@@ -232,7 +232,7 @@ tf_py_test(
 tf_py_test(
     name = "matmul_test",
     size = "large",
-    shard_count = 2,
+    shard_count = 3,
     srcs = ["size_speed_tests/matmul_test.py"],
     additional_deps = [
         ":ipu",
