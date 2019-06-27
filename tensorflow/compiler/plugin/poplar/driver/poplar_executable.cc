@@ -165,22 +165,14 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   InfeedInfos infeeds;
   for (const auto infeed : proto.infeeds()) {
-    FeedInfo info;
-    info.stream_prefix = infeed.stream_prefix();
-    info.config = infeed.config();
-    info.shape = Shape(infeed.shape());
-
-    infeeds.push_back(info);
+    infeeds.push_back(
+        {infeed.stream_prefix(), infeed.config(), Shape(infeed.shape())});
   }
 
   OutfeedInfos outfeeds;
-  for (const auto infeed : proto.outfeeds()) {
-    FeedInfo info;
-    info.stream_prefix = infeed.stream_prefix();
-    info.config = infeed.config();
-    info.shape = Shape(infeed.shape());
-
-    outfeeds.push_back(info);
+  for (const auto outfeed : proto.outfeeds()) {
+    outfeeds.push_back(
+        {outfeed.stream_prefix(), outfeed.config(), Shape(outfeed.shape())});
   }
 
   // Load the poplar compilation options from the serialized executable

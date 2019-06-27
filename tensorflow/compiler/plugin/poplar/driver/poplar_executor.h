@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_transfer_manager.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_outfeed_queue.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_queue.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 
@@ -46,6 +47,7 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/process_function_library_runtime.h"
 
+#include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/core/threadpool.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/lib/io/path.h"
@@ -387,6 +389,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime>&,
       const std::vector<xla::Shape>&);
 
+  // Lock the outfeed queue and dequeue all the tensors from a given feed.
+  // Fails if the outfeed with the given name does not exist.
+  std::vector<std::vector<tensorflow::Tensor>> GetTensorsFromOutfeed(
+      const std::string& feed_id);
+
   Status RegisterOutfeeds(const OutfeedInfos& outfeed_infos);
 
   void ResetSeed(int seed);
@@ -551,13 +558,15 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   void ConnectOutfeedToStreamCallback(const OutfeedInfos& outfeed_infos,
                                       const uint32 replication_factor);
 
-  // Creates and launches the thread which will fetch inputs from
-  // the InfeedDatasetIterator and enqueue them.
-  // The thread is joined when the infeed is cancelled.
-  void LaunchInfeedThread(const InfeedInfos& infeed_infos);
-
   std::function<void()> CreateInfeedIOThreadFunction(
       const InfeedInfos& infeed_infos);
+  std::function<void()> CreateOutfeedIOThreadFunction(
+      const OutfeedInfos& outfeed_infos);
+
+  // Creates and launches the threads which send/recieve data from the Poplar
+  // stream callbacks.
+  void LaunchIOThreads(const InfeedInfos& infeed_infos,
+                       const OutfeedInfos& outfeed_infos);
 
   // Sets cancellation flags and notifies the threads running in thread_pool_
   void StopThreadPool();
@@ -599,7 +608,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   std::atomic<bool> infeed_thread_cancelled_;
 
-  static const int NUM_THREADS = 1;
+  std::atomic<bool> outfeed_thread_cancelled_;
+
+  static const int NUM_THREADS = 2;
   tensorflow::thread::ThreadPool thread_pool_;
 
   struct InfeedDatasetIterator {
@@ -610,7 +621,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         std::unique_ptr<tensorflow::FunctionLibraryDefinition> flib_def,
         std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime> process_flib,
         const std::vector<xla::Shape>& shapes);
-    ~InfeedDatasetIterator();
 
     std::unique_ptr<tensorflow::data::IteratorBase> iterator;
     std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx;
@@ -624,10 +634,30 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     std::vector<std::unique_ptr<QueueType>> tensor_queues;
   };
 
+  struct OutfeedContext {
+    OutfeedContext(const FeedInfo& outfeed_info);
+    OutfeedContext() = delete;
+
+    using QueueType = SPSCOutfeedQueue<2048>;
+
+    const PoplarFeedConfig config;
+    const std::vector<xla::Shape> shapes;
+    std::vector<tensorflow::DataType> tf_data_types;
+    std::vector<tensorflow::TensorShape> tf_shapes;
+    std::vector<std::unique_ptr<QueueType>> callback_to_io_thread_queues;
+    std::queue<std::vector<tensorflow::Tensor>> io_thread_output_queues;
+    // Mutex to prevent TF CPU op reading from the outfeed whilst we are
+    // executing.
+    // TODO T8971 - this still doesn't help when we do sess.run([graph,
+    // outfeed]) because the outfeed op can execute before the graph op.
+    std::mutex mutex;
+  };
+
   absl::flat_hash_map<std::string, std::unique_ptr<InfeedDatasetIterator>>
       infeed_dataset_iterators_;
 
-  absl::flat_hash_set<std::string> registered_outfeeds_;
+  absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>
+      outfeed_contexts_;
 
   std::mt19937_64 seed_gen;
 };

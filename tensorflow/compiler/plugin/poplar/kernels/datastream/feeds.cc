@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/env.h"
+#include "tensorflow/core/util/batch_util.h"
 #include "tensorflow/core/util/stream_executor_util.h"
 
 #include "tensorflow/compiler/tf2xla/shape_util.h"
@@ -64,10 +65,29 @@ void GetFeedConfig(OpKernelConstruction* ctx,
                    xla::poplarplugin::PoplarFeedConfig& config) {
   std::string feed_id;
   int64 replication_factor;
+  std::vector<tensorflow::DataType> types;
+  OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &types));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("replication_factor", &replication_factor));
   config.set_feed_id(feed_id);
   config.set_replication_factor(replication_factor);
+  *(config.mutable_tf_data_types()) = {types.begin(), types.end()};
+}
+
+void GetOutfeedMode(OpKernelConstruction* ctx,
+                    xla::poplarplugin::PoplarFeedConfig& config) {
+  std::string outfeed_mode_str;
+  OP_REQUIRES_OK(ctx, ctx->GetAttr("outfeed_mode", &outfeed_mode_str));
+  if (outfeed_mode_str == "all") {
+    config.set_mode(xla::poplarplugin::PoplarFeedConfig::GetAll);
+  } else if (outfeed_mode_str == "get_last") {
+    config.set_mode(xla::poplarplugin::PoplarFeedConfig::GetLast);
+  } else {
+    OP_REQUIRES(
+        ctx, false,
+        errors::InvalidArgument("Unkown outfeed_mode : ", outfeed_mode_str,
+                                ", supported values are 'all' and 'get_last'"));
+  }
 }
 }  // namespace
 
@@ -171,14 +191,7 @@ class PopDatastreamOutfeedEnqueueOp : public XlaOpKernel {
   explicit PopDatastreamOutfeedEnqueueOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx) {
     GetFeedConfig(ctx, config_);
-
-    std::string outfeed_mode = "all";
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("outfeed_mode", &outfeed_mode));
-    OP_REQUIRES(
-        ctx, outfeed_mode == "all" || outfeed_mode == "get_last",
-        errors::InvalidArgument("Unkown outfeed_mode : ", outfeed_mode,
-                                ", supported values are 'all' and 'get_last'"));
-    config_.set_mode(outfeed_mode);
+    GetOutfeedMode(ctx, config_);
   }
 
   ~PopDatastreamOutfeedEnqueueOp() override{};
@@ -187,25 +200,22 @@ class PopDatastreamOutfeedEnqueueOp : public XlaOpKernel {
     xla::XlaBuilder* b = ctx->builder();
     const auto num_inputs = ctx->num_inputs();
 
-    std::vector<xla::XlaOp> inputs;
-    std::vector<xla::Shape> xla_shapes;
-    inputs.reserve(num_inputs);
-    xla_shapes.reserve(num_inputs);
-
-    bool is_tuple = num_inputs > 1;
+    std::vector<xla::XlaOp> inputs(num_inputs);
+    std::vector<xla::Shape> xla_shapes(num_inputs);
 
     for (int i = 0; i < num_inputs; ++i) {
-      inputs.push_back(ctx->Input(i));
+      inputs[i] = ctx->Input(i);
       auto input_shape = ctx->InputShape(i);
       auto dtype = ctx->input_type(i);
       xla::Shape xla_shape;
       OP_REQUIRES_OK(ctx,
                      TensorShapeToXLAShape(dtype, input_shape, &xla_shape));
-      xla_shapes.emplace_back(xla_shape);
+      xla_shapes[i] = xla_shape;
     }
 
     xla::Shape outfeed_shape;
     xla::XlaOp outfeed_input;
+    const bool is_tuple = num_inputs > 1;
     if (is_tuple) {
       outfeed_shape = xla::ShapeUtil::MakeTupleShape(xla_shapes);
       outfeed_input = Tuple(b, inputs);
@@ -236,32 +246,15 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
   explicit PopDatastreamOutfeedDequeueOp(OpKernelConstruction* ctx)
       : OpKernel(ctx), device_ordinal_(0) {
     GetFeedConfig(ctx, config_);
+    GetOutfeedMode(ctx, config_);
+    XlaShapesFromAttr(ctx, xla_shapes_);
+
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
 
     OP_REQUIRES(ctx, device_ordinal_ >= 0,
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
                                         device_ordinal_));
-
-    std::vector<PartialTensorShape> partial_shapes;
-    std::vector<tensorflow::DataType> types;
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("output_shapes", &partial_shapes));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &types));
-
-    outfeed_all_ =
-        ((partial_shapes.size() > 1) && partial_shapes[0].unknown_rank());
-    int start = outfeed_all_ ? 1 : 0;
-    tensor_shapes_.reserve(partial_shapes.size() - start);
-    for (int i = start; i < partial_shapes.size(); ++i) {
-      xla::PrimitiveType xla_type;
-      TensorShape tensor_shape;
-      OP_REQUIRES(ctx, partial_shapes[i].AsTensorShape(&tensor_shape),
-                  errors::InvalidArgument("Unable to cast partial tensor shape "
-                                          "to tensor shape for tensor : ",
-                                          partial_shapes[i].DebugString()));
-      OP_REQUIRES_OK(ctx, DataTypeToPrimitiveType(types[i - start], &xla_type));
-      xla_shapes_.emplace_back(TensorShapeToXLAShape(xla_type, tensor_shape));
-      tensor_shapes_.emplace_back(tensor_shape);
-    }
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("output_shapes", &tensor_shapes_));
 
     num_outputs_ = ctx->num_outputs();
     OP_REQUIRES(ctx, ctx->num_outputs() == xla_shapes_.size(),
@@ -277,73 +270,49 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
     OP_REQUIRES(ctx, platform.ok(), platform.status());
     auto* p =
         static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
+    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+    auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
+        stream_executor->implementation());
 
-    auto* transfer_manager =
-        xla::TransferManager::GetForPlatform(p).ValueOrDie();
-
-    auto executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
-
-    auto* outfeed_queue_manager =
-        xla::poplarplugin::GetXfeedManager(device_ordinal_)->outfeed();
-
-    OP_REQUIRES(
-        ctx, outfeed_queue_manager->queue_name() == config_.feed_id(),
-        errors::Unavailable(
-            "Trying to access IPUOutfeedQueue with id='", config_.feed_id(),
-            "', however "
-            "the last executed IPUOutfeedQueue has id='",
-            outfeed_queue_manager->queue_name(),
-            "'. If "
-            "multiple IPUOutfeedQueues are registered to the same "
-            "TensorFlow device, only the results from the most "
-            "recently executed IPUOutfeedQueue are preserved."));
-
-    size_t num_available = outfeed_queue_manager->size();
-    if (num_available < num_outputs_) {
-      num_available = outfeed_queue_manager->WaitForBuffers(num_outputs_);
-    }
-
-    // TODO(shauryas, T7218): This is slightly tedious due to tuples being
-    // enqueued as separate buffers. When we call dequeue with
-    // outfeed_all_==true we may be in a situation where only some of the tuple
-    // buffers have been enqueued. When the performance optimization refactoring
-    // is done this will need to be rewritten to handle a dequeueing of all the
-    // tuple buffers at once.
-    if (outfeed_all_) {
-      size_t remainder = num_available % num_outputs_;
-      size_t num_dequeue = (num_available - remainder);
-      size_t num_outfeed = num_dequeue / num_outputs_;
+    // Get all the tensors which were stored in the outfeed.
+    // Note that this call will block until we can acquire a lock on the
+    // outfeed.
+    auto outfeed_tensors =
+        poplar_executor->GetTensorsFromOutfeed(config_.feed_id());
+    if (config_.mode() == xla::poplarplugin::PoplarFeedConfig::GetAll) {
+      // Allocate all the output buffers with the extra dimension for the number
+      // of executions.
       std::vector<Tensor*> output_tensors;
-      for (size_t i = 0; i < num_outputs_; ++i) {
+      for (auto i = 0; i < num_outputs_; ++i) {
+        // Insert an extra dimension to the shape to represent the number of
+        // iterations.
         TensorShape tensor_shape = tensor_shapes_[i];
-        tensor_shape.InsertDim(0, num_outfeed);
+        tensor_shape.InsertDim(0, outfeed_tensors.size());
         Tensor* output_tensor = nullptr;
         OP_REQUIRES_OK(ctx,
                        ctx->allocate_output(i, tensor_shape, &output_tensor));
         output_tensors.push_back(output_tensor);
       }
-
-      for (size_t i = 0; i < num_outfeed; ++i) {
-        for (size_t j = 0; j < num_outputs_; ++j) {
-          Tensor* output_tensor = output_tensors[j];
-          auto subslice = output_tensor->SubSlice(i);
-          const auto& xla_shape = xla_shapes_[j];
-          const char* data = subslice.tensor_data().data();
-          auto result_literal = xla::MutableBorrowingLiteral(data, xla_shape);
-          OP_REQUIRES_OK(ctx, transfer_manager->TransferLiteralFromOutfeed(
-                                  executor, xla_shape, result_literal));
+      // Copy the data into the output tensors.
+      // Go through all the iterations, and copy the tensors into the right
+      // output slices.
+      for (auto iteration = 0; iteration < outfeed_tensors.size();
+           ++iteration) {
+        auto& tensors_for_iteration = outfeed_tensors[iteration];
+        CHECK_EQ(tensors_for_iteration.size(), num_outputs_);
+        for (auto j = 0; j < num_outputs_; ++j) {
+          OP_REQUIRES_OK(
+              ctx, batch_util::CopyElementToSlice(
+                       tensors_for_iteration[j], output_tensors[j], iteration));
         }
       }
     } else {
-      for (size_t i = 0; i < xla_shapes_.size(); ++i) {
-        Tensor* output_tensor = nullptr;
-        OP_REQUIRES_OK(
-            ctx, ctx->allocate_output(i, tensor_shapes_[i], &output_tensor));
-        const auto& xla_shape = xla_shapes_[i];
-        const char* data = output_tensor->tensor_data().data();
-        auto result_literal = xla::MutableBorrowingLiteral(data, xla_shape);
-        OP_REQUIRES_OK(ctx, transfer_manager->TransferLiteralFromOutfeed(
-                                executor, xla_shape, result_literal));
+      // Just set the output data if we are getting the last element.
+      CHECK_EQ(config_.mode(), xla::poplarplugin::PoplarFeedConfig::GetLast);
+      CHECK_EQ(outfeed_tensors.size(), 1);
+      CHECK_EQ(outfeed_tensors[0].size(), num_outputs_);
+      for (auto j = 0; j < num_outputs_; ++j) {
+        ctx->set_output(j, outfeed_tensors[0][j]);
       }
     }
   }
@@ -352,7 +321,6 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
   int device_ordinal_;
   std::vector<xla::Shape> xla_shapes_;
   std::vector<TensorShape> tensor_shapes_;
-  bool outfeed_all_;
   size_t num_outputs_;
   xla::poplarplugin::PoplarFeedConfig config_;
   TF_DISALLOW_COPY_AND_ASSIGN(PopDatastreamOutfeedDequeueOp);

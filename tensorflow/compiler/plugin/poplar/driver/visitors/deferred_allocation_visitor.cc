@@ -186,11 +186,7 @@ Status DeferredAllocationVisitor::HandleInfeed(HloInstruction* inst) {
   }
   has_infeed_ = true;
 
-  FeedInfo info;
-  info.stream_prefix = infeed->name();
-  info.config = infeed_config;
-  info.shape = infeed->shape();
-
+  FeedInfo info(infeed->name(), infeed_config, infeed->shape());
   resources_.annotations.infeed_infos.push_back(info);
 
   return Status::OK();

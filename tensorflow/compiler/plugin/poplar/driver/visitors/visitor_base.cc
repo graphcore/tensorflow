@@ -492,11 +492,8 @@ Status BaseVisitor::HandleOutfeed(HloInstruction* inst) {
     seq.add(poplar::program::Copy(in, fifo, false));
   }
 
-  FeedInfo info;
-  info.stream_prefix = outfeed->name();
-  info.config = outfeed_config;
-  info.shape = outfeed->operands()[0]->shape();
-
+  FeedInfo info(outfeed->name(), outfeed_config,
+                outfeed->operands()[0]->shape());
   resources_.annotations.outfeed_infos.push_back(info);
 
   return Status::OK();
@@ -607,7 +604,6 @@ Status BaseVisitor::HandleCopyStart(HloInstruction* inst) {
 Status BaseVisitor::HandleCopyDone(HloInstruction* inst) {
   return Unimplemented(inst);
 }
-
 
 }  // namespace poplarplugin
 }  // namespace xla
