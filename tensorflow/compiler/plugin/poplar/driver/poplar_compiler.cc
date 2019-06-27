@@ -301,8 +301,7 @@ HloPrintOptions GetPrintOptions() {
   return opts;
 }
 
-poplar::program::Program InitializeSeed(poplar::Graph& master_graph,
-                                        poplar::Graph& graph,
+poplar::program::Program InitializeSeed(poplar::Graph& graph,
                                         int replication_factor) {
   const std::string seed_prefix = "__seed";
 
@@ -310,18 +309,12 @@ poplar::program::Program InitializeSeed(poplar::Graph& master_graph,
       graph.addVariable(poplar::UNSIGNED_INT, {2}, seed_prefix + "/tensor");
   graph.setTileMapping(seed, 0);
 
-  auto data_stream = master_graph.addHostToDeviceFIFO(
-      GetRandomNumberSeedStream(), seed.elementType(),
-      seed.numElements() * std::max(replication_factor, 1));
+  auto data_stream = graph.addHostToDeviceFIFO(
+      GetRandomNumberSeedStream(), seed.elementType(), seed.numElements());
 
   poplar::program::Sequence seq;
-  if (replication_factor > 1) {
-    seq.add(poplar::program::Copy(data_stream,
-                                  master_graph.getNonReplicatedTensor(seed)));
-  } else {
-    seq.add(poplar::program::Copy(data_stream, seed));
-  }
-
+  // Copy the seed from the data stream and set it.
+  seq.add(poplar::program::Copy(data_stream, seed));
   poprand::setSeed(graph, seed, 0, seq, seed_prefix + "/set");
 
   return seq;
@@ -641,8 +634,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     TF_RETURN_IF_ERROR(
         poplarExecutor->RegisterOutfeeds(resources.annotations.outfeed_infos));
     // Set up the random seed
-    auto seed_setup = InitializeSeed(resources.main_graph, *sharding_main_graph,
-                                     replication_factor);
+    auto seed_setup =
+        InitializeSeed(GetReplicatedGraph(resources), replication_factor);
     main_program.add(seed_setup);
 
     // Set up the floating point control register if required

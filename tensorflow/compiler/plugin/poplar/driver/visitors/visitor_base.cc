@@ -438,8 +438,10 @@ Status BaseVisitor::HandleOutfeed(HloInstruction* inst) {
     return InvalidArgument("Only one IPUOutfeedQueue supported per graph.");
   }
 
+  poplar::program::Sequence seq;
+  poplar::Graph& graph = GetGraph(resources_, inst);
+
   HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
-  poplar::program::Sequence& seq = sequence;
   xla::poplarplugin::PoplarFeedConfig outfeed_config;
   outfeed_config.ParseFromString(outfeed->outfeed_config());
 
@@ -474,17 +476,12 @@ Status BaseVisitor::HandleOutfeed(HloInstruction* inst) {
   } else {
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor in,
-        FindInstructionInput(tensor_map, resources_, inst, 0, sequence));
+        FindInstructionInput(tensor_map, resources_, inst, 0, seq));
     input_tensors.emplace_back(in);
   }
 
   for (unsigned i = 0; i < input_tensors.size(); ++i) {
     poplar::Tensor& in = input_tensors[i];
-    poplar::Graph& graph = GetMasterGraph(resources_);
-
-    if (HasReplicatedGraph(resources_)) {
-      in = graph.getNonReplicatedTensor(in);
-    }
 
     auto fifo = graph.addDeviceToHostFIFO(GetOutfeedCopyHandle(inst->name(), i),
                                           in.elementType(), in.numElements());
@@ -495,6 +492,7 @@ Status BaseVisitor::HandleOutfeed(HloInstruction* inst) {
   FeedInfo info(outfeed->name(), outfeed_config,
                 outfeed->operands()[0]->shape());
   resources_.annotations.outfeed_infos.push_back(info);
+  sequence.add(seq);
 
   return Status::OK();
 }

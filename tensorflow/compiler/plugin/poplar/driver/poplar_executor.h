@@ -24,6 +24,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_transfer_manager.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_outfeed_queue.h"
@@ -382,7 +383,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   static poplar::DeviceManager& GetDeviceManager();
 
   void CreateInfeedDatasetIterator(
-      const std::string&, std::unique_ptr<tensorflow::data::IteratorBase>&,
+      const PoplarFeedConfig&, std::unique_ptr<tensorflow::data::IteratorBase>&,
       std::unique_ptr<tensorflow::data::IteratorContext>&,
       std::unique_ptr<tensorflow::data::FunctionHandleCache>&,
       std::unique_ptr<tensorflow::FunctionLibraryDefinition>&,
@@ -532,6 +533,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Create a new trace event object
   tensorflow::IpuTraceEvent NewTraceEvent();
 
+  // A function used to connect device to host streams, which only copies data
+  // from the 0th replica and the rest is ignored.
+  void ConnectReplicatedDeviceToHost(const std::string& stream_name,
+                                     TensorControl* tc);
+
   // Functions which move the resource variables to/from the device
   Status MoveDeviceToHost();
   Status MoveHostToDevice();
@@ -555,8 +561,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   // Connect buffers provided by transfer manager to Poplar
   // deviceToHostFIFO()
-  void ConnectOutfeedToStreamCallback(const OutfeedInfos& outfeed_infos,
-                                      const uint32 replication_factor);
+  void ConnectOutfeedToStreamCallback(const OutfeedInfos& outfeed_infos);
 
   std::function<void()> CreateInfeedIOThreadFunction(
       const InfeedInfos& infeed_infos);
@@ -573,13 +578,15 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void DeferredDeallocation();
 
-  void ConnectSeedCallback(poplar::Engine* engine, int replication_factor);
+  void ConnectSeedCallback();
 
   int ordinal_;
 
   std::recursive_mutex mutex_;
 
   poplar::Engine* current_engine_;
+
+  int64 current_replication_factor_;
 
   bool device_open_;
 
@@ -615,6 +622,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   struct InfeedDatasetIterator {
     InfeedDatasetIterator(
+        int64 replication_factor,
         std::unique_ptr<tensorflow::data::IteratorBase> iterator,
         std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx,
         std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache,
@@ -630,8 +638,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     const std::vector<xla::Shape> shapes;
 
     using QueueType = SPSCQueue<tensorflow::TensorBuffer*, 2048>;
-
-    std::vector<std::unique_ptr<QueueType>> tensor_queues;
+    std::vector<std::vector<std::unique_ptr<QueueType>>> tensor_queues;
   };
 
   struct OutfeedContext {
@@ -644,7 +651,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     const std::vector<xla::Shape> shapes;
     std::vector<tensorflow::DataType> tf_data_types;
     std::vector<tensorflow::TensorShape> tf_shapes;
-    std::vector<std::unique_ptr<QueueType>> callback_to_io_thread_queues;
+    std::vector<std::vector<std::unique_ptr<QueueType>>>
+        callback_to_io_thread_queues;
     std::queue<std::vector<tensorflow::Tensor>> io_thread_output_queues;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // executing.

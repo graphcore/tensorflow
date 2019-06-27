@@ -145,6 +145,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       self._initializer = gen_pop_datastream_ops.ipu_consume_dataset(
           input_dataset=ds_variant,
           feed_id=self._id,
+          replication_factor=self._replication_factor,
           device_ordinal=device_ordinal,
           **self._dataset._flat_structure)
 

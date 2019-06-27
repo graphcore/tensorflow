@@ -128,7 +128,7 @@ class IPUConsumeDatasetOp : public OpKernel {
   explicit IPUConsumeDatasetOp(OpKernelConstruction* ctx)
       : OpKernel(ctx), device_ordinal_(0) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &id_));
+    GetFeedConfig(ctx, config_);
 
     OP_REQUIRES(ctx, device_ordinal_ >= 0,
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
@@ -172,13 +172,13 @@ class IPUConsumeDatasetOp : public OpKernel {
     auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
     auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
         stream_executor->implementation());
-    poplar_executor->CreateInfeedDatasetIterator(id_, iterator, iter_ctx, fhc,
-                                                 flib_def, pflr, xla_shapes_);
+    poplar_executor->CreateInfeedDatasetIterator(
+        config_, iterator, iter_ctx, fhc, flib_def, pflr, xla_shapes_);
   }
 
  private:
   int device_ordinal_;
-  std::string id_;
+  xla::poplarplugin::PoplarFeedConfig config_;
   std::vector<xla::Shape> xla_shapes_;
   TF_DISALLOW_COPY_AND_ASSIGN(IPUConsumeDatasetOp);
 };

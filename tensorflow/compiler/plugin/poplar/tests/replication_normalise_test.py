@@ -62,7 +62,6 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
           '__seed*',
           'IpuReplicationNormalise/custom-call*/replication_normalise/Op/Divide',
           'switchControlBroadcast*/GlobalPre/Copy/OnTileCopy',
-          'host-exchange-local-copy-',
           '/OnTileCopy',
           'Copy_XLA_Args*OnTileCopy',
       ]
@@ -95,7 +94,6 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
           '__seed*',
           'IpuReplicationNormalise/custom-call*/replication_normalise/Op/Divide',
           'switchControlBroadcast*/GlobalPre/Copy/OnTileCopy',
-          'host-exchange-local-copy-',
           '/OnTileCopy',
           'Copy_XLA_Args*OnTileCopy',
           'add/add*/AddTo',
