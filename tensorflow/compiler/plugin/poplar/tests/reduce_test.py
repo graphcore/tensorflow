@@ -184,6 +184,131 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         result = sess.run(output, fd)
         self.assertAllClose(result, np.ones([1, 3, 3, 1]))
 
+  def testAvgPool3DSamePaddingWithStridesF32(self):
+    with ops.device("/device:IPU:0"):
+      with session_lib.Session() as sess:
+        pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
+        output = nn.avg_pool3d(
+            pa,
+            ksize=[1, 1, 5, 5, 5],
+            strides=[1, 1, 2, 2, 2],
+            data_format='NCDHW',
+            padding='SAME',
+            name="avg")
+
+        fd = {pa: np.ones([1, 1, 10, 10, 10])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 1, 5, 5, 5]))
+
+  def testAvgPool3DSamePaddingWithStridesF16(self):
+    with ops.device("/device:IPU:0"):
+      with session_lib.Session() as sess:
+        pa = array_ops.placeholder(np.float16, [1, 1, 10, 10, 10], name="a")
+        output = nn.avg_pool3d(
+            pa,
+            ksize=[1, 1, 5, 5, 5],
+            strides=[1, 1, 2, 2, 2],
+            data_format='NCDHW',
+            padding='SAME')
+
+        fd = {pa: np.ones([1, 1, 10, 10, 10])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 1, 5, 5, 5]))
+
+  def testAvgPool3DValidPaddingWithStridesF32(self):
+    with ops.device("/device:IPU:0"):
+      with session_lib.Session() as sess:
+        pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
+        output = nn.avg_pool3d(
+            pa,
+            ksize=[1, 1, 5, 5, 5],
+            strides=[1, 1, 2, 2, 2],
+            data_format='NCDHW',
+            padding='VALID')
+
+        fd = {pa: np.ones([1, 1, 10, 10, 10])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 1, 3, 3, 3]))
+
+  def testAvgPool3DValidPaddingWithStridesF16(self):
+    with ops.device("/device:IPU:0"):
+      with session_lib.Session() as sess:
+        pa = array_ops.placeholder(np.float16, [1, 1, 10, 10, 10], name="a")
+        output = nn.avg_pool3d(
+            pa,
+            ksize=[1, 1, 5, 5, 5],
+            strides=[1, 1, 2, 2, 2],
+            data_format='NCDHW',
+            padding='VALID')
+
+        fd = {pa: np.ones([1, 1, 10, 10, 10])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 1, 3, 3, 3]))
+
+  def testMaxPool3DSamePaddingWithStridesF32(self):
+    with ops.device("/device:IPU:0"):
+      with session_lib.Session() as sess:
+        pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
+        output = nn.max_pool3d(
+            pa,
+            ksize=[1, 1, 5, 5, 5],
+            strides=[1, 1, 2, 2, 2],
+            data_format='NCDHW',
+            padding='SAME',
+            name="max")
+
+        fd = {pa: np.ones([1, 1, 10, 10, 10])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 1, 5, 5, 5]))
+
+  def testMaxPool3DValidPaddingWithStridesF32(self):
+    with ops.device("/device:IPU:0"):
+      with session_lib.Session() as sess:
+        pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
+        output = nn.max_pool3d(
+            pa,
+            ksize=[1, 1, 5, 5, 5],
+            strides=[1, 1, 2, 2, 2],
+            data_format='NCDHW',
+            padding='VALID',
+            name="max")
+
+        fd = {pa: np.ones([1, 1, 10, 10, 10])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 1, 3, 3, 3]))
+
+  def testAvgPool3DSamePaddingWithStridesF32Dim123(self):
+    with ops.device("/device:IPU:0"):
+      with session_lib.Session() as sess:
+        pa = array_ops.placeholder(np.float32, [1, 10, 10, 12, 1], name="a")
+        output = nn.avg_pool3d(
+            pa,
+            ksize=[1, 5, 5, 7, 1],
+            strides=[1, 2, 2, 2, 1],
+            data_format='NDHWC',
+            padding='SAME',
+            name="avg")
+
+        fd = {pa: np.ones([1, 10, 10, 12, 1])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 5, 5, 6, 1]))
+
+  def testAvgPool3DValidPaddingWithStridesF32Dim123(self):
+    with ops.device("/device:IPU:0"):
+      with session_lib.Session() as sess:
+        pa = array_ops.placeholder(np.float32, [1, 10, 12, 10, 1], name="a")
+        output = nn.avg_pool3d(
+            pa,
+            ksize=[1, 5, 5, 5, 1],
+            strides=[1, 2, 2, 2, 1],
+            data_format='NDHWC',
+            padding='VALID',
+            name="avg")
+
+        fd = {pa: np.ones([1, 10, 12, 10, 1])}
+        result = sess.run(output, fd)
+        self.assertAllClose(result, np.ones([1, 3, 4, 3, 1]))
+
 
 if __name__ == "__main__":
   googletest.main()

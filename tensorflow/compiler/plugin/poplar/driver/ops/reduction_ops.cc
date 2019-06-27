@@ -236,7 +236,6 @@ std::set<unsigned int> GetPoolingReductionDims(const Window& window) {
     }
   }
 
-  // TODO make sure this works with T5956.
   // When we have a single reduction dimension, add an adjacent dimension for
   // reduction as well.
   if (reduction_dims.size() == 1) {
@@ -535,10 +534,6 @@ StatusOr<poplar::program::Program> CreatePoplibsPooling(
     return prog;
   }
 
-  if (reduction_dims.size() != 2) {
-    return xla::FailedPrecondition("Popnn pooling only supports 2D pooling.");
-  }
-
   const auto shuffle_in =
       GetShuffleInputDimensionsForPoplar(window, reduction_dims);
   to_reduce = to_reduce.dimShuffle(shuffle_in);
@@ -617,9 +612,6 @@ StatusOr<poplar::program::Program> CreatePoplibsMaxPoolGrad(
                       FindInstructionInput(tensor_map, res, inst, 2, seq));
 
   const auto reduction_dims = GetPoolingReductionDims(window);
-  if (reduction_dims.size() != 2) {
-    return xla::FailedPrecondition("Popnn pooling only supports 2D pooling.");
-  }
 
   const auto shuffle_in =
       GetShuffleInputDimensionsForPoplar(window, reduction_dims);
@@ -664,9 +656,6 @@ StatusOr<poplar::program::Program> CreatePoplibsPoolingGrad(
   std::vector<std::size_t> input_shape = *optional_input_shape;
 
   const auto reduction_dims = GetPoolingReductionDims(window);
-  if (reduction_dims.size() != 2) {
-    return xla::FailedPrecondition("Popnn pooling only supports 2D pooling.");
-  }
 
   const auto shuffle_in =
       GetShuffleInputDimensionsForPoplar(window, reduction_dims);
