@@ -12,7 +12,6 @@ BinaryOpsTest.testS64Comparisons # No S64
 PoolGradTest.testMaxPool # Tests MaxPoolGradGrad
 OutOfMemoryTest.testOutputOutOfMemory # Don't do out of memory yet
 WhileTest.testCountingLoopHandrolledC64 # C64
-CategoricalTest.testSamplingCorrectness # Failing due to input size to poplibs reduction
 Pooling3DTest.testMaxPoolGradValidPadding1_1_3d  # 3D grad_grad
 Pooling3DTest.testMaxPoolGradValidPadding2_1_6_3d  # 3D grad_grad
 Pooling3DTest.testMaxPoolGradValidPadding2_2_3d  # 3D grad_grad
@@ -45,7 +44,7 @@ AdjustSaturationTest
 ResamplerOpsTest # Don't support the op
 ListDiffTest.testNonOverlapping # no int64 iota
 ListDiffTest.testEmptyY # no int64 iota
-CategoricalTest.testDeterminismMultinomial # No int64 iota
+CategoricalTest.testDeterminismMultinomial # disable until poplar CPU random works
 CumsumTest.test6D # Too long
 CumsumTest.test3D # Too long
 CumprodTest.test6D # Too long
@@ -72,7 +71,6 @@ ListOpsTest # Disable due to variants in lists
 StatelessRandomOpsTest.testDeterminism # poplibs CPU mode does not obey seed
 StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random uniform int doesn't obey limits
 StatelessRandomOpsTest.testTruncatedNormal # Tests float64
-CategoricalTest.testCategoricalIsInRange # Uses argmax inline
 ResizeBilinearTest.test112x112To512x512 # Too slow
 ResizeBilinearTest.test112x112To512x512 # Too slow
 ResizeBilinearTest.test256x48To2048x384 # Too slow

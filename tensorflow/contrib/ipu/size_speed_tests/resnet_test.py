@@ -4,11 +4,9 @@ from __future__ import print_function
 
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.contrib.ipu import utils
 from tensorflow.contrib.ipu import ops as ipu_ops
-from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
@@ -35,9 +33,6 @@ def inference(x):
     x = nn_ops.relu(x)
     x = max_pool(x, ksize=3, stride=2)
     x = block("b1", 64, 1, 2, x)
-    x = block("b2", 128, 2, 2, x)
-    x = block("b3", 256, 2, 2, x)
-    x = block("b4", 512, 2, 2, x)
     x = nn_ops.max_pool(x, [1, x.shape[1], x.shape[2], 1], [1, 1, 1, 1],
                         'VALID')
     x = array_ops.reshape(x, [x.shape[0], x.shape[3]])
@@ -147,7 +142,7 @@ class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
 
     evts = utils.extract_all_events(out)
     size = utils.get_memory_size_from_events(evts)
-    self.assertTrue(size < 81000000)
+    self.assertTrue(size < 36210000)
 
   def testTraining(self):
     x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
@@ -183,7 +178,7 @@ class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
 
     evts = utils.extract_all_events(out)
     size = utils.get_memory_size_from_events(evts)
-    self.assertTrue(size < 174000000)
+    self.assertTrue(size < 75000000)
 
 
 if __name__ == "__main__":

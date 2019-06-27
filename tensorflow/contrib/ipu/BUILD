@@ -69,6 +69,19 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "embedding_lookup_test",
+    size = "medium",
+    srcs = ["python/tests/embedding_lookup_test.py"],
+    additional_deps = [
+        ":ipu",
+        ":test_util",
+        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python:layers",
+    ],
+)
+
+tf_py_test(
     name = "case_test",
     size = "small",
     srcs = ["python/tests/case_test.py"],
@@ -203,10 +216,24 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "resnet18_nobn_test",
+    name = "resnet_test",
     size = "large",
     shard_count = 2,
-    srcs = ["size_speed_tests/resnet18_nobn_test.py"],
+    srcs = ["size_speed_tests/resnet_test.py"],
+    additional_deps = [
+        ":ipu",
+        ":test_util",
+        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python:layers",
+    ],
+)
+
+tf_py_test(
+    name = "matmul_test",
+    size = "large",
+    shard_count = 3,
+    srcs = ["size_speed_tests/matmul_test.py"],
     additional_deps = [
         ":ipu",
         ":test_util",
@@ -436,6 +463,7 @@ test_suite(
         "case_test",
         "conditional_test",
         "dump_poplar_info",
+        "embedding_lookup_test",
         "infeed_outfeed_test",
         "mapping_test",
         "multi_ipu_test",
@@ -458,7 +486,8 @@ test_suite(
     name = "size_speed_tests",
     tests = [
         "combined_weights_test",
-        "resnet18_nobn_test",
+        "matmul_test",
+        "resnet_test",
         "lstm_size_test",
     ],
 )
