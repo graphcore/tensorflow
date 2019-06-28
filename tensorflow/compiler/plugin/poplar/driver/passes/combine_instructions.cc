@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/instruction_colocator_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
+#include "tensorflow/compiler/xla/service/hlo_reachability.h"
 #include "tensorflow/core/lib/core/errors.h"
 
 #include "absl/types/optional.h"
@@ -29,33 +30,13 @@ namespace xla {
 namespace poplarplugin {
 
 namespace {
-// Check that a region of instruction can be combined. This means checking
-// that they are not sequenced due to a data dependency.
+
+// Partition the ops into regions where they are independent, can colocate,
+// have the same type and same inplaceness.
 template <typename Iter>
-bool CanCombine(Iter begin, Iter end) {
-  for (Iter itr1 = begin; itr1 != end; ++itr1) {
-    auto instr1 = *itr1;
-    const auto& operands = instr1->operands();
-    for (Iter itr2 = begin; itr2 != itr1; ++itr2) {
-      auto instr2 = *itr2;
-
-      if (std::find(operands.begin(), operands.end(), instr2) !=
-          operands.end()) {
-        // Found a data dependency :(
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
-// Partition the ops into regions where they colocate, have the same type and
-// same inplaceness.
-template <typename Iter>
-std::vector<std::pair<Iter, Iter>> Partition(Iter begin, Iter end) {
-  std::vector<std::pair<Iter, Iter>> result;
-
+std::vector<absl::flat_hash_set<HloInstruction*>> Partition(
+    Iter begin, Iter end, HloReachabilityMap* reachability_map) {
+  std::vector<absl::flat_hash_set<HloInstruction*>> result;
   while (begin != end) {
     auto first = *begin;
     auto pred = [&](const HloInstruction* inst) {
@@ -65,9 +46,31 @@ std::vector<std::pair<Iter, Iter>> Partition(Iter begin, Iter end) {
     };
 
     auto itr = std::stable_partition(begin, end, pred);
-
-    result.push_back({begin, itr});
-    begin = itr;
+    // The vector of instructions in [begin, itr) might not be independent.
+    // We now greedily cluster it into independent clusters.
+    std::vector<absl::flat_hash_set<HloInstruction*>> clusters;
+    while (begin != itr) {
+      bool found_cluster = false;
+      // Go through all existing clusters and check if the instruction is
+      // independent of all the instructions in the cluster. If it is, add it to
+      // the cluster, otherwise create a new cluster.
+      for (auto& cluster : clusters) {
+        bool can_insert =
+            absl::c_all_of(cluster, [&](const HloInstruction* inst) {
+              return !reachability_map->IsConnected(inst, *begin);
+            });
+        if (can_insert) {
+          cluster.insert(*begin);
+          found_cluster = true;
+          break;
+        }
+      }
+      if (!found_cluster) {
+        clusters.push_back({*begin});
+      }
+      begin = std::next(begin);
+    }
+    result.insert(std::end(result), std::begin(clusters), std::end(clusters));
   }
 
   return result;
@@ -111,7 +114,7 @@ HloInstruction* Combine(HloComputation* comp, Iter begin, Iter end) {
 template <typename Iter>
 StatusOr<std::vector<HloInstruction*>> Replace(HloComputation* comp, Iter begin,
                                                Iter end,
-                                               HloInstruction* all_reduce) {
+                                               HloInstruction* combined) {
   auto dist = std::distance(begin, end);
 
   if (dist == 1) {
@@ -122,15 +125,18 @@ StatusOr<std::vector<HloInstruction*>> Replace(HloComputation* comp, Iter begin,
   result.reserve(dist);
 
   for (auto itr = begin; itr != end; ++itr) {
+    HloInstruction* inst = *itr;
     // Add a get tuple to unpack the combined result
     auto gte = comp->AddInstruction(HloInstruction::CreateGetTupleElement(
-        (*itr)->shape(), all_reduce, std::distance(begin, itr)));
+        inst->shape(), combined, std::distance(begin, itr)));
     MakeUsedInplace(gte);
     result.push_back(gte);
+    TF_RETURN_IF_ERROR(combined->CopyAllControlDepsFrom(inst));
+    TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
 
     // Replace the op
-    TF_RETURN_IF_ERROR((*itr)->ReplaceAllUsesWith(gte));
-    TF_RETURN_IF_ERROR(comp->RemoveInstruction(*itr));
+    TF_RETURN_IF_ERROR(inst->ReplaceAllUsesWith(gte));
+    TF_RETURN_IF_ERROR(comp->ForceRemoveInstruction(inst));
   }
 
   return result;
@@ -140,6 +146,7 @@ StatusOr<std::vector<HloInstruction*>> Replace(HloComputation* comp, Iter begin,
 StatusOr<absl::optional<HloInstructionSequence>>
 CombineInstructions::CombineInstructionsInComputation(
     HloComputation* comp, const HloInstructionSequence& sequence) {
+  auto reachability_map = HloReachabilityMap::Build(comp);
   bool changed = false;
   auto instructions = sequence.instructions();
 
@@ -166,38 +173,36 @@ CombineInstructions::CombineInstructionsInComputation(
 
   // While we have a region to process
   while (region_begin != instructions.end()) {
-    // If all of the instructions can be combined
-    if (CanCombine(region_begin, region_end)) {
-      // Partition the instructions into combinable groups
-      auto subregions = Partition(region_begin, region_end);
+    // Partition the instructions into combinable groups
+    auto subregions =
+        Partition(region_begin, region_end, reachability_map.get());
 
-      std::vector<HloInstruction*> replacements;
+    std::vector<HloInstruction*> replacements;
 
-      // Create the combined instructions
-      for (auto& subregion : subregions) {
-        replacements.push_back(
-            Combine(comp, subregion.first, subregion.second));
+    // Create the combined instructions
+    for (auto& subregion : subregions) {
+      replacements.push_back(
+          Combine(comp, std::begin(subregion), std::end(subregion)));
 
-        TF_ASSIGN_OR_RETURN(auto ops,
-                            Replace(comp, subregion.first, subregion.second,
-                                    replacements.back()));
-        changed |= ops.size();
-        replacements.insert(replacements.end(), ops.begin(), ops.end());
-      }
-
-      // Replace the previous instruction in the schedule
-      //       v beg     v end
-      // [a,b,c|r,r,r,r,r|d,e,f,g,r,r,r]
-      // becomes
-      //       v itr
-      // [a,b,c|d,e,f,g,r,r,r]
-      auto insert_itr = instructions.erase(region_begin, region_end);
-      //       v itr   v end
-      // [a,b,c|r,t,t,t|d,e,f,g,r,r,r]
-      region_end = instructions.insert(insert_itr, replacements.begin(),
-                                       replacements.end()) +
-                   replacements.size();
+      TF_ASSIGN_OR_RETURN(
+          auto ops, Replace(comp, std::begin(subregion), std::end(subregion),
+                            replacements.back()));
+      changed |= ops.size();
+      replacements.insert(replacements.end(), ops.begin(), ops.end());
     }
+
+    // Replace the previous instruction in the schedule
+    //       v beg     v end
+    // [a,b,c|r,r,r,r,r|d,e,f,g,r,r,r]
+    // becomes
+    //       v itr
+    // [a,b,c|d,e,f,g,r,r,r]
+    auto insert_itr = instructions.erase(region_begin, region_end);
+    //       v itr   v end
+    // [a,b,c|r,t,t,t|d,e,f,g,r,r,r]
+    region_end = instructions.insert(insert_itr, replacements.begin(),
+                                     replacements.end()) +
+                 replacements.size();
 
     // Find the next region of consecutive colocated instructions
     //               v end   v beg

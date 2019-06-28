@@ -24,7 +24,9 @@ HloTruncatedNormalInstruction::HloTruncatedNormalInstruction(const Shape& shape)
     : HloPoplarInstruction(
           shape, {},
           GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                         PoplibsOp::TruncatedNormal)) {}
+                                         PoplibsOp::TruncatedNormal)) {
+  set_custom_call_has_side_effect(true);
+}
 
 absl::flat_hash_set<int64> HloTruncatedNormalInstruction::AllocatingIndices()
     const {
@@ -42,10 +44,6 @@ uint64 HloTruncatedNormalInstruction::NumberOfInplaceOperands() const {
 
 bool HloTruncatedNormalInstruction::IsPopOpsElementwise() const {
   return false;
-}
-
-bool HloTruncatedNormalInstruction::HasSideEffectNoRecurse() const {
-  return true;
 }
 
 std::unique_ptr<HloInstruction>
