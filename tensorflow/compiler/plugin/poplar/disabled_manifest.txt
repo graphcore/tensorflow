@@ -106,3 +106,4 @@ XlaSortOpTest.testTopK2D_200000
 XlaSortOpTest.testTopK2DLarge
 XlaSortOpTest.testInTopKLarge
 XlaSortOpTest.testInTopKLarge
+InverseOpTest # matrix inversing
