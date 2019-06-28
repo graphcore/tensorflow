@@ -64,16 +64,11 @@ def embedding_lookup(params,
     # Do we need to pad the input tensor?
     if K % balance_factor != 0:
       padding = balance_factor - (K % balance_factor)
-      logging.warning("Padding input tensor to " + str(name) +
-                      " embedding_lookup by " + str(padding) +
-                      " rows. This might produce a sub-optimal tile-mapping.")
-      params = tf.pad(params, [[0, padding], [0, 0]])
-      return embedding_lookup(
-          params,
-          ids,
-          name=name + "_padded",
-          one_hot_threshold=one_hot_threshold,
-          min_encoding_size=min_encoding_size)
+      logging.warning(
+          "Rebalancing of input tensor to embedding_lookup op named '" +
+          str(name) + "' failed. Consider adding " + str(padding) +
+          " rows to your embedding.")
+      return tf.nn.embedding_lookup(params, ids, name=name)
 
     # Reshape to distribute the tensor across more of the tiles
     params = tf.reshape(params, [K // balance_factor, N * balance_factor])
