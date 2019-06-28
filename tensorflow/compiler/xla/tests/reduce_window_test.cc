@@ -211,7 +211,7 @@ XLA_TEST_P(ReduceWindowTest, Along2ndMinorDim) {
                            DefaultErrorSpec());
 }
 
-XLA_TEST_P(ReduceWindowTest, AmongMajor2Dims) {
+XLA_TEST_P(ReduceWindowTest, AmongMajor2DimsAdd) {
   Array4D<float> input_array(4, 4, 6, 8);
   input_array.FillWithMinorDimNum();
   const auto input_data_handle =
@@ -233,7 +233,7 @@ XLA_TEST_P(ReduceWindowTest, AmongMajor2Dims) {
                            DefaultErrorSpec());
 }
 
-XLA_TEST_P(ReduceWindowTest, AmongMajor2DimsMediumSize) {
+XLA_TEST_P(ReduceWindowTest, AmongMajor2DimsMax) {
   Array4D<float> input_array(3, 3, 2, 1);
   input_array.FillWithMinorDimNum();
   const auto input_data_handle =
@@ -248,7 +248,6 @@ XLA_TEST_P(ReduceWindowTest, AmongMajor2DimsMediumSize) {
 }
 
 TEST_P(ReduceWindowTest, AmongMajor2DimsMediumSize) {
->>>>>>> tensorflow/master
   Array4D<float> input_array(9, 12, 4, 89);
   input_array.FillRandom(2.f, 2.f);
 
