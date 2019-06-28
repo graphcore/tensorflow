@@ -810,7 +810,7 @@ class NNAPIDelegateKernel {
 
   // Return a function that knows how to translate a node into its operands
   // when called. You can use this function to see if a node is supported
-  // (i.e. that MappingFn is not nullptr).
+  // (i.e. if the returned MappingFn is null, then the node is not supported).
   static MappingFn Map(const TfLiteContext* context, int builtin_code,
                        int version, int android_sdk_version,
                        const TfLiteNode* node) {
@@ -1199,6 +1199,9 @@ class NNAPIDelegateKernel {
       case kTfLiteBuiltinDequantize:
         if (version == 1 || version == 2) {
           const auto& input = context->tensors[node->inputs->data[0]];
+          if (input.type == kTfLiteFloat16) {
+            return nullptr;
+          }
           const auto zero_point = input.params.zero_point;
           // NN API supports int8 type since version 1.2 but only for symmetric
           // quantization.
@@ -1674,6 +1677,22 @@ class NNAPIDelegateKernel {
           } else {
             return nullptr;
           }
+        }
+      } break;
+      case kTfLiteBuiltinSelect: {
+        const auto value_type = context->tensors[node->inputs->data[1]].type;
+        if (version == 1 && android_sdk_version >= kMinSdkVersionForNNAPI12 &&
+            (value_type == kTfLiteFloat32 || value_type == kTfLiteUInt8 ||
+             value_type == kTfLiteInt32)) {
+          TfLiteIntArray* condition_shape =
+              context->tensors[node->inputs->data[0]].dims;
+          TfLiteIntArray* input_shape =
+              context->tensors[node->inputs->data[1]].dims;
+          // The Android Q-variant of select does not support broadcasting.
+          if (!TfLiteIntArrayEqual(condition_shape, input_shape)) {
+            return nullptr;
+          }
+          return BasicMappingFn<ANEURALNETWORKS_SELECT>;
         }
       } break;
       case kTfLiteBuiltinGather: {

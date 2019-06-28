@@ -2010,7 +2010,7 @@ cc_library(
         "//tensorflow/core/kernels:android_core_ops",
         "//tensorflow/core/kernels:android_extended_ops",
     ]),
-    copts = tf_copts() + ["-Os"] + ["-std=c++11"],
+    copts = tf_copts() + ["-Os"],
     visibility = ["//visibility:public"],
     deps = [
         ":ios_tensorflow_lib_lite",
@@ -2027,7 +2027,7 @@ cc_library(
 cc_library(
     name = "ios_tensorflow_lib_lite",
     srcs = if_ios([":android_srcs"]),
-    copts = tf_copts() + ["-Os"] + ["-std=c++11"],
+    copts = tf_copts() + ["-Os"],
     visibility = ["//visibility:public"],
     deps = [
         ":mobile_additional_lib_deps",
@@ -4810,6 +4810,7 @@ tf_cuda_cc_test(
         ":test_main",
         ":testlib",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
         "//third_party/eigen3",
         "//tensorflow/cc:cc_ops",
         "//tensorflow/core/kernels:collective_ops",
@@ -4850,6 +4851,7 @@ tf_cc_test(
         ":test",
         ":test_main",
         ":testlib",
+        "@com_google_absl//absl/strings",
         "//third_party/eigen3",
         "@com_google_absl//absl/memory",
         "//tensorflow/cc:cc_ops",
