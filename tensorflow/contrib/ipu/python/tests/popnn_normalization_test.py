@@ -21,14 +21,10 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.contrib.framework.python.ops import variables as contrib_variables
-from tensorflow.contrib.ipu.python import popnn_normalization
-from tensorflow.python.framework import constant_op
+from tensorflow.contrib import ipu
 from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import random_ops
-from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
 
@@ -41,7 +37,7 @@ class PopnnGroupNormTest(test.TestCase):
     inputs = array_ops.placeholder(dtypes.float32, shape=(5, 2, 10, 10))
     with self.assertRaisesRegexp(ValueError,
                                  'Invalid groups 10 for 2 channels.'):
-      popnn_normalization.group_norm(
+      ipu.popnn_normalization.group_norm(
           inputs, groups=10, reduction_axes=[-2, -1], channels_axis=-3)
 
   def testBadCommensurateGroup(self):
@@ -49,51 +45,51 @@ class PopnnGroupNormTest(test.TestCase):
     with self.assertRaisesRegexp(
         ValueError, '4 channels is not commensurate with '
         '3 groups.'):
-      popnn_normalization.group_norm(
+      ipu.popnn_normalization.group_norm(
           inputs, groups=3, reduction_axes=[-2, -1], channels_axis=-3)
 
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
-      popnn_normalization.group_norm(inputs, channels_axis=5)
+      ipu.popnn_normalization.group_norm(inputs, channels_axis=5)
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
-      popnn_normalization.group_norm(inputs, reduction_axes=[1, 5])
+      ipu.popnn_normalization.group_norm(inputs, reduction_axes=[1, 5])
 
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.group_norm(
+      ipu.popnn_normalization.group_norm(
           inputs, channels_axis=-1, reduction_axes=[-1])
     # Specify axis with positive values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.group_norm(
+      ipu.popnn_normalization.group_norm(
           inputs, channels_axis=1, reduction_axes=[1, 3])
     # Specify axis with mixed positive and negative values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.group_norm(
+      ipu.popnn_normalization.group_norm(
           inputs, channels_axis=-1, reduction_axes=[3])
 
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
     with self.assertRaisesRegexp(ValueError, 'undefined rank'):
-      popnn_normalization.group_norm(inputs)
+      ipu.popnn_normalization.group_norm(inputs)
 
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
     with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
-      popnn_normalization.group_norm(inputs)
+      ipu.popnn_normalization.group_norm(inputs)
 
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
     with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
-      popnn_normalization.group_norm(
+      ipu.popnn_normalization.group_norm(
           inputs, channels_axis=-1, reduction_axes=[-3, -2])
 
   def testCreateOp(self):
     height, width, groups = 3, 3, 4
     images = random_ops.random_uniform((5, height, width, 2 * groups), seed=1)
-    output = popnn_normalization.group_norm(
+    output = ipu.popnn_normalization.group_norm(
         images, groups=groups, channels_axis=-1, reduction_axes=[-3, -2])
     self.assertListEqual([5, height, width, 2 * groups],
                          output.shape.as_list())
@@ -103,7 +99,7 @@ class PopnnGroupNormTest(test.TestCase):
     images = random_ops.random_uniform((5, height, width, 3 * groups),
                                        dtype=dtypes.float32,
                                        seed=1)
-    output = popnn_normalization.group_norm(
+    output = ipu.popnn_normalization.group_norm(
         images, groups=groups, center=False, scale=False)
     self.assertListEqual([5, height, width, 3 * groups],
                          output.shape.as_list())
@@ -113,7 +109,7 @@ class PopnnGroupNormTest(test.TestCase):
   def testCreateVariables_NHWC(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 8), seed=1)
-    popnn_normalization.group_norm(
+    ipu.popnn_normalization.group_norm(
         images,
         groups=4,
         channels_axis=-1,
@@ -128,7 +124,7 @@ class PopnnGroupNormTest(test.TestCase):
   def testCreateVariables_NCHW(self):
     height, width, groups = 3, 3, 4
     images = random_ops.random_uniform((5, 2 * groups, height, width), seed=1)
-    popnn_normalization.group_norm(
+    ipu.popnn_normalization.group_norm(
         images,
         groups=4,
         channels_axis=-3,
@@ -143,8 +139,9 @@ class PopnnGroupNormTest(test.TestCase):
   def testReuseVariables(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 4), seed=1)
-    popnn_normalization.group_norm(images, groups=2, scale=True, scope='IN')
-    popnn_normalization.group_norm(
+    ipu.popnn_normalization.group_norm(
+        images, groups=2, scale=True, scope='IN')
+    ipu.popnn_normalization.group_norm(
         images, groups=2, scale=True, scope='IN', reuse=True)
     beta = contrib_variables.get_variables_by_name('beta')
     gamma = contrib_variables.get_variables_by_name('gamma')
@@ -155,8 +152,9 @@ class PopnnGroupNormTest(test.TestCase):
     height, width = 3, 3
     image_shape = (10, height, width, 4)
     images = random_ops.random_uniform(image_shape, seed=1)
-    output_train = popnn_normalization.group_norm(images, groups=2, scope='IN')
-    output_eval = popnn_normalization.group_norm(
+    output_train = ipu.popnn_normalization.group_norm(
+        images, groups=2, scope='IN')
+    output_eval = ipu.popnn_normalization.group_norm(
         images, groups=2, scope='IN', reuse=True)
     with self.cached_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -204,7 +202,7 @@ class PopnnGroupNormTest(test.TestCase):
     expected_var = np.ones(reduced_shape)
 
     inputs = random_ops.random_normal(input_shape, seed=0) * sigma + mu
-    output_op = popnn_normalization.group_norm(
+    output_op = ipu.popnn_normalization.group_norm(
         inputs,
         groups=groups,
         center=False,
@@ -282,45 +280,45 @@ class PopnnInstanceNormTest(test.TestCase):
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
-      popnn_normalization.instance_norm(inputs, channels_axis=5)
+      ipu.popnn_normalization.instance_norm(inputs, channels_axis=5)
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
-      popnn_normalization.instance_norm(inputs, reduction_axes=[1, 5])
+      ipu.popnn_normalization.instance_norm(inputs, reduction_axes=[1, 5])
 
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.instance_norm(
+      ipu.popnn_normalization.instance_norm(
           inputs, channels_axis=-1, reduction_axes=[-1])
     # Specify axis with positive values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.instance_norm(
+      ipu.popnn_normalization.instance_norm(
           inputs, channels_axis=1, reduction_axes=[1, 3])
     # Specify axis with mixed positive and negative values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.instance_norm(
+      ipu.popnn_normalization.instance_norm(
           inputs, channels_axis=-1, reduction_axes=[3])
 
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
     with self.assertRaisesRegexp(ValueError, 'undefined rank'):
-      popnn_normalization.instance_norm(inputs)
+      ipu.popnn_normalization.instance_norm(inputs)
 
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
     with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
-      popnn_normalization.instance_norm(inputs)
+      ipu.popnn_normalization.instance_norm(inputs)
 
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
     with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
-      popnn_normalization.instance_norm(
+      ipu.popnn_normalization.instance_norm(
           inputs, channels_axis=-1, reduction_axes=[-3, -2])
 
   def testCreateOp(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 2), seed=1)
-    output = popnn_normalization.instance_norm(
+    output = ipu.popnn_normalization.instance_norm(
         images, channels_axis=-1, reduction_axes=[-3, -2])
     self.assertListEqual([5, height, width, 2], output.shape.as_list())
 
@@ -329,7 +327,7 @@ class PopnnInstanceNormTest(test.TestCase):
     images = random_ops.random_uniform((5, height, width, 3),
                                        dtype=dtypes.float32,
                                        seed=1)
-    output = popnn_normalization.instance_norm(
+    output = ipu.popnn_normalization.instance_norm(
         images, center=False, scale=False)
     self.assertListEqual([5, height, width, 3], output.shape.as_list())
     self.assertEqual(0, len(contrib_variables.get_variables_by_name('beta')))
@@ -338,7 +336,7 @@ class PopnnInstanceNormTest(test.TestCase):
   def testCreateVariables_NHWC(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 8), seed=1)
-    popnn_normalization.instance_norm(
+    ipu.popnn_normalization.instance_norm(
         images,
         channels_axis=-1,
         reduction_axes=(-3, -2),
@@ -352,7 +350,7 @@ class PopnnInstanceNormTest(test.TestCase):
   def testCreateVariables_NCHW(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, 2, height, width), seed=1)
-    popnn_normalization.instance_norm(
+    ipu.popnn_normalization.instance_norm(
         images,
         channels_axis=-3,
         reduction_axes=(-2, -1),
@@ -366,8 +364,8 @@ class PopnnInstanceNormTest(test.TestCase):
   def testReuseVariables(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 4), seed=1)
-    popnn_normalization.instance_norm(images, scale=True, scope='IN')
-    popnn_normalization.instance_norm(
+    ipu.popnn_normalization.instance_norm(images, scale=True, scope='IN')
+    ipu.popnn_normalization.instance_norm(
         images, scale=True, scope='IN', reuse=True)
     beta = contrib_variables.get_variables_by_name('beta')
     gamma = contrib_variables.get_variables_by_name('gamma')
@@ -378,8 +376,8 @@ class PopnnInstanceNormTest(test.TestCase):
     height, width = 3, 3
     image_shape = (10, height, width, 4)
     images = random_ops.random_uniform(image_shape, seed=1)
-    output_train = popnn_normalization.instance_norm(images, scope='IN')
-    output_eval = popnn_normalization.instance_norm(
+    output_train = ipu.popnn_normalization.instance_norm(images, scope='IN')
+    output_eval = ipu.popnn_normalization.instance_norm(
         images, scope='IN', reuse=True)
     with self.cached_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -425,7 +423,7 @@ class PopnnInstanceNormTest(test.TestCase):
     expected_var = np.ones(reduced_shape)
 
     inputs = random_ops.random_normal(input_shape, seed=0) * sigma + mu
-    output_op = popnn_normalization.instance_norm(
+    output_op = ipu.popnn_normalization.instance_norm(
         inputs,
         center=False,
         scale=False,
@@ -489,45 +487,45 @@ class PopnnLayerNormTest(test.TestCase):
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
-      popnn_normalization.layer_norm(inputs, channels_axis=5)
+      ipu.popnn_normalization.layer_norm(inputs, channels_axis=5)
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
-      popnn_normalization.layer_norm(inputs, reduction_axes=[1, 5])
+      ipu.popnn_normalization.layer_norm(inputs, reduction_axes=[1, 5])
 
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.layer_norm(
+      ipu.popnn_normalization.layer_norm(
           inputs, channels_axis=-1, reduction_axes=[-1])
     # Specify axis with positive values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.layer_norm(
+      ipu.popnn_normalization.layer_norm(
           inputs, channels_axis=1, reduction_axes=[1, 3])
     # Specify axis with mixed positive and negative values.
     with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
-      popnn_normalization.layer_norm(
+      ipu.popnn_normalization.layer_norm(
           inputs, channels_axis=-1, reduction_axes=[3])
 
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
     with self.assertRaisesRegexp(ValueError, 'undefined rank'):
-      popnn_normalization.layer_norm(inputs)
+      ipu.popnn_normalization.layer_norm(inputs)
 
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
     with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
-      popnn_normalization.layer_norm(inputs)
+      ipu.popnn_normalization.layer_norm(inputs)
 
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
     with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
-      popnn_normalization.layer_norm(
+      ipu.popnn_normalization.layer_norm(
           inputs, channels_axis=-1, reduction_axes=[-3, -2])
 
   def testCreateOp(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 2), seed=1)
-    output = popnn_normalization.layer_norm(
+    output = ipu.popnn_normalization.layer_norm(
         images, channels_axis=-1, reduction_axes=[-3, -2])
     self.assertListEqual([5, height, width, 2], output.shape.as_list())
 
@@ -536,7 +534,8 @@ class PopnnLayerNormTest(test.TestCase):
     images = random_ops.random_uniform((5, height, width, 3),
                                        dtype=dtypes.float32,
                                        seed=1)
-    output = popnn_normalization.layer_norm(images, center=False, scale=False)
+    output = ipu.popnn_normalization.layer_norm(
+        images, center=False, scale=False)
     self.assertListEqual([5, height, width, 3], output.shape.as_list())
     self.assertEqual(0, len(contrib_variables.get_variables_by_name('beta')))
     self.assertEqual(0, len(contrib_variables.get_variables_by_name('gamma')))
@@ -544,7 +543,7 @@ class PopnnLayerNormTest(test.TestCase):
   def testCreateVariables_NHWC(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 8), seed=1)
-    popnn_normalization.layer_norm(
+    ipu.popnn_normalization.layer_norm(
         images,
         channels_axis=-1,
         reduction_axes=(-3, -2),
@@ -558,7 +557,7 @@ class PopnnLayerNormTest(test.TestCase):
   def testCreateVariables_NCHW(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, 2, height, width), seed=1)
-    popnn_normalization.layer_norm(
+    ipu.popnn_normalization.layer_norm(
         images,
         channels_axis=-3,
         reduction_axes=(-2, -1),
@@ -572,8 +571,9 @@ class PopnnLayerNormTest(test.TestCase):
   def testReuseVariables(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 4), seed=1)
-    popnn_normalization.layer_norm(images, scale=True, scope='IN')
-    popnn_normalization.layer_norm(images, scale=True, scope='IN', reuse=True)
+    ipu.popnn_normalization.layer_norm(images, scale=True, scope='IN')
+    ipu.popnn_normalization.layer_norm(
+        images, scale=True, scope='IN', reuse=True)
     beta = contrib_variables.get_variables_by_name('beta')
     gamma = contrib_variables.get_variables_by_name('gamma')
     self.assertEqual(1, len(beta))
@@ -583,8 +583,8 @@ class PopnnLayerNormTest(test.TestCase):
     height, width = 3, 3
     image_shape = (10, height, width, 4)
     images = random_ops.random_uniform(image_shape, seed=1)
-    output_train = popnn_normalization.layer_norm(images, scope='IN')
-    output_eval = popnn_normalization.layer_norm(
+    output_train = ipu.popnn_normalization.layer_norm(images, scope='IN')
+    output_eval = ipu.popnn_normalization.layer_norm(
         images, scope='IN', reuse=True)
     with self.cached_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -630,7 +630,7 @@ class PopnnLayerNormTest(test.TestCase):
     expected_var = np.ones(reduced_shape)
 
     inputs = random_ops.random_normal(input_shape, seed=0) * sigma + mu
-    output_op = popnn_normalization.layer_norm(
+    output_op = ipu.popnn_normalization.layer_norm(
         inputs,
         center=False,
         scale=False,

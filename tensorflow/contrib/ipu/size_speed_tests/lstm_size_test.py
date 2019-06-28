@@ -6,10 +6,7 @@ import os
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.contrib.ipu import ipu_compiler
 from tensorflow.contrib import ipu
-from tensorflow.contrib.ipu import utils
-from tensorflow.contrib.ipu import popnn_rnn
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
@@ -29,7 +26,7 @@ num_hidden = 512
 
 
 def _PopnnLSTM(x, h, c):
-  lstm_cell = popnn_rnn.PopnnLSTM(
+  lstm_cell = ipu.popnn_rnn.PopnnLSTM(
       num_hidden,
       dtype=dataType,
       weights_initializer=init_ops.zeros_initializer(dtype=dataType),
@@ -56,9 +53,9 @@ def RunLayer(layer_func, x):
     pc = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
     report = gen_ipu_ops.ipu_event_trace()
   with ipu.ops.ipu_scope("/device:IPU:0"):
-    r = ipu_compiler.compile(layer_func, inputs=[px, ph, pc])
+    r = ipu.ipu_compiler.compile(layer_func, inputs=[px, ph, pc])
 
-  opts = utils.create_ipu_config(profiling=True)
+  opts = ipu.utils.create_ipu_config(profiling=True)
   ipu.utils.configure_ipu_system(opts)
 
   with sl.Session() as sess:
@@ -66,8 +63,8 @@ def RunLayer(layer_func, x):
     out = sess.run(report)
     result = sess.run(r, {px: x, ph: np.ones(ph.shape), pc: np.ones(pc.shape)})
     out = sess.run(report)
-    evts = utils.extract_all_events(out)
-    size = utils.get_memory_size_from_events(evts)
+    evts = ipu.utils.extract_all_events(out)
+    size = ipu.utils.get_memory_size_from_events(evts)
   return (size, result)
 
 

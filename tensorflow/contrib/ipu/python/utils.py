@@ -23,7 +23,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.platform import tf_logging as logging
 
 import json
 import re

@@ -9,7 +9,6 @@ import glob
 import numpy as np
 import os
 
-from tensorflow.contrib.ipu.python import ipu_compiler
 from tensorflow.contrib import ipu
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
@@ -36,7 +35,7 @@ class DumpPoplarInfo(test_util.TensorFlowTestCase):
       pc = array_ops.placeholder(np.float32, [2048], name="c")
 
     with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_model, inputs=[pa, pb, pc])
+      r = ipu.ipu_compiler.compile(my_model, inputs=[pa, pb, pc])
 
     cfg = ipu.utils.create_ipu_config(profiling=False)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)

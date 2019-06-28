@@ -16,8 +16,6 @@
 Graphcore utility operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-from functools import wraps
-
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.platform import tf_logging as logging
 

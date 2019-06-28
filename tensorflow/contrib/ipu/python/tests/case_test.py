@@ -9,7 +9,6 @@ import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.contrib.ipu import ipu_compiler
 from tensorflow.contrib import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.eager import function as eager_function
@@ -59,7 +58,7 @@ class CaseTest(test_util.TensorFlowTestCase):
       pc = array_ops.placeholder(np.float32, [2], name="c")
       report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_graph, [pa, pb, pc])
+    out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -126,7 +125,7 @@ class CaseTest(test_util.TensorFlowTestCase):
       pb = array_ops.placeholder(np.float32, [2], name="b")
       report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_graph, [pa, pb])
+    out = ipu.ipu_compiler.compile(my_graph, [pa, pb])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)

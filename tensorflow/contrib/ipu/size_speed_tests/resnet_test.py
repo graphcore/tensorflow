@@ -5,8 +5,7 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.contrib.ipu import utils
-from tensorflow.contrib.ipu import ops as ipu_ops
+from tensorflow.contrib import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
@@ -115,7 +114,7 @@ class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
     x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
     y_ = array_ops.placeholder(datatype, shape=[1, 1000])
 
-    with ipu_ops.ipu_scope("/device:IPU:0"):
+    with ipu.ops.ipu_scope("/device:IPU:0"):
       logits = inference(x)
 
       loss = math_ops.reduce_mean(
@@ -125,8 +124,8 @@ class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
 
-    opts = utils.create_ipu_config(profiling=True)
-    utils.configure_ipu_system(opts)
+    opts = ipu.utils.create_ipu_config(profiling=True)
+    ipu.utils.configure_ipu_system(opts)
     sess = sl.Session()
 
     sess.run(variables.global_variables_initializer())
@@ -140,15 +139,15 @@ class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
 
     sess.close()
 
-    evts = utils.extract_all_events(out)
-    size = utils.get_memory_size_from_events(evts)
+    evts = ipu.utils.extract_all_events(out)
+    size = ipu.utils.get_memory_size_from_events(evts)
     self.assertTrue(size < 36210000)
 
   def testTraining(self):
     x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
     y_ = array_ops.placeholder(datatype, shape=[1, 1000])
 
-    with ipu_ops.ipu_scope("/device:IPU:0"):
+    with ipu.ops.ipu_scope("/device:IPU:0"):
       logits = inference(x)
 
       loss = math_ops.reduce_mean(
@@ -160,8 +159,8 @@ class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
 
-    opts = utils.create_ipu_config(profiling=True)
-    utils.configure_ipu_system(opts)
+    opts = ipu.utils.create_ipu_config(profiling=True)
+    ipu.utils.configure_ipu_system(opts)
 
     sess = sl.Session()
 
@@ -176,8 +175,8 @@ class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
 
     sess.close()
 
-    evts = utils.extract_all_events(out)
-    size = utils.get_memory_size_from_events(evts)
+    evts = ipu.utils.extract_all_events(out)
+    size = ipu.utils.get_memory_size_from_events(evts)
     self.assertTrue(size < 75000000)
 
 

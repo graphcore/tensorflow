@@ -22,7 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.python.framework import ops
-from tensorflow.contrib.compiler import xla
+from tensorflow.python.compiler.xla import xla
 
 
 def compile(computation, inputs=None):

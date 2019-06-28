@@ -8,7 +8,7 @@ import tempfile
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.contrib.ipu import ipu_compiler
+from tensorflow.contrib import ipu
 from tensorflow.keras import layers
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
@@ -27,9 +27,8 @@ from tensorflow.python.training import gradient_descent
 
 
 def count_compile_end_events(events):
-  fn = (
-      lambda x: 1 if x.type == IpuTraceEvent.COMPILE_END and len(x.compile_end.compilation_report) > 10 else 0
-  )
+  fn = (lambda x: 1 if x.type == IpuTraceEvent.COMPILE_END and len(
+      x.compile_end.compilation_report) > 10 else 0)
   return sum(map(fn, events))
 
 
@@ -214,7 +213,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       events = gen_ipu_ops.ipu_event_trace()
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[a, b])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
 
     cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -281,7 +280,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
 
-      l = ipu_compiler.compile(my_net, inputs=[a, b])
+      l = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
