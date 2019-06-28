@@ -76,31 +76,6 @@ class SPSCQueue {
   }
 
   /**
-   * Access the back elemenet of the queue.
-   * This is only safe to call on the same thread which pushes to the queue.
-   *
-   * \return reference to the back of the queue.
-   */
-  inline T& Back() {
-    assert(!IsFull());
-
-    return buffer_[write_position_];
-  }
-
-  /**
-   * Similar to Back, except it will block until the queue is not full.
-   * This is only safe to call on the same thread which pushes to the queue.
-   *
-   * \param item The element to push.
-   */
-  inline T& BlockBack() {
-    while (IsFull()) {
-    }
-
-    return Back();
-  }
-
-  /**
    * Advance the write position of the queue.
    * This is only safe to call on the same thread which pushes to the queue.
    *
@@ -156,18 +131,6 @@ class SPSCQueue {
   }
 
   /**
-   * Access the front elemenet of the queue.
-   * This is only safe to call on the same thread which pops from the queue.
-   *
-   * \return reference to the front of the queue.
-   */
-  inline T& Front() {
-    assert(!IsEmpty());
-
-    return buffer_[read_position_];
-  }
-
-  /**
    * Advance the read position of the queue.
    * This is only safe to call on the same thread which pops from the queue.
    *
@@ -175,19 +138,6 @@ class SPSCQueue {
   inline void AdvanceReadPosition() {
     read_position_ = (read_position_ + 1) % Capacity;
     std::atomic_fetch_sub(&size_, std::size_t{1});
-  }
-
-  /**
-   * Similar to Front, except it will block until the queue is not full.
-   * This is only safe to call on the same thread which pops from the queue.
-   *
-   * \param item The element to push.
-   */
-  inline T& BlockFront() {
-    while (IsEmpty()) {
-    }
-
-    return Front();
   }
 
   /**

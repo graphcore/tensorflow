@@ -348,7 +348,7 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
               // writes to it, and then moves the write position of the queue.
               void* dest = queue->BlockBack();
               std::memcpy(dest, src, bytes_per_replica);
-              queue->AdvanceWritePosition();
+              queue->FinishedBack();
             });
       }
     }
@@ -444,6 +444,7 @@ inline std::vector<tensorflow::Tensor> AllocateTensors(
 std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
     const OutfeedInfos& outfeed_infos) {
   outfeed_thread_cancelled_ = false;
+  outfeeds_done_ = false;
 
   std::vector<OutfeedContext*> outfeed_contexts;
   outfeed_contexts.reserve(outfeed_infos.size());
@@ -462,16 +463,16 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
     for (auto& outfeed_context : outfeed_contexts) {
       outfeed_context->mutex.lock();
     }
-    bool all_queues_empty;
-    // Continue while the IO thread has not been cancelled or any of the
-    // callback queues is not empty.
-    do {
-      all_queues_empty = true;
+    // Continue while the thread has not been cancelled, and if it has been
+    // cancelled allow for up to two extra runs.
+    uint32 all_queues_empty_for = 0;
+    while (!outfeed_thread_cancelled_ || all_queues_empty_for != 2) {
+      bool all_queues_empty = true;
       for (auto& outfeed_context : outfeed_contexts) {
         for (auto& tensor_queues :
              outfeed_context->callback_to_io_thread_queues) {
           for (auto& replica_queue : tensor_queues) {
-            all_queues_empty &= replica_queue->IsEmpty();
+            all_queues_empty &= !replica_queue->HasItemsWaiting();
           }
         }
 
@@ -493,8 +494,8 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
         }
 
         // Get the last element of the queue, for the all mode this means this
-        // will be the newly allocated tensors, for the get last mode this will
-        // be the same tensors as before which will be overwritten.
+        // will be the newly allocated tensors, for the get last mode this
+        // will be the same tensors as before which will be overwritten.
         std::vector<tensorflow::Tensor>& tensors_to_write_to =
             outfeed_context->io_thread_output_queues.back();
         for (auto j = 0; j < outfeed_context->shapes.size(); ++j) {
@@ -526,12 +527,22 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
             auto* src = queue->BlockFront();
             // Memcpy it into the output tensor.
             std::memcpy(tb->data(), src, tensor.AllocatedBytes());
-            // Move the position indicating we are no longer reading from here.
-            queue->AdvanceReadPosition();
+            // Move the position indicating we are no longer reading from
+            // here.
+            queue->FinishedFront();
           }
         }
       }
-    } while (!outfeed_thread_cancelled_ || !all_queues_empty);
+      if (all_queues_empty && outfeed_thread_cancelled_) {
+        all_queues_empty_for++;
+      }
+    }
+    // Notify the main thread that outfeeds are done.
+    {
+      std::lock_guard<std::mutex> l(outfeeds_mutex_);
+      outfeeds_done_ = true;
+    }
+    outfeeds_cond_var_.notify_one();
     // Unlock all the outfeed queues.
     for (auto& outfeed_context : outfeed_contexts) {
       outfeed_context->mutex.unlock();
@@ -541,17 +552,29 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
 
 void PoplarExecutor::LaunchIOThreads(const InfeedInfos& infeed_infos,
                                      const OutfeedInfos& outfeed_infos) {
-  std::function<void()> infeed_thread_io_fn =
-      CreateInfeedIOThreadFunction(infeed_infos);
-  std::function<void()> outfeed_thread_io_fn =
-      CreateOutfeedIOThreadFunction(outfeed_infos);
-  thread_pool_.Schedule(infeed_thread_io_fn);
-  thread_pool_.Schedule(outfeed_thread_io_fn);
+  if (infeed_infos.size()) {
+    std::function<void()> infeed_thread_io_fn =
+        CreateInfeedIOThreadFunction(infeed_infos);
+    thread_pool_.Schedule(infeed_thread_io_fn);
+  }
+
+  if (outfeed_infos.size()) {
+    std::function<void()> outfeed_thread_io_fn =
+        CreateOutfeedIOThreadFunction(outfeed_infos);
+    thread_pool_.Schedule(outfeed_thread_io_fn);
+  }
 }
 
-void PoplarExecutor::StopThreadPool() {
+void PoplarExecutor::StopThreadPool(const OutfeedInfos& outfeed_infos) {
   infeed_thread_cancelled_ = true;
   outfeed_thread_cancelled_ = true;
+
+  if (outfeed_infos.size()) {
+    // Block until the outfeed thread has finished.
+    std::unique_lock<std::mutex> l(outfeeds_mutex_);
+    outfeeds_cond_var_.wait(
+        l, [this] { return std::atomic_load(&outfeeds_done_); });
+  }
 }
 
 void PoplarExecutor::DeferredDeallocation() {
@@ -1768,8 +1791,6 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       ConnectStreamedVariablesDeviceToHost();
 
       const auto& infeed_infos = executable.GetInfeedInfos();
-      auto infeed_thread_cleanup =
-          tensorflow::gtl::MakeCleanup([this]() { StopThreadPool(); });
       if (!infeed_infos.empty()) {
         ConnectInfeedsToStreamCallback(infeed_infos);
       }
@@ -1789,6 +1810,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       // Run the main engine
       current_engine_->enableExecutionProfiling();
       current_engine_->run(PoplarProgramType::MAIN_SEQUENCE);
+      StopThreadPool(outfeed_infos);
 
       // We need to call post process to make sure all the data is in the
       // right format on the host

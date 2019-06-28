@@ -53,6 +53,7 @@ limitations under the License.
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/lib/io/path.h"
 
+#include <condition_variable>
 #include <list>
 #include <mutex>
 
@@ -574,7 +575,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                        const OutfeedInfos& outfeed_infos);
 
   // Sets cancellation flags and notifies the threads running in thread_pool_
-  void StopThreadPool();
+  void StopThreadPool(const OutfeedInfos& outfeed_infos);
 
   void DeferredDeallocation();
 
@@ -583,6 +584,16 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   int ordinal_;
 
   std::recursive_mutex mutex_;
+
+  std::mutex outfeeds_mutex_;
+
+  std::condition_variable outfeeds_cond_var_;
+
+  std::atomic<bool> infeed_thread_cancelled_;
+
+  std::atomic<bool> outfeed_thread_cancelled_;
+
+  std::atomic<bool> outfeeds_done_;
 
   poplar::Engine* current_engine_;
 
@@ -612,10 +623,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   IpuOptions current_config_;
 
   std::list<tensorflow::IpuTraceEvent> reports_;
-
-  std::atomic<bool> infeed_thread_cancelled_;
-
-  std::atomic<bool> outfeed_thread_cancelled_;
 
   static const int NUM_THREADS = 2;
   tensorflow::thread::ThreadPool thread_pool_;
