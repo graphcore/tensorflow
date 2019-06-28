@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package xla.poplarplugin;
 
+import "tensorflow/core/framework/types.proto";
+
 // Message which is stored as the config field for an HloInstruction for an
 // HloInfeedInstruction/HloOutfeedInstruction instruction.
 message PoplarFeedConfig {
@@ -11,6 +13,14 @@ message PoplarFeedConfig {
 	// The unique name of this feed.
 	string feed_id = 2;
 
+	enum Mode {
+		GetAll = 0;
+		GetLast = 1;
+	}
 	// Optional mode.
-	string mode = 3;
+	Mode mode = 3;
+
+	// We store the TF DataType for each shape as it is not safe to convert from
+	// XLA PrimitveType to TF DataType.
+	repeated tensorflow.DataType tf_data_types = 4;
 };

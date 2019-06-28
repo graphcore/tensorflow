@@ -20,6 +20,7 @@ Popnn embedding operator
 from functools import reduce
 from operator import mul
 import tensorflow as tf
+from tensorflow.python.platform import tf_logging as logging
 
 
 def embedding_lookup(params,

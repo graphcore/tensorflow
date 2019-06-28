@@ -22,6 +22,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
+#include <poplar/ReplicatedStreamMode.hpp>
+
 namespace xla {
 namespace poplarplugin {
 
@@ -60,49 +62,24 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
   poplar::program::Sequence& stream_copy_seq =
       in_info.IsStreaming() ? sequence : host_to_device;
 
-  poplar::program::Sequence& inter_ipu_copy_seq =
-      in_info.IsStreaming() ? sequence : host_to_device_inter_ipu_copy;
-
-  poplar::Graph& master_graph = GetMasterGraph(resources_);
-  poplar::Tensor master_tensor = tensor;
-  poplar::Tensor input_tensor = tensor;
-
-  const auto replication_factor = resources_.replication_factor;
-  if (HasReplicatedGraph(resources_)) {
-    master_tensor = master_graph.getNonReplicatedTensor(master_tensor);
-    if (replication_factor != master_tensor.dim(0)) {
-      return xla::FailedPrecondition(
-          "Unable to stream replicated tensor - replication count does not "
-          "match (%llu vs %llu).",
-          replication_factor, master_tensor.dim(0));
-    }
-    // For replicated graphs we copy from the host to IPU 0, then copy to the
-    // other IPUs
-    input_tensor = master_tensor.slice(0, 1);
-  }
+  poplar::Graph& graph = GetGraph(resources_, inst);
 
   if (!UseSyntheticData()) {
     // Create a host stream.
-    auto fifo = master_graph.addHostToDeviceFIFO(
+    auto fifo = graph.addHostToDeviceFIFO(
         GetInputCopyHandle(inst->parameter_number(), flat_tuple_index),
-        input_tensor.elementType(), input_tensor.numElements());
+        tensor.elementType(), tensor.numElements(),
+        poplar::ReplicatedStreamMode::BROADCAST);
 
     stream_copy_seq.add(poplar::program::Copy(
-        fifo, input_tensor,
+        fifo, tensor,
         !in_info.IsStreaming() || always_rearrange_copies_on_the_host));
 
   } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
     // Initialize the tensor to a constant value.
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
     TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
-    TF_RETURN_IF_ERROR(
-        SetInitialTensorValue(master_graph, input_tensor, literal));
-  }
-
-  if (HasReplicatedGraph(resources_)) {
-    inter_ipu_copy_seq.add(
-        poplar::program::Copy(input_tensor.broadcast(replication_factor - 1, 0),
-                              master_tensor.slice(1, replication_factor)));
+    TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
   }
 
   if (!LayoutUtil::IsMonotonicWithDim0Major(
@@ -134,6 +111,8 @@ Status EntryVisitor::FinishVisit(HloInstruction* root) {
     resources_.tensor_maps[comp->name()] = std::move(tensor_map);
     return Status::OK();
   }
+
+  poplar::Graph& graph = GetGraph(resources_, root);
 
   auto* layout = comp->parent()->mutable_entry_computation_layout();
   std::vector<Shape> shapes = FlattenedXlaShape(layout->result_shape());
@@ -193,16 +172,7 @@ Status EntryVisitor::FinishVisit(HloInstruction* root) {
             ConvertFromDeviceLayout(shapes[all_outputs_flat_tensor_index],
                                     out_tensors[all_outputs_flat_tensor_index]);
 
-        poplar::Graph& master_graph = GetMasterGraph(resources_);
-
-        if (HasReplicatedGraph(resources_)) {
-          // For replicated outputs, we send only the first IPU's slice to the
-          // host
-          out = master_graph.getNonReplicatedTensor(out);
-          out = out.slice(0, 1);
-        }
-
-        auto fifo = master_graph.addDeviceToHostFIFO(
+        auto fifo = graph.addDeviceToHostFIFO(
             GetOutputCopyHandle(idx, current_output_flat_tensor_index),
             out.elementType(), out.numElements());
 
@@ -225,10 +195,7 @@ EntryVisitor::GetNonStandardParameterLayout() const {
 }
 
 const poplar::program::Sequence EntryVisitor::GetHostToDevice() const {
-  poplar::program::Sequence seq;
-  seq.add(host_to_device);
-  seq.add(host_to_device_inter_ipu_copy);
-  return seq;
+  return host_to_device;
 }
 const poplar::program::Sequence EntryVisitor::GetDeviceToHost() const {
   return device_to_host;

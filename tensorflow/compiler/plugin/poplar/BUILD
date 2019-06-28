@@ -41,6 +41,7 @@ xla_proto_library(
     ],
     deps = [
       "//tensorflow/compiler/xla:xla_data_proto",
+      "//tensorflow/core:protos_all_cc",
     ],
 )
 
@@ -316,6 +317,7 @@ cc_library(
         "driver/tools/data_initializer.h",
         "driver/tools/mapping_helper.h",
         "driver/tools/spsc_queue.h",
+        "driver/tools/spsc_outfeed_queue.h",
         "driver/vertex_templates.h",
         "driver/visitors/deferred_allocation_visitor.h",
         "driver/visitors/entry_visitor.h",
@@ -848,24 +850,6 @@ tf_cc_test(
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
-    ],
-)
-
-tf_cc_test(
-    name = "ipu_outfeed_test",
-    srcs = ["tests/ipu_outfeed_test.cc"],
-    size = "small",
-    extra_copts = [
-        "-fexceptions",
-    ],
-    deps = [
-        ":poplar_lib",
-        ":test_utils",
-        "//tensorflow/compiler/xla/service:hlo_matchers",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
-        "//tensorflow/compiler/xla/tests:client_library_test_base",
-        "//tensorflow/compiler/xla/tests:local_client_test_base",
-        "//tensorflow/compiler/xla/client/lib:arithmetic",
     ],
 )
 
@@ -1699,7 +1683,6 @@ test_suite(
         "inplace_test",
         "inter_ipu_copy_inserter_test",
         "ipu_model_device_test",
-        "ipu_outfeed_test",
         "lstm_test",
         "matmul_test",
         "monitored_session_test",

@@ -196,6 +196,7 @@ class IPUOutfeedQueue:
     with ops.device(self._device_str):
       outfeed_op = gen_pop_datastream_ops.pop_datastream_outfeed_enqueue(
           self._structure.to_tensor_list(tensors),
+          output_shapes=self._structure.flat_shapes,
           outfeed_mode=self._outfeed_mode.value,
           feed_id=self._feed_name,
           replication_factor=self._replication_factor)
@@ -342,16 +343,12 @@ class IPUOutfeedQueue:
 
     """
 
-    # None shape in beginning of list indicates that an unknown number of
-    # outfeed elements will be returned
-    outfeed_shapes = deepcopy(self._structure.flat_shapes)
-    if self._outfeed_all and self._structure.flat_shapes[0] is not None:
-      outfeed_shapes.insert(0, None)
     with ops.device('cpu'):
       outfeed_dequeue = \
         gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
           output_types=self._structure.flat_types,
-          output_shapes=outfeed_shapes,
+          output_shapes=self._structure.flat_shapes,
+          outfeed_mode=self._outfeed_mode.value,
           feed_id=self._feed_name,
           replication_factor=self._replication_factor)
 

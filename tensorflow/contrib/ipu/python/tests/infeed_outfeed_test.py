@@ -888,7 +888,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       for i in range(7):
         self.assertAllClose(outfed2[i], np.broadcast_to(i + 4, [5, 5]))
 
-  def testTwoOutfeedsDifferentProgramsAccessingDiscartedData(self):
+  def testTwoOutfeedsDifferentProgramsDelayedOutfeedRead(self):
 
     outfeed_queue1 = ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
@@ -932,9 +932,13 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result1[0], np.broadcast_to(6, [4, 4]))
       result2 = sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
       self.assertAllClose(result2[0], np.broadcast_to(11, [5, 5]))
-      with self.assertRaisesRegexp(errors.UnavailableError,
-                                   'Trying to access IPUOutfeedQueue with id'):
-        outfed1 = sess.run(outfeed1)
+
+      outfed1 = sess.run(outfeed1)
+      for i in range(5):
+        self.assertAllClose(outfed1[i], np.broadcast_to(i + 1, [4, 4]))
+      outfed2 = sess.run(outfeed2)
+      for i in range(7):
+        self.assertAllClose(outfed2[i], np.broadcast_to(i + 4, [5, 5]))
 
   def testTwoOutfeedsDifferentProgramsSameFeedName(self):
 

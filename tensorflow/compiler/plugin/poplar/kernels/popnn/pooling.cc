@@ -273,13 +273,12 @@ REGISTER_XLA_OP(Name("MaxPoolV2")
                     .CompileTimeConstantInput("strides"),
                 MaxPool2DOp);
 
-// TODO - uncomment this for T5956/T6966.
-// class MaxPool3DOp : public MaxPoolOp {
-//  public:
-//   explicit MaxPool3DOp(OpKernelConstruction* ctx)
-//       : MaxPoolOp(ctx, /*num_spatial_dims=*/3) {}
-// };
-// REGISTER_XLA_OP(Name("MaxPool3D").Device(DEVICE_IPU_XLA_JIT), MaxPool3DOp);
+class MaxPool3DOp : public MaxPoolOp {
+ public:
+  explicit MaxPool3DOp(OpKernelConstruction* ctx)
+      : MaxPoolOp(ctx, /*num_spatial_dims=*/3) {}
+};
+REGISTER_XLA_OP(Name("MaxPool3D").Device(DEVICE_IPU_XLA_JIT), MaxPool3DOp);
 
 class AvgPoolOp : public PoolingOp {
  public:
@@ -294,13 +293,12 @@ class AvgPool2DOp : public AvgPoolOp {
 };
 REGISTER_XLA_OP(Name("AvgPool").Device(DEVICE_IPU_XLA_JIT), AvgPool2DOp);
 
-// TODO - uncomment this for T5956/T6966.
-// class AvgPool3DOp : public AvgPoolOp {
-//  public:
-//   explicit AvgPool3DOp(OpKernelConstruction* ctx)
-//       : AvgPoolOp(ctx, /*num_spatial_dims=*/3) {}
-// };
-// REGISTER_XLA_OP(Name("AvgPool3D").Device(DEVICE_IPU_XLA_JIT), AvgPool3DOp);
+class AvgPool3DOp : public AvgPoolOp {
+ public:
+  explicit AvgPool3DOp(OpKernelConstruction* ctx)
+      : AvgPoolOp(ctx, /*num_spatial_dims=*/3) {}
+};
+REGISTER_XLA_OP(Name("AvgPool3D").Device(DEVICE_IPU_XLA_JIT), AvgPool3DOp);
 
 // The operation to compute MaxPool gradients.
 // It takes three inputs:
@@ -352,7 +350,7 @@ class MaxPoolGradOp : public XlaOpKernel, IpuOpKernel {
 
     const TensorShape tensor_in_shape = ctx->InputShape(0);
     const TensorShape tensor_out_shape = ctx->InputShape(1);
-    const TensorShape out_backprop_shape = ctx->InputShape(2);
+    const TensorShape output_backprop_shape = ctx->InputShape(2);
 
     // For maxpooling, tensor_in should have num_dims() dimensions.
     OP_REQUIRES(ctx, tensor_in_shape.dims() == num_dims(),
@@ -361,14 +359,14 @@ class MaxPoolGradOp : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES(ctx, tensor_out_shape.dims() == num_dims(),
                 errors::InvalidArgument("tensor_out must be ", num_dims(),
                                         "-dimensional"));
-    // For maxpooling, out_backprop should have num_dims() dimensions.
-    OP_REQUIRES(ctx, out_backprop_shape.dims() == num_dims(),
-                errors::InvalidArgument("out_backprop must be ", num_dims(),
+    // For maxpooling, output_backprop should have num_dims() dimensions.
+    OP_REQUIRES(ctx, output_backprop_shape.dims() == num_dims(),
+                errors::InvalidArgument("output_backprop must be ", num_dims(),
                                         "-dimensional"));
 
     auto input = ctx->Input(0);
     auto out = ctx->Input(1);
-    auto out_backprop = ctx->Input(2);
+    auto output_backprop = ctx->Input(2);
 
     xla::PrimitiveType input_type;
     OP_REQUIRES_OK(ctx,
@@ -390,15 +388,16 @@ class MaxPoolGradOp : public XlaOpKernel, IpuOpKernel {
 
     xla::XlaOp input_backprop;
     if (reduction_dims.size()) {
-      std::vector<xla::XlaOp> args = {input, out, out_backprop};
+      std::vector<xla::XlaOp> args = {input, out, output_backprop};
       input_backprop =
           xla::CustomCall(&b,
                           GetPoplibsCustomOpTargetString(
                               PoplibsOp::Popnn, PoplibsOp::MaxPoolGrad),
                           args, input_shape, attribute_map_.Serialise());
     } else {
-      // The gradient is all 0s when we don't reduce.
-      input_backprop = xla::Zeros(&b, input_shape);
+      // The gradient is all 1s when we don't reduce, therefore the rule gives
+      // input_backprop = output_backprop.
+      input_backprop = output_backprop;
     }
     ctx->SetOutput(0, input_backprop);
   }
@@ -423,14 +422,13 @@ REGISTER_XLA_OP(Name("MaxPoolGradV2")
                     .CompileTimeConstantInput("strides"),
                 MaxPool2DGradOp);
 
-// TODO - uncomment this for T5956/T6966.
-// class MaxPool3DGradOp : public MaxPoolGradOp {
-//  public:
-//   explicit MaxPool3DGradOp(OpKernelConstruction* ctx)
-//       : MaxPoolGradOp(ctx, /*num_spatial_dims=*/3) {}
-// };
-// REGISTER_XLA_OP(Name("MaxPool3DGrad").Device(DEVICE_IPU_XLA_JIT),
-// MaxPool3DGradOp);
+class MaxPool3DGradOp : public MaxPoolGradOp {
+ public:
+  explicit MaxPool3DGradOp(OpKernelConstruction* ctx)
+      : MaxPoolGradOp(ctx, /*num_spatial_dims=*/3) {}
+};
+REGISTER_XLA_OP(Name("MaxPool3DGrad").Device(DEVICE_IPU_XLA_JIT),
+                MaxPool3DGradOp);
 
 // The operation to compute AvgPool gradients.
 // It takes two inputs:
@@ -462,19 +460,19 @@ class AvgPoolGradOp : public XlaOpKernel, IpuOpKernel {
   void Compile(XlaOpKernelContext* ctx) override {
     TensorShape tensor_input_shape;
     OP_REQUIRES_OK(ctx, ctx->ConstantInputAsShape(0, &tensor_input_shape));
-    const TensorShape tensor_out_backprop_shape = ctx->InputShape(1);
+    const TensorShape tensor_output_backprop_shape = ctx->InputShape(1);
 
     // For avgpooling, tensor_in_shape should have num_dims() dimensions.
     OP_REQUIRES(ctx, tensor_input_shape.dims() == num_dims(),
                 errors::InvalidArgument("orig_tensor_input_shape must be ",
                                         num_dims(), "-dimensional"));
 
-    // For avgpooling, out_backprop should have num_dims() dimensions.
-    OP_REQUIRES(ctx, tensor_out_backprop_shape.dims() == num_dims(),
-                errors::InvalidArgument("out_backprop must be ", num_dims(),
+    // For avgpooling, output_backprop should have num_dims() dimensions.
+    OP_REQUIRES(ctx, tensor_output_backprop_shape.dims() == num_dims(),
+                errors::InvalidArgument("output_backprop must be ", num_dims(),
                                         "-dimensional"));
 
-    auto out_backprop = ctx->Input(1);
+    auto output_backprop = ctx->Input(1);
 
     xla::PrimitiveType data_type;
     OP_REQUIRES_OK(ctx,
@@ -497,15 +495,16 @@ class AvgPoolGradOp : public XlaOpKernel, IpuOpKernel {
 
     xla::XlaOp input_backprop;
     if (reduction_dims.size()) {
-      std::vector<xla::XlaOp> args = {out_backprop};
+      std::vector<xla::XlaOp> args = {output_backprop};
       input_backprop =
           xla::CustomCall(&b,
                           GetPoplibsCustomOpTargetString(
                               PoplibsOp::Popnn, PoplibsOp::AvgPoolGrad),
                           args, input_shape, attribute_map_.Serialise());
     } else {
-      // The gradient is all 0s when we don't reduce.
-      input_backprop = xla::Zeros(&b, input_shape);
+      // The gradient is all 1s when we don't reduce, therefore the rule gives
+      // input_backprop = output_backprop.
+      input_backprop = output_backprop;
     }
 
     ctx->SetOutput(0, input_backprop);
@@ -528,15 +527,15 @@ REGISTER_XLA_OP(Name("AvgPoolGrad")
                     .CompileTimeConstantInput("orig_input_shape"),
                 AvgPool2DGradOp);
 
-// TODO - uncomment this for T5956/T6966.
-// class AvgPool3DGradOp : public AvgPoolGradOp {
-//  public:
-//   explicit AvgPool3DGradOp(OpKernelConstruction* ctx)
-//       : AvgPoolGradOp(ctx, /*num_spatial_dims=*/3) {}
-// };
-// REGISTER_XLA_OP(
-//     Name("AvgPool3DGrad").Device(DEVICE_IPU_XLA_JIT).CompileTimeConstantInput("orig_input_shape"),
-//     AvgPool3DGradOp);
+class AvgPool3DGradOp : public AvgPoolGradOp {
+ public:
+  explicit AvgPool3DGradOp(OpKernelConstruction* ctx)
+      : AvgPoolGradOp(ctx, /*num_spatial_dims=*/3) {}
+};
+REGISTER_XLA_OP(Name("AvgPool3DGrad")
+                    .Device(DEVICE_IPU_XLA_JIT)
+                    .CompileTimeConstantInput("orig_input_shape"),
+                AvgPool3DGradOp);
 
 }  // anonymous namespace
 }  // namespace tensorflow

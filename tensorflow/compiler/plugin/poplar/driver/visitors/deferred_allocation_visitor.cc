@@ -186,11 +186,7 @@ Status DeferredAllocationVisitor::HandleInfeed(HloInstruction* inst) {
   }
   has_infeed_ = true;
 
-  FeedInfo info;
-  info.stream_prefix = infeed->name();
-  info.config = infeed_config;
-  info.shape = infeed->shape();
-
+  FeedInfo info(infeed->name(), infeed_config, infeed->shape());
   resources_.annotations.infeed_infos.push_back(info);
 
   return Status::OK();
@@ -201,21 +197,15 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
     const Shape& shape, poplar::Tensor tensor) {
   const HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
 
-  poplar::Graph& master_graph = GetMasterGraph(resources_);
-  poplar::Tensor master_tensor = tensor;
-  Shape master_shape = shape;
-
-  if (HasReplicatedGraph(resources_)) {
-    master_tensor = master_graph.getNonReplicatedTensor(master_tensor);
-  }
+  poplar::Graph& graph = GetGraph(resources_, inst);
 
   if (!UseSyntheticData()) {
     // Create a stream from the host.
-    auto fifo = master_graph.addHostToDeviceFIFO(
+    auto fifo = graph.addHostToDeviceFIFO(
         GetInfeedCopyHandle(infeed->name(), flat_tuple_index),
-        master_tensor.elementType(), master_tensor.numElements());
+        tensor.elementType(), tensor.numElements());
 
-    auto prog = poplar::program::Copy(fifo, master_tensor, false);
+    auto prog = poplar::program::Copy(fifo, tensor, false);
     if (resources_.merge_infeed_io_copies) {
       merged_infeed_sequence.add(prog);
     } else {
@@ -223,20 +213,9 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
     }
   } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
     // Initialize the tensor.
-
-    // The replicated shape has an extra dimension at the front.
-    if (HasReplicatedGraph(resources_)) {
-      auto replication_factor = resources_.replication_factor;
-      auto dimensions = master_shape.dimensions();
-      dimensions.insert(dimensions.begin(), replication_factor);
-      master_shape =
-          ShapeUtil::MakeShape(master_shape.element_type(), dimensions);
-    }
-
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-    TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(master_shape));
-    TF_RETURN_IF_ERROR(
-        SetInitialTensorValue(master_graph, master_tensor, literal));
+    TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
+    TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
   }
   return tensor;
 }
