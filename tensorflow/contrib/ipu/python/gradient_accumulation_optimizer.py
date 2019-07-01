@@ -20,10 +20,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow import cast
 from tensorflow.python.framework import ops
-from tensorflow.python.ops.losses import losses
-from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.contrib.ipu.python import ipu_optimizer

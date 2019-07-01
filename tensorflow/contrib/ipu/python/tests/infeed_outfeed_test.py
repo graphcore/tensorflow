@@ -34,10 +34,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 
-from tensorflow.contrib.ipu import ipu_compiler
-from tensorflow.contrib.ipu import ipu_infeed_queue
-from tensorflow.contrib.ipu import ipu_outfeed_queue
-from tensorflow.contrib.ipu import loops
+from tensorflow.contrib import ipu
 
 
 def next_feed_id():
@@ -53,21 +50,21 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   def testSingleInfeedRepeatNonTuple(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def body(v, x):
       v = v + x
       return (v)
 
     def my_net(v):
-      r = loops.repeat(20, body, (v), infeed_queue)
+      r = ipu.loops.repeat(20, body, (v), infeed_queue)
       return r
 
     with ops.device('cpu'):
       v = array_ops.placeholder(np.float32, [4, 4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[v])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -82,21 +79,21 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(
         10, shape=[4, 4], repeat=False)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def body(v, x):
       v = v + x
       return (v)
 
     def my_net(v):
-      r = loops.repeat(10, body, (v), infeed_queue)
+      r = ipu.loops.repeat(10, body, (v), infeed_queue)
       return r
 
     with ops.device('cpu'):
       v = array_ops.placeholder(np.float32, [4, 4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[v])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -117,7 +114,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -125,11 +122,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net():
       v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-      r = loops.repeat(5, body, [v], infeed_queue)
+      r = ipu.loops.repeat(5, body, [v], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -150,7 +147,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -158,11 +155,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net():
       v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-      r = loops.repeat(5, body, [v], infeed_queue)
+      r = ipu.loops.repeat(5, body, [v], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     cfg = ipu.utils.create_ipu_config(merge_infeed_io_copies=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -183,7 +180,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     # Note how the parameters are swapped around.
     def body(v1, v2, b, a):
@@ -194,11 +191,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     def my_net():
       v1 = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
       v2 = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-      r = loops.repeat(5, body, [v1, v2], infeed_queue)
+      r = ipu.loops.repeat(5, body, [v1, v2], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -213,7 +210,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   def testSingleInfeedMultipleRepeats(self):
     dataset = tu.create_single_increasing_dataset(2, shape=[4, 4])
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def body(v, x):
       v = v + x
@@ -221,12 +218,12 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net():
       v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-      r = loops.repeat(5, body, [v], infeed_queue)
-      r = loops.repeat(5, body, [r], infeed_queue)
+      r = ipu.loops.repeat(5, body, [v], infeed_queue)
+      r = ipu.loops.repeat(5, body, [r], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -240,7 +237,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   def testSingleInfeedWhileLoopNonTuple(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def cond(i, v):
       return i < 20
@@ -251,14 +248,14 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net(v):
       i = 0
-      r = loops.while_loop(cond, body, (i, v), infeed_queue)
+      r = ipu.loops.while_loop(cond, body, (i, v), infeed_queue)
       return r[1]
 
     with ops.device('cpu'):
       v = array_ops.placeholder(np.float32, [4, 4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[v])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -279,7 +276,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def cond(i, v):
       return i < 20
@@ -290,14 +287,14 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net(v):
       i = 0
-      r = loops.while_loop(cond, body, (i, v), infeed_queue)
+      r = ipu.loops.while_loop(cond, body, (i, v), infeed_queue)
       return r[1]
 
     with ops.device('cpu'):
       v = array_ops.placeholder(np.float32, [4, 4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[v])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -311,7 +308,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   def testSingleInfeedMultipleRuns(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def program(iters):
       def body(v, x):
@@ -320,11 +317,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-        r = loops.repeat(iters, body, (v), infeed_queue)
+        r = ipu.loops.repeat(iters, body, (v), infeed_queue)
         return r
 
       with ipu.ops.ipu_scope("/device:IPU:0"):
-        return ipu_compiler.compile(my_net)
+        return ipu.ipu_compiler.compile(my_net)
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -348,9 +345,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset1 = tu.create_single_increasing_dataset(20, shape=[4, 4])
     dataset2 = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
-    infeed_queue1 = ipu_infeed_queue.IPUInfeedQueue(
+    infeed_queue1 = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset1, feed_name=next_feed_id())
-    infeed_queue2 = ipu_infeed_queue.IPUInfeedQueue(
+    infeed_queue2 = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset2, feed_name=next_feed_id())
 
     def program(iters, infeed_queue):
@@ -360,11 +357,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-        r = loops.repeat(iters, body, (v), infeed_queue)
+        r = ipu.loops.repeat(iters, body, (v), infeed_queue)
         return r
 
       with ipu.ops.ipu_scope("/device:IPU:0"):
-        return ipu_compiler.compile(my_net)
+        return ipu.ipu_compiler.compile(my_net)
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -386,11 +383,12 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     dataset = dataset.batch(10, drop_remainder=False)
     with self.assertRaisesRegexp(ValueError, 'Output shape \(\?,'):
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, next_feed_id())
 
   def testMultipleInitializations(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
     infeed_queue.initializer
     with self.assertRaisesRegexp(
         ValueError,
@@ -402,7 +400,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def my_net(iters):
       def body(loss, x):
@@ -420,13 +418,13 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
           return array_ops.identity(loss)
 
       loss = 0.0
-      return loops.repeat(iters, body, (loss), infeed_queue)
+      return ipu.loops.repeat(iters, body, (loss), infeed_queue)
 
     with ops.device('cpu'):
       iters = array_ops.placeholder(np.int32, shape=[])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[iters])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[iters])
 
     with session_lib.Session() as sess:
       sess.run(infeed_queue.initializer)
@@ -437,7 +435,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   def testSingleOutfeedRepeatNonTuple(self):
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
     def body(v):
       outfeed = outfeed_queue.enqueue(v)
@@ -445,14 +443,14 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed)
 
     def my_net(v):
-      r = loops.repeat(20, body, (v))
+      r = ipu.loops.repeat(20, body, (v))
       return r
 
     with ops.device('cpu'):
       v = array_ops.placeholder(np.float32, [4, 4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[v])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -469,8 +467,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   def testMultipleOutfeedsRepeatNonTuple(self):
 
-    outfeed_queue1 = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
-    outfeed_queue2 = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
     def body(v):
       outfeed1 = outfeed_queue1.enqueue(v)
@@ -479,14 +477,14 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed1, outfeed2)
 
     def my_net(v):
-      r = loops.repeat(20, body, (v))
+      r = ipu.loops.repeat(20, body, (v))
       return r
 
     with ops.device('cpu'):
       v = array_ops.placeholder(np.float32, [4, 4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[v])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -503,8 +501,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   def testSingleInfeedOutfeedRepeatNonTuple(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
     def body(v, x):
       v = v + x
@@ -512,14 +510,14 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed)
 
     def my_net(v):
-      r = loops.repeat(20, body, (v), infeed_queue)
+      r = ipu.loops.repeat(20, body, (v), infeed_queue)
       return r
 
     with ops.device('cpu'):
       v = array_ops.placeholder(np.float32, [4, 4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[v])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -546,8 +544,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -556,11 +554,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net():
       v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
-      r = loops.repeat(5, body, [v], infeed_queue)
+      r = ipu.loops.repeat(5, body, [v], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
     cfg = ipu.utils.create_ipu_config()
@@ -602,9 +600,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -613,11 +611,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net():
       v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
-      r = loops.repeat(5, body, [v], infeed_queue)
+      r = ipu.loops.repeat(5, body, [v], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
     cfg = ipu.utils.create_ipu_config()
@@ -645,8 +643,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -655,11 +653,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net():
       v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
-      r = loops.repeat(5, body, [v], infeed_queue)
+      r = ipu.loops.repeat(5, body, [v], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
     cfg = ipu.utils.create_ipu_config()
@@ -711,9 +709,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def body(v, im1, im2):
       v = v + im1 + im2
@@ -722,11 +720,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def my_net():
       v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
-      r = loops.repeat(5, body, [v], infeed_queue)
+      r = ipu.loops.repeat(5, body, [v], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
     cfg = ipu.utils.create_ipu_config()
@@ -748,8 +746,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
     def my_net(iters):
       def body(loss, x):
@@ -768,13 +766,13 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
           return (array_ops.identity(loss), outfeed)
 
       loss = 0.0
-      return loops.repeat(iters, body, (loss), infeed_queue)
+      return ipu.loops.repeat(iters, body, (loss), infeed_queue)
 
     with ops.device('cpu'):
       iters = array_ops.placeholder(np.int32, shape=[])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[iters])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[iters])
 
     outfeeds = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
@@ -792,9 +790,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-        next_feed_id(), outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST)
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
 
     def my_net(iters):
       def body(loss, x):
@@ -813,13 +811,13 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
           return (array_ops.identity(loss), outfeed)
 
       loss = 0.0
-      return loops.repeat(iters, body, (loss), infeed_queue)
+      return ipu.loops.repeat(iters, body, (loss), infeed_queue)
 
     with ops.device('cpu'):
       iters = array_ops.placeholder(np.int32, shape=[])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[iters])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[iters])
 
     outfeeds = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
@@ -838,9 +836,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   def testTwoOutfeedsDifferentPrograms(self):
 
-    outfeed_queue1 = ipu_outfeed_queue.IPUOutfeedQueue(
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
-    outfeed_queue2 = ipu_outfeed_queue.IPUOutfeedQueue(
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
     def body1(v):
@@ -849,7 +847,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed)
 
     def my_net1(v):
-      r = loops.repeat(5, body1, (v))
+      r = ipu.loops.repeat(5, body1, (v))
       return r
 
     def body2(v):
@@ -858,7 +856,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed)
 
     def my_net2(v):
-      r = loops.repeat(7, body2, (v))
+      r = ipu.loops.repeat(7, body2, (v))
       return r
 
     with ops.device('cpu'):
@@ -866,8 +864,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       v2 = array_ops.placeholder(np.float32, [5, 5])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res1 = ipu_compiler.compile(my_net1, inputs=[v1])
-      res2 = ipu_compiler.compile(my_net2, inputs=[v2])
+      res1 = ipu.ipu_compiler.compile(my_net1, inputs=[v1])
+      res2 = ipu.ipu_compiler.compile(my_net2, inputs=[v2])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -890,9 +888,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   def testTwoOutfeedsDifferentProgramsDelayedOutfeedRead(self):
 
-    outfeed_queue1 = ipu_outfeed_queue.IPUOutfeedQueue(
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
-    outfeed_queue2 = ipu_outfeed_queue.IPUOutfeedQueue(
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id())
 
     def body1(v):
@@ -901,7 +899,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed)
 
     def my_net1(v):
-      r = loops.repeat(5, body1, (v))
+      r = ipu.loops.repeat(5, body1, (v))
       return r
 
     def body2(v):
@@ -910,7 +908,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed)
 
     def my_net2(v):
-      r = loops.repeat(7, body2, (v))
+      r = ipu.loops.repeat(7, body2, (v))
       return r
 
     with ops.device('cpu'):
@@ -918,8 +916,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       v2 = array_ops.placeholder(np.float32, [5, 5])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res1 = ipu_compiler.compile(my_net1, inputs=[v1])
-      res2 = ipu_compiler.compile(my_net2, inputs=[v2])
+      res1 = ipu.ipu_compiler.compile(my_net1, inputs=[v1])
+      res2 = ipu.ipu_compiler.compile(my_net2, inputs=[v2])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -942,8 +940,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   def testTwoOutfeedsDifferentProgramsSameFeedName(self):
 
-    outfeed_queue1 = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
-    outfeed_queue2 = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
+    outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
+    outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
 
     def body1(v):
       outfeed = outfeed_queue1.enqueue(v)
@@ -951,7 +949,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed)
 
     def my_net1(v):
-      r = loops.repeat(5, body1, (v))
+      r = ipu.loops.repeat(5, body1, (v))
       return r
 
     def body2(v):
@@ -960,7 +958,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       return (v, outfeed)
 
     def my_net2(v):
-      r = loops.repeat(7, body2, (v))
+      r = ipu.loops.repeat(7, body2, (v))
       return r
 
     with ops.device('cpu'):
@@ -968,8 +966,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       v2 = array_ops.placeholder(np.float32, [5, 5])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res1 = ipu_compiler.compile(my_net1, inputs=[v1])
-      res2 = ipu_compiler.compile(my_net2, inputs=[v2])
+      res1 = ipu.ipu_compiler.compile(my_net1, inputs=[v1])
+      res2 = ipu.ipu_compiler.compile(my_net2, inputs=[v2])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)

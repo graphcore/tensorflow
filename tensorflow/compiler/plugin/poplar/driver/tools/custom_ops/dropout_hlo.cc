@@ -33,7 +33,9 @@ HloDropoutInstruction::HloDropoutInstruction(HloInstruction* X,
       scale(scale_),
       rate(rate_),
       seed_modifier(seed_mod),
-      is_user_seed(should_use_user_seed) {}
+      is_user_seed(should_use_user_seed) {
+  set_custom_call_has_side_effect(true);
+}
 
 absl::flat_hash_set<int64> HloDropoutInstruction::AllocatingIndices() const {
   return {};
@@ -47,8 +49,6 @@ absl::flat_hash_map<int64, int64> HloDropoutInstruction::LayoutDependencies()
 uint64 HloDropoutInstruction::NumberOfInplaceOperands() const { return 0; }
 
 bool HloDropoutInstruction::IsPopOpsElementwise() const { return true; }
-
-bool HloDropoutInstruction::HasSideEffectNoRecurse() const { return true; }
 
 std::unique_ptr<HloInstruction> HloDropoutInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,

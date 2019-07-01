@@ -36,5 +36,6 @@ from tensorflow.contrib.ipu.python import popnn_rnn
 from tensorflow.contrib.ipu.python import poprand
 from tensorflow.contrib.ipu.python import popops_cross_replica_sum
 from tensorflow.contrib.ipu.python import sharded_optimizer
+from tensorflow.contrib.ipu.python import sharding
 from tensorflow.contrib.ipu.python import utils
 # pylint: enable=wildcard-import,unused-import

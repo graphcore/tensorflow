@@ -9,9 +9,6 @@ import numpy as np
 import test_util as tu
 
 from tensorflow.contrib import ipu
-from tensorflow.contrib.ipu.python import ipu_compiler
-from tensorflow.contrib.ipu.python import ipu_infeed_queue
-from tensorflow.contrib.ipu.python import loops
 from tensorflow.keras import layers
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import dtypes
@@ -65,7 +62,7 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
       Y = array_ops.placeholder(dataType, [1, timesteps, num_units])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[X, Y])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[X, Y])
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -85,7 +82,7 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
       Y = array_ops.placeholder(dtypes.int32, [2])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[X, Y])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[X, Y])
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -104,7 +101,7 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
       Y = array_ops.placeholder(dtypes.int32, [2])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[X, Y])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[X, Y])
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -128,7 +125,7 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(dtypes.float32, [4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[x])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -165,7 +162,7 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(dtypes.int32, [4])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[x])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -217,7 +214,7 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
           cond, body, (i, loss), maximum_iterations=10)
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -228,7 +225,7 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
     dataset = tu.create_dual_increasing_dataset(
         3, data_shape=[4, 1, 8], label_shape=[4, 1, 128])
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "feed")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed")
 
     def my_net():
       def my_model(loss, x, y):
@@ -247,10 +244,10 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
           return [loss, train]
 
       loss = 0.0
-      return loops.repeat(
+      return ipu.loops.repeat(
           10, my_model, [loss], infeed_queue, use_while_v1=True)
 
-    out = ipu_compiler.compile(my_net, inputs=[])
+    out = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -262,35 +259,35 @@ class WhileLoopTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(out[0], {})
 
-    def testRepeatLoopGradient(self):
-      def model(features):
-        a = variable_scope.get_variable("a", initializer=1.0)
+  def testRepeatLoopGradient(self):
+    def model(features):
+      a = variable_scope.get_variable("a", initializer=1.0)
 
-        def body(x):
-          return a * x
+      def body(x):
+        return a * x
 
-        logits = ipu.loops.repeat(5, body, [features])
-        loss = math_ops.reduce_sum(logits)
-        optimizer = momentum.MomentumOptimizer(
-            learning_rate=.001, momentum=0.9)
-        grads_and_vars = optimizer.compute_gradients(loss)
-        train_op = optimizer.apply_gradients(grads_and_vars)
-        return a, loss, train_op
+      logits = ipu.loops.repeat(5, body, [features])
+      loss = math_ops.reduce_sum(logits)
+      optimizer = momentum.MomentumOptimizer(learning_rate=.001, momentum=0.9)
+      grads_and_vars = optimizer.compute_gradients(loss)
+      train_op = optimizer.apply_gradients(grads_and_vars)
+      return a, loss, train_op
 
-      with ops.device('cpu'):
-        features = array_ops.placeholder(dtypes.float32, shape=[10])
+    with ops.device('cpu'):
+      features = array_ops.placeholder(dtypes.float32, shape=[10])
 
-      with ipu.ops.ipu_scope('/device:IPU:0'):
-        ret = ipu.ipu_compiler.compile(model, [features])
+    with ipu.ops.ipu_scope('/device:IPU:0'):
+      ret = ipu.ipu_compiler.compile(model, [features])
 
-        options = ipu.utils.create_ipu_config()
-        options = ipu.utils.auto_select_ipus(options, 1)
-        ipu.utils.configure_ipu_system(options)
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    cfg = ipu.utils.auto_select_ipus(cfg, 1)
+    ipu.utils.configure_ipu_system(cfg)
 
-      with session_lib.Session() as sess:
-        sess.run(variables.global_variables_initializer())
-        x, z = sess.run(ret, feed_dict={features: np.ones([10])})
-        self.assertEqual(x, 1)
+    with session_lib.Session() as sess:
+      sess.run(variables.global_variables_initializer())
+      x, z = sess.run(ret, feed_dict={features: np.ones([10])})
+      self.assertEqual(x, 1)
 
 
 if __name__ == "__main__":

@@ -6,8 +6,7 @@ import numpy as np
 import json
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.contrib.ipu import utils
-from tensorflow.contrib.ipu import ops as ipu_ops
+from tensorflow.contrib import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
@@ -70,7 +69,7 @@ class CombinedWightsTest(test_util.TensorFlowTestCase):
     x = array_ops.placeholder(datatype, shape=[16, 4])
     y_ = array_ops.placeholder(datatype, shape=[16, 256])
 
-    with ipu_ops.ipu_scope("/device:IPU:0"):
+    with ipu.ops.ipu_scope("/device:IPU:0"):
       logits = inference(x)
 
       loss = math_ops.reduce_mean(
@@ -80,10 +79,10 @@ class CombinedWightsTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
 
-    opts = utils.create_ipu_config(profiling=True)
-    opts = utils.set_ipu_model_options(opts, True)
-    opts = utils.auto_select_ipus(opts, 1)
-    utils.configure_ipu_system(opts)
+    opts = ipu.utils.create_ipu_config(profiling=True)
+    opts = ipu.utils.set_ipu_model_options(opts, True)
+    opts = ipu.utils.auto_select_ipus(opts, 1)
+    ipu.utils.configure_ipu_system(opts)
     sess = sl.Session()
 
     sess.run(variables.global_variables_initializer())
@@ -97,8 +96,8 @@ class CombinedWightsTest(test_util.TensorFlowTestCase):
 
     sess.close()
 
-    evts = utils.extract_all_events(out)
-    r = utils.extract_compile_reports(out)
+    evts = ipu.utils.extract_all_events(out)
+    r = ipu.utils.extract_compile_reports(out)
     self.assertEqual(len(r), 1)
     j = json.loads(r[0][1])
 
@@ -117,7 +116,7 @@ class CombinedWightsTest(test_util.TensorFlowTestCase):
     self.assertTrue(len(j['programs'][download_weights_index]['children']) < 7)
 
     # Also check the overall size
-    size = utils.get_memory_size_from_events(evts)
+    size = ipu.utils.get_memory_size_from_events(evts)
     self.assertTrue(size < 17600000)
 
 

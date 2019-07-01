@@ -22,9 +22,6 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
-from tensorflow.contrib.framework.python.ops import add_arg_scope
-from tensorflow.contrib.framework.python.ops import variables
-from tensorflow.contrib.layers.python.layers import utils
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -42,7 +39,14 @@ DATA_FORMAT_NCHW = 'NCHW'
 DATA_FORMAT_NHWC = 'NHWC'
 
 
-@add_arg_scope
+def _get_variable_collections(variables_collections, name):
+  if isinstance(variables_collections, dict):
+    variable_collections = variables_collections.get(name, None)
+  else:
+    variable_collections = variables_collections
+  return variable_collections
+
+
 def _group_norm_impl(inputs,
                      groups=2,
                      channels_axis=-1,
@@ -53,7 +57,6 @@ def _group_norm_impl(inputs,
                      param_initializers=None,
                      reuse=None,
                      variables_collections=None,
-                     outputs_collections=None,
                      training=True,
                      trainable=True,
                      scope=None,
@@ -116,11 +119,11 @@ def _group_norm_impl(inputs,
     if param_initializers is None:
       param_initializers = {}
     if center:
-      beta_collections = utils.get_variable_collections(
-          variables_collections, 'beta')
+      beta_collections = _get_variable_collections(variables_collections,
+                                                   'beta')
       beta_initializer = param_initializers.get('beta',
                                                 init_ops.zeros_initializer())
-      beta = variables.model_variable(
+      beta = variable_scope.get_variable(
           'beta',
           shape=params_shape,
           dtype=dtype,
@@ -131,11 +134,11 @@ def _group_norm_impl(inputs,
       beta = array_ops.constant(0.0, dtype=dtype, shape=params_shape)
 
     if scale:
-      gamma_collections = utils.get_variable_collections(
-          variables_collections, 'gamma')
+      gamma_collections = _get_variable_collections(variables_collections,
+                                                    'gamma')
       gamma_initializer = param_initializers.get('gamma',
                                                  init_ops.ones_initializer())
-      gamma = variables.model_variable(
+      gamma = variable_scope.get_variable(
           'gamma',
           shape=params_shape,
           dtype=dtype,
@@ -172,10 +175,9 @@ def _group_norm_impl(inputs,
           epsilon=epsilon,
           num_groups=groups)
 
-    return utils.collect_named_outputs(outputs_collections, sc.name, outputs)
+    return outputs
 
 
-@add_arg_scope
 def group_norm(inputs,
                groups=2,
                channels_axis=-1,
@@ -186,7 +188,6 @@ def group_norm(inputs,
                param_initializers=None,
                reuse=None,
                variables_collections=None,
-               outputs_collections=None,
                training=True,
                trainable=True,
                scope=None):
@@ -230,7 +231,6 @@ def group_norm(inputs,
     reuse: Whether or not the layer and its variables should be reused. To be
       able to reuse the layer scope must be given.
     variables_collections: Optional collections for the variables.
-    outputs_collections: Collections to add the outputs.
     training: Whether this is operation is being used in a training network.
     trainable: If `True` also add variables to the graph collection
       `GraphKeys.TRAINABLE_VARIABLES` (see `tf.Variable`).
@@ -250,11 +250,10 @@ def group_norm(inputs,
   """
   return _group_norm_impl(inputs, groups, channels_axis, reduction_axes,
                           center, scale, epsilon, param_initializers, reuse,
-                          variables_collections, outputs_collections, training,
-                          trainable, "GroupNorm")
+                          variables_collections, training, trainable,
+                          "GroupNorm")
 
 
-@add_arg_scope
 def layer_norm(inputs,
                channels_axis=-1,
                reduction_axes=(-3, -2),
@@ -264,7 +263,6 @@ def layer_norm(inputs,
                param_initializers=None,
                reuse=None,
                variables_collections=None,
-               outputs_collections=None,
                training=True,
                trainable=True,
                scope=None):
@@ -323,7 +321,6 @@ def layer_norm(inputs,
     reuse: Whether or not the layer and its variables should be reused. To be
       able to reuse the layer scope must be given.
     variables_collections: Optional collections for the variables.
-    outputs_collections: Collections to add the outputs.
     training: Whether this is operation is being used in a training network.
     trainable: If `True` also add variables to the graph collection
       `GraphKeys.TRAINABLE_VARIABLES` (see `tf.Variable`).
@@ -349,11 +346,10 @@ def layer_norm(inputs,
 
   return _group_norm_impl(inputs, groups, channels_axis, reduction_axes,
                           center, scale, epsilon, param_initializers, reuse,
-                          variables_collections, outputs_collections, training,
-                          trainable, scope, "LayerNorm")
+                          variables_collections, training, trainable, scope,
+                          "LayerNorm")
 
 
-@add_arg_scope
 def instance_norm(inputs,
                   channels_axis=-1,
                   reduction_axes=(-3, -2),
@@ -363,7 +359,6 @@ def instance_norm(inputs,
                   param_initializers=None,
                   reuse=None,
                   variables_collections=None,
-                  outputs_collections=None,
                   training=True,
                   trainable=True,
                   scope=None):
@@ -405,7 +400,6 @@ def instance_norm(inputs,
     reuse: Whether or not the layer and its variables should be reused. To be
       able to reuse the layer scope must be given.
     variables_collections: Optional collections for the variables.
-    outputs_collections: Collections to add the outputs.
     training: Whether this is operation is being used in a training network.
     trainable: If `True` also add variables to the graph collection
       `GraphKeys.TRAINABLE_VARIABLES` (see `tf.Variable`).
@@ -422,5 +416,5 @@ def instance_norm(inputs,
   groups = 1
   return _group_norm_impl(inputs, groups, channels_axis, reduction_axes,
                           center, scale, epsilon, param_initializers, reuse,
-                          variables_collections, outputs_collections, training,
-                          trainable, scope, "InstanceNorm")
+                          variables_collections, training, trainable, scope,
+                          "InstanceNorm")

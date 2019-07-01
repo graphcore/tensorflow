@@ -23,7 +23,6 @@ import test_util as tu
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.tests import test_utils as internal_tu
 from tensorflow.contrib import ipu
 from tensorflow.keras import layers
 from tensorflow.python.client import session as sl
@@ -31,23 +30,11 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
-from tensorflow.python.ops import nn_ops
-from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
-from tensorflow.python.framework import errors
-from tensorflow.contrib.ipu import popops_cross_replica_sum
-from tensorflow.contrib.ipu import ipu_compiler
-from tensorflow.contrib.ipu import ipu_optimizer
-from tensorflow.contrib.ipu import ipu_infeed_queue
-from tensorflow.contrib.ipu import ipu_outfeed_queue
-from tensorflow.contrib.ipu import loops
-from tensorflow.contrib.ipu import gradient_accumulation_optimizer
 
 
 def next_feed_id():
@@ -64,9 +51,9 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
     shape = [2]
     dataset = tu.create_single_increasing_dataset(3, shape)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name=next_feed_id(), replication_factor=2)
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id(), replication_factor=2)
 
     def body(v, x):
@@ -74,18 +61,18 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
         z = v + x
         y = x * x
       with ipu.ops.ipu_shard(1):
-        z = popops_cross_replica_sum.cross_replica_sum(
-            z) + popops_cross_replica_sum.cross_replica_sum(y)
+        z = ipu.popops_cross_replica_sum.cross_replica_sum(
+            z) + ipu.popops_cross_replica_sum.cross_replica_sum(y)
         outfeed = outfeed_queue.enqueue(z)
       return (z, outfeed)
 
     def my_net():
       v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
-      r = loops.repeat(2, body, [v], infeed_queue)
+      r = ipu.loops.repeat(2, body, [v], infeed_queue)
       return r
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      res = ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
 
@@ -124,7 +111,7 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(lab))
           loss = math_ops.reduce_mean(loss)
 
-        opt = ipu_optimizer.CrossReplicaOptimizer(
+        opt = ipu.ipu_optimizer.CrossReplicaOptimizer(
             ipu.sharded_optimizer.ShardedOptimizer(
                 gradient_descent.GradientDescentOptimizer(0.000001)))
         train = opt.minimize(loss)
@@ -136,7 +123,7 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
       lab = array_ops.placeholder(np.float32, [1, 8], name="labels")
       report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_graph, [inp, lab])
+    out = ipu.ipu_compiler.compile(my_graph, [inp, lab])
 
     cfg = ipu.utils.create_ipu_config(
         profiling=True,
@@ -183,7 +170,7 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
   def testShardedAndReplicatedAndGradientAccumulateTraining(self):
     dataset = tu.create_dual_increasing_dataset(3)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name=next_feed_id(), replication_factor=2)
 
     def my_graph(loss, inp, lab):
@@ -199,7 +186,7 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(lab))
           loss = math_ops.reduce_mean(loss)
 
-        opt = gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer(
+        opt = ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer(
             ipu.sharded_optimizer.ShardedOptimizer(
                 gradient_descent.GradientDescentOptimizer(0.000001)), 10)
         train = opt.minimize(loss)
@@ -208,13 +195,13 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
 
     def my_net():
       v = 0.0
-      r = loops.repeat(2, my_graph, [v], infeed_queue)
+      r = ipu.loops.repeat(2, my_graph, [v], infeed_queue)
       return r
 
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_net, [])
+    out = ipu.ipu_compiler.compile(my_net, [])
 
     cfg = ipu.utils.create_ipu_config(
         profiling=True,

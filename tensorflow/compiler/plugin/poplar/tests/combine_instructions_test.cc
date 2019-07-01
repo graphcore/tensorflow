@@ -436,6 +436,162 @@ add {
   ASSERT_EQ(absl::c_count_if(seq, pred), 2);
 }
 
+TEST_F(CombineInstructionsTest, TestDataDependency) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  add = f32[] add(x, y)
+}
+
+%cluster_1  {
+  %arg0 = f16[4] parameter(0)
+  %arg1 = f16[4] parameter(1)
+  %a1 = f16[4] all-reduce(arg0), to_apply=add
+  %a2 = f16[4] all-reduce(arg1), to_apply=add
+  %a3 = f16[4] all-reduce(a2), to_apply=add
+  ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a1, f16[4] %a2, f16[4] %a3)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseHloString(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      IpuToMemorySchedulerAlgorithm(
+          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024})));
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
+
+  // Check the inplace instructions are all GTEs
+  auto inplace_instructions = GetInplaceInstructions(module);
+  EXPECT_EQ(inplace_instructions.size(), 2);
+  for (auto inplace_inst : inplace_instructions) {
+    EXPECT_EQ(inplace_inst->opcode(), HloOpcode::kGetTupleElement);
+    EXPECT_TRUE(inplace_inst->tuple_index() < 2);
+  }
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+  ASSERT_EQ(seq.size(), 7);
+
+  auto pred = [](const HloInstruction* inst) {
+    return inst->opcode() == HloOpcode::kAllReduce;
+  };
+  ASSERT_EQ(absl::c_count_if(seq, pred), 2);
+}
+
+TEST_F(CombineInstructionsTest, TestControlDependency) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  add = f32[] add(x, y)
+}
+
+%cluster_1  {
+  %arg0 = f16[4] parameter(0)
+  %arg1 = f16[4] parameter(1)
+  %a1 = f16[4] all-reduce(arg0), to_apply=add
+  %a2 = f16[4] all-reduce(arg1), to_apply=add, control-predecessors={a1}
+  %a3 = f16[4] all-reduce(a2), to_apply=add
+  ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a1, f16[4] %a2, f16[4] %a3)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseHloString(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      IpuToMemorySchedulerAlgorithm(
+          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024})));
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
+}
+
+TEST_F(CombineInstructionsTest, TestControlDependency2) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  add = f32[] add(x, y)
+}
+
+%cluster_1  {
+  %arg0 = f16[4] parameter(0)
+  %arg1 = f16[4] parameter(1)
+  %arg2 = f16[4] parameter(2)
+  %a1 = f16[4] all-reduce(arg0), to_apply=add
+  %a2 = f16[4] all-reduce(arg1), to_apply=add, control-predecessors={a1}
+  %a3 = f16[4] all-reduce(arg2), to_apply=add, control-predecessors={a1}
+  %arg3 = f16[4] parameter(3), control-predecessors={a1, a2, a3}
+  %a4 = f16[4] all-reduce(arg3), to_apply=add, control-predecessors={a2}
+  %a5 = f16[4] all-reduce(a2), to_apply=add, control-predecessors={a4}
+  %a6 = f16[4] all-reduce(a1), to_apply=add, control-predecessors={arg3}
+  ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(f16[4] %a4, f16[4] %a5, f16[4] %a6)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseHloString(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      IpuToMemorySchedulerAlgorithm(
+          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024})));
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
+
+  // Check the inplace instructions are all GTEs
+  auto inplace_instructions = GetInplaceInstructions(module);
+  EXPECT_EQ(inplace_instructions.size(), 4);
+  for (auto inplace_inst : inplace_instructions) {
+    EXPECT_EQ(inplace_inst->opcode(), HloOpcode::kGetTupleElement);
+    EXPECT_TRUE(inplace_inst->tuple_index() < 4);
+  }
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+  ASSERT_EQ(seq.size(), 13);
+
+  auto pred = [](const HloInstruction* inst) {
+    return inst->opcode() == HloOpcode::kAllReduce;
+  };
+  ASSERT_EQ(absl::c_count_if(seq, pred), 4);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

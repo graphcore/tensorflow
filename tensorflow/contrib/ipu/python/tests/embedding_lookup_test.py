@@ -18,28 +18,20 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import json
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.contrib.compiler import xla
 from tensorflow.contrib import ipu
 from tensorflow.python.client import session as sl
-from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
-from tensorflow.contrib.ipu import ipu_compiler
-from tensorflow.contrib.ipu import popnn_embedding
 
 
 class EmbeddingLookupTest(test_util.TensorFlowTestCase):
   def testGather(self):
     def my_net(w, i):
-      out = popnn_embedding.embedding_lookup(w, i)
+      out = ipu.popnn_embedding.embedding_lookup(w, i)
       return [out]
 
     with ops.device('cpu'):
@@ -48,7 +40,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       report = gen_ipu_ops.ipu_event_trace()
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[w, i])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)

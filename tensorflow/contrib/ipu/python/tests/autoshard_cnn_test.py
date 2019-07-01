@@ -8,13 +8,7 @@ from __future__ import print_function
 import numpy as np
 import test_util as tu
 
-from tensorflow.contrib.ipu.python import autoshard
-from tensorflow.contrib.ipu.python import ipu_compiler
-from tensorflow.contrib.ipu.python import ipu_infeed_queue
-from tensorflow.contrib.ipu.python import loops
-from tensorflow.contrib.ipu.python import popnn_rnn
-from tensorflow.contrib.ipu.python import sharded_optimizer as so
-from tensorflow.contrib.ipu.python import sharding
+from tensorflow.contrib import ipu
 from tensorflow.keras import layers
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -52,9 +46,9 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       inp = array_ops.placeholder(np.float32, [], name="a")
 
     with ops.device("/device:IPU:0"):
-      out = ipu_compiler.compile(my_model, inputs=[inp])
+      out = ipu.ipu_compiler.compile(my_model, inputs=[inp])
 
-    autoshard.automatic_sharding(2, inp, out[0])
+    ipu.autoshard.automatic_sharding(2, inp, out[0])
 
     op_list = ops.get_default_graph().get_operations()
     for o in op_list:
@@ -75,10 +69,11 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
           logits=x, labels=array_ops.stop_gradient(y))
       loss = math_ops.reduce_mean(cross_entropy)
-      optim = so.ShardedOptimizer(gd.GradientDescentOptimizer(0.01))
+      optim = ipu.sharded_optimizer.ShardedOptimizer(
+          gd.GradientDescentOptimizer(0.01))
       train = optim.minimize(cross_entropy)
 
-      autoshard.automatic_sharding(2, inp, loss)
+      ipu.autoshard.automatic_sharding(2, inp, loss)
 
       return [loss, train]
 
@@ -87,9 +82,9 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       lab = array_ops.placeholder(np.float32, [1, 8], name="labl")
 
     with ops.device("/device:IPU:0"):
-      out = ipu_compiler.compile(my_model, inputs=[inp, lab])
+      out = ipu.ipu_compiler.compile(my_model, inputs=[inp, lab])
 
-    op_set = sharding.dependencies([out[0]])
+    op_set = ipu.sharding.dependencies([out[0]])
 
     for o in op_set:
       if o.device == '/device:IPU:0' and o.type not in allowed_op_types:
@@ -105,7 +100,8 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
           logits=x, labels=array_ops.stop_gradient(y))
       loss = math_ops.reduce_mean(cross_entropy)
-      optim = so.ShardedOptimizer(gd.GradientDescentOptimizer(0.01))
+      optim = ipu.sharded_optimizer.ShardedOptimizer(
+          gd.GradientDescentOptimizer(0.01))
       train = optim.minimize(cross_entropy)
       return [loss, train]
 
@@ -116,9 +112,9 @@ class AutoshardTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       l, t = my_model(inp, lab)
 
-    autoshard.automatic_sharding(2, inp, l)
+    ipu.autoshard.automatic_sharding(2, inp, l)
 
-    op_set = sharding.dependencies([l, t])
+    op_set = ipu.sharding.dependencies([l, t])
 
     for o in op_set:
       if o.device == '/device:IPU:0' and o.type not in allowed_op_types:
@@ -134,7 +130,8 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
           logits=x, labels=array_ops.stop_gradient(y))
       loss = math_ops.reduce_mean(cross_entropy)
-      optim = so.ShardedOptimizer(gd.GradientDescentOptimizer(0.01))
+      optim = ipu.sharded_optimizer.ShardedOptimizer(
+          gd.GradientDescentOptimizer(0.01))
       train = optim.minimize(cross_entropy)
       return [loss, train]
 
@@ -147,9 +144,9 @@ class AutoshardTest(test_util.TensorFlowTestCase):
 
     filt = lambda e: not (e[0] != 'conv2/Conv2D' and e[1] != 'conv3/Conv2D')
 
-    autoshard.automatic_sharding(2, inp, l, edge_filter=filt)
+    ipu.autoshard.automatic_sharding(2, inp, l, edge_filter=filt)
 
-    op_set = sharding.dependencies([l, t])
+    op_set = ipu.sharding.dependencies([l, t])
 
     for o in op_set:
       if o.device == '/device:IPU:0' and o.type not in allowed_op_types:
@@ -158,7 +155,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
   def testSimpleXlaCompileTrainingInLoop(self):
     dataset = tu.create_dual_increasing_dataset(3)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "feed4")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed4")
 
     def my_net():
       def my_model(loss, x, y):
@@ -177,18 +174,19 @@ class AutoshardTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(y))
           loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = so.ShardedOptimizer(gd.GradientDescentOptimizer(0.01))
+          optim = ipu.sharded_optimizer.ShardedOptimizer(
+              gd.GradientDescentOptimizer(0.01))
           train = optim.minimize(cross_entropy)
 
-          autoshard.automatic_sharding(2, inp, loss)
+          ipu.autoshard.automatic_sharding(2, inp, loss)
 
           return [loss, train]
 
       loss = 0.0
-      return loops.repeat(
+      return ipu.loops.repeat(
           10, my_model, [loss], infeed_queue, use_while_v1=False)
 
-    ipu_compiler.compile(my_net, inputs=[])
+    ipu.ipu_compiler.compile(my_net, inputs=[])
 
     body = get_single_while_op_body(ops.get_default_graph())
     op_set = body.get_operations()
@@ -208,32 +206,33 @@ class AutoshardTest(test_util.TensorFlowTestCase):
     dataset = tu.create_dual_increasing_dataset(
         3, data_shape=[16, 2, 8], label_shape=[16, 2, 256])
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "feed1")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed1")
 
     def my_net():
       def my_model(loss, x, y):
         with ops.device("/device:IPU:0"):
           inp = x
 
-          lstm_cell = popnn_rnn.PopnnLSTM(256, dtype=dtypes.float32)
+          lstm_cell = ipu.popnn_rnn.PopnnLSTM(256, dtype=dtypes.float32)
           x, _ = lstm_cell(x, training=True)
 
           cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
               logits=x, labels=array_ops.stop_gradient(y))
           loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = so.ShardedOptimizer(gd.GradientDescentOptimizer(0.01))
+          optim = ipu.sharded_optimizer.ShardedOptimizer(
+              gd.GradientDescentOptimizer(0.01))
           train = optim.minimize(cross_entropy)
 
-          autoshard.automatic_sharding(2, inp, loss)
+          ipu.autoshard.automatic_sharding(2, inp, loss)
 
           return [loss, train]
 
       loss = 0.0
-      return loops.repeat(
+      return ipu.loops.repeat(
           10, my_model, [loss], infeed_queue, use_while_v1=False)
 
-    ipu_compiler.compile(my_net, inputs=[])
+    ipu.ipu_compiler.compile(my_net, inputs=[])
 
     body = get_single_while_op_body(ops.get_default_graph())
     op_set = body.get_operations()
@@ -254,7 +253,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
   def testSimpleXlaCompileTrainingInLoopWithParam(self):
     dataset = tu.create_dual_increasing_dataset(3)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "feed2")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed2")
 
     def my_net(lr):
       def my_model(loss, x, y):
@@ -273,19 +272,20 @@ class AutoshardTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(y))
           loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = so.ShardedOptimizer(gd.GradientDescentOptimizer(lr))
+          optim = ipu.sharded_optimizer.ShardedOptimizer(
+              gd.GradientDescentOptimizer(lr))
           train = optim.minimize(cross_entropy)
 
-          autoshard.automatic_sharding(2, inp, loss)
+          ipu.autoshard.automatic_sharding(2, inp, loss)
 
           return [loss, train]
 
       loss = 0.0
-      return loops.repeat(
+      return ipu.loops.repeat(
           10, my_model, [loss], infeed_queue, use_while_v1=False)
 
     lr = array_ops.placeholder(dtypes.float32, [])
-    ipu_compiler.compile(my_net, inputs=[lr])
+    ipu.ipu_compiler.compile(my_net, inputs=[lr])
 
     body = get_single_while_op_body(ops.get_default_graph())
     op_set = body.get_operations()
@@ -353,7 +353,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
 
     dataset = tu.create_dual_increasing_dataset(3)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "feed3")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed3")
 
     def my_net():
       def my_model(loss, x, y):
@@ -372,18 +372,19 @@ class AutoshardTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(y))
           loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = so.ShardedOptimizer(gd.GradientDescentOptimizer(0.01))
+          optim = ipu.sharded_optimizer.ShardedOptimizer(
+              gd.GradientDescentOptimizer(0.01))
           train = optim.minimize(cross_entropy)
 
-          autoshard.automatic_sharding(2, inp, loss)
+          ipu.autoshard.automatic_sharding(2, inp, loss)
 
           return [loss, train]
 
       loss = 0.0
-      return loops.repeat(
+      return ipu.loops.repeat(
           10, my_model, [loss], infeed_queue, use_while_v1=True)
 
-    ipu_compiler.compile(my_net, inputs=[])
+    ipu.ipu_compiler.compile(my_net, inputs=[])
 
     op_set = ops.get_default_graph().get_operations()
     op_types = set()
@@ -403,7 +404,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
 
     with ops.device("/device:IPU:0"):
 
-      with autoshard.ipu_autoshard():
+      with ipu.autoshard.ipu_autoshard():
         x = array_ops.placeholder(dtypes.float32, shape=[1, 32, 32, 4])
         y = array_ops.placeholder(dtypes.float32, shape=[1, 8])
 
@@ -423,13 +424,14 @@ class AutoshardTest(test_util.TensorFlowTestCase):
             logits=x, labels=array_ops.stop_gradient(y))
         loss = math_ops.reduce_mean(cross_entropy)
 
-      optim = so.ShardedOptimizer(gd.GradientDescentOptimizer(0.01))
+      optim = ipu.sharded_optimizer.ShardedOptimizer(
+          gd.GradientDescentOptimizer(0.01))
       optim.minimize(loss)
 
-      autoshard.automatic_sharding(2, inp, loss)
+      ipu.autoshard.automatic_sharding(2, inp, loss)
 
     to_autoshard = ops.get_default_graph().get_collection(
-        sharding._IPU_AUTOSHARD)
+        ipu.sharding._IPU_AUTOSHARD)
 
     fwd_ops = []
     bwd_ops = []

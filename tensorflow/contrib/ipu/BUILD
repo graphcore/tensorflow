@@ -358,7 +358,8 @@ tf_py_test(
 
 tf_py_test(
     name = "infeed_outfeed_test",
-    size = "medium",
+    size = "large",
+    shard_count = 2,
     srcs = ["python/tests/infeed_outfeed_test.py"],
     additional_deps = [
         ":ipu",

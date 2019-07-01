@@ -6,16 +6,13 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import json
 
 from tensorflow.contrib import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
-from tensorflow.contrib.ipu import ipu_compiler
 
 
 class MappingTest(test_util.TensorFlowTestCase):
@@ -33,7 +30,7 @@ class MappingTest(test_util.TensorFlowTestCase):
       d = array_ops.placeholder(np.int32, [1])
 
     with ipu.ops.ipu_scope("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[a, b, c, d])
+      r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c, d])
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)

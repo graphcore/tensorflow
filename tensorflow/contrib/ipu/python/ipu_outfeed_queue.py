@@ -24,7 +24,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.platform import tf_logging as logging
-from copy import deepcopy
 from enum import Enum
 
 

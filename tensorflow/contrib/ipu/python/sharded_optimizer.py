@@ -17,9 +17,9 @@ Optimizer wrapper for sharded graphs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.contrib.ipu.python import sharding
 from tensorflow.python.training import optimizer
 from tensorflow.python.framework import ops
-from tensorflow.contrib.ipu.python.sharding import propagate_sharding
 
 
 class ShardedOptimizer(optimizer.Optimizer):
@@ -36,12 +36,12 @@ class ShardedOptimizer(optimizer.Optimizer):
   def compute_gradients(self, loss, var_list=None, **kwargs):
     kwargs['colocate_gradients_with_ops'] = True
     ret = self._optimizer.compute_gradients(loss, var_list=var_list, **kwargs)
-    propagate_sharding(ops.get_default_graph())
+    sharding.propagate_sharding(ops.get_default_graph())
     return ret
 
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
     ret = self._optimizer.apply_gradients(grads_and_vars, global_step, name)
-    propagate_sharding(ops.get_default_graph())
+    sharding.propagate_sharding(ops.get_default_graph())
     return ret
 
   def get_slot_names(self, *args, **kwargs):

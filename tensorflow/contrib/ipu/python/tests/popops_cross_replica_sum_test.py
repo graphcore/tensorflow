@@ -14,10 +14,10 @@
 # ==============================================================================
 import tensorflow as tf
 
+from tensorflow.contrib import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
-from tensorflow.contrib.ipu.python import popops_cross_replica_sum
 
 
 #TODO Test with a replicated graph
@@ -26,7 +26,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       with tf.Session() as session:
         t1 = tf.random_uniform([1000], dtype=tf.float32)
-        t2 = popops_cross_replica_sum.cross_replica_sum(t1, "crs")
+        t2 = ipu.popops_cross_replica_sum.cross_replica_sum(t1, "crs")
         h1, h2 = session.run([t1, t2])
         self.assertEqual(list(h1), list(h2))
 

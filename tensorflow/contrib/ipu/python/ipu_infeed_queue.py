@@ -23,7 +23,6 @@ from __future__ import print_function
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python.data.ops import dataset_ops
-from tensorflow.python.data.ops.dataset_ops import Dataset
 from tensorflow.python.data.util import structure
 from tensorflow.python.framework import ops
 
@@ -60,7 +59,7 @@ class IPUInfeedQueue:
     # The resulting dataset has a nested structure of: {features, labels}.
     dataset = dataset.map(dataset_parser)
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="training_infeed")
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, feed_name="training_infeed")
 
     # dataset can no longer be used beyond this point.
 

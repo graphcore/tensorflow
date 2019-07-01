@@ -9,7 +9,6 @@ import numpy as np
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
-from tensorflow.contrib.ipu import ipu_compiler
 from tensorflow.contrib import ipu
 from tensorflow.keras import layers
 from tensorflow.python.client import session as sl
@@ -47,7 +46,7 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
       pc = array_ops.placeholder(np.float32, [2], name="c")
       report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_graph, [pa, pb, pc])
+    out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -93,9 +92,8 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
       pa = array_ops.placeholder(np.float32, [2], name="a")
       pb = array_ops.placeholder(np.float32, [2], name="b")
       pc = array_ops.placeholder(np.float32, [2], name="c")
-      report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_graph, [pa, pb, pc])
+    out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -121,10 +119,9 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
       pa = array_ops.placeholder(np.float32, [2], name="a")
       pb = array_ops.placeholder(np.float32, [2], name="b")
       pc = array_ops.placeholder(np.float32, [2], name="c")
-      report = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
-      out = ipu_compiler.compile(my_graph, [pa, pb, pc])
+      out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -161,7 +158,7 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
       pc = array_ops.placeholder(np.float32, [2], name="c")
       report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_graph, [pa, pb, pc])
+    out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -221,7 +218,7 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
       lab = array_ops.placeholder(np.float32, [1, 8], name="labels")
       report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_graph, [inp, lab])
+    out = ipu.ipu_compiler.compile(my_graph, [inp, lab])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -279,7 +276,7 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
       bias = array_ops.placeholder(np.float32, [8], name="bias")
       report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu_compiler.compile(my_graph, [inp, bias])
+    out = ipu.ipu_compiler.compile(my_graph, [inp, bias])
 
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)

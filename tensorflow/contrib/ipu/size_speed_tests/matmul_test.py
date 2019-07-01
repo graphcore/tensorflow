@@ -5,8 +5,7 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.contrib.ipu import utils
-from tensorflow.contrib.ipu import ops as ipu_ops
+from tensorflow.contrib import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
@@ -58,7 +57,7 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
     x = array_ops.placeholder(datatype, shape=[2, 112 * 112 * 4])
     y_ = array_ops.placeholder(datatype, shape=[2, 64])
 
-    with ipu_ops.ipu_scope("/device:IPU:0"):
+    with ipu.ops.ipu_scope("/device:IPU:0"):
       logits = inference(x)
 
       loss = math_ops.reduce_mean(
@@ -68,8 +67,8 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
 
-    opts = utils.create_ipu_config(profiling=True)
-    utils.configure_ipu_system(opts)
+    opts = ipu.utils.create_ipu_config(profiling=True)
+    ipu.utils.configure_ipu_system(opts)
     sess = sl.Session()
 
     sess.run(variables.global_variables_initializer())
@@ -83,15 +82,15 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
 
     sess.close()
 
-    evts = utils.extract_all_events(out)
-    size = utils.get_memory_size_from_events(evts)
+    evts = ipu.utils.extract_all_events(out)
+    size = ipu.utils.get_memory_size_from_events(evts)
     self.assertTrue(size < 17740000)
 
   def testTrainingBs1(self):
     x = array_ops.placeholder(datatype, shape=[1, 112 * 112 * 4])
     y_ = array_ops.placeholder(datatype, shape=[1, 64])
 
-    with ipu_ops.ipu_scope("/device:IPU:0"):
+    with ipu.ops.ipu_scope("/device:IPU:0"):
       logits = inference(x)
 
       loss = math_ops.reduce_mean(
@@ -103,8 +102,8 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
 
-    opts = utils.create_ipu_config(profiling=True)
-    utils.configure_ipu_system(opts)
+    opts = ipu.utils.create_ipu_config(profiling=True)
+    ipu.utils.configure_ipu_system(opts)
 
     sess = sl.Session()
 
@@ -119,15 +118,15 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
 
     sess.close()
 
-    evts = utils.extract_all_events(out)
-    size = utils.get_memory_size_from_events(evts)
+    evts = ipu.utils.extract_all_events(out)
+    size = ipu.utils.get_memory_size_from_events(evts)
     self.assertTrue(size < 15820000)
 
   def testTrainingBs2(self):
     x = array_ops.placeholder(datatype, shape=[2, 112 * 112 * 4])
     y_ = array_ops.placeholder(datatype, shape=[2, 64])
 
-    with ipu_ops.ipu_scope("/device:IPU:0"):
+    with ipu.ops.ipu_scope("/device:IPU:0"):
       logits = inference(x)
 
       loss = math_ops.reduce_mean(
@@ -139,8 +138,8 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
 
-    opts = utils.create_ipu_config(profiling=True)
-    utils.configure_ipu_system(opts)
+    opts = ipu.utils.create_ipu_config(profiling=True)
+    ipu.utils.configure_ipu_system(opts)
 
     sess = sl.Session()
 
@@ -155,8 +154,8 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
 
     sess.close()
 
-    evts = utils.extract_all_events(out)
-    size = utils.get_memory_size_from_events(evts)
+    evts = ipu.utils.extract_all_events(out)
+    size = ipu.utils.get_memory_size_from_events(evts)
     self.assertTrue(size < 26380000)
 
 

@@ -18,31 +18,23 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import json
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.contrib.compiler import xla
 from tensorflow.contrib import ipu
 from tensorflow.python.client import session as sl
-from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
-from tensorflow.contrib.ipu import ipu_compiler
-from tensorflow.contrib.ipu.python import poprand
-
-import tensorflow as tf
+from tensorflow.python.training import gradient_descent
 
 
 class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
   def testDropout(self):
     def testDropoutImpl(rate):
       def ipu_dropout(w):
-        output = poprand.dropout(w, rate=rate)
+        output = ipu.poprand.dropout(w, rate=rate)
         return [output]
 
       with ops.device('cpu'):
@@ -50,7 +42,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
         report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.ops.ipu_scope("/device:IPU:0"):
-        r = ipu_compiler.compile(ipu_dropout, inputs=[input_data])
+        r = ipu.ipu_compiler.compile(ipu_dropout, inputs=[input_data])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -78,15 +70,14 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
   def testDropoutUserSeed(self):
     def testDropoutImpl(rate, seed, in_data):
       def ipu_dropout(w):
-        output = poprand.dropout(w, rate=rate, seed=seed)
+        output = ipu.poprand.dropout(w, rate=rate, seed=seed)
         return [output]
 
       with ops.device('cpu'):
         input_data = array_ops.placeholder(np.float32, [32, 4])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.ops.ipu_scope("/device:IPU:0"):
-        r = ipu_compiler.compile(ipu_dropout, inputs=[input_data])
+        r = ipu.ipu_compiler.compile(ipu_dropout, inputs=[input_data])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -98,7 +89,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
     # Randomize the parameters but keep them the same for all runs
     int32_limits = np.iinfo(np.int32)
     seed = np.random.randint(int32_limits.max, size=[2], dtype=np.int32)
-    seed_tensor = tf.constant(seed)
+    seed_tensor = array_ops.constant(seed)
     rate = np.random.uniform()
     in_data = np.random.rand(32, 4)
 
@@ -116,12 +107,12 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
   def testDropoutBackwardPass(self):
     def testDropoutImpl():
       def ipu_dropout_back(w):
-        output = poprand.dropout(w, rate=0.4)
+        output = ipu.poprand.dropout(w, rate=0.4)
 
         largest = output
-        cost = tf.square(largest)
+        cost = math_ops.square(largest)
 
-        opt = tf.train.GradientDescentOptimizer(learning_rate=0.1)
+        opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
 
         gradients = opt.compute_gradients(cost, w)
 
@@ -132,7 +123,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
         report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.ops.ipu_scope("/device:IPU:0"):
-        r = ipu_compiler.compile(ipu_dropout_back, inputs=[input_data])
+        r = ipu.ipu_compiler.compile(ipu_dropout_back, inputs=[input_data])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)

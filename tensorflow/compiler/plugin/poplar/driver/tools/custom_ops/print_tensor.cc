@@ -27,7 +27,9 @@ namespace poplarplugin {
 HloPrintTensor::HloPrintTensor(HloInstruction* input)
     : HloPoplarInstruction(ShapeUtil::MakeTokenShape(), {input},
                            GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Poputil, PoplibsOp::PrintTensor)) {}
+                               PoplibsOp::Poputil, PoplibsOp::PrintTensor)) {
+  set_custom_call_has_side_effect(true);
+}
 
 absl::flat_hash_set<int64> HloPrintTensor::AllocatingIndices() const {
   return {};
@@ -40,8 +42,6 @@ absl::flat_hash_map<int64, int64> HloPrintTensor::LayoutDependencies() const {
 uint64 HloPrintTensor::NumberOfInplaceOperands() const { return 0; }
 
 bool HloPrintTensor::IsPopOpsElementwise() const { return false; }
-
-bool HloPrintTensor::HasSideEffectNoRecurse() const { return true; }
 
 // Creates an instance of a HloOneHotInstruction
 std::unique_ptr<HloInstruction> CreateHloPrintTensor(HloInstruction* input) {
