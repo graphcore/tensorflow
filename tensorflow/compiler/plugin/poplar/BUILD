@@ -146,6 +146,7 @@ cc_library(
         "driver/tools/util.cc",
         "driver/tools/while_loop_util.cc",
         "driver/schedulers/ipu_scheduler.cc",
+        "driver/schedulers/liveness_look_ahead_scheduler.cc",
         "driver/schedulers/look_ahead_scheduler.cc",
         "driver/schedulers/sync_list_scheduler.cc"
     ],
@@ -215,7 +216,10 @@ cc_library(
         "driver/tools/util.h",
         "driver/tools/while_loop_util.h",
         "driver/schedulers/ipu_scheduler.h",
+        "driver/schedulers/liveness_look_ahead_scheduler.h",
         "driver/schedulers/look_ahead_scheduler.h",
+        "driver/schedulers/schedule_tree.h",
+        "driver/schedulers/schedule_utils.h",
         "driver/schedulers/sync_list_scheduler.h"
 
     ],
@@ -820,6 +824,17 @@ tf_cc_test(
 tf_cc_test(
     name = "scheduler_test",
     srcs = ["tests/scheduler_test.cc"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+tf_cc_test(
+    name = "scheduler_tree_test",
+    srcs = ["tests/scheduler_tree_test.cc"],
     size = "small",
     deps = [
         ":optimizers",
@@ -1996,6 +2011,7 @@ test_suite(
         "remapping_test",
         "root_token_replacer_test",
         "scheduler_test",
+        "scheduler_tree_test",
         "sharded_inplace_test",
         "sharding_pass_test",
         "simple_network_test",

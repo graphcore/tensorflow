@@ -262,8 +262,10 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
       cs_list = tu.get_compute_sets_from_report(s)
 
       ok = [
-          '__seed*', 'Copy_', 'Conv2DBackpropFilter/convolution.*/Conv_8x8',
-          'host-exchange-local-copy-3/OnTileCopy-0'
+          '__seed*',
+          'Copy_',
+          'Conv2DBackpropFilter/convolution.*/Conv_8x8',
+          'host-exchange-local-copy-*/OnTileCopy',
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 

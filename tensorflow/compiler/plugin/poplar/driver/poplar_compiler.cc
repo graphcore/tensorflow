@@ -62,6 +62,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/liveness_look_ahead_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/look_ahead_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
@@ -589,8 +590,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     TF_ASSIGN_OR_RETURN(
         auto scheduler,
         BestIpuSchedule(
-            CreateLookAheadMemoryScheduler(resources.information),
-            MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler)));
+            {CreateLookAheadMemoryScheduler(resources.information),
+             MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler),
+             CreateLivenessLookAheadMemoryScheduler()}));
 
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
 
