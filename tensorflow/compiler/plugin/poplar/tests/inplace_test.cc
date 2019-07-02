@@ -766,42 +766,6 @@ ENTRY c1 {
   EXPECT_EQ(h->control_successors()[0], e);
 }
 
-TEST_F(HloInplaceDependencyTest, TestUpdateScalarInRowsInplace) {
-  std::string hlo = R"(
-HloModule top
-
-ENTRY c1 {
-  softmax = f16[20,30] parameter(0)
-	labels = s32[20] parameter(1)
-
-  ROOT c = f16[20, 30] custom-call(softmax, labels), custom_call_target="Popops::UpdateScalarInRows"
-}
-
-)";
-
-  auto config = GetModuleConfigForTest();
-  config.set_argument_count(2);
-  config.set_resource_input_count(2);
-  config.set_input_mapping({0, 1});
-  config.set_resource_update_to_input_index({0});
-
-  auto module = ParseHloString(hlo, config);
-  EXPECT_TRUE(module.ok());
-  auto* module0 = module.ValueOrDie().get();
-
-  CompilerAnnotations annotations(module0);
-
-  InplaceFinder inplaceFinder;
-  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
-
-  auto inplace_instructions = GetInplaceInstructions(module0);
-  EXPECT_THAT(inplace_instructions.size(), 1);
-  std::set<std::string> in_place_ops = {"c"};
-  for (auto i : inplace_instructions) {
-    EXPECT_TRUE(in_place_ops.count(i->name()));
-  }
-}
-
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

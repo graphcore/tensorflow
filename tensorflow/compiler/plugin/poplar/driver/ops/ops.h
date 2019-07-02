@@ -409,14 +409,6 @@ StatusOr<poplar::program::Sequence> CreateGather(
     CompilerResources& res, const HloGatherInstruction* inst,
     TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreateSelectScalarFromRows(
-    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
-    TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
-    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
-    TensorMap& tensor_map);
-
 /* Optimization tests */
 
 bool IsPoplibsPool(const HloInstruction*, const HloComputation*);
