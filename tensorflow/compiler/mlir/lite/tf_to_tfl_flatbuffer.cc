@@ -87,8 +87,8 @@ StatusOr<std::unique_ptr<Module>> LoadFromGraphdefOrMlirSource(
 }
 
 bool ShouldRunQuantizePasses(mlir::Module *m) {
-  if (mlir::Function *main_fn = m->getNamedFunction("main")) {
-    return main_fn->getAttrOfType<mlir::UnitAttr>("tf.quantize") !=
+  if (mlir::Function main_fn = m->getNamedFunction("main")) {
+    return main_fn.getAttrOfType<mlir::UnitAttr>("tf.quantize") !=
            mlir::Attribute();
   }
   return false;
@@ -98,7 +98,7 @@ void AddTFToTFLConversionPasses(bool emit_builtin_tflite_ops, bool run_quantize,
                                 bool emit_quant_adaptor_ops,
                                 bool lower_tensor_list_ops,
                                 mlir::PassManager *pass_manager) {
-  pass_manager->addPass(mlir::createRaiseTFControlFlowPass());
+  pass_manager->addPass(mlir::TFControlFlow::CreateRaiseTFControlFlowPass());
   // TODO(jpienaar): Revise post dialect constants.
   pass_manager->addPass(mlir::TF::CreateDecodeConstantPass());
   // Canonicalization includes const folding, which is utilized here to optimize

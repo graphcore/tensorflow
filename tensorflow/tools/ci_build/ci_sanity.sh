@@ -105,6 +105,7 @@ do_pylint() {
 "^tensorflow/contrib/eager/python/evaluator\.py.*\[E0202.*method-hidden "\
 "^tensorflow/contrib/eager/python/metrics_impl\.py.*\[E0202.*method-hidden "\
 "^tensorflow/contrib/rate/rate\.py.*\[E0202.*method-hidden "\
+"^tensorflow/python/training/tracking/tracking\.py.*\[E0202.*method-hidden "\
 "^tensorflow/python/platform/gfile\.py.*\[E0301.*non-iterator "\
 "^tensorflow/python/keras/callbacks\.py.*\[E1133.*not-an-iterable "\
 "^tensorflow/python/keras/engine/base_layer.py.*\[E0203.*access-member-before-definition "\
@@ -591,6 +592,10 @@ do_configure_test() {
   do
     export TF_NEED_CUDA=${WITH_CUDA}
     export PYTHON_BIN_PATH=$(which python)
+    sed -i \
+      -e "s/^_TF_MIN_BAZEL_VERSION =.*$/_TF_MIN_BAZEL_VERSION = '0.24.1'/" \
+      -e "s/^_TF_MAX_BAZEL_VERSION =.*$/_TF_MAX_BAZEL_VERSION = '0.24.1'/" \
+      configure.py
     yes "" | ./configure
 
     RESULT=$?
