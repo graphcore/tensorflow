@@ -113,7 +113,7 @@ class PopopsSparseSoftmaxXentWithLogitsOp : public XlaOpKernel, IpuOpKernel {
       : XlaOpKernel(ctx), IpuOpKernel() {}
 
   void Compile(XlaOpKernelContext* ctx) override {
-    VLOG(1) << "Using IPU version of SparseSoftmaxXentWithLogitsOp";
+    LOG(INFO) << "Using IPU version of SparseSoftmaxXentWithLogitsOp";
 
     const TensorShape logits_shape = ctx->InputShape(0);
     const TensorShape labels_shape = ctx->InputShape(1);
