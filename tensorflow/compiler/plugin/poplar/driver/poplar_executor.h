@@ -574,8 +574,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   void LaunchIOThreads(const InfeedInfos& infeed_infos,
                        const OutfeedInfos& outfeed_infos);
 
-  // Sets cancellation flags and notifies the threads running in thread_pool_
-  void StopThreadPool(const OutfeedInfos& outfeed_infos);
+  // Sets cancellation flags and notifies the threads running to stop.
+  void StopIOThreads(const OutfeedInfos& outfeed_infos);
 
   void DeferredDeallocation();
 
@@ -624,8 +624,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   std::list<tensorflow::IpuTraceEvent> reports_;
 
-  static const int NUM_THREADS = 2;
-  tensorflow::thread::ThreadPool thread_pool_;
+  static const int NUM_THREADS = 1;
+  tensorflow::thread::ThreadPool infeed_thread_pool_;
+  tensorflow::thread::ThreadPool outfeed_thread_pool_;
 
   struct InfeedDatasetIterator {
     InfeedDatasetIterator(

@@ -260,8 +260,12 @@ PoplarExecutor::PoplarExecutor()
       device_open_(false),
       poplar_device_hash_(0),
       hardware_configured_(false),
-      thread_pool_(tensorflow::Env::Default(), "poplar_executor_threadpool",
-                   PoplarExecutor::NUM_THREADS) {
+      infeed_thread_pool_(tensorflow::Env::Default(),
+                          "poplar_infeed_thread_pool_",
+                          PoplarExecutor::NUM_THREADS),
+      outfeed_thread_pool_(tensorflow::Env::Default(),
+                           "poplar_outfeed_thread_pool_",
+                           PoplarExecutor::NUM_THREADS) {
   // TODO should this use the time/ms?
   static std::random_device rd;
   seed_gen.seed(rd());
@@ -416,7 +420,7 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
               auto* tb =
                   tensorflow::DMAHelper::buffer(&tensor_slices[replica_id]);
               tb->Ref();
-              queue->Push(tb);
+              queue->BlockPush(tb);
             }
           }
         } else {
@@ -555,17 +559,17 @@ void PoplarExecutor::LaunchIOThreads(const InfeedInfos& infeed_infos,
   if (infeed_infos.size()) {
     std::function<void()> infeed_thread_io_fn =
         CreateInfeedIOThreadFunction(infeed_infos);
-    thread_pool_.Schedule(infeed_thread_io_fn);
+    infeed_thread_pool_.Schedule(infeed_thread_io_fn);
   }
 
   if (outfeed_infos.size()) {
     std::function<void()> outfeed_thread_io_fn =
         CreateOutfeedIOThreadFunction(outfeed_infos);
-    thread_pool_.Schedule(outfeed_thread_io_fn);
+    outfeed_thread_pool_.Schedule(outfeed_thread_io_fn);
   }
 }
 
-void PoplarExecutor::StopThreadPool(const OutfeedInfos& outfeed_infos) {
+void PoplarExecutor::StopIOThreads(const OutfeedInfos& outfeed_infos) {
   infeed_thread_cancelled_ = true;
   outfeed_thread_cancelled_ = true;
 
@@ -1810,7 +1814,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       // Run the main engine
       current_engine_->enableExecutionProfiling();
       current_engine_->run(PoplarProgramType::MAIN_SEQUENCE);
-      StopThreadPool(outfeed_infos);
+      StopIOThreads(outfeed_infos);
 
       // We need to call post process to make sure all the data is in the
       // right format on the host
