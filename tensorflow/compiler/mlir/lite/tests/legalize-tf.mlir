@@ -398,6 +398,17 @@ func @greater_equal(%arg0: tensor<8x16xf32>, %arg1: tensor<8x16xf32>) -> tensor<
 // CHECK:  return %0 : tensor<8x16xi1>
 }
 
+//TODO(b/136498739): Add failure test for non-broadcastable types, since currently
+// we can't catch this error.
+func @less_equal(%arg0: tensor<8x16xf32>, %arg1: tensor<8x16xf32>) -> tensor<8x16xi1> {
+  %0 = "tf.LessEqual"(%arg0, %arg1) : (tensor<8x16xf32>, tensor<8x16xf32>) -> tensor<8x16xi1>
+  return %0 : tensor<8x16xi1>
+
+// CHECK-LABEL: less_equal
+// CHECK:  %0 = "tfl.less_equal"(%arg0, %arg1) : (tensor<8x16xf32>, tensor<8x16xf32>) -> tensor<8x16xi1>
+// CHECK:  return %0 : tensor<8x16xi1>
+}
+
 func @rank(%arg0: tensor<11x16xf32>) -> tensor<1xi32> {
   %0 = "tf.Rank"(%arg0) : (tensor<11x16xf32>) -> tensor<1xi32>
   return %0 : tensor<1xi32>
@@ -720,6 +731,22 @@ func @space_to_batch_nd(%arg0: tensor<1x4x4x3xf32>, %arg1: tensor<2xi32>, %arg2:
   return %0 : tensor<?xf32>
   // CHECK-LABEL: space_to_batch_nd
   // CHECK: %0 = "tfl.space_to_batch_nd"(%arg0, %arg1, %arg2) : (tensor<1x4x4x3xf32>, tensor<2xi32>, tensor<2x2xi32>) -> tensor<?xf32>
+}
+
+func @split(%arg0: tensor<1xi32>, %arg1: tensor<1x4x3x3xf32>) -> tensor<1x4x3xf32> {
+  %0:3 = "tf.Split"(%arg0, %arg1) {num_split = 3 : i64} : (tensor<1xi32>, tensor<1x4x3x3xf32>) -> (tensor<1x4x3xf32>, tensor<1x4x3xf32>, tensor<1x4x3xf32>)
+  return %0#0 : tensor<1x4x3xf32>
+
+  // CHECK-LABEL: split
+  // CHECK: %0:3 = "tfl.split"(%arg0, %arg1) {num_splits = 3 : i32} : (tensor<1xi32>, tensor<1x4x3x3xf32>) -> (tensor<1x4x3xf32>, tensor<1x4x3xf32>, tensor<1x4x3xf32>)
+}
+
+func @splitv(%arg0: tensor<1x4x3x3xf32>, %arg1: tensor<2xi32>, %arg2: tensor<1xi32>) -> tensor<1x4x2x3xf32> {
+  %0:2 = "tf.SplitV"(%arg0, %arg1, %arg2) {num_split = 2 : i64} : (tensor<1x4x3x3xf32>, tensor<2xi32>, tensor<1xi32>) -> (tensor<1x4x2x3xf32>, tensor<1x4x1x3xf32>)
+  return %0#0 : tensor<1x4x2x3xf32>
+
+  // CHECK-LABEL: splitv
+  // CHECK: %0:2 = "tfl.split_v"(%arg0, %arg1, %arg2) {num_splits = 2 : i32} : (tensor<1x4x3x3xf32>, tensor<2xi32>, tensor<1xi32>) -> (tensor<1x4x2x3xf32>, tensor<1x4x1x3xf32>)
 }
 
 func @matmul_transposed(%arg0: tensor<40x37xf32>, %arg1: tensor<40x37xf32>) -> tensor<40x40xf32> {
