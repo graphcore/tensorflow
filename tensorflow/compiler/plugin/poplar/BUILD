@@ -268,6 +268,7 @@ cc_library(
         "driver/ops/gather_ops.cc",
         "driver/ops/map_ops.cc",
         "driver/ops/maths_ops.cc",
+        "driver/ops/multiupdate_ops.cc",
         "driver/ops/norm_graph_caching.cc",
         "driver/ops/norm_ops.cc",
         "driver/ops/random_ops.cc",
