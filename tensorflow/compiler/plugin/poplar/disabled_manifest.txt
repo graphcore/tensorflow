@@ -1,4 +1,3 @@
-TensorArrayTest.testTensorArrayEvalEmpty  # Test generates invalid graph
 ReduceOpsTest.testReduceSumC64            # No support for C64
 ReduceOpsTest.testReduceProdC64           # No support for C64
 ReduceOpsTest.testReduceMeanC64           # No support for C64
@@ -6,7 +5,6 @@ DepthwiseConv2DTest.testDepthwiseConv2DInputGradCompare # Fails on Valid - T4475
 DepthwiseConv2DTest.testDepthwiseConv2DFilterGradCompare # Fails - T4475
 Pooling3DTest.testMaxPool3dSamePaddingDifferentStrides  # Too slow at the moment
 FFTTest # No support for FFT
-MatrixTriangularSolveOpTest.testLarge # Too slow at the moment
 SegmentReductionOpsTest.testUnsortedSegmentSum1DIndices1DDataNegativeIndices # Tests negative indices, not allowed in TF Op
 BinaryOpsTest.testS64Comparisons # No S64
 PoolGradTest.testMaxPool # Tests MaxPoolGradGrad
@@ -25,7 +23,6 @@ MatrixBandPartTest  # Too slow
 UnaryOpsTest.testAllTypeOps # Need bitwise reductions
 QrOpTest # No QR support
 GatherTest.testHigherRank # Bad
-MatrixTriangularSolveOpTest.testBatch # Arithmetic precision?
 EagerTest.testIdentityOnVariable # Copy back from device failing
 EagerTest.testAssignAddVariable
 EagerTest.testReadAssignRead
@@ -67,7 +64,6 @@ RandomOpsTest.testTruncatedNormalIsNotConstant # disable until poplar CPU random
 XlaAddNTest # Disable due to variants in lists
 WhileTest.testMap # Disable due to variants in lists
 WhileTest.testMaxItersSimpleV2 # Disable due to variants in lists
-ListOpsTest # Disable due to variants in lists
 StatelessRandomOpsTest.testDeterminism # poplibs CPU mode does not obey seed
 StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random uniform int doesn't obey limits
 StatelessRandomOpsTest.testTruncatedNormal # Tests float64
