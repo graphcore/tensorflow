@@ -42,6 +42,7 @@ py_library(
         "//tensorflow/contrib/compiler:compiler_py",
         "//tensorflow/contrib/layers:layers_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 

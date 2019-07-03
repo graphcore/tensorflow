@@ -112,9 +112,10 @@ from tensorflow.python.ops.parallel_for.control_flow_ops import vectorized_map
 # pylint: enable=g-bad-import-order
 
 #Imports the following poplibs modules so that @RegisterGradient get executed.
-from tensorflow.python.ops.poplar import popnn_ops_grad
-from tensorflow.python.ops.poplar import poputil_ops_grad
-from tensorflow.python.ops.poplar import poprand_ops_grad
+from tensorflow.python.ipu.ops import internal_ops_grad
+from tensorflow.python.ipu.ops import normalization_ops_grad
+from tensorflow.python.ipu.ops import rand_ops_grad
+from tensorflow.python.ipu.ops import rnn_ops_grad
 
 # These modules were imported to set up RaggedTensor operators and dispatchers:
 del _ragged_dispatch, _ragged_operators

@@ -1,4 +1,4 @@
-# Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,11 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# =============================================================================
-"""Ops related to the Graphcore IPU
-
-"""
-
+# ==============================================================================
+"""Gradients for Popnn operators."""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+from tensorflow.python.framework import ops
+"""
+    These gradient function should *never* be called directly.
+"""
+
+
+@ops.RegisterGradient("IpuRemap")
+def _poputil_remap_layer_backward(op, grads):
+  """Gradients for the IpuRemap op."""
+  return grads
+
+
+@ops.RegisterGradient("IpuPrintTensor")
+def _poputil_print_tensor_layer_backward(op, grads):
+  """Gradients for the IpuPrintTensor op."""
+  return grads

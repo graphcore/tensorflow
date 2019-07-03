@@ -1502,7 +1502,7 @@ py_test(
         "//tensorflow/python:layers",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/ops/poplar:poplar"
+        "//tensorflow/python/ipu:ipu_lib"
     ],
     srcs_version = "PY2AND3",
 )
@@ -1522,7 +1522,7 @@ py_test(
         "//tensorflow/python:layers",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/ops/poplar:poplar"
+        "//tensorflow/python/ipu:ipu_lib"
     ],
     srcs_version = "PY2AND3",
 )

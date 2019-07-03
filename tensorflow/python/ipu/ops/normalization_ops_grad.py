@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,31 +18,20 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.python.framework import ops
-from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 """
     These gradient function should *never* be called directly.
 """
 
-
-@ops.RegisterGradient("IpuDropout")
-def _poputil_dropout_layer_backward(op, grads, seed_grads):
-  """Gradients for the IpuDropout op."""
-  seed = op.outputs[1]
-  rate = op.get_attr("rate")
-  scale = op.get_attr("scale")
-  seed_modifier = op.get_attr("seed_modifier")
-
-  return [
-      gen_poprand_ops.ipu_dropout(
-          grads,
-          seed=seed,
-          user_seed=1,
-          rate=rate,
-          scale=scale,
-          name=op.name + "_grad",
-          is_using_user_seed=True,
-          seed_modifier=seed_modifier)[0],
-
-      # The seed is an input so needs a gradient as well
-      None
-  ]
+@ops.RegisterGradient("PopnnGroupNormTraining")
+def _popnn_group_norm_backward(op, *grads):
+  """Gradients for the PopnnGroupNormTraining op."""
+  return gen_popnn_ops.popnn_group_norm_grad(
+      inputs=op.inputs[0],
+      gamma=op.inputs[1],
+      mean=op.outputs[1],
+      inv_std_dev=op.outputs[2],
+      output_backprop=grads[0],
+      data_format=op.get_attr("data_format"),
+      epsilon=op.get_attr("epsilon"),
+      num_groups=op.get_attr("num_groups"))

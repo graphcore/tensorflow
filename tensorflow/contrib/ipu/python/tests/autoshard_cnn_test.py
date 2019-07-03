@@ -8,8 +8,8 @@ from __future__ import print_function
 import numpy as np
 import test_util as tu
 
-from tensorflow.contrib import ipu
 from tensorflow.keras import layers
+from tensorflow.python import ipu
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -213,7 +213,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
         with ops.device("/device:IPU:0"):
           inp = x
 
-          lstm_cell = ipu.popnn_rnn.PopnnLSTM(256, dtype=dtypes.float32)
+          lstm_cell = ipu.rnn_ops.PopnnLSTM(256, dtype=dtypes.float32)
           x, _ = lstm_cell(x, training=True)
 
           cross_entropy = nn.softmax_cross_entropy_with_logits_v2(

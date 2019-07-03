@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,24 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Gradients for Popnn operators."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-from tensorflow.python.framework import ops
 """
-    These gradient function should *never* be called directly.
+Popnn cross replica operators
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-
-@ops.RegisterGradient("IpuRemap")
-def _poputil_remap_layer_backward(op, grads):
-  """Gradients for the IpuRemap op."""
-  return grads
+from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 
 
-@ops.RegisterGradient("IpuPrintTensor")
-def _poputil_print_tensor_layer_backward(op, grads):
-  """Gradients for the IpuPrintTensor op."""
-  return grads
+def cross_replica_sum(x, name=None):
+  """Sum the input tensor across replicas.
+
+  Args:
+    x: The local tensor to the sum.
+    name: Optional op name.
+
+  Returns:
+    A `Tensor` which is summed across replicas.
+  """
+
+  return gen_popops_ops.ipu_cross_replica_sum(x, name=name)
