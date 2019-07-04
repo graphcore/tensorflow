@@ -1833,6 +1833,55 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "logging_example_1",
+    size = "small",
+    srcs = ["docs/logging_example_1.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
+    name = "perf_training_example",
+    size = "small",
+    srcs = ["docs/perf_training_example.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
+tf_py_test(
+    name = "tutorial_basic",
+    size = "small",
+    srcs = ["docs/tutorial_basic.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
+    name = "tutorial_sharding",
+    size = "small",
+    srcs = ["docs/tutorial_sharding.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
+    name = "tutorial_xla_compile",
+    size = "small",
+    srcs = ["docs/tutorial_xla_compile.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -1932,6 +1981,17 @@ test_suite(
 )
 
 test_suite(
+    name = "doc_examples",
+    tests = [
+        "logging_example_1",
+        "perf_training_example",
+        "tutorial_basic",
+        "tutorial_sharding",
+        "tutorial_xla_compile",
+    ],
+)
+
+test_suite(
     name = "poplar_test_suite",
     tests = [
       ":all_tests",
@@ -1947,6 +2007,7 @@ test_suite(
       ":poplar_test_suite",
       ":size_speed_tests",
       ":training_tests",
+      ":doc_examples",
     ],
 )
 

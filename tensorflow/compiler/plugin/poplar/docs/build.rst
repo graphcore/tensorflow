@@ -68,7 +68,7 @@ Build instructions
 
     To run the suit of unit tests::
 
-        bazel test --verbose_failures --test_output=all --test_env=TF_POPLAR_FLAGS="--use_ipu_model"  --verbose_failures --config=opt //tensorflow/contrib/ipu:poplar_test_suite
+        bash ../tensorflow_packaging/run_ci_tests.sh
 
     Adding  ``--test_env TF_CPP_MIN_VLOG_LEVEL=1`` to the command line will dump out more debug information, including the work done by the XLA driver turning the XLA graph into a Poplar graph.
     

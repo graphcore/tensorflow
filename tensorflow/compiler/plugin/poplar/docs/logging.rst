@@ -41,77 +41,26 @@ from ``tensorflow.compiler.plugin.poplar.driver.trace_pb2.IpuTraceEvent``.
 This is the example from the tutorial with a few lines of additional code to
 create a trace report:
 
-.. code-block:: python
-    :linenos:
+.. literalinclude:: logging_example_1.py
+  :language: python
+  :linenos:
 
-        import tensorflow as tf
-        import numpy as np
-        import os
-        from tensorflow.contrib import ipu
-        from tensorflow.contrib.ipu.python.ops import ipu_scope
+The example starts by importing two new elements that are IPU-specific APIs.
+The first import is *gen_ipu_ops*, which will generate the actual event trace,
+while the second import is an assortment of utility functions, a component of
+which will be used here to parse the event trace to a readable output.
 
-        # Needed to generate report
-        from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-        from tensorflow.contrib.ipu import utils
-
-        # Configure argument for targeting the IPU
-        cfg = ipu.utils.create_ipu_config(profiling=True, use_poplar_text_report=True)
-        cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-        cfg = ipu.utils.auto_select_ipus(cfg, 1, sharded=True)
-        ipu.utils.configure_ipu_system(cfg)
-
-        with tf.device("cpu"):
-            pa = tf.placeholder(np.float32, [2], name="a")
-            pb = tf.placeholder(np.float32, [2], name="b")
-            pc = tf.placeholder(np.float32, [2], name="c")
-
-            # Create a trace event
-            report = gen_ipu_ops.ipu_event_trace()
-
-
-        def basic_graph(pa, pb, pc):
-            # Do basic addition with tensors
-            o1 = pa + pb
-            o2 = pa + pc
-            simple_graph_output = o1 + o2
-            return simple_graph_output
-
-
-        with ipu_scope("/device:IPU:0"):
-            result = basic_graph(pa, pb, pc)
-
-        with tf.Session() as sess:
-            # Run the graph through the session feeding it an arbitrary dictionary
-            result = sess.run(result, feed_dict={pa: [1., 1.], pb: [0., 1.], pc: [1., 5.]})
-
-            # Generate report based on the event run in session
-            trace_out = sess.run(report)
-            trace_report = utils.extract_all_strings_from_event_trace(trace_out)
-
-            # Write trace report to file
-            with open('Trace_Event_Report.rep', "w") as f:
-                f.write(trace_report)
-
-            # Print the result
-            print(result)
-
-Lines *8* and *9* import two new elements that are IPU-specific APIs. The first
-import is *gen_ipu_ops*, which will generate the actual event trace, while the
-second import is an assortment of utility functions, a component of which will
-be used here to parse the event trace to a readable output.
-
-The event trace is created at line *23*, where *gen_ipu_ops* is called to
-instantiate the trace and returns it to *report*. This is then fed to the
-TensorFlow session as a *run* argument on line *42*, directly following the
-session run call to the feed-forward pass through *basic_graph*. In essence the
-report is generated based on the last session graph call. The trace output is
-then parsed through *extract_all_strings_from_event_trace*, and a log file is
-generated. The final component of writing the trace to an actual file is done on
-lines *46* and *47*, where a file is opened, named and written to with the
-parsed trace data.
+The event trace operation is created when *gen_ipu_ops* is called to instantiate
+the trace and returns it to *report*. This is then fed to the TensorFlow session
+as a *run* argument, directly following the session run call to the feed-forward
+pass through *basic_graph*. In essence the report is generated based on the last
+session graph call. The trace output is then parsed through
+*extract_all_strings_from_event_trace*, and a log file is generated. The final
+component of writing the trace to an actual file is done near the end of the
+example where a file is opened, named and written to with the parsed trace data.
 
 ``ipu_compile_summary(name, [op list])``
-_________________________________
+________________________________________
 
 This produces a summary, which can be tied into the rest of the summary system
 to produce output for Tensorboard. The parameter name is the name of the
@@ -122,8 +71,7 @@ graph, or the train op for a training graph.
 ::
 
   import tensorflow as tf
-  from tensorflow.contrib import ipu
-  from tensorflow.core.protobuf import config_pb2
+  from tensorflow.python import ipu
 
   ...
 
@@ -145,8 +93,8 @@ Enabling tracing in the hardware configuration options
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The main function for producing an IPU system hardware configuration is called
-``tensorflow.contrib.ipu.create_ipu_config``.  It provides several options for
-controlling the logging and tracing of Poplar compilations.
+``create_ipu_config``.  It provides several options for controlling the logging
+and tracing of Poplar compilations.
 
 ``profiling``
 _____________

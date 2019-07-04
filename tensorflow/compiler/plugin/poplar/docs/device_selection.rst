@@ -42,13 +42,11 @@ will be for a single IPU. The first available single IPU will be used.
 Two API calls are available for selecting the number and configuration
 of the IPU system.
 
-``tensorflow.contrib.ipu.util.auto_select_ipus`` allows the selection
-of a number of IPUs.  The process searches for the first set of IPUs
-which match the number requested.
+``auto_select_ipus`` allows the selection of a number of IPUs.  The process
+searches for the first set of IPUs which match the number requested.
 
-``tensorflow.contrib.ipu.util.select_ipus`` allows the selection of
-a specific IPU hardware device ordinal, as returned by the ``gc-info``
-tool.
+``select_ipus`` allows the selection of a specific IPU hardware device ordinal,
+as returned by the ``gc-info`` tool.
 
 Each of these functions takes as a first argument the options structure
 returned by the ``create_ipu_config`` function.  The second argument is

@@ -3,59 +3,59 @@
 Python API
 ----------
 
-.. automodule:: tensorflow.contrib.ipu.python.autoshard
+.. automodule:: tensorflow.python.ipu.autoshard
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.ipu_compiler
+.. automodule:: tensorflow.python.ipu.ipu_compiler
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.ipu_infeed_queue
+.. automodule:: tensorflow.python.ipu.ipu_infeed_queue
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.ipu_optimizer
+.. automodule:: tensorflow.python.ipu.ipu_optimizer
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.ipu_outfeed_queue
+.. automodule:: tensorflow.python.ipu.ipu_outfeed_queue
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.loops
+.. automodule:: tensorflow.python.ipu.loops
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.ops
+.. automodule:: tensorflow.python.ipu.ops
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.popnn_normalization
+.. automodule:: tensorflow.python.ipu.sharded_optimizer
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.popnn_rnn
+.. automodule:: tensorflow.python.ipu.sharding
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.poprand
+.. automodule:: tensorflow.python.ipu.utils
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.popops_cross_replica_sum
+.. automodule:: tensorflow.python.ipu.ops.normalization_ops
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.sharded_optimizer
+.. automodule:: tensorflow.python.ipu.ops.rnn_ops
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.sharding
+.. automodule:: tensorflow.python.ipu.ops.rand_ops
   :members:
   :noindex:
 
-.. automodule:: tensorflow.contrib.ipu.python.utils
+.. automodule:: tensorflow.python.ipu.ops.cross_replica_ops
   :members:
   :noindex:
 
