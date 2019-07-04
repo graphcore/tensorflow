@@ -30,14 +30,14 @@ from tensorflow.python.framework import ops
 class IPUInfeedQueue:
   """Wraps a tf.Dataset object with infeed operations specific to the IPU.
 
-  This class, along with `contrib.ipu.loops` is used to create a data pipeline
-  from a `dataset` into a training/inference loop on the IPU inside a single
-  `session.run` which reduces the overheads of calling `session.run` for each
-  iteration of the loop.
+  This class, along with `tensorflow.python.ipu.loops` is used to create a data
+  pipeline from a `dataset` into a training/inference loop on the IPU inside a
+  single `session.run` which reduces the overheads of calling `session.run` for
+  each iteration of the loop.
 
   You should pass the infeed queue as an argument to a loop from
-  `contrib.ipu.loops`. These loops will then handle the dequeuing of the data to
-  the device automatically.
+  `tensorflow.python.ipu.loops`. These loops will then handle the dequeuing of
+  the data to the device automatically.
 
   The feed_name allows individual feeds to be named.  When including more than
   one feed in the same graph, each should be independently named.
@@ -156,7 +156,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     in the infeed queue.
 
     This function should not be called directly, instead the infeed should be
-    passed to a loop from `contrib.ipu.loops`.
+    passed to a loop from `tensorflow.python.ipu.loops`.
 
     Returns:
       A nested structure of `tf.Tensor` objects.

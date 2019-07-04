@@ -22,21 +22,25 @@ from tensorflow.core.framework import summary_pb2
 from tensorflow.python.framework import ops
 from tensorflow.python.summary.summary import tensor_summary
 
-def ipu_compile_summary(name, op, collections=None):
+def ipu_compile_summary(name, op_list, collections=None):
   """Create an IPU compiler summary operation.
 
   Args:
-    name: A name for the summary
-    op: An operation to make this summary dependent upon
-    collections: Optional collections to add the summary into
+    name: A name for the summary.
+    op_list: An operation or list of operations to make this summary dependent
+             upon.
+    collections: Optional collections to add the summary into.
     
   Returns:
     The new summary operation
 
   """
 
+  if type(op_list) is not list:
+    op_list = [op_list]
+
   with ops.device("cpu"):
-    with ops.control_dependencies([op]):
+    with ops.control_dependencies(op_list):
 
       reports = gen_ipu_ops.ipu_event_trace()
 

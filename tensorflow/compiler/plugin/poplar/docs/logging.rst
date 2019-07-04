@@ -110,7 +110,7 @@ generated. The final component of writing the trace to an actual file is done on
 lines *46* and *47*, where a file is opened, named and written to with the
 parsed trace data.
 
-``ipu_compile_summary(name, op)``
+``ipu_compile_summary(name, [op list])``
 _________________________________
 
 This produces a summary, which can be tied into the rest of the summary system
@@ -128,7 +128,7 @@ graph, or the train op for a training graph.
   ...
 
   tf.summary.scalar('c_out', c)
-  ipu.ops.ipu_compile_summary('report', c)
+  ipu.summary_ops.ipu_compile_summary('report', [c])
   all_sum = tf.summary.merge_all()
 
   ...

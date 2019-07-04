@@ -56,15 +56,15 @@ def print_tensor(input, name=None):
 
        import tensorflow as tf
 
-       from tensorflow.contrib.ipu import internal
-       from tensorflow.contrib.ipu import ops
+       from tensorflow.python.ipu.ops import internal_ops
+       from tensorflow.python.ipu import scopes
 
        def my_net(v):
-         print_op = internal.print_tensor(v)
+         print_op = internal_ops.print_tensor(v)
          v = v + 1
          return v, print_op
 
-       with ops.ipu_scope("/device:IPU:0"):
+       with scope.ipu_scope("/device:IPU:0"):
          res = ipu_compiler.compile(my_net, inputs=[v])
 
        ...
@@ -77,8 +77,8 @@ def print_tensor(input, name=None):
        import numpy as np
        import tensorflow as tf
 
-       from tensorflow.contrib.ipu import internal
-       from tensorflow.contrib.ipu import ops
+       from tensorflow.python.ipu.ops import internal_ops
+       from tensorflow.python.ipu import scopes
 
        with ops.ipu_scope("/device:IPU:0"):
          pa = tf.placeholder(np.float32, [2, 2], name="a")
@@ -98,8 +98,8 @@ def print_tensor(input, name=None):
        import numpy as np
        import tensorflow as tf
 
-       from tensorflow.contrib.ipu import internal
-       from tensorflow.contrib.ipu import ops
+       from tensorflow.python.ipu.ops import internal_ops
+       from tensorflow.python.ipu import scopes
 
        with ops.ipu_scope("/device:IPU:0"):
          pa = tf.placeholder(np.float32, [2, 2], name="a")

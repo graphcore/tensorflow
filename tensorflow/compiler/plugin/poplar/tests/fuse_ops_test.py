@@ -9,11 +9,11 @@ import os
 import numpy as np
 import test_utils as tu
 
-from tensorflow.keras import layers
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.layers import normalization as layers_norm
+from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_nn_ops
 from tensorflow.python.ops import gen_math_ops

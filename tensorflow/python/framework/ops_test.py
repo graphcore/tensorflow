@@ -2764,7 +2764,7 @@ class DeviceStackTest(test_util.TensorFlowTestCase):
     one_list = const_one.op._device_assignments
     self.assertEqual(1, len(one_list))
     self.assertEqual("/cpu", one_list[0].obj)
-    self.assertEqual("ops_test.py", os.path.basename(one_list[0].filename))
+    self.assertEqual("utils_test.py", os.path.basename(one_list[0].filename))
 
     two_list = const_two.op._device_assignments
     self.assertEqual(2, len(two_list))
@@ -2774,7 +2774,7 @@ class DeviceStackTest(test_util.TensorFlowTestCase):
     three_list = const_three.op._device_assignments
     self.assertEqual(1, len(three_list))
     func_description = three_list[0].obj
-    expected_regex = r"device_func<.*ops_test.py, [0-9]+"
+    expected_regex = r"device_func<.*utils_test.py, [0-9]+"
     self.assertRegexpMatches(func_description, expected_regex)
 
   @test_util.run_deprecated_v1
@@ -2789,7 +2789,7 @@ class DeviceStackTest(test_util.TensorFlowTestCase):
     two_metadata = const_two.op._device_assignments[0]
 
     # Verify both types of device assignment return the right stack info.
-    self.assertRegexpMatches("ops_test.py",
+    self.assertRegexpMatches("utils_test.py",
                              os.path.basename(one_metadata.filename))
     self.assertEqual(one_metadata.filename, two_metadata.filename)
     self.assertEqual(one_metadata.lineno + 2, two_metadata.lineno)
@@ -2819,7 +2819,7 @@ class ColocationGroupTest(test_util.TensorFlowTestCase):
     self.assertIsNone(metadata.obj)
     # Check that this test's filename is recorded as the file containing the
     # colocation statement.
-    self.assertEqual("ops_test.py", os.path.basename(metadata.filename))
+    self.assertEqual("utils_test.py", os.path.basename(metadata.filename))
 
   @test_util.run_deprecated_v1
   def testColocationDeviceInteraction(self):

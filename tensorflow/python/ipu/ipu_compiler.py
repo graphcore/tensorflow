@@ -82,7 +82,7 @@ def compile(computation, inputs=None):
     raise Exception("""\
 A computation has been compiled, however it was not placed on an IPU device. \
 This computation will not be executed on an IPU.
-To execute it on an IPU use the `ipu_scope` from `tensorflow.contrib.ipu.ops`, \
+To execute it on an IPU use the `ipu_scope` from `tensorflow.python.ipu.ops`, \
 for example:
 
   with ipu_scope('/device:IPU:0'):

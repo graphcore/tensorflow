@@ -18,8 +18,11 @@ from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import summary_pb2
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.core.protobuf import config_pb2
+from tensorflow.python.data.ops.dataset_ops import Dataset
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
+from tensorflow.python.ops import gen_array_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.summary.summary import tensor_summary
 
 
@@ -274,19 +277,40 @@ def extract_all_io_events(events):
   return result
 
 
-def ipu_compile_summary(name, op_list, collections=None):
+def create_multi_increasing_dataset(value,
+                                    shapes=[[1, 32, 32, 4], [1, 8]],
+                                    dtypes=[np.float32, np.float32],
+                                    repeat=True):
+  def _get_one_input(data):
+    result = []
+    for i in range(len(shapes)):
+      result.append(
+          math_ops.cast(
+              gen_array_ops.broadcast_to(data, shape=shapes[i]),
+              dtype=dtypes[i]))
+    return result
 
-  with ops.device("cpu"):
-    with ops.control_dependencies(op_list):
-      reports = gen_ipu_ops.ipu_event_trace()
+  dataset = Dataset.range(value).map(_get_one_input)
+  if repeat:
+    dataset = dataset.repeat()
+  return dataset
 
-      summary_metadata = summary_pb2.SummaryMetadata(
-          plugin_data=summary_pb2.SummaryMetadata.PluginData(
-              plugin_name="ipu"))
 
-      t_summary = tensor_summary(
-          name=name,
-          tensor=reports,
-          summary_metadata=summary_metadata,
-          collections=collections)
-  return t_summary
+def create_dual_increasing_dataset(value,
+                                   data_shape=[1, 32, 32, 4],
+                                   label_shape=[1, 8],
+                                   dtype=np.float32,
+                                   repeat=True):
+  return create_multi_increasing_dataset(
+      value,
+      shapes=[data_shape, label_shape],
+      dtypes=[dtype, dtype],
+      repeat=repeat)
+
+
+def create_single_increasing_dataset(value,
+                                     shape=[1, 32, 32, 4],
+                                     dtype=np.float32,
+                                     repeat=True):
+  return create_multi_increasing_dataset(
+      value, shapes=[shape], dtypes=[dtype], repeat=repeat)
