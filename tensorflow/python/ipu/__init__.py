@@ -23,11 +23,13 @@ from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_optimizer
 from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import sharded_optimizer
 from tensorflow.python.ipu import sharding
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu import ipu_estimator
 
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ipu.ops import embedding_ops

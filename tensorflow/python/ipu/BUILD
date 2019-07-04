@@ -60,9 +60,11 @@ py_library(
         "autoshard_cnn.py",
         "gradient_accumulation_optimizer.py",
         "ipu_compiler.py",
+        "ipu_estimator.py",
         "ipu_infeed_queue.py",
-        "ipu_outfeed_queue.py",
         "ipu_optimizer.py",
+        "ipu_outfeed_queue.py",
+        "ipu_run_config.py",
         "loops.py",
         "ops/cross_replica_ops.py",
         "ops/embedding_ops.py",
@@ -82,6 +84,7 @@ py_library(
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python/estimator:estimator_py",
     ],
 )
 
@@ -158,6 +161,23 @@ tf_py_test(
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
+    name = "ipu_estimator_test",
+    size = "medium",
+    srcs = ["tests/ipu_estimator_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/contrib/compiler:xla",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
@@ -248,6 +268,7 @@ test_suite(
         "embedding_lookup_test",
         "estimator_test",
         "infeed_outfeed_test",
+        "ipu_estimator_test",
         "pop_datastream_test",
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
