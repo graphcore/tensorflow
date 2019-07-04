@@ -100,8 +100,8 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
       if (do_all_reduce) {
         // All reduce the accumulator tensor.
         result = popops::replicatedAllReduce(
-            GetReplicatedGraph(res), GetMasterGraph(res), accumulator,
-            popops::Operation::ADD, if_true, GetDebugName(inst));
+            GetReplicatedGraph(res), accumulator, popops::Operation::ADD,
+            if_true, GetDebugName(inst));
       }
 
       // Copy accumulator into output.

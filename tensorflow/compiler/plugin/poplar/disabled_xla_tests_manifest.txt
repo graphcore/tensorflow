@@ -338,3 +338,5 @@ QrTest POPLAR // No Qr op
 
 ArithmeticTest POPLAR // Requires multi-variate reduction
 
+IotaR1Test POPLAR // Slow
+IotaR3Test POPLAR

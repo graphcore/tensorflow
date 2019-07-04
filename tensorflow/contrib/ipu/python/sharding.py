@@ -12,95 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
-"""
-Utility functions for sharding graphs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-"""
 
-from tensorflow.core.framework import attr_value_pb2
-from tensorflow.python.framework import ops
+from tensorflow.python.ipu.sharding import *
+from tensorflow.python.platform import tf_logging
 
-_IPU_AUTOSHARD = "IPU_AUTOSHARD"
-_XLA_SHARDING = '_XlaSharding'
-
-
-def has_attr(o, attr_name):
-  """Test for the presence of a specific attribute.
-
-  Args:
-    o: An operation.
-    attr_name: The name of an attribute to test for.
-
-  Returns:
-    True if the operation has the given attribute.
-  """
-  for i in o.node_def.attr.items():
-    if i[0] == attr_name:
-      return True
-  return False
-
-
-def dependencies(roots):
-  """Find a list of ancestor operations for a given set of root operations
-
-  Args:
-    roots: The root operations from which to start.
-
-  """
-  working = roots
-  op_set = set()
-  while len(working) > 0:
-    o = working[0]
-    if type(o) is ops.Tensor:
-      o = o.op
-    working = working[1:]
-    op_set.add(o)
-    working += [t.op for t in o.inputs if t.op not in op_set]
-    working += [c for c in o.control_inputs if c not in op_set]
-  return op_set
-
-
-def get_shard_from_colocation(op):
-  """Find the shard number from an op which shares co-location information with
-  the given operation.
-
-  Args:
-    op: The operation to apply sharding to.
-  """
-  g = op.graph
-  for c in op.colocation_groups():
-    try:
-      coloc_op = g.get_operation_by_name(c.decode('utf-8')[5:])
-      if has_attr(coloc_op, _XLA_SHARDING):
-        attr = coloc_op.get_attr(_XLA_SHARDING)
-        return attr
-    except KeyError:
-      continue
-  for c in op.inputs:
-    coloc_op = c.op
-    if has_attr(coloc_op, _XLA_SHARDING):
-      attr = coloc_op.get_attr(_XLA_SHARDING)
-      return attr
-  return None
-
-
-def propagate_sharding(g):
-  """Move the sharding from the forward pass operations onto their co-located
-  backward pass operations.
-
-  Args:
-    g: The graph.
-  """
-  changed = True
-  while changed:
-    changed = False
-
-    op_list = g.get_operations()
-    op_list = filter(lambda o: has_attr(o, '_class'), op_list)
-    op_list = filter(lambda o: not has_attr(o, '_XlaSharding'), op_list)
-    for o in op_list:
-      attr = get_shard_from_colocation(o)
-      if attr is not None:
-        o._set_attr(_XLA_SHARDING, attr_value_pb2.AttrValue(s=attr))
-        changed = True
-        break
+tf_logging.warning(
+    "tensorflow.contrib.ipu has been moved to tensorflow.python.ipu.  This "
+    "namespace will be removed in September 2019")

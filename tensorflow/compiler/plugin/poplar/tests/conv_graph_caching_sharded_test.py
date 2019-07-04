@@ -8,10 +8,10 @@ from __future__ import print_function
 import numpy as np
 import test_utils as tu
 
-from tensorflow.keras import layers
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
+from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops

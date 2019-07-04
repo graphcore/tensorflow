@@ -19,23 +19,17 @@ from __future__ import print_function
 import numpy as np
 import test_utils as tu
 
-from tensorflow.keras import layers
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
-from tensorflow.python.layers import normalization as layers_norm
+from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
-from tensorflow.python.ops import gen_nn_ops
-from tensorflow.python.ops import gen_math_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
-from tensorflow.python.training import gradient_descent
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class ForwardAllocationTest(test_util.TensorFlowTestCase):

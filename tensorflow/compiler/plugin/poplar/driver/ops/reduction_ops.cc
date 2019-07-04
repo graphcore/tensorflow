@@ -922,9 +922,9 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     auto t = FlattenAndConcatenteTensors(input_tensors);
 
     // Replicated sum the concatenated tensor
-    auto out = popops::replicatedAllReduce(
-        GetReplicatedGraph(res), GetMasterGraph(res), t, popops::Operation::ADD,
-        seq, GetDebugName(inst));
+    auto out = popops::replicatedAllReduce(GetReplicatedGraph(res), t,
+                                           popops::Operation::ADD, seq,
+                                           GetDebugName(inst));
 
     // Unconcat the result and unflatten
     auto output_tensors = SliceTensorIntoTensorsLike(out, input_tensors);

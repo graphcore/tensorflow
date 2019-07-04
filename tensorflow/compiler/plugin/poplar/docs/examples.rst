@@ -1,6 +1,7 @@
 Example
 -------
 
-Placeholder for full example.
+This example shows how to use the IPU to train using a high performance
+streaming data infeed.
 
-.. literalinclude:: ../../../../contrib/ipu/python/tests/multi_ipu_test.py
+.. literalinclude:: perf_training_example.py

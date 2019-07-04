@@ -12,7 +12,7 @@ Controlling the half precision floating point unit
 
 The floating point unit has a control register that controls its behaviour.
 When configuring the IPU system hardware, the function
-:py:func:`tensorflow.contrib.ipu.utils.set_floating_point_behaviour_options`
+:py:func:`tensorflow.python.ipu.utils.set_floating_point_behaviour_options`
 will set the control register.
 
 The `esr` bit enables the stochastic rounding unit. Three of the remaining
@@ -28,14 +28,14 @@ generators both use a common global random number seed to initialize the
 random number generator hardware. Each TensorFlow IPU device has its own seed.
 
 By default this seed is set randomly, but it can be reset by using the
-:py:func:`tensorflow.contrib.ipu.utils.reset_ipu_seed` function.
+:py:func:`tensorflow.python.ipu.utils.reset_ipu_seed` function.
 
 Due to the hardware threading in the device, if the seed reset function is used
 then the `target.deterministicWorkers` Poplar Engine option will need to be set
 to `true`.
 
 This can be done with using the
-:py:func:`tensorflow.contrib.ipu.utils.set_compilation_options` function.
+:py:func:`tensorflow.python.ipu.utils.set_compilation_options` function.
 
 Debugging Numerical Issues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -44,4 +44,4 @@ The values held in a tensor can be printed by calling ipu.internal.print_tensor.
 This function takes in a tensor and will print it to standard error as a side
 effect.
 
-See :py:func:`tensorflow.contrib.ipu.print_tensor`.
+See :py:func:`tensorflow.python.ipu.ops.interal_ops.print_tensor`.

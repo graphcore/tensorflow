@@ -46,57 +46,10 @@ The following example shows how to construct a trivial DataSet, attach it to
 a model using in IPUInfeedQueue, feed results into an IPUOutfeedQueue, and
 construct a loop.
 
-.. code-block:: python
+.. literalinclude:: perf_training_example.py
+  :language: python
+  :linenos:
 
-  import numpy as np
-  import tensorflow as tf
-
-  from tensorflow.contrib.ipu import ipu_compiler
-  from tensorflow.contrib.ipu import ipu_infeed_queue
-  from tensorflow.contrib.ipu import ipu_outfeed_queue
-  from tensorflow.contrib.ipu import loops
-  from tensorflow.contrib.ipu import ops
-  from tensorflow.contrib.ipu import poprand
-  from tensorflow.contrib.ipu import utils
-
-  # The dataset for feeding the graphs
-  ds = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[800]))
-  ds = ds.map(lambda x: [x, x])
-  ds = ds.repeat()
-
-  # The host side queues
-  infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, feed_name="infeed")
-  outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
-
-  # The device side main
-  def body(x1, x2):
-      d1 = x1 + x2
-      d2 = x1 - x2
-      outfeed = outfeed_queue.enqueue({'d1': d1, 'd2':d2})
-      return outfeed
-
-  def my_net():
-      r = loops.repeat(10, body, [], infeed_queue)
-      return r
-
-  with ops.ipu_scope('/device:IPU:0'):
-      run_loop = ipu_compiler.compile(my_net, inputs=[])
-
-  # The outfeed dequeue has to happen after the outfeed enqueue
-  dequeue_outfeed = outfeed_queue.dequeue()
-
-
-  # Configure the hardware
-  config = utils.create_ipu_config()
-  config = utils.auto_select_ipus(config, 1)
-  utils.configure_ipu_system(config)
-
-  with tf.Session() as sess:
-    sess.run(infeed_queue.initializer)
-
-    sess.run(run_loop)
-    result = sess.run(dequeue_outfeed)
-    print(result)
 
 In this case the DataSet is a trivial one.  It constructs a base DataSet from a
 single TensorFlow constant, and then maps the output of that DataSet into a pair
@@ -156,8 +109,8 @@ Selecting the number of replicas
 ________________________________
 
 During system configuration, the user specifies the number of IPUs for the
-TensorFlow device using the `tensorflow.contrib.ipu.utils.auto_select_ipus()`
-function, or the `tensorflow.contrib.ipu.utils.select_ipus()` function.
+TensorFlow device using the `auto_select_ipus()` function, or the
+`select_ipus()` function.
 
 A graph can be sharded across multiple IPUs (model parallelism), and then
 replicated across IPUs (data parallelism).  When specifying the number of IPUs
@@ -185,5 +138,4 @@ in sync across replicas.
 
 A wrapper for standard TensorFlow optimizers is used to add extra operations to
 the parameter update nodes in the graph to average updates across replicas. It
-is called `tensorflow.contrib.ipu.CrossReplicaOptimizer`.  See the
-:ref:`api-section` for more details.
+is called `CrossReplicaOptimizer`.  See the :ref:`api-section` for more details.

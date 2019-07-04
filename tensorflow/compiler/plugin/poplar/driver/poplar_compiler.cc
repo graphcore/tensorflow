@@ -404,7 +404,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   if (!poplarExecutor->HasPoplarDevice()) {
     return xla::FailedPrecondition(
         "No device has been configured. Did you configure the IPU devices by "
-        "running `tensorflow.contrib.ipu.configure_ipu_system(ipu_options)`?");
+        "running `tensorflow.python.ipu.configure_ipu_system(ipu_options)`?");
   }
   const poplar::Device& dev = poplarExecutor->GetPoplarDevice();
 
@@ -451,7 +451,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         return xla::FailedPrecondition(
             "This is not a valid replicated graph because no All-Reduce "
             "operations were found. Did you use the "
-            "`tensorflow.contrib.ipu.ipu_optimizer.CrossReplicaOptimizer` "
+            "`tensorflow.python.ipu.ipu_optimizer.CrossReplicaOptimizer` "
             "optimizer?\nIf you want the graph to still run in replicated "
             "mode with no All-Reduce operations use "
             "`TF_POPLAR_FLAGS=\"--force_replicated_mode\"`.");

@@ -57,6 +57,7 @@ py_library(
         ":no_contrib",
         "//tensorflow/python/estimator:estimator_py",
         "//tensorflow/python/tpu:tpu_estimator",
+        "//tensorflow/python/ipu:ipu_lib",
     ] + if_not_v2(["//tensorflow/contrib:contrib_py"]),
 )
 
@@ -3621,9 +3622,9 @@ py_library(
         ":variable_scope",
         ":variables",
         "//tensorflow/python/eager:wrap_function",
+        "//tensorflow/python/ipu:ipu_grad_ops_lib",
         "//tensorflow/python/ops/distributions",
         "//tensorflow/python/ops/linalg",
-        "//tensorflow/python/ops/poplar:poplar",
         "//tensorflow/python/ops/ragged",
     ],
 )

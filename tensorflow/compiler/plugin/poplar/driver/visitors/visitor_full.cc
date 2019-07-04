@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -258,11 +259,24 @@ Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
 }
 
 Status FullVisitor::HandleScatter(HloInstruction* inst) {
+  namespace m = match;
   VLOG(1) << "Processing " << inst->name();
 
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
-      CreateScatter(resources_, Cast<HloScatterInstruction>(inst), tensor_map));
+  poplar::program::Program prog;
+  auto root_inst = inst->to_apply()->root_instruction();
+  if (Match(root_inst, m::Parameter(1))) {
+    TF_ASSIGN_OR_RETURN(
+        prog, CreateMultiUpdate(resources_, Cast<HloScatterInstruction>(inst),
+                                tensor_map));
+  } else if (Match(root_inst, m::Add(m::Parameter(0), m::Parameter(1)))) {
+    TF_ASSIGN_OR_RETURN(
+        prog, CreateMultiUpdateAdd(
+                  resources_, Cast<HloScatterInstruction>(inst), tensor_map));
+  } else {
+    TF_ASSIGN_OR_RETURN(
+        prog, CreateScatter(resources_, Cast<HloScatterInstruction>(inst),
+                            tensor_map));
+  }
 
   sequence.add(prog);
   return Status::OK();

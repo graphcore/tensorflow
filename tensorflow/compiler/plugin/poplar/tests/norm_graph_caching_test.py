@@ -8,20 +8,24 @@ from __future__ import print_function
 import numpy as np
 import test_utils as tu
 
-from tensorflow.python.platform import googletest
+# pylint: disable=unused-import
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
+from tensorflow.python import ipu
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.layers import convolutional
+from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
-from tensorflow.python.layers import normalization as layers_norm
+
+# pylint: enable=unused-import
 
 
 class NormGraphCachingTest(test_util.TensorFlowTestCase):

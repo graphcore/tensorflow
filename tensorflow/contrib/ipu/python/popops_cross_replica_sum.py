@@ -12,23 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""
-Popnn cross replica sum operator
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-"""
 
-from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+from tensorflow.python.ipu.ops.cross_replica_ops import *
+from tensorflow.python.platform import tf_logging
 
-
-def cross_replica_sum(x, name=None):
-  """Sum the input tensor across replicas.
-
-  Args:
-    x: The local tensor to the sum.
-    name: Optional op name.
-
-  Returns:
-    A `Tensor` which is summed across replicas.
-  """
-
-  return gen_popops_ops.ipu_cross_replica_sum(x, name=name)
+tf_logging.warning(
+    "tensorflow.contrib.ipu has been moved to tensorflow.python.ipu.  This "
+    "namespace will be removed in September 2019")

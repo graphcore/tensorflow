@@ -99,7 +99,7 @@ StatusOr<poplar::program::Program> CreateScatter(
                   {inserted_window_dims.begin(), inserted_window_dims.end()},
                   {scatter_dims_to_operand_dims.begin(),
                    scatter_dims_to_operand_dims.end()},
-                  update_computation_func, prog);
+                  update_computation_func, prog, GetDebugName(inst));
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
