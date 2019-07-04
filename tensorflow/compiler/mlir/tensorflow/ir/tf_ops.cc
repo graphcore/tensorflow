@@ -573,9 +573,7 @@ static LogicalResult Verify(ShapeOp op) {
     // The operand is a ranked tensor.
     if (resultType.hasStaticShape()) {
       if ((!rankedTensorType.getShape().empty() &&
-           resultType.getDimSize(0) != rankedTensorType.getShape().size()) ||
-          (rankedTensorType.getShape().empty() &&
-           resultType.getDimSize(0) != 1))
+           resultType.getDimSize(0) != rankedTensorType.getShape().size()))
         return op.emitOpError(
             "requires dimension size of result to match rank of operand");
     }
@@ -595,11 +593,8 @@ OpFoldResult ShapeOp::fold(ArrayRef<Attribute> operands) {
   auto rankedTensorType = inputType.dyn_cast<RankedTensorType>();
   if (!rankedTensorType || !rankedTensorType.hasStaticShape()) return {};
 
-  // TODO: This is handling the simple case where the resultant type matches the
-  // size of getShape()'s returned type.
   auto shape = rankedTensorType.getShape();
   int rank = shape.size();
-  if (rank == 0) return {};
 
   Builder b(getContext());
   auto elementType = getType().cast<ShapedType>().getElementType();
