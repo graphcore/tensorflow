@@ -118,9 +118,17 @@ bool GpuMultiOutputFusion::DoProducerConsumerMultiOutputFusion() {
     // the back of the vector.
     HloInstruction* producer = defs_before_uses.back();
     defs_before_uses.pop_back();
+    // Never multi-output fuse constants.  To the extent that we want to fuse
+    // constants, that should be handled by the regular fusion pass.
+    if (producer->opcode() == HloOpcode::kConstant) {
+      VLOG(3) << producer->name() << " is a constant.";
+      continue;
+    }
     for (HloInstruction* consumer : producer->users()) {
       VLOG(3) << "Looking at producer " << producer->name()
               << " and its consumer " << consumer->name();
+      // TODO(b/136623068): Use IsFusibleAsMultiOutputFusionRoot(...) to lift
+      // the restriction to input-fusible reductions.
       if (!IsInputFusibleReduction(*consumer)) {
         VLOG(3) << "Consumer " << consumer->name()
                 << " is not an input-fusible reduction.";
@@ -129,12 +137,6 @@ bool GpuMultiOutputFusion::DoProducerConsumerMultiOutputFusion() {
       if (!IsProducerConsumerMultiOutputFusible(*producer, *consumer)) {
         VLOG(3) << producer->name() << " and " << consumer->name()
                 << " are not fusible.";
-        continue;
-      }
-      // Never multi-output fuse constants.  To the extent that we want to fuse
-      // constants, that should be handled by the regular fusion pass.
-      if (producer->opcode() == HloOpcode::kConstant) {
-        VLOG(3) << producer->name() << " is a constant.";
         continue;
       }
       // Do not fuse a producer if the other operands of the fusion are
@@ -164,10 +166,9 @@ bool GpuMultiOutputFusion::DoProducerConsumerMultiOutputFusion() {
         continue;
       }
       if (consumer->opcode() != HloOpcode::kFusion) {
-        // Fusing with a reduce (fusion) always results in an input fusion.
         HloInstruction* input_fusion =
             computation()->AddInstruction(HloInstruction::CreateFusion(
-                consumer->shape(), HloInstruction::FusionKind::kInput,
+                consumer->shape(), ChooseFusionKind(*producer, *consumer),
                 consumer));
         VLOG(2) << "Fuse producer " << producer->name() << " and its consumer "
                 << consumer->name() << " into " << input_fusion->name();
@@ -177,9 +178,12 @@ bool GpuMultiOutputFusion::DoProducerConsumerMultiOutputFusion() {
           input_fusion->MergeFusionInstructionIntoMultiOutput(producer);
         } else {
           input_fusion->FuseInstructionIntoMultiOutput(producer);
+          CHECK_EQ(0, producer->user_count());
           TF_CHECK_OK(computation()->RemoveInstruction(producer));
         }
       } else {
+        VLOG(2) << "Fuse producer " << producer->name() << " into its consumer "
+                << consumer->name();
         if (producer->opcode() == HloOpcode::kFusion) {
           consumer->MergeFusionInstructionIntoMultiOutput(producer);
         } else {

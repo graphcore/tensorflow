@@ -564,6 +564,7 @@ cc_library(
     srcs = [
         "functionalize_control_flow_pass_registration.cc",
     ],
+    visibility = [":friends"],
     deps = [
         ":functionalize_control_flow",
     ],

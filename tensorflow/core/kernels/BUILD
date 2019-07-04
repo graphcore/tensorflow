@@ -820,6 +820,7 @@ cc_library(
     ],
     deps = [
         ":eigen_contraction_kernel",
+        ":eigen_convolution_helpers",
         ":eigen_spatial_convolutions-inl",
         "//third_party/eigen3",
     ],
@@ -839,6 +840,7 @@ cc_library(
         "eigen_volume_patch.h",
     ],
     deps = [
+        ":eigen_convolution_helpers",
         ":eigen_spatial_convolutions-inl",
         "//third_party/eigen3",
     ],
@@ -848,6 +850,16 @@ cc_library(
     name = "eigen_spatial_convolutions-inl",
     hdrs = [
         "eigen_spatial_convolutions-inl.h",
+    ],
+    deps = [
+        ":eigen_convolution_helpers",
+    ],
+)
+
+cc_library(
+    name = "eigen_convolution_helpers",
+    hdrs = [
+        "eigen_convolution_helpers.h",
     ],
 )
 
@@ -2999,7 +3011,6 @@ tf_cc_tests(
         "non_max_suppression_op_test.cc",
         "resize_area_op_test.cc",
         "resize_bicubic_op_test.cc",
-        "resize_bilinear_op_test.cc",
         "resize_nearest_neighbor_op_test.cc",
         "scale_and_translate_op_test.cc",
     ],
@@ -3007,6 +3018,26 @@ tf_cc_tests(
         "//tensorflow:macos": ["-headerpad_max_install_names"],
         "//conditions:default": [],
     }),
+    deps = [
+        ":image",
+        ":ops_testutil",
+        ":ops_util",
+        ":sampling_kernels",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:lib_internal",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
+tf_cuda_cc_test(
+    name = "resize_bilinear_op_test",
+    srcs = ["resize_bilinear_op_test.cc"],
+    tags = ["no_cuda_on_cpu_tap"],
     deps = [
         ":image",
         ":ops_testutil",
@@ -3759,7 +3790,7 @@ tf_kernel_library(
 tf_kernel_library(
     name = "segment_reduction_ops",
     prefix = "segment_reduction_ops",
-    deps = MATH_DEPS + if_cuda([
+    deps = MATH_DEPS + if_cuda_or_rocm([
         ":cuda_solvers",
     ]),
 )
@@ -5909,6 +5940,7 @@ filegroup(
         "eigen_attention.h",
         "eigen_backward_cuboid_convolutions.h",
         "eigen_backward_spatial_convolutions.h",
+        "eigen_convolution_helpers.h",
         "eigen_cuboid_convolution.h",
         "eigen_pooling.h",
         "eigen_softmax.h",
@@ -6377,6 +6409,7 @@ filegroup(
 )
 
 ANDROID_TEXTUAL_HDRS = [
+    "eigen_convolution_helpers.h",
     "eigen_spatial_convolutions-inl.h",
     "gather_nd_op_cpu_impl.h",
     "gemm_functors.h",

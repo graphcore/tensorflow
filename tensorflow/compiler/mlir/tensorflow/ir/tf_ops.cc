@@ -17,10 +17,13 @@ limitations under the License.
 
 #include <algorithm>
 
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "mlir/IR/Attributes.h"  // TF:local_config_mlir
 #include "mlir/IR/Builders.h"  // TF:local_config_mlir
+#include "mlir/IR/Diagnostics.h"  // TF:local_config_mlir
 #include "mlir/IR/Function.h"  // TF:local_config_mlir
 #include "mlir/IR/MLIRContext.h"  // TF:local_config_mlir
 #include "mlir/IR/Matchers.h"  // TF:local_config_mlir
@@ -28,8 +31,13 @@ limitations under the License.
 #include "mlir/IR/PatternMatch.h"  // TF:local_config_mlir
 #include "mlir/IR/Types.h"  // TF:local_config_mlir
 #include "mlir/IR/Value.h"  // TF:local_config_mlir
+#include "mlir/Parser.h"  // TF:local_config_mlir
 #include "mlir/StandardOps/Ops.h"  // TF:local_config_mlir
+#include "mlir/Support/LLVM.h"  // TF:local_config_mlir
+#include "mlir/Support/STLExtras.h"  // TF:local_config_mlir
 #include "mlir/Support/TypeUtilities.h"  // TF:local_config_mlir
+#include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
+#include "tensorflow/core/platform/logging.h"
 
 namespace mlir {
 namespace TF {
@@ -57,22 +65,6 @@ static inline bool IsOfRankOrUnranked(Value *value, int64_t rank) {
     return type.getRank() == rank;
   }
   return true;
-}
-
-// Returns true if the specified element type is a TensorFlow type that is ok
-// in a tensor.
-static inline bool isValidTFElementType(Type type) {
-  return type.isa<FloatType>() || type.isa<IntegerType>() ||
-         type.isa<TensorFlowType>();
-}
-
-// Returns true if this is a valid TensorFlow tensor type.
-static inline bool isValidTFTensorType(Type type) {
-  // TensorFlow types should be tensors of one of the valid TensorFlow element
-  // types.
-  if (auto tensorTy = type.dyn_cast<TensorType>())
-    return isValidTFElementType(tensorTy.getElementType());
-  return false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -167,6 +159,14 @@ void ConstOp::build(Builder *builder, OperationState *result, Attribute value) {
 
 void ConstOp::build(Builder *builder, OperationState *result, Type type,
                     Attribute value) {
+  // Handle the case where the type and value are already tensors.
+  if (type.isa<TensorType>() && value.isa<ElementsAttr>()) {
+    result->addTypes(type);
+    result->addAttribute("value", value);
+    return;
+  }
+
+  // Otherwise, default to the attribute builder.
   ConstOp::build(builder, result, value);
   assert(type == result->types[0] && "type mismatch in construction");
 }
@@ -840,8 +840,12 @@ Type TensorFlowDialect::parseType(StringRef data, Location loc) const {
   auto typeKind = llvm::StringSwitch<unsigned>(data)
 #define HANDLE_TF_TYPE(tftype, enumerant, name) \
   .Case(name, TensorFlowTypes::enumerant)
+// Custom TensorFlow types are handled separately at the end as they do partial
+// match.
+#define HANDLE_CUSTOM_TF_TYPE(tftype, enumerant, name)
 // NOLINTNEXTLINE
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.def"
+                      .StartsWith("variant", TensorFlowTypes::VARIANT)
                       .Default(0);
   switch (typeKind) {
     default:
@@ -850,8 +854,11 @@ Type TensorFlowDialect::parseType(StringRef data, Location loc) const {
 #define HANDLE_TF_TYPE(tftype, enumerant, name) \
   case TensorFlowTypes::enumerant:              \
     return tftype##Type::get(getContext());
+#define HANDLE_CUSTOM_TF_TYPE(tftype, enumerant, name)
 // NOLINTNEXTLINE
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.def"
+    case TensorFlowTypes::VARIANT:
+      return ParseVariantType(data, loc);
   }
 }
 
@@ -865,16 +872,67 @@ void TensorFlowDialect::printType(Type ty, raw_ostream &os) const {
   case TensorFlowTypes::enumerant:              \
     os << name;                                 \
     break;
+#define HANDLE_CUSTOM_TF_TYPE(tftype, enumerant, name) \
+  case TensorFlowTypes::enumerant:                     \
+    Print##tftype##Type(ty.cast<tftype##Type>(), os);  \
+    break;
 // NOLINTNEXTLINE
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.def"
   }
 }
 
+Type TensorFlowDialect::ParseVariantType(StringRef spec, Location loc) const {
+  bool success = spec.consume_front("variant");
+  DCHECK(success) << spec.str();
+
+  // Default variant type without inferred subtypes.
+  MLIRContext *context = getContext();
+  if (spec.empty()) return VariantType::get(context);
+
+  if (!spec.consume_front("<") || !spec.consume_back(">"))
+    return emitError(loc) << "tf.variant delimiter <...> mismatch", nullptr;
+
+  // Most variant types with subtypes have only one subtype.
+  SmallVector<StringRef, 1> subtype_specs;
+  llvm::SplitString(spec, subtype_specs, ",");
+  if (subtype_specs.empty())
+    return emitError(loc) << "invalid type: tf.variant<>", nullptr;
+
+  SmallVector<TensorType, 1> subtypes;
+  subtypes.reserve(subtype_specs.size());
+  for (StringRef subtype_spec : subtype_specs) {
+    subtype_spec = subtype_spec.trim();
+    Type type = mlir::parseType(subtype_spec, context);
+    if (!type) {
+      return emitError(loc) << "invalid type: " << subtype_spec, nullptr;
+    }
+
+    if (TensorType tensor_ty = type.dyn_cast<TensorType>()) {
+      subtypes.push_back(tensor_ty);
+    } else {
+      return emitError(loc) << "expected TensorType. Found: " << type, nullptr;
+    }
+  }
+  return VariantType::getChecked(subtypes, context, loc);
+}
+
+void TensorFlowDialect::PrintVariantType(VariantType ty,
+                                         raw_ostream &os) const {
+  os << "variant";
+  ArrayRef<TensorType> subtypes = ty.getSubtypes();
+  if (subtypes.empty()) return;
+
+  os << "<";
+  interleaveComma(subtypes, os);
+  os << ">";
+}
+
 Operation *TensorFlowDialect::materializeConstant(OpBuilder &builder,
                                                   Attribute value, Type type,
                                                   Location loc) {
-  // If this is an opaque elements attribute, then generate a tf.Const.
-  if (value.isa<OpaqueElementsAttr>() && value.getType() == type)
+  // If this is an opaque elements attribute or the result type doesn't match
+  // the attribute type, then generate a tf.Const.
+  if (value.isa<OpaqueElementsAttr>() || value.getType() != type)
     return builder.create<ConstOp>(loc, type, value);
   return nullptr;
 }
@@ -887,13 +945,13 @@ LogicalResult verifyTensorFlowOp(Operation *op) {
            << op->getName() << " should start with 'tf.'";
 
   for (Type type : op->getOperandTypes()) {
-    if (!isValidTFTensorType(type))
+    if (!IsValidTFTensorType(type))
       return op->emitOpError(
           "requires operands to have a valid TensorFlow tensor type");
   }
 
   for (Type type : op->getResultTypes()) {
-    if (!isValidTFTensorType(type))
+    if (!IsValidTFTensorType(type))
       return op->emitOpError(
           "requires results to have a valid TensorFlow tensor type");
   }
