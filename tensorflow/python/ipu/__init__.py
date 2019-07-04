@@ -34,8 +34,12 @@ from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ipu.ops import embedding_ops
 from tensorflow.python.ipu.ops import internal_ops
+from tensorflow.python.ipu.ops import internal_ops_grad
 from tensorflow.python.ipu.ops import normalization_ops
+from tensorflow.python.ipu.ops import normalization_ops_grad
 from tensorflow.python.ipu.ops import rand_ops
+from tensorflow.python.ipu.ops import rand_ops_grad
 from tensorflow.python.ipu.ops import rnn_ops
+from tensorflow.python.ipu.ops import rnn_ops_grad
 from tensorflow.python.ipu.ops import summary_ops
 # pylint: enable=wildcard-import,unused-import

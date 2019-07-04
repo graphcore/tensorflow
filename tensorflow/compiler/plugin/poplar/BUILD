@@ -1204,7 +1204,7 @@ py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1226,7 +1226,7 @@ py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1299,7 +1299,7 @@ py_test(
         "//tensorflow/python:nn",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1316,7 +1316,7 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1350,7 +1350,7 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1399,7 +1399,8 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1416,7 +1417,8 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1433,7 +1435,7 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1450,7 +1452,7 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1468,7 +1470,7 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1488,7 +1490,7 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1521,7 +1523,7 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
     srcs_version = "PY2AND3",
 )
@@ -1567,7 +1569,7 @@ tf_py_test(
         ":test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -1665,7 +1667,7 @@ tf_py_test(
         ":test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -1678,7 +1680,7 @@ tf_py_test(
         ":test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -1690,8 +1692,8 @@ tf_py_test(
     additional_deps = [
         ":test_utils_py",
         "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/keras:layers",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -1701,9 +1703,9 @@ tf_py_test(
     srcs = ["tests/size_speed_tests/lstm_size_test.py"],
     additional_deps = [
         ":test_utils_py",
-        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/keras:layers",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
     ],
 )
 

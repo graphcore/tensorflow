@@ -21,8 +21,10 @@ from __future__ import print_function
 import os
 import numpy as np
 
-from tensorflow.python.client import session as session_lib
+# pylint: disable=unused-import
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
+from tensorflow.python import ipu
+from tensorflow.python.client import session as session_lib
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -35,6 +37,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
+# pylint: enable=unused-import
 
 dataType = np.float32
 batch_size = 1
