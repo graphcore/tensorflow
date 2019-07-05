@@ -163,6 +163,7 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     cfg = ipu.utils.auto_select_ipus(cfg, 2)
     ipu.utils.configure_ipu_system(cfg)
+    tu.move_variable_initialization_to_cpu()
 
     with sl.Session() as sess:
 
@@ -223,6 +224,7 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     cfg = ipu.utils.auto_select_ipus(cfg, 2)
     ipu.utils.configure_ipu_system(cfg)
+    tu.move_variable_initialization_to_cpu()
 
     with sl.Session() as sess:
 
@@ -281,6 +283,7 @@ class MultiIpuTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     cfg = ipu.utils.auto_select_ipus(cfg, 2)
     ipu.utils.configure_ipu_system(cfg)
+    tu.move_variable_initialization_to_cpu()
 
     with sl.Session() as sess:
 

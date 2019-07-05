@@ -85,7 +85,6 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
   if (!LayoutUtil::IsMonotonicWithDim0Major(
           module_shapes[flat_tuple_index].layout())) {
     // Host tensor needs to be host layout
-    non_standard_parameter_layout.insert(inst);
     tensor = ConvertToDeviceLayout(module_shapes[flat_tuple_index], tensor);
   }
 
@@ -187,11 +186,6 @@ Status EntryVisitor::FinishVisit(HloInstruction* root) {
   resources_.tensor_maps[comp->name()] = std::move(tensor_map);
 
   return Status::OK();
-}
-
-const std::set<const HloInstruction*>&
-EntryVisitor::GetNonStandardParameterLayout() const {
-  return non_standard_parameter_layout;
 }
 
 const poplar::program::Sequence EntryVisitor::GetHostToDevice() const {

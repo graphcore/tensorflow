@@ -314,3 +314,26 @@ def create_single_increasing_dataset(value,
                                      repeat=True):
   return create_multi_increasing_dataset(
       value, shapes=[shape], dtypes=[dtype], repeat=repeat)
+
+
+def move_variable_initialization_to_cpu():
+  graph = ops.get_default_graph()
+
+  init_ops = []
+  dep_ops = list(
+      map(lambda x: x.initializer.inputs[1].op,
+          graph.get_collection('variables')))
+  visited = set()
+
+  while len(dep_ops) > 0:
+    op = dep_ops.pop()
+    if not op in visited:
+      visited.add(op)
+      init_ops += [op]
+      dep_ops += map(lambda x: x.op, op.inputs)
+
+  for op in init_ops:
+    op._set_device('/device:CPU:0')
+    op._set_attr('_class', attr_value_pb2.AttrValue(s=b'loc:@cpu'))
+    op._set_attr('_XlaCompile', attr_value_pb2.AttrValue(b=False))
+    op._set_attr('_XlaScope', attr_value_pb2.AttrValue(s=b''))
