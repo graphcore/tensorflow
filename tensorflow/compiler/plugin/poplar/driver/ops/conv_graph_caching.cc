@@ -100,7 +100,8 @@ ConvolutionCacheKey GetConvolutionCacheKey(
   weights_shape.insert(weights_shape.end(), params.kernelShape.begin(),
                        params.kernelShape.end());
   PoplarTensorSignature weights_sig(params.inputType, std::move(weights_shape));
-  return std::make_tuple(in_sig, weights_sig, params.canonicalize(), conv_type,
+  return std::make_tuple(in_sig, weights_sig,
+                         poplin::canonicalizeParams(params), conv_type,
                          transpose_and_flip_weights, device_id);
 }
 
@@ -122,9 +123,9 @@ ConvolutionScaledInplaceCacheKey GetConvolutionScaledInplaceCacheKey(
   grad_shape.insert(grad_shape.end(), params.kernelShape.begin(),
                     params.kernelShape.end());
   PoplarTensorSignature grad_sig(params.inputType, std::move(grad_shape));
-  return std::make_tuple(in_sig, grad_sig, params.canonicalize(), conv_type,
-                         learning_rate_is_constant, learning_rate, op_type,
-                         device_id);
+  return std::make_tuple(in_sig, grad_sig, poplin::canonicalizeParams(params),
+                         conv_type, learning_rate_is_constant, learning_rate,
+                         op_type, device_id);
 }
 
 BiasApplyCacheKey GetBiasApplyCacheKey(
@@ -165,8 +166,9 @@ poplar::Tensor DoCachedConvolution(
   }
   // Perform the convolution.
   std::vector<poplar::Tensor> args = {in, weights};
-  auto key = GetConvolutionCacheKey(params.canonicalize(), conv_type,
-                                    transpose_and_flip_weights, device_id);
+  auto key =
+      GetConvolutionCacheKey(poplin::canonicalizeParams(params), conv_type,
+                             transpose_and_flip_weights, device_id);
   auto it = res.conv_graph_cache.find(key);
   if (it != res.conv_graph_cache.end() &&
       !res.disable_graph_convolution_caching) {
