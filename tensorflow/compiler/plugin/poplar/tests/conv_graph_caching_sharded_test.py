@@ -44,6 +44,7 @@ class ConvGraphCachingTest(test_util.TensorFlowTestCase):
         report = gen_ipu_ops.ipu_event_trace()
 
     tu.configure_ipu_system(True, True, True, sharded=True)
+    tu.move_variable_initialization_to_cpu()
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -62,47 +63,6 @@ class ConvGraphCachingTest(test_util.TensorFlowTestCase):
           '__seed*', '*OnTileCopy*', 'vs/conv2d/Conv2D/convolution.*',
           'Copy_vs/conv2d/Conv2D/convolution.*',
           'vs/conv2d_1/Conv2D/convolution.*'
-      ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
-
-  def testConvolutionsMatchShardingSameDevice(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
-
-      with variable_scope.variable_scope("vs", use_resource=True):
-        with tu.ipu_shard(0):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(x)
-        with tu.ipu_shard(0):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(y)
-
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-    tu.configure_ipu_system(True, True, True, sharded=True)
-
-    with tu.ipu_session() as sess:
-      sess.run(variables.global_variables_initializer())
-
-      sess.run(report)
-
-      sess.run(y, {x: np.zeros([1, 4, 4, 2])})
-
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
-      # Would fail if there were two convolutions in the graph as they would be
-      # called conv2d and conv2d_1
-      ok = [
-          '__seed*', '*OnTileCopy*', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 

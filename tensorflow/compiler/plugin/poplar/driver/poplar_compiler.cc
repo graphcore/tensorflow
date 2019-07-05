@@ -233,6 +233,20 @@ int64 MaximalShard(const HloModule* module) {
   return maximal_shard;
 }
 
+int64 NumIPUsInShards(const HloModule* module) {
+  int64 num_explicit_shards = MaximalShard(module) + 1;
+  // Round it up to the next highest power of 2.
+  if (num_explicit_shards <= 1LL) {
+    return 1LL;
+  }
+  int64 rounded = 2;
+  num_explicit_shards--;
+  while (num_explicit_shards >>= 1LL) {
+    rounded <<= 1LL;
+  }
+  return rounded;
+}
+
 bool IsValidReplicatedGraph(const HloModule* module) {
   // If the graph has an infeed and no all-reduces, then we make an executive
   // decision for the user that they should use the CrossReplicaOptimizer.
@@ -250,16 +264,17 @@ bool IsValidReplicatedGraph(const HloModule* module) {
   return has_infeed ? has_all_reduce : true;
 }
 
-bool AreAllOutputsParameters(
-    HloInstruction* root,
-    const std::set<const HloInstruction*>& non_standard_parameter_layout,
-    std::vector<uint64>& result) {
+bool AreAllOutputsParameters(const HloModule* module,
+                             std::vector<uint64>& output_paramater_numbers) {
+  const HloComputation* entry = module->entry_computation();
+  const HloInstruction* root = entry->root_instruction();
+
   // Get all the outputs
-  HloInstruction::InstructionVector outputs;
+  std::vector<const HloInstruction*> outputs;
   if (root->opcode() == HloOpcode::kTuple) {
-    outputs = HloInstruction::InstructionVector(root->operands());
+    outputs = {root->operands().begin(), root->operands().end()};
   } else if (root->opcode() == HloOpcode::kParameter) {
-    outputs.push_back(root);
+    outputs = {root};
   } else {
     return false;
   }
@@ -270,14 +285,22 @@ bool AreAllOutputsParameters(
     if (op->opcode() != HloOpcode::kParameter) {
       return false;
     } else {
-      result.push_back(op->parameter_number());
+      output_paramater_numbers.push_back(op->parameter_number());
     }
   }
 
-  // Check that all the parameters are in a standard layout format
-  for (auto op : outputs) {
-    if (non_standard_parameter_layout.count(op)) {
-      return false;
+  // Check that all the parameters are in a standard layout format.
+  const ComputationLayout layout = module->entry_computation_layout();
+  for (auto param_number : output_paramater_numbers) {
+    if (param_number < layout.parameter_count()) {
+      auto parameter_shape = layout.parameter_layout(param_number).shape();
+      const bool parameter_has_standard_layout = absl::c_all_of(
+          FlattenedXlaShape(parameter_shape), [](const Shape& shape) {
+            return LayoutUtil::IsMonotonicWithDim0Major(shape.layout());
+          });
+      if (!parameter_has_standard_layout) {
+        return false;
+      }
     }
   }
 
@@ -417,8 +440,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   // `num_shards` and the replication factor is `num_ipus`/`num_shards` (and
   // we also make sure `num_ipus` % `num_shards` == 0).
   const auto num_ipus = dev.getTarget().getNumIPUs();
-  const auto num_shards = MaximalShard(module.get()) + 1;
+  const auto num_shards = NumIPUsInShards(module.get());
   const auto replication_factor = num_ipus / num_shards;
+
   // Check that it's divisible.
   if (num_ipus % num_shards) {
     return xla::ResourceExhaustedStrCat(
@@ -613,10 +637,17 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   std::string map_json;
   std::vector<uint64> remaped_output;
-  bool is_remap_graph = false;
+
+  const bool all_outputs_are_parameters =
+      AreAllOutputsParameters(module.get(), remaped_output);
+
+  bool is_remap_graph =
+      all_outputs_are_parameters && !any_computation_has_side_effects;
 
   if (is_constant_graph) {
-    VLOG(1) << "Skip engine compilation - output is constant";
+    VLOG(1) << "Skip engine compilation - output is constant.";
+  } else if (is_remap_graph) {
+    VLOG(1) << "Skip engine compilation - all outputs are inputs.";
   } else {
     try {
       ConvolutionPreplanning convolution_preplanning;
@@ -664,50 +695,38 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       resources.main_graph.outputVertexGraph(stream, progs);
     }
 
-    const bool all_outputs_are_parameters = AreAllOutputsParameters(
-        entry->root_instruction(), visitor.GetNonStandardParameterLayout(),
-        remaped_output);
+    try {
+      VLOG(1) << "Compile engine " << module->name();
 
-    is_remap_graph =
-        all_outputs_are_parameters && !any_computation_has_side_effects;
-    if (is_remap_graph) {
-      VLOG(1) << "Skip engine compilation - all outputs are inputs";
-    } else {
-      try {
-        VLOG(1) << "Compile engine " << module->name();
+      map_json = GetTensorMappingJson(
+          module->name(), GetReplicatedGraph(resources), resources.tensor_maps);
 
-        map_json =
-            GetTensorMappingJson(module->name(), GetReplicatedGraph(resources),
-                                 resources.tensor_maps);
+      auto& opts = poplarExecutor->GetOptionsFlags();
+      auto progress_logging = [](int progress, int total) {
+        float progress_percent = std::floor(
+            100.0f * static_cast<float>(progress) / static_cast<float>(total));
+        VLOG(1) << "Poplar compilation " << progress_percent << "% complete";
+      };
 
-        auto& opts = poplarExecutor->GetOptionsFlags();
-        auto progress_logging = [](int progress, int total) {
-          float progress_percent =
-              std::floor(100.0f * static_cast<float>(progress) /
-                         static_cast<float>(total));
-          VLOG(1) << "Poplar compilation " << progress_percent << "% complete";
-        };
+      poplar::Executable exec = poplar::compileGraph(
+          resources.main_graph, progs, opts, progress_logging);
 
-        poplar::Executable exec = poplar::compileGraph(
-            resources.main_graph, progs, opts, progress_logging);
-
-        if (poplarExecutor->HaveExecutableCache()) {
-          if (!poplarExecutor->HaveCachedExecutable(cache_filename)) {
-            TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
-                cache_filename, exec, resources.annotations.infeed_infos,
-                resources.annotations.outfeed_infos, replication_factor,
-                poplarExecutor->GetReportFlags()));
-          }
+      if (poplarExecutor->HaveExecutableCache()) {
+        if (!poplarExecutor->HaveCachedExecutable(cache_filename)) {
+          TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
+              cache_filename, exec, resources.annotations.infeed_infos,
+              resources.annotations.outfeed_infos, replication_factor,
+              poplarExecutor->GetReportFlags()));
         }
-
-        engine.reset(new poplar::Engine(std::move(exec), opts));
-
-      } catch (const std::exception& e) {
-        if (poplarExecutor->CompilerReportingEnabled()) {
-          DumpIfPoplarOutOfMemoryAllocationException(poplarExecutor);
-        }
-        return PoplarExceptionToTensorflowStatus("[Compile engine] ", e);
       }
+
+      engine.reset(new poplar::Engine(std::move(exec), opts));
+
+    } catch (const std::exception& e) {
+      if (poplarExecutor->CompilerReportingEnabled()) {
+        DumpIfPoplarOutOfMemoryAllocationException(poplarExecutor);
+      }
+      return PoplarExceptionToTensorflowStatus("[Compile engine] ", e);
     }
   }
 

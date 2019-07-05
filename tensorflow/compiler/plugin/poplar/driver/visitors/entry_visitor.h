@@ -38,8 +38,6 @@ class EntryVisitor : public DeferredAllocationVisitor {
   Status HandleParameter(HloInstruction* inst);
   Status FinishVisit(HloInstruction* root);
 
-  const std::set<const HloInstruction*>& GetNonStandardParameterLayout() const;
-
   const poplar::program::Sequence GetHostToDevice() const;
   const poplar::program::Sequence GetDeviceToHost() const;
 
@@ -51,9 +49,6 @@ class EntryVisitor : public DeferredAllocationVisitor {
  private:
   Status StreamOutputs(HloInstruction* inst, uint64 start_idx,
                        OutVector outputs);
-
-  std::set<const HloInstruction*> non_standard_parameter_layout;
-  std::set<HloInstruction*> non_standard_parameter_layout_defer;
 
   poplar::program::Sequence host_to_device;
   poplar::program::Sequence device_to_host;
