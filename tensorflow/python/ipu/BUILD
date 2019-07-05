@@ -272,7 +272,13 @@ test_suite(
         "pop_datastream_test",
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
-        "replication_normalise_test",
         "utils_test",
+    ],
+)
+
+test_suite(
+    name = "replicated_tests",
+    tests = [
+        "replication_normalise_test",
     ],
 )

@@ -43,7 +43,7 @@ class ConvolutionPreplanning {
   std::map<std::string, poplar::OptionFlags> option_flags_store;
 
   Status StorePreplanConv(const HloInstruction* inst,
-                          const CompilerResources& resources, int64 input_index,
+                          CompilerResources& resources, int64 input_index,
                           int64 kernel_index);
 };
 

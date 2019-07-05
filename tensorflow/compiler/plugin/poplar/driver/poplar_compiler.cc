@@ -105,6 +105,7 @@ limitations under the License.
 #include <poprand/codelets.hpp>
 #include <popsys/codelets.hpp>
 
+#include <poplar/replication_factor.hpp>
 #include <poprand/RandomGen.hpp>
 #include <popsys/CSRFunctions.hpp>
 
@@ -360,6 +361,28 @@ void setFpBehaviour(poplar::Graph& graph,
 
 void PrintHelpString() { LOG(INFO) << PoplarXlaFlags::GetFlagUsageString(); }
 
+void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
+                        const poplar::Device& dev) {
+  resources.main_graph = absl::make_unique<poplar::Graph>(
+      dev, 0, poplar::replication_factor(resources.replication_factor));
+  auto& main_graph = GetMasterGraph(resources);
+  if (ShardingEnabled(module)) {
+    auto num_ipus = main_graph.getTarget().getNumIPUs();
+    // Check that we have enough IPUs for this sharding configuration.
+    auto tiles_per_ipu = main_graph.getTarget().getTilesPerIPU();
+    for (unsigned ipu = 0; ipu < num_ipus; ++ipu) {
+      resources.shard_graphs.emplace_back(main_graph.createVirtualGraph(
+          ipu * tiles_per_ipu, (ipu + 1) * tiles_per_ipu));
+    }
+    VLOG(1) << "Created " << num_ipus << " IPU shards";
+  }
+  main_graph.addCodelets(GetPathToGraphProgFile("tf.gp"));
+  poplin::addCodelets(main_graph);
+  popnn::addCodelets(main_graph);
+  popops::addCodelets(main_graph);
+  poprand::addCodelets(main_graph);
+  popsys::addCodelets(main_graph);
+}
 }  // namespace
 
 StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
@@ -429,7 +452,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         "No device has been configured. Did you configure the IPU devices by "
         "running `tensorflow.python.ipu.configure_ipu_system(ipu_options)`?");
   }
-  const poplar::Device& dev = poplarExecutor->GetPoplarDevice();
+  const poplar::Device& poplar_device = poplarExecutor->GetPoplarDevice();
 
   std::lock_guard<std::mutex> g(static_mu_);
 
@@ -439,7 +462,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   // Given device with `num_ipus` IPU chips, we get the number of shards
   // `num_shards` and the replication factor is `num_ipus`/`num_shards` (and
   // we also make sure `num_ipus` % `num_shards` == 0).
-  const auto num_ipus = dev.getTarget().getNumIPUs();
+  const auto num_ipus = poplar_device.getTarget().getNumIPUs();
   const auto num_shards = NumIPUsInShards(module.get());
   const auto replication_factor = num_ipus / num_shards;
 
@@ -453,21 +476,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   }
 
   CompilerResources resources(
-      dev, poplarExecutor->GetConvolutionOptions(),
+      poplarExecutor->GetConvolutionOptions(),
       poplarExecutor->GetPoolingOptions(),
       poplarExecutor->DisableGraphConvCaching(),
       poplarExecutor->MergeInfeedCopies(), replication_factor,
       poplarExecutor->GetMaxAllReduceBufferSize(),
       poplarExecutor->GetMaxInterIpuCopyBufferSize(), module.get());
-
-  resources.main_graph.addCodelets(GetPathToGraphProgFile("tf.gp"));
-  poplin::addCodelets(resources.main_graph);
-  popnn::addCodelets(resources.main_graph);
-  popops::addCodelets(resources.main_graph);
-  poprand::addCodelets(resources.main_graph);
-  popsys::addCodelets(resources.main_graph);
-
-  poplar::Graph* sharding_main_graph = &resources.main_graph;
 
   if (replication_factor > 1) {
     if (!IsValidReplicatedGraph(module.get())) {
@@ -483,23 +497,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         LOG(INFO) << "A graph is being forced to run in replicated mode.";
       }
     }
-
-    resources.replicated_graph =
-        resources.main_graph.createReplicatedGraph(replication_factor);
-    VLOG(1) << "Created " << replication_factor << " replica IPU graphs.";
-    sharding_main_graph = &(resources.replicated_graph.value());
-  }
-
-  if (ShardingEnabled(module.get())) {
-    auto num_ipus = sharding_main_graph->getTarget().getNumIPUs();
-    // Check that we have enough IPUs for this sharding configuration.
-    auto tiles_per_ipu = sharding_main_graph->getTarget().getTilesPerIPU();
-    for (unsigned ipu = 0; ipu < num_ipus; ++ipu) {
-      resources.shard_graphs.emplace_back(
-          sharding_main_graph->createVirtualGraph(ipu * tiles_per_ipu,
-                                                  (ipu + 1) * tiles_per_ipu));
-    }
-    VLOG(1) << "Created " << num_ipus << " IPU shards";
+    VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
   }
 
   {
@@ -649,6 +647,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   } else if (is_remap_graph) {
     VLOG(1) << "Skip engine compilation - all outputs are inputs.";
   } else {
+    // Only create the graphs if we are compiling.
+    CreatePoplarGraphs(resources, module.get(), poplar_device);
+    auto& main_graph = GetMasterGraph(resources);
+
     try {
       ConvolutionPreplanning convolution_preplanning;
       TF_RETURN_IF_ERROR(convolution_preplanning.Plan(module.get(), resources));
@@ -665,14 +667,13 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     TF_RETURN_IF_ERROR(
         poplarExecutor->RegisterOutfeeds(resources.annotations.outfeed_infos));
     // Set up the random seed
-    auto seed_setup =
-        InitializeSeed(GetReplicatedGraph(resources), replication_factor);
+    auto seed_setup = InitializeSeed(main_graph, replication_factor);
     main_program.add(seed_setup);
 
     // Set up the floating point control register if required
     const auto& fp_control = poplarExecutor->FloatingPointBehaviour();
     if (fp_control.flags_set()) {
-      setFpBehaviour(resources.main_graph, fp_control, main_program);
+      setFpBehaviour(main_graph, fp_control, main_program);
     }
 
     // Add the main program sequence
@@ -692,14 +693,14 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
                                    module->name() + ".vertex_graph");
       VLOG(1) << "Dumping vertex graph " << filename;
       std::ofstream stream(filename);
-      resources.main_graph.outputVertexGraph(stream, progs);
+      main_graph.outputVertexGraph(stream, progs);
     }
 
     try {
       VLOG(1) << "Compile engine " << module->name();
 
-      map_json = GetTensorMappingJson(
-          module->name(), GetReplicatedGraph(resources), resources.tensor_maps);
+      map_json = GetTensorMappingJson(module->name(), main_graph,
+                                      resources.tensor_maps);
 
       auto& opts = poplarExecutor->GetOptionsFlags();
       auto progress_logging = [](int progress, int total) {
@@ -708,8 +709,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         VLOG(1) << "Poplar compilation " << progress_percent << "% complete";
       };
 
-      poplar::Executable exec = poplar::compileGraph(
-          resources.main_graph, progs, opts, progress_logging);
+      poplar::Executable exec =
+          poplar::compileGraph(main_graph, progs, opts, progress_logging);
 
       if (poplarExecutor->HaveExecutableCache()) {
         if (!poplarExecutor->HaveCachedExecutable(cache_filename)) {

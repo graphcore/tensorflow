@@ -77,8 +77,8 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
   // Create a concatenated and flattened tensor of the input tensors.
   auto t = FlattenAndConcatenteTensors(tensors_to_copy);
 
-  t = poputil::copyToIpu(GetReplicatedGraph(res), t, seq,
-                         *std::begin(dst_devices), GetDebugName(inst),
+  t = poputil::copyToIpu(GetMasterGraph(res), t, seq, *std::begin(dst_devices),
+                         GetDebugName(inst),
                          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 
   auto copied_tensors = SliceTensorIntoTensorsLike(t, tensors_to_copy);

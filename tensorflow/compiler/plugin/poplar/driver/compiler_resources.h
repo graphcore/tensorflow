@@ -34,6 +34,8 @@ limitations under the License.
 #include <poprand/RandomGen.hpp>
 #include <poputil/GraphFunction.hpp>
 
+#include <memory>
+
 namespace xla {
 namespace poplarplugin {
 
@@ -43,9 +45,7 @@ using ComputationMap =
 // This structure contains additional information required to lower the graph
 // from an XLA graph to a poplar graph.
 struct CompilerResources {
-  poplar::Graph main_graph;
-
-  absl::optional<poplar::Graph> replicated_graph;
+  std::unique_ptr<poplar::Graph> main_graph;
 
   std::vector<poplar::Graph> shard_graphs;
 
@@ -92,15 +92,13 @@ struct CompilerResources {
 
   dot_graph_caching::DotGraphCache dot_graph_cache;
 
-  CompilerResources(const poplar::Device& dev,
-                    const poplar::OptionFlags& conv_options,
+  CompilerResources(const poplar::OptionFlags& conv_options,
                     const poplar::OptionFlags& pooling_options,
                     bool disable_graph_convolution_caching,
                     bool merge_infeed_io_copies, uint32 replication_factor,
                     int64 max_all_reduce_buffer_size,
                     int64 max_inter_ipu_copies_buffer_size, HloModule* module)
-      : main_graph(dev),
-        annotations(module),
+      : annotations(module),
         information(max_all_reduce_buffer_size,
                     max_inter_ipu_copies_buffer_size),
         default_conv_options(conv_options),

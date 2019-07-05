@@ -1934,14 +1934,11 @@ test_suite(
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
-        "reduce_test",
         "recomputation_test",
+        "reduce_test",
         "remapping_test",
-        "replicated_graph_test",
-        "replicated_stateful_gradient_accumulate_test",
         "root_token_replacer_test",
         "scheduler_test",
-        "sharded_and_replicated_test",
         "sharded_inplace_test",
         "sharding_pass_test",
         "simple_network_test",
@@ -1957,9 +1954,9 @@ test_suite(
         "while_loop_alias_copy_test",
         "while_loop_condition_simplify_test",
         "while_loop_perf_test",
+        "while_loop_sharded_test",
         "while_loop_test",
         "while_loop_to_repeat_simplify_test",
-        "while_loop_sharded_test",
         "wide_const_expansion_test",
         "wide_const_finder_test",
     ],
@@ -2010,6 +2007,15 @@ test_suite(
       ":size_speed_tests",
       ":training_tests",
       ":doc_examples",
+    ],
+)
+
+test_suite(
+    name = "replicated_tests",
+    tests = [
+        "replicated_graph_test",
+        "replicated_stateful_gradient_accumulate_test",
+        "sharded_and_replicated_test",
     ],
 )
 

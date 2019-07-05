@@ -42,6 +42,7 @@ limitations under the License.
 #include "absl/memory/memory.h"
 
 #include <poplar/Device.hpp>
+#include <poplar/replication_factor.hpp>
 #include <poprand/RandomGen.hpp>
 
 #include <poplin/codelets.hpp>
@@ -58,12 +59,14 @@ class DeferredAllocationsVisitorTest : public HloTestBase {};
 std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
                                                     bool merge_infeeds) {
   auto resources = absl::make_unique<CompilerResources>(
-      poplar::Device::createCPUDevice(), poplar::OptionFlags(),
-      poplar::OptionFlags(), false, 1, merge_infeeds, 0, 0, module);
-  poplin::addCodelets(resources->main_graph);
-  popnn::addCodelets(resources->main_graph);
-  popops::addCodelets(resources->main_graph);
-  poprand::addCodelets(resources->main_graph);
+      poplar::OptionFlags(), poplar::OptionFlags(), false, merge_infeeds, 1, 0,
+      0, module);
+  resources->main_graph = absl::make_unique<poplar::Graph>(
+      poplar::Device::createCPUDevice(), 0, poplar::replication_factor(1));
+  poplin::addCodelets(*resources->main_graph);
+  popnn::addCodelets(*resources->main_graph);
+  popops::addCodelets(*resources->main_graph);
+  poprand::addCodelets(*resources->main_graph);
   return std::move(resources);
 }
 
@@ -336,7 +339,7 @@ _pop_op_conv_biasadd (arg_0: f32[1,4,4,2], arg_1: f32[2]) -> f32[1,4,4,2] {
 ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   arg = f32[1,1,2,2] parameter(0)
   after-all = token[] after-all()
-  infeed = ((f32[1,4,4,2], f32[2]), token[]) infeed(token[] after-all), infeed_config="7"
+  infeed = ((f32[1,4,4,2], f32[2]), token[]) infeed(token[] after-all), infeed_config="\010\001\022\005feed5\"\002\001\001"
   gte = (f32[1,4,4,2], f32[2]) get-tuple-element(((f32[1,4,4,2], f32[2]), token[]) infeed), index=0
   gte0 = f32[1,4,4,2] get-tuple-element((f32[1,4,4,2], f32[2]) gte), index=0
   convolution.5 = f32[1,4,4,2] convolution(gte0, arg), window={size=1x1}, dim_labels=b01f_01io->b01f
