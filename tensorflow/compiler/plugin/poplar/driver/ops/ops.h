@@ -80,9 +80,6 @@ Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
 // Get the master graph
 poplar::Graph& GetMasterGraph(CompilerResources&);
 
-// Get the replicated graph if there is one, master graph if not
-poplar::Graph& GetReplicatedGraph(CompilerResources&);
-
 // Get the appropriate virtual graph, or the replicated/master graph if not
 poplar::Graph& GetGraph(CompilerResources&, const HloInstruction*);
 
@@ -97,14 +94,14 @@ poplar::Graph& GetGraphWithOutputIndex(CompilerResources&,
                                        const HloInstruction*,
                                        int flattened_output_tuple_index);
 
-bool HasReplicatedGraph(CompilerResources&);
-
 // Convert a poplar/poplibs exception to a Tensorflow error Status
 Status PoplarExceptionToTensorflowStatus(const std::string& prefix,
                                          const std::exception& e);
 
 void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
                          const std::string& value);
+
+poplar::OptionFlags GetReplicateAllReduceOptions();
 
 // Try and dump the profiler report to a file if a OOM exception occurs.
 void DumpIfPoplarOutOfMemoryAllocationException(const PoplarExecutor*);

@@ -21,14 +21,8 @@ using ::absl::StrCat;
 namespace xla {
 namespace poplarplugin {
 
-poplar::Graph& GetMasterGraph(CompilerResources& res) { return res.main_graph; }
-
-poplar::Graph& GetReplicatedGraph(CompilerResources& res) {
-  if (res.replicated_graph) {
-    return *res.replicated_graph;
-  }
-
-  return GetMasterGraph(res);
+poplar::Graph& GetMasterGraph(CompilerResources& res) {
+  return *res.main_graph;
 }
 
 uint64 GetShardForOutputIndex(const HloInstruction* inst,
@@ -60,15 +54,11 @@ poplar::Graph& GetGraphWithOutputIndex(CompilerResources& res,
     return res.shard_graphs[device_id];
   }
 
-  return GetReplicatedGraph(res);
+  return GetMasterGraph(res);
 }
 
 poplar::Graph& GetGraph(CompilerResources& res, const HloInstruction* inst) {
   return GetGraphWithOutputIndex(res, inst, 0);
-}
-
-bool HasReplicatedGraph(CompilerResources& res) {
-  return res.replicated_graph.has_value();
 }
 
 template <typename TYPE>
@@ -190,6 +180,12 @@ void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
     }
   }
   opts.set(key, value);
+}
+
+poplar::OptionFlags GetReplicateAllReduceOptions() {
+  poplar::OptionFlags options;
+  options.set("useReplicatedImplementation", "true");
+  return options;
 }
 
 void DumpIfPoplarOutOfMemoryAllocationException(
