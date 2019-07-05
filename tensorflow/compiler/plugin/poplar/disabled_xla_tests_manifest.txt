@@ -340,3 +340,4 @@ ArithmeticTest POPLAR // Requires multi-variate reduction
 
 IotaR1Test POPLAR // Slow
 IotaR3Test POPLAR
+Exhaustive32BitOrLessUnaryTest POPLAR
