@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/casts_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -170,35 +171,6 @@ static const std::vector<HloMatcherPattern> patterns = {
 
 CastsElimination::CastsElimination(struct CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, false) {}
-
-namespace {
-
-HloInstruction* ConvertInstruction(HloInstruction* inst,
-                                   const PrimitiveType& new_type) {
-  HloInstruction* new_inst;
-  HloComputation* computation = inst->parent();
-  if (inst->opcode() == HloOpcode::kConstant) {
-    // For constants - replace it with the new constant.
-    const auto shape = ShapeUtil::ChangeElementType(inst->shape(), new_type);
-    auto literal_new_type = inst->literal().ConvertToShape(shape);
-    new_inst = computation->AddInstruction(HloInstruction::CreateConstant(
-        std::move(literal_new_type.ValueOrDie())));
-  } else {
-    // Otherwise clone and change the desired shape.
-    new_inst = computation->AddInstruction(inst->Clone());
-    new_inst->mutable_shape()->set_element_type(new_type);
-  }
-
-  new_inst->set_raw_backend_config_string(inst->raw_backend_config_string());
-
-  new_inst->set_metadata(inst->metadata());
-  if (inst->has_sharding()) {
-    new_inst->set_sharding(inst->sharding());
-  }
-  return new_inst;
-}
-
-}  // namespace
 
 // For casts elimination we ignore the sharding device because we replace
 // instructions with the sharding they had before.

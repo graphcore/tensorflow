@@ -26,6 +26,7 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
+#include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
 
 namespace xla {
@@ -158,6 +159,9 @@ absl::flat_hash_set<const HloInstruction*> GetInplaceInstructions(
 // Get all the inplace instructions in a module.
 absl::flat_hash_set<const HloInstruction*> GetInplaceInstructions(
     const HloModule* module);
+
+HloInstruction* ConvertInstruction(HloInstruction* inst,
+                                   const PrimitiveType& new_type);
 
 }  // namespace poplarplugin
 }  // namespace xla

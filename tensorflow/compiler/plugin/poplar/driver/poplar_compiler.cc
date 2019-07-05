@@ -40,6 +40,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/f16_constant_folding.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_early.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
@@ -536,6 +537,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ComputationFlattener>();
     pipeline.AddPass<TupleSimplifier>(true);
     // pass.AddPass<ConditionalSimplifier>();
+    pipeline.AddPass<F16ConstantFolding>();
     pipeline.AddPass<HloConstantFolding>();
     pipeline.AddPass<HloPassFix<CastsElimination>>(resources.annotations);
     pipeline.AddPass<HloCSE>(true);
