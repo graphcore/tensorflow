@@ -1601,6 +1601,7 @@ py_test(
 py_test(
     name = "replicated_stateful_gradient_accumulate_test",
     size = "large",
+    shard_count = 2,
     srcs = ["tests/replicated_stateful_gradient_accumulate_test.py"],
     deps = [
         ":test_utils_py",
@@ -1843,6 +1844,7 @@ tf_py_test(
 tf_py_test(
     name = "replicated_graph_test",
     size = "large",
+    shard_count = 2,
     srcs = ["tests/replicated_graph_test.py"],
     additional_deps = [
         ":test_utils_py",
@@ -1875,7 +1877,7 @@ tf_py_test(
 tf_py_test(
     name = "sharded_and_replicated_test",
     size = "large",
-    tags = ['exclusive'],
+    shard_count = 2,
     srcs = ["tests/sharded_and_replicated_test.py"],
     additional_deps = [
         ":test_utils_py",
@@ -2049,20 +2051,20 @@ test_suite(
 test_suite(
     name = "poplar_test_suite",
     tests = [
-      ":all_tests",
-      "//tensorflow/compiler/tests:poplar_tests",
-      "//tensorflow/compiler/xla/client/lib:poplar_tests",
-      "//tensorflow/compiler/xla/tests:poplar_tests",
+        ":all_tests",
+        "//tensorflow/compiler/tests:poplar_tests",
+        "//tensorflow/compiler/xla/client/lib:poplar_tests",
+        "//tensorflow/compiler/xla/tests:poplar_tests",
     ],
 )
 
 test_suite(
     name = "poplar_ci_test_suite",
     tests = [
-      ":poplar_test_suite",
-      ":size_speed_tests",
-      ":training_tests",
-      ":doc_examples",
+        ":poplar_test_suite",
+        ":size_speed_tests",
+        ":training_tests",
+        ":doc_examples",
     ],
 )
 
@@ -2075,6 +2077,12 @@ test_suite(
     ],
 )
 
+test_suite(
+    name = "hardware_tests",
+    tests = [
+        ":replicated_tests",
+    ],
+)
 
 exports_files([
     "disabled_manifest.txt",
