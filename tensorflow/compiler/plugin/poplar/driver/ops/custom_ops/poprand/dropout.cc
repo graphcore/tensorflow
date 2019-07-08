@@ -85,19 +85,33 @@ class DropoutOp : public PoplibsOpDef {
     // If we aren't using a user provided seed we need to create a temp seed and
     // use that.
     if (!is_user_seed) {
-      // Create the variable to hold the seed state.s
+      // Create the variable to hold the seed state.
       global_seed_tensor = graph.addVariable(poplar::INT, {2});
       poputil::mapTensorLinearly(graph, global_seed_tensor);
 
       // Create the literal value to add onto the seed each iteration.
-      int32_t increment_literal[] = {0, 1};
+      int32_t increment_literal[] = {1, 0};
       poplar::Tensor increment_tensor =
           graph.addConstant(poplar::INT, {2}, increment_literal);
       poputil::mapTensorLinearly(graph, increment_tensor);
 
       // Add one to the seed state so we get a different number on each call.
-      popops::addInPlace(graph, global_seed_tensor, increment_tensor, seq);
+      popops::addInPlace(graph, global_seed_tensor, increment_tensor, seq,
+                         GetDebugName(inst) + "/AddIncrement");
       seed_to_use = &global_seed_tensor;
+
+      // Also add the IPU number so each replica has a different seed.
+      if (res.replication_factor > 1) {
+        auto indexConstant = graph.addReplicationIndexConstant();
+
+        if (indexConstant.elementType() == poplar::UNSIGNED_INT) {
+          indexConstant = indexConstant.reinterpret(poplar::INT);
+        }
+
+        poputil::mapTensorLinearly(graph, indexConstant);
+        popops::addInPlace(graph, global_seed_tensor, indexConstant, seq,
+                           GetDebugName(inst) + "/AddReplicaId");
+      }
     }
 
     // Dropout expects an unsigned int but tensorflow takes in int32 when

@@ -1907,6 +1907,22 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "dropout_hw_test",
+    size = "small",
+    srcs = ["tests/dropout_hw_test.py"],
+    additional_deps = [
+        ":test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
     name = "logging_example_1",
     size = "small",
     srcs = ["docs/logging_example_1.py"],
@@ -2097,6 +2113,7 @@ test_suite(
     name = "hardware_tests",
     tests = [
         ":replicated_tests",
+        ":dropout_hw_test",
     ],
 )
 
