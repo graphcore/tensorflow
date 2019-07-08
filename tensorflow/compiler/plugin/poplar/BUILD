@@ -87,6 +87,7 @@ cc_library(
         "driver/passes/dependency_replacer.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
         "driver/passes/expression_outliner.cc",
+        "driver/passes/f16_constant_folding.cc",
         "driver/passes/forward_allocation.cc",
         "driver/passes/fuse_ops_early.cc",
         "driver/passes/fuse_ops_late.cc",
@@ -161,6 +162,7 @@ cc_library(
         "driver/passes/dependency_replacer.h",
         "driver/passes/elementwise_broadcast_converter.h",
         "driver/passes/expression_outliner.h",
+        "driver/passes/f16_constant_folding.h",
         "driver/passes/forward_allocation.h",
         "driver/passes/fuse_ops_early.h",
         "driver/passes/fuse_ops_late.h",
@@ -917,6 +919,17 @@ tf_cc_test(
 tf_cc_test(
     name = "dependency_replacer_test",
     srcs = ["tests/dependency_replacer_test.cc"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+tf_cc_test(
+    name = "f16_constant_folding_test",
+    srcs = ["tests/f16_constant_folding_test.cc"],
     size = "small",
     deps = [
         ":optimizers",
@@ -1909,6 +1922,7 @@ test_suite(
         "dynamic_slice_layout_test",
         "elementwise_broadcast_converter_test",
         "expression_outliner_test",
+        "f16_constant_folding_test",
         "f16_test",
         "find_all_users_test",
         "forward_allocation_test",
