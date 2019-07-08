@@ -184,7 +184,7 @@ void MultiUpdateInternal(poplar::Graph& graph, poplar::Tensor operand,
   } else {
     poplar::Tensor scale = graph.addConstant(operand.elementType(), {}, 1,
                                              debug_prefix + "/const_1_scale");
-
+    graph.setTileMapping(scale, 0);
     popops::multiUpdateAdd(
         graph, operand, adjusted_canonical_updates,
         canonical_scatter_iIndices.reinterpret(poplar::UNSIGNED_INT), scale,
