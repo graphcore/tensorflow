@@ -12,13 +12,6 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import gen_array_ops
-from tensorflow.python.ops import init_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import nn
-from tensorflow.python.ops import variables
-from tensorflow.python.ops import variable_scope
-from tensorflow.python.framework import constant_op
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
@@ -47,7 +40,7 @@ class ReplicatedStatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
       y = array_ops.placeholder(dtype, [1])
       report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(replicated=True)
+    tu.configure_ipu_system(execution_trace=False, replicated=True)
 
     with ops.device("/device:IPU:0"):
       r = xla.compile(my_net, inputs=[y])
@@ -80,7 +73,7 @@ class ReplicatedStatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
       y = array_ops.placeholder(dtype, [1])
       report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(replicated=True)
+    tu.configure_ipu_system(execution_trace=False, replicated=True)
 
     with ops.device("/device:IPU:0"):
       r = xla.compile(my_net, inputs=[y])
@@ -114,7 +107,7 @@ class ReplicatedStatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
       y = array_ops.placeholder(dtype, [1])
       report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(replicated=True)
+    tu.configure_ipu_system(execution_trace=False, replicated=True)
 
     with ops.device("/device:IPU:0"):
       r = xla.compile(my_net, inputs=[y])

@@ -159,13 +159,13 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
       js = json.loads(compile_report[0][1])
       cs_list = js['computeSets']['names']
 
-      # There are 10 global communications
+      # There are 13 global communications
       n_inter_ipu_copies = 0
       for n in cs_list:
         if fnmatch.fnmatch(n, '*/GlobalPre/*'):
           n_inter_ipu_copies = n_inter_ipu_copies + 1
 
-      self.assertEqual(n_inter_ipu_copies, 10)
+      self.assertEqual(n_inter_ipu_copies, 13)
 
   def testShardedAndReplicatedAndGradientAccumulateTraining(self):
     dataset = tu.create_dual_increasing_dataset(3)
@@ -235,13 +235,13 @@ class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
       js = json.loads(compile_report[0][1])
       cs_list = js['computeSets']['names']
 
-      # There are 9 global communications
+      # There are 13 global communications
       n_inter_ipu_copies = 0
       for n in cs_list:
         if fnmatch.fnmatch(n, '*/GlobalPre/*'):
           n_inter_ipu_copies = n_inter_ipu_copies + 1
 
-      self.assertEqual(n_inter_ipu_copies, 9)
+      self.assertEqual(n_inter_ipu_copies, 13)
 
 
 if __name__ == "__main__":
