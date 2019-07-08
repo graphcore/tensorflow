@@ -74,8 +74,8 @@ We begin with the most humble of aspirations: the ability to add.
     :linenos:
 
 Let's review the various key sections of the code as they are presented. In
-lines *1-4* are the basic import statements, two of which pertain to the IPU
-specifically. Line *3* imports the *IPU* API, which will be the main interface
+lines *1-5* are the basic import statements, two of which pertain to the IPU
+specifically. Line *4* imports the *IPU* API, which will be the main interface
 to set configuration options for the IPU session run. *ipu_scope* is a helper
 function that insures the device and resource scopes are set, (i.e. the hardware
 is properly initiated when called by the script).
@@ -274,7 +274,7 @@ script to go through the IPUs currently available to the host, determine which
 are being utilised and which are free, and then subscribe to those IPUs that are
 available.
 
-In lines *31-39*, the standard sum graph is defined, (with the addition of one
+In lines *29-37*, the standard sum graph is defined, (with the addition of one
 more sum for shard *2*), and now each portion of the sum is performed on a
 distinct shard, using
 
@@ -284,7 +284,7 @@ distinct shard, using
 
 
 As a result, shards *0* through *2* perform independent tensor sums, while shard
-*3* performs an accumulated sum from the other respective shards. In line *44*
+*3* performs an accumulated sum from the other respective shards. In line *42*
 we are using *xla.compile* to parse the graph, but it is noted that sharding can
 be performed without running through the *XLA* library.
 
