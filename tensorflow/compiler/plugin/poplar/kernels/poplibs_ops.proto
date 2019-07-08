@@ -40,6 +40,8 @@ message PoplibsOp {
     PrintTensor = 28;
     StatefulGradientAccumulate = 29;
     StatefulGradientAccumulateAndAllReduce = 30;
+    SelectScalarFromRows = 31;
+    UpdateScalarInRows = 32;
   }
   required Op op = 2;
 }

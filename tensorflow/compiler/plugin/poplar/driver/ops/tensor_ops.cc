@@ -1,3 +1,17 @@
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 #include <algorithm>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -20,6 +34,8 @@
 #include <popops/DynamicSlice.hpp>
 #include <popops/Encoding.hpp>
 #include <popops/Pad.hpp>
+#include <popops/SelectScalarFromRows.hpp>
+#include <popops/UpdateScalarInRows.hpp>
 #include <poputil/TileMapping.hpp>
 
 namespace xla {
@@ -33,6 +49,18 @@ bool AreAllDimensionsConstant(const HloDynamicIndexInstruction* inst) {
     }
   }
   return true;
+}
+
+StatusOr<poplar::Tensor> ReinterpretAsUnsigned(poplar::Tensor tensor) {
+  if (tensor.elementType() == poplar::INT) {
+    return tensor.reinterpret(poplar::UNSIGNED_INT);
+  } else if (tensor.elementType() == poplar::UNSIGNED_INT) {
+    return tensor;
+  } else {
+    return xla::InvalidArgumentStrCat(
+        "Reinterpret - unsupported tensor type ",
+        std::string(tensor.elementType().toString()));
+  }
 }
 
 StatusOr<poplar::program::Program> ConstSliceUpdate(
@@ -109,10 +137,7 @@ StatusOr<poplar::program::Program> DynamicSliceUpdate(
       t = indices.index({d}).reshape({1});
     }
 
-    auto type = t.elementType();
-    if (type == poplar::INT) {
-      t = t.reinterpret(poplar::UNSIGNED_INT);
-    }
+    TF_ASSIGN_OR_RETURN(t, ReinterpretAsUnsigned(t));
 
     bool same_shape = inst->shape().dimensions(d) == update.shape()[d];
     unsigned int index;
@@ -208,10 +233,7 @@ StatusOr<poplar::program::Program> DynamicSlice(
       t = indices.index({d}).reshape({1});
     }
 
-    auto type = t.elementType();
-    if (type == poplar::INT) {
-      t = t.reinterpret(poplar::UNSIGNED_INT);
-    }
+    TF_ASSIGN_OR_RETURN(t, ReinterpretAsUnsigned(t));
 
     bool same_shape = inst_slice_sizes[d] == input.shape()[d];
     unsigned int index;
@@ -403,6 +425,49 @@ StatusOr<poplar::program::Program> CreateZeroPadOp(CompilerResources& res,
   out = popops::pad(graph, out, paddingLower, paddingUpper);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateSelectScalarFromRows(
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    TensorMap& tensor_map) {
+  poplar::program::Sequence seq;
+
+  poplar::Tensor params;
+  TF_ASSIGN_OR_RETURN(params,
+                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+  poplar::Tensor indices;
+  TF_ASSIGN_OR_RETURN(indices,
+                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+  TF_ASSIGN_OR_RETURN(indices, ReinterpretAsUnsigned(indices));
+
+  poplar::Tensor out = popops::selectScalarFromRows(graph, params, indices, seq,
+                                                    GetDebugName(inst));
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    TensorMap& tensor_map) {
+  poplar::program::Sequence seq;
+
+  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, res, inst, seq));
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor params = inputs[0][0];
+
+  TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
+                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+  TF_ASSIGN_OR_RETURN(indices, ReinterpretAsUnsigned(indices));
+
+  popops::updateScalarInRows(graph, params, indices, seq, GetDebugName(inst));
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, params));
+
   return seq;
 }
 
