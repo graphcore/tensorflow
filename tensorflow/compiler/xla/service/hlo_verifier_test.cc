@@ -169,7 +169,8 @@ TEST_F(HloVerifierTest, CheckCallOperandParameterShapesMismatch) {
     ROOT mycall = (s32[], f32[4]) call(p0), to_apply=callme
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -198,7 +199,8 @@ TEST_F(HloVerifierTest, CheckConditionalOperandParameterShapesMismatch) {
       true_computation=true_branch, false_computation=false_branch
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -232,7 +234,8 @@ TEST_F(HloVerifierTest, CheckConditionalBranchIndexOperandShape) {
       branch_computations={branch0, branch1, branch2}
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
   auto status = verifier().Run(module.get()).status();
 
   HloInstruction* condition = FindInstruction(module.get(), "b0");
@@ -262,7 +265,8 @@ TEST_F(HloVerifierTest, RngOpnd0NotScalar) {
     distribution=rng_uniform
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -280,7 +284,8 @@ TEST_F(HloVerifierTest, RngOperandElementTypesDoNotMatch) {
     distribution=rng_normal
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -299,7 +304,8 @@ TEST_F(HloVerifierTest, RngMixedPrecisionNotAllowed) {
     distribution=rng_normal
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -318,7 +324,8 @@ TEST_F(HloVerifierTestAllowMixedPrecision, RngMixedPrecisionAllowed) {
     distribution=rng_normal
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_TRUE(status.ok());
@@ -335,7 +342,8 @@ TEST_F(HloVerifierTest, RngElementTypeNotSupported) {
     distribution=rng_normal
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -400,7 +408,8 @@ ENTRY entry_computation {
 })";
 
 TEST_F(HloVerifierTest, ConvNegativeWindowDilationNotAllowed) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(kConvHloString));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(kConvHloString));
   auto* conv = module->entry_computation()->root_instruction();
   Window w = conv->window();
   w.mutable_dimensions(0)->set_window_dilation(-1);
@@ -411,7 +420,8 @@ TEST_F(HloVerifierTest, ConvNegativeWindowDilationNotAllowed) {
 }
 
 TEST_F(HloVerifierTest, ConvNegativeBaseDilationNotAllowed) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(kConvHloString));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(kConvHloString));
   auto* conv = module->entry_computation()->root_instruction();
   Window w = conv->window();
   w.mutable_dimensions(0)->set_base_dilation(-1);
@@ -431,7 +441,8 @@ static const char* const kAddWithLayoutChangeHlo = R"(
   )";
 
 TEST_F(HloVerifierTest, AddWithLayoutChange) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(kAddWithLayoutChangeHlo));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnUnverifiedModule(kAddWithLayoutChangeHlo));
   auto status = verifier().Run(module.get()).status();
   ASSERT_TRUE(status.ok());
 }
@@ -453,8 +464,8 @@ TEST_F(HloVerifierTest, ScalarIndexDynamicSlice) {
   debug_options.set_xla_allow_scalar_index_dynamic_ops(true);
   config.set_debug_options(debug_options);
 
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseHloString(kScalarIndexDynamicSlice, config));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(
+                                           kScalarIndexDynamicSlice, config));
   auto status = verifier().Run(module.get()).status();
   ASSERT_TRUE(status.ok());
 }
@@ -479,14 +490,15 @@ TEST_F(HloVerifierTest, ScalarIndexDynamicUpdateSlice) {
   debug_options.set_xla_allow_scalar_index_dynamic_ops(true);
   config.set_debug_options(debug_options);
 
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseHloString(kScalarIndexDynamicSlice, config));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(
+                                           kScalarIndexDynamicSlice, config));
   auto status = verifier().Run(module.get()).status();
   ASSERT_TRUE(status.ok());
 }
 
 TEST_F(HloVerifierTestLayoutSensitive, AddWithLayoutChangeNotAllowed) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(kAddWithLayoutChangeHlo));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnUnverifiedModule(kAddWithLayoutChangeHlo));
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.error_message(),
@@ -504,8 +516,8 @@ TEST_F(HloVerifierTestLayoutSensitive, SliceWithLayoutChangeNotAllowed) {
         dynamic_slice_sizes={3,4}
     }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseHloString(kSliceWithLayoutChangeHlo));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnUnverifiedModule(kSliceWithLayoutChangeHlo));
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.error_message(),
@@ -522,8 +534,8 @@ TEST_F(HloVerifierTestLayoutSensitive, ConcatWithLayoutChangeNotAllowed) {
         dimensions={1}
    }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseHloString(kConcatWithLayoutChangeHlo));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnUnverifiedModule(kConcatWithLayoutChangeHlo));
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.error_message(),
@@ -539,7 +551,8 @@ TEST_F(HloVerifierTest, BitcastCanNotChangeElementType) {
    ROOT bitcast = s32[2] bitcast(constant.0)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -558,7 +571,8 @@ TEST_F(HloVerifierTest, SelectMixedPrecisionNotAllowed) {
    ROOT select = f32[32] select(p0, p1, p2)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -577,7 +591,8 @@ TEST_F(HloVerifierTestAllowMixedPrecision, SelectMixedPrecisionAllowed) {
    ROOT select = f32[32] select(p0, p1, p2)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_TRUE(status.ok());
@@ -594,7 +609,8 @@ TEST_F(HloVerifierTest, SelectTupleNotAllowed) {
     ROOT select = (f32[], f32[]) select(p2, p0, p1)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -612,7 +628,8 @@ TEST_F(HloVerifierTestLayoutSensitive, CopyStartAndCopyDone) {
     ROOT copy-done = f32[2,3]{1,0:S(2)} copy-done(copy-start)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_TRUE(status.ok());
@@ -628,7 +645,8 @@ TEST_F(HloVerifierTestLayoutSensitive, CopyStartAndCopyDoneWrongLayout) {
     ROOT copy-done = f32[2,3]{1,0:S(2)} copy-done(copy-start)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -646,7 +664,8 @@ TEST_F(HloVerifierTest, CopyStartAndCopyDoneWrongType) {
     ROOT copy-done = f32[2,3] copy-done(copy-start)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -668,7 +687,8 @@ TEST_F(HloVerifierTest, CopyStartMultipleCopyDone) {
     ROOT tuple = (f32[2,3], f32[2,3]) tuple(copy-done.1, copy-done.2)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -688,7 +708,8 @@ TEST_F(HloVerifierTest, CopyDoneNoCopyStart) {
     ROOT copy-done = f32[2,3] copy-done(tuple)
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -706,7 +727,8 @@ TEST_F(HloVerifierTest, IotaNonArrayResult) {
   }
   )";
 
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -723,7 +745,8 @@ TEST_F(HloVerifierTest, IotaNegativeDimension) {
   }
   )";
 
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -739,7 +762,8 @@ TEST_F(HloVerifierTest, IotaPredResultNotAllowed) {
   }
   )";
 
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
 
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
@@ -761,8 +785,8 @@ static const char* const kMapOperandComputationMismatchHlo = R"(
 })";
 
 TEST_F(HloVerifierTest, MapOperandComputationMismatch) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseHloString(kMapOperandComputationMismatchHlo));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(
+                                           kMapOperandComputationMismatchHlo));
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(
@@ -772,8 +796,8 @@ TEST_F(HloVerifierTest, MapOperandComputationMismatch) {
 }
 
 TEST_F(HloVerifierTestAllowMixedPrecision, MapOperandComputationMismatch) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseHloString(kMapOperandComputationMismatchHlo));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(
+                                           kMapOperandComputationMismatchHlo));
   auto status = verifier().Run(module.get()).status();
   ASSERT_TRUE(status.ok());
 }
@@ -793,8 +817,9 @@ static const char* const kReduceOperandComputationMismatchHlo = R"(
   })";
 
 TEST_F(HloVerifierTest, ReduceOperandComputationMismatch) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseHloString(kReduceOperandComputationMismatchHlo));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module,
+      ParseAndReturnUnverifiedModule(kReduceOperandComputationMismatchHlo));
   auto status = verifier().Run(module.get()).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.error_message(),
@@ -802,8 +827,9 @@ TEST_F(HloVerifierTest, ReduceOperandComputationMismatch) {
 }
 
 TEST_F(HloVerifierTestAllowMixedPrecision, ReduceOperandComputationMismatch) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseHloString(kReduceOperandComputationMismatchHlo));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module,
+      ParseAndReturnUnverifiedModule(kReduceOperandComputationMismatchHlo));
   auto status = verifier().Run(module.get()).status();
   ASSERT_TRUE(status.ok());
 }
@@ -830,7 +856,7 @@ StatusOr<std::unique_ptr<HloModule>> MakeAllReduceComputation(
     p = f32[128]{0} parameter(0)
     crs = f32[128]{0} all-reduce(p), to_apply=add, replica_groups=REPLICA_GROUPS
   })";
-  return ParseHloString(absl::StrReplaceAll(
+  return ParseAndReturnUnverifiedModule(absl::StrReplaceAll(
       kTemplate, {{"REPLICA_GROUPS", ReplicaGroupsStr(replica_groups)}}));
 }
 
@@ -879,7 +905,7 @@ StatusOr<std::unique_ptr<HloModule>> MakeAllToAllComputation(
     p1 = f32[128]{0} parameter(1)
     a2a = (f32[128], f32[128]) all-to-all(p0, p1), replica_groups=REPLICA_GROUPS
   })";
-  return ParseHloString(absl::StrReplaceAll(
+  return ParseAndReturnUnverifiedModule(absl::StrReplaceAll(
       kTemplate, {{"REPLICA_GROUPS", ReplicaGroupsStr(replica_groups)}}));
 }
 
@@ -924,7 +950,8 @@ TEST_F(HloVerifierTest, CollectivePermuteSameSourceTwice) {
       source_target_pairs={{0,1}, {0,2}, {1,0}}
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(kModuleStr));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(kModuleStr));
   EXPECT_THAT(verifier().Run(module.get()).status().error_message(),
               HasSubstr("Source 0 appears more than once"));
 }
@@ -938,7 +965,8 @@ TEST_F(HloVerifierTest, CollectivePermuteSameTargetTwice) {
       source_target_pairs={{0,2}, {1,2}, {2,0}}
   }
   )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(kModuleStr));
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnUnverifiedModule(kModuleStr));
   EXPECT_THAT(verifier().Run(module.get()).status().error_message(),
               HasSubstr("Target 2 appears more than once"));
 }
