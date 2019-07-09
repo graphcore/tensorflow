@@ -17,6 +17,23 @@ namespace xla {
 namespace m = match;
 
 namespace poplarplugin {
+namespace {
+// TODO popops::multiUpdate and popops::multiUpdateAdd only supports the 2D
+// case.
+bool CheckValidAttributes(const HloScatterInstruction* inst) {
+  const auto dim_numbers = inst->scatter_dimension_numbers();
+  const auto update_window_dims = dim_numbers.update_window_dims();
+  const auto inserted_window_dims = dim_numbers.inserted_window_dims();
+  const auto scatter_dims_to_operand_dims =
+      dim_numbers.scatter_dims_to_operand_dims();
+
+  return !(
+      (inst->operand(0)->shape().rank() != 2) ||
+      (inst->operand(2)->shape().rank() != 2) ||
+      (scatter_dims_to_operand_dims.size() != 1) ||
+      (inserted_window_dims.size() != 1 || (update_window_dims.size()) != 1));
+}
+}  // namespace
 
 static bool IsAllFloatValue(const HloInstruction* inst, const double value) {
   return !ShapeUtil::IsZeroElementArray(inst->shape()) &&
@@ -68,17 +85,28 @@ bool Is2DReductionWindow(const HloInstruction* inst) {
   return reduction_count == 2;
 }
 
+bool IsFloat(const HloInstruction* inst) {
+  return ShapeUtil::ElementIsFloating(inst->shape());
+}
+
 bool IsScalar(const HloInstruction* inst) {
   return ShapeUtil::IsScalar(inst->shape());
+}
+
+bool IsFloatScalar(const HloInstruction* inst) {
+  return IsScalar(inst) && IsFloat(inst);
 }
 
 bool IsScalarConstant(const HloInstruction* inst) {
   return IsScalar(inst) && inst->IsConstant();
 }
 
+bool IsFloatScalarConstant(const HloInstruction* inst) {
+  return IsScalarConstant(inst) && IsFloat(inst);
+}
+
 bool IsScalarIntegerConstant(const HloInstruction* inst) {
-  return IsScalar(inst) && inst->IsConstant() &&
-         ShapeUtil::ElementIsIntegral(inst->shape());
+  return IsScalarConstant(inst) && ShapeUtil::ElementIsIntegral(inst->shape());
 }
 
 bool IsConvFilterTranspose(const HloInstruction* inst) {
@@ -285,6 +313,23 @@ bool IsSupportedAllReduce(const HloInstruction* inst) {
   if (auto all_reduce = DynCast<HloAllReduceInstruction>(inst)) {
     auto root = all_reduce->to_apply()->root_instruction();
     return Match(root, m::Add(m::Parameter(0), m::Parameter(1)));
+  }
+  return false;
+}
+
+bool IsMultiUpdate(const HloInstruction* inst) {
+  if (auto scatter = DynCast<HloScatterInstruction>(inst)) {
+    auto root_inst = scatter->to_apply()->root_instruction();
+    return Match(root_inst, m::Parameter(1)) && CheckValidAttributes(scatter);
+  }
+  return false;
+}
+
+bool IsMultiUpdateAdd(const HloInstruction* inst) {
+  if (auto scatter = DynCast<HloScatterInstruction>(inst)) {
+    auto root_inst = scatter->to_apply()->root_instruction();
+    return Match(root_inst, m::Add(m::Parameter(0), m::Parameter(1))) &&
+           CheckValidAttributes(scatter);
   }
   return false;
 }

@@ -42,6 +42,7 @@ message PoplibsOp {
     StatefulGradientAccumulateAndAllReduce = 30;
     SelectScalarFromRows = 31;
     UpdateScalarInRows = 32;
+    Fifo = 33;
   }
   required Op op = 2;
 }

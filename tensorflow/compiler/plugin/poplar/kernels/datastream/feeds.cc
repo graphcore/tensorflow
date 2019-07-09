@@ -62,7 +62,8 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
 }
 
 void GetFeedConfig(OpKernelConstruction* ctx,
-                   xla::poplarplugin::PoplarFeedConfig& config) {
+                   xla::poplarplugin::PoplarFeedConfig& config,
+                   bool has_prefetch = false) {
   std::string feed_id;
   int64 replication_factor;
   std::vector<tensorflow::DataType> types;
@@ -71,6 +72,14 @@ void GetFeedConfig(OpKernelConstruction* ctx,
   OP_REQUIRES_OK(ctx, ctx->GetAttr("replication_factor", &replication_factor));
   config.set_feed_id(feed_id);
   config.set_replication_factor(replication_factor);
+
+  int data_to_prefetch = 1;
+  if (has_prefetch) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("data_to_prefetch", &data_to_prefetch));
+  }
+
+  config.set_data_to_prefetch(data_to_prefetch);
+
   *(config.mutable_tf_data_types()) = {types.begin(), types.end()};
 }
 
@@ -95,7 +104,7 @@ class PopDatastreamInfeedDequeueOp : public XlaOpKernel {
  public:
   explicit PopDatastreamInfeedDequeueOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx) {
-    GetFeedConfig(ctx, config_);
+    GetFeedConfig(ctx, config_, true);
     XlaShapesFromAttr(ctx, xla_shapes_);
   }
 

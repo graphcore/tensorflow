@@ -246,6 +246,46 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
+  // Applying scattered deltas into a tensor with constant learning rate.
+  HloMatcherPattern(
+    PatternType("scatter_update_inplace"),
+    PatternMetaTarget(3),
+    PatternInputs({6, 7, 8}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({6, 1}), IsAddOrSubtract},
+      {HloOpcode::kMultiply, NodeOperands({3, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({9})},
+      {HloOpcode::kScatter, NodeOperands({4, 7, 8}), IsMultiUpdateAdd},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloOpcode::kConstant, NodeOperands({}), IsFloatScalarConstant}
+    })
+  ),
+
+  // Applying scattered deltas into a tensor with variable learning rate.
+  HloMatcherPattern(
+    PatternType("scatter_update_inplace"),
+    PatternMetaTarget(3),
+    PatternInputs({6, 7, 8, 9}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({6, 1}), IsAddOrSubtract},
+      {HloOpcode::kMultiply, NodeOperands({3, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({9})},
+      {HloOpcode::kScatter, NodeOperands({4, 7, 8}), IsMultiUpdateAdd},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsFloatScalar}
+    })
+  ),
+
   // Scaled add/subtract to/from - A = A +/- B * c (constant)
   HloMatcherPattern(
     PatternType("scaled_inplace"),

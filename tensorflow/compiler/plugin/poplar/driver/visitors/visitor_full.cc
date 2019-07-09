@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/layout_util.h"
@@ -28,7 +29,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
-#include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -259,16 +259,14 @@ Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
 }
 
 Status FullVisitor::HandleScatter(HloInstruction* inst) {
-  namespace m = match;
   VLOG(1) << "Processing " << inst->name();
 
   poplar::program::Program prog;
-  auto root_inst = inst->to_apply()->root_instruction();
-  if (Match(root_inst, m::Parameter(1))) {
+  if (IsMultiUpdate(inst)) {
     TF_ASSIGN_OR_RETURN(
         prog, CreateMultiUpdate(resources_, Cast<HloScatterInstruction>(inst),
                                 tensor_map));
-  } else if (Match(root_inst, m::Add(m::Parameter(0), m::Parameter(1)))) {
+  } else if (IsMultiUpdateAdd(inst)) {
     TF_ASSIGN_OR_RETURN(
         prog, CreateMultiUpdateAdd(
                   resources_, Cast<HloScatterInstruction>(inst), tensor_map));
