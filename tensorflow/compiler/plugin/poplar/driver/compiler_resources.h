@@ -97,10 +97,13 @@ struct CompilerResources {
                     bool disable_graph_convolution_caching,
                     bool merge_infeed_io_copies, uint32 replication_factor,
                     int64 max_all_reduce_buffer_size,
-                    int64 max_inter_ipu_copies_buffer_size, HloModule* module)
+                    int64 max_inter_ipu_copies_buffer_size,
+                    int64 max_scheduler_lookahead_depth,
+                    int64 max_scheduler_search_space_size, HloModule* module)
       : annotations(module),
-        information(max_all_reduce_buffer_size,
-                    max_inter_ipu_copies_buffer_size),
+        information(
+            max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
+            max_scheduler_lookahead_depth, max_scheduler_search_space_size),
         default_conv_options(conv_options),
         default_pooling_options(pooling_options),
         disable_graph_convolution_caching(disable_graph_convolution_caching),

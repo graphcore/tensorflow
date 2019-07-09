@@ -483,7 +483,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplarExecutor->DisableGraphConvCaching(),
       poplarExecutor->MergeInfeedCopies(), replication_factor,
       poplarExecutor->GetMaxAllReduceBufferSize(),
-      poplarExecutor->GetMaxInterIpuCopyBufferSize(), module.get());
+      poplarExecutor->GetMaxInterIpuCopyBufferSize(),
+      poplarExecutor->GetMaxSchedulerLookaheadDepth(),
+      poplarExecutor->GetMaxSchedulerSearchSpaceSize(), module.get());
 
   if (replication_factor > 1) {
     if (!IsValidReplicatedGraph(module.get())) {
@@ -592,7 +594,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         BestIpuSchedule(
             {CreateLookAheadMemoryScheduler(resources.information),
              MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler),
-             CreateLivenessLookAheadMemoryScheduler()}));
+             CreateLivenessLookAheadMemoryScheduler(resources.information)}));
 
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
 

@@ -20,10 +20,12 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+struct CompilerInformation;
 
 // Scheduler which will look ahead and queue large chunks of the graph at a
 // time.
-IpuSchedulerAlgorithm CreateLivenessLookAheadMemoryScheduler();
+IpuSchedulerAlgorithm CreateLivenessLookAheadMemoryScheduler(
+    const CompilerInformation& information);
 
 }  // namespace poplarplugin
 }  // namespace xla

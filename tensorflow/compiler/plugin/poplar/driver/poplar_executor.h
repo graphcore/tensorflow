@@ -346,6 +346,15 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.max_inter_ipu_copies_buffer_size();
   }
 
+  int64 GetMaxSchedulerLookaheadDepth() const {
+    return std::max<int64>(1, current_config_.max_scheduler_lookahead_depth());
+  }
+
+  int64 GetMaxSchedulerSearchSpaceSize() const {
+    return std::max<int64>(2,
+                           current_config_.max_scheduler_search_space_size());
+  }
+
   void AddCompileBeginEventRecord(const std::string& module_name);
 
   void AddCompileEndEventRecord(const std::string& module_name,
