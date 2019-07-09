@@ -64,7 +64,9 @@ def create_ipu_config(profiling=False,
                       disable_graph_convolution_caching=False,
                       retain_control_dependencies=False,
                       max_cross_replica_sum_buffer_size=0,
-                      max_inter_ipu_copies_buffer_size=0):
+                      max_inter_ipu_copies_buffer_size=0,
+                      max_scheduler_lookahead_depth=5,
+                      max_scheduler_search_space_size=64):
   """Create an empty IPU session configuration structure.
 
   Args:
@@ -103,6 +105,10 @@ def create_ipu_config(profiling=False,
       waiting before a cross replica sum op is scheduled.
     max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
       waiting before a inter IPU copy between IPUs is scheduled.
+    max_scheduler_lookahead_depth: The maximum distance to look into the future
+      when considering valid schedules.
+    max_scheduler_search_space_size: The maximum number of nodes to consider when
+      building the tree of future schedules.
 
   Returns:
     An IpuOptions configuration protobuf, suitable for passing to
@@ -136,6 +142,9 @@ def create_ipu_config(profiling=False,
   opts.retain_control_dependencies = retain_control_dependencies
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+  
+  opts.max_scheduler_lookahead_depth = max_scheduler_lookahead_depth
+  opts.max_scheduler_search_space_size = max_scheduler_search_space_size
 
   return opts
 

@@ -87,7 +87,13 @@ to the Poplar summery report generator. ``set_ipu_model_options`` allows control
 of the Poplar IPU_MODEL device type. ``set_recomputation_options`` turns on
 recomputation, to reduce the memory requirement at the expense of speed.
 ``set_floating_point_behaviour_options`` allows control of the IPUs floating
-point control register.
+point control register. ``max_scheduler_lookahead_depth`` controls how far the
+scheduler can look beyond a given scheduling decision to understand the
+max-liveness implications. This search space grows very quickly and can take an
+unacceptable amount of time, for large ``max_scheduler_lookahead_depth``.
+``max_scheduler_search_space_size`` introduces an upper-limit to the size of the
+schedule search space to guarantee that it will terminate in a reasonable amount
+of time.
 
 See the documentation in :ref:`api-section` for more details.
 
@@ -188,4 +194,3 @@ been targeted at the Poplar device:
 
   # Creates a session with log_device_placement set to True.
   sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
-

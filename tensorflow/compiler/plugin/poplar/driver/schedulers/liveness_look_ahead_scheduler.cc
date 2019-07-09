@@ -22,6 +22,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/schedule_tree.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/schedule_utils.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
@@ -138,7 +139,8 @@ StatusOr<HloInstructionSequence> ScheduleInstructions(
     HloComputation* comp, const TuplePointsToAnalysis& points_to_analysis,
     const LogicalBuffer::SizeFunction& size_function,
     const absl::flat_hash_map<const HloComputation*, int64>&
-        memory_by_computation) {
+        memory_by_computation,
+    int64 max_search_depth, int64 max_search_size) {
   auto instructions = comp->MakeInstructionPostOrder();
   auto schedule_tree = std::make_shared<HloScheduleTree const>(
       instructions, HloInstructionForEachPredecessor{},
@@ -147,11 +149,11 @@ StatusOr<HloInstructionSequence> ScheduleInstructions(
       TempCost{
           GrossCost{memory_by_computation, points_to_analysis, size_function}});
 
-  // TODO(T9672) Allow the user to specify these values.
-  // Lookahead 5 and limit the tree size to 64 nodes.
-  schedule_tree = schedule_tree->TakeAllReady()->Grow(5, 64);
+  schedule_tree =
+      schedule_tree->TakeAllReady()->Grow(max_search_depth, max_search_size);
   while (!schedule_tree->IsLeaf()) {
-    schedule_tree = schedule_tree->BestChild(64)->Grow(1, 64);
+    schedule_tree =
+        schedule_tree->BestChild(max_search_size)->Grow(1, max_search_size);
   }
 
   auto schedule = schedule_tree->GetSchedule();
@@ -163,10 +165,12 @@ StatusOr<HloInstructionSequence> LivenessLookAheadMemoryScheduler(
     const TuplePointsToAnalysis& points_to_analysis,
     const LogicalBuffer::SizeFunction& size_function,
     const absl::flat_hash_map<const HloComputation*, int64>&
-        memory_by_computation) {
-  TF_ASSIGN_OR_RETURN(
-      auto sched, ScheduleInstructions(computation, points_to_analysis,
-                                       size_function, memory_by_computation));
+        memory_by_computation,
+    int64 max_search_depth, int64 max_search_size) {
+  TF_ASSIGN_OR_RETURN(auto sched,
+                      ScheduleInstructions(computation, points_to_analysis,
+                                           size_function, memory_by_computation,
+                                           max_search_depth, max_search_size));
 
   return sched;
 }
@@ -174,8 +178,18 @@ StatusOr<HloInstructionSequence> LivenessLookAheadMemoryScheduler(
 }  // namespace
 
 // Create a functor which performs the look-ahead scheduling.
-IpuSchedulerAlgorithm CreateLivenessLookAheadMemoryScheduler() {
-  return LivenessLookAheadMemoryScheduler;
+IpuSchedulerAlgorithm CreateLivenessLookAheadMemoryScheduler(
+    const CompilerInformation& information) {
+  return [=](HloComputation* computation,
+             const TuplePointsToAnalysis& points_to_analysis,
+             const LogicalBuffer::SizeFunction& size_function,
+             const absl::flat_hash_map<const HloComputation*, int64>&
+                 memory_by_computation) {
+    return LivenessLookAheadMemoryScheduler(
+        computation, points_to_analysis, size_function, memory_by_computation,
+        information.max_scheduler_lookahead_depth,
+        information.max_scheduler_search_space_size);
+  };
 }
 
 }  // namespace poplarplugin
