@@ -243,7 +243,7 @@ Status SelectDevice(EagerOperation* op, const NodeDef& ndef, EagerContext* ctx,
   TF_RETURN_IF_ERROR(SupportedDeviceTypesForNode(
       ctx->prioritized_device_type_list(), ndef, &supported_devs));
   if (supported_devs.empty()) {
-    return errors::Internal("Could not find valid device for node.\nNode:",
+    return errors::NotFound("Could not find valid device for node.\nNode:",
                             FormatNodeDefForError(ndef),
                             "\nAll kernels registered for op ", ndef.op(),
                             " :\n", KernelsRegisteredForOp(ndef.op()));
@@ -664,7 +664,6 @@ Status EagerLocalExecute(EagerOperation* op,
     // input handles are ready before executing them.
     // TODO(agarwal): Consider executing "cheap" kernels inline for
     // performance.
-    tensorflow::uint64 id = ctx->NextId();
     for (int i = 0; i < *num_retvals; ++i) {
       TF_RETURN_IF_ERROR(TensorHandle::CreateAsyncLocalHandle(
           /* d= */ kernel->OutputDevice(i),
@@ -673,7 +672,7 @@ Status EagerLocalExecute(EagerOperation* op,
           output_dtypes[i], ctx, &(*retvals)[i]));
     }
     std::unique_ptr<EagerNode> node(new ExecuteNode(
-        id, ctx, op->Inputs(), std::move(kernel), maybe_stats.release(),
+        ctx, op->Inputs(), std::move(kernel), maybe_stats.release(),
         maybe_step_stats, graph_collector, output_dtypes, *retvals));
     ctx->ExecutorAdd(std::move(node));
 
@@ -710,27 +709,13 @@ Status EagerRemoteSendTensor(EagerContext* ctx, TensorHandle* h,
   request.set_op_id(ctx->NextId());
   request.set_device_name(recv_device->name());
 
-  Device* tensor_handle_device = h->device();
-
   // AsProtoTensorContent doesn't work when the tensor is on the GPU, hence
   // copy it to the CPU before copying it out.
   // TODO(b/110044833): this is currently slow, but can be fixed by making
   // tensor handles aware of more than one device.
-  TensorHandle* actual_handle;
-  if (tensor_handle_device != nullptr &&
-      tensor_handle_device->device_type() != "CPU") {
-    Tensor tensor;
-    TF_RETURN_IF_ERROR(h->CopyToDevice(ctx, ctx->HostCPU(), &tensor));
-    TF_RETURN_IF_ERROR(
-        TensorHandle::CreateLocalHandle(tensor, nullptr, ctx, &actual_handle));
-  } else {
-    actual_handle = h;
-    actual_handle->Ref();
-  }
-
-  const Tensor* tensor;
-  TF_RETURN_IF_ERROR(actual_handle->Tensor(&tensor));
-  tensor->AsProtoTensorContent(request.add_tensors());
+  Tensor tensor;
+  TF_RETURN_IF_ERROR(h->CopyToDevice(ctx, ctx->HostCPU(), &tensor));
+  tensor.AsProtoTensorContent(request.add_tensors());
 
   const tensorflow::uint64 id = request.op_id();
 
@@ -746,18 +731,16 @@ Status EagerRemoteSendTensor(EagerContext* ctx, TensorHandle* h,
   if (!status.ok()) return status;
 
   auto tensor_handle_data = absl::make_unique<RemoteTensorHandleData>(
-      id, 0, tensor->shape(), eager_client, context_id, ctx);
+      id, 0, tensor.shape(), eager_client, context_id, ctx);
   if (mirror) {
     status = h->AddRemoteMirror(std::move(tensor_handle_data), recv_device);
     h->Ref();
     *result = h;
   } else {
     status = TensorHandle::CreateRemoteHandle(std::move(tensor_handle_data),
-                                              tensor->dtype(), recv_device,
+                                              tensor.dtype(), recv_device,
                                               nullptr, ctx, result);
   }
-
-  actual_handle->Unref();
 
   return status;
 }
@@ -867,14 +850,11 @@ Status EagerRemoteExecute(EagerOperation* op, TensorHandle** retvals,
   tensorflow::Device* op_device = op->Device();
 
   bool is_async = ctx->Async();
-  uint64 remote_node_id = 0;
-
   VLOG(4) << "Execute remote eager op: " << op->Name()
           << " (is async?: " << is_async << ").";
 
   const tensorflow::uint64 id = remote_op->id();
   if (is_async) {
-    remote_node_id = ctx->NextId();
     for (int i = 0; i < *num_retvals; i++) {
       // TODO(nareshmodi): Change the callback to instead add the decref to a
       // list of pending decrefs that we can send as a batch with the next
@@ -896,8 +876,7 @@ Status EagerRemoteExecute(EagerOperation* op, TensorHandle** retvals,
     // TODO(gjn): If the retval TensorHandle is simply going to be used as a
     // mirror then there should be no need to call SetRemoteShape
     std::unique_ptr<EagerNode> node(new eager::RemoteExecuteNode(
-        remote_node_id, std::move(request), eager_client, op->Inputs(), retvals,
-        *num_retvals));
+        std::move(request), eager_client, op->Inputs(), retvals, *num_retvals));
     ctx->ExecutorAdd(std::move(node));
   } else {
     TF_RETURN_IF_ERROR(EnqueueAndWait(eager_client, request, &response));
@@ -1213,9 +1192,7 @@ Status LocalEagerCopyToDevice(TensorHandle* h, EagerContext* ctx, Device* dstd,
   } else {
     tensorflow::Tensor tensor;
     TF_RETURN_IF_ERROR(h->CopyToDevice(ctx, dstd, &tensor));
-    const bool dst_cpu = dstd->tensorflow_gpu_device_info() == nullptr;
-    return TensorHandle::CreateLocalHandle(tensor, dst_cpu ? nullptr : dstd,
-                                           ctx, result);
+    return TensorHandle::CreateLocalHandle(tensor, dstd, ctx, result);
     return Status::OK();
   }
 }
@@ -1296,11 +1273,8 @@ Status ExecuteSend(EagerContext* ctx, Device* device, TensorHandle* h,
     PrepareRemoteOp(remote_op, &op);
 
     if (ctx->Async()) {
-      uint64 remote_node_id = ctx->NextId();
-
-      std::unique_ptr<EagerNode> node(
-          new eager::RemoteExecuteNode(remote_node_id, std::move(request),
-                                       eager_client, op.Inputs(), nullptr, 0));
+      std::unique_ptr<EagerNode> node(new eager::RemoteExecuteNode(
+          std::move(request), eager_client, op.Inputs(), nullptr, 0));
       ctx->ExecutorAdd(std::move(node));
     } else {
       TF_RETURN_IF_ERROR(EnqueueAndWait(eager_client, request, &response));
@@ -1367,15 +1341,12 @@ Status ExecuteRecv(EagerContext* ctx, Device* device, DataType dtype,
 
     const uint64 id = remote_op->id();
     if (ctx->Async()) {
-      uint64 remote_node_id = ctx->NextId();
-
       TF_RETURN_IF_ERROR(TensorHandle::CreateUnshapedRemoteHandle(
           id, 0, eager_client, context_id, dtype, device,
           dtype == DT_RESOURCE ? device : nullptr, ctx, result));
 
-      std::unique_ptr<EagerNode> node(
-          new eager::RemoteExecuteNode(remote_node_id, std::move(request),
-                                       eager_client, op.Inputs(), result, 1));
+      std::unique_ptr<EagerNode> node(new eager::RemoteExecuteNode(
+          std::move(request), eager_client, op.Inputs(), result, 1));
       ctx->ExecutorAdd(std::move(node));
     } else {
       TF_RETURN_IF_ERROR(EnqueueAndWait(eager_client, request, &response));

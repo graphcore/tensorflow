@@ -1668,7 +1668,9 @@ class StrategyExtendedV1(StrategyExtendedV2):
                                          iterator,
                                          iterations=1,
                                          initial_loop_values=None):
-    """Run `fn` with input from `iterator` for `iterations` times.
+    """DEPRECATED: please use `experimental_run_v2` instead.
+
+    Run `fn` with input from `iterator` for `iterations` times.
 
     This method can be used to run a step function for training a number of
     times using input from a dataset.
@@ -2070,6 +2072,9 @@ class _DefaultDistributionExtended(StrategyExtendedV1):
 
   def _experimental_distribute_dataset(self, dataset):
     return dataset
+
+  def _experimental_distribute_datasets_from_function(self, dataset_fn):
+    return dataset_fn(InputContext())
 
   def _make_dataset_iterator(self, dataset):
     return _DefaultDistributionExtended.DefaultInputIterator(dataset)

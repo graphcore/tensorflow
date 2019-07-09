@@ -194,8 +194,10 @@ std::string Exporter::UniqueName(mlir::Operation* op) {
 StatusOr<std::unique_ptr<NodeDef>> Exporter::GetArgumentNode(
     mlir::BlockArgument* arg, unsigned index) {
   auto node_def = absl::make_unique<NodeDef>();
-  node_def->set_name(
-      UniqueName(arg->getOwner()->getFunction().getName().str()));
+  node_def->set_name(UniqueName(arg->getContainingRegion()
+                                    ->getParentOfType<mlir::FuncOp>()
+                                    .getName()
+                                    .str()));
   node_def->set_op(FunctionLibraryDefinition::kArgOp);
   DataType dtype;
   TF_RETURN_IF_ERROR(ConvertToDataType(
@@ -213,7 +215,8 @@ StatusOr<std::unique_ptr<NodeDef>> Exporter::GetReturnNode(
     mlir::Operation* inst, unsigned index) {
   auto node_def = absl::make_unique<NodeDef>();
   auto* inst_op = inst->getOperand(index);
-  node_def->set_name(UniqueName(inst->getFunction().getName().str()));
+  node_def->set_name(
+      UniqueName(inst->getParentOfType<mlir::FuncOp>().getName().str()));
   node_def->set_op(FunctionLibraryDefinition::kRetOp);
   DataType dtype;
   TF_RETURN_IF_ERROR(ConvertToDataType(
@@ -316,7 +319,8 @@ Status Exporter::AddArgumentNode(mlir::BlockArgument* arg, unsigned index) {
   // is an input node. We recover the original input node and skip adding the
   // argument node. The new input node will be handled as normal in the
   // following steps.
-  if (arg->getFunction().getName() == "main") {
+  if (arg->getContainingRegion()->getParentOfType<mlir::FuncOp>().getName() ==
+      "main") {
     if (!arg->hasOneUse()) {
       return errors::FailedPrecondition(
           "Arg in 'main' should only have one user.");
@@ -535,7 +539,7 @@ Status Exporter::Convert(mlir::Module module, const ExporterConfigs& configs,
   absl::optional<mlir::Function> entry_func;
   FunctionDefLibrary flib;
   auto tf_dialect = module.getContext()->getRegisteredDialect("tf");
-  for (auto function : module.getFunctions()) {
+  for (auto function : module.getOps<mlir::Function>()) {
     if (function.isExternal())
       return errors::FailedPrecondition("External functions not supported");
 
