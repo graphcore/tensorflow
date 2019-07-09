@@ -105,7 +105,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
 
       ok = [
           '__seed*', 'Copy_*actsRearranged', 'host-exchange-local-copy-',
-          'cnv3*/convolution.*/Conv_3x3', 'ba3*/fusion/addToChannel'
+          'cnv3*/convolution.*/Conv_3x3', 'ba3*/fusion/Op/Add'
       ]
 
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
@@ -150,7 +150,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
       ok = [
           '__seed*', 'host-exchange-local-copy-',
           'Copy_XLA_Args/arg2.*_weights_to_cnv4*/convolution.*/Conv_8x8_stride4x4/weightsRearranged',
-          'cnv4*/convolution.*/Conv_8x8_stride4x4', 'ba4*/fusion/addToChannel'
+          'cnv4*/convolution.*/Conv_8x8_stride4x4', 'ba4*/fusion/Op/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
@@ -193,7 +193,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
 
       ok = [
           '__seed*', 'Copy_*actsRearranged', 'host-exchange-local-copy-',
-          'cnv5*/convolution.*/Conv_1x1', 'ba5*/fusion/addToChannel'
+          'cnv5*/convolution.*/Conv_1x1', 'ba5*/fusion/Op/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
@@ -302,7 +302,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
 
       ok = [
           '__seed*', 'host-exchange-local-copy-',
-          'depthwise/convolution.*/Conv_1x1', 'add/fusion*/addToChannel'
+          'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
@@ -340,7 +340,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
           '__seed*', 'host-exchange-local-copy-', 'Copy_',
           'depthwise/convolution.*/Conv_1x1',
           'Copy_depthwise/convolution.*/Conv_1x1/partials_to_depthwise/convolution.*/Conv_1x1/partials[[]cloned[]]',
-          'add/fusion*/addToChannel'
+          'add/fusion*/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 

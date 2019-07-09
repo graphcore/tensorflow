@@ -76,7 +76,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
 
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Copy_',
-          'convolution/convolution.*/Conv_3x3x3', 'BiasAdd/fusion/addToChannel'
+          'convolution/convolution.*/Conv_3x3x3', 'BiasAdd/fusion/Op/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
@@ -113,7 +113,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Copy_',
           'Conv3D/convolution.*/Conv_8x8x8_stride4x4x4',
-          'BiasAdd/fusion/addToChannel'
+          'BiasAdd/fusion/Op/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
@@ -149,7 +149,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
 
       ok = [
           '__seed*', 'Copy_*actsRearranged', 'host-exchange-local-copy-',
-          'Conv3D/convolution.*/Conv_1x1', 'add/fusion/addToChannel'
+          'Conv3D/convolution.*/Conv_1x1', 'add/fusion/Op/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 

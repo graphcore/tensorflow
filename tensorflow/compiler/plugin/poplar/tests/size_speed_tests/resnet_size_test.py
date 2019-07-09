@@ -141,7 +141,7 @@ class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
 
     evts = ipu.utils.extract_all_events(out)
     size = ipu.utils.get_memory_size_from_events(evts)
-    self.assertTrue(size < 36210000)
+    self.assertTrue(size < 38750000)
 
   def testTraining(self):
     x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
