@@ -34,6 +34,22 @@ def remap(x, name=None):
   logging.warning("remap is a Graphcore internal op")
   return gen_poputil_ops.ipu_remap(x, name=name)
 
+def fifo(x, depth, name=None):
+  """Introduces a first-in-first-out queue with a fixed depth.
+
+  Args:
+    x: The tensor to enqueue.
+    depth: The depth of the queue.
+    name: Optional op name.
+
+  Returns:
+    A `Tensor` which was dequeued from the fifo. This will be `x` at `t - depth`.
+    The first `depth` iterations will have unspecified values.
+  """
+  if (depth < 1):
+    return x
+
+  return gen_poputil_ops.ipu_fifo(x, depth=depth, name=name)
 
 def print_tensor(input, name=None):
   """Print the specified input.

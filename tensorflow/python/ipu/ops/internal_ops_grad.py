@@ -33,3 +33,9 @@ def _poputil_remap_layer_backward(op, grads):
 def _poputil_print_tensor_layer_backward(op, grads):
   """Gradients for the IpuPrintTensor op."""
   return grads
+
+
+@ops.RegisterGradient("IpuFifo")
+def _poputil_fifo_backward(op, grads):
+"""Gradients for the IpuFifo op."""
+  return [None] * len(grads)
