@@ -1183,6 +1183,24 @@ py_test(
     srcs_version = "PY2AND3",
 )
 
+
+py_test(
+    name = "infeed_prefetch_test",
+    size = "small",
+    srcs = ["tests/infeed_prefetch_test.py"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+    srcs_version = "PY2AND3",
+)
+
+
 py_test(
     name = "simple_network_test",
     size = "small",

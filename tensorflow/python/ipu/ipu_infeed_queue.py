@@ -94,7 +94,8 @@ class IPUInfeedQueue:
                dataset,
                feed_name,
                device_ordinal=0,
-               replication_factor=1):
+               replication_factor=1,
+               data_to_prefetch=1):
     """Creates an IPUInfeedQueue object.
 
     Args:
@@ -106,6 +107,19 @@ class IPUInfeedQueue:
        device_ordinal: ordinal of the device on which this queue will be used.
        replication_factor: the number of replicated graphs this infeed will be
          used in.
+       data_to_prefetch: The amount of data to prefetch. Defaults to 1, no prefetch.
+        If set to non-1 (and non-0) each time we sync with the CPU we will return
+        this number of dataset values rather than 1. This must not go over the size
+        of the dataset if it is not repeating, and will increment the infeed by this
+        amount each time so using the infeed in multiple programs or loops should take
+        into account that if data_to_prefetch is not a factor of the previous iterations
+        then the next loop/program will not be starting at the iteration it otherwise
+        would be.
+
+        This will obviously increase the memory usage from having more batches live at a
+        given point but should give a speed up by having to make fewer round trips to host
+        memory. It may be that larger number of batches should be prefetched at once in
+        order to see any benefit as the lookup itself has some overhead from internal copies.
 
     Raises:
       ValueError: if all dimensions of shapes of dataset.output_shapes are not
@@ -120,16 +134,25 @@ class IPUInfeedQueue:
       if not output_shape.is_fully_defined():
         raise ValueError("""Output shape {} is not fully defined. If using \
 tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
-
     with ops.device('/device:CPU:0'):
       self._replication_factor = replication_factor
       self._dataset = dataset
       self._structure = dataset_ops.get_structure(self._dataset)
       self._flat_structure = dataset._flat_structure
-      # Batch the dataset to take replication into account.
-      if self._replication_factor > 1:
+
+      # We use max to clamp 0/1 to the same value.
+      self._data_to_prefetch = max(1, data_to_prefetch)
+
+      # Batch the dataset to take replication and prefetch into account.
+
+      if self._data_to_prefetch != 1:
+        self._dataset = self._dataset.batch(
+            self._data_to_prefetch, drop_remainder=True)
+
+      if self._replication_factor != 1:
         self._dataset = self._dataset.batch(
             self._replication_factor, drop_remainder=True)
+
       # Apply the dataset and take ownership.
       self._dataset = self._dataset._apply_options()
 
@@ -164,6 +187,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     flat_ret = gen_pop_datastream_ops.pop_datastream_infeed_dequeue(
         feed_id=self._id,
         replication_factor=self._replication_factor,
+        data_to_prefetch=self._data_to_prefetch,
         **self._flat_structure)
     self._dequeued = True
     return structure.from_tensor_list(self._structure, flat_ret)
@@ -203,3 +227,4 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     """Obsolete function."""
     raise ValueError("""`get_next()` is now obsolete as the IPUInfeedQueue is \
 now automatically dequeued by the loop.""")
+
