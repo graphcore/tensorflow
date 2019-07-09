@@ -406,6 +406,10 @@ StatusOr<poplar::program::Program> CreateMultiUpdateAdd(
     CompilerResources& res, const HloScatterInstruction* inst,
     TensorMap& tensor_map);
 
+StatusOr<poplar::program::Program> CreateScatterUpdateOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateMultiUpdate(
     CompilerResources& res, const HloScatterInstruction* inst,
     TensorMap& tensor_map);

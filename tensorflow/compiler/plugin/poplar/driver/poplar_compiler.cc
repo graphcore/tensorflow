@@ -557,11 +557,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<ReshapeMover>();
       pass.AddPass<SortSimplifier>();
       pass.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
-      pass.AddPass<ElementwiseBroadcastConverter>();
       pass.AddPass<HloDCE>();
       pass.AddPass<WhileLoopConditionSimplify>();
       pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
     }
+    pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
     pipeline.AddPass<HloSubcomputationUnification>();
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
