@@ -125,6 +125,7 @@ void XlaDeviceContext::CopyCPUTensorToDevice(const Tensor* cpu_tensor,
           << cpu_tensor->shape().DebugString() << " "
           << device_tensor->shape().DebugString();
 
+
   XlaTensor* xla_tensor = XlaTensor::FromTensor(device_tensor);
   CHECK(xla_tensor);
 

@@ -4423,7 +4423,7 @@ TEST_F(HloEvaluatorTest, ZeroSizedIotaWithHugeDimension) {
   TF_ASSERT_OK_AND_ASSIGN(
       Literal actual_literal,
       HloEvaluator().Evaluate(*m_->entry_computation(), {}));
-  //EXPECT_THAT(actual_literal.data<float>(), ::testing::IsEmpty());
+  EXPECT_TRUE(actual_literal.data<float>().empty());
 }
 
 }  // namespace
