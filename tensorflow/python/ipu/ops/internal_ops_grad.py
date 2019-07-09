@@ -37,5 +37,5 @@ def _poputil_print_tensor_layer_backward(op, grads):
 
 @ops.RegisterGradient("IpuFifo")
 def _poputil_fifo_backward(op, grads):
-"""Gradients for the IpuFifo op."""
+  """Gradients for the IpuFifo op."""
   return [None] * len(grads)
