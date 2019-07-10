@@ -15,6 +15,7 @@
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
+#include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"

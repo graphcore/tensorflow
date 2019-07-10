@@ -63,7 +63,7 @@ ENTRY _pop_op_test2 {
 }
 )";
 
-  auto module = ParseHloString(hlo, GetModuleConfigForTest());
+  auto module = ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest());
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 
@@ -115,7 +115,7 @@ ENTRY b_pop_op_test2 {
 }
 )";
 
-  auto module = ParseHloString(hlo, GetModuleConfigForTest());
+  auto module = ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest());
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
 

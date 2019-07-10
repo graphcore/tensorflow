@@ -189,7 +189,7 @@ TEST_F(NormInputRecomputationTest, RecomputeInput) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({1, 2, 3, 4, 5, 6});
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -233,7 +233,7 @@ TEST_F(NormInputRecomputationTest, RecomputeInputOff) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({1, 2, 3, 4, 5, 6});
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -375,7 +375,7 @@ TEST_F(NormInputRecomputationTest, RecomputeRelu) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({1, 2, 3, 4, 5, 6});
-  auto module_or_status = ParseHloString(hlo_string_relu, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string_relu, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -435,7 +435,7 @@ TEST_F(NormInputRecomputationTest, RecomputeReluOff) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({1, 2, 3, 4, 5, 6});
-  auto module_or_status = ParseHloString(hlo_string_relu, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string_relu, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 

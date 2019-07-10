@@ -181,7 +181,7 @@ _cluster_1  {
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({2, 3, 4, 5});
   config.set_resource_input_count(4);
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -385,7 +385,7 @@ ENTRY in {
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({2, 3, 4, 5});
   config.set_resource_input_count(4);
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -590,7 +590,7 @@ ENTRY in {
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({2, 3, 4, 5});
   config.set_resource_input_count(4);
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -705,7 +705,7 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({2});
   config.set_resource_input_count(1);
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -813,7 +813,7 @@ ENTRY cluster_1 {
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({2, 3});
   config.set_resource_input_count(2);
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -944,7 +944,7 @@ ENTRY in {
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({2, 3});
   config.set_resource_input_count(2);
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1076,7 +1076,7 @@ ENTRY in {
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({2, 3});
   config.set_resource_input_count(2);
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
@@ -1151,7 +1151,7 @@ ENTRY cluster_9 {
   config.set_debug_options(GetDebugOptionsForTest());
   config.set_resource_update_to_input_index({});
   config.set_resource_input_count(4);
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 

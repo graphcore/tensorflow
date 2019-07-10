@@ -62,7 +62,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto& module = module_or_status.ValueOrDie();
@@ -72,7 +72,6 @@ main {
   auto* stream_executor = platform->ExecutorForDevice(0).ConsumeValueOrDie();
 
   IpuOptions opts;
-  auto* p = static_cast<PoplarPlatform*>(platform);
 
   PoplarCompiler compiler;
 
@@ -111,7 +110,7 @@ main {
   config.set_input_mapping({0, 1});
   config.set_resource_update_to_input_index({});
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto& module = module_or_status.ValueOrDie();
@@ -121,7 +120,6 @@ main {
   auto* stream_executor = platform->ExecutorForDevice(0).ConsumeValueOrDie();
 
   IpuOptions opts;
-  auto* p = static_cast<PoplarPlatform*>(platform);
 
   PoplarCompiler compiler;
 
@@ -161,7 +159,7 @@ main {
   config.set_input_mapping({0, 1});
   config.set_resource_update_to_input_index({1});
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto& module = module_or_status.ValueOrDie();
@@ -171,7 +169,6 @@ main {
   auto* stream_executor = platform->ExecutorForDevice(0).ConsumeValueOrDie();
 
   IpuOptions opts;
-  auto* p = static_cast<PoplarPlatform*>(platform);
 
   PoplarCompiler compiler;
 
@@ -221,7 +218,7 @@ main {
   config.set_input_mapping({0, 1, 2, 3});
   config.set_resource_update_to_input_index({2});
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto& module = module_or_status.ValueOrDie();
@@ -231,7 +228,6 @@ main {
   auto* stream_executor = platform->ExecutorForDevice(0).ConsumeValueOrDie();
 
   IpuOptions opts;
-  auto* p = static_cast<PoplarPlatform*>(platform);
 
   PoplarCompiler compiler;
 
@@ -285,7 +281,7 @@ main {
   config.set_input_mapping({0, 1, 2});
   config.set_resource_update_to_input_index({});
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto& module = module_or_status.ValueOrDie();
@@ -295,7 +291,6 @@ main {
   auto* stream_executor = platform->ExecutorForDevice(0).ConsumeValueOrDie();
 
   IpuOptions opts;
-  auto* p = static_cast<PoplarPlatform*>(platform);
 
   PoplarCompiler compiler;
 
@@ -341,7 +336,7 @@ main {
   config.set_input_mapping({0, 1, 2});
   config.set_resource_update_to_input_index({});
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto& module = module_or_status.ValueOrDie();
@@ -351,7 +346,6 @@ main {
   auto* stream_executor = platform->ExecutorForDevice(0).ConsumeValueOrDie();
 
   IpuOptions opts;
-  auto* p = static_cast<PoplarPlatform*>(platform);
 
   PoplarCompiler compiler;
 
@@ -395,7 +389,7 @@ main {
   config.set_input_mapping({0, 1, 2});
   config.set_resource_update_to_input_index({3, 4, 5, 6});
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto& module = module_or_status.ValueOrDie();
@@ -408,12 +402,8 @@ main {
   stream.Init();
 
   IpuOptions opts;
-  auto* p = static_cast<PoplarPlatform*>(platform);
 
   PoplarCompiler compiler;
-
-  module = compiler.RunHloPasses(std::move(module), stream_executor, nullptr)
-               .ConsumeValueOrDie();
 
   std::unique_ptr<Executable> executable =
       compiler.RunBackend(std::move(module), stream_executor, nullptr)

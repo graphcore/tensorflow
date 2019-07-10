@@ -66,7 +66,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -108,7 +108,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -150,7 +150,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -192,7 +192,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -234,7 +234,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_FALSE(changed);
@@ -268,7 +268,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_FALSE(changed);
@@ -303,7 +303,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -345,7 +345,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -399,7 +399,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -453,7 +453,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -509,7 +509,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -573,7 +573,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -652,7 +652,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -717,7 +717,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -759,7 +759,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);
@@ -833,7 +833,7 @@ ENTRY entry {
 )";
 
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseHloString(hlo_string));
+                          ParseAndReturnVerifiedModule(hlo_string));
   HloPassFix<WhileLoopToRepeatSimplify> wltrs;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, wltrs.Run(module.get()));
   EXPECT_TRUE(changed);

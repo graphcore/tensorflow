@@ -68,7 +68,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -110,7 +110,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -154,7 +154,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -220,7 +220,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -274,7 +274,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -320,7 +320,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -367,7 +367,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -1624,7 +1624,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -1674,7 +1674,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -1730,7 +1730,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -1789,7 +1789,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 
@@ -1841,7 +1841,7 @@ ENTRY c1 {
 )";
 
   auto config = GetModuleConfigForTest();
-  auto module = ParseHloString(hlo, config);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* hlo_module = module.ValueOrDie().get();
 

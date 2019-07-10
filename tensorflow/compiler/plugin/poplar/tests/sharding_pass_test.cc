@@ -45,7 +45,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -77,7 +77,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -107,7 +107,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -134,7 +134,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -171,7 +171,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -225,7 +225,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -266,7 +266,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -327,7 +327,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -371,7 +371,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -394,8 +394,9 @@ cond {
   c0 = (f16[4], f16[4]) parameter(0)
   c1 = f16[4] get-tuple-element(c0), index=0
   c2 = f16[] constant(1.0)
-  c3 = f16[4] broadcast(c2), dimensions={0}
-  ROOT c4 = pred[4] compare(c1, c3), direction=EQ
+  c3 = f16[1] reshape(c2)
+  c4 = f16[4] broadcast(c3), dimensions={0}
+  ROOT c5 = pred[4] compare(c1, c4), direction=EQ
 }
 
 body {
@@ -421,7 +422,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -444,7 +445,8 @@ cond {
   c0 = (f16[4], f16[4]) parameter(0)
   c1 = f16[4] get-tuple-element(c0), index=0
   c2 = f16[] constant(1.0)
-  c3 = f16[4] broadcast(c2), dimensions={0}, sharding={maximal device=1}
+  c3 = f16[1] reshape(c2)
+  c4 = f16[4] broadcast(c3), dimensions={0}, sharding={maximal device=1}
   ROOT c4 = pred[4] compare(c1, c3), direction=EQ
 }
 
@@ -471,7 +473,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -511,7 +513,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -551,7 +553,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -590,7 +592,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -642,7 +644,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -675,7 +677,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -706,7 +708,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -750,7 +752,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -793,7 +795,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -845,7 +847,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -887,7 +889,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -928,7 +930,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -972,7 +974,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -1018,7 +1020,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -1078,7 +1080,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -1134,7 +1136,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -1202,7 +1204,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -1270,7 +1272,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -1353,7 +1355,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -1390,7 +1392,7 @@ main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
@@ -1472,7 +1474,7 @@ ENTRY main {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
