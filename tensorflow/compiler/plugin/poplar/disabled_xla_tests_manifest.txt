@@ -343,3 +343,5 @@ IotaR3Test POPLAR
 Exhaustive32BitOrLessUnaryTest POPLAR
 
 LocalClientExecuteTest.LargeNestedTuple POPLAR // Too long on IPU
+
+ReduceWindowTextTest.R4OnlyDilation POPLAR // Dilated reductions

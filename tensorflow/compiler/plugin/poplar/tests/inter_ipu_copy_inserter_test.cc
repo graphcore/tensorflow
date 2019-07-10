@@ -134,7 +134,7 @@ HloModule top
 cluster_1  {
   arg0 = f16[] parameter(0), sharding={maximal device=0}
   const0 = f16[] constant(0.1), sharding={maximal device=0}
-  ROOT mul = f16[4] multiply(arg0, const0), sharding={maximal device=1}
+  ROOT mul = f16[] multiply(arg0, const0), sharding={maximal device=1}
 }
   )";
 

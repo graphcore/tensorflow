@@ -523,7 +523,7 @@ _loop_body {
   infeed = ((f16[1,16,16,4], f16[1,1024]), token[]) infeed(after-all), infeed_config="01234567"
   infeed_tuple = (f16[1,16,16,4], f16[1,1024]) get-tuple-element(infeed), index=0
   arg0.19.0 = f16[1,16,16,4] get-tuple-element(infeed_tuple), index=0
-  arg1.19.1 = f16[1,1024] get-tuple-element(infeed_tuple), index=0
+  arg1.19.1 = f16[1,1024] get-tuple-element(infeed_tuple), index=1
   call.3 = f16[4] fusion(), kind=kCustom, calls=_pop_op_wide_const
   convert.19.11 = f32[1,1024] convert(arg1.19.1)
   call.9 = f16[1,16,16,64] fusion(arg0.19.0, arg5.19.5), kind=kCustom, calls=pop_convolution.1
@@ -1026,8 +1026,8 @@ loop_body {
   after-all = token[] after-all()
   infeed = ((f32[1,4], f32[1,12]), token[]) infeed(after-all), infeed_config="01234567"
   infeed_tuple = (f32[1,4], f32[1,12]) get-tuple-element(infeed), index=0
-  arg0.9.0 = f16[1,4] get-tuple-element(infeed_tuple), index=0
-  arg1.9.1 = f16[1,12] get-tuple-element(infeed_tuple), index=0
+  arg0.9.0 = f32[1,4] get-tuple-element(infeed_tuple), index=0
+  arg1.9.1 = f32[1,12] get-tuple-element(infeed_tuple), index=1
   call.2 = f32[12,12] fusion(), kind=kCustom, calls=_pop_op_wide_const
   dot.9.9 = f32[1,12] dot(arg0.9.0, arg3.9.3), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   call = f32[1,12] fusion(dot.9.9), kind=kCustom, calls=_pop_op_relu

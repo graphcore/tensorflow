@@ -34,7 +34,7 @@ HloModule TensorFlowGatherV2
 ENTRY main {
   operand = s32[3,3] parameter(0)
   indices = s32[2] parameter(1)
-  ROOT gather = s32[3,0] gather(operand, indices),
+  ROOT gather = s32[3,2] gather(operand, indices),
       offset_dims={0},
       collapsed_slice_dims={1},
       start_index_map={1},

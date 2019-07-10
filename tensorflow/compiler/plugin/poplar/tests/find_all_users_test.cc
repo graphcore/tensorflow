@@ -139,15 +139,20 @@ TEST_F(FindAddUsersTest, FindMultipleFusionUsers) {
   std::string hlo_string = R"(
 HloModule top
 
-_pop_op_special {
+_pop_op_special1 {
+  p0 = f16[4] parameter(0)
+  ROOT ad0 = f16[4] negate(p0)
+}
+
+_pop_op_special2 {
   p0 = f16[4] parameter(0)
   ROOT ad0 = f16[4] negate(p0)
 }
 
 %cluster_1  {
   a0 = f16[4] parameter(0)
-  s0 = f16[4] fusion(a0), kind=kCustom, calls=_pop_op_special
-  s1 = f16[4] fusion(a0), kind=kCustom, calls=_pop_op_special
+  s0 = f16[4] fusion(a0), kind=kCustom, calls=_pop_op_special1
+  s1 = f16[4] fusion(a0), kind=kCustom, calls=_pop_op_special2
   ROOT %tuple = (f16[4], f16[4]) tuple(s0, s1)
 }
   )";
@@ -482,7 +487,7 @@ cond {
 
 body {
   b_p0 = (s32[], f16[4], f16[4]) parameter(0)
-  b_e0 = f16[4] get-tuple-element(b_p0), index=0
+  b_e0 = s32[] get-tuple-element(b_p0), index=0
   b_e1 = f16[4] get-tuple-element(b_p0), index=1
   b_e2 = f16[4] get-tuple-element(b_p0), index=2
   b_s0 = f16[4] sine(b_e1)

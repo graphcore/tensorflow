@@ -358,11 +358,11 @@ HloModule top
 ENTRY c1 {
   p0 = f32[10] parameter(0)
   p1 = f32[] constant(1.0)
-  b1 = f32[10] broadcast(p1), dimensions={0}
-  sub1 = f32[10,10] subtract(p0, b1)
-  add1 = f32[10,10] add(p0, b1)
-  sub2 = f32[10,10] subtract(add1, sub1)
-  ROOT root = (f32[10,10]) tuple(sub2)
+  b1 = f32[10] broadcast(p1), dimensions={}
+  sub1 = f32[10] subtract(p0, b1)
+  add1 = f32[10] add(p0, b1)
+  sub2 = f32[10] subtract(add1, sub1)
+  ROOT root = (f32[10]) tuple(sub2)
  }
 )";
 

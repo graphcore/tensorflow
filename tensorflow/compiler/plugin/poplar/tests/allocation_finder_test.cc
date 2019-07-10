@@ -906,7 +906,7 @@ ENTRY c1 {
   p0 = f16[1,16,16,2] parameter(0)
   p1 = f16[3,3,4,2] parameter(1)
 
-  p1_t = f16[3,3,2,4] transpose(p1), dimensions={2,3}
+  p1_t = f16[3,3,2,4] transpose(p1), dimensions={0, 1, 3, 2}
 
   conv = f16[1,16,16,4] convolution(p0, p1_t), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
 
@@ -1104,10 +1104,10 @@ _pop_op_conv_biasadd {
 }
 
 _pop_op_conv_biasadd.1 {
-  arg_0 = f16[1,16,16,4] parameter(0)
+  arg_0 = f16[1,16,16,64] parameter(0)
   arg_1 = f16[4] parameter(1)
-  bcast = f16[1,16,16,4] broadcast(arg_1), dimensions={3}
-  ROOT add = f16[1,16,16,4] add(arg_0, bcast)
+  bcast = f16[1,16,16,64] broadcast(arg_1), dimensions={3}
+  ROOT add = f16[1,16,16,64] add(arg_0, bcast)
 }
 
 ENTRY c1 {
