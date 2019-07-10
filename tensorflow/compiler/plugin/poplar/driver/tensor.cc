@@ -1284,22 +1284,31 @@ StatusOr<poplar::Tensor> AddConstantTensor(poplar::Graph& graph,
                                            const xla::Literal& literal,
                                            CompilerResources& resources,
                                            const TensorMap& tensor_map) {
-  poplar::Tensor tensor;
+  if (HasTensorAllocationTarget(src, resources)) {
+    auto tensor_target = resources.annotations.tensor_allocation_map.find(src);
+    const auto* target = tensor_target->second.tgt;
 
-  TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(literal.shape()));
-  const bool has_tensor_target = HasTensorAllocationTarget(src, resources);
-  if (has_tensor_target || ShapeUtil::ElementsIn(literal.shape()) > 32) {
-    TF_ASSIGN_OR_RETURN(tensor,
+    if (ShapeUtil::ElementsIn(target->shape()) ==
+        ShapeUtil::ElementsIn(shape)) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
+                          AddTensor(graph, src, shape, resources, tensor_map));
+      TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
+      return ConvertToDeviceLayout(shape, tensor);
+    }
+  }
+
+  if (ShapeUtil::ElementsIn(literal.shape()) > 32) {
+    TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
                         AddTensor(graph, src, shape, resources, tensor_map));
     TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
     return ConvertToDeviceLayout(shape, tensor);
-  } else {
-    const auto& name = GetDebugName(src.first);
-    TF_ASSIGN_OR_RETURN(
-        tensor, CreateConstantTensor(graph, literal, shape, type, name));
-    std::vector<std::size_t> dim = PoplarShapeFromXlaShape(shape);
-    return tensor.reshape(dim);
   }
+
+  const auto& name = GetDebugName(src.first);
+  TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(literal.shape()));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
+                      CreateConstantTensor(graph, literal, shape, type, name));
+  return tensor.reshape(PoplarShapeFromXlaShape(shape));
 }
 
 template <typename T>
