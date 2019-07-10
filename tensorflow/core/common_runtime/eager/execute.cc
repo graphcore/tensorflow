@@ -43,6 +43,7 @@ limitations under the License.
 #include "tensorflow/core/profiler/lib/traceme.h"
 #include "tensorflow/core/util/device_name_utils.h"
 #if !defined(IS_MOBILE_PLATFORM)
+#include "tensorflow/core/distributed_runtime/eager/remote_mgr.h"
 #include "tensorflow/core/distributed_runtime/eager/eager_client.h"
 #include "tensorflow/core/distributed_runtime/eager/remote_execute_node.h"
 #endif  // IS_MOBILE_PLATFORM
@@ -214,6 +215,8 @@ Status ValidateInputTypeAndPlacement(
     EagerContext* ctx, EagerOperation* op,
     const core::RefCountPtr<KernelAndDevice>& kernel,
     RunMetadata* run_metadata) {
+  profiler::TraceMe activity("ValidateInputTypeAndPlacement",
+                             profiler::TraceMeLevel::kInfo);
   if (kernel->num_inputs() != op->Inputs().size()) {
     return errors::InvalidArgument("expected ", kernel->num_inputs(),
                                    " inputs, got ", op->Inputs().size());
@@ -487,6 +490,8 @@ Status EagerLocalExecute(EagerOperation* op,
   std::unordered_map<int, DtypeAndPartialTensorShape>
       input_resource_variable_dtypes_and_shapes;
   if (is_multi_device_function) {
+    profiler::TraceMe activity("EagerCopyToDeviceAndAddCacheKey",
+                               profiler::TraceMeLevel::kInfo);
     input_dev_ptrs.reserve(op->Inputs().size());
     // All inputs need to be on local devices.
     // TODO(b/122851476): This is a limitation of the current code base (but
@@ -706,7 +711,7 @@ Status EagerRemoteSendTensor(EagerContext* ctx, TensorHandle* h,
   eager::SendTensorResponse response;
 
   request.set_context_id(context_id);
-  request.set_op_id(ctx->NextId());
+  request.set_op_id(ctx->RemoteMgr()->NextOpId());
   request.set_device_name(recv_device->name());
 
   // AsProtoTensorContent doesn't work when the tensor is on the GPU, hence
@@ -745,19 +750,6 @@ Status EagerRemoteSendTensor(EagerContext* ctx, TensorHandle* h,
   return status;
 }
 
-Status AddRemoteInput(eager::Operation* remote_op, TensorHandle* input,
-                      Device* input_device) {
-  tensorflow::int64 op_id;
-  int32 output_num;
-  TF_RETURN_IF_ERROR(input->RemoteAddress(input_device, &op_id, &output_num));
-
-  auto* remote_op_input = remote_op->add_inputs();
-  remote_op_input->set_op_id(op_id);
-  remote_op_input->set_output_num(output_num);
-
-  return Status::OK();
-}
-
 Status EnqueueAndWait(eager::EagerClient* eager_client,
                       const std::unique_ptr<eager::EnqueueRequest>& request,
                       eager::EnqueueResponse* response) {
@@ -776,7 +768,7 @@ Status EnqueueAndWait(eager::EagerClient* eager_client,
 void PrepareRemoteOp(eager::Operation* remote_op, EagerOperation* op) {
   EagerContext* ctx = op->EagerContext();
 
-  remote_op->set_id(ctx->NextId());
+  remote_op->set_id(ctx->RemoteMgr()->NextOpId());
   remote_op->set_name(op->Name());
 
   op->Attrs().FillAttrValueMap(remote_op->mutable_attrs());
@@ -807,34 +799,39 @@ Status EagerRemoteExecute(EagerOperation* op, TensorHandle** retvals,
 
   eager::Operation* remote_op = request->add_queue()->mutable_operation();
 
-  for (int i = 0; i < op->Inputs().size(); i++) {
-    tensorflow::TensorHandle* input = op->Inputs()[i];
-    tensorflow::Device* input_device = input->device();
-    if (op->Device() != input_device &&
-        // If the expected and actual devices are on the same task, don't
-        // explicitly copy, and instead depend on the copy to happen locally
-        // when the op is executed on the device.
-        !ctx->OnSameTask(op->Device(), input_device)) {
-      tensorflow::Device* remote_cpu_device;
-      TF_RETURN_IF_ERROR(
-          ctx->CPUDeviceOnTask(op->Device(), &remote_cpu_device));
-      // TODO(b/110044833): It's possible the same tensor gets copied to the
-      // remote device repeatedly.
-      // Always copy to the remote CPU so that the actual device can be
-      // correctly determined after the kernel is selected/instantiated, since
-      // the op might have its inputs on host memory.
-      TensorHandle* handle = nullptr;
-      TF_RETURN_IF_ERROR(
-          MaybeCopyInputToExpectedDevice(op, op->Device(), i, remote_cpu_device,
-                                         /* run_metadata= */ nullptr, &handle));
-      op->UpdateInput(i, handle);
-      input = handle;
-      input_device = remote_cpu_device;
-      // Unref handle since it has a ref as an input now
-      handle->Unref();
-    }
+  {
+    profiler::TraceMe activity("CopyInputToExpectedDevice",
+                               profiler::TraceMeLevel::kInfo);
+    for (int i = 0; i < op->Inputs().size(); i++) {
+      tensorflow::TensorHandle* input = op->Inputs()[i];
+      tensorflow::Device* input_device = input->device();
+      if (op->Device() != input_device &&
+          // If the expected and actual devices are on the same task, don't
+          // explicitly copy, and instead depend on the copy to happen locally
+          // when the op is executed on the device.
+          !ctx->OnSameTask(op->Device(), input_device)) {
+        tensorflow::Device* remote_cpu_device;
+        TF_RETURN_IF_ERROR(
+            ctx->CPUDeviceOnTask(op->Device(), &remote_cpu_device));
+        // TODO(b/110044833): It's possible the same tensor gets copied to the
+        // remote device repeatedly.
+        // Always copy to the remote CPU so that the actual device can be
+        // correctly determined after the kernel is selected/instantiated, since
+        // the op might have its inputs on host memory.
+        TensorHandle* handle = nullptr;
+        TF_RETURN_IF_ERROR(MaybeCopyInputToExpectedDevice(
+            op, op->Device(), i, remote_cpu_device,
+            /* run_metadata= */ nullptr, &handle));
+        op->UpdateInput(i, handle);
+        input = handle;
+        input_device = remote_cpu_device;
+        // Unref handle since it has a ref as an input now
+        handle->Unref();
+      }
 
-    TF_RETURN_IF_ERROR(AddRemoteInput(remote_op, input, input_device));
+      TF_RETURN_IF_ERROR(ctx->RemoteMgr()->SerializeRemoteTensorHandle(
+          input, remote_op->add_inputs(), input_device));
+    }
   }
 
   PrepareRemoteOp(remote_op, op);
@@ -1259,8 +1256,7 @@ Status ExecuteSend(EagerContext* ctx, Device* device, TensorHandle* h,
   } else {
     eager::EagerClient* eager_client;
     uint64 context_id = ctx->GetContextId();
-    TF_RETURN_IF_ERROR(
-        ctx->GetClient(device, &eager_client));
+    TF_RETURN_IF_ERROR(ctx->GetClient(device, &eager_client));
 
     std::unique_ptr<eager::EnqueueRequest> request(new eager::EnqueueRequest);
     eager::EnqueueResponse response;
@@ -1268,7 +1264,8 @@ Status ExecuteSend(EagerContext* ctx, Device* device, TensorHandle* h,
     request->set_context_id(context_id);
 
     auto* remote_op = request->add_queue()->mutable_operation();
-    TF_RETURN_IF_ERROR(AddRemoteInput(remote_op, h, h->device()));
+    TF_RETURN_IF_ERROR(ctx->RemoteMgr()->SerializeRemoteTensorHandle(
+        h, remote_op->add_inputs(), h->device()));
 
     PrepareRemoteOp(remote_op, &op);
 
@@ -1328,8 +1325,7 @@ Status ExecuteRecv(EagerContext* ctx, Device* device, DataType dtype,
   } else {
     eager::EagerClient* eager_client;
     uint64 context_id = ctx->GetContextId();
-    TF_RETURN_IF_ERROR(
-        ctx->GetClient(device, &eager_client));
+    TF_RETURN_IF_ERROR(ctx->GetClient(device, &eager_client));
 
     std::unique_ptr<eager::EnqueueRequest> request(new eager::EnqueueRequest);
     eager::EnqueueResponse response;
@@ -1385,8 +1381,6 @@ string GetUniqueWireID() {
 
 Status EagerCopyToDevice(TensorHandle* h, EagerContext* ctx, Device* device,
                          bool mirror, TensorHandle** result) {
-  profiler::TraceMe activity("EagerCopyToDevice",
-                             profiler::TraceMeLevel::kInfo);
   Device* send_device = h->DeviceOrHostCPU(ctx);
 
   bool sender_is_local = ctx->IsLocal(send_device);

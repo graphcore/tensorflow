@@ -1151,8 +1151,8 @@ Status Importer::Convert(llvm::StringRef func_name,
                          const absl::InlinedVector<OutputTensor, 4>& ret_nodes,
                          llvm::ArrayRef<mlir::NamedAttribute> attrs) {
   // TODO(b/122040776): Uses debug info for FunctionDef.
-  auto function = mlir::Function::create(mlir::UnknownLoc::get(context_),
-                                         func_name, func_type, attrs);
+  auto function = mlir::FuncOp::create(mlir::UnknownLoc::get(context_),
+                                       func_name, func_type, attrs);
 
   module_.push_back(function);
   builder_ = absl::make_unique<mlir::OpBuilder>(function.getBody());
@@ -1291,7 +1291,8 @@ StatusOr<mlir::OwningModuleRef> Importer::Convert(
     mlir::MLIRContext* context, const Graph& graph,
     const GraphDebugInfo& debug_info, const FunctionLibraryDefinition& flib_def,
     const NodeSpecs& specs) {
-  mlir::OwningModuleRef module = mlir::Module::create(context);
+  mlir::OwningModuleRef module =
+      mlir::Module::create(mlir::UnknownLoc::get(context));
   std::unordered_map<std::string, std::string> tf_name_to_mlir_name;
   Importer importer(flib_def, debug_info, specs, module.get(),
                     &tf_name_to_mlir_name);
