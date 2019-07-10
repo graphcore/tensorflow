@@ -43,6 +43,7 @@ message PoplibsOp {
     SelectScalarFromRows = 31;
     UpdateScalarInRows = 32;
     Fifo = 33;
+    TopK = 34;
   }
   required Op op = 2;
 }
