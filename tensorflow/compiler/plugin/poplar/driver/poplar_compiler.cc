@@ -542,7 +542,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     // pass.AddPass<ConditionalSimplifier>();
     pipeline.AddPass<F16ConstantFolding>();
     pipeline.AddPass<HloConstantFolding>();
-    pipeline.AddPass<HloPassFix<CastsElimination>>(resources.annotations);
     pipeline.AddPass<HloCSE>(true);
     pipeline.AddPass<WideConstFinder>();
     pipeline.AddPass<CommutativeInstructionReorderOperands>();
@@ -550,6 +549,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     {
       auto& pass =
           pipeline.AddPass<HloPassFix<HloPassPipeline>>("repeated-fusing");
+      pass.AddPass<CastsElimination>(resources.annotations);
       pass.AddPass<HloCSE>(true);
       pass.AddPass<HloDCE>();
       pass.AddPass<WhileLoopConstantSinking>();
