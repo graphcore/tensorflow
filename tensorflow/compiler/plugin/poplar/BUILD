@@ -81,6 +81,7 @@ cc_library(
         "driver/passes/combine_instructions.cc",
         "driver/passes/commutative_instruction_reorder_operands.cc",
         "driver/passes/computation_flattener.cc",
+        "driver/passes/constant_nan.cc",
         "driver/passes/constant_slice_folding.cc",
         "driver/passes/convolution_classifier.cc",
         "driver/passes/custom_op_replacer.cc",
@@ -160,6 +161,7 @@ cc_library(
         "driver/passes/combine_instructions.h",
         "driver/passes/commutative_instruction_reorder_operands.h",
         "driver/passes/computation_flattener.h",
+        "driver/passes/constant_nan.h",
         "driver/passes/constant_slice_folding.h",
         "driver/passes/convolution_classifier.h",
         "driver/passes/custom_op_replacer.h",
@@ -958,6 +960,17 @@ tf_cc_test(
 tf_cc_test(
     name = "f16_constant_folding_test",
     srcs = ["tests/f16_constant_folding_test.cc"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+tf_cc_test(
+    name = "constant_nan_test",
+    srcs = ["tests/constant_nan_test.cc"],
     size = "small",
     deps = [
         ":optimizers",
@@ -2025,6 +2038,7 @@ test_suite(
         "combine_instructions_test",
         "commutative_instruction_reorder_operands_test",
         "conditional_test",
+        "constant_nan_test",
         "constant_slice_folding_test",
         "conv3d_test",
         "conv_graph_caching_sharded_test",

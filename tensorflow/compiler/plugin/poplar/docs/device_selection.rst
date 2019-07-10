@@ -146,6 +146,8 @@ of all tensors to be written to this directory.
 ``--fallback_scheduler`` uses the standard TensorFlow scheduler, instead of
 the GraphCore specific one.
 
+``--allow_nans`` will allow NaNs.
+
 The options can be used at the same time by treating them as command line
 switches, eg. ``--executable_cache_path=/tmp/cache --force_replicated_mode``
 
