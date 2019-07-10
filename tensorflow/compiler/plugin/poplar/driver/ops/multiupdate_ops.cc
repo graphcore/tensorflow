@@ -265,8 +265,15 @@ StatusOr<poplar::program::Program> CreateScatterUpdateOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {
   auto fusion_root = inst->fused_instructions_computation()->root_instruction();
-  auto scatter =
-      Cast<HloScatterInstruction>(fusion_root->operand(1)->operand(0));
+
+  const bool negate_multiplier = fusion_root->opcode() == HloOpcode::kSubtract;
+  const bool has_reshape =
+      fusion_root->operand(1)->opcode() == HloOpcode::kReshape;
+  // Get the rhs of the root operation, looking through the reshape.
+  auto rhs_inst = has_reshape ? fusion_root->operand(1)->operand(0)
+                              : fusion_root->operand(1);
+  CHECK_EQ(rhs_inst->opcode(), HloOpcode::kMultiply);
+  auto scatter = Cast<HloScatterInstruction>(rhs_inst->operand(0));
   const auto dim_numbers = scatter->scatter_dimension_numbers();
   const auto update_window_dims = dim_numbers.update_window_dims();
   const auto index_vector_dim = dim_numbers.index_vector_dim();
@@ -286,34 +293,43 @@ StatusOr<poplar::program::Program> CreateScatterUpdateOp(
   TF_ASSIGN_OR_RETURN(poplar::Tensor updates,
                       FindInstructionInput(tensor_map, res, inst, 2, prog));
 
-  poplar::Tensor scale;
-  bool negate_multiplier = fusion_root->opcode() == HloOpcode::kSubtract;
+  // A tensor view of the operand which depends on whether there is a reshape or
+  // not.
+  poplar::Tensor scatter_into = operand;
+  if (has_reshape) {
+    // Reshape the operand so that the values are scattered into it.
+    std::vector<size_t> dims(PoplarShapeFromXlaShape(rhs_inst->shape()));
+    scatter_into = scatter_into.reshape(dims);
+  }
 
+  auto scale = rhs_inst->operand(1)->operand(0);
+  poplar::Tensor scale_tensor;
   if (inst->operand_count() == 3) {
     // Constant scale - get the value from the literal.
-    const auto* const_inst = fusion_root->operand(1)->operand(1)->operand(0);
-    CHECK_EQ(const_inst->opcode(), HloOpcode::kConstant);
-    TF_ASSIGN_OR_RETURN(float scale_value, LiteralScalarToNativeType<float>(
-                                               const_inst->literal()));
+    CHECK_EQ(scale->opcode(), HloOpcode::kConstant);
+    TF_ASSIGN_OR_RETURN(float scale_value,
+                        LiteralScalarToNativeType<float>(scale->literal()));
     scale_value = negate_multiplier ? -scale_value : scale_value;
 
-    scale = graph.addConstant(operand.elementType(), {}, scale_value,
-                              GetDebugName(inst) + "/const_scale");
-    graph.setTileMapping(scale, 0);
+    scale_tensor = graph.addConstant(operand.elementType(), {}, scale_value,
+                                     GetDebugName(inst) + "/const_scale");
+    graph.setTileMapping(scale_tensor, 0);
 
   } else {
     CHECK_EQ(inst->operand_count(), 4);
-    TF_ASSIGN_OR_RETURN(scale,
+    CHECK_EQ(scale->opcode(), HloOpcode::kParameter);
+    TF_ASSIGN_OR_RETURN(scale_tensor,
                         FindInstructionInput(tensor_map, res, inst, 3, prog));
-    scale = negate_multiplier
-                ? popops::neg(graph, scale, prog,
-                              GetDebugName(inst) + "/negate_scale")
-                : scale;
+    scale_tensor = negate_multiplier
+                       ? popops::neg(graph, scale_tensor, prog,
+                                     GetDebugName(inst) + "/negate_scale")
+                       : scale_tensor;
   }
 
-  MultiUpdateInternal(graph, operand, indices, updates, index_vector_dim,
+  MultiUpdateInternal(graph, scatter_into, indices, updates, index_vector_dim,
                       {update_window_dims.begin(), update_window_dims.end()},
-                      prog, GetDebugName(inst), UpdateMode::Accumulate, scale);
+                      prog, GetDebugName(inst), UpdateMode::Accumulate,
+                      scale_tensor);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
   return prog;

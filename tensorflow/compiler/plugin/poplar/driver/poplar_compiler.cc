@@ -55,6 +55,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
@@ -557,11 +558,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<HloPassFix<AlgebraicSimplifier>>(simplifier_opts);
       pass.AddPass<ReshapeMover>();
       pass.AddPass<SortSimplifier>();
-      pass.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
+      pass.AddPass<ScatterCombiner>(resources.annotations);
       pass.AddPass<HloDCE>();
       pass.AddPass<WhileLoopConditionSimplify>();
       pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
     }
+    pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
     pipeline.AddPass<HloSubcomputationUnification>();

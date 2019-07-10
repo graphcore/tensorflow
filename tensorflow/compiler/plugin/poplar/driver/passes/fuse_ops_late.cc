@@ -286,6 +286,48 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
+  // Applying scattered deltas into a tensor with constant learning rate, where there is a reshape.
+  HloMatcherPattern(
+    PatternType("scatter_update_inplace"),
+    PatternMetaTarget(3),
+    PatternInputs({7, 8, 9}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({7, 1}), IsAddOrSubtract},
+      {HloOpcode::kReshape, NodeOperands({2})},
+      {HloOpcode::kMultiply, NodeOperands({4, 3})},
+      {HloOpcode::kBroadcast, NodeOperands({10})},
+      {HloOpcode::kScatter, NodeOperands({5, 8, 9}), IsMultiUpdateAdd},
+      {HloOpcode::kBroadcast, NodeOperands({6})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloOpcode::kConstant, NodeOperands({}), IsFloatScalarConstant}
+    })
+  ),
+
+  // Applying scattered deltas into a tensor with variable learning rate, where there is a reshape.
+  HloMatcherPattern(
+    PatternType("scatter_update_inplace"),
+    PatternMetaTarget(3),
+    PatternInputs({7, 8, 9, 10}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({7, 1}), IsAddOrSubtract},
+      {HloOpcode::kReshape, NodeOperands({2})},
+      {HloOpcode::kMultiply, NodeOperands({4, 3})},
+      {HloOpcode::kBroadcast, NodeOperands({10})},
+      {HloOpcode::kScatter, NodeOperands({5, 8, 9}), IsMultiUpdateAdd},
+      {HloOpcode::kBroadcast, NodeOperands({6})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsFloatScalar}
+    })
+  ),
+
   // Scaled add/subtract to/from - A = A +/- B * c (constant)
   HloMatcherPattern(
     PatternType("scaled_inplace"),
