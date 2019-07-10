@@ -61,9 +61,6 @@ CategoricalTest.testStatelessMultinomialIsInRange # No U64
 RandomOpsTest.testRandomNormalIsNotConstant # disable until poplar CPU random works
 RandomOpsTest.testRandomUniformIsNotConstant # disable until poplar CPU random works
 RandomOpsTest.testTruncatedNormalIsNotConstant # disable until poplar CPU random works
-XlaAddNTest # Disable due to variants in lists
-WhileTest.testMap # Disable due to variants in lists
-WhileTest.testMaxItersSimpleV2 # Disable due to variants in lists
 StatelessRandomOpsTest.testDeterminism # poplibs CPU mode does not obey seed
 StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random uniform int doesn't obey limits
 StatelessRandomOpsTest.testTruncatedNormal # Tests float64
