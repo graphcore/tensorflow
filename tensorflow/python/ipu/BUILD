@@ -76,6 +76,7 @@ py_library(
         "scopes.py",
         "sharded_optimizer.py",
         "sharding.py",
+        "sharding_utils.py",
         "utils.py",
     ],
     deps = [
@@ -151,6 +152,23 @@ py_test(
         "//tensorflow/python/keras:layers",
     ],
     srcs_version = "PY2AND3",
+)
+
+tf_py_test(
+    name = "fifo_test",
+    size = "small",
+    srcs = ["tests/fifo_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
 )
 
 tf_py_test(
@@ -267,6 +285,7 @@ test_suite(
         "dropout_test",
         "embedding_lookup_test",
         "estimator_test",
+        "fifo_test",
         "infeed_outfeed_test",
         "ipu_estimator_test",
         "pop_datastream_test",

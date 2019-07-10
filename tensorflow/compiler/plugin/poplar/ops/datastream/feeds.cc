@@ -28,6 +28,7 @@ REGISTER_OP("PopDatastreamInfeedDequeue")
     .Attr("replication_factor: int")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
+    .Attr("data_to_prefetch: int")
     .SetIsStateful()
     .SetShapeFn([](InferenceContext* c) {
       std::vector<PartialTensorShape> shapes;

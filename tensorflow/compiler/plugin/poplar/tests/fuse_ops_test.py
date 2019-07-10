@@ -10,13 +10,17 @@ import numpy as np
 import test_utils as tu
 
 from tensorflow.python.platform import googletest
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import embedding_ops
+from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import gen_nn_ops
 from tensorflow.python.ops import gen_math_ops
+from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
@@ -25,6 +29,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.python.compiler.xla import xla
 
 
 class IpuFuseOpsTest(test_util.TensorFlowTestCase):
@@ -783,6 +788,129 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
           self.assertAllClose(val, [-0.6, -0.6], atol=0.001)
           found = True
       self.assertTrue(found)
+
+  def testUnsortedSegmentSumConstLR(self):
+    def network(x, y1, y2):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        w1 = variable_scope.get_variable(
+            "w1",
+            shape=[10, 200],
+            dtype=np.float32,
+            initializer=init_ops.constant_initializer(1))
+        g1 = array_ops.gather(w1, y1)
+        g2 = array_ops.gather(w1, y2)
+
+        a = math_ops.reduce_sum(g1 + g2)
+
+      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+      grads = [a]
+      grads = [
+          gradients_impl.gradients(g, variables.trainable_variables())[0]
+          for g in grads
+      ]
+      grads = [array_ops.expand_dims(g, 0) for g in grads]
+      grad = array_ops.concat(grads, axis=0)
+      grad = math_ops.reduce_mean(grad, 0)
+      train = optimizer.apply_gradients([(grad, w1)])
+      return a, train
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.float32, shape=[10, 200])
+      y1 = array_ops.placeholder(np.int32, shape=[10])
+      y2 = array_ops.placeholder(np.int32, shape=[10])
+      report = gen_ipu_ops.ipu_event_trace()
+
+    with ops.device("/device:IPU:0"):
+      r = xla.compile(network, inputs=[x, y1, y2])
+
+    tu.configure_ipu_system()
+
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      sess.run(report)
+      out = sess.run(r, {
+          x: np.ones(x.shape),
+          y1: np.ones(y1.shape),
+          y2: np.ones(y2.shape),
+      })
+      self.assertAllClose(out, [-4000.0])
+
+      result = sess.run(report)
+      s = tu.extract_all_strings_from_event_trace(result)
+      cs_list = tu.get_compute_sets_from_report(s)
+
+      ok = [
+          '__seed*',
+          'Copy_',
+          'ExpandDims/input/fusion*/multiUpdateAdd',
+          '/multiSlice',
+          'vs/add/add*/AddTo',
+          'vs/Sum/reduce*/Reduce',
+      ]
+      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+
+  def testUnsortedSegmentSumVariableLR(self):
+    def network(x, y1, y2, lr):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        w1 = variable_scope.get_variable(
+            "w1",
+            shape=[10, 200],
+            dtype=np.float32,
+            initializer=init_ops.constant_initializer(1))
+        g1 = array_ops.gather(w1, y1)
+        g2 = array_ops.gather(w1, y2)
+
+        a = math_ops.reduce_sum(g1 + g2)
+
+      optimizer = gradient_descent.GradientDescentOptimizer(lr)
+      grads = [a]
+      grads = [
+          gradients_impl.gradients(g, variables.trainable_variables())[0]
+          for g in grads
+      ]
+      grads = [array_ops.expand_dims(g, 0) for g in grads]
+      grad = array_ops.concat(grads, axis=0)
+      grad = math_ops.reduce_mean(grad, 0)
+      train = optimizer.apply_gradients([(grad, w1)])
+      return a, train
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.float32, shape=[10, 200])
+      y1 = array_ops.placeholder(np.int32, shape=[10])
+      y2 = array_ops.placeholder(np.int32, shape=[10])
+      lr = array_ops.placeholder(np.float32, shape=[])
+      report = gen_ipu_ops.ipu_event_trace()
+
+    with ops.device("/device:IPU:0"):
+      r = xla.compile(network, inputs=[x, y1, y2, lr])
+
+    tu.configure_ipu_system()
+
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      sess.run(report)
+      out = sess.run(
+          r, {
+              x: np.ones(x.shape),
+              y1: np.ones(y1.shape),
+              y2: np.ones(y2.shape),
+              lr: 0.1,
+          })
+      self.assertAllClose(out, [-4000.0])
+
+      result = sess.run(report)
+      s = tu.extract_all_strings_from_event_trace(result)
+      cs_list = tu.get_compute_sets_from_report(s)
+
+      ok = [
+          '__seed*',
+          'ExpandDims/input/fusion*/multiUpdateAdd',
+          'ExpandDims/input/fusion*/negate_scale/Op/Negate',
+          '/multiSlice',
+          'vs/add/add*/AddTo',
+          'vs/Sum/reduce*/Reduce',
+      ]
+      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
 
 if __name__ == "__main__":

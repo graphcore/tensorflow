@@ -150,7 +150,8 @@ void MultiUpdateInternal(poplar::Graph& graph, poplar::Tensor operand,
                          std::size_t index_vector_dim,
                          std::vector<unsigned> update_window_dims,
                          poplar::program::Sequence& prog,
-                         const std::string& debug_prefix, UpdateMode mode) {
+                         const std::string& debug_prefix, UpdateMode mode,
+                         absl::optional<poplar::Tensor> scale = absl::nullopt) {
   // If the updates tensor is empty, there is no need to update the operand. We
   // can return the operand as is.
   if (updates.numElements() == 0) {
@@ -182,27 +183,11 @@ void MultiUpdateInternal(poplar::Graph& graph, poplar::Tensor operand,
         canonical_scatter_iIndices.reinterpret(poplar::UNSIGNED_INT), {0}, {1},
         prog, debug_prefix);
   } else {
-    poplar::Tensor scale = graph.addConstant(operand.elementType(), {}, 1,
-                                             debug_prefix + "/const_1_scale");
-    graph.setTileMapping(scale, 0);
     popops::multiUpdateAdd(
         graph, operand, adjusted_canonical_updates,
-        canonical_scatter_iIndices.reinterpret(poplar::UNSIGNED_INT), scale,
+        canonical_scatter_iIndices.reinterpret(poplar::UNSIGNED_INT), *scale,
         {0}, {1}, prog, debug_prefix);
   }
-}
-
-bool CheckValidAttributes(const HloScatterInstruction* inst) {
-  const auto dim_numbers = inst->scatter_dimension_numbers();
-  const auto update_window_dims = dim_numbers.update_window_dims();
-  const auto inserted_window_dims = dim_numbers.inserted_window_dims();
-  const auto scatter_dims_to_operand_dims =
-      dim_numbers.scatter_dims_to_operand_dims();
-
-  return (inst->operand(0)->shape().rank() != 2) ||
-         (inst->operand(2)->shape().rank() != 2) ||
-         (scatter_dims_to_operand_dims.size() != 1) ||
-         (inserted_window_dims.size() != 1 || (update_window_dims.size()) != 1);
 }
 }  // namespace
 
@@ -212,12 +197,6 @@ StatusOr<poplar::program::Program> CreateMultiUpdate(
   const auto dim_numbers = inst->scatter_dimension_numbers();
   const auto update_window_dims = dim_numbers.update_window_dims();
   const auto index_vector_dim = dim_numbers.index_vector_dim();
-
-  // TODO popops::multiUpdate and popops::multiUpdateAdd only supports the 2D
-  // case. Fallback to scatter.
-  if (CheckValidAttributes(inst)) {
-    return CreateScatter(res, inst, tensor_map);
-  }
 
   poplar::program::Sequence prog;
   poplar::Graph& graph = GetGraph(res, inst);
@@ -252,12 +231,6 @@ StatusOr<poplar::program::Program> CreateMultiUpdateAdd(
   const auto update_window_dims = dim_numbers.update_window_dims();
   const auto index_vector_dim = dim_numbers.index_vector_dim();
 
-  // TODO popops::multiUpdate and popops::multiUpdateAdd only supports the 2D
-  // case. Fallback to scatter.
-  if (CheckValidAttributes(inst)) {
-    return CreateScatter(res, inst, tensor_map);
-  }
-
   poplar::program::Sequence prog;
   poplar::Graph& graph = GetGraph(res, inst);
 
@@ -275,12 +248,74 @@ StatusOr<poplar::program::Program> CreateMultiUpdateAdd(
 
   VLOG(1) << "Processing " << inst->name() << " as multiUpdateAdd";
 
+  poplar::Tensor scale = graph.addConstant(
+      operand.elementType(), {}, 1, GetDebugName(inst) + "/const_1_scale");
+  graph.setTileMapping(scale, 0);
+
   MultiUpdateInternal(graph, operand, indices, updates, index_vector_dim,
                       {update_window_dims.begin(), update_window_dims.end()},
-                      prog, GetDebugName(inst), UpdateMode::Accumulate);
+                      prog, GetDebugName(inst), UpdateMode::Accumulate, scale);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
+  return prog;
+}
+
+StatusOr<poplar::program::Program> CreateScatterUpdateOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  auto fusion_root = inst->fused_instructions_computation()->root_instruction();
+  auto scatter =
+      Cast<HloScatterInstruction>(fusion_root->operand(1)->operand(0));
+  const auto dim_numbers = scatter->scatter_dimension_numbers();
+  const auto update_window_dims = dim_numbers.update_window_dims();
+  const auto index_vector_dim = dim_numbers.index_vector_dim();
+
+  poplar::program::Sequence prog;
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, res, inst, prog));
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor operand = inputs[0][0];
+
+  TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
+                      FindInstructionInput(tensor_map, res, inst, 1, prog));
+
+  TF_ASSIGN_OR_RETURN(poplar::Tensor updates,
+                      FindInstructionInput(tensor_map, res, inst, 2, prog));
+
+  poplar::Tensor scale;
+  bool negate_multiplier = fusion_root->opcode() == HloOpcode::kSubtract;
+
+  if (inst->operand_count() == 3) {
+    // Constant scale - get the value from the literal.
+    const auto* const_inst = fusion_root->operand(1)->operand(1)->operand(0);
+    CHECK_EQ(const_inst->opcode(), HloOpcode::kConstant);
+    TF_ASSIGN_OR_RETURN(float scale_value, LiteralScalarToNativeType<float>(
+                                               const_inst->literal()));
+    scale_value = negate_multiplier ? -scale_value : scale_value;
+
+    scale = graph.addConstant(operand.elementType(), {}, scale_value,
+                              GetDebugName(inst) + "/const_scale");
+    graph.setTileMapping(scale, 0);
+
+  } else {
+    CHECK_EQ(inst->operand_count(), 4);
+    TF_ASSIGN_OR_RETURN(scale,
+                        FindInstructionInput(tensor_map, res, inst, 3, prog));
+    scale = negate_multiplier
+                ? popops::neg(graph, scale, prog,
+                              GetDebugName(inst) + "/negate_scale")
+                : scale;
+  }
+
+  MultiUpdateInternal(graph, operand, indices, updates, index_vector_dim,
+                      {update_window_dims.begin(), update_window_dims.end()},
+                      prog, GetDebugName(inst), UpdateMode::Accumulate, scale);
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
   return prog;
 }
 
