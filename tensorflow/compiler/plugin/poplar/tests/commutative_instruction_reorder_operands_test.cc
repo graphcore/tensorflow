@@ -33,7 +33,7 @@ HloModule top
 %cluster_1  {
   i1 = f16[] parameter(0)
   i2 = f16[2, 2] parameter(1)
-  b1 = f16[2, 2] broadcast(i1), dimensions={0, 1}
+  b1 = f16[2, 2] broadcast(i1), dimensions={}
   ROOT a1 = f16[2, 2] add(b1, i2)
 }
   )";
@@ -65,7 +65,7 @@ HloModule top
   aa = token[] after-all()
   i2 = f16[2, 2] parameter(1)
   ad = f16[2, 2] add-dependency(i2, aa)
-  b1 = f16[2, 2] broadcast(i1), dimensions={0, 1}
+  b1 = f16[2, 2] broadcast(i1), dimensions={}
   ROOT a1 = f16[2, 2] add(b1, ad)
 }
   )";
@@ -96,7 +96,7 @@ HloModule top
   i1 = f16[] parameter(0)
   aa = token[] after-all()
   i2 = f16[2, 2] parameter(1)
-  b1 = f16[2, 2] broadcast(i1), dimensions={0, 1}
+  b1 = f16[2, 2] broadcast(i1), dimensions={}
   ad = f16[2, 2] add-dependency(b1, aa)
   ROOT a1 = f16[2, 2] add(ad, i2)
 }
@@ -219,8 +219,8 @@ HloModule top
 %cluster_1  {
   i1 = f16[] parameter(0)
   i2 = f16[] parameter(1)
-  b1 = f16[2, 2] broadcast(i1), dimensions={0, 1}
-  b2 = f16[2, 2] broadcast(i2), dimensions={0, 1}
+  b1 = f16[2, 2] broadcast(i1), dimensions={}
+  b2 = f16[2, 2] broadcast(i2), dimensions={}
   ROOT a1 = f16[2, 2] add(b1, b2)
 }
   )";

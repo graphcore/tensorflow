@@ -83,7 +83,7 @@ HloModule top
 
 ENTRY c1 {
   p0 = f16[1,16,16,4] parameter(0)
-  c1 = f16[1] constant({1})
+  c1 = f16[4] constant({1, 2, 3, 4})
   bcast = f16[1,16,16,4] broadcast(c1), dimensions={3}
   ROOT %divide = f16[1,16,16,4] divide(p0, bcast)
 }
@@ -127,7 +127,7 @@ HloModule top
 ENTRY c1 {
   p0 = f16[1,16,16,4] parameter(0)
   c1 = f16[] constant(1)
-  bcast = f16[1,16,16,4] broadcast(c1), dimensions={3}
+  bcast = f16[1,16,16,4] broadcast(c1), dimensions={}
   ROOT %divide = f16[1,16,16,4] divide(p0, bcast)
 }
 )";
@@ -213,8 +213,8 @@ TEST_F(ElementwiseBroadcastConvert, BinaryLHSConst) {
 HloModule top
 
 ENTRY c1 {
-  c0 = f16[1] constant({1})
-  bcast = f16[1,16,16,4] broadcast(c0), dimensions={3}
+  c0 = f16[] constant(1)
+  bcast = f16[1,16,16,4] broadcast(c0), dimensions={}
   p1 = f16[1,16,16,4] parameter(0)
   ROOT %add = f16[1,16,16,4] add(bcast, p1)
 }
@@ -256,7 +256,7 @@ TEST_F(ElementwiseBroadcastConvert, TernaryArg0Bcast) {
 HloModule top
 
 ENTRY c1 {
-  p0 = f16[1] parameter(0)
+  p0 = f16[4] parameter(0)
   bcast = f16[1,16,16,4] broadcast(p0), dimensions={3}
   p1 = f16[1,16,16,4] parameter(1)
   p2 = f16[1,16,16,4] parameter(2)

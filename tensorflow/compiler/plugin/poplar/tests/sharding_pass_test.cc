@@ -390,13 +390,20 @@ TEST_F(ShardingPassTest, TestAddToCallSiteTupleOutputWhileFromBody) {
   std::string hlo_string = R"(
 HloModule top
 
+reduce_and {
+  lhs = pred[] parameter(0)
+  rhs = pred[] parameter(1)
+  ROOT and = pred[] and(lhs, rhs)
+}
+
 cond {
   c0 = (f16[4], f16[4]) parameter(0)
   c1 = f16[4] get-tuple-element(c0), index=0
   c2 = f16[] constant(1.0)
-  c3 = f16[1] reshape(c2)
-  c4 = f16[4] broadcast(c3), dimensions={0}
-  ROOT c5 = pred[4] compare(c1, c4), direction=EQ
+  c3 = f16[4] broadcast(c2), dimensions={}
+  c5 = pred[4] compare(c1, c3), direction=EQ
+  c6 = pred[] constant(true)
+  ROOT c7 = pred[] reduce(c5, c6), dimensions={0}, to_apply=reduce_and
 }
 
 body {
@@ -441,13 +448,20 @@ TEST_F(ShardingPassTest, TestAddToCallSiteTupleOutputWhileFromCond) {
   std::string hlo_string = R"(
 HloModule top
 
+reduce_and {
+  lhs = pred[] parameter(0)
+  rhs = pred[] parameter(1)
+  ROOT and = pred[] and(lhs, rhs)
+}
+
 cond {
   c0 = (f16[4], f16[4]) parameter(0)
   c1 = f16[4] get-tuple-element(c0), index=0
   c2 = f16[] constant(1.0)
-  c3 = f16[1] reshape(c2)
-  c4 = f16[4] broadcast(c3), dimensions={0}, sharding={maximal device=1}
-  ROOT c4 = pred[4] compare(c1, c3), direction=EQ
+  c3 = f16[4] broadcast(c2), dimensions={}, sharding={maximal device=1}
+  c4 = pred[4] compare(c1, c3), direction=EQ
+  c5 = pred[] constant(true)
+  c6 = pred[] reduce(c4, c5), dimensions={0}, to_apply=reduce_and
 }
 
 body {
@@ -502,8 +516,10 @@ subcomp {
 }
 
 main {
-  arg0 = (f16[4], f16[4], f16[4]) parameter(0)
-  cal1 = (f16[4], f16[4]) call(arg0), to_apply=subcomp
+  arg0 = f16[4] parameter(0)
+  arg1 = f16[4] parameter(1)
+  arg2 = f16[4] parameter(2)
+  cal1 = (f16[4], f16[4]) call(arg0, arg1, arg2), to_apply=subcomp
   g0 = f16[4] get-tuple-element(cal1), index=0
   g1 = f16[4] get-tuple-element(cal1), index=1
   ROOT add = f16[4] add(g0, g1)
@@ -542,8 +558,10 @@ subcomp {
 }
 
 main {
-  arg0 = (f16[4], f16[4], f16[4]) parameter(0)
-  cal1 = (f16[4], f16[4]) call(arg0), to_apply=subcomp
+  arg0 = f16[4] parameter(0)
+  arg1 = f16[4] parameter(1)
+  arg2 = f16[4] parameter(2)
+  cal1 = (f16[4], f16[4]) call(arg0, arg1, arg2), to_apply=subcomp
   g0 = f16[4] get-tuple-element(cal1), index=0
   g1 = f16[4] get-tuple-element(cal1), index=1
   ROOT add = f16[4] add(g0, g1)
@@ -582,8 +600,10 @@ subcomp {
 }
 
 main {
-  arg0 = (f16[4], f16[4], (f16[4], f16[4])) parameter(0)
-  cal1 = (f16[4], (f16[4], f16[4])) call(arg0), to_apply=subcomp
+  arg0 = f16[4] parameter(0)
+  arg1 = f16[4] parameter(1)
+  arg2 = (f16[4], f16[4]) parameter(2)
+  cal1 = (f16[4], (f16[4], f16[4])) call(arg0, arg1, arg2), to_apply=subcomp
   g0 = f16[4] get-tuple-element(cal1), index=0
   ROOT add = f16[4] add(g0, g0)
 }
@@ -613,7 +633,7 @@ HloModule top
 
 cond {
   cp = (s32[], f16[4], f16[4]) parameter(0)
-  gte = f16[4] get-tuple-element(cp), index=0
+  gte = s32[] get-tuple-element(cp), index=0
   cc = s32[] constant(10)
   ROOT lt = pred[] compare(gte, cc), direction=LT
 }
@@ -1103,27 +1123,38 @@ TEST_F(ShardingPassTest, TestConditionalAsSelect) {
   std::string hlo_string = R"(
 HloModule top
 
+reduce_and {
+  lhs = pred[] parameter(0)
+  rhs = pred[] parameter(1)
+  ROOT and = pred[] and(lhs, rhs)
+}
+
 cond1 {
-  s0 = f16[4] parameter(0)
-  s1 = f16[4] parameter(1)
-  s2 = f16[4] add(s0, s1)
-  s3 = f16[4] add(s0, s1), sharding={maximal device=1}
-  s4 = (f16[4], f16[4]) tuple(s2, s3)
+  s0 = (f16[4], f16[4]) parameter(0)
+  s1 = f16[4] get-tuple-element(s0), index=0
+  s2 = f16[4] get-tuple-element(s0), index=1
+  s3 = f16[4] add(s1, s2)
+  s4 = f16[4] add(s1, s2), sharding={maximal device=1}
+  s5 = (f16[4], f16[4]) tuple(s3, s4)
 }
 
 cond2 {
-  s0 = f16[4] parameter(0)
-  s1 = f16[4] parameter(1)
-  s2 = f16[4] add(s0, s1)
-  s3 = f16[4] add(s0, s1)
-  s4 = (f16[4], f16[4]) tuple(s2, s3)
+  s0 = (f16[4], f16[4]) parameter(0)
+  s1 = f16[4] get-tuple-element(s0), index=0
+  s2 = f16[4] get-tuple-element(s0), index=1
+  s3 = f16[4] add(s1, s2)
+  s4 = f16[4] add(s1, s2)
+  s5 = (f16[4], f16[4]) tuple(s3, s4)
 }
 
 main {
   a0 = f16[4] parameter(0)
   a1 = f16[4] parameter(1)
-  lt = pred[] compare(a0, a1), direction=LT
-  con1 = (f16[4], f16[4]) conditional(lt, a0, a1),
+  tu = (f16[4], f16[4]) tuple(a0, a1)
+  lt = pred[4] compare(a0, a1), direction=LT
+  c0 = pred[] constant(true)
+  lt_r = pred[] reduce(lt, c0), dimensions={0}, to_apply=reduce_and
+  con1 = (f16[4], f16[4]) conditional(lt_r, tu, tu),
       true_computation=cond1, false_computation=cond2
   gte0 = f16[4] get-tuple-element(con1), index=0
   gte1 = f16[4] get-tuple-element(con1), index=1
@@ -1145,6 +1176,9 @@ main {
   ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
 
   for (auto* comp : module->computations()) {
+    if (comp->name() == "reduce_and") {
+      continue;
+    }
     auto insts = comp->instructions();
     for (auto* inst : insts) {
       ASSERT_TRUE(inst->has_sharding());

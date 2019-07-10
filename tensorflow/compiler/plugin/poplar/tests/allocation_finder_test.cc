@@ -1105,7 +1105,7 @@ _pop_op_conv_biasadd {
 
 _pop_op_conv_biasadd.1 {
   arg_0 = f16[1,16,16,64] parameter(0)
-  arg_1 = f16[4] parameter(1)
+  arg_1 = f16[64] parameter(1)
   bcast = f16[1,16,16,64] broadcast(arg_1), dimensions={3}
   ROOT add = f16[1,16,16,64] add(arg_0, bcast)
 }
@@ -1114,7 +1114,7 @@ ENTRY c1 {
   p0 = f16[1,16,16,2] parameter(0)
   p1 = f16[3,3,2,4] parameter(1)
   p2 = f16[4] parameter(2)
-  p3 = f16[4] parameter(3)
+  p3 = f16[64] parameter(3)
 
   conv = f16[1,16,16,4] convolution(p0, p1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
   call = f16[1,16,16,64] fusion(conv, p2), kind=kCustom, calls=_pop_op_conv_biasadd
@@ -1849,9 +1849,9 @@ TEST_F(AllocationFinderTest, ForwardAllocationMultipleUsesOneTarget) {
   std::string hlo = R"(
 HloModule top
 Sum-reduction48 {
-  x.48.45 = f32[2] parameter(0)
-  y.48.46 = f32[2] parameter(1)
-  ROOT add.48.47 = f32[2] add(x.48.45, y.48.46)
+  x.48.45 = f32[] parameter(0)
+  y.48.46 = f32[] parameter(1)
+  ROOT add.48.47 = f32[] add(x.48.45, y.48.46)
 }
 
 ENTRY top {
@@ -1864,8 +1864,10 @@ ENTRY top {
  arg3.36.25_r = f32[2] reshape(arg3.36.25)
  arg4.36.26 = f32[2] parameter(4)
  arg5.36.27 = f32[2] parameter(5)
+ s0 = f32[1] slice(arg2.36.24_r), slice={[0:1]}
+ s1 = f32[] reshape(s0)
  batch-norm-inference.36.31 = f32[1,4,4,2] batch-norm-inference(convolution.36.29, arg2.36.24_r, arg3.36.25_r, arg4.36.26, arg5.36.27), epsilon=0.001, feature_index=3, metadata={op_type="FusedBatchNorm" op_name="vs/batch_normalization/FusedBatchNorm"}
- ROOT reduce.78.49 = f32[2] reduce(batch-norm-inference.36.31, arg2.36.24_r), dimensions={1,2,3}, to_apply=Sum-reduction48, metadata={op_type="Sum" op_name="Sum"}
+ ROOT reduce.78.49 = f32[2] reduce(batch-norm-inference.36.31, s1), dimensions={0, 1, 2}, to_apply=Sum-reduction48, metadata={op_type="Sum" op_name="Sum"}
 }
 
 )";
@@ -2081,8 +2083,8 @@ ENTRY top {
  arg4.36.26 = f32[2] parameter(4)
  arg5.36.27 = f32[2] parameter(5)
  batch-norm-inference.36.31 = f32[1,4,4,2] batch-norm-inference(convolution.36.29, arg2.36.24_r, arg3.36.25_r, arg4.36.26, arg5.36.27), epsilon=0.001, feature_index=3, metadata={op_type="FusedBatchNorm" op_name="vs/batch_normalization/FusedBatchNorm"}
- add = f32[1,2] add(arg2.36.24_r, arg3.36.25_r)
- ROOT tuple = (f32[1,4,4,2], f32[1,2]) tuple(batch-norm-inference.36.31, add)
+ add = f32[2] add(arg2.36.24_r, arg3.36.25_r)
+ ROOT tuple = (f32[1,4,4,2], f32[2]) tuple(batch-norm-inference.36.31, add)
 }
 
 )";

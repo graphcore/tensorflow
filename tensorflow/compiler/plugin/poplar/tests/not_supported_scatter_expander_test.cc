@@ -41,13 +41,13 @@ update_s32 (lhs: s32[], rhs: s32[]) -> s32[] {
 ENTRY main {
   operand = s32[3,3] parameter(0)
   indices = s32[2] parameter(1)
-  updates = s32[0] parameter(2)
+  updates = s32[2,0] parameter(2)
   ROOT scatter = s32[3,3] scatter(operand, indices, updates),
       to_apply=update_s32,
       update_window_dims={1},
       inserted_window_dims={0},
       scatter_dims_to_operand_dims={0},
-      index_vector_dim=1, sharding={maximal device=0}
+      index_vector_dim=1
 }
 )";
 
