@@ -25,7 +25,6 @@ py_library(
       "python/popnn_rnn.py",
       "python/poprand.py",
       "python/sharded_optimizer.py",
-      "python/sharding_utils.py",
       "python/popops_cross_replica_sum.py",
       "python/sharding.py",
       "python/utils.py",
