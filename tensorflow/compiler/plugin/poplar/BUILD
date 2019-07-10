@@ -135,6 +135,7 @@ cc_library(
         "driver/tools/custom_ops/stateful_gradient_accumulate.cc",
         "driver/tools/custom_ops/stateless_random.cc",
         "driver/tools/custom_ops/tanh.cc",
+        "driver/tools/custom_ops/topk.cc",
         "driver/tools/custom_ops/truncated_normal.cc",
         "driver/tools/find_all_users.cc",
         "driver/tools/flags.cc",
@@ -204,6 +205,7 @@ cc_library(
         "driver/tools/custom_ops/stateful_gradient_accumulate.h",
         "driver/tools/custom_ops/stateless_random.h",
         "driver/tools/custom_ops/tanh.h",
+        "driver/tools/custom_ops/topk.h",
         "driver/tools/custom_ops/truncated_normal.h",
         "driver/tools/find_all_users.h",
         "driver/tools/flags.h",
@@ -223,7 +225,6 @@ cc_library(
         "driver/schedulers/schedule_tree.h",
         "driver/schedulers/schedule_utils.h",
         "driver/schedulers/sync_list_scheduler.h"
-
     ],
     deps = [
         ":common",
@@ -267,6 +268,7 @@ cc_library(
         "driver/ops/custom_ops/popnn/relu.cc",
         "driver/ops/custom_ops/popnn/sigmoid.cc",
         "driver/ops/custom_ops/popnn/tanh.cc",
+        "driver/ops/custom_ops/popnn/topk.cc",
         "driver/ops/custom_ops/popops/select_scalars.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
         "driver/ops/custom_ops/poprand/random.cc",
@@ -398,6 +400,7 @@ cc_library(
         "kernels/popnn/relu.cc",
         "kernels/popnn/sigmoid.cc",
         "kernels/popnn/tanh.cc",
+        "kernels/popnn/topk.cc",
         "kernels/poprand/categorical.cc",
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
@@ -420,6 +423,7 @@ cc_library(
         "//tensorflow/compiler/tf2xla:xla_compiler",
         "//tensorflow/compiler/xla/client/lib:pooling",
         "//tensorflow/compiler/xla/client/lib:prng",
+        "//tensorflow/compiler/xla/client/lib:sorting",
         "//third_party/eigen3",
         "@jsoncpp_git//:jsoncpp",
         "@com_google_protobuf//:protobuf_headers",
@@ -1183,6 +1187,22 @@ py_test(
     srcs_version = "PY2AND3",
 )
 
+
+py_test(
+    name = "topk_test",
+    size = "small",
+    srcs = ["tests/topk_test.py"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+    srcs_version = "PY2AND3",
+)
 
 py_test(
     name = "infeed_prefetch_test",
