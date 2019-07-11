@@ -90,6 +90,7 @@ using PatternType = std::string;
 using PatternMetaTarget = NodeId;
 using PatternInputs = std::vector<NodeId>;
 using PatternOutputs = std::vector<NodeId>;
+using PatternInplaceInputs = std::vector<NodeId>;
 using Pattern = std::vector<HloMatcherNode>;
 
 class HloMatcherPattern {
@@ -100,11 +101,19 @@ class HloMatcherPattern {
                     PatternInputs inputs, PatternOutputs outputs,
                     Pattern pattern);
 
+  HloMatcherPattern(PatternType type, PatternMetaTarget meta_target,
+                    PatternInputs inputs, PatternInplaceInputs inplace_inputs,
+                    PatternOutputs outputs, Pattern pattern);
+
   const PatternType& GetType() const;
 
   const PatternMetaTarget& GetMetaTarget() const;
 
   const PatternInputs& GetInputs() const;
+
+  const PatternInplaceInputs& GetInplaceInputs() const;
+
+  const std::vector<int64>& GetInplaceInputIndices() const;
 
   const PatternOutputs& GetOutputs() const;
 
@@ -132,6 +141,17 @@ class HloMatcherPattern {
   // index 0 and the instruction with label 1 will be a parameter instruction
   // with index 1.
   PatternInputs inputs;
+
+  // Subset of pattern inputs which are used inplace by this fusion.
+  PatternInplaceInputs inplace_inputs;
+
+  // Input indecies which are inplace.
+  // Example:
+  // inputs = {2, 1, 3}
+  // inplace_inputs = {2, 3}
+  // Then the inputs with label 2 and 3 are inplace, and their input inplace
+  // indicies are 0 and 2.
+  std::vector<int64> inplace_input_indices;
 
   // If an op is an output then replace all the uses of this node in the
   // computation with the output tensor from this fusion. If there is more than

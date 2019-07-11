@@ -374,12 +374,29 @@ HloMatcherPattern::HloMatcherPattern(PatternType type,
                                      PatternInputs inputs,
                                      PatternOutputs outputs,
                                      Pattern pattern_nodes)
+    : HloMatcherPattern(type, meta_target, inputs, {}, outputs, pattern_nodes) {
+}
+
+HloMatcherPattern::HloMatcherPattern(PatternType type,
+                                     PatternMetaTarget meta_target,
+                                     PatternInputs inputs,
+                                     PatternInplaceInputs inplace_inputs,
+                                     PatternOutputs outputs,
+                                     Pattern pattern_nodes)
     : type(type),
       meta_target(meta_target),
       inputs(inputs),
+      inplace_inputs(inplace_inputs),
+      inplace_input_indices(inplace_inputs.size()),
       outputs(outputs),
       pattern_nodes(pattern_nodes),
-      pattern_graphs(VerifyAndGetGraphs()) {}
+      pattern_graphs(VerifyAndGetGraphs()) {
+  absl::c_transform(inplace_inputs, inplace_input_indices.begin(),
+                    [&](const NodeId& inplace_input_id) {
+                      auto pos = absl::c_find(inputs, inplace_input_id);
+                      return std::distance(inputs.begin(), pos);
+                    });
+}
 
 const PatternType& HloMatcherPattern::GetType() const { return type; }
 
@@ -388,6 +405,14 @@ const PatternMetaTarget& HloMatcherPattern::GetMetaTarget() const {
 }
 
 const PatternInputs& HloMatcherPattern::GetInputs() const { return inputs; }
+
+const PatternInplaceInputs& HloMatcherPattern::GetInplaceInputs() const {
+  return inplace_inputs;
+}
+
+const std::vector<int64>& HloMatcherPattern::GetInplaceInputIndices() const {
+  return inplace_input_indices;
+}
 
 const PatternOutputs& HloMatcherPattern::GetOutputs() const { return outputs; }
 
@@ -430,6 +455,16 @@ HloMatcherPattern::VerifyAndGetGraphs() {
           " already defined. Pattern inputs need to be unique.");
     }
     inputs_set.insert(input);
+  }
+
+  // Make sure all the inplace inputs are in the inputs set.
+  for (auto inplace_input : inplace_inputs) {
+    if (!inputs_set.count(inplace_input)) {
+      throw std::invalid_argument(
+          prefix + "Inplace input with label " + std::to_string(inplace_input) +
+          " is not an inplace input to the pattern. Inplace inputs need to be "
+          "inputs to the pattern.");
+    }
   }
 
   // Make sure outputs are unique and that they point to a label in the pattern.
@@ -1017,13 +1052,17 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
   auto* old = matched.instruction_mapping.at(pattern.GetMetaTarget());
 
   PoplarBackendConfig backend_config;
+  auto* cfg = backend_config.mutable_fusion_config();
   if (old->opcode() == HloOpcode::kConvolution) {
-    auto* cfg = backend_config.mutable_fusion_config();
     *(cfg->mutable_window()) = old->window();
     *(cfg->mutable_dimension_numbers()) = old->convolution_dimension_numbers();
     cfg->set_feature_group_count(old->feature_group_count());
     cfg->set_batch_group_count(old->batch_group_count());
   }
+  auto inplace_indices = pattern.GetInplaceInputIndices();
+  *(cfg->mutable_inplace_operands()) = {inplace_indices.begin(),
+                                        inplace_indices.end()};
+
   fusion->set_backend_config(backend_config);
 
   fusion->set_metadata(old->metadata());

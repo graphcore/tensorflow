@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -27,16 +28,6 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-// Map from name to the number of the first x operands which are inplace
-static std::map<std::string, uint64> fused_inplace_info_map = {
-    {"conv_biasadd", 1},
-    {"matmul_biasadd", 1},
-    {"bias_apply", 1},
-    {"conv_scaled_inplace", 1},
-    {"scaled_inplace", 1},
-    {"implicit_binary_inplace", 1},
-    {"scatter_update_inplace", 1},
-};
 
 // Only add a dependency iff `to` was not already reachable from `from`.
 void AddDependency(HloInstruction* from, HloInstruction* to,
@@ -435,15 +426,13 @@ HloInstructionDescription::HloInstructionDescription(
 
     case HloOpcode::kFusion: {
       if (IsPopOpsFusion(inst)) {
-        auto comp_name = inst->fused_instructions_computation()->name();
-        auto end = comp_name.find('.');
-        std::string popops_name = comp_name.substr(8, end - 8);
-
-        if (fused_inplace_info_map.count(popops_name) == 1) {
-          OperandIndexes indexes(fused_inplace_info_map.at(popops_name));
-          std::iota(indexes.begin(), indexes.end(), 0);
+        auto fusion_config = inst->backend_config<PoplarBackendConfig>()
+                                 .ValueOrDie()
+                                 .fusion_config();
+        auto inplace_operands = fusion_config.inplace_operands();
+        inplace_operands_ = {inplace_operands.begin(), inplace_operands.end()};
+        if (inplace_operands_.size()) {
           type_ = HloInstructionType::kInplaceReadWrite;
-          inplace_operands_ = indexes;
         } else {
           type_ = HloInstructionType::kNotInplace;
         }

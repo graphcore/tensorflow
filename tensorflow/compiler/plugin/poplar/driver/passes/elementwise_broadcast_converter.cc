@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -69,18 +71,19 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
 
   // Check whether this is inplace.
   auto inplace_description = HloInstructionDescription(inst);
+  bool is_inplace = false;
   if (inplace_description.GetType() == HloInstructionType::kInplaceReadWrite) {
     // To be inplace, all the inplace operands have to be non_broadcasting.
-    bool is_inplace = true;
+    is_inplace = true;
     for (auto idx : inplace_description.GetInplaceOperandIndexes()) {
       if (!non_broadcast_operands.contains(idx)) {
         is_inplace = false;
         break;
       }
     }
-    if (is_inplace) {
-      op_name += "_inplace";
-    }
+  }
+  if (is_inplace) {
+    op_name += "_inplace";
   }
 
   // Create a fused computation, and pull in the broadcasts (and constants),
@@ -142,6 +145,14 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
       fusion_computation));
 
   fusion_computation->SetFusionInstruction(fusion);
+  PoplarBackendConfig backend_config;
+  auto* cfg = backend_config.mutable_fusion_config();
+  if (is_inplace) {
+    auto inplace_operands = inplace_description.GetInplaceOperandIndexes();
+    *(cfg->mutable_inplace_operands()) = {inplace_operands.begin(),
+                                          inplace_operands.end()};
+  }
+  fusion->set_backend_config(backend_config);
   VLOG(1) << "Replacing " << inst->ToString() << " with " << fusion->ToString()
           << " and fusion " << fusion_computation->ToString();
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(inst, fusion));
