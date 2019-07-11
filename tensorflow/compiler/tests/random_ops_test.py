@@ -116,7 +116,7 @@ class RandomOpsTest(xla_test.XLATestCase):
     def rng(dtype):
       return random_ops.truncated_normal(shape=[2], dtype=dtype)
 
-    for dtype in self._random_types() & self.float_types
+    for dtype in self._random_types() & self.float_types:
       self._testRngIsNotConstant(rng, dtype)
 
   def testTruncatedNormalIsInRange(self):
