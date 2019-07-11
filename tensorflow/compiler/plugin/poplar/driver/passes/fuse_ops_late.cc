@@ -38,6 +38,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_biasadd"),
     PatternMetaTarget(0),
     PatternInputs({2, 3}),
+    PatternInplaceInputs({2}),
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
@@ -52,6 +53,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_biasadd"),
     PatternMetaTarget(0),
     PatternInputs({2, 3}),
+    PatternInplaceInputs({2}),
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
@@ -66,6 +68,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_biasadd"),
     PatternMetaTarget(0),
     PatternInputs({2, 3}),
+    PatternInplaceInputs({2}),
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
@@ -80,6 +83,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("matmul_biasadd"),
     PatternMetaTarget(0),
     PatternInputs({2, 3}),
+    PatternInplaceInputs({2}),
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({2, 1}), IsBiasAdd},
@@ -179,6 +183,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("bias_apply"),
     PatternMetaTarget(0),
     PatternInputs({5, 6}),
+    PatternInplaceInputs({5}),
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kSubtract, NodeOperands({5, 1}), IsOutputFeed},
@@ -197,6 +202,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("bias_apply"),
     PatternMetaTarget(0),
     PatternInputs({5, 6, 7}),
+    PatternInplaceInputs({5}),
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kSubtract, NodeOperands({5, 1}), IsOutputFeed},
@@ -215,6 +221,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_scaled_inplace"),
     PatternMetaTarget(3),
     PatternInputs({4, 5, 6}),
+    PatternInplaceInputs({4}),
     PatternOutputs({0}),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAddOrSubtract},
@@ -233,6 +240,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("conv_scaled_inplace"),
     PatternMetaTarget(3),
     PatternInputs({4, 5, 6, 7}),
+    PatternInplaceInputs({4}),
     PatternOutputs({0}),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAddOrSubtract},
@@ -251,6 +259,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scatter_update_inplace"),
     PatternMetaTarget(3),
     PatternInputs({6, 7, 8}),
+    PatternInplaceInputs({6}),
     PatternOutputs({0}),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({6, 1}), IsAddOrSubtract},
@@ -271,6 +280,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scatter_update_inplace"),
     PatternMetaTarget(3),
     PatternInputs({6, 7, 8, 9}),
+    PatternInplaceInputs({6}),
     PatternOutputs({0}),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({6, 1}), IsAddOrSubtract},
@@ -291,6 +301,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scatter_update_inplace"),
     PatternMetaTarget(3),
     PatternInputs({7, 8, 9}),
+    PatternInplaceInputs({7}),
     PatternOutputs({0}),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({7, 1}), IsAddOrSubtract},
@@ -312,6 +323,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scatter_update_inplace"),
     PatternMetaTarget(3),
     PatternInputs({7, 8, 9, 10}),
+    PatternInplaceInputs({7}),
     PatternOutputs({0}),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({7, 1}), IsAddOrSubtract},
@@ -333,6 +345,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace"),
     PatternMetaTarget(0),
     PatternInputs({3, 4}),
+    PatternInplaceInputs({3}),
     PatternOutputs({0}),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({3, 1}), IsAddOrSubtract},
@@ -349,6 +362,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("scaled_inplace"),
     PatternMetaTarget(0),
     PatternInputs({3, 4, 5}),
+    PatternInplaceInputs({3}),
     PatternOutputs({0}),
     Pattern({
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({3, 1}), IsAddOrSubtract},

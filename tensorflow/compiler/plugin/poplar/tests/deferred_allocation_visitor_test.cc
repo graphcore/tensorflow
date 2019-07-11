@@ -103,7 +103,7 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
   gte2 = f32[1,1,2,2] get-tuple-element(arg), index=2
   convolution.5 = f32[1,4,4,2] convolution( gte0, gte2), window={size=1x1}, dim_labels=b01f_01io->b01f
   gte1 = f32[2] get-tuple-element(arg), index=1
-  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1), kind=kCustom, calls=_pop_op_conv_biasadd
+  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1), kind=kCustom, calls=_pop_op_conv_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
 }
 )";
   std::unique_ptr<HloModule> module =
@@ -149,7 +149,7 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
   gte2 = f32[1,1,2,2] get-tuple-element(gte), index=2
   convolution.5 = f32[1,4,4,2] convolution(gte0, gte2), window={size=1x1}, dim_labels=b01f_01io->b01f
   gte1 = f32[2] get-tuple-element(gte), index=1
-  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1), kind=kCustom, calls=_pop_op_conv_biasadd
+  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1), kind=kCustom, calls=_pop_op_conv_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
 }
 )";
   std::unique_ptr<HloModule> module =
@@ -200,7 +200,7 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
   gte1.1 = f32[1,1,2,2] get-tuple-element(gte1), index=1
   convolution.5 = f32[1,4,4,2] convolution(gte0, gte1.1), window={size=1x1}, dim_labels=b01f_01io->b01f
   gte1.0 = f32[2] get-tuple-element(gte1), index=0
-  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1.0), kind=kCustom, calls=_pop_op_conv_biasadd
+  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1.0), kind=kCustom, calls=_pop_op_conv_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
 }
 )";
   std::unique_ptr<HloModule> module =
@@ -262,13 +262,13 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   gte1.1 = f32[1,1,2,2] get-tuple-element(gte1), index=1
   convolution.0 = f32[1,4,4,2] convolution(gte0.0, gte1.1), window={size=1x1}, dim_labels=b01f_01io->b01f
   gte1.0 = f32[2] get-tuple-element((f32[2], f32[1,1,2,2], f32[2], f32[1,1,2,2]) gte1), index=0
-  fusion.0 = f32[1,4,4,2] fusion(convolution.0, gte1.0), kind=kCustom, calls=_pop_op_conv_biasadd
+  fusion.0 = f32[1,4,4,2] fusion(convolution.0, gte1.0), kind=kCustom, calls=_pop_op_conv_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
 
   gte0.1 = f32[1,4,4,2] get-tuple-element(gte0), index=1
   gte1.3 = f32[1,1,2,2] get-tuple-element((f32[2], f32[1,1,2,2], f32[2], f32[1,1,2,2]) gte1), index=3
   convolution.1 = f32[1,4,4,2] convolution(gte0.1, gte1.3), window={size=1x1}, dim_labels=b01f_01io->b01f
   gte1.2 = f32[2] get-tuple-element((f32[2], f32[1,1,2,2], f32[2], f32[1,1,2,2]) gte1), index=2
-  fusion.1 = f32[1,4,4,2] fusion(convolution.1, gte1.2), kind=kCustom, calls=_pop_op_conv_biasadd.1
+  fusion.1 = f32[1,4,4,2] fusion(convolution.1, gte1.2), kind=kCustom, calls=_pop_op_conv_biasadd.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(fusion.0, fusion.1)
 }
 )";
@@ -344,7 +344,7 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   gte0 = f32[1,4,4,2] get-tuple-element((f32[1,4,4,2], f32[2]) gte), index=0
   convolution.5 = f32[1,4,4,2] convolution(gte0, arg), window={size=1x1}, dim_labels=b01f_01io->b01f
   gte1 = f32[2] get-tuple-element((f32[1,4,4,2], f32[2]) gte), index=1
-  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1), kind=kCustom, calls=_pop_op_conv_biasadd
+  ROOT fusion = f32[1,4,4,2] fusion(convolution.5, gte1), kind=kCustom, calls=_pop_op_conv_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
 }
 )";
   std::unique_ptr<HloModule> module =

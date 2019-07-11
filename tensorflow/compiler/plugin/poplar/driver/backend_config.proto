@@ -16,6 +16,8 @@ message PoplarBackendConfig {
     int64 feature_group_count = 3;
     int64 batch_group_count = 4;
 
+    // Fusion inplace operands.
+    repeated int64 inplace_operands = 5;
   };
 
   // Instruction config for a Call repeat instruction

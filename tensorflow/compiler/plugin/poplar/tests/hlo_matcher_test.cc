@@ -1025,6 +1025,35 @@ TEST_F(HloMatcherTest, PatternInvalidPatternLabel) {
   }
 }
 
+TEST_F(HloMatcherTest, PatternInvalidInplaceInput) {
+  try {
+    // clang-format off
+    std::vector<HloMatcherPattern> patterns = {
+      HloMatcherPattern(
+        PatternType("abc"),
+        PatternMetaTarget(0),
+        PatternInputs({1, 2}),
+        PatternInplaceInputs({0}),
+        PatternOutputs({0}),
+        Pattern({
+          {HloOpcode::kAdd, NodeOperands({2, 1})},
+          {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+          {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+        })
+      )
+    };
+    // clang-format on
+    FAIL() << "Expected invalid_argument throw.";
+  } catch (const std::invalid_argument& ia) {
+    EXPECT_EQ(
+        std::string(ia.what()),
+        "[Pattern abc] Inplace input with label 0 is not an inplace input to "
+        "the pattern. Inplace inputs need to be inputs to the pattern.");
+  } catch (...) {
+    FAIL() << "Expected invalid_argument throw.";
+  }
+}
+
 TEST_F(HloMatcherTest, TwoDisconnectedGraphs) {
   try {
     // clang-format off
@@ -1867,7 +1896,6 @@ std::vector<HloMatcherPattern> patterns = {
   TestMatcher matcher(patterns, annotations, false);
 
   EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
-  LOG(INFO) << hlo_module->ToString();
   ASSERT_EQ(1, matcher.replace_count);
   EXPECT_EQ(8, hlo_module->entry_computation()->instruction_count());
 }
