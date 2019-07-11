@@ -19,20 +19,14 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
-import json
-import os
 
-from tensorflow.core.protobuf import config_pb2
-from tensorflow.python.ipu import ipu_outfeed_queue
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.python.estimator import run_config as run_config_lib
-from tensorflow.python.platform import tf_logging as logging
 
 
 class IPURunConfig(
-    collections.namedtuple('IPURunConfig', [
-        'iterations_per_loop', 'outfeed_mode', 'ipu_options', 'compile_summary'
-    ])):
+    collections.namedtuple(
+        'IPURunConfig',
+        ['iterations_per_loop', 'ipu_options', 'compile_summary'])):
   r"""IPU related configuration required by `IPUEstimator`.
 
   Args:
@@ -48,13 +42,11 @@ class IPURunConfig(
 
   def __new__(cls,
               iterations_per_loop=2,
-              outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.LAST,
               ipu_options=None,
               compile_summary=False):
     return super(IPURunConfig,
                  cls).__new__(cls,
                               iterations_per_loop=iterations_per_loop,
-                              outfeed_mode=outfeed_mode,
                               ipu_options=ipu_options,
                               compile_summary=compile_summary)
 
