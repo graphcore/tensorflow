@@ -727,11 +727,8 @@ HloModule top
 
 ENTRY c1 {
   p0 = f32[20] parameter(0)
-
   a = f32[10, 2] reshape(p0)
-
-  p1 = f32[20, 2] broadcast(p0), dimensions={0}
-  b = f32[40] reshape(p1)
+  b = f32[40] concatenate(p0, p0), dimensions={0}
   c = f32[20] negate(p0)
 
   d = f32[20] reshape(a)
@@ -759,8 +756,9 @@ ENTRY c1 {
   InplaceFinder inplaceFinder;
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
   auto inplace_instructions = GetInplaceInstructions(module0);
-  EXPECT_THAT(inplace_instructions.size(), 9);
-  std::set<std::string> in_place_ops = {"c", "d", "e", "f", "g", "k", "l", "t"};
+  EXPECT_THAT(inplace_instructions.size(), 8);
+  std::set<std::string> in_place_ops =
+      {"c", "d", "e", "f", "g", "k", "l", "t"};
   for (auto i : inplace_instructions) {
     EXPECT_TRUE(in_place_ops.count(i->name()));
   }
