@@ -83,8 +83,8 @@ HloModule top
 
 ENTRY c1 {
   p0 = f16[1,16,16,4] parameter(0)
-  c1 = f16[4] constant({1, 2, 3, 4})
-  bcast = f16[1,16,16,4] broadcast(c1), dimensions={3}
+  c1 = f16[] constant(1)
+  bcast = f16[1,16,16,4] broadcast(c1), dimensions={}
   ROOT %divide = f16[1,16,16,4] divide(p0, bcast)
 }
 )";
@@ -97,8 +97,6 @@ ENTRY c1 {
 
   auto* root = module0->entry_computation()->root_instruction();
   auto opcode = root->opcode();
-  const auto* bcast = root->operand(1);
-  const auto* c1 = bcast->operand(0);
   const auto* p0 = root->operand(0);
 
   ElementwiseBroadcastConverter ebc;
@@ -140,8 +138,6 @@ ENTRY c1 {
 
   auto* root = module0->entry_computation()->root_instruction();
   auto opcode = root->opcode();
-  const auto* bcast = root->operand(1);
-  const auto* c1 = bcast->operand(0);
   const auto* p0 = root->operand(0);
 
   ElementwiseBroadcastConverter ebc;
@@ -228,8 +224,6 @@ ENTRY c1 {
 
   auto* root = module0->entry_computation()->root_instruction();
   auto opcode = root->opcode();
-  const auto* bcast = root->operand(0);
-  const auto* c0 = bcast->operand(0);
   const auto* p1 = root->operand(1);
 
   ElementwiseBroadcastConverter ebc;
@@ -325,8 +319,6 @@ ENTRY c1 {
   auto* root = module0->entry_computation()->root_instruction();
   auto opcode = root->opcode();
   const auto* p0 = root->operand(0);
-  const auto* bcast1 = root->operand(1);
-  const auto* c1 = bcast1->operand(0);
   const auto* bcast2 = root->operand(2);
   const auto* p2 = bcast2->operand(0);
 
