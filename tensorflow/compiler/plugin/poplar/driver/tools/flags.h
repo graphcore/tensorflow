@@ -82,6 +82,9 @@ class PoplarXlaFlags {
   // Use the fallback scheduler instead of the default one.
   bool fallback_scheduler = false;
 
+  // Allow/disallow nans during graph construction.
+  bool allow_nans = false;
+
   // Stores all the values as a string.
   std::string as_string = "";
 

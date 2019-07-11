@@ -340,10 +340,26 @@ ArithmeticTest POPLAR // Requires multi-variate reduction
 
 IotaR1Test POPLAR // Slow
 IotaR3Test POPLAR
+
 Exhaustive32BitOrLessUnaryTest POPLAR
 
 LocalClientExecuteTest.LargeNestedTuple POPLAR // Too long on IPU
 
+
 ReduceWindowTextTest.R4OnlyDilation POPLAR // Dilated reductions
 PoolingTest.AvgPool2DGradWithPaddingCountNotIncludePadding POPLAR
 PoolingTest.AvgPool2DGradWithPadding POPLAR
+
+ConstantsTest.NanValueF32 POPLAR // NaNs
+MathTypedTest.IsInfOrNan POPLAR // NaNs
+RandomCholeskyTest.Random POPLAR // NaNs
+ArrayElementwiseOpTest.IsFiniteScalarF32 POPLAR // NaNs
+ArrayElementwiseOpTest.IsFiniteR1F32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareEqF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareGeF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareGtF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareLeF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareLtF32s POPLAR // NaNs
+ArrayElementwiseOpTest.CompareNeF32s POPLAR // NaNs
+ArrayElementwiseOpTest.PowF32s POPLAR // NaNs
+

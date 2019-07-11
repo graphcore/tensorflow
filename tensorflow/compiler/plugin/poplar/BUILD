@@ -81,6 +81,7 @@ cc_library(
         "driver/passes/combine_instructions.cc",
         "driver/passes/commutative_instruction_reorder_operands.cc",
         "driver/passes/computation_flattener.cc",
+        "driver/passes/constant_nan.cc",
         "driver/passes/constant_slice_folding.cc",
         "driver/passes/convolution_classifier.cc",
         "driver/passes/custom_op_replacer.cc",
@@ -102,6 +103,7 @@ cc_library(
         "driver/passes/recompute_instructions.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
+        "driver/passes/scatter_combiner.cc",
         "driver/passes/scheduler.cc",
         "driver/passes/sharding_pass.cc",
         "driver/passes/while_loop_condition_simplify.cc",
@@ -160,6 +162,7 @@ cc_library(
         "driver/passes/combine_instructions.h",
         "driver/passes/commutative_instruction_reorder_operands.h",
         "driver/passes/computation_flattener.h",
+        "driver/passes/constant_nan.h",
         "driver/passes/constant_slice_folding.h",
         "driver/passes/convolution_classifier.h",
         "driver/passes/custom_op_replacer.h",
@@ -181,6 +184,7 @@ cc_library(
         "driver/passes/recompute_instructions.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
+        "driver/passes/scatter_combiner.h",
         "driver/passes/scheduler.h",
         "driver/passes/sharding_pass.h",
         "driver/passes/while_loop_condition_simplify.h",
@@ -967,6 +971,17 @@ tf_cc_test(
 )
 
 tf_cc_test(
+    name = "constant_nan_test",
+    srcs = ["tests/constant_nan_test.cc"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+tf_cc_test(
     name = "constant_slice_folding_test",
     srcs = ["tests/constant_slice_folding_test.cc"],
     size = "small",
@@ -1094,6 +1109,43 @@ tf_cc_test(
 xla_test(
     name = "sparse_softmax_test",
     srcs = ["tests/sparse_softmax_test.cc"],
+    backends = [
+        "poplar",
+    ],
+    size = "medium",
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla:array3d",
+        "//tensorflow/compiler/xla:literal",
+        "//tensorflow/compiler/xla:reference_util",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:status_macros",
+        "//tensorflow/compiler/xla:statusor",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla/client:global_data",
+        "//tensorflow/compiler/xla/client:local_client",
+        "//tensorflow/compiler/xla/client:xla_builder",
+        "//tensorflow/compiler/xla/client:xla_computation",
+        "//tensorflow/compiler/xla/client/lib:arithmetic",
+        "//tensorflow/compiler/xla/client/lib:math",
+        "//tensorflow/compiler/xla/service:hlo",
+        "//tensorflow/compiler/xla/tests:client_library_test_base",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:literal_test_util",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
+    name = "scatter_combiner_test",
+    srcs = ["tests/scatter_combiner_test.cc"],
     backends = [
         "poplar",
     ],
@@ -2025,6 +2077,7 @@ test_suite(
         "combine_instructions_test",
         "commutative_instruction_reorder_operands_test",
         "conditional_test",
+        "constant_nan_test",
         "constant_slice_folding_test",
         "conv3d_test",
         "conv_graph_caching_sharded_test",
@@ -2069,6 +2122,7 @@ test_suite(
         "reduce_test",
         "remapping_test",
         "root_token_replacer_test",
+        "scatter_combiner_test",
         "scheduler_test",
         "scheduler_tree_test",
         "sharded_inplace_test",

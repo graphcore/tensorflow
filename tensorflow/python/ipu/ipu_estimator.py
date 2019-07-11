@@ -18,10 +18,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import six
+
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -30,14 +33,21 @@ from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import ops as ipu_ops
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.ipu_outfeed_queue import IPUOutfeedMode
 from tensorflow.python.ipu.scopes import ipu_scope
-from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import session_run_hook
 from tensorflow.python.training import training_util
 from tensorflow.python.util import function_utils
 
-_INITIAL_LOSS = 1e7
+_INITIAL_LOSS = 0.0
+_INPUT_FN_KEY = "input_fn"
+
+# Keys that cannot be used in the `params` dictionary passed to the
+# IPUEstimator
+_RESERVED_PARAMS_KEYS = [_INPUT_FN_KEY]
 
 
 def _next_feed_id():
@@ -60,10 +70,9 @@ class _IPUConfigureIPUSystemHook(session_run_hook.SessionRunHook):
     ipu_utils.configure_ipu_system(self._config, self._host_device)
 
 
-class _IPUInfeedOutfeedSessionHook(session_run_hook.SessionRunHook):
-  def __init__(self, infeed, outfeed=None):
+class _IPUInfeedInitializerSessionHook(session_run_hook.SessionRunHook):
+  def __init__(self, infeed):
     self._infeed = infeed
-    self._outfeed = outfeed
 
   def after_create_session(self, session, coord):
     session.run(self._infeed.initializer)
@@ -110,61 +119,16 @@ def _call_input_fn(input_fn, mode, params, config):
   return input_fn(**kwargs)
 
 
-def _call_model_fn(model_fn, features, labels, mode, params, config):
-  model_fn_args = function_utils.fn_args(model_fn)
-  kwargs = {}
-  if "labels" in model_fn_args:
-    kwargs["labels"] = labels
-  else:
-    if labels is not None:
-      raise ValueError(
-          "model_fn does not take labels, but input_fn returns labels.")
-  if "mode" in model_fn_args:
-    kwargs["mode"] = mode
-  if "params" in model_fn_args:
-    kwargs["params"] = params
-  if "config" in model_fn_args:
-    kwargs["config"] = config
-  return model_fn(features=features, **kwargs)
+class _ModelFnWrapper(object):
+  def __init__(self, model_fn, config, params):
+    self._model_fn = model_fn
+    self._config = config
+    self._params = params
 
-
-def _augment_model_fn(model_fn, input_fn, iterations_per_loop):
-  """Returns a new model_fn, which wraps the IPU support."""
-
-  def _model_fn(features, labels, mode, config, params):
-    assert mode == model_fn_lib.ModeKeys.TRAIN
-
-    dataset = _call_input_fn(input_fn, mode, params, config)
-    if not isinstance(dataset, dataset_ops.Dataset):
-      raise ValueError("input_fn must return Dataset")
-
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, _next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-        _next_feed_id(), outfeed_mode=config.ipu_run_config.outfeed_mode)
-
-    training_hooks = [
-        _IPUInfeedOutfeedSessionHook(infeed_queue, outfeed_queue),
-    ]
-
-    if config.ipu_run_config.ipu_options is None:
-      if config.ipu_run_config.compile_summary:
-        logging.warning(
-            "Compile summary enabled but IpuOptions is None. No profile will be generated"
-        )
-
-    if config.ipu_run_config.ipu_options is not None:
-      ipu_options = config.ipu_run_config.ipu_options
-      training_hooks += [
-          _IPUConfigureIPUSystemHook(ipu_options, host_device="cpu")
-      ]
-
-    def training_step(loss, features, labels=None):
-      del loss  # unused; required in function signature.
-
-      estimator_spec = _call_model_fn(model_fn, features, labels, mode, params,
-                                      config)
-      if not isinstance(estimator_spec, model_fn_lib.EstimatorSpec):
-        raise ValueError("`model_fn` must return `tf.estimator.EstimatorSpec`")
+  def create_training_loop(self, iterations_per_loop, infeed_queue):
+    def training_step(total_loss, features, labels=None):
+      estimator_spec = self._call_model_fn(features, labels,
+                                           model_fn_lib.ModeKeys.TRAIN)
 
       loss = estimator_spec.loss
       if loss is None:
@@ -179,9 +143,9 @@ def _augment_model_fn(model_fn, input_fn, iterations_per_loop):
       # Even though xla.compile() automatically adds operation-typed train_op as
       # control dependency of other tensor outputs, it doesn"t do so for
       # tensor-typed train_op. Thus, we need to set it explicitly here.
-      outfeed = outfeed_queue.enqueue(loss)
       with ops.control_dependencies([train_op]):
-        return (array_ops.identity(loss, name="model_fn_loss"), outfeed)
+        total_loss += math_ops.cast(loss, dtypes.float32)
+        return total_loss
 
     def training_loop():
       return loops.repeat(iterations_per_loop,
@@ -189,22 +153,164 @@ def _augment_model_fn(model_fn, input_fn, iterations_per_loop):
                           inputs=[_INITIAL_LOSS],
                           infeed_queue=infeed_queue)
 
-    with ipu_scope("/device:IPU:0"):
-      compiled_training_loop = ipu_compiler.compile(training_loop)
+    return training_loop
 
-    train_op = compiled_training_loop[0]
-    with ops.control_dependencies([train_op]):
-      loss = outfeed_queue.dequeue()
+  def create_evaluation_loop(self, iterations_per_loop, infeed_queue,
+                             outfeed_queue):
+    def evaluation_step(total_loss, features, labels=None):
+      estimator_spec = self._call_model_fn(features, labels,
+                                           model_fn_lib.ModeKeys.EVAL)
+
+      loss = estimator_spec.loss
+      if loss is None:
+        raise ValueError("EstimatorSpec must contain loss when evaluating")
+
+      eval_metric_ops = estimator_spec.eval_metric_ops
+      if eval_metric_ops is None:
+        raise ValueError(
+            "EstimatorSpec must contain eval_metric_ops when evaluating")
+
+      update_op, value_ops = estimator_lib._extract_metric_update_ops(  # pylint: disable=protected-access
+          eval_metric_ops)
+
+      with ops.control_dependencies([update_op, loss]):
+        total_loss += math_ops.cast(loss, dtypes.float32)
+        outfeed = outfeed_queue.enqueue(value_ops)
+        return total_loss, outfeed
+
+    def evaluation_loop():
+      return loops.repeat(iterations_per_loop,
+                          evaluation_step,
+                          inputs=[_INITIAL_LOSS],
+                          infeed_queue=infeed_queue)
+
+    return evaluation_loop
+
+  def create_prediction_loop(self, iterations_per_loop, infeed_queue,
+                             outfeed_queue):
+    def prediction_step(features, labels=None):
+      estimator_spec = self._call_model_fn(features, labels,
+                                           model_fn_lib.ModeKeys.PREDICT)
+
+      predictions = estimator_spec.predictions
+      if predictions is None:
+        raise ValueError(
+            "EstimatorSpec must contain predictions when predicting")
+
+      outfeed = outfeed_queue.enqueue(predictions)
+      return outfeed
+
+    def prediction_loop():
+      return loops.repeat(iterations_per_loop,
+                          prediction_step,
+                          infeed_queue=infeed_queue)
+
+    return prediction_loop
+
+  def _call_model_fn(self, features, labels, mode):
+    model_fn_args = function_utils.fn_args(self._model_fn)
+    kwargs = {}
+    if "labels" in model_fn_args:
+      kwargs["labels"] = labels
+    else:
+      if labels is not None:
+        raise ValueError(
+            "model_fn does not take labels, but input_fn returns labels.")
+    if "mode" in model_fn_args:
+      kwargs["mode"] = mode
+    if "params" in model_fn_args:
+      kwargs["params"] = self._params
+    if "config" in model_fn_args:
+      kwargs["config"] = self._config
+
+    estimator_spec = self._model_fn(features=features, **kwargs)
+
+    if not isinstance(estimator_spec, model_fn_lib.EstimatorSpec):
+      raise ValueError("`model_fn` must return `tf.estimator.EstimatorSpec`")
+
+    return estimator_spec
+
+
+def _augment_model_fn(model_fn, iterations_per_loop):
+  """Returns a new model_fn, which wraps the IPU support."""
+
+  def _model_fn(features, labels, mode, config, params):  # pylint: disable=unused-argument
+    input_fn = params[_INPUT_FN_KEY]
+    dataset = _call_input_fn(input_fn, mode, params, config)
+    if not isinstance(dataset, dataset_ops.Dataset):
+      raise ValueError("input_fn must return Dataset")
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, _next_feed_id())
+
+    hooks = [
+        _IPUInfeedInitializerSessionHook(infeed_queue),
+    ]
+
+    if config.ipu_run_config.ipu_options is None:
+      if config.ipu_run_config.compile_summary:
+        logging.warning(
+            "Compile summary enabled but IpuOptions is None. No profile will be generated"
+        )
+
+    if config.ipu_run_config.ipu_options is not None:
+      ipu_options = config.ipu_run_config.ipu_options
+      hooks += [_IPUConfigureIPUSystemHook(ipu_options, host_device="cpu")]
+
+    model_fn_wrapper = _ModelFnWrapper(model_fn, config, params)
+
+    if mode == model_fn_lib.ModeKeys.TRAIN:
+      loop = model_fn_wrapper.create_training_loop(iterations_per_loop,
+                                                   infeed_queue)
+    elif mode == model_fn_lib.ModeKeys.EVAL:
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+          "eval_" + _next_feed_id(), outfeed_mode=IPUOutfeedMode.LAST)
+      loop = model_fn_wrapper.create_evaluation_loop(iterations_per_loop,
+                                                     infeed_queue,
+                                                     outfeed_queue)
+    elif mode == model_fn_lib.ModeKeys.PREDICT:
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+          "predict_" + _next_feed_id(), outfeed_mode=IPUOutfeedMode.ALL)
+      loop = model_fn_wrapper.create_prediction_loop(iterations_per_loop,
+                                                     infeed_queue,
+                                                     outfeed_queue)
+    else:
+      raise ValueError("Unknown mode: {}".format(mode))
+
+    with ipu_scope("/device:IPU:0"):
+      compiled_loop = ipu_compiler.compile(loop)
+
+    if config.ipu_run_config.compile_summary:
+      ipu_ops.summary_ops.ipu_compile_summary("compile_summary", compiled_loop)
 
     ipu_utils.move_variable_initialization_to_cpu()
 
-    if config.ipu_run_config.compile_summary:
-      ipu_ops.summary_ops.ipu_compile_summary("compile_summary", train_op)
+    if mode in (model_fn_lib.ModeKeys.TRAIN, model_fn_lib.ModeKeys.EVAL):
+      train_op = total_loss = compiled_loop[0]
+      loss = total_loss / iterations_per_loop
+      predictions = None
+    else:
+      assert mode == model_fn_lib.ModeKeys.PREDICT
+      train_op = None
+      loss = None
+      with ops.control_dependencies([compiled_loop]):
+        predictions = outfeed_queue.dequeue()
+
+    eval_metric_ops = {}
+    if mode == model_fn_lib.ModeKeys.EVAL:
+      dequeue_op = outfeed_queue.dequeue()
+      for metric_name, outfed_tensor in six.iteritems(dequeue_op):
+        # No op as update-op since updating is done inside the loop
+        eval_metric_ops[metric_name] = (outfed_tensor,
+                                        control_flow_ops.no_op())
 
     return model_fn_lib.EstimatorSpec(mode=mode,
                                       loss=loss,
                                       train_op=train_op,
-                                      training_hooks=training_hooks)
+                                      training_hooks=hooks,
+                                      evaluation_hooks=hooks,
+                                      prediction_hooks=hooks,
+                                      eval_metric_ops=eval_metric_ops,
+                                      predictions=predictions)
 
   return _model_fn
 
@@ -233,9 +339,16 @@ class IPUEstimator(estimator_lib.Estimator):
       if len(dev) > 1 or (len(dev) == 1 and dev[0].auto_count > 1):
         raise NotImplementedError("Only one IPU is currently supported")
 
-    self._model_fn_augmented = False
+    if params is not None and not isinstance(params, dict):
+      raise ValueError('`params` is expected to be of type `dict`')
+    if params is not None and any(k in params for k in _RESERVED_PARAMS_KEYS):
+      raise ValueError('{} are reserved keys but existed in params {}.'.format(
+          _RESERVED_PARAMS_KEYS, params))
 
-    super(IPUEstimator, self).__init__(model_fn=model_fn,
+    model_function = _augment_model_fn(
+        model_fn, config.ipu_run_config.iterations_per_loop)
+
+    super(IPUEstimator, self).__init__(model_fn=model_function,
                                        model_dir=model_dir,
                                        config=config,
                                        params=params,
@@ -247,12 +360,7 @@ class IPUEstimator(estimator_lib.Estimator):
             steps=None,
             max_steps=None,
             saving_listeners=None):
-    if not self._model_fn_augmented:
-      self._model_fn = _augment_model_fn(
-          self._model_fn, input_fn,
-          self._config.ipu_run_config.iterations_per_loop)
-      self._model_fn_augmented = True
-
+    self._params[_INPUT_FN_KEY] = input_fn
     return super(IPUEstimator, self).train(input_fn=input_fn,
                                            hooks=hooks,
                                            steps=steps,
@@ -265,13 +373,21 @@ class IPUEstimator(estimator_lib.Estimator):
             self._config.ipu_run_config.iterations_per_loop, steps, max_steps)
     ]
 
+  def _convert_eval_steps_to_hooks(self, steps):
+    return self._convert_train_steps_to_hooks(steps, max_steps=None)
+
   def evaluate(self,
                input_fn,
                steps=None,
                hooks=None,
                checkpoint_path=None,
                name=None):
-    raise NotImplementedError()
+    self._params[_INPUT_FN_KEY] = input_fn
+    return super(IPUEstimator, self).evaluate(input_fn=input_fn,
+                                              hooks=hooks,
+                                              steps=steps,
+                                              checkpoint_path=checkpoint_path,
+                                              name=name)
 
   def predict(self,
               input_fn,
@@ -279,4 +395,35 @@ class IPUEstimator(estimator_lib.Estimator):
               hooks=None,
               checkpoint_path=None,
               yield_single_examples=True):
-    raise NotImplementedError()
+    """The returned generator will block forever if you try to consume
+    more elements than what is generated, instead of raising the regular
+    `StopIteration` exception. This is caused by the current behaviour
+    when requesting to run a loop on the IPU for more iterations than there
+    are elements remaining in the dataset. So you cannot simply drain it by
+    using `list(predictions)`, you have to consume the expected number of
+    elements, e.g. using `[next(predictions) for _ in range(num_examples)]`."""
+
+    self._params[_INPUT_FN_KEY] = input_fn
+    predictions = super(IPUEstimator, self).predict(
+        input_fn=input_fn,
+        predict_keys=predict_keys,
+        hooks=hooks,
+        checkpoint_path=checkpoint_path,
+        yield_single_examples=yield_single_examples)
+
+    # If yield_single_examples == True, the base class has
+    # already flattened the outermost iterations_per_loop
+    # dimension, but we also want to flatten the batch dimension.
+    # If however yield_single_examples == False, we need to
+    # flatten the iterations_per_loop dimension ourselves.
+    # So in both cases we need to flatten the output here.
+    for nested_predictions in predictions:
+      if isinstance(nested_predictions, dict):
+        for i in range(self._extract_batch_length(nested_predictions)):
+          yield {
+              key: value[i]
+              for key, value in six.iteritems(nested_predictions)
+          }
+      else:
+        for prediction in nested_predictions:
+          yield prediction

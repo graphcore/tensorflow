@@ -912,6 +912,66 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
+  def testScatterWithReshape(self):
+    def network(x, y1, y2, lr):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        w = variable_scope.get_variable(
+            "w",
+            shape=[200, 10],
+            dtype=np.float32,
+            initializer=init_ops.constant_initializer(1))
+        y = w * 2
+        y = array_ops.reshape(y, [10, 200])
+        g1 = nn.embedding_lookup(y, y1)
+        g2 = nn.embedding_lookup(y, y1)
+        g = array_ops.concat([g1, g2], axis=1)
+
+        loss = math_ops.reduce_mean(g)
+
+      optimizer = gradient_descent.GradientDescentOptimizer(lr)
+      train = optimizer.minimize(loss)
+      return loss, train
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.float32, shape=[1, 100, 100, 2])
+      y1 = array_ops.placeholder(np.int32, shape=[10])
+      y2 = array_ops.placeholder(np.int32, shape=[10])
+      lr = array_ops.placeholder(np.float32, shape=[])
+      report = gen_ipu_ops.ipu_event_trace()
+
+    with ops.device("/device:IPU:0"):
+      r = xla.compile(network, inputs=[x, y1, y2, lr])
+
+    tu.configure_ipu_system()
+
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      sess.run(report)
+      out = sess.run(
+          r, {
+              x: np.ones(x.shape),
+              y1: np.ones(y1.shape),
+              y2: np.ones(y2.shape),
+              lr: 0.1,
+          })
+      self.assertAllClose(out, [2.0])
+
+      result = sess.run(report)
+      s = tu.extract_all_strings_from_event_trace(result)
+      cs_list = tu.get_compute_sets_from_report(s)
+      ok = [
+          '__seed*',
+          'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/multiUpdateAdd',
+          'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/negate_scale/Op/Negate',
+          'vs/mul/fusion*/Op/Multiply',
+          '/multiSlice',
+          '/reduce*/Reduce*/Reduce',
+          'vs/Mean/add/Op/Add',
+          'vs/Mean/multiply/Op/Multiply',
+          'Copy_*',
+      ]
+      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = (

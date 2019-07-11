@@ -87,8 +87,7 @@ class HloPoplarInstructionFactory {
       HloCustomCallInstruction* inst);
 
  private:
-  static std::unordered_map<std::string, FactoryType>
-      poplar_instruction_factory;
+  static std::unordered_map<std::string, FactoryType>& GetFactoryMap();
 };
 
 // Returns true if inst is a call to a custom hlo op for Poplibs
