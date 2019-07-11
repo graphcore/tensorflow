@@ -76,6 +76,7 @@ py_library(
         "scopes.py",
         "sharded_optimizer.py",
         "sharding.py",
+        "sharding_utils.py",
         "utils.py",
     ],
     deps = [

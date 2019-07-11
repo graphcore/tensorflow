@@ -37,6 +37,32 @@ def get_single_while_op_body(g):
 
 
 class AutoshardTest(test_util.TensorFlowTestCase):
+
+  def testFrozenInference(self):
+    def my_model(inp):
+      weight_ih = array_ops.constant(np.random.rand(1024, 512),
+                                     dtype=np.float32,
+                                     name="W_ih")
+      hidden = math_ops.matmul(weight_ih, inp)
+      weight_ho = array_ops.constant(np.random.rand(1000, 1024),
+                                     dtype=np.float32,
+                                     name="W_ho")
+      output = math_ops.matmul(weight_ho, hidden)
+      return [output]
+
+    with ops.device("cpu"):
+      inp = array_ops.placeholder(np.float32, [512, 1], name="a")
+
+    with ops.device("/device:IPU:0"):
+      out = ipu.ipu_compiler.compile(my_model, inputs=[inp])
+
+    ipu.autoshard.automatic_sharding(2, inp, out[0], frozen_inference=True)
+
+    op_list = ops.get_default_graph().get_operations()
+    for o in op_list:
+      if o.device == '/device:IPU:0' and o.type != 'NoOp':
+        self.assertTrue(o.get_attr('_XlaSharding') is not None)
+
   def testSimpleXlaCompileInference(self):
     def my_model(inp):
       output = inp * inp

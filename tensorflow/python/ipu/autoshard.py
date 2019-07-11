@@ -24,7 +24,11 @@ from tensorflow.python.ipu import sharding
 from tensorflow.python.util import tf_contextlib
 
 
-def automatic_sharding(num_shards, input_ts, loss_ts, edge_filter=None):
+def automatic_sharding(num_shards,
+                       input_ts,
+                       loss_ts,
+                       edge_filter=None,
+                       frozen_inference=False):
   """Automatically set shards for all connected nodes in graph.
 
   Args:
@@ -34,9 +38,10 @@ def automatic_sharding(num_shards, input_ts, loss_ts, edge_filter=None):
     edge_filter: a callable predicate, with the signature fn(edge), where edge
       is a tuple with the name of the source op, and the name of the destination
       op.
+    frozen_inference: Flag set to True if running inference on a frozen graph.
 
   """
-  autoshard_cnn.automatic_sharding(num_shards, input_ts, loss_ts, edge_filter)
+  autoshard_cnn.automatic_sharding(num_shards, input_ts, loss_ts, edge_filter, frozen_inference)
 
 
 @tf_contextlib.contextmanager
