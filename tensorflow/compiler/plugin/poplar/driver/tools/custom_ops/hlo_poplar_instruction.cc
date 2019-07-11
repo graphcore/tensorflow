@@ -26,26 +26,30 @@ namespace poplarplugin {
 
 HloPoplarInstructionFactory::HloPoplarInstructionFactory(
     const std::string& name, HloPoplarInstructionFactory::FactoryType factory) {
-  poplar_instruction_factory[name] = factory;
+  GetFactoryMap()[name] = factory;
 }
 
 bool HloPoplarInstructionFactory::IsCreatable(HloCustomCallInstruction* inst) {
-  return poplar_instruction_factory.count(inst->custom_call_target()) == 1;
+  return GetFactoryMap().count(inst->custom_call_target()) == 1;
+}
+
+std::unordered_map<std::string, HloPoplarInstructionFactory::FactoryType>&
+HloPoplarInstructionFactory::GetFactoryMap() {
+  static std::unordered_map<std::string, FactoryType>
+      poplar_instruction_factory;
+  return poplar_instruction_factory;
 }
 
 StatusOr<std::unique_ptr<HloInstruction>> HloPoplarInstructionFactory::Create(
     HloCustomCallInstruction* inst) {
   std::string target_name = inst->custom_call_target();
   if (HloPoplarInstructionFactory::IsCreatable(inst)) {
-    return poplar_instruction_factory.at(target_name)(inst);
+    return GetFactoryMap().at(target_name)(inst);
   } else {
     return tensorflow::errors::FailedPrecondition(tensorflow::strings::StrCat(
         target_name, " does not have a HloPoplarInstructionFactory instance"));
   }
 }
-
-std::unordered_map<std::string, HloPoplarInstructionFactory::FactoryType>
-    HloPoplarInstructionFactory::poplar_instruction_factory;
 
 const bool IsPoplibsHloCustomOp(const HloInstruction* inst) {
   return DynCast<HloPoplarInstruction>(inst) != nullptr;
