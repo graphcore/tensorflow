@@ -293,7 +293,7 @@ class TruncatedNormalOp : public XlaOpKernel {
 
 REGISTER_XLA_OP(Name("TruncatedNormal")
                     .CompileTimeConstantInput("shape")
-                    .TypeConstraint("dtype", {DT_HALF, DT_FLOAT, DT_DOUBLE})
+                    .TypeConstraint("dtype", {DT_HALF, DT_FLOAT, DT_DOUBLE}),
                 TruncatedNormalOp);
 
 }  // namespace

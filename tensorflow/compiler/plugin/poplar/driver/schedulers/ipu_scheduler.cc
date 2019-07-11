@@ -82,7 +82,7 @@ IpuSchedulerAlgorithm MemorySchedulerAlgorithmToIPU(
     std::unique_ptr<HloAliasAnalysis> alias_analysis =
         HloAliasAnalysis::NewEmptyAnalysis(computation->parent());
     return algorithm(computation, points_to_analysis, *alias_analysis,
-                     size_function, memory_by_computation);
+                     size_function, memory_by_computation, nullptr);
   };
 }
 
@@ -93,7 +93,7 @@ MemorySchedulerAlgorithm IpuToMemorySchedulerAlgorithm(
                      const HloAliasAnalysis& alias_analysis,
                      const LogicalBuffer::SizeFunction& size_function,
                      const absl::flat_hash_map<const HloComputation*, int64>&
-                     memory_by_computation) {
+                     memory_by_computation, int64* peak_mem) {
     return algorithm(computation, points_to_analysis, size_function,
                      memory_by_computation);
   };
