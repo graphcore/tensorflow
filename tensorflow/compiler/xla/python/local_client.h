@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/client/executable_build_options.h"
 #include "tensorflow/compiler/xla/client/local_client.h"
 #include "tensorflow/compiler/xla/client/xla_computation.h"
+#include "tensorflow/compiler/xla/python/event_pool.h"
 #include "tensorflow/compiler/xla/python/python_ref_manager.h"
 #include "tensorflow/compiler/xla/python/shared_device_buffer.h"
 #include "tensorflow/compiler/xla/python/worker_thread.h"
@@ -35,6 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/status.h"
 #include "tensorflow/compiler/xla/statusor.h"
+#include "tensorflow/core/lib/core/status.h"
 
 namespace xla {
 
@@ -48,11 +50,6 @@ Status RegisterCpuCustomCallTarget(const std::string& fn_name,
 // can perform computation and transfers.
 class Device {
  public:
-  // If use_multiple_streams is true, we allocate separate streams for compute
-  // and transfers. If it is false, we share a single stream for compute and
-  // transfers. The CPU device does not support multiple streams, and this is
-  // a workaround until it does.
-  //
   // If synchronous_deallocation is true, the host must not free buffers until
   // compute/transfers that use those buffers have completed. For example, this
   // typically is the case for the "platform" where compute/transfers are
@@ -60,13 +57,15 @@ class Device {
   //
   // If asynchronous is false, the host will synchronize to the device after
   // each execution or transfer. This is intended for debugging only.
-  Device(se::StreamExecutor* executor, bool use_multiple_streams,
-         bool synchronous_deallocation, bool asynchronous);
+  Device(se::StreamExecutor* executor, bool synchronous_deallocation,
+         bool asynchronous, bool allow_event_reuse);
   virtual ~Device();
 
-  bool use_multiple_streams() const { return use_multiple_streams_; }
   bool synchronous_deallocation() const { return synchronous_deallocation_; }
   bool asynchronous() const { return asynchronous_; }
+
+  EventPool& event_pool() { return event_pool_; }
+
   se::Stream* compute_stream() const { return compute_stream_.get(); }
   se::Stream* host_to_device_stream() const {
     return host_to_device_stream_.get();
@@ -95,54 +94,33 @@ class Device {
   void ThenExecuteOnWorkerThread(se::Stream* stream,
                                  std::function<void()> callback) const;
 
-  // Helper for releasing values from a callback at the tail of a stream.
-  // This is only permitted if object's destructor will not free any device
-  // objects, since the callback may be called from a device thread pool on
-  // GPU.
+  // Helpers for releasing values on a worker thread at the tail of a stream on
+  // a worker thread. Copies `object`, and destroys the copy when the tail of
+  // the stream is reached. The destruction happens either in the caller's
+  // thread or on the worker thread (depending on thread schedules), not a
+  // device callback, so it is safe if the destructor frees device resource
+  // (e.g., GPU objects).
+  // TODO(phawkins): use move-capture when we can use C++14 features.
   template <typename T>
   void ThenRelease(se::Stream* stream, T object) const {
     if (callback_stream_.get() != stream) {
       callback_stream_->ThenWaitFor(stream);
     }
-    callback_stream_->ThenDoHostCallback(
-        std::bind([](T& object) { /* releases object */ }, std::move(object)));
-  }
-
-  // Helpers for releasing values on a worker thread at the tail of a stream on
-  // a worker thread.
-  template <typename T>
-  void ThenReleaseOnWorkerThread(se::Stream* stream,
-                                 std::shared_ptr<T> object) const {
-    // We use a non-smart pointer here because we want to ensure that the worker
-    // thread is the only callee of the shared_ptr destructor, and if we passed
-    // object by lambda capture we have a race where the worker thread might
-    // run and release its reference first.
-    auto* ref = new std::shared_ptr<T>(std::move(object));
-    if (callback_stream_.get() != stream) {
-      callback_stream_->ThenWaitFor(stream);
-    }
-    ThenExecuteOnWorkerThread(callback_stream_.get(), [ref]() { delete ref; });
-  }
-  template <typename T>
-  void ThenReleaseOnWorkerThread(se::Stream* stream,
-                                 std::vector<std::shared_ptr<T>> object) const {
-    auto* ref = new std::vector<std::shared_ptr<T>>(std::move(object));
-    if (callback_stream_.get() != stream) {
-      callback_stream_->ThenWaitFor(stream);
-    }
-    ThenExecuteOnWorkerThread(callback_stream_.get(), [ref]() { delete ref; });
+    ThenExecuteOnWorkerThread(callback_stream_.get(),
+                              [object]() { /* releases object */ });
   }
 
  private:
   Status SynchronizeAllActivity();
 
-  bool use_multiple_streams_;
   bool synchronous_deallocation_;
   bool asynchronous_;
-  std::shared_ptr<se::Stream> compute_stream_;
-  std::shared_ptr<se::Stream> host_to_device_stream_;
-  std::shared_ptr<se::Stream> device_to_host_stream_;
-  std::vector<std::shared_ptr<se::Stream>> device_to_device_streams_;
+
+  EventPool event_pool_;
+  std::unique_ptr<se::Stream> compute_stream_;
+  std::unique_ptr<se::Stream> host_to_device_stream_;
+  std::unique_ptr<se::Stream> device_to_host_stream_;
+  std::vector<std::unique_ptr<se::Stream>> device_to_device_streams_;
 
   // Number of device-to-device streams to create in the multistream case.
   static constexpr int kNumDeviceToDeviceStreams = 4;
@@ -153,7 +131,7 @@ class Device {
   // Callback stream is used for running short host-side callbacks after device
   // side events, without preventing the device-side stream from doing useful
   // work.
-  std::shared_ptr<se::Stream> callback_stream_;
+  std::unique_ptr<se::Stream> callback_stream_;
 
   std::unique_ptr<WorkerThread> worker_thread_;
 };
