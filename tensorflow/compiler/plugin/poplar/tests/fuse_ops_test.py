@@ -843,7 +843,7 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
           '__seed*',
           'Copy_',
           'ExpandDims/input/fusion*/multiUpdateAdd',
-          '/multiSlice',
+          'vs/Gather*/gather.*/multiSlice',
           'vs/add/add*/AddTo',
           'vs/Sum/reduce*/Reduce',
       ]
@@ -906,7 +906,7 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
           '__seed*',
           'ExpandDims/input/fusion*/multiUpdateAdd',
           'ExpandDims/input/fusion*/negate_scale/Op/Negate',
-          '/multiSlice',
+          'vs/Gather*/gather.*/multiSlice',
           'vs/add/add*/AddTo',
           'vs/Sum/reduce*/Reduce',
       ]

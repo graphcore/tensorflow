@@ -29,7 +29,7 @@ from tensorflow.python.platform import tf_logging as logging
 def embedding_lookup(params,
                      ids,
                      name=None,
-                     one_hot_threshold=2048,
+                     one_hot_threshold=0,
                      min_encoding_size=1216):
   """Looks up `ids` in a list of embedding tensors.
 
