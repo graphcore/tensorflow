@@ -16,7 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_PYTHON_LOCAL_CLIENT_H_
 #define TENSORFLOW_COMPILER_XLA_PYTHON_LOCAL_CLIENT_H_
 
-#include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -27,114 +27,18 @@ limitations under the License.
 #include "tensorflow/compiler/xla/client/executable_build_options.h"
 #include "tensorflow/compiler/xla/client/local_client.h"
 #include "tensorflow/compiler/xla/client/xla_computation.h"
-#include "tensorflow/compiler/xla/python/event_pool.h"
+#include "tensorflow/compiler/xla/python/device.h"
 #include "tensorflow/compiler/xla/python/python_ref_manager.h"
 #include "tensorflow/compiler/xla/python/shared_device_buffer.h"
-#include "tensorflow/compiler/xla/python/worker_thread.h"
 #include "tensorflow/compiler/xla/service/computation_placer.h"
 #include "tensorflow/compiler/xla/service/shaped_buffer.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/status.h"
 #include "tensorflow/compiler/xla/statusor.h"
+#include "tensorflow/core/framework/allocator.h"
 #include "tensorflow/core/lib/core/status.h"
 
 namespace xla {
-
-// Registers a 'fn_capsule' as a CPU custom call target.
-// 'fn_capsule' is a void* pointer encapsulated in a PyCapsule object, with name
-// "xla._CPU_CUSTOM_CALL_TARGET".
-Status RegisterCpuCustomCallTarget(const std::string& fn_name,
-                                   pybind11::capsule capsule);
-
-// Class that encapsulates state relating to a device (e.g., a GPU) on which we
-// can perform computation and transfers.
-class Device {
- public:
-  // If synchronous_deallocation is true, the host must not free buffers until
-  // compute/transfers that use those buffers have completed. For example, this
-  // typically is the case for the "platform" where compute/transfers are
-  // operations that take place on another thread.
-  //
-  // If asynchronous is false, the host will synchronize to the device after
-  // each execution or transfer. This is intended for debugging only.
-  Device(se::StreamExecutor* executor, bool synchronous_deallocation,
-         bool asynchronous, bool allow_event_reuse);
-  virtual ~Device();
-
-  bool synchronous_deallocation() const { return synchronous_deallocation_; }
-  bool asynchronous() const { return asynchronous_; }
-
-  EventPool& event_pool() { return event_pool_; }
-
-  se::Stream* compute_stream() const { return compute_stream_.get(); }
-  se::Stream* host_to_device_stream() const {
-    return host_to_device_stream_.get();
-  }
-  se::Stream* device_to_host_stream() const {
-    return device_to_host_stream_.get();
-  }
-
-  // Returns a device to device stream. Allocates streams in a round-robin
-  // fashion amongst the available streams.
-  se::Stream* GetDeviceToDeviceStream();
-
-  // Enqueues a copy of `src_buffer` to `dst_buffer` onto `src_stream`.
-  virtual Status ThenMemcpyDeviceToDevice(se::Stream* src_stream,
-                                          se::Stream* dst_stream,
-                                          se::DeviceMemoryBase src_buffer,
-                                          se::DeviceMemoryBase dst_buffer);
-
-  // A worker thread, used for replicated computation launches and callbacks.
-  WorkerThread* worker_thread() const { return worker_thread_.get(); }
-
-  // Enqueues a host callback on 'stream', to be executed by worker_thread_.
-  // ThenDoHostCallback is often constrained in what it can do, in particular,
-  // on GPU the callback runs on a thread belonging to the GPU runtime and
-  // cannot perform GPU operations itself.
-  void ThenExecuteOnWorkerThread(se::Stream* stream,
-                                 std::function<void()> callback) const;
-
-  // Helpers for releasing values on a worker thread at the tail of a stream on
-  // a worker thread. Copies `object`, and destroys the copy when the tail of
-  // the stream is reached. The destruction happens either in the caller's
-  // thread or on the worker thread (depending on thread schedules), not a
-  // device callback, so it is safe if the destructor frees device resource
-  // (e.g., GPU objects).
-  // TODO(phawkins): use move-capture when we can use C++14 features.
-  template <typename T>
-  void ThenRelease(se::Stream* stream, T object) const {
-    if (callback_stream_.get() != stream) {
-      callback_stream_->ThenWaitFor(stream);
-    }
-    ThenExecuteOnWorkerThread(callback_stream_.get(),
-                              [object]() { /* releases object */ });
-  }
-
- private:
-  Status SynchronizeAllActivity();
-
-  bool synchronous_deallocation_;
-  bool asynchronous_;
-
-  EventPool event_pool_;
-  std::unique_ptr<se::Stream> compute_stream_;
-  std::unique_ptr<se::Stream> host_to_device_stream_;
-  std::unique_ptr<se::Stream> device_to_host_stream_;
-  std::vector<std::unique_ptr<se::Stream>> device_to_device_streams_;
-
-  // Number of device-to-device streams to create in the multistream case.
-  static constexpr int kNumDeviceToDeviceStreams = 4;
-
-  absl::Mutex mu_;
-  int next_device_to_device_stream_ GUARDED_BY(mu_) = 0;
-
-  // Callback stream is used for running short host-side callbacks after device
-  // side events, without preventing the device-side stream from doing useful
-  // work.
-  std::unique_ptr<se::Stream> callback_stream_;
-
-  std::unique_ptr<WorkerThread> worker_thread_;
-};
 
 struct AllocatorConfig {
   enum class Kind {
@@ -166,10 +70,11 @@ class PyLocalClient {
       bool asynchronous, const AllocatorConfig& allocator_config);
 
   // `allocator` may null, in which case the platform default allocator is used.
-  explicit PyLocalClient(std::string platform_name, LocalClient* client,
-                         std::vector<std::unique_ptr<Device>> devices,
-                         std::unique_ptr<se::DeviceMemoryAllocator> allocator,
-                         bool asynchronous);
+  explicit PyLocalClient(
+      std::string platform_name, LocalClient* client,
+      std::vector<std::unique_ptr<Device>> devices,
+      std::unique_ptr<se::DeviceMemoryAllocator> allocator,
+      std::unique_ptr<tensorflow::Allocator> host_memory_allocator);
   virtual ~PyLocalClient() = default;
 
   Status TransferToInfeed(const LiteralSlice& literal, int device_ordinal);
@@ -182,6 +87,9 @@ class PyLocalClient {
   }
   LocalClient* client() const { return client_; }
   se::DeviceMemoryAllocator* allocator() const { return allocator_; }
+  tensorflow::Allocator* host_memory_allocator() const {
+    return host_memory_allocator_.get();
+  }
 
   tensorflow::thread::ThreadPool* h2d_transfer_pool() {
     return &h2d_transfer_pool_;
@@ -202,6 +110,11 @@ class PyLocalClient {
   std::vector<std::unique_ptr<Device>> devices_;
   se::DeviceMemoryAllocator* allocator_;
   std::unique_ptr<se::DeviceMemoryAllocator> owned_allocator_;
+
+  // Allocator to be used for staging memory transfers to devices. Optional;
+  // only used on GPU where it is more efficient to copy buffers to and from the
+  // device via a staging area of pinned memory.
+  std::unique_ptr<tensorflow::Allocator> host_memory_allocator_;
 
   tensorflow::thread::ThreadPool h2d_transfer_pool_;
 };
