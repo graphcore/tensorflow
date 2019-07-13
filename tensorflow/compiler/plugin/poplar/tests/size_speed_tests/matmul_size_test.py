@@ -84,7 +84,7 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
 
     evts = ipu.utils.extract_all_events(out)
     size = ipu.utils.get_memory_size_from_events(evts)
-    self.assertTrue(size < 17740000)
+    self.assertTrue(size < 18780000)
 
   def testTrainingBs1(self):
     x = array_ops.placeholder(datatype, shape=[1, 112 * 112 * 4])
@@ -156,7 +156,7 @@ class MatMulSizeTest(test_util.TensorFlowTestCase):
 
     evts = ipu.utils.extract_all_events(out)
     size = ipu.utils.get_memory_size_from_events(evts)
-    self.assertTrue(size < 26400000)
+    self.assertTrue(size < 38580000)
 
 
 if __name__ == "__main__":
