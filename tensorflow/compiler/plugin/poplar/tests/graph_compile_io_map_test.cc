@@ -513,7 +513,7 @@ main {
   config.set_input_mapping({0, 1});
   config.set_resource_update_to_input_index({0, 1});
 
-  auto module_or_status = ParseHloString(hlo_string, config);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
 
   auto& module = module_or_status.ValueOrDie();
@@ -530,11 +530,13 @@ main {
 
   PoplarCompiler compiler;
 
-  module = compiler.RunHloPasses(std::move(module), stream_executor, nullptr)
-               .ConsumeValueOrDie();
+  auto module_post_passes =
+      compiler.RunHloPasses(std::move(module), stream_executor, nullptr)
+          .ConsumeValueOrDie();
 
   std::unique_ptr<Executable> executable =
-      compiler.RunBackend(std::move(module), stream_executor, nullptr)
+      compiler
+          .RunBackend(std::move(module_post_passes), stream_executor, nullptr)
           .ConsumeValueOrDie();
 
   PoplarExecutable* e = static_cast<PoplarExecutable*>(executable.get());
