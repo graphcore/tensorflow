@@ -198,13 +198,12 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
   def testMaxPool(self):
     with ops.device("/device:IPU:0"):
       pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
-      c = nn.max_pool(
-          pa,
-          ksize=[1, 1, 5, 5],
-          strides=[1, 1, 2, 2],
-          data_format='NCHW',
-          padding='SAME',
-          name="max")
+      c = nn.max_pool(pa,
+                      ksize=[1, 1, 5, 5],
+                      strides=[1, 1, 2, 2],
+                      data_format='NCHW',
+                      padding='SAME',
+                      name="max")
 
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
@@ -236,20 +235,18 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       pa = array_ops.placeholder(np.float32, [1, 4, 4, 1], name="a")
       pb = array_ops.placeholder(np.float32, [1, 2, 2, 1], name="b")
-      c = nn.max_pool(
-          pa,
-          ksize=[1, 2, 2, 1],
-          strides=[1, 2, 2, 1],
-          data_format='NCHW',
-          padding='SAME')
-      d = gen_nn_ops.max_pool_grad(
-          pa,
-          c,
-          pb,
-          ksize=[1, 2, 2, 1],
-          strides=[1, 2, 2, 1],
-          data_format='NCHW',
-          padding='SAME')
+      c = nn.max_pool(pa,
+                      ksize=[1, 2, 2, 1],
+                      strides=[1, 2, 2, 1],
+                      data_format='NCHW',
+                      padding='SAME')
+      d = gen_nn_ops.max_pool_grad(pa,
+                                   c,
+                                   pb,
+                                   ksize=[1, 2, 2, 1],
+                                   strides=[1, 2, 2, 1],
+                                   data_format='NCHW',
+                                   padding='SAME')
 
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
@@ -399,16 +396,14 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
       with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(x)
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(y)
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer())(x)
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer())(y)
 
       loss = math_ops.reduce_sum(y)
       optimizer = gradient_descent.GradientDescentOptimizer(0.1)
@@ -445,16 +440,14 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       lr = array_ops.placeholder(np.float32, shape=[])
 
       with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(x)
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(y)
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer())(x)
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer())(y)
 
       loss = math_ops.reduce_sum(y)
       optimizer = gradient_descent.GradientDescentOptimizer(lr)
@@ -506,13 +499,12 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
 
     with ops.device("/device:IPU:0"):
       pa = array_ops.placeholder(np.float32, shape, name="a")
-      output = nn.avg_pool(
-          pa,
-          ksize=[1, 10, 10, 1],
-          strides=[1, 1, 1, 1],
-          data_format='NHWC',
-          padding='VALID',
-          name="avg")
+      output = nn.avg_pool(pa,
+                           ksize=[1, 10, 10, 1],
+                           strides=[1, 1, 1, 1],
+                           data_format='NHWC',
+                           padding='VALID',
+                           name="avg")
 
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
@@ -548,13 +540,12 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
 
     with ops.device("/device:IPU:0"):
       pa = array_ops.placeholder(np.float32, shape, name="a")
-      output = nn.avg_pool(
-          pa,
-          ksize=[1, 5, 5, 1],
-          strides=[1, 2, 2, 1],
-          data_format='NHWC',
-          padding='VALID',
-          name="avg")
+      output = nn.avg_pool(pa,
+                           ksize=[1, 5, 5, 1],
+                           strides=[1, 2, 2, 1],
+                           data_format='NHWC',
+                           padding='VALID',
+                           name="avg")
 
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
@@ -597,13 +588,12 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
 
     with ops.device("/device:IPU:0"):
       pa = array_ops.placeholder(np.float32, shape, name="a")
-      output = nn.avg_pool(
-          pa,
-          ksize=[1, 5, 5, 1],
-          strides=[1, 2, 2, 1],
-          data_format='NHWC',
-          padding='SAME',
-          name="avg")
+      output = nn.avg_pool(pa,
+                           ksize=[1, 5, 5, 1],
+                           strides=[1, 2, 2, 1],
+                           data_format='NHWC',
+                           padding='SAME',
+                           name="avg")
 
     with ops.device('cpu'):
       report = gen_ipu_ops.ipu_event_trace()
@@ -666,11 +656,10 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(x)
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer())(x)
         y = layers_norm.batch_normalization(y, fused=True)
         y = nn_ops.relu(y)
 
@@ -709,13 +698,12 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
       with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer(),
-            bias_initializer=init_ops.ones_initializer(),
-            name="a")(x)
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer(),
+                          bias_initializer=init_ops.ones_initializer(),
+                          name="a")(x)
         y = nn.relu(y)
 
       loss = math_ops.reduce_sum(y)
@@ -752,13 +740,12 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float16, shape=[1, 4, 4, 2])
       lr = array_ops.placeholder(np.float16, shape=[])
       with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer(),
-            bias_initializer=init_ops.ones_initializer(),
-            name="a")(x)
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          kernel_initializer=init_ops.ones_initializer(),
+                          bias_initializer=init_ops.ones_initializer(),
+                          name="a")(x)
         y = nn.relu(y)
 
       loss = math_ops.reduce_sum(y)
@@ -964,7 +951,7 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/multiUpdateAdd',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/negate_scale/Op/Negate',
           'vs/mul/fusion*/Op/Multiply',
-          '/multiSlice',
+          'vs/embedding_lookup/gather.*/multiSlice',
           '/reduce*/Reduce*/Reduce',
           'vs/Mean/add/Op/Add',
           'vs/Mean/multiply/Op/Multiply',
@@ -974,6 +961,6 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()
