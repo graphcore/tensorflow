@@ -459,7 +459,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       OutputPairList&, const xla::Shape&, void*,
       const InputOutputAliasingMap::OutputInfo&);
 
-  void UpdateArgsHandleMap(const Args&,
+  void UpdateArgsHandleMap(const Args&, se::DeviceMemoryAllocator*,
                            const xla::poplarplugin::PoplarExecutable&);
 
   void UpdateOutputsHandleMap(

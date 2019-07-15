@@ -1111,7 +1111,8 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
 }
 
 void PoplarExecutor::UpdateArgsHandleMap(
-    const Args& args, const xla::poplarplugin::PoplarExecutable& executable) {
+    const Args& args, se::DeviceMemoryAllocator* allocator,
+    const xla::poplarplugin::PoplarExecutable& executable) {
   args_map_.clear();
 
   const auto* comp = executable.module().entry_computation();
@@ -1124,13 +1125,37 @@ void PoplarExecutor::UpdateArgsHandleMap(
       executable.GetInputOutputAliasingMap().GetEntryInputInfos();
   CHECK_EQ(inputs_info.size(), args.size());
   CHECK_EQ(shapes.size(), args.size());
+
+  // We require all the resource arguments which are modified to be not-aliasing
+  // with each other.
+  absl::flat_hash_set<const TensorControl*> modified_resources;
+
   for (unsigned int a = 0; a < inputs_info.size(); a++) {
     const auto& input_info = inputs_info[a];
     InputPairList bufs;
     FlattenedDeviceMemoryList(bufs, shapes[a],
                               const_cast<void*>(args[a].opaque()), input_info);
     for (unsigned i = 0; i < bufs.size(); i++) {
-      args_map_[GetInputCopyHandle(a, i)] = bufs[i];
+      InputDef input = bufs[i];
+      auto input_handle = GetInputCopyHandle(a, i);
+      if (input_info.IsResource() && !input_info.IsResourceNotModified()) {
+        if (modified_resources.contains(input.tc)) {
+          // We found an alias - we add a copy.
+          VLOG(1) << "Found an alias for input handle " << input_handle
+                  << ", duplicating the buffer.";
+          se::DeviceMemoryBase allocated =
+              allocator->Allocate(ordinal_, input.tc->size, false)
+                  .ConsumeValueOrDie()
+                  .Release();
+          TensorControl* tc =
+              reinterpret_cast<TensorControl*>(allocated.opaque());
+          std::memcpy(tc->data, input.tc->data, input.tc->size);
+          input = InputDef(tc, input.fn, input.streamed);
+        }
+        modified_resources.insert(input.tc);
+      }
+
+      args_map_[input_handle] = input;
     }
   }
 }
@@ -1238,9 +1263,11 @@ se::DeviceMemoryBase PoplarExecutor::RemapOutputAllocation::GetAllocation(
             .ConsumeValueOrDie()
             .Release();
     TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
-
     if (orig->on_device) {
-      executor_->MoveDeviceToHost();
+      auto status = executor_->MoveDeviceToHost();
+      if (!status.ok()) {
+        LOG(FATAL) << status.ToString();
+      }
     }
 
     memcpy(tc->data, orig->data, orig->size);
@@ -1605,7 +1632,10 @@ void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
   if (current_engine_ != nullptr) {
     std::lock_guard<std::recursive_mutex> g(mutex_);
     if (engine == current_engine_) {
-      MoveDeviceToHost();
+      auto status = MoveDeviceToHost();
+      if (!status.ok()) {
+        LOG(FATAL) << status.ToString();
+      }
       DeferredDeallocation();
       current_engine_ = NULL;
     }
@@ -1714,7 +1744,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 
   bool engine_changed(current_engine_ != engine);
 
-  UpdateArgsHandleMap(args, executable);
+  UpdateArgsHandleMap(args, allocator, executable);
 
   if (engine == NULL) {
     // An empty engine is either a graph that just passes its inputs through
@@ -1772,7 +1802,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     TF_ASSIGN_OR_RETURN(const bool move_host_to_device,
                         CheckMoveHostToDeviceRequired(engine_changed));
     if (move_host_to_device) {
-      MoveHostToDevice();
+      TF_RETURN_IF_ERROR(MoveHostToDevice());
     }
 
     // Outfeeds add empty tuples as output shape, no need to get an output

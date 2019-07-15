@@ -31,12 +31,12 @@ from tensorflow.python.platform import googletest
 class EmbeddingLookupTest(test_util.TensorFlowTestCase):
   def testGather(self):
     def my_net(w, i):
-      out = ipu.ops.embedding_ops.embedding_lookup(w, i)
+      out = ipu.ops.embedding_ops.embedding_lookup(w, i, min_encoding_size=1200)
       return [out]
 
     with ops.device('cpu'):
       i = array_ops.placeholder(np.int32, [8])
-      w = array_ops.placeholder(np.float32, [100002, 200])
+      w = array_ops.placeholder(np.float32, [12000, 200])
       report = gen_ipu_ops.ipu_event_trace()
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
@@ -47,7 +47,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     ipu.utils.configure_ipu_system(cfg)
     with sl.Session() as sess:
       i_h = np.arange(0, 8)
-      w_h = np.arange(20000400).reshape([100002, 200])
+      w_h = np.arange(2400000).reshape([12000, 200])
 
       result = sess.run(r, {i: i_h, w: w_h})
       self.assertAllClose(result[0], np.take(w_h, i_h, axis=0))
