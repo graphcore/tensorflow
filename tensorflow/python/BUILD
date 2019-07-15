@@ -22,7 +22,7 @@ load("//tensorflow:tensorflow.bzl", "if_not_v2", "if_not_windows", "tf_cuda_libr
 load("//tensorflow:tensorflow.bzl", "tf_py_wrap_cc")
 load("//tensorflow:tensorflow.bzl", "cuda_py_test")
 load("//tensorflow:tensorflow.bzl", "cuda_py_tests")
-load("//tensorflow/core:platform/default/build_config.bzl", "pyx_library", "tf_proto_library", "tf_proto_library_py", "tf_additional_lib_deps", "tf_additional_all_protos", "tf_protos_grappler")
+load("//tensorflow/core:platform/default/build_config.bzl", "pyx_library", "tf_proto_library", "tf_proto_library_py", "tf_additional_lib_deps", "tf_additional_all_protos", "tf_protos_grappler", "tf_additional_cupti_test_flags")  # @unused
 load("//tensorflow/core:platform/default/build_config_root.bzl", "tf_additional_plugin_deps", "tf_additional_verbs_deps", "tf_additional_mpi_deps", "tf_additional_gdr_deps", "if_static")
 load("//tensorflow/python:build_defs.bzl", "tf_gen_op_wrapper_private_py")
 load(
@@ -114,6 +114,7 @@ py_library(
         ":cudnn_rnn_ops_gen",
         ":errors",
         ":framework",
+        ":framework_combinations",
         ":framework_for_generated_wrappers",
         ":functional_ops",
         ":gradient_checker",
@@ -1325,6 +1326,39 @@ py_library(
     name = "distributed_framework_test_lib",
     srcs_version = "PY2AND3",
     deps = [":framework_test_lib"],
+)
+
+py_library(
+    name = "framework_combinations",
+    srcs = ["framework/combinations.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":framework_ops",
+        ":framework_test_combinations_lib",
+        ":util",
+        "//tensorflow/python/eager:context",
+    ],
+)
+
+py_library(
+    name = "framework_test_combinations_lib",
+    srcs = ["framework/test_combinations.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":util",
+        "@absl_py//absl/testing:parameterized",
+    ],
+)
+
+py_test(
+    name = "test_combinations_test",
+    srcs = ["framework/test_combinations_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY2AND3",
+    deps = [
+        ":framework_test_combinations_lib",
+        "//tensorflow/python/eager:test",
+    ],
 )
 
 py_library(
@@ -3922,6 +3956,7 @@ cuda_py_test(
         ":framework_test_lib",
         ":functional_ops",
         ":gradients",
+        ":init_ops",
         ":list_ops",
         ":math_grad",
         ":math_ops",
@@ -3929,6 +3964,7 @@ cuda_py_test(
         ":nn_ops",
         ":platform_test",
         ":state_grad",
+        ":state_ops",
         ":tensor_array_grad",
         ":tensor_array_ops",
         ":test_ops",
@@ -4759,6 +4795,7 @@ tf_py_wrap_cc(
         "util/tfprof.i",
         "util/transform_graph.i",
         "util/util.i",
+        "//tensorflow/lite/toco/python:toco.i",
     ],
     # add win_def_file for pywrap_tensorflow
     win_def_file = select({
@@ -4805,6 +4842,7 @@ tf_py_wrap_cc(
         "//tensorflow/core/distributed_runtime:server_lib",
         "//tensorflow/core/profiler/internal:print_model_analysis",
         "//tensorflow/tools/graph_transforms:transform_graph_lib",
+        "//tensorflow/lite/toco/python:toco_python_api",
         "//tensorflow/python/eager:pywrap_tfe_lib",
     ] + (tf_additional_lib_deps() +
          tf_additional_plugin_deps() +
@@ -5208,6 +5246,7 @@ cuda_py_test(
         ":math_ops",
         "//tensorflow/core:protos_all_py",
     ],
+    args = tf_additional_cupti_test_flags(),
     xla_enable_strict_auto_jit = False,  # Graph structure is different with autojit
 )
 
@@ -6457,39 +6496,37 @@ cuda_py_test(
     xla_enable_strict_auto_jit = True,
 )
 
-# TODO(b/131764887) Remove once LayoutOptimizer is swapped out with GenericLayoutOptimizer.
-#
-# cuda_py_test(
-#     name = "layout_optimizer_test",
-#     size = "medium",
-#     srcs = [
-#         "grappler/layout_optimizer_test.py",
-#     ],
-#     additional_deps = [
-#         ":client_testlib",
-#         ":framework_for_generated_wrappers",
-#         ":array_ops",
-#         ":constant_op",
-#         ":dtypes",
-#         ":functional_ops",
-#         ":math_ops",
-#         ":nn",
-#         ":ops",
-#         ":random_ops",
-#         ":state_ops",
-#         ":tf_cluster",
-#         ":tf_optimizer",
-#         ":training",
-#         "//third_party/py/numpy",
-#         "//tensorflow/core:protos_all_py",
-#     ],
-#     shard_count = 10,
-#     tags = [
-#         "grappler",
-#     ],
-#     # This test will not run on XLA because it primarily tests the TF Classic flow.
-#     xla_enable_strict_auto_jit = False,
-# )
+cuda_py_test(
+    name = "layout_optimizer_test",
+    size = "medium",
+    srcs = [
+        "grappler/layout_optimizer_test.py",
+    ],
+    additional_deps = [
+        ":client_testlib",
+        ":framework_for_generated_wrappers",
+        ":array_ops",
+        ":constant_op",
+        ":dtypes",
+        ":functional_ops",
+        ":math_ops",
+        ":nn",
+        ":ops",
+        ":random_ops",
+        ":state_ops",
+        ":tf_cluster",
+        ":tf_optimizer",
+        ":training",
+        "//third_party/py/numpy",
+        "//tensorflow/core:protos_all_py",
+    ],
+    shard_count = 10,
+    tags = [
+        "grappler",
+    ],
+    # This test will not run on XLA because it primarily tests the TF Classic flow.
+    xla_enable_strict_auto_jit = False,
+)
 
 py_library(
     name = "cost_analyzer",
@@ -6705,8 +6742,8 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":client_testlib",
+        ":framework_combinations",
         ":tf2",
-        "//tensorflow/python/distribute:combinations",
     ],
 )
 
