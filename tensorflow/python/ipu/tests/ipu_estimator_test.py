@@ -377,7 +377,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
             evt = IpuTraceEvent.FromString(evt_str)
 
             if (evt.type == IpuTraceEvent.COMPILE_END
-                and len(evt.compile_end.compilation_report)) > 0:
+                and len(evt.compile_end.compilation_report) > 0):
               compile_for_ipu_count += 1
 
     self.assertEqual(compile_for_ipu_count, 1)
