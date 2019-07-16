@@ -6,6 +6,7 @@ load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "poplar_lib_directory")
 load("@local_config_poplar//poplar:build_defs.bzl", "poplibs_lib_directory")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
+load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
 load("//tensorflow:tensorflow.bzl", "tf_cc_test")
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
 load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
@@ -627,6 +628,14 @@ cc_library(
     ],
     linkstatic=1,
     alwayslink = True,
+)
+
+tf_cc_binary(
+    name = "grpc_service_main_ipu",
+    deps = [
+        ":poplar_lib",
+        "//tensorflow/compiler/xla/rpc:grpc_service_main_library",
+    ],
 )
 
 cc_library(
