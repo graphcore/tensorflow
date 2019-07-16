@@ -142,6 +142,55 @@ class MappingTest(test_util.TensorFlowTestCase):
             # The add is done inplace
             self.assertEqual(slice_layout[7], add_layout[7])
 
+  def testInplaceReadWrite(self):
+    def my_net(x, y, a):
+      z = x + y
+      c = a + x
+      return c, z
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.int32, [100])
+      y = array_ops.placeholder(np.int32, [100])
+      a = array_ops.placeholder(np.int32, [100])
+      report = gen_ipu_ops.ipu_event_trace()
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      r = ipu.ipu_compiler.compile(my_net, inputs=[x, y, a])
+
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+    with sl.Session() as sess:
+      i_x = np.full(100, 1)
+      i_y = np.full(100, 2)
+      i_a = np.full(100, 10)
+      expect_c = np.full(100, 11)
+      expect_z = np.full(100, 3)
+
+      result_c, result_z = sess.run(r, {x: i_x, y: i_y, a: i_a})
+      self.assertAllClose(result_c, expect_c)
+      self.assertAllClose(result_z, expect_z)
+
+      rep = sess.run(report)
+
+      events = ipu.utils.extract_all_events(rep)
+
+      for e in events:
+        if e.type == IpuTraceEvent.COMPILE_END:
+          j = e.compile_end.tensor_map.decode('utf-8')
+          if len(j) > 0:
+            tm = json.loads(e.compile_end.tensor_map.decode('utf-8'))
+
+            bad_maps = []
+            for g in tm['mappings']:
+              for tensor in tm['mappings'][g]:
+                # Number of elements in tensor 100.
+                # Number of used tiles should be larger than 1
+                if tensor[6] != 100 or len(tensor[7]) <= 1:
+                  bad_maps += [tensor[0]]
+
+      self.assertEqual(bad_maps, [])
+
 
 if __name__ == "__main__":
   googletest.main()
