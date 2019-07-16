@@ -206,7 +206,8 @@ tf_py_test(
 
 tf_py_test(
     name = "ipu_estimator_test",
-    size = "medium",
+    size = "large",
+    shard_count = 4,
     srcs = ["tests/ipu_estimator_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
