@@ -182,7 +182,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
       s = tu.extract_all_strings_from_event_trace(result)
       cs_list = tu.get_compute_sets_from_report(s)
 
-      ok = ['__seed*', 'Copy_', 'Conv3DBackpropInputV2/fusion*/Conv_2x2x2']
+      ok = ['__seed*', 'Conv3DBackpropInputV2/fusion*/Conv_2x2x2']
 
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
@@ -216,7 +216,7 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
       cs_list = tu.get_compute_sets_from_report(s)
 
       ok = [
-          '__seed*', 'host-exchange-local-copy-',
+          '__seed*', 'Copy_', 'host-exchange-local-copy-',
           'Conv3DBackpropFilterV2/convolution.*/Conv_8x8x8'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
