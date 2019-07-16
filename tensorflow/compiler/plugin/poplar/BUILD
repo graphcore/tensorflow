@@ -13,6 +13,7 @@ load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 load("//tensorflow/core:platform/default/build_config.bzl", "tf_proto_library")
 load("//tensorflow/compiler/xla:xla.bzl", "xla_proto_library")
+load("//tensorflow:tensorflow.bzl", "tf_custom_op_library")
 
 # Rule for creating the vertex program pre-compiled object
 genrule(
@@ -140,6 +141,7 @@ cc_library(
         "driver/tools/custom_ops/tanh.cc",
         "driver/tools/custom_ops/topk.cc",
         "driver/tools/custom_ops/truncated_normal.cc",
+        "driver/tools/custom_ops/user_op_hlo.cc",
         "driver/tools/find_all_users.cc",
         "driver/tools/flags.cc",
         "driver/tools/hlo_hash.cc",
@@ -212,6 +214,7 @@ cc_library(
         "driver/tools/custom_ops/tanh.h",
         "driver/tools/custom_ops/topk.h",
         "driver/tools/custom_ops/truncated_normal.h",
+        "driver/tools/custom_ops/user_op_hlo.h",
         "driver/tools/find_all_users.h",
         "driver/tools/flags.h",
         "driver/tools/hash.h",
@@ -283,6 +286,7 @@ cc_library(
         "driver/ops/custom_ops/poputil/remap.cc",
         "driver/ops/custom_ops/poputil/replication_factor.cc",
         "driver/ops/custom_ops/poputil/stateful_gradient_accumulate.cc",
+        "driver/ops/custom_ops/poputil/user_op.cc",
         "driver/ops/dot_graph_caching.cc",
         "driver/ops/graph_caching_util.cc",
         "driver/ops/gather_ops.cc",
@@ -416,6 +420,7 @@ cc_library(
         "kernels/poputil/remap.cc",
         "kernels/poputil/replication_factor.cc",
         "kernels/poputil/stateful_gradient_accumulate.cc",
+        "kernels/poputil/user_operation.cc"
     ],
     hdrs = [
         "kernels/ipu_kernels_common.h",
@@ -534,6 +539,7 @@ cc_library(
         "ops/poputil/remap.cc",
         "ops/poputil/replication_factor.cc",
         "ops/poputil/stateful_gradient_accumulate.cc",
+        "ops/poputil/user_operation.cc"
     ],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,

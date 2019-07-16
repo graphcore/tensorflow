@@ -44,6 +44,7 @@ message PoplibsOp {
     UpdateScalarInRows = 32;
     Fifo = 33;
     TopK = 34;
+    UserOp = 35;
   }
   required Op op = 2;
 }

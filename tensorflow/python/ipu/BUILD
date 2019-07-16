@@ -9,6 +9,12 @@ package(
 
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
 
+# Needed so we can build the custom op.
+load("@local_config_poplar//poplar:build_defs.bzl", "poplar_lib_directory")
+load("@local_config_poplar//poplar:build_defs.bzl", "poplibs_lib_directory")
+load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
+load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
+load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 
 py_library(
     name = "ipu_ops_lib",
@@ -281,6 +287,53 @@ py_test(
         "//tensorflow/python/keras:layers",
     ],
     srcs_version = "PY2AND3",
+)
+
+cc_library(
+	name = "add_incrementing_custom",
+	srcs = ["tests/add_incrementing_custom.cc"],
+ 	copts = ["-fexceptions"], 
+	nocopts = "-fno-exceptions",
+    deps = ["@local_config_poplar//poplar:poplar_headers",
+            "//tensorflow/core:framework",
+        ],
+
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
+    ],
+    data = [
+        "@local_config_poplar//poplar:poplar_lib",
+    ],
+    )
+
+tf_gen_op_wrapper_py(
+    name = "add_incrementing_custom_python_target",
+    deps = [":add_incrementing_custom"],
+)
+
+tf_custom_op_py_library(
+    name = "add_incrementing_custom_python_target_lib",
+    deps = [":add_incrementing_custom_python_target"],
+)
+
+tf_py_test(
+    name = "user_ops_test",
+    size = "small",
+    srcs = ["tests/user_ops_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        ":add_incrementing_custom_python_target_lib",
+    ],
 )
 
 tf_py_test(

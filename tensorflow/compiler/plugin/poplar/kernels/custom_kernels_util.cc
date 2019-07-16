@@ -127,6 +127,10 @@ void AttributeMap::AddAttribute(const std::string& field_name,
     auto casted_val = absl::any_cast<tensorflow::DataType>(attr);
     attributes_[field_name] = GetAsJsonValue(casted_val);
 
+  } else if (tinfo == typeid(std::string)) {
+    auto casted_val = absl::any_cast<std::string>(attr);
+    attributes_[field_name] = GetAsJsonValue(casted_val);
+
   } else if (tinfo == typeid(absl::flat_hash_set<int64>)) {
     auto casted_vals = absl::any_cast<absl::flat_hash_set<int64>>(attr);
     // Always create the field.
