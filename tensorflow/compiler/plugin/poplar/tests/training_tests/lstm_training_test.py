@@ -18,9 +18,10 @@ from __future__ import print_function
 
 # Naive LSTM to learn three-char time steps to one-char mapping
 import numpy as np
+
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
-from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -73,35 +74,34 @@ def _tfLSTM(x, h, c, y):
   return [loss, train]
 
 
-def _RunLayer(layer_func, x, y):
-  with ops.device('cpu'):
-    px = array_ops.placeholder(dataType, shape=x.shape)
-    ph = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
-    pc = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
-    py = array_ops.placeholder(dataType, shape=y.shape)
-  with ipu.scopes.ipu_scope("/device:IPU:0"):
-    r = ipu.ipu_compiler.compile(layer_func, inputs=[px, ph, pc, py])
-
-  opts = ipu.utils.create_ipu_config(
-      profiling=True, use_poplar_text_report=True)
-  opts = ipu.utils.set_ipu_model_options(opts, compile_ipu_code=False)
-  ipu.utils.configure_ipu_system(opts)
-
-  with sl.Session() as sess:
-    sess.run(variables.global_variables_initializer())
-    fd = {px: x, ph: np.ones(ph.shape), pc: np.ones(pc.shape), py: y}
-    losses = []
-    for _ in range(0, num_training_steps):
-      loss = sess.run(r, fd)
-      losses.append(loss)
-  return losses
-
-
 def get_one_hot(a, num_classes):
   return np.squeeze(np.eye(num_classes)[a.reshape(-1)])
 
 
-class LstmTrainingTest(test_util.TensorFlowTestCase):
+class LstmTrainingTest(xla_test.XLATestCase):
+  def _RunLayer(self, layer_func, x, y):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        px = array_ops.placeholder(dataType, shape=x.shape)
+        ph = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
+        pc = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
+        py = array_ops.placeholder(dataType, shape=y.shape)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(layer_func, inputs=[px, ph, pc, py])
+
+      opts = ipu.utils.create_ipu_config(
+          profiling=True, use_poplar_text_report=True)
+      opts = ipu.utils.set_ipu_model_options(opts, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(opts)
+
+      sess.run(variables.global_variables_initializer())
+      fd = {px: x, ph: np.ones(ph.shape), pc: np.ones(pc.shape), py: y}
+      losses = []
+      for _ in range(0, num_training_steps):
+        loss = sess.run(r, fd)
+        losses.append(loss)
+    return losses
+
   # Check that the loss goes down (and is identical to reference version).
   def testTraining(self):
     np.random.seed(42)
@@ -122,11 +122,11 @@ class LstmTrainingTest(test_util.TensorFlowTestCase):
     labels = np.zeros([batch_size, num_hidden], dtype=dataType)
     labels[:y.shape[0], :y.shape[1]] = y
 
-    custom_losses = _RunLayer(_PopnnLSTM, X, labels)
+    custom_losses = self._RunLayer(_PopnnLSTM, X, labels)
     # Check the loss goes down
     self.assertTrue(custom_losses[0] > custom_losses[-1])
     # Check that the loss is the same for the reference as well
-    ref_losses = _RunLayer(_tfLSTM, X, labels)
+    ref_losses = self._RunLayer(_tfLSTM, X, labels)
     self.assertAllClose(custom_losses, ref_losses, atol=0.01)
 
 

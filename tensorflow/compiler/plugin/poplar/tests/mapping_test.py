@@ -8,17 +8,17 @@ from __future__ import print_function
 import numpy as np
 import json
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
 
 
-class MappingTest(test_util.TensorFlowTestCase):
+class MappingTest(xla_test.XLATestCase):
   def testGather(self):
     def my_net(w, i):
       out = array_ops.gather(w, i)

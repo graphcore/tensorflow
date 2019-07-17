@@ -9,6 +9,7 @@ import glob
 import numpy as np
 import os
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
@@ -18,30 +19,29 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
 
 
-class DumpPoplarInfo(test_util.TensorFlowTestCase):
+class DumpPoplarInfo(xla_test.XLATestCase):
   def testVertexGraphAndIntervalReport(self):
-    tempdir = test.get_temp_dir()
-    os.environ['TF_POPLAR_FLAGS'] = (
-        '--save_vertex_graph=' + tempdir + " " + '--save_interval_report=' +
-        tempdir + " " + os.environ.get('TF_POPLAR_FLAGS', ''))
+    with self.session() as sess:
+      tempdir = test.get_temp_dir()
+      os.environ['TF_POPLAR_FLAGS'] = (
+          '--save_vertex_graph=' + tempdir + " " + '--save_interval_report=' +
+          tempdir + " " + os.environ.get('TF_POPLAR_FLAGS', ''))
 
-    def my_model(pa, pb, pc):
-      output = pa + pb + pc
-      return [output]
+      def my_model(pa, pb, pc):
+        output = pa + pb + pc
+        return [output]
 
-    with ops.device("cpu"):
-      pa = array_ops.placeholder(np.float32, [2048], name="a")
-      pb = array_ops.placeholder(np.float32, [2048], name="b")
-      pc = array_ops.placeholder(np.float32, [2048], name="c")
+      with ops.device("cpu"):
+        pa = array_ops.placeholder(np.float32, [2048], name="a")
+        pb = array_ops.placeholder(np.float32, [2048], name="b")
+        pc = array_ops.placeholder(np.float32, [2048], name="c")
 
-    with ops.device("/device:IPU:0"):
-      r = ipu.ipu_compiler.compile(my_model, inputs=[pa, pb, pc])
+      with ops.device("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_model, inputs=[pa, pb, pc])
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
-    with session_lib.Session() as sess:
+      cfg = ipu.utils.create_ipu_config(profiling=False)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
 
       fd = {pa: [1.] * 2048, pb: [2.] * 2048, pc: [3.] * 2048}
       result = sess.run(r[0], fd)

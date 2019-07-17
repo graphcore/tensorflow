@@ -19,6 +19,7 @@ from __future__ import print_function
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import errors
@@ -41,7 +42,7 @@ def next_feed_id():
 next_feed_id.feed_count = 0
 
 
-class ReplicatedGraphTest(test_util.TensorFlowTestCase):
+class ReplicatedGraphTest(xla_test.XLATestCase):
   def testCreateSimpleReplicatedGraph(self):
     def my_graph(inp):
       with ops.device("/device:IPU:0"):

@@ -6,6 +6,7 @@ import os
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
@@ -16,34 +17,34 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 
 
-class StatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
+class StatefulGradientAccumulateTest(xla_test.XLATestCase):
   def testStatefulGradientAccumulate(self):
-    dtype = np.float32
+    with self.session() as sess:
+      dtype = np.float32
 
-    def my_net(y):
-      def cond(i, x, y):
-        return i < 10
+      def my_net(y):
+        def cond(i, x, y):
+          return i < 10
 
-      def body(i, x, y):
-        x = x + gen_poputil_ops.ipu_stateful_gradient_accumulate(
-            array_ops.ones_like(x), num_mini_batches=5)
-        y = y + array_ops.ones_like(x)
-        i = i + 1
-        return (i, x, y)
+        def body(i, x, y):
+          x = x + gen_poputil_ops.ipu_stateful_gradient_accumulate(
+              array_ops.ones_like(x), num_mini_batches=5)
+          y = y + array_ops.ones_like(x)
+          i = i + 1
+          return (i, x, y)
 
-      i = 0
-      return control_flow_ops.while_loop(cond, body, (i, y, y))
+        i = 0
+        return control_flow_ops.while_loop(cond, body, (i, y, y))
 
-    with ops.device('cpu'):
-      y = array_ops.placeholder(dtype, [1])
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        y = array_ops.placeholder(dtype, [1])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(execution_trace=False)
+      tu.configure_ipu_system(execution_trace=False)
 
-    with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[y])
+      with ops.device("/device:IPU:0"):
+        r = xla.compile(my_net, inputs=[y])
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)
@@ -51,32 +52,32 @@ class StatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(y[2], [20])
 
   def testWideConstantWithAllocationTarget(self):
-    dtype = np.float32
+    with self.session() as sess:
+      dtype = np.float32
 
-    def my_net(y):
-      def cond(i, x, y):
-        return i < 10
+      def my_net(y):
+        def cond(i, x, y):
+          return i < 10
 
-      def body(i, x, y):
-        x = x + gen_poputil_ops.ipu_stateful_gradient_accumulate(
-            array_ops.ones_like(x), num_mini_batches=4)
-        y = y + array_ops.ones_like(x)
-        i = i + 1
-        return (i, x, y)
+        def body(i, x, y):
+          x = x + gen_poputil_ops.ipu_stateful_gradient_accumulate(
+              array_ops.ones_like(x), num_mini_batches=4)
+          y = y + array_ops.ones_like(x)
+          i = i + 1
+          return (i, x, y)
 
-      i = 0
-      return control_flow_ops.while_loop(cond, body, (i, y, y))
+        i = 0
+        return control_flow_ops.while_loop(cond, body, (i, y, y))
 
-    with ops.device('cpu'):
-      y = array_ops.placeholder(dtype, [1])
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        y = array_ops.placeholder(dtype, [1])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(execution_trace=False)
+      tu.configure_ipu_system(execution_trace=False)
 
-    with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[y])
+      with ops.device("/device:IPU:0"):
+        r = xla.compile(my_net, inputs=[y])
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)

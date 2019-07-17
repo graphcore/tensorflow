@@ -3,12 +3,11 @@ licenses(["restricted"])
 package(default_visibility = ["//visibility:public"])
 
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
+load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "poplar_lib_directory")
 load("@local_config_poplar//poplar:build_defs.bzl", "poplibs_lib_directory")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
 load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
-load("//tensorflow:tensorflow.bzl", "tf_cc_test")
-load("//tensorflow:tensorflow.bzl", "tf_py_test")
 load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 load("//tensorflow/core:platform/default/build_config.bzl", "tf_proto_library")
@@ -527,7 +526,6 @@ tf_custom_op_py_library(
     name = "poprand_ops_py",
     kernels = [":poprand_ops"],
     deps = [":poprand_ops_wrapper_py"],
-    srcs_version = "PY2AND3",
 )
 
 
@@ -556,7 +554,6 @@ tf_custom_op_py_library(
     name = "poputil_ops_py",
     kernels = [":poputil_ops"],
     deps = [":poputil_ops_wrapper_py"],
-    srcs_version = "PY2AND3",
 )
 
 cc_library(
@@ -655,74 +652,66 @@ cc_library(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "graph_compile_io_map_test",
     srcs = ["tests/graph_compile_io_map_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "conversions_test",
     srcs = ["tests/conversions_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "allreduce_lookahead_scheduler_test",
     srcs = ["tests/allreduce_lookahead_scheduler_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "dynamic_slice_layout_test",
     srcs = ["tests/dynamic_slice_layout_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "sort_op_cc_test",
     srcs = ["tests/sort_op_cc_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "convolution_classifier_test",
     srcs = ["tests/convolution_classifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -731,9 +720,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "inplace_test",
     srcs = ["tests/inplace_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -742,9 +733,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "hlo_hash_test",
     srcs = ["tests/hlo_hash_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -752,12 +745,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "hlo_matcher_test",
     srcs = ["tests/hlo_matcher_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -766,9 +758,11 @@ tf_cc_test(
 )
 
 
-tf_cc_test(
+xla_test(
     name = "expression_outliner_test",
     srcs = ["tests/expression_outliner_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         ":test_utils",
@@ -777,9 +771,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "allocation_finder_test",
     srcs = ["tests/allocation_finder_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -789,9 +785,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "wide_const_finder_test",
     srcs = ["tests/wide_const_finder_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -799,9 +797,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "while_loop_condition_simplify_test",
     srcs = ["tests/while_loop_condition_simplify_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -809,9 +809,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "while_loop_to_repeat_simplify_test",
     srcs = ["tests/while_loop_to_repeat_simplify_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -819,19 +821,22 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "while_loop_alias_copy_test",
     srcs = ["tests/while_loop_alias_copy_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "commutative_instruction_reorder_operands_test",
     srcs = ["tests/commutative_instruction_reorder_operands_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -839,9 +844,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "fuse_wide_const_test",
     srcs = ["tests/fuse_wide_const_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -849,9 +856,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "scheduler_test",
     srcs = ["tests/scheduler_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -860,9 +869,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "scheduler_tree_test",
     srcs = ["tests/scheduler_tree_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -871,9 +882,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "sync_list_scheduler_test",
     srcs = ["tests/sync_list_scheduler_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -882,9 +895,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "combine_instructions_test",
     srcs = ["tests/combine_instructions_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -893,9 +908,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "hlo_computation_name_uniquify_test",
     srcs = ["tests/hlo_computation_name_uniquify_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -907,9 +924,8 @@ tf_cc_test(
 xla_test(
     name = "fused_batch_norm_test",
     srcs = ["tests/fused_batch_norm_test.cc"],
-    backends = [
-        "poplar",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "medium",
     deps = [
         ":optimizers",
@@ -941,9 +957,11 @@ xla_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "sharding_pass_test",
     srcs = ["tests/sharding_pass_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -952,9 +970,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "inter_ipu_copy_inserter_test",
     srcs = ["tests/inter_ipu_copy_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -963,9 +983,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "dependency_replacer_test",
     srcs = ["tests/dependency_replacer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -974,9 +996,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "f16_constant_folding_test",
     srcs = ["tests/f16_constant_folding_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -985,9 +1009,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "constant_nan_test",
     srcs = ["tests/constant_nan_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -996,9 +1022,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "constant_slice_folding_test",
     srcs = ["tests/constant_slice_folding_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -1007,12 +1035,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "find_all_users_test",
     srcs = ["tests/find_all_users_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -1020,9 +1047,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "not_supported_gather_expander_test",
     srcs = ["tests/not_supported_gather_expander_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -1030,9 +1059,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "not_supported_scatter_expander_test",
     srcs = ["tests/not_supported_scatter_expander_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -1040,9 +1071,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "root_token_replacer_test",
     srcs = ["tests/root_token_replacer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "small",
     deps = [
         ":optimizers",
@@ -1051,14 +1084,12 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "deferred_allocation_visitor_test",
     srcs = ["tests/deferred_allocation_visitor_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/compiler/xla/service:hlo_runner",
         "//tensorflow/compiler/xla:shape_util",
@@ -1071,35 +1102,33 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "recomputation_test",
     srcs = ["tests/recomputation_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "data_initializer_test",
     srcs = ["tests/data_initializer_test.cc"],
-    extra_copts = [
-        "-fexceptions",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
-        ":poplar_lib",
         "//tensorflow/compiler/xla/service:hlo_matchers",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "elementwise_broadcast_converter_test",
     srcs = ["tests/elementwise_broadcast_converter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -1109,9 +1138,11 @@ tf_cc_test(
     ],
 )
 
-tf_cc_test(
+xla_test(
     name = "gradient_accumulation_fuser_test",
     srcs = ["tests/gradient_accumulation_fuser_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -1124,9 +1155,8 @@ tf_cc_test(
 xla_test(
     name = "sparse_softmax_test",
     srcs = ["tests/sparse_softmax_test.cc"],
-    backends = [
-        "poplar",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "medium",
     deps = [
         ":optimizers",
@@ -1161,9 +1191,8 @@ xla_test(
 xla_test(
     name = "scatter_combiner_test",
     srcs = ["tests/scatter_combiner_test.cc"],
-    backends = [
-        "poplar",
-    ],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
     size = "medium",
     deps = [
         ":optimizers",
@@ -1202,14 +1231,14 @@ py_library(
         ":ipu_ops_py",
         "//tensorflow/compiler/tf2xla/python:xla",
     ],
-    srcs_version = "PY2AND3"
 )
 
-py_test(
+tf_xla_py_test(
     name = "arg_min_max_test",
     size = "medium",
     shard_count = 2,
     srcs = ["tests/arg_min_max_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1219,13 +1248,13 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "ipu_model_device_test",
     size = "medium",
     srcs = ["tests/ipu_model_device_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1235,13 +1264,13 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "topk_onehot_test",
     size = "small",
     srcs = ["tests/topk_onehot_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1251,14 +1280,14 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
 
-py_test(
+tf_xla_py_test(
     name = "topk_test",
     size = "small",
     srcs = ["tests/topk_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1268,13 +1297,13 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "infeed_prefetch_test",
     size = "small",
     srcs = ["tests/infeed_prefetch_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1284,14 +1313,14 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
 
-py_test(
+tf_xla_py_test(
     name = "simple_network_test",
     size = "small",
     srcs = ["tests/simple_network_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1302,13 +1331,13 @@ py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "matmul_test",
     size = "small",
     srcs = ["tests/matmul_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1320,13 +1349,13 @@ py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "conv_test",
     size = "large",
     srcs = ["tests/conv_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1335,13 +1364,13 @@ py_test(
         "//tensorflow/python:constant_op",
         "//tensorflow/python:nn_ops",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "conv3d_test",
     size = "large",
     srcs = ["tests/conv3d_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1350,26 +1379,26 @@ py_test(
         "//tensorflow/python:constant_op",
         "//tensorflow/python:nn_ops",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "constant_test",
     size = "large",
     srcs = ["tests/constant_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:constant_op",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "variable_test",
     size = "small",
     srcs = ["tests/variable_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1385,13 +1414,13 @@ py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "synthetic_data_test",
     size = "small",
     srcs = ["tests/synthetic_data_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1407,13 +1436,13 @@ py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "multi_run_test",
     size = "small",
     srcs = ["tests/multi_run_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1421,25 +1450,25 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "reduce_test",
     size = "small",
     srcs = ["tests/reduce_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "f16_test",
     size = "small",
     srcs = ["tests/f16_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1447,13 +1476,13 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "64_bit_test",
     size = "small",
     srcs = ["tests/64_bit_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1461,13 +1490,13 @@ py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "batch_norm_test",
     size = "small",
     srcs = ["tests/batch_norm_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1480,13 +1509,13 @@ py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "fuse_ops_test",
     size = "medium",
     srcs = ["tests/fuse_ops_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1497,13 +1526,13 @@ py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "tensor_array_test",
     size = "small",
     srcs = ["tests/tensor_array_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1515,13 +1544,13 @@ py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "monitored_session_test",
     size = "small",
     srcs = ["tests/monitored_session_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1531,13 +1560,13 @@ py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "casts_elimination_test",
     size = "medium",
     srcs = ["tests/casts_elimination_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1547,13 +1576,13 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "update_op_dependencies_test",
     size = "medium",
     srcs = ["tests/update_op_dependencies_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1563,13 +1592,13 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "norm_graph_caching_test",
     size = "medium",
     srcs = ["tests/norm_graph_caching_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1581,13 +1610,13 @@ py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "norm_graph_caching_sharded_test",
     size = "medium",
     srcs = ["tests/norm_graph_caching_sharded_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1599,13 +1628,13 @@ py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "conv_graph_caching_test",
     size = "medium",
     srcs = ["tests/conv_graph_caching_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1616,13 +1645,13 @@ py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "conv_graph_caching_sharded_test",
     size = "medium",
     srcs = ["tests/conv_graph_caching_sharded_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1633,13 +1662,13 @@ py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "lstm_test",
     size = "medium",
     srcs = ["tests/lstm_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1651,13 +1680,13 @@ py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "group_norm_test",
     size = "large",
     srcs = ["tests/group_norm_test.py"],
+    enabled_backends = ["poplar"],
     shard_count = 5,
     deps = [
         ":test_utils_py",
@@ -1671,13 +1700,13 @@ py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "wide_const_expansion_test",
     size = "medium",
     srcs = ["tests/wide_const_expansion_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1687,13 +1716,13 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "forward_allocation_test",
     size = "medium",
     srcs = ["tests/forward_allocation_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1704,13 +1733,13 @@ py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/keras:layers_base",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "stateful_gradient_accumulate_test",
     size = "medium",
     srcs = ["tests/stateful_gradient_accumulate_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1720,14 +1749,14 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-py_test(
+tf_xla_py_test(
     name = "replicated_stateful_gradient_accumulate_test",
     size = "large",
     shard_count = 2,
     srcs = ["tests/replicated_stateful_gradient_accumulate_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
@@ -1738,26 +1767,28 @@ py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
     ],
-    srcs_version = "PY2AND3",
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "case_test",
     size = "small",
     srcs = ["tests/case_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "while_loop_perf_test",
     size = "small",
     srcs = ["tests/while_loop_perf_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1770,11 +1801,12 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "mapping_test",
     size = "small",
     srcs = ["tests/mapping_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1788,11 +1820,12 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "remapping_test",
     size = "small",
     srcs = ["tests/remapping_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1805,11 +1838,12 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "dump_poplar_info",
     size = "small",
     srcs = ["tests/dump_poplar_info.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -1822,12 +1856,14 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "conditional_test",
     size = "small",
     srcs = ["tests/conditional_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:control_flow_ops",
@@ -1839,74 +1875,86 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "combined_weights_test",
     size = "large",
     srcs = ["tests/size_speed_tests/combined_weights_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "resnet_size_test",
     size = "large",
     shard_count = 2,
     srcs = ["tests/size_speed_tests/resnet_size_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "matmul_size_test",
     size = "large",
     shard_count = 3,
     srcs = ["tests/size_speed_tests/matmul_size_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "lstm_size_test",
     size = "large",
     srcs = ["tests/size_speed_tests/lstm_size_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "lstm_training_test",
     size = "large",
     srcs = ["tests/training_tests/lstm_training_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:layers",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "while_loop_test",
     size = "medium",
     srcs = ["tests/while_loop_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1917,12 +1965,14 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "while_loop_sharded_test",
     size = "medium",
     srcs = ["tests/while_loop_sharded_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1933,13 +1983,15 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "multi_ipu_test",
     size = "medium",
     tags = ['exclusive'],
     srcs = ["tests/multi_ipu_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1950,12 +2002,14 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "sort_op_py_test",
     size = "medium",
     srcs = ["tests/sort_op_py_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1966,13 +2020,15 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "replicated_graph_test",
     size = "large",
     shard_count = 2,
     srcs = ["tests/replicated_graph_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1983,12 +2039,14 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "sharded_inplace_test",
     size = "small",
     srcs = ["tests/sharded_inplace_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -1999,13 +2057,15 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "sharded_and_replicated_test",
     size = "large",
     shard_count = 2,
     srcs = ["tests/sharded_and_replicated_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -2016,12 +2076,14 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "dropout_hw_test",
     size = "small",
     srcs = ["tests/dropout_hw_test.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
@@ -2032,50 +2094,55 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "logging_example_1",
     size = "small",
     srcs = ["docs/logging_example_1.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "perf_training_example",
     size = "small",
     srcs = ["docs/perf_training_example.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         "//tensorflow:tensorflow_py",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "tutorial_basic",
     size = "small",
     srcs = ["docs/tutorial_basic.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "tutorial_sharding",
     size = "small",
     srcs = ["docs/tutorial_sharding.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
-tf_py_test(
+tf_xla_py_test(
     name = "tutorial_xla_compile",
     size = "small",
     srcs = ["docs/tutorial_xla_compile.py"],
-    additional_deps = [
+    enabled_backends = ["poplar"],
+    deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],

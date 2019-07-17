@@ -8,6 +8,7 @@ from __future__ import print_function
 import os
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
@@ -24,7 +25,7 @@ def count_event_type(events, type):
   return sum(map((lambda x: 1 if x.type == type else 0), events))
 
 
-class WhileLoopPerfTest(test_util.TensorFlowTestCase):
+class WhileLoopPerfTest(xla_test.XLATestCase):
   def testIpuWhilePerfTest(self):
     def cond(i, v):
       return math_ops.less(i, 15)

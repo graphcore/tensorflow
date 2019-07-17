@@ -8,6 +8,7 @@ from __future__ import print_function
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
@@ -22,50 +23,51 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.layers import normalization as layers_norm
 
 
-class NormGraphCachingTest(test_util.TensorFlowTestCase):
+class NormGraphCachingTest(xla_test.XLATestCase):
   def testBatchNormsMatchFwdBwdSomeOnShard0SomeOnShard1(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        with tu.ipu_shard(0):
-          y = convolutional.conv2d(
-              x,
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv1')
-          y = layers_norm.batch_normalization(y, fused=True, training=True)
-          y = convolutional.conv2d(
-              y,
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv2')
-          y = layers_norm.batch_normalization(y, fused=True, training=True)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          with tu.ipu_shard(0):
+            y = convolutional.conv2d(
+                x,
+                2,
+                1,
+                use_bias=False,
+                kernel_initializer=init_ops.ones_initializer(),
+                name='conv1')
+            y = layers_norm.batch_normalization(y, fused=True, training=True)
+            y = convolutional.conv2d(
+                y,
+                2,
+                1,
+                use_bias=False,
+                kernel_initializer=init_ops.ones_initializer(),
+                name='conv2')
+            y = layers_norm.batch_normalization(y, fused=True, training=True)
 
-        with tu.ipu_shard(1):
-          y = convolutional.conv2d(
-              y,
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv3')
-          y = layers_norm.batch_normalization(y, fused=True, training=True)
+          with tu.ipu_shard(1):
+            y = convolutional.conv2d(
+                y,
+                2,
+                1,
+                use_bias=False,
+                kernel_initializer=init_ops.ones_initializer(),
+                name='conv3')
+            y = layers_norm.batch_normalization(y, fused=True, training=True)
 
-      loss = math_ops.reduce_sum(y)
-      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      train = optimizer.minimize(loss)
+        loss = math_ops.reduce_sum(y)
+        optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+        train = optimizer.minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True, sharded=True)
-    tu.move_variable_initialization_to_cpu()
-    with tu.ipu_session() as sess:
+      tu.configure_ipu_system(True, True, True, sharded=True)
+      tu.move_variable_initialization_to_cpu()
+
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)

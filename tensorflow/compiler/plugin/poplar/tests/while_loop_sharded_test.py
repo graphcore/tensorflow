@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import dtypes
@@ -20,46 +21,46 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent as gd
 
 
-class WhileLoopShardedTest(test_util.TensorFlowTestCase):
+class WhileLoopShardedTest(xla_test.XLATestCase):
   def testSimpleXlaCompileTrainingInLoopWithParam(self):
-    dataset = tu.create_dual_increasing_dataset(3)
+    with self.session() as sess:
+      dataset = tu.create_dual_increasing_dataset(3)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed")
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed")
 
-    def my_net(lr):
-      def my_model(lr, loss, x, y):
-        with ipu.scopes.ipu_scope("/device:IPU:0"):
-          inp = x
+      def my_net(lr):
+        def my_model(lr, loss, x, y):
+          with ipu.scopes.ipu_scope("/device:IPU:0"):
+            inp = x
 
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv1", use_bias=False)(x)
-          x = math_ops.reduce_max(x, axis=[1, 2])
+            x = layers.Conv2D(
+                8, 3, padding='same', name="conv1", use_bias=False)(x)
+            x = math_ops.reduce_max(x, axis=[1, 2])
 
-          cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
-              logits=x, labels=array_ops.stop_gradient(y))
-          loss = math_ops.reduce_mean(cross_entropy)
+            cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
+                logits=x, labels=array_ops.stop_gradient(y))
+            loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = ipu.sharded_optimizer.ShardedOptimizer(
-              gd.GradientDescentOptimizer(lr))
-          train = optim.minimize(cross_entropy)
+            optim = ipu.sharded_optimizer.ShardedOptimizer(
+                gd.GradientDescentOptimizer(lr))
+            train = optim.minimize(cross_entropy)
 
-          ipu.autoshard.automatic_sharding(2, inp, loss)
+            ipu.autoshard.automatic_sharding(2, inp, loss)
 
-          return [lr, loss, train]
+            return [lr, loss, train]
 
-      loss = 0.0
-      return ipu.loops.repeat(2, my_model, [lr, loss], infeed_queue)
+        loss = 0.0
+        return ipu.loops.repeat(2, my_model, [lr, loss], infeed_queue)
 
-    lr = array_ops.placeholder(dtypes.float32, [])
-    out = ipu.ipu_compiler.compile(my_net, inputs=[lr])
+      lr = array_ops.placeholder(dtypes.float32, [])
+      out = ipu.ipu_compiler.compile(my_net, inputs=[lr])
 
-    cfg = ipu.utils.create_ipu_config(profiling=False)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    cfg = ipu.utils.auto_select_ipus(cfg, 2)
-    ipu.utils.configure_ipu_system(cfg)
-    tu.move_variable_initialization_to_cpu()
+      cfg = ipu.utils.create_ipu_config(profiling=False)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+      tu.move_variable_initialization_to_cpu()
 
-    with session_lib.Session() as sess:
       sess.run(infeed_queue.initializer)
       sess.run(variables.global_variables_initializer())
       sess.run(out[0], {lr: 0.1})

@@ -4,10 +4,9 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python import ipu
-from tensorflow.python.client import session as sl
-from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -109,75 +108,71 @@ def max_pool(x, ksize=3, stride=2):
       padding='SAME')
 
 
-class Resnet18_No_Batchnorm(test_util.TensorFlowTestCase):
+class Resnet18_No_Batchnorm(xla_test.XLATestCase):
   def testInference(self):
-    x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
-    y_ = array_ops.placeholder(datatype, shape=[1, 1000])
+    with self.session() as sess:
+      x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
+      y_ = array_ops.placeholder(datatype, shape=[1, 1000])
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      logits = inference(x)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        logits = inference(x)
 
-      loss = math_ops.reduce_mean(
-          nn_ops.softmax_cross_entropy_with_logits_v2(
-              logits=logits, labels=array_ops.stop_gradient(y_)))
+        loss = math_ops.reduce_mean(
+            nn_ops.softmax_cross_entropy_with_logits_v2(
+                logits=logits, labels=array_ops.stop_gradient(y_)))
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    opts = ipu.utils.create_ipu_config(profiling=True)
-    ipu.utils.configure_ipu_system(opts)
-    sess = sl.Session()
+      opts = ipu.utils.create_ipu_config(profiling=True)
+      ipu.utils.configure_ipu_system(opts)
 
-    sess.run(variables.global_variables_initializer())
-    sess.run(report)
+      sess.run(variables.global_variables_initializer())
+      sess.run(report)
 
-    data = np.zeros([1, 224, 224, 4])
-    labels = np.zeros([1, 1000])
+      data = np.zeros([1, 224, 224, 4])
+      labels = np.zeros([1, 1000])
 
-    sess.run(loss, feed_dict={x: data, y_: labels})
-    out = sess.run(report)
+      sess.run(loss, feed_dict={x: data, y_: labels})
+      out = sess.run(report)
 
-    sess.close()
-
-    evts = ipu.utils.extract_all_events(out)
-    size = ipu.utils.get_memory_size_from_events(evts)
-    self.assertTrue(size < 38750000)
+      evts = ipu.utils.extract_all_events(out)
+      size = ipu.utils.get_memory_size_from_events(evts)
+      self.assertTrue(size < 38750000)
 
   def testTraining(self):
-    x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
-    y_ = array_ops.placeholder(datatype, shape=[1, 1000])
+    with self.session() as sess:
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      logits = inference(x)
+      x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
+      y_ = array_ops.placeholder(datatype, shape=[1, 1000])
 
-      loss = math_ops.reduce_mean(
-          nn_ops.softmax_cross_entropy_with_logits_v2(
-              logits=logits, labels=array_ops.stop_gradient(y_)))
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        logits = inference(x)
 
-      train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+        loss = math_ops.reduce_mean(
+            nn_ops.softmax_cross_entropy_with_logits_v2(
+                logits=logits, labels=array_ops.stop_gradient(y_)))
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+        train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-    opts = ipu.utils.create_ipu_config(profiling=True)
-    ipu.utils.configure_ipu_system(opts)
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    sess = sl.Session()
+      opts = ipu.utils.create_ipu_config(profiling=True)
+      ipu.utils.configure_ipu_system(opts)
 
-    sess.run(variables.global_variables_initializer())
-    sess.run(report)
+      sess.run(variables.global_variables_initializer())
+      sess.run(report)
 
-    data = np.zeros([1, 224, 224, 4])
-    labels = np.zeros([1, 1000])
+      data = np.zeros([1, 224, 224, 4])
+      labels = np.zeros([1, 1000])
 
-    sess.run(train, feed_dict={x: data, y_: labels})
-    out = sess.run(report)
+      sess.run(train, feed_dict={x: data, y_: labels})
+      out = sess.run(report)
 
-    sess.close()
-
-    evts = ipu.utils.extract_all_events(out)
-    size = ipu.utils.get_memory_size_from_events(evts)
-    self.assertTrue(size < 75000000)
+      evts = ipu.utils.extract_all_events(out)
+      size = ipu.utils.get_memory_size_from_events(evts)
+      self.assertTrue(size < 75000000)
 
 
 if __name__ == "__main__":

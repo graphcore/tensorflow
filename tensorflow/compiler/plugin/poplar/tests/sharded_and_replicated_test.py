@@ -21,6 +21,7 @@ import json
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
@@ -46,7 +47,7 @@ def next_feed_id():
 next_feed_id.feed_count = 0
 
 
-class ShardedAndReplicatedTest(test_util.TensorFlowTestCase):
+class ShardedAndReplicatedTest(xla_test.XLATestCase):
   def testShardedAndReplicated(self):
     shape = [2]
     dataset = tu.create_single_increasing_dataset(3, shape)

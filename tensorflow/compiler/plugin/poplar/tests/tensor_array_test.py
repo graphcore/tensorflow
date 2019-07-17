@@ -7,19 +7,18 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import tensor_array_grad
 from tensorflow.python.ops import tensor_array_ops
 
 
-class IpuXlaTensorArrayTest(test_util.TensorFlowTestCase):
+class IpuXlaTensorArrayTest(xla_test.XLATestCase):
   def testTensorArrayWriteRead(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as session:
+      with self.session() as session:
 
         in1 = array_ops.placeholder(np.float32, [1, 2])
         in2 = array_ops.placeholder(np.float32, [1, 2])
@@ -48,7 +47,7 @@ class IpuXlaTensorArrayTest(test_util.TensorFlowTestCase):
 
   def testTensorArrayScatterGather(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as session:
+      with self.session() as session:
 
         in1 = array_ops.placeholder(np.float32, [5, 2])
         in2 = array_ops.placeholder(np.float32, [2])

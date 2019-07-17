@@ -9,22 +9,20 @@ import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.eager import function as eager_function
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_functional_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables as variables_lib
-from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import googletest
-from tensorflow.python.training import gradient_descent
 
 
-class CaseTest(test_util.TensorFlowTestCase):
+class CaseTest(xla_test.XLATestCase):
   def testCaseSimple(self):
     def my_graph(pa, pb, pc):
       with ipu.scopes.ipu_scope("/device:IPU:0"):

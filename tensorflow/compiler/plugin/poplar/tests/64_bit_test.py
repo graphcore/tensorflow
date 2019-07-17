@@ -7,17 +7,16 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 
 
-class Ipu64BitTest(test_util.TensorFlowTestCase):
+class Ipu64BitTest(xla_test.XLATestCase):
   def testAdd(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.int64, [2, 2], name="a")
         pb = array_ops.placeholder(np.int64, [2, 2], name="b")
         output = pa + pb
@@ -32,7 +31,7 @@ class Ipu64BitTest(test_util.TensorFlowTestCase):
 
   def testSubConstant(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.int64, [2, 2], name="a")
         pb = array_ops.constant([[1, 2], [3, 4]], dtype=np.int64)
         output = pa - pb

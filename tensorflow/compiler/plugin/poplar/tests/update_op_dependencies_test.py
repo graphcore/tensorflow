@@ -6,31 +6,31 @@ import os
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import nn
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
-class UpdateOpDependenciesTest(test_util.TensorFlowTestCase):
+class UpdateOpDependenciesTest(xla_test.XLATestCase):
   def testDontOutlineInplaceExpression(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float32, [])
-      pb = array_ops.placeholder(np.float32, [])
-      pc = array_ops.placeholder(np.float32, [])
-      pd = array_ops.placeholder(np.float32, [])
-      e = pa + pb - pc + pd
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [])
+        pb = array_ops.placeholder(np.float32, [])
+        pc = array_ops.placeholder(np.float32, [])
+        pd = array_ops.placeholder(np.float32, [])
+        e = pa + pb - pc + pd
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       fd = {pa: 1, pb: 2, pc: 3, pd: 4}
       result = sess.run(e, fd)
@@ -49,21 +49,21 @@ class UpdateOpDependenciesTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def tesInplaceAddCopyWithInplacePeer(self):
-    data_a = np.array([[10, -20], [5, 1]])
-    data_b = np.array([[-12, 11], [12, -13]])
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float32, [2, 2])
-      pb = array_ops.placeholder(np.float32, [2, 2])
-      c = array_ops.transpose(pa)
-      d = pa + pb
-      e = c / d
+    with self.session() as sess:
+      data_a = np.array([[10, -20], [5, 1]])
+      data_b = np.array([[-12, 11], [12, -13]])
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [2, 2])
+        pb = array_ops.placeholder(np.float32, [2, 2])
+        c = array_ops.transpose(pa)
+        d = pa + pb
+        e = c / d
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       fd = {
           pa: data_a,
@@ -87,24 +87,24 @@ class UpdateOpDependenciesTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def tesInplaceAddCopyWithInplacePeer2(self):
-    data_a = np.array([[10, -10], [-5, 5]])
-    data_b = np.array([[-15, 15], [25, -25]])
-    data_c = 2
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float32, [2, 2])
-      pb = array_ops.placeholder(np.float32, [2, 2])
-      pc = array_ops.placeholder(np.float32, [])
-      a = array_ops.transpose(pa)
-      b = pa + pb * pc
-      c = a * pb + pc
-      d = b / c
+    with self.session() as sess:
+      data_a = np.array([[10, -10], [-5, 5]])
+      data_b = np.array([[-15, 15], [25, -25]])
+      data_c = 2
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [2, 2])
+        pb = array_ops.placeholder(np.float32, [2, 2])
+        pc = array_ops.placeholder(np.float32, [])
+        a = array_ops.transpose(pa)
+        b = pa + pb * pc
+        c = a * pb + pc
+        d = b / c
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       fd = {
           pa: data_a,
@@ -131,23 +131,23 @@ class UpdateOpDependenciesTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testInplaceOpAddCopyWithInplaceParent(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float32, [3])
-      pb = array_ops.placeholder(np.float32, [3])
-      pc = array_ops.placeholder(np.float32, [])
-      c = array_ops.slice(pa, [0], [2])
-      d = array_ops.slice(pb, [0], [2])
-      e = c + d
-      f = e / pc
-      g = array_ops.slice(pa, [1], [2])
-      h = f + g
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [3])
+        pb = array_ops.placeholder(np.float32, [3])
+        pc = array_ops.placeholder(np.float32, [])
+        c = array_ops.slice(pa, [0], [2])
+        d = array_ops.slice(pb, [0], [2])
+        e = c + d
+        f = e / pc
+        g = array_ops.slice(pa, [1], [2])
+        h = f + g
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       fd = {
           pa: [1, 2, 3],
@@ -170,29 +170,30 @@ class UpdateOpDependenciesTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testInplaceTuple(self):
-    def my_net(x):
-      def cond(i, x, y):
-        return i < 1
+    with self.session() as sess:
 
-      def body(i, x, y):
-        i = i + 1
-        x = nn.tanh(x)
-        y = nn.tanh(y)
-        return (i, x, y)
+      def my_net(x):
+        def cond(i, x, y):
+          return i < 1
 
-      i = 0
-      return control_flow_ops.while_loop(cond, body, (i, x, x))[1:]
+        def body(i, x, y):
+          i = i + 1
+          x = nn.tanh(x)
+          y = nn.tanh(y)
+          return (i, x, y)
 
-    with ops.device('cpu'):
-      x = array_ops.placeholder(np.float32, [4])
-      report = gen_ipu_ops.ipu_event_trace()
+        i = 0
+        return control_flow_ops.while_loop(cond, body, (i, x, x))[1:]
 
-    tu.configure_ipu_system()
+      with ops.device('cpu'):
+        x = array_ops.placeholder(np.float32, [4])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[x])
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
+      with ops.device("/device:IPU:0"):
+        r = xla.compile(my_net, inputs=[x])
+
       sess.run(report)
       x, y = sess.run(r, {x: np.full([4], 2)})
       self.assertAllClose(x, np.full([4], np.tanh(2)))
