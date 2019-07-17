@@ -759,13 +759,24 @@ StatusOr<poplar::program::Program> CreateNonLinearityOp(
   poplar::Graph& graph = GetGraph(res, inst);
 
   poplar::program::Sequence seq;
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
-                      FindInplaceOutputTensors(tensor_map, res, inst, seq));
-  CHECK_EQ(inputs.size(), 1);
-  CHECK_EQ(inputs[0].size(), 1);
-  poplar::Tensor t = inputs[0][0];
-  popnn::nonLinearityInPlace(graph, non_linearity_type, t, seq,
-                             GetDebugName(inst));
+  poplar::Tensor t;
+  const bool is_inplace = AreInplaceOutputTensorsWritable(tensor_map, inst);
+
+  if (is_inplace) {
+    TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    CHECK_EQ(inputs.size(), 1);
+    CHECK_EQ(inputs[0].size(), 1);
+    t = inputs[0][0];
+    popnn::nonLinearityInPlace(graph, non_linearity_type, t, seq,
+                               GetDebugName(inst));
+  } else {
+    TF_ASSIGN_OR_RETURN(
+        t, FindInstructionInput(tensor_map, res, inst, 0, seq, false));
+
+    t = popnn::nonLinearity(graph, non_linearity_type, t, seq,
+                            GetDebugName(inst));
+  }
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, t));
 
