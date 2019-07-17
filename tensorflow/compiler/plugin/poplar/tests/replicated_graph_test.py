@@ -22,6 +22,7 @@ import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
@@ -372,26 +373,24 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       # Check output equals the expected value
       self.assertAllClose(result, ref)
 
-  def testErrorWhenNoAllReduce(self):
-    shape = [2]
-    dataset = tu.create_single_increasing_dataset(3, shape)
+  def testReplicatedGraphWithoutAllReduce(self):
+    dataset = dataset_ops.Dataset.from_tensor_slices([1, 2, 3, 4])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         dataset, feed_name=next_feed_id(), replication_factor=2)
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name=next_feed_id(), replication_factor=2)
 
-    def body(v, x):
-      outfeed = outfeed_queue.enqueue(v)
-      return (v + x, outfeed)
+    def body(x):
+      outfeed = outfeed_queue.enqueue(x)
+      return outfeed
 
     def my_net():
-      v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
-      r = ipu.loops.repeat(5, body, [v], infeed_queue)
+      r = ipu.loops.repeat(2, body, infeed_queue=infeed_queue)
       return r
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
-      res = ipu.ipu_compiler.compile(my_net, inputs=[])
+      res = ipu.ipu_compiler.compile(my_net)
 
     outfed = outfeed_queue.dequeue()
 
@@ -403,10 +402,10 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
     with sl.Session() as sess:
       sess.run(infeed_queue.initializer)
-      with self.assertRaisesRegexp(
-          errors.FailedPreconditionError,
-          'This is not a valid replicated graph because'):
-        result = sess.run(res)
+      sess.run(res)
+      outfed_result = sess.run(outfed)
+
+    self.assertAllClose([[1, 2], [3, 4]], outfed_result)
 
   def testCreateSimpleReplicatedInfeedWrongReplicationFactor(self):
     shape = [2]

@@ -45,9 +45,6 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"use_ipu_model",
        "If enabled, this computation will be executed on the IPU model. "
        "(bool)"},
-      {"force_replicated_mode",
-       "If enabled, we allow replicated graphs with no AllReduce operations in "
-       "them to still run in replicated mode. (bool)"},
       {"while_loop_brute_force_max_trip_count",
        "When trying to convert a while loop to a repeat loop, we can try and "
        "use a brute force method to simulate the conditional part of the while "
@@ -80,6 +77,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
   // Struct for deprecated flags.
   struct DeprecatedFlags {
     bool add_all_reduce_copies = false;
+    bool force_replicated_mode = false;
   };
 
   DeprecatedFlags deprecated_flags;
@@ -95,7 +93,6 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(use_synthetic_data)
     ADD_FLAG(synthetic_data_initializer)
     ADD_FLAG(use_ipu_model)
-    ADD_FLAG(force_replicated_mode)
     ADD_FLAG(while_loop_brute_force_max_trip_count)
     ADD_FLAG(max_compilation_threads)
     ADD_FLAG(save_oom_profiler)
@@ -109,6 +106,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
 
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(add_all_reduce_copies)
+    ADD_DEPRECATED_FLAG(force_replicated_mode)
 
 // clang-format on
 #undef ADD_FLAG
@@ -133,11 +131,17 @@ PoplarXlaFlags::PoplarXlaFlags() {
            "deprecated, has no effect and it will be removed in the future.";
   }
 
+  if (deprecated_flags.force_replicated_mode) {
+    LOG(INFO)
+        << "The TensorFlow Poplar flag \"force_replicated_mode\" is "
+           "deprecated, has no effect and it will be removed in the future.";
+  }
+
   // Hash all the flags which affect the graph generation and compilation only.
-  hlo_hash = hash_util::hash(
-      use_synthetic_data, synthetic_data_initializer, use_ipu_model,
-      force_replicated_mode, while_loop_brute_force_max_trip_count,
-      executable_cache_path, fallback_scheduler, allow_nans);
+  hlo_hash =
+      hash_util::hash(use_synthetic_data, synthetic_data_initializer,
+                      use_ipu_model, while_loop_brute_force_max_trip_count,
+                      executable_cache_path, fallback_scheduler, allow_nans);
 }
 
 const PoplarXlaFlags& PoplarXlaFlags::Get() {

@@ -118,11 +118,6 @@ without the overhead of data transfer.
 directly on the IPU either randomly (synthetic_data_initializer=random) or to a
 constant value X (synthetic_data_initializer=X)
 
-``--force_replicated_mode`` allows graphs without ``AllReduce`` operations in
-them to be executed in replicated mode.  This might be required if replicated
-graphs are used in inference mode, or where there are no per-replica trainable
-parameters.
-
 ``--max_compilation_threads`` sets the maximum number of threads which Poplar
 is allowed to use for compiling the executable.
 
@@ -149,7 +144,7 @@ the GraphCore specific one.
 ``--allow_nans`` will allow NaNs.
 
 The options can be used at the same time by treating them as command line
-switches, eg. ``--executable_cache_path=/tmp/cache --force_replicated_mode``
+switches, eg. ``--executable_cache_path=/tmp/cache --allow_nans``
 
 
 Caching of compiled executables
