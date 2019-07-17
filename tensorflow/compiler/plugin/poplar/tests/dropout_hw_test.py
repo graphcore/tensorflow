@@ -35,8 +35,6 @@ REPLICAS = 2
 REPEATS = 10
 EXECS = 2
 
-os.environ['TF_POPLAR_FLAGS'] = "--force_replicated_mode"
-
 
 class TestDropout(xla_test.XLATestCase):
   def testResetSeed(self):

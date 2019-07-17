@@ -252,23 +252,6 @@ int64 NumIPUsInShards(const HloModule* module) {
   return rounded;
 }
 
-bool IsValidReplicatedGraph(const HloModule* module) {
-  // If the graph has an infeed and no all-reduces, then we make an executive
-  // decision for the user that they should use the CrossReplicaOptimizer.
-  bool has_infeed = false;
-  bool has_all_reduce = false;
-  for (const auto* comp : module->MakeNonfusionComputations()) {
-    for (const auto* inst : comp->instructions()) {
-      has_infeed |= inst->opcode() == HloOpcode::kInfeed;
-      has_all_reduce |= inst->opcode() == HloOpcode::kAllReduce;
-    }
-  }
-  // TODO T8122
-  // If the graph has no infeed then we don't mind whether there is an all
-  // reduce or not.
-  return has_infeed ? has_all_reduce : true;
-}
-
 bool AreAllOutputsParameters(const HloModule* module,
                              std::vector<uint64>& output_paramater_numbers) {
   const HloComputation* entry = module->entry_computation();
@@ -490,19 +473,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplarExecutor->GetMaxSchedulerSearchSpaceSize(), module.get());
 
   if (replication_factor > 1) {
-    if (!IsValidReplicatedGraph(module.get())) {
-      if (!PoplarXlaFlags::Get().force_replicated_mode) {
-        return xla::FailedPrecondition(
-            "This is not a valid replicated graph because no All-Reduce "
-            "operations were found. Did you use the "
-            "`tensorflow.python.ipu.ipu_optimizer.CrossReplicaOptimizer` "
-            "optimizer?\nIf you want the graph to still run in replicated "
-            "mode with no All-Reduce operations use "
-            "`TF_POPLAR_FLAGS=\"--force_replicated_mode\"`.");
-      } else {
-        LOG(INFO) << "A graph is being forced to run in replicated mode.";
-      }
-    }
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
   }
 
