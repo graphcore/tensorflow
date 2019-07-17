@@ -5104,6 +5104,7 @@ tf_py_test(
     grpc_enabled = True,
     tags = [
         "no_oss",  # Test flaky due to port collisions.
+        "nofwdcompat",  # b/137641346
         "notsan",  # data race due to b/62910646
         "oss_serial",
     ],
@@ -6496,37 +6497,39 @@ cuda_py_test(
     xla_enable_strict_auto_jit = True,
 )
 
-cuda_py_test(
-    name = "layout_optimizer_test",
-    size = "medium",
-    srcs = [
-        "grappler/layout_optimizer_test.py",
-    ],
-    additional_deps = [
-        ":client_testlib",
-        ":framework_for_generated_wrappers",
-        ":array_ops",
-        ":constant_op",
-        ":dtypes",
-        ":functional_ops",
-        ":math_ops",
-        ":nn",
-        ":ops",
-        ":random_ops",
-        ":state_ops",
-        ":tf_cluster",
-        ":tf_optimizer",
-        ":training",
-        "//third_party/py/numpy",
-        "//tensorflow/core:protos_all_py",
-    ],
-    shard_count = 10,
-    tags = [
-        "grappler",
-    ],
-    # This test will not run on XLA because it primarily tests the TF Classic flow.
-    xla_enable_strict_auto_jit = False,
-)
+# TODO(b/131764887) Remove once LayoutOptimizer is swapped out with GenericLayoutOptimizer.
+#
+# cuda_py_test(
+#     name = "layout_optimizer_test",
+#     size = "medium",
+#     srcs = [
+#         "grappler/layout_optimizer_test.py",
+#     ],
+#     additional_deps = [
+#         ":client_testlib",
+#         ":framework_for_generated_wrappers",
+#         ":array_ops",
+#         ":constant_op",
+#         ":dtypes",
+#         ":functional_ops",
+#         ":math_ops",
+#         ":nn",
+#         ":ops",
+#         ":random_ops",
+#         ":state_ops",
+#         ":tf_cluster",
+#         ":tf_optimizer",
+#         ":training",
+#         "//third_party/py/numpy",
+#         "//tensorflow/core:protos_all_py",
+#     ],
+#     shard_count = 10,
+#     tags = [
+#         "grappler",
+#     ],
+#     # This test will not run on XLA because it primarily tests the TF Classic flow.
+#     xla_enable_strict_auto_jit = False,
+# )
 
 py_library(
     name = "cost_analyzer",

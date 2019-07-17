@@ -585,6 +585,24 @@ def TFL_GatherOp : TFL_Op<"gather", [
   let hasOptions = 1;
 }
 
+def TFL_GatherNdOp : TFL_Op<"gather_nd", [NoSideEffect]> {
+  let summary = "Gather_nd operator";
+
+  let description = [{
+    Gather slices from `params` into a Tensor with shape specified by `indices`.
+  }];
+
+  // TODO: missing Uint8.
+  let arguments = (ins
+    TensorOf<[F32, I8, I64, I32]>:$params,
+    TFL_I32OrI64Tensor:$indices
+  );
+
+  let results = (outs
+    TensorOf<[F32, I8, I64, I32]>:$output
+  );
+}
+
 // Same type check of lhs and rhs is handled by the Broadcastable trait.
 def TFL_LessEqualOp : TFL_Op<"less_equal", [Broadcastable, NoSideEffect]> {
   let summary = "Less_equal operator";
@@ -1018,6 +1036,7 @@ def TFL_LogSoftmaxOp : TFL_Op<"log_softmax", [
     SameOperandsAndResultShape,
     // zero_point = max_value
     // scale = -log_softmax_output_min / (max_value + 1)
+    TFL_FixedResultScale<TFL_Int8UniformQuantizedType<127, 625, -4>>,
     TFL_FixedResultScale<TFL_UInt8UniformQuantizedType<255, 625, -4>>]> {
   let summary = "Log softmax operator";
 
@@ -1481,6 +1500,38 @@ def TFL_ReshapeOp: TFL_Op<"reshape", [
   let hasFolder = 1;
 }
 
+def TFL_ReverseSequenceOp : TFL_Op<"reverse_sequence", [NoSideEffect]> {
+  let summary = "Reverses variable length slices.";
+
+  let description = [{
+This op first slices `input` along the dimension `batch_dim`, and for each
+slice `i`, reverses the first `seq_lengths[i]` elements along
+the dimension `seq_dim`.
+
+The elements of `seq_lengths` must obey `seq_lengths[i] <= input.dims[seq_dim]`,
+and `seq_lengths` must be a vector of length `input.dims[batch_dim]`.
+
+The output slice `i` along dimension `batch_dim` is then given by input
+slice `i`, with the first `seq_lengths[i]` slices along dimension
+`seq_dim` reversed.
+  }];
+
+  // Missing Uint8.
+  let arguments = (ins
+    TensorOf<[F32, I16, I32, I64]>:$input,
+    TFL_I32OrI64Tensor:$seq_lengths,
+
+    I32Attr:$seq_dim,
+    I32Attr:$batch_dim
+  );
+
+  let results = (outs
+    TensorOf<[F32, I16, I32, I64]>:$output
+  );
+
+  let hasOptions = 1;
+}
+
 def TFL_RsqrtOp: TFL_Op<"rsqrt", [NoSideEffect, SameOperandsAndResultType]> {
   let summary = "Reciprocal of square root operator";
 
@@ -1626,6 +1677,7 @@ def TFL_SoftmaxOp : TFL_Op<"softmax", [
     SameOperandsAndResultShape,
     // zero_point = 0
     // scale = 1. / (max_value + 1)
+    TFL_FixedResultScale<TFL_Int8UniformQuantizedType<-128, 390625, -8>>,
     TFL_FixedResultScale<TFL_UInt8UniformQuantizedType<0, 390625, -8>>]> {
   let summary = "Softmax operator";
 
@@ -1724,6 +1776,7 @@ def TFL_TanhOp: TFL_Op<"tanh", [
     // central_value = min_value / 2 + (max_value - 1) / 2 + 1
     // zero_point = central_value
     // scale = 1. / (central_value - min_value)
+    TFL_FixedResultScale<TFL_Int8UniformQuantizedType<0, 78125, -7>>,
     TFL_FixedResultScale<TFL_UInt8UniformQuantizedType<128, 78125, -7>>]> {
   let summary = "Hyperbolic tangent operator";
 

@@ -127,6 +127,10 @@ def : Pat<(TF_ReluOp $arg), (TFL_ReluOp $arg)>;
 // The second operand is captured in the type for this transform.
 def : Pat<(TF_ReshapeOp:$res AnyStaticShapeTensor:$arg, $ignored),
           (TFL_ReshapeOp $arg), [(AnyStaticShapeTensor $res)]>;
+def : Pat<(TF_ReverseSequenceOp $input, $seq_lengths, $seq_dim, $batch_dim),
+          (TFL_ReverseSequenceOp $input, $seq_lengths,
+           (convertIntAttrTo32Bit $seq_dim),
+           (convertIntAttrTo32Bit $batch_dim))>;
 def : Pat<(TF_RsqrtOp $arg), (TFL_RsqrtOp $arg)>;
 // TODO(jpienaar): this is not true for all selects, TF's select supports rank 0
 // condition
@@ -166,6 +170,9 @@ def : Pat<(TF_GreaterEqualOp $l, $r), (TFL_GreaterEqualOp $l, $r)>;
 // The 'validate_indices' attribute is deprecated.
 def : Pat<(TF_GatherOp $params, $indices, $ignored_validate_indices),
           (TFL_GatherOp $params, $indices, ConstantAttr<I32Attr, "0">)>;
+
+def : Pat<(TF_GatherNdOp $params, $indices),
+          (TFL_GatherNdOp $params, $indices)>;
 
 def : Pat<(TF_GatherV2Op $params, $indices,
                          (ConstantOp ElementsAttr:$axis),

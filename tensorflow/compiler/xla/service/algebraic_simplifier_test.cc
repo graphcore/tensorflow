@@ -5473,7 +5473,7 @@ TEST_F(AlgebraicSimplifierTest, CanDisableDotToMultiplyRewrite) {
   TF_ASSERT_OK_AND_ASSIGN(auto m1, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m1.get()).ValueOrDie());
   EXPECT_THAT(m1->entry_computation()->root_instruction(),
-      GmockMatch(m::Multiply(m::Op(), m::Op())));
+              GmockMatch(m::Multiply(m::Op(), m::Op())));
 
   // Verify that we can disable the re-write
   AlgebraicSimplifierOptions opts = default_options_;
