@@ -9,49 +9,49 @@ import os
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
-class OneHotTopK(test_util.TensorFlowTestCase):
+class OneHotTopK(xla_test.XLATestCase):
   def testOneHot(self):
     def executeModel(inputs, expected):
+      with self.session() as sess:
 
-      # Decide what the output type should be.
-      data_type = inputs["on"].dtype
+        # Decide what the output type should be.
+        data_type = inputs["on"].dtype
 
-      # The actual model function which perfoms the one-hot operation based on the inputs given to executeModel.
-      def model(a):
-        return array_ops.one_hot(
-            a,
-            inputs["n_classes"],
-            dtype=data_type,
-            on_value=inputs["on"],
-            off_value=inputs["off"],
-            axis=inputs["axis"])
+        # The actual model function which perfoms the one-hot operation based on the inputs given to executeModel.
+        def model(a):
+          return array_ops.one_hot(
+              a,
+              inputs["n_classes"],
+              dtype=data_type,
+              on_value=inputs["on"],
+              off_value=inputs["off"],
+              axis=inputs["axis"])
 
-      # We run once on the CPU to get the expected result, then on the IPU to compare the two.
-      cpuRun = expected is None
+        # We run once on the CPU to get the expected result, then on the IPU to compare the two.
+        cpuRun = expected is None
 
-      with ops.device('cpu'):
-        pa = array_ops.placeholder(np.int32, inputs["shape"], name="a")
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          pa = array_ops.placeholder(np.int32, inputs["shape"], name="a")
+          report = gen_ipu_ops.ipu_event_trace()
 
-      # Check if we should be running on IPU or cpu.
-      device = "cpu:0" if cpuRun else "/device:IPU:0"
+        # Check if we should be running on IPU or cpu.
+        device = "cpu:0" if cpuRun else "/device:IPU:0"
 
-      with ops.device(device):
-        out = model(pa)
+        with ops.device(device):
+          out = model(pa)
 
-      tu.configure_ipu_system()
+        tu.configure_ipu_system()
 
-      with tu.ipu_session() as sess:
         sess.run(report)
 
         in_data = np.array(inputs["in_values"])
@@ -205,24 +205,24 @@ class OneHotTopK(test_util.TensorFlowTestCase):
       executeModel(test_case, result)
 
   def testTopK(self):
+    with self.session() as sess:
 
-    n_categories = 1200
-    topn = 24
+      n_categories = 1200
+      topn = 24
 
-    def model(a):
-      values, indices = nn.top_k(a, topn)
-      return indices
+      def model(a):
+        values, indices = nn.top_k(a, topn)
+        return indices
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(np.float32, [n_categories], name="a")
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(np.float32, [n_categories], name="a")
+        report = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device("/device:IPU:0"):
-      out = model(pa)
+      with ops.device("/device:IPU:0"):
+        out = model(pa)
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       sess.run(report)
 
       input = np.random.random(n_categories)
@@ -236,25 +236,25 @@ class OneHotTopK(test_util.TensorFlowTestCase):
       self.assertTrue(len(result) == 3)
 
   def testInTopK(self):
+    with self.session() as sess:
 
-    batchsize = 4
-    n_categories = 1200
-    topn = 8
+      batchsize = 4
+      n_categories = 1200
+      topn = 8
 
-    def model(a, b):
-      return nn.in_top_k(a, b, topn)
+      def model(a, b):
+        return nn.in_top_k(a, b, topn)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(np.float32, [batchsize, n_categories])
-      pb = array_ops.placeholder(np.int32, [batchsize])
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(np.float32, [batchsize, n_categories])
+        pb = array_ops.placeholder(np.int32, [batchsize])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device("/device:IPU:0"):
-      out = model(pa, pb)
+      with ops.device("/device:IPU:0"):
+        out = model(pa, pb)
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       sess.run(report)
 
       input = np.random.rand(batchsize, n_categories)

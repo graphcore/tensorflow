@@ -10,14 +10,11 @@ import os
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 TYPES = [np.float16, np.float32, np.int32]
 TESTCASES = [{"testcase_name": np.dtype(x).name, "dtype": x} for x in TYPES]
@@ -34,7 +31,7 @@ def _get_random_input(dtype, shape):
       info_fn(dtype).min, info_fn(dtype).max, size=shape).astype(dtype)
 
 
-class ArgTopK(test_util.TensorFlowTestCase, parameterized.TestCase):
+class ArgTopK(xla_test.XLATestCase, parameterized.TestCase):
   @parameterized.named_parameters(*TESTCASES)
   def testTopKBasic(self, dtype):
     def model(a):
@@ -50,14 +47,14 @@ class ArgTopK(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     input = _get_random_input(dtype, (100))
     # IPU Run
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       fd = {pa: input}
       ipu_result = sess.run(out, fd)
 
     with ops.device("/device:CPU:0"):
       out = model(pa)
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       fd = {pa: input}
       cpu_result = sess.run(out, fd)
       self.assertAllClose(cpu_result, ipu_result)
@@ -81,14 +78,14 @@ class ArgTopK(test_util.TensorFlowTestCase, parameterized.TestCase):
       with ops.device("/device:IPU:0"):
         out = model(pa, p_k)
 
-      with tu.ipu_session() as sess:
+      with self.session() as sess:
         fd = {pa: input, p_k: k}
         ipu_result = sess.run(out, fd)
 
       with ops.device("/device:CPU:0"):
         out = model(pa, p_k)
 
-      with tu.ipu_session() as sess:
+      with self.session() as sess:
         fd = {pa: input, p_k: k}
         cpu_result = sess.run(out, fd)
         self.assertAllClose(cpu_result, ipu_result)
@@ -111,14 +108,14 @@ class ArgTopK(test_util.TensorFlowTestCase, parameterized.TestCase):
     with ops.device("/device:IPU:0"):
       out = model(pa, p_k)
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       fd = {pa: input, p_k: 100}
       ipu_result = sess.run(out, fd)
 
     with ops.device("/device:CPU:0"):
       out = model(pa, p_k)
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       fd = {pa: input, p_k: 100}
       cpu_result = sess.run(out, fd)
 

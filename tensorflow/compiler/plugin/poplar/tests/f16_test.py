@@ -7,19 +7,17 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
 
 
-class IpuXlaF16Test(test_util.TensorFlowTestCase):
+class IpuXlaF16Test(xla_test.XLATestCase):
   def testNeg(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float16, [2, 2], name="a")
         output = -pa
 
@@ -29,7 +27,7 @@ class IpuXlaF16Test(test_util.TensorFlowTestCase):
 
   def testAdd(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float16, [2, 2], name="a")
         pb = array_ops.placeholder(np.float16, [2, 2], name="b")
         output = pa + pb
@@ -44,7 +42,7 @@ class IpuXlaF16Test(test_util.TensorFlowTestCase):
 
   def testSubConstant(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float16, [2, 2], name="a")
         pb = constant_op.constant([[1., 2.], [3., 4.]], np.float16)
         output = pa - pb

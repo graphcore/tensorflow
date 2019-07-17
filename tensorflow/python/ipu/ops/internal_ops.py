@@ -18,6 +18,45 @@ Graphcore utility operations
 """
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.platform import tf_logging as logging
+import errno
+import hashlib
+import imp
+import os
+import platform
+import sys
+import threading  # pylint: disable=unused-import
+
+from tensorflow.core.framework import op_def_pb2
+from tensorflow.core.lib.core import error_codes_pb2  # pylint: disable=unused-import
+from tensorflow.python import pywrap_tensorflow as py_tf
+from tensorflow.python.lib.io import file_io
+from tensorflow.python.util import compat
+from tensorflow.python.util import deprecation
+from tensorflow.python.util.tf_export import tf_export
+
+
+def precompiled_user_op(inputs, op_name, library_path, gp_path=None, outs=None, name=None):
+  """
+    Call the poplar function 'op_name' located in the shared library at 'library_path'
+    as part of the normal tensorflow execution with the given 'inputs'. The shape and 
+    type of the output should be specified by 'outs' if it is None it will default to 
+    no output. 'outs' should be a dictionary with two elements like so:
+
+    outs = {
+          "output_types": [my_types_as_a_list],
+          "output_shapes": [my_shapes_as_a_list],
+      }
+  """
+
+  if outs is None:
+      outs = {
+          "output_types": [],
+          "output_shapes": [],
+      }
+  gp_path = gp_path if gp_path else ""
+  name = name if name else "UserOp/" + op_name
+  return gen_poputil_ops.ipu_user_op(inputs, op_name=op_name, library_path=library_path, gp_path=gp_path, name=name, **outs)
+
 
 
 def remap(x, name=None):

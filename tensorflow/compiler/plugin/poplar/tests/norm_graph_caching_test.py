@@ -9,12 +9,12 @@ import numpy as np
 import test_utils as tu
 
 # pylint: disable=unused-import
+from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
-from tensorflow.python import ipu
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
+from tensorflow.python.ipu.ops import normalization_ops_grad
 from tensorflow.python.layers import convolutional
 from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.ops import array_ops
@@ -28,33 +28,33 @@ from tensorflow.python.training import gradient_descent
 # pylint: enable=unused-import
 
 
-class NormGraphCachingTest(test_util.TensorFlowTestCase):
+class NormGraphCachingTest(xla_test.XLATestCase):
   def testBatchNormalizeInference(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -75,32 +75,32 @@ class NormGraphCachingTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testBatchNormalizeInferenceDontMatchDifferentTypes(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
-        y = math_ops.cast(y, np.float16)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
+          y = math_ops.cast(y, np.float16)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -123,31 +123,31 @@ class NormGraphCachingTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testBatchNormalizeInference(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -168,32 +168,32 @@ class NormGraphCachingTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testBatchNormsDontMatchDifferentShapes(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
-        y = array_ops.reshape(y, [1, 2, 8, 2])
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
+          y = array_ops.reshape(y, [1, 2, 8, 2])
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -215,45 +215,45 @@ class NormGraphCachingTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testBatchNormsMatchFwdBwd(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer(),
-            name='conv1')
-        y = layers_norm.batch_normalization(y, fused=True, training=True)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer(),
-            name='conv2')
-        y = layers_norm.batch_normalization(y, fused=True, training=True)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer(),
-            name='conv3')
-        y = layers_norm.batch_normalization(y, fused=True, training=True)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer(),
+              name='conv1')
+          y = layers_norm.batch_normalization(y, fused=True, training=True)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer(),
+              name='conv2')
+          y = layers_norm.batch_normalization(y, fused=True, training=True)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer(),
+              name='conv3')
+          y = layers_norm.batch_normalization(y, fused=True, training=True)
 
-      loss = math_ops.reduce_sum(y)
-      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      train = optimizer.minimize(loss)
+        loss = math_ops.reduce_sum(y)
+        optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+        train = optimizer.minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -284,51 +284,51 @@ class NormGraphCachingTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testGroupNormalizeInference(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        gamma = constant_op.constant([0.5, 0.5], np.float32)
-        beta = constant_op.constant([0.5, 0.5], np.float32)
-        mean = constant_op.constant([0.5, 0.5], np.float32)
-        inv_std_dev = constant_op.constant([0.5, 0.5], np.float32)
-        y = gen_popnn_ops.popnn_group_norm_inference(
-            inputs=y,
-            gamma=gamma,
-            beta=beta,
-            mean=mean,
-            inv_std_dev=inv_std_dev,
-            data_format="NHWC",
-            epsilon=0.0015,
-            num_groups=2)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = gen_popnn_ops.popnn_group_norm_inference(
-            inputs=y,
-            gamma=gamma,
-            beta=beta,
-            mean=mean,
-            inv_std_dev=inv_std_dev,
-            data_format="NHWC",
-            epsilon=0.0015,
-            num_groups=2)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          gamma = constant_op.constant([0.5, 0.5], np.float32)
+          beta = constant_op.constant([0.5, 0.5], np.float32)
+          mean = constant_op.constant([0.5, 0.5], np.float32)
+          inv_std_dev = constant_op.constant([0.5, 0.5], np.float32)
+          y = gen_popnn_ops.popnn_group_norm_inference(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              mean=mean,
+              inv_std_dev=inv_std_dev,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = gen_popnn_ops.popnn_group_norm_inference(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              mean=mean,
+              inv_std_dev=inv_std_dev,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -349,53 +349,53 @@ class NormGraphCachingTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testGroupNormalizeInferenceAndStatistics(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        gamma = constant_op.constant([0.5, 0.5], np.float32)
-        beta = constant_op.constant([0.5, 0.5], np.float32)
-        mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
-            inputs=y, data_format="NHWC", epsilon=0.0015, num_groups=2)
-        y = gen_popnn_ops.popnn_group_norm_inference(
-            inputs=y,
-            gamma=gamma,
-            beta=beta,
-            mean=mean,
-            inv_std_dev=inv_std_dev,
-            data_format="NHWC",
-            epsilon=0.0015,
-            num_groups=2)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
-            inputs=y, data_format="NHWC", epsilon=0.0015, num_groups=2)
-        y = gen_popnn_ops.popnn_group_norm_inference(
-            inputs=y,
-            gamma=gamma,
-            beta=beta,
-            mean=mean,
-            inv_std_dev=inv_std_dev,
-            data_format="NHWC",
-            epsilon=0.0015,
-            num_groups=2)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          gamma = constant_op.constant([0.5, 0.5], np.float32)
+          beta = constant_op.constant([0.5, 0.5], np.float32)
+          mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
+              inputs=y, data_format="NHWC", epsilon=0.0015, num_groups=2)
+          y = gen_popnn_ops.popnn_group_norm_inference(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              mean=mean,
+              inv_std_dev=inv_std_dev,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
+              inputs=y, data_format="NHWC", epsilon=0.0015, num_groups=2)
+          y = gen_popnn_ops.popnn_group_norm_inference(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              mean=mean,
+              inv_std_dev=inv_std_dev,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -417,43 +417,43 @@ class NormGraphCachingTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testBatchNormAndGroupNormalizeMixedInference(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        gamma = constant_op.constant([0.5, 0.5], np.float32)
-        beta = constant_op.constant([0.5, 0.5], np.float32)
-        mean = constant_op.constant([0.5, 0.5], np.float32)
-        inv_std_dev = constant_op.constant([0.5, 0.5], np.float32)
-        y = gen_popnn_ops.popnn_group_norm_inference(
-            inputs=y,
-            gamma=gamma,
-            beta=beta,
-            mean=mean,
-            inv_std_dev=inv_std_dev,
-            data_format="NHWC",
-            epsilon=0.0015,
-            num_groups=2)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer())
-        y = layers_norm.batch_normalization(y, fused=True)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          gamma = constant_op.constant([0.5, 0.5], np.float32)
+          beta = constant_op.constant([0.5, 0.5], np.float32)
+          mean = constant_op.constant([0.5, 0.5], np.float32)
+          inv_std_dev = constant_op.constant([0.5, 0.5], np.float32)
+          y = gen_popnn_ops.popnn_group_norm_inference(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              mean=mean,
+              inv_std_dev=inv_std_dev,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer())
+          y = layers_norm.batch_normalization(y, fused=True)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -475,65 +475,65 @@ class NormGraphCachingTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testGroupNormsMatchFwdBwd(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = convolutional.conv2d(
-            x,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer(),
-            name='conv1')
-        gamma = constant_op.constant([0.5, 0.5], np.float32)
-        beta = constant_op.constant([0.5, 0.5], np.float32)
-        y, _, _ = gen_popnn_ops.popnn_group_norm_training(
-            inputs=y,
-            gamma=gamma,
-            beta=beta,
-            data_format="NHWC",
-            epsilon=0.0015,
-            num_groups=2)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer(),
-            name='conv2')
-        y, _, _ = gen_popnn_ops.popnn_group_norm_training(
-            inputs=y,
-            gamma=gamma,
-            beta=beta,
-            data_format="NHWC",
-            epsilon=0.0015,
-            num_groups=2)
-        y = convolutional.conv2d(
-            y,
-            2,
-            1,
-            use_bias=False,
-            kernel_initializer=init_ops.ones_initializer(),
-            name='conv3')
-        y, _, _ = gen_popnn_ops.popnn_group_norm_training(
-            inputs=y,
-            gamma=gamma,
-            beta=beta,
-            data_format="NHWC",
-            epsilon=0.0015,
-            num_groups=2)
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = convolutional.conv2d(
+              x,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer(),
+              name='conv1')
+          gamma = constant_op.constant([0.5, 0.5], np.float32)
+          beta = constant_op.constant([0.5, 0.5], np.float32)
+          y, _, _ = gen_popnn_ops.popnn_group_norm_training(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer(),
+              name='conv2')
+          y, _, _ = gen_popnn_ops.popnn_group_norm_training(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
+          y = convolutional.conv2d(
+              y,
+              2,
+              1,
+              use_bias=False,
+              kernel_initializer=init_ops.ones_initializer(),
+              name='conv3')
+          y, _, _ = gen_popnn_ops.popnn_group_norm_training(
+              inputs=y,
+              gamma=gamma,
+              beta=beta,
+              data_format="NHWC",
+              epsilon=0.0015,
+              num_groups=2)
 
-      loss = math_ops.reduce_sum(y)
-      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      train = optimizer.minimize(loss)
+        loss = math_ops.reduce_sum(y)
+        optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+        train = optimizer.minimize(loss)
 
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)

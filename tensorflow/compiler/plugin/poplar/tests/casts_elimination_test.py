@@ -6,27 +6,27 @@ import os
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
-class IpuFuseOpsTest(test_util.TensorFlowTestCase):
+class IpuFuseOpsTest(xla_test.XLATestCase):
   def testReductionSumVectorF16NoConverts(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float16, [4096], name="a")
-      output = math_ops.reduce_sum(pa, axis=[0])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, [4096], name="a")
+        output = math_ops.reduce_sum(pa, axis=[0])
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       fd = {pa: np.ones([4096])}
       result = sess.run(output, fd)
@@ -50,17 +50,17 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testNoCastsF32ToF16ToF32(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float32, [3])
-      b = math_ops.cast(pa, np.float16)
-      c = math_ops.cast(b, np.float32)
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [3])
+        b = math_ops.cast(pa, np.float16)
+        c = math_ops.cast(b, np.float32)
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       fd = {pa: [2.0, 0.5, 1.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [2.0, 0.5, 1.0])
@@ -73,17 +73,17 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue(len(cs_list) == 0)
 
   def testNoCastsF16ReduceWithReshape(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float16, [3, 4])
-      a = gen_array_ops.reshape(pa, [4, 3])
-      a = math_ops.reduce_sum(a, axis=(1))
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, [3, 4])
+        a = gen_array_ops.reshape(pa, [4, 3])
+        a = math_ops.reduce_sum(a, axis=(1))
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       fd = {pa: np.ones([3, 4])}
       result = sess.run(a, fd)
       self.assertAllClose(result, [3.0, 3.0, 3.0, 3.0])
@@ -101,23 +101,23 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testMultipleReduces(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float16, [3])
-      pb = array_ops.placeholder(np.float16, [3])
-      a = math_ops.cast(pa, np.float32)
-      a = math_ops.reduce_sum(a)
-      a = math_ops.cast(a, np.float16)
-      b = math_ops.cast(pb, np.float32)
-      b = math_ops.reduce_sum(b)
-      b = math_ops.cast(b, np.float16)
-      c = a + b
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, [3])
+        pb = array_ops.placeholder(np.float16, [3])
+        a = math_ops.cast(pa, np.float32)
+        a = math_ops.reduce_sum(a)
+        a = math_ops.cast(a, np.float16)
+        b = math_ops.cast(pb, np.float32)
+        b = math_ops.reduce_sum(b)
+        b = math_ops.cast(b, np.float16)
+        c = a + b
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 1.0, 2.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, 7.5)
@@ -135,17 +135,17 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testNoCastsF16ToF32ToF16(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float16, [3])
-      b = math_ops.cast(pa, np.float32)
-      c = math_ops.cast(b, np.float16)
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, [3])
+        b = math_ops.cast(pa, np.float32)
+        c = math_ops.cast(b, np.float16)
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       fd = {pa: [2.0, 0.5, 1.0]}
       result = sess.run(c, fd)
@@ -159,19 +159,19 @@ class IpuFuseOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue(len(cs_list) == 0)
 
   def testDontRemoveCastsIfUsed(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float16, [3])
-      b = math_ops.cast(pa, np.float32)
-      const = array_ops.constant(1.0, np.float32)
-      b = b + const
-      c = math_ops.cast(b, np.float16)
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, [3])
+        b = math_ops.cast(pa, np.float32)
+        const = array_ops.constant(1.0, np.float32)
+        b = b + const
+        c = math_ops.cast(b, np.float16)
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       fd = {pa: [2.0, 0.5, 1.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [3.0, 1.5, 2.0])

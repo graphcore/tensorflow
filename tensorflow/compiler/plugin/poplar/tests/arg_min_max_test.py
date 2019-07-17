@@ -10,13 +10,12 @@ import os
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import nn
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 TYPES = (np.float16, np.float32, np.int32)
@@ -34,7 +33,7 @@ def _get_random_input(dtype, shape):
       info_fn(dtype).min, info_fn(dtype).max, size=shape).astype(dtype)
 
 
-class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
+class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxBasic(self, dtype):
     batchsize = 4
@@ -52,7 +51,7 @@ class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       sess.run(report)
 
       input = _get_random_input(dtype, (3, 5, 2))
@@ -80,7 +79,7 @@ class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       input = _get_random_input(dtype, (3, 5, 2))
 
       fd = {pa: input}
@@ -105,7 +104,7 @@ class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
     tu.configure_ipu_system()
 
     for axis in range(6):
-      with tu.ipu_session() as sess:
+      with self.session() as sess:
         input = _get_random_input(dtype, (1, 2, 3, 4, 5, 6))
 
         fd = {pa: input, p_axis: axis}
@@ -129,7 +128,7 @@ class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       sess.run(report)
 
       input = _get_random_input(dtype, (3, 5, 2))
@@ -157,7 +156,7 @@ class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       input = _get_random_input(dtype, (3, 5, 2))
 
       fd = {pa: input}
@@ -182,7 +181,7 @@ class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
     tu.configure_ipu_system()
 
     for axis in range(6):
-      with tu.ipu_session() as sess:
+      with self.session() as sess:
         input = _get_random_input(dtype, (1, 2, 3, 4, 5, 6))
 
         fd = {pa: input, p_axis: axis}
@@ -206,7 +205,7 @@ class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       sess.run(report)
 
       input = _get_random_input(dtype, (3, 5, 2))
@@ -235,7 +234,7 @@ class ArgMinMax(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       sess.run(report)
 
       input = _get_random_input(dtype, (3))

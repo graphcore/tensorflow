@@ -6,8 +6,8 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
@@ -15,13 +15,12 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
-class IpuXlaConvTest(test_util.TensorFlowTestCase):
+class IpuXlaConvTest(xla_test.XLATestCase):
   def testReductionMeanDim12(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [2, 7, 7, 32], name="a")
         output = math_ops.reduce_mean(pa, axis=[1, 2])
 
@@ -30,8 +29,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([2, 32]))
 
   def testReductionMeanDim03(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [2, 7, 7, 32], name="a")
         output = math_ops.reduce_mean(pa, axis=[0, 3])
 
@@ -40,8 +39,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([7, 7]))
 
   def testReductionMeanDim13(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [2, 7, 7, 32], name="a")
         output = math_ops.reduce_mean(pa, axis=[1, 3])
 
@@ -50,8 +49,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([2, 7]))
 
   def testReductionMeanDim23(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [2, 7, 7, 32], name="a")
         output = math_ops.reduce_mean(pa, axis=[2, 3])
 
@@ -60,8 +59,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([2, 7]))
 
   def testAvgPoolSamePaddingWithStridesF32(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
         output = nn.avg_pool(
             pa,
@@ -76,8 +75,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 5, 5]))
 
   def testAvgPoolSamePaddingWithStridesF16(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [1, 1, 10, 10], name="a")
         output = nn.avg_pool(
             pa,
@@ -91,8 +90,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 5, 5]))
 
   def testAvgPoolValidPaddingWithStridesF32(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
         output = nn.avg_pool(
             pa,
@@ -106,8 +105,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 3, 3]))
 
   def testAvgPoolValidPaddingWithStridesF16(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [1, 1, 10, 10], name="a")
         output = nn.avg_pool(
             pa,
@@ -121,8 +120,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 3, 3]))
 
   def testMaxPoolSamePaddingWithStridesF32(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
         output = nn.max_pool(
             pa,
@@ -137,8 +136,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 5, 5]))
 
   def testMaxPoolValidPaddingWithStridesF32(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
         output = nn.max_pool(
             pa,
@@ -153,8 +152,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 3, 3]))
 
   def testAvgPoolSamePaddingWithStridesF32Dim12(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 10, 10, 1], name="a")
         output = nn.avg_pool(
             pa,
@@ -169,8 +168,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 5, 5, 1]))
 
   def testAvgPoolValidPaddingWithStridesF32Dim12(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 10, 10, 1], name="a")
         output = nn.avg_pool(
             pa,
@@ -185,8 +184,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 3, 3, 1]))
 
   def testAvgPool3DSamePaddingWithStridesF32(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
         output = nn.avg_pool3d(
             pa,
@@ -201,8 +200,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 5, 5, 5]))
 
   def testAvgPool3DSamePaddingWithStridesF16(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [1, 1, 10, 10, 10], name="a")
         output = nn.avg_pool3d(
             pa,
@@ -216,8 +215,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 5, 5, 5]))
 
   def testAvgPool3DValidPaddingWithStridesF32(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
         output = nn.avg_pool3d(
             pa,
@@ -231,8 +230,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 3, 3, 3]))
 
   def testAvgPool3DValidPaddingWithStridesF16(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [1, 1, 10, 10, 10], name="a")
         output = nn.avg_pool3d(
             pa,
@@ -246,8 +245,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 3, 3, 3]))
 
   def testMaxPool3DSamePaddingWithStridesF32(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
         output = nn.max_pool3d(
             pa,
@@ -262,8 +261,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 5, 5, 5]))
 
   def testMaxPool3DValidPaddingWithStridesF32(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
         output = nn.max_pool3d(
             pa,
@@ -278,8 +277,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 1, 3, 3, 3]))
 
   def testAvgPool3DSamePaddingWithStridesF32Dim123(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 10, 10, 12, 1], name="a")
         output = nn.avg_pool3d(
             pa,
@@ -294,8 +293,8 @@ class IpuXlaConvTest(test_util.TensorFlowTestCase):
         self.assertAllClose(result, np.ones([1, 5, 5, 6, 1]))
 
   def testAvgPool3DValidPaddingWithStridesF32Dim123(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 10, 12, 10, 1], name="a")
         output = nn.avg_pool3d(
             pa,

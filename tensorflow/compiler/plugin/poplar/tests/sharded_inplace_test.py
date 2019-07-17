@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
@@ -15,7 +16,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
 
 
-class MappingTest(test_util.TensorFlowTestCase):
+class MappingTest(xla_test.XLATestCase):
   def testConcat(self):
     def my_net(a, b, c, d):
       with ipu.scopes.ipu_shard(0):

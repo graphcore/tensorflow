@@ -22,11 +22,11 @@ import os
 import numpy as np
 
 # pylint: disable=unused-import
+from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
-from tensorflow.python import ipu
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.ops import rnn_ops_grad
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -35,7 +35,6 @@ from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
-from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
 # pylint: enable=unused-import
 
@@ -67,7 +66,7 @@ def _createLSTMInitialState(h_value, c_value, batch_size, num_channels):
               dtype=dataType))
 
 
-class LSTMTest(test.TestCase):
+class LSTMTest(xla_test.XLATestCase):
   def _LSTMLayerCPU(self, inputs, weights_value, initial_state, forget_bias,
                     training, name):
     with ops.device("/device:CPU:0"):
@@ -113,21 +112,21 @@ class LSTMTest(test.TestCase):
   def _RunLSTMLayerInference(self, name, input_value, forget_bias,
                              weights_value, h_value, c_value,
                              lstm_layer_function):
-    pinputs = array_ops.placeholder(
-        dataType, [seq_len, batch_size, input_size], name="inputs")
-    pinitial_h_state = array_ops.placeholder(
-        dataType, [batch_size, num_channels], name="init_h_state")
-    pinitial_c_state = array_ops.placeholder(
-        dataType, [batch_size, num_channels], name="init_c_state")
-    lstm_output_seq = lstm_layer_function(
-        inputs=pinputs,
-        weights_value=weights_value,
-        initial_state=(pinitial_h_state, pinitial_c_state),
-        forget_bias=forget_bias,
-        training=False,
-        name=name)
+    with self.session() as sess:
+      pinputs = array_ops.placeholder(
+          dataType, [seq_len, batch_size, input_size], name="inputs")
+      pinitial_h_state = array_ops.placeholder(
+          dataType, [batch_size, num_channels], name="init_h_state")
+      pinitial_c_state = array_ops.placeholder(
+          dataType, [batch_size, num_channels], name="init_c_state")
+      lstm_output_seq = lstm_layer_function(
+          inputs=pinputs,
+          weights_value=weights_value,
+          initial_state=(pinitial_h_state, pinitial_c_state),
+          forget_bias=forget_bias,
+          training=False,
+          name=name)
 
-    with session_lib.Session() as sess:
       inputs = _createLSTMInput(input_value, batch_size, seq_len, input_size)
       initial_state = _createLSTMInitialState(h_value, c_value, batch_size,
                                               num_channels)
@@ -202,34 +201,34 @@ class LSTMTest(test.TestCase):
   def _RunLSTMLayerTraining(self, name, input_value, forget_bias,
                             weights_value, h_value, c_value, training_steps,
                             labels_array, lstm_layer_function, device_string):
-    pinputs = array_ops.placeholder(
-        dataType, [seq_len, batch_size, input_size], name="inputs")
-    plabels = array_ops.placeholder(
-        dataType, [seq_len, batch_size, num_channels], name="labels")
+    with self.session() as sess:
+      pinputs = array_ops.placeholder(
+          dataType, [seq_len, batch_size, input_size], name="inputs")
+      plabels = array_ops.placeholder(
+          dataType, [seq_len, batch_size, num_channels], name="labels")
 
-    with ops.device(device_string):
-      with variable_scope.variable_scope("lstm_layer", use_resource=True):
-        initial_h_state = _get_variable(
-            "initial_h_state",
-            shape=[batch_size, num_channels],
-            initializer=init_ops.constant_initializer(h_value, dataType))
-        initial_c_state = _get_variable(
-            "initial_c_state",
-            shape=[batch_size, num_channels],
-            initializer=init_ops.constant_initializer(c_value, dataType))
-      logits = lstm_layer_function(
-          inputs=pinputs,
-          weights_value=weights_value,
-          initial_state=(initial_h_state, initial_c_state),
-          forget_bias=forget_bias,
-          training=True,
-          name=name)
-      softmax = nn.softmax_cross_entropy_with_logits_v2(
-          logits=logits, labels=array_ops.stop_gradient(plabels))
-      loss = math_ops.reduce_mean(softmax)
-      train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+      with ops.device(device_string):
+        with variable_scope.variable_scope("lstm_layer", use_resource=True):
+          initial_h_state = _get_variable(
+              "initial_h_state",
+              shape=[batch_size, num_channels],
+              initializer=init_ops.constant_initializer(h_value, dataType))
+          initial_c_state = _get_variable(
+              "initial_c_state",
+              shape=[batch_size, num_channels],
+              initializer=init_ops.constant_initializer(c_value, dataType))
+        logits = lstm_layer_function(
+            inputs=pinputs,
+            weights_value=weights_value,
+            initial_state=(initial_h_state, initial_c_state),
+            forget_bias=forget_bias,
+            training=True,
+            name=name)
+        softmax = nn.softmax_cross_entropy_with_logits_v2(
+            logits=logits, labels=array_ops.stop_gradient(plabels))
+        loss = math_ops.reduce_mean(softmax)
+        train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-    with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
       losses = []
       inputs = _createLSTMInput(input_value, batch_size, seq_len, input_size)

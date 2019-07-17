@@ -19,9 +19,9 @@ from __future__ import print_function
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
@@ -32,23 +32,23 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 
 
-class ForwardAllocationTest(test_util.TensorFlowTestCase):
+class ForwardAllocationTest(xla_test.XLATestCase):
   def testPrefixPathWithReshape(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
-      z = array_ops.placeholder(np.float32, shape=[32])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+        z = array_ops.placeholder(np.float32, shape=[32])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(x)
-      res = gen_array_ops.reshape(y, [32]) + z
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = layers.Conv2D(
+              2,
+              1,
+              use_bias=True,
+              kernel_initializer=init_ops.ones_initializer())(x)
+        res = gen_array_ops.reshape(y, [32]) + z
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       result = sess.run(res, {
@@ -63,21 +63,21 @@ class ForwardAllocationTest(test_util.TensorFlowTestCase):
       ])
 
   def testPrefixPathWithTranspose(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
-      z = array_ops.placeholder(np.float32, shape=[4, 4, 2, 1])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+        z = array_ops.placeholder(np.float32, shape=[4, 4, 2, 1])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(x)
-      res = array_ops.transpose(y, [1, 2, 3, 0]) + z
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = layers.Conv2D(
+              2,
+              1,
+              use_bias=True,
+              kernel_initializer=init_ops.ones_initializer())(x)
+        res = array_ops.transpose(y, [1, 2, 3, 0]) + z
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       result = sess.run(res, {
@@ -92,22 +92,22 @@ class ForwardAllocationTest(test_util.TensorFlowTestCase):
            [[[50.], [50.]], [[54.], [54.]], [[58.], [58.]], [[62.], [62.]]]])
 
   def testPrefixPathWithElementwiseInPath(self):
-    with ops.device("/device:IPU:0"):
-      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
-      z = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
-      s = array_ops.placeholder(np.float32, shape=[])
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+        z = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+        s = array_ops.placeholder(np.float32, shape=[])
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(x)
-      res = y + z * s
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = layers.Conv2D(
+              2,
+              1,
+              use_bias=True,
+              kernel_initializer=init_ops.ones_initializer())(x)
+        res = y + z * s
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       result = sess.run(
@@ -124,17 +124,17 @@ class ForwardAllocationTest(test_util.TensorFlowTestCase):
                     [[97., 99.], [105., 107.], [113., 115.], [121., 123.]]]])
 
   def testPrefixPathWithCast(self):
-    with ops.device("/device:IPU:0"):
-      data = array_ops.placeholder(np.float32, shape=[1, 7, 1])
-      kernel2 = array_ops.placeholder(np.float16, shape=[3, 1, 1])
-      kernel = math_ops.cast(kernel2, np.float32)
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        data = array_ops.placeholder(np.float32, shape=[1, 7, 1])
+        kernel2 = array_ops.placeholder(np.float16, shape=[3, 1, 1])
+        kernel = math_ops.cast(kernel2, np.float32)
 
-      with variable_scope.variable_scope("vs", use_resource=True):
-        res = nn.conv1d(data, kernel, stride=1, padding="VALID")
+        with variable_scope.variable_scope("vs", use_resource=True):
+          res = nn.conv1d(data, kernel, stride=1, padding="VALID")
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       result = sess.run(

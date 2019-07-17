@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import random_seed
@@ -23,7 +24,7 @@ from tensorflow.python.training import monitored_session as ms
 from tensorflow.python.training import training_util
 
 
-class IpuMonitoredSessionTest(test_util.TensorFlowTestCase):
+class IpuMonitoredSessionTest(xla_test.XLATestCase):
   def testMonitoredSession(self):
     random_seed.set_random_seed(1)
 

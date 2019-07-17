@@ -6,6 +6,7 @@ import os
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
@@ -17,7 +18,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 
 
-class ReplicatedStatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
+class ReplicatedStatefulGradientAccumulateTest(xla_test.XLATestCase):
   def testStatefulGradientAccumulateAndCrossReplica(self):
     dtype = np.float32
 
@@ -45,7 +46,7 @@ class ReplicatedStatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       r = xla.compile(my_net, inputs=[y])
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)
@@ -78,7 +79,7 @@ class ReplicatedStatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       r = xla.compile(my_net, inputs=[y])
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)
@@ -112,7 +113,7 @@ class ReplicatedStatefulGradientAccumulateTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       r = xla.compile(my_net, inputs=[y])
 
-    with tu.ipu_session() as sess:
+    with self.session() as sess:
       sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)

@@ -1646,8 +1646,20 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
                 << " inplace description: " << inplace_description.ToString();
         const auto* operand = inst->operand(inplace_indexes[i]);
         auto& graph = GetGraphWithOutputIndex(res, operand, tuple_idx);
-        t = poputil::duplicate(graph, t, seq, GetDebugName(inst) + ".clone",
-                               clone_method);
+
+        if (is_inplace_read_write) {
+          poplar::Tensor t_clone =
+              graph.clone(t, GetDebugName(inst) + ".clone", clone_method);
+          auto tile_tensor_mapping = graph.getTileMapping(t_clone);
+          if (tile_tensor_mapping.size() == 1 && !t.isParallelWriteable()) {
+            poputil::mapTensorLinearly(graph, t_clone);
+          }
+          seq.add(poplar::program::Copy(t, t_clone));
+          t = t_clone;
+        } else {
+          t = poputil::duplicate(graph, t, seq, GetDebugName(inst) + ".clone",
+                                 clone_method);
+        }
       }
       tensors[i][tuple_idx] = t;
     }

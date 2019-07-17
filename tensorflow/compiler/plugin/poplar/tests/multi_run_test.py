@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
@@ -14,10 +15,10 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 
 
-class IpuXlaMultiRunTest(test_util.TensorFlowTestCase):
+class IpuXlaMultiRunTest(xla_test.XLATestCase):
   def testSimpleTwice(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float32, [2, 2], name="a")
         pb = array_ops.placeholder(np.float32, [2, 2], name="b")
         output = pa + pb
@@ -32,7 +33,7 @@ class IpuXlaMultiRunTest(test_util.TensorFlowTestCase):
 
   def testSimpleThree(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float32, [2, 2], name="a")
         pb = array_ops.placeholder(np.float32, [2, 2], name="b")
         output = pa + pb

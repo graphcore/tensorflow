@@ -4,10 +4,10 @@
 import os
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
@@ -25,10 +25,10 @@ from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 import test_utils as tu
 
 
-class IpuXlaVariableTest(test_util.TensorFlowTestCase):
+class IpuXlaVariableTest(xla_test.XLATestCase):
   def testInitializeSimpleVariables(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
 
         x = resource_variable_ops.ResourceVariable(
             random_ops.random_normal([5, 5], stddev=0.1), name="x")
@@ -44,7 +44,7 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
 
   def testInitializeSharedVariables(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         with variable_scope.variable_scope("vs", use_resource=True):
           x = variable_scope.get_variable(
               "x",
@@ -67,7 +67,7 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
 
   def testRead(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         with variable_scope.variable_scope("vs", use_resource=True):
           z = variable_scope.get_variable(
               "z",
@@ -83,7 +83,7 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
 
   def testAssign(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         with variable_scope.variable_scope("vs", use_resource=True):
           z = variable_scope.get_variable(
               "z",
@@ -102,30 +102,30 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
         self.assertAllClose(r, 8)
 
   def testGradientDescent(self):
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
 
-        w = variable_scope.get_variable(
-            "w",
-            shape=[4, 2],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=np.float32)))
-        b = variable_scope.get_variable(
-            "b",
-            shape=[2],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array([2, 3], dtype=np.float32)))
+          w = variable_scope.get_variable(
+              "w",
+              shape=[4, 2],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array([[1, 2], [3, 4], [5, 6], [7, 8]],
+                           dtype=np.float32)))
+          b = variable_scope.get_variable(
+              "b",
+              shape=[2],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array([2, 3], dtype=np.float32)))
 
-      x = array_ops.placeholder(np.float32, shape=[1, 4])
-      y = math_ops.matmul(x, w) + b
+        x = array_ops.placeholder(np.float32, shape=[1, 4])
+        y = math_ops.matmul(x, w) + b
 
-      loss = math_ops.reduce_sum(y)
-      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      train = optimizer.minimize(loss)
-
-    with session_lib.Session() as sess:
+        loss = math_ops.reduce_sum(y)
+        optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+        train = optimizer.minimize(loss)
 
       sess.run(variables.global_variables_initializer())
       sess.run(train, {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
@@ -142,30 +142,30 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
           np.array([1.9, 2.9], dtype=np.float32), vb, rtol=1e-4)
 
   def testRepeatedGradientDescent(self):
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
 
-        w = variable_scope.get_variable(
-            "w",
-            shape=[4, 2],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=np.float32)))
-        b = variable_scope.get_variable(
-            "b",
-            shape=[2],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array([2, 3], dtype=np.float32)))
+          w = variable_scope.get_variable(
+              "w",
+              shape=[4, 2],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array([[1, 2], [3, 4], [5, 6], [7, 8]],
+                           dtype=np.float32)))
+          b = variable_scope.get_variable(
+              "b",
+              shape=[2],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array([2, 3], dtype=np.float32)))
 
-      x = array_ops.placeholder(np.float32, shape=[1, 4])
-      y = math_ops.matmul(x, w) + b
+        x = array_ops.placeholder(np.float32, shape=[1, 4])
+        y = math_ops.matmul(x, w) + b
 
-      loss = math_ops.reduce_sum(y)
-      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      train = optimizer.minimize(loss)
-
-    with session_lib.Session() as sess:
+        loss = math_ops.reduce_sum(y)
+        optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+        train = optimizer.minimize(loss)
 
       sess.run(variables.global_variables_initializer())
       sess.run(train, {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
@@ -186,8 +186,8 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
           np.array([1.5, 2.5], dtype=np.float32), vb, rtol=1e-4)
 
   def testMultipleUpdate(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
           z = variable_scope.get_variable(
               "z",
@@ -214,17 +214,17 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
         self.assertAllClose(r, 10.0)
 
   def testRandomNormalInitalizer(self):
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        i = init_ops.random_normal_initializer(mean=2.0, stddev=0.01)
-        z = variable_scope.get_variable(
-            "z1", shape=[], dtype=np.float32, initializer=i)
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          i = init_ops.random_normal_initializer(mean=2.0, stddev=0.01)
+          z = variable_scope.get_variable(
+              "z1", shape=[], dtype=np.float32, initializer=i)
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       # Clean existing reports
       sess.run(report)
       sess.run(variables.global_variables_initializer())
@@ -242,17 +242,17 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testRandomNormalNonScalarInitalizer(self):
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        i = init_ops.random_normal_initializer(mean=2.0, stddev=0.01)
-        z = variable_scope.get_variable(
-            "z1", shape=[2], dtype=np.float32, initializer=i)
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          i = init_ops.random_normal_initializer(mean=2.0, stddev=0.01)
+          z = variable_scope.get_variable(
+              "z1", shape=[2], dtype=np.float32, initializer=i)
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       # Clean existing reports
       sess.run(report)
       sess.run(variables.global_variables_initializer())
@@ -270,8 +270,8 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testDefaultRandomNormalInitalizer(self):
-    with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
         with variable_scope.variable_scope("vs", use_resource=True):
           i = init_ops.random_normal_initializer()
           z = variable_scope.get_variable(
@@ -282,19 +282,18 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
         self.assertAllClose(o, 0.0, 1.0, 3.0)
 
   def testTruncatedNormalScalarInitalizer(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("", use_resource=True):
+          i = init_ops.truncated_normal_initializer(mean=1.0, stddev=0.01)
+          z = variable_scope.get_variable(
+              "z1", shape=[], dtype=np.float32, initializer=i)
 
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("", use_resource=True):
-        i = init_ops.truncated_normal_initializer(mean=1.0, stddev=0.01)
-        z = variable_scope.get_variable(
-            "z1", shape=[], dtype=np.float32, initializer=i)
+      tu.configure_ipu_system()
 
-    tu.configure_ipu_system()
-
-    with tu.ipu_session() as sess:
       # Clean existing reports
       sess.run(report)
 
@@ -317,19 +316,18 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testTruncatedNormalInitalizer(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("", use_resource=True):
+          i = init_ops.truncated_normal_initializer(mean=1.0, stddev=0.01)
+          z = variable_scope.get_variable(
+              "z1", shape=[2, 4], dtype=np.float32, initializer=i)
 
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("", use_resource=True):
-        i = init_ops.truncated_normal_initializer(mean=1.0, stddev=0.01)
-        z = variable_scope.get_variable(
-            "z1", shape=[2, 4], dtype=np.float32, initializer=i)
+      tu.configure_ipu_system()
 
-    tu.configure_ipu_system()
-
-    with tu.ipu_session() as sess:
       # Clean existing reports
       sess.run(report)
 
@@ -352,19 +350,18 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testDefaultTruncatedNormalScalarInitalizer(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("", use_resource=True):
+          i = init_ops.truncated_normal_initializer()
+          z = variable_scope.get_variable(
+              "z1", shape=[], dtype=np.float32, initializer=i)
 
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("", use_resource=True):
-        i = init_ops.truncated_normal_initializer()
-        z = variable_scope.get_variable(
-            "z1", shape=[], dtype=np.float32, initializer=i)
+      tu.configure_ipu_system()
 
-    tu.configure_ipu_system()
-
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
       o = sess.run(z)
       self.assertAllClose(o, 1.0, 2.0, 2.0)
@@ -382,19 +379,18 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testDefaultTruncatedNormalInitalizer(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("", use_resource=True):
+          i = init_ops.truncated_normal_initializer()
+          z = variable_scope.get_variable(
+              "z1", shape=[2, 4], dtype=np.float32, initializer=i)
 
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("", use_resource=True):
-        i = init_ops.truncated_normal_initializer()
-        z = variable_scope.get_variable(
-            "z1", shape=[2, 4], dtype=np.float32, initializer=i)
+      tu.configure_ipu_system()
 
-    tu.configure_ipu_system()
-
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
       o = sess.run(z)
       self.assertAllClose(o, np.ones((2, 4)), 2.0, 2.0)
@@ -412,17 +408,17 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testUniformRandomInitalizer(self):
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        i = init_ops.random_uniform_initializer(minval=-2.0, maxval=2.0)
-        z = variable_scope.get_variable(
-            "z1", shape=[], dtype=np.float32, initializer=i)
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          i = init_ops.random_uniform_initializer(minval=-2.0, maxval=2.0)
+          z = variable_scope.get_variable(
+              "z1", shape=[], dtype=np.float32, initializer=i)
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       # Clean existing reports
       sess.run(report)
       sess.run(variables.global_variables_initializer())
@@ -440,17 +436,17 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testUniformRandomNonScalarInitalizer(self):
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        i = init_ops.random_uniform_initializer(minval=-2.0, maxval=2.0)
-        z = variable_scope.get_variable(
-            "z1", shape=[2], dtype=np.float32, initializer=i)
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          i = init_ops.random_uniform_initializer(minval=-2.0, maxval=2.0)
+          z = variable_scope.get_variable(
+              "z1", shape=[2], dtype=np.float32, initializer=i)
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       # Clean existing reports
       sess.run(report)
       sess.run(variables.global_variables_initializer())
@@ -469,7 +465,7 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
 
   def testDefaultUniformRandomInitalizer(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         with variable_scope.variable_scope("vs", use_resource=True):
           i = init_ops.random_uniform_initializer()
           z = variable_scope.get_variable(
@@ -480,35 +476,36 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
         self.assertAllClose(o, 0.5, 0.5, 0.5)
 
   def testVariablesRemainResident(self):
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
 
-        w = variable_scope.get_variable(
-            "w",
-            shape=[4, 2],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=np.float32)))
-        b = variable_scope.get_variable(
-            "b",
-            shape=[2],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array([2, 3], dtype=np.float32)))
+          w = variable_scope.get_variable(
+              "w",
+              shape=[4, 2],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array([[1, 2], [3, 4], [5, 6], [7, 8]],
+                           dtype=np.float32)))
+          b = variable_scope.get_variable(
+              "b",
+              shape=[2],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array([2, 3], dtype=np.float32)))
 
-      x = array_ops.placeholder(np.float32, shape=[1, 4])
-      y = math_ops.matmul(x, w) + b
+        x = array_ops.placeholder(np.float32, shape=[1, 4])
+        y = math_ops.matmul(x, w) + b
 
-      loss = math_ops.reduce_sum(y)
-      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      train = optimizer.minimize(loss)
+        loss = math_ops.reduce_sum(y)
+        optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+        train = optimizer.minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -596,49 +593,50 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
           len(list(filter(lambda x: x[1] == b_ul, device_to_host))), 1)
 
   def testResourceCountsAreCorrect(self):
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        w1 = variable_scope.get_variable(
-            "w1",
-            shape=[4, 2],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array([[1, 2], [3, 4], [5, 6], [7, 8]], dtype=np.float32)))
-        b1 = variable_scope.get_variable(
-            "b1",
-            shape=[2],
-            dtype=np.float32,
-            trainable=False,
-            initializer=init_ops.constant_initializer(
-                np.array([2, 3], dtype=np.float32)))
-        w2 = variable_scope.get_variable(
-            "w2",
-            shape=[2, 2],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array([[1, 2], [3, 4]], dtype=np.float32)))
-        b2 = variable_scope.get_variable(
-            "b2",
-            shape=[2],
-            dtype=np.float32,
-            trainable=False,
-            initializer=init_ops.constant_initializer(
-                np.array([2, 3], dtype=np.float32)))
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          w1 = variable_scope.get_variable(
+              "w1",
+              shape=[4, 2],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array([[1, 2], [3, 4], [5, 6], [7, 8]],
+                           dtype=np.float32)))
+          b1 = variable_scope.get_variable(
+              "b1",
+              shape=[2],
+              dtype=np.float32,
+              trainable=False,
+              initializer=init_ops.constant_initializer(
+                  np.array([2, 3], dtype=np.float32)))
+          w2 = variable_scope.get_variable(
+              "w2",
+              shape=[2, 2],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array([[1, 2], [3, 4]], dtype=np.float32)))
+          b2 = variable_scope.get_variable(
+              "b2",
+              shape=[2],
+              dtype=np.float32,
+              trainable=False,
+              initializer=init_ops.constant_initializer(
+                  np.array([2, 3], dtype=np.float32)))
 
-      x = array_ops.placeholder(np.float32, shape=[1, 4])
-      y = math_ops.matmul(x, w1) + b1
-      y = math_ops.matmul(y, w2) + b2
+        x = array_ops.placeholder(np.float32, shape=[1, 4])
+        y = math_ops.matmul(x, w1) + b1
+        y = math_ops.matmul(y, w2) + b2
 
-      loss = math_ops.reduce_sum(y)
-      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      train = optimizer.minimize(loss)
+        loss = math_ops.reduce_sum(y)
+        optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+        train = optimizer.minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)
@@ -740,19 +738,19 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
           len(list(filter(lambda x: x[1] == w2_ul, device_to_host))), 1)
 
   def testTuplesOfTuplesAreStreamed(self):
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        pa = array_ops.placeholder(np.int64, [2, 2], name="a")
-        pb = array_ops.placeholder(np.int64, [2, 2], name="b")
-        pc = array_ops.placeholder(np.int64, [2, 2], name="c")
-        c = control_flow_ops.tuple((pa + pc, pb + pc))
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          pa = array_ops.placeholder(np.int64, [2, 2], name="a")
+          pb = array_ops.placeholder(np.int64, [2, 2], name="b")
+          pc = array_ops.placeholder(np.int64, [2, 2], name="c")
+          c = control_flow_ops.tuple((pa + pc, pb + pc))
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(report)
       in0 = np.full((2, 2), 7)
       in1 = np.full((2, 2), 6)
@@ -776,24 +774,24 @@ class IpuXlaVariableTest(test_util.TensorFlowTestCase):
     # as not modified then a copy is inserted to make sure it is not overwritten
     # between executions if it is used by an inplace op
     w_val = [1, 2, 3, 4]
-    with ops.device("/device:IPU:0"):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        w = variable_scope.get_variable(
-            "w",
-            shape=[4],
-            dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                np.array(w_val, dtype=np.float32)))
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          w = variable_scope.get_variable(
+              "w",
+              shape=[4],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(
+                  np.array(w_val, dtype=np.float32)))
 
-      px = array_ops.placeholder(np.float32, shape=[4])
-      y = w + px
+        px = array_ops.placeholder(np.float32, shape=[4])
+        y = w + px
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True)
 
-    with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
 
       sess.run(report)

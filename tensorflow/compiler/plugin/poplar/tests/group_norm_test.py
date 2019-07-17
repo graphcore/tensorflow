@@ -20,24 +20,12 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 import numpy as np
-import test_utils as tu
 
-from tensorflow.python.client import session as session_lib
+from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.platform import googletest
-from tensorflow.python.framework import constant_op
-from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import gradients_impl
-from tensorflow.python.ops import init_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variables
-from tensorflow.python.ops import variable_scope
-from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import standard_ops
-from tensorflow.python.platform import test
-from tensorflow.python.training import gradient_descent
 
 # These tests are implemented based on the Layers implementation of the group
 # norm - tensorflow/contrib/layers/python/layers/normalization.py.
@@ -98,7 +86,7 @@ training_rel_tolerance = 1.0
 dataType = np.float32
 
 
-class GroupNormTest(test.TestCase, parameterized.TestCase):
+class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
   def _refGroupNormFwd(self,
                        inputs,
                        gamma,
@@ -245,24 +233,24 @@ class GroupNormTest(test.TestCase, parameterized.TestCase):
     if data_format != "NHWC" and data_format != "NCHW":
       raise Exception("Unsupported data format " + data_format)
 
-    with ops.device("/device:IPU:0"):
-      pinputs = array_ops.placeholder(dataType, inputs.shape, name="inputs")
-      pgamma = array_ops.placeholder(dataType, gamma.shape, name="gamma")
-      pbeta = array_ops.placeholder(dataType, beta.shape, name="beta")
-      pmean = array_ops.placeholder(dataType, mean.shape, name="mean")
-      pinv_std_dev = array_ops.placeholder(
-          dataType, inv_std_dev.shape, name="inv_std_dev")
-      output = gen_popnn_ops.popnn_group_norm_inference(
-          inputs=pinputs,
-          gamma=pgamma,
-          beta=pbeta,
-          mean=pmean,
-          inv_std_dev=pinv_std_dev,
-          data_format=data_format,
-          epsilon=epsilon,
-          num_groups=groups)
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pinputs = array_ops.placeholder(dataType, inputs.shape, name="inputs")
+        pgamma = array_ops.placeholder(dataType, gamma.shape, name="gamma")
+        pbeta = array_ops.placeholder(dataType, beta.shape, name="beta")
+        pmean = array_ops.placeholder(dataType, mean.shape, name="mean")
+        pinv_std_dev = array_ops.placeholder(
+            dataType, inv_std_dev.shape, name="inv_std_dev")
+        output = gen_popnn_ops.popnn_group_norm_inference(
+            inputs=pinputs,
+            gamma=pgamma,
+            beta=pbeta,
+            mean=pmean,
+            inv_std_dev=pinv_std_dev,
+            data_format=data_format,
+            epsilon=epsilon,
+            num_groups=groups)
 
-    with session_lib.Session() as sess:
       fd = {
           pinputs: inputs,
           pgamma: gamma,
@@ -282,19 +270,19 @@ class GroupNormTest(test.TestCase, parameterized.TestCase):
     if data_format != "NHWC" and data_format != "NCHW":
       raise Exception("Unsupported data format " + data_format)
 
-    with ops.device("/device:IPU:0"):
-      pinputs = array_ops.placeholder(dataType, inputs.shape, name="inputs")
-      pgamma = array_ops.placeholder(dataType, gamma.shape, name="gamma")
-      pbeta = array_ops.placeholder(dataType, beta.shape, name="beta")
-      norm, mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_training(
-          inputs=pinputs,
-          gamma=pgamma,
-          beta=pbeta,
-          data_format=data_format,
-          epsilon=epsilon,
-          num_groups=groups)
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pinputs = array_ops.placeholder(dataType, inputs.shape, name="inputs")
+        pgamma = array_ops.placeholder(dataType, gamma.shape, name="gamma")
+        pbeta = array_ops.placeholder(dataType, beta.shape, name="beta")
+        norm, mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_training(
+            inputs=pinputs,
+            gamma=pgamma,
+            beta=pbeta,
+            data_format=data_format,
+            epsilon=epsilon,
+            num_groups=groups)
 
-    with session_lib.Session() as sess:
       fd = {
           pinputs: inputs,
           pgamma: gamma,
@@ -310,15 +298,15 @@ class GroupNormTest(test.TestCase, parameterized.TestCase):
     if data_format != "NHWC" and data_format != "NCHW":
       raise Exception("Unsupported data format " + data_format)
 
-    with ops.device("/device:IPU:0"):
-      pinputs = array_ops.placeholder(dataType, inputs.shape, name="inputs")
-      mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
-          inputs=pinputs,
-          data_format=data_format,
-          epsilon=epsilon,
-          num_groups=groups)
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pinputs = array_ops.placeholder(dataType, inputs.shape, name="inputs")
+        mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
+            inputs=pinputs,
+            data_format=data_format,
+            epsilon=epsilon,
+            num_groups=groups)
 
-    with session_lib.Session() as sess:
       fd = {
           pinputs: inputs,
       }

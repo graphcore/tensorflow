@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
@@ -17,10 +18,10 @@ from tensorflow.python.ops import nn
 from tensorflow.python.ops import variables
 
 
-class IpuXlaSimpleNetworkTest(test_util.TensorFlowTestCase):
+class IpuXlaSimpleNetworkTest(xla_test.XLATestCase):
   def testAdd(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float32, [2, 2], name="a")
         pb = array_ops.placeholder(np.float32, [2, 2], name="b")
         output = pa + pb
@@ -35,7 +36,7 @@ class IpuXlaSimpleNetworkTest(test_util.TensorFlowTestCase):
 
   def testTransposeNegate(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float32, [2, 2, 3], name="a")
         a = array_ops.transpose(pa, [2, 1, 0])
         b = math_ops.negative(a)
@@ -50,7 +51,7 @@ class IpuXlaSimpleNetworkTest(test_util.TensorFlowTestCase):
 
   def testTransposeNegate2(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float32, [2, 2, 3], name="a")
         a = array_ops.transpose(pa, [1, 2, 0])
         b = math_ops.negative(a)
@@ -65,7 +66,7 @@ class IpuXlaSimpleNetworkTest(test_util.TensorFlowTestCase):
 
   def testReshape(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float32, [2, 1, 3], name="a")
         a = array_ops.reshape(pa, [1, 3, 2])
 
@@ -85,7 +86,7 @@ class IpuXlaSimpleNetworkTest(test_util.TensorFlowTestCase):
     # It has an output which doesn't match it's inputs.  (and it doesn't
     # have any meta-information either)
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         a = array_ops.placeholder(np.float32, [])
         b = array_ops.placeholder(np.float32, [2])
         c = array_ops.placeholder(np.float32, [2])
@@ -103,7 +104,7 @@ class IpuXlaSimpleNetworkTest(test_util.TensorFlowTestCase):
 
   def testDropout(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         pa = array_ops.placeholder(np.float32, [2, 2], name="a")
         output = nn.dropout(pa, 0.5)
 
@@ -111,7 +112,7 @@ class IpuXlaSimpleNetworkTest(test_util.TensorFlowTestCase):
 
   def testControlDependencies(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         a = array_ops.placeholder(np.float32, [1])
         b = array_ops.placeholder(np.float32, [1])
         c = array_ops.placeholder(np.float32, [1])
@@ -129,7 +130,7 @@ class IpuXlaSimpleNetworkTest(test_util.TensorFlowTestCase):
 
   def testSigmoid(self):
     with ops.device("/device:IPU:0"):
-      with session_lib.Session() as sess:
+      with self.session() as sess:
         a = array_ops.placeholder(np.float32, [2, 2])
         b = math_ops.sigmoid(a)
 

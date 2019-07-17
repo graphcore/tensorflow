@@ -1,6 +1,7 @@
 import numpy as np
 import os
 
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import test_util
@@ -37,7 +38,7 @@ EXECS = 2
 os.environ['TF_POPLAR_FLAGS'] = "--force_replicated_mode"
 
 
-class TestDropout(test_util.TensorFlowTestCase):
+class TestDropout(xla_test.XLATestCase):
   def testResetSeed(self):
     # The dataset for feeding the graphs
     ds = dataset_ops.Dataset.from_tensors(
