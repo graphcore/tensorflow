@@ -228,6 +228,24 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "ipu_estimator_replicated_test",
+    size = "large",
+    shard_count = 2,
+    srcs = ["tests/ipu_estimator_replicated_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
 py_test(
     name = "pop_datastream_test",
     size = "small",
@@ -371,5 +389,6 @@ test_suite(
     name = "replicated_tests",
     tests = [
         "replication_normalise_test",
+        "ipu_estimator_replicated_test"
     ],
 )

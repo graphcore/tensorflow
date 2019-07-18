@@ -26,6 +26,7 @@ from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python import ipu
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -44,6 +45,7 @@ from tensorflow.python.util import function_utils
 
 _INITIAL_LOSS = 0.0
 _INPUT_FN_KEY = "input_fn"
+_CROSS_REPLICA_SUM_OP = "IpuCrossReplicaSum"
 
 # Keys that cannot be used in the `params` dictionary passed to the
 # IPUEstimator
@@ -119,13 +121,36 @@ def _call_input_fn(input_fn, mode, params, config):
   return input_fn(**kwargs)
 
 
+def _validate_replicated_training_graph():
+  operations = ops.get_default_graph().get_operations()
+  if not any(o.type == _CROSS_REPLICA_SUM_OP for o in operations):
+    raise ValueError(
+        ("This is not a valid replicated training graph because no {} " +
+         "operations were found. Did you remember to use the " +
+         "`tensorflow.python.ipu.ipu_optimizer.CrossReplicaOptimizer`?"
+         ).format(_CROSS_REPLICA_SUM_OP))
+
+
 class _ModelFnWrapper(object):
-  def __init__(self, model_fn, config, params):
+  def __init__(self, model_fn, config, params, infeed_queue):
     self._model_fn = model_fn
     self._config = config
     self._params = params
+    self._infeed_queue = infeed_queue
+    self._iterations_per_loop = config.ipu_run_config.iterations_per_loop
+    self._replication_factor = config.ipu_run_config.num_replicas
+    self._num_shards = config.ipu_run_config.num_shards
+    self._autosharding = config.ipu_run_config.autosharding
 
-  def create_training_loop(self, iterations_per_loop, infeed_queue):
+  def _loop_replica_mean(self, loop_sum):
+    if self._replication_factor == 1:
+      return loop_sum / self._iterations_per_loop
+
+    loop_replica_sum = ipu_ops.cross_replica_ops.cross_replica_sum(loop_sum)
+    return loop_replica_sum / (self._iterations_per_loop *
+                               self._replication_factor)
+
+  def create_training_loop(self):
     def training_step(total_loss, features, labels=None):
       estimator_spec = self._call_model_fn(features, labels,
                                            model_fn_lib.ModeKeys.TRAIN)
@@ -138,6 +163,9 @@ class _ModelFnWrapper(object):
       if train_op is None:
         raise ValueError("EstimatorSpec must contain train_op when training")
 
+      if self._autosharding:
+        ipu.autoshard.automatic_sharding(self._num_shards, features, loss)
+
       # training_step will be run by xla.compile(). xla.compile() only supports
       # tensor output while train_op can be either an operation or a tensor.
       # Even though xla.compile() automatically adds operation-typed train_op as
@@ -145,18 +173,22 @@ class _ModelFnWrapper(object):
       # tensor-typed train_op. Thus, we need to set it explicitly here.
       with ops.control_dependencies([train_op]):
         total_loss += math_ops.cast(loss, dtypes.float32)
-        return total_loss
+
+      if self._replication_factor > 1:
+        _validate_replicated_training_graph()
+
+      return total_loss
 
     def training_loop():
-      return loops.repeat(iterations_per_loop,
-                          training_step,
-                          inputs=[_INITIAL_LOSS],
-                          infeed_queue=infeed_queue)
+      total_loss = loops.repeat(self._iterations_per_loop,
+                                training_step,
+                                inputs=[_INITIAL_LOSS],
+                                infeed_queue=self._infeed_queue)
+      return self._loop_replica_mean(total_loss)
 
     return training_loop
 
-  def create_evaluation_loop(self, iterations_per_loop, infeed_queue,
-                             outfeed_queue):
+  def create_evaluation_loop(self, outfeed_queue):
     def evaluation_step(total_loss, features, labels=None):
       estimator_spec = self._call_model_fn(features, labels,
                                            model_fn_lib.ModeKeys.EVAL)
@@ -173,21 +205,24 @@ class _ModelFnWrapper(object):
       update_op, value_ops = estimator_lib._extract_metric_update_ops(  # pylint: disable=protected-access
           eval_metric_ops)
 
+      if self._autosharding:
+        ipu.autoshard.automatic_sharding(self._num_shards, features, loss)
+
       with ops.control_dependencies([update_op, loss]):
         total_loss += math_ops.cast(loss, dtypes.float32)
         outfeed = outfeed_queue.enqueue(value_ops)
         return total_loss, outfeed
 
     def evaluation_loop():
-      return loops.repeat(iterations_per_loop,
-                          evaluation_step,
-                          inputs=[_INITIAL_LOSS],
-                          infeed_queue=infeed_queue)
+      total_loss = loops.repeat(self._iterations_per_loop,
+                                evaluation_step,
+                                inputs=[_INITIAL_LOSS],
+                                infeed_queue=self._infeed_queue)
+      return self._loop_replica_mean(total_loss)
 
     return evaluation_loop
 
-  def create_prediction_loop(self, iterations_per_loop, infeed_queue,
-                             outfeed_queue):
+  def create_prediction_loop(self, outfeed_queue):
     def prediction_step(features, labels=None):
       estimator_spec = self._call_model_fn(features, labels,
                                            model_fn_lib.ModeKeys.PREDICT)
@@ -201,9 +236,9 @@ class _ModelFnWrapper(object):
       return outfeed
 
     def prediction_loop():
-      return loops.repeat(iterations_per_loop,
+      return loops.repeat(self._iterations_per_loop,
                           prediction_step,
-                          infeed_queue=infeed_queue)
+                          infeed_queue=self._infeed_queue)
 
     return prediction_loop
 
@@ -231,7 +266,7 @@ class _ModelFnWrapper(object):
     return estimator_spec
 
 
-def _augment_model_fn(model_fn, iterations_per_loop):
+def _augment_model_fn(model_fn):
   """Returns a new model_fn, which wraps the IPU support."""
 
   def _model_fn(features, labels, mode, config, params):  # pylint: disable=unused-argument
@@ -240,7 +275,9 @@ def _augment_model_fn(model_fn, iterations_per_loop):
     if not isinstance(dataset, dataset_ops.Dataset):
       raise ValueError("input_fn must return Dataset")
 
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, _next_feed_id())
+    replication_factor = config.ipu_run_config.num_replicas
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+        dataset, _next_feed_id(), replication_factor=replication_factor)
 
     hooks = [
         _IPUInfeedInitializerSessionHook(infeed_queue),
@@ -256,23 +293,22 @@ def _augment_model_fn(model_fn, iterations_per_loop):
       ipu_options = config.ipu_run_config.ipu_options
       hooks += [_IPUConfigureIPUSystemHook(ipu_options, host_device="cpu")]
 
-    model_fn_wrapper = _ModelFnWrapper(model_fn, config, params)
+    model_fn_wrapper = _ModelFnWrapper(model_fn, config, params, infeed_queue)
 
     if mode == model_fn_lib.ModeKeys.TRAIN:
-      loop = model_fn_wrapper.create_training_loop(iterations_per_loop,
-                                                   infeed_queue)
+      loop = model_fn_wrapper.create_training_loop()
     elif mode == model_fn_lib.ModeKeys.EVAL:
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          "eval_" + _next_feed_id(), outfeed_mode=IPUOutfeedMode.LAST)
-      loop = model_fn_wrapper.create_evaluation_loop(iterations_per_loop,
-                                                     infeed_queue,
-                                                     outfeed_queue)
+          "eval_" + _next_feed_id(),
+          outfeed_mode=IPUOutfeedMode.LAST,
+          replication_factor=replication_factor)
+      loop = model_fn_wrapper.create_evaluation_loop(outfeed_queue)
     elif mode == model_fn_lib.ModeKeys.PREDICT:
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          "predict_" + _next_feed_id(), outfeed_mode=IPUOutfeedMode.ALL)
-      loop = model_fn_wrapper.create_prediction_loop(iterations_per_loop,
-                                                     infeed_queue,
-                                                     outfeed_queue)
+          "predict_" + _next_feed_id(),
+          outfeed_mode=IPUOutfeedMode.ALL,
+          replication_factor=replication_factor)
+      loop = model_fn_wrapper.create_prediction_loop(outfeed_queue)
     else:
       raise ValueError("Unknown mode: {}".format(mode))
 
@@ -284,23 +320,24 @@ def _augment_model_fn(model_fn, iterations_per_loop):
 
     ipu_utils.move_variable_initialization_to_cpu()
 
-    if mode in (model_fn_lib.ModeKeys.TRAIN, model_fn_lib.ModeKeys.EVAL):
-      train_op = total_loss = compiled_loop[0]
-      loss = total_loss / iterations_per_loop
-      predictions = None
-    else:
-      assert mode == model_fn_lib.ModeKeys.PREDICT
-      train_op = None
-      loss = None
+    loss = None
+    train_op = None
+    predictions = None
+    eval_metric_ops = {}
+
+    if mode == model_fn_lib.ModeKeys.TRAIN:
+      train_op = loss = compiled_loop[0]
+    elif mode == model_fn_lib.ModeKeys.PREDICT:
       with ops.control_dependencies([compiled_loop]):
         predictions = outfeed_queue.dequeue()
-
-    eval_metric_ops = {}
-    if mode == model_fn_lib.ModeKeys.EVAL:
+    elif mode == model_fn_lib.ModeKeys.EVAL:
+      loss = compiled_loop[0]
       dequeue_op = outfeed_queue.dequeue()
-      for metric_name, outfed_tensor in six.iteritems(dequeue_op):
+      for metric_name, metric_tensor in six.iteritems(dequeue_op):
+        # TODO(hakons): mean is not always correct, e.g. for root_mean_squared_error
+        cross_replica_metric = math_ops.reduce_mean(metric_tensor)
         # No op as update-op since updating is done inside the loop
-        eval_metric_ops[metric_name] = (outfed_tensor,
+        eval_metric_ops[metric_name] = (cross_replica_metric,
                                         control_flow_ops.no_op())
 
     return model_fn_lib.EstimatorSpec(mode=mode,
@@ -334,19 +371,13 @@ class IPUEstimator(estimator_lib.Estimator):
     # Verifies the model_fn signature according to Estimator framework.
     estimator_lib._verify_model_fn_args(model_fn, params)  # pylint: disable=protected-access
 
-    if config.ipu_run_config.ipu_options is not None:
-      dev = config.ipu_run_config.ipu_options.device_config
-      if len(dev) > 1 or (len(dev) == 1 and dev[0].auto_count > 1):
-        raise NotImplementedError("Only one IPU is currently supported")
-
     if params is not None and not isinstance(params, dict):
       raise ValueError('`params` is expected to be of type `dict`')
     if params is not None and any(k in params for k in _RESERVED_PARAMS_KEYS):
       raise ValueError('{} are reserved keys but existed in params {}.'.format(
           _RESERVED_PARAMS_KEYS, params))
 
-    model_function = _augment_model_fn(
-        model_fn, config.ipu_run_config.iterations_per_loop)
+    model_function = _augment_model_fn(model_fn)
 
     super(IPUEstimator, self).__init__(model_fn=model_function,
                                        model_dir=model_dir,
@@ -360,6 +391,7 @@ class IPUEstimator(estimator_lib.Estimator):
             steps=None,
             max_steps=None,
             saving_listeners=None):
+    self._validate_steps(steps)
     self._params[_INPUT_FN_KEY] = input_fn
     return super(IPUEstimator, self).train(input_fn=input_fn,
                                            hooks=hooks,
@@ -376,12 +408,20 @@ class IPUEstimator(estimator_lib.Estimator):
   def _convert_eval_steps_to_hooks(self, steps):
     return self._convert_train_steps_to_hooks(steps, max_steps=None)
 
+  def _validate_steps(self, steps):
+    iterations_per_loop = self.config.ipu_run_config.iterations_per_loop
+    if steps is not None and steps % iterations_per_loop != 0:
+      raise ValueError(
+          "steps ({}) must be a multiple of iterations_per_loop ({})".format(
+              steps, iterations_per_loop))
+
   def evaluate(self,
                input_fn,
                steps=None,
                hooks=None,
                checkpoint_path=None,
                name=None):
+    self._validate_steps(steps)
     self._params[_INPUT_FN_KEY] = input_fn
     return super(IPUEstimator, self).evaluate(input_fn=input_fn,
                                               hooks=hooks,
