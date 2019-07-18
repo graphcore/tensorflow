@@ -182,7 +182,10 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       s = tu.extract_all_strings_from_event_trace(result)
       cs_list = tu.get_compute_sets_from_report(s)
 
-      ok = ['__seed*', 'Copy_', 'Conv3DBackpropInputV2/fusion*/Conv_2x2x2']
+      ok = [
+          '__seed*', 'Copy_', 'Conv3DBackpropInputV2/fusion*/Conv_2x2x2',
+          'Conv3DBackpropInputV2/fusion/WeightTranspose'
+      ]
 
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
