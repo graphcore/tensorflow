@@ -21,6 +21,7 @@ import numpy as np
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
+from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
@@ -978,6 +979,57 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegexp(errors.FailedPreconditionError,
                                    'Outfeed with id=\'a\' already exists'):
         result2 = sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
+
+  def testInfeedUsingDatasetWithNestedDictNotUnpacked(self):
+    x = {
+      "x0": np.ones(shape=[2], dtype=np.float32),
+      "x1": np.ones(shape=[2], dtype=np.float32)
+    }
+    y = np.ones(shape=[2], dtype=np.float32)
+    ds = dataset_ops.Dataset.from_tensor_slices((x, y))
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(ds, feed_name=next_feed_id())
+
+    def body(total, x, y):
+      total += x["x0"] + x["x1"] + y
+      return total
+
+    def my_net():
+      r = ipu.loops.repeat(2, body, [0.0], infeed_queue)
+      return r
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net)
+
+    with session_lib.Session() as sess:
+      sess.run(infeed_queue.initializer)
+      result = sess.run(res)
+
+    self.assertEqual(result, [6.0])
+
+  def testInfeedUsingDatasetWithOnlyDictIsUnpacked(self):
+    x = {
+      "x0": np.ones(shape=[2], dtype=np.float32),
+      "x1": np.ones(shape=[2], dtype=np.float32)
+    }
+    ds = dataset_ops.Dataset.from_tensor_slices((x, ))
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(ds, feed_name=next_feed_id())
+
+    def body(total, x0, x1):
+      total += x0 + x1
+      return total
+
+    def my_net():
+      r = ipu.loops.repeat(2, body, [0.0], infeed_queue)
+      return r
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net)
+
+    with session_lib.Session() as sess:
+      sess.run(infeed_queue.initializer)
+      result = sess.run(res)
+
+    self.assertEqual(result, [4.0])
 
 
 if __name__ == "__main__":

@@ -114,15 +114,12 @@ def while_loop(condition,
 
     # Runs `body` with the dequeue_ops appended.
     if infeed_queue:
-      dequeue_ops = _convert_to_list(infeed_queue._dequeue())
+      dequeue_ops = infeed_queue._dequeue()
     else:
       dequeue_ops = []
 
-    if len(dequeue_ops) == 1 and isinstance(dequeue_ops[0], dict):
-      dequeue_ops = dequeue_ops[0]
-      outputs = body(*(inputs), **dequeue_ops)
-    else:
-      outputs = body(*(inputs + dequeue_ops))
+    body_args, body_kwargs = _body_arguments(dequeue_ops)
+    outputs = body(*(inputs + body_args), **body_kwargs)
 
     # If the computation only returned one value, make it a tuple.
     if not isinstance(outputs, (list, tuple)):
@@ -241,3 +238,16 @@ def _convert_to_list(xs):
     return [xs]
   else:
     return list(xs)
+
+
+def _body_arguments(inputs):
+  """Returns the positional and named arguments for the loop body."""
+  inputs = _convert_to_list(inputs)
+  if len(inputs) == 1 and isinstance(inputs[0], dict):
+    # A single dict is unpacked
+    args = []
+    kwargs = inputs[0]
+  else:
+    args = inputs
+    kwargs = dict()
+  return args, kwargs

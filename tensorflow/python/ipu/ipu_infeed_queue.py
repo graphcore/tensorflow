@@ -25,6 +25,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.util import structure
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import loops
 
 
 class IPUInfeedQueue:
@@ -203,8 +204,9 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
 
   @property
   def number_of_tuple_elements(self):
-    """Returns the number of IPUInfeedQueue tuple elements."""
-    return len(structure.get_flat_tensor_specs(self._structure))
+    """Returns the number of arguments supplied by this IPUInfeedQueue."""
+    args, kwargs = loops._body_arguments(self._structure)  # pylint: disable=protected-access
+    return len(args) + len(kwargs)
 
   @property
   def initializer(self):
