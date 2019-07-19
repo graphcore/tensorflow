@@ -1499,7 +1499,7 @@ ENTRY main {
   arg1.2 = s32[1,5] parameter(1)
   arg2.3 = f16[512,1000] parameter(2)
   tuple.13 = (f16[1,5,1000], s32[1,5], f16[512,1000]) tuple(arg0.1, arg1.2, arg2.3)
-  call.4 = (f16[1,5,1000], s32[1,5], f16[512,1000]) call(tuple.13), to_apply=body, backend_config="{\"repeatConfig\":{\"isRepeatLoop\":true,\"repeatCount\":\"100\"}}"
+  call.4 = (f16[1,5,1000], s32[1,5], f16[512,1000]) call(tuple.13), to_apply=body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
   gte.270 = f16[1,5,1000] get-tuple-element(call.4), index=0
   ROOT tuple.284 = (f16[1,5,1000]) tuple(gte.270)
 }

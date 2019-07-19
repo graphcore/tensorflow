@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/backend_config_handler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/casts_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
@@ -491,6 +492,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
     pipeline.AddPass<HloGetDimensionSizeRewriter>();
     pipeline.AddPass<CustomOpReplacer>();
+    pipeline.AddPass<BackendConfigHandler>();
     pipeline.AddPass<ReplicationFactorToConstant>(resources.replication_factor);
     pipeline.AddPass<GradientAccumulationFuser>(resources.annotations);
     pipeline.AddPass<HloComputationNameUniquify>();

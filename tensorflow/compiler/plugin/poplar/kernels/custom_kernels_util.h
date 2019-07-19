@@ -47,6 +47,7 @@ class AttributeMap {
  public:
   AttributeMap();
   AttributeMap(const HloInstruction* custom_call);
+  AttributeMap(const std::string& attributes_json);
 
   // We support:
   // * float, int, bool, uint64, int64, tensorflow::DataType
@@ -54,6 +55,7 @@ class AttributeMap {
   // * absl::flat_hash_map of int64 to int64
   void AddAttribute(const std::string& field_name, const absl::any& attr);
 
+  bool HasAttribute(const std::string& field_name) const;
   StatusOr<std::string> GetAttributeAsString(
       const std::string& field_name) const;
   StatusOr<float> GetAttributeAsFloat(const std::string& field_name) const;

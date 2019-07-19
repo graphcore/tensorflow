@@ -67,12 +67,13 @@ absl::optional<std::pair<PoplibsOp::Lib, PoplibsOp::Op>> GetPoplibsCustomOp(
 namespace IPUCustomKernelsUtil {
 
 AttributeMap::AttributeMap() {}
-AttributeMap::AttributeMap(const HloInstruction* custom_call) {
+
+AttributeMap::AttributeMap(const HloInstruction* custom_call)
+    : AttributeMap(custom_call->raw_backend_config_string()) {
   CHECK_EQ(custom_call->opcode(), HloOpcode::kCustomCall);
+}
 
-  std::string attributes_json =
-      static_cast<const HloCustomCallInstruction*>(custom_call)->opaque();
-
+AttributeMap::AttributeMap(const std::string& attributes_json) {
   Json::Reader reader;
   bool parsed = reader.parse(attributes_json.c_str(), attributes_);
   if (!parsed) {
@@ -165,9 +166,13 @@ void AttributeMap::AddAttribute(const std::string& field_name,
   }
 }
 
+bool AttributeMap::HasAttribute(const std::string& field_name) const {
+  return attributes_.isMember(field_name);
+}
+
 StatusOr<std::string> AttributeMap::GetAttributeAsString(
     const std::string& field_name) const {
-  if (!attributes_.isMember(field_name)) {
+  if (!HasAttribute(field_name)) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
   }
@@ -176,7 +181,7 @@ StatusOr<std::string> AttributeMap::GetAttributeAsString(
 
 StatusOr<float> AttributeMap::GetAttributeAsFloat(
     const std::string& field_name) const {
-  if (!attributes_.isMember(field_name)) {
+  if (!HasAttribute(field_name)) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
   }
@@ -185,7 +190,7 @@ StatusOr<float> AttributeMap::GetAttributeAsFloat(
 
 StatusOr<int> AttributeMap::GetAttributeAsInt(
     const std::string& field_name) const {
-  if (!attributes_.isMember(field_name)) {
+  if (!HasAttribute(field_name)) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
   }
@@ -194,7 +199,7 @@ StatusOr<int> AttributeMap::GetAttributeAsInt(
 
 StatusOr<uint64> AttributeMap::GetAttributeAsUInt64(
     const std::string& field_name) const {
-  if (!attributes_.isMember(field_name)) {
+  if (!HasAttribute(field_name)) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
   }
@@ -203,7 +208,7 @@ StatusOr<uint64> AttributeMap::GetAttributeAsUInt64(
 
 StatusOr<bool> AttributeMap::GetAttributeAsBool(
     const std::string& field_name) const {
-  if (!attributes_.isMember(field_name)) {
+  if (!HasAttribute(field_name)) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
   }
@@ -212,7 +217,7 @@ StatusOr<bool> AttributeMap::GetAttributeAsBool(
 
 StatusOr<tensorflow::DataType> AttributeMap::GetAttributeAsTFDataType(
     const std::string& field_name) const {
-  if (!attributes_.isMember(field_name)) {
+  if (!HasAttribute(field_name)) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
   }
@@ -227,7 +232,7 @@ StatusOr<tensorflow::DataType> AttributeMap::GetAttributeAsTFDataType(
 
 StatusOr<absl::flat_hash_set<int64>> AttributeMap::GetAttributeFlatHashSet(
     const std::string& field_name) const {
-  if (!attributes_.isMember(field_name) || !attributes_[field_name].isArray()) {
+  if (!HasAttribute(field_name) || !attributes_[field_name].isArray()) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
   }
@@ -240,8 +245,7 @@ StatusOr<absl::flat_hash_set<int64>> AttributeMap::GetAttributeFlatHashSet(
 
 StatusOr<absl::flat_hash_map<int64, int64>>
 AttributeMap::GetAttributeFlatHashMap(const std::string& field_name) const {
-  if (!attributes_.isMember(field_name) ||
-      !attributes_[field_name].isMember("keys") ||
+  if (!HasAttribute(field_name) || !attributes_[field_name].isMember("keys") ||
       !attributes_[field_name].isMember("values")) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
@@ -263,7 +267,7 @@ AttributeMap::GetAttributeFlatHashMap(const std::string& field_name) const {
 
 StatusOr<Window> AttributeMap::GetAttributeAsWindow(
     const std::string& field_name) const {
-  if (!attributes_.isMember(field_name)) {
+  if (!HasAttribute(field_name)) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
   }

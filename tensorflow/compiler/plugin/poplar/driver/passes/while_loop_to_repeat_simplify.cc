@@ -346,9 +346,10 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
       parent_computation->AddInstruction(HloInstruction::CreateCall(
           input_tuple->shape(), {input_tuple}, repeat_body));
   PoplarBackendConfig backend_config;
-  auto* cfg = backend_config.mutable_repeat_config();
-  cfg->set_repeat_count(number_of_iterations);
-  cfg->set_is_repeat_loop(true);
+  auto* call_config = backend_config.mutable_call_config();
+  call_config->set_type(PoplarBackendConfig::CallConfig::RepeatLoop);
+  auto* repeat_cfg = call_config->mutable_repeat_config();
+  repeat_cfg->set_repeat_count(number_of_iterations);
   repeat_call->set_backend_config(backend_config);
 
   // Copy sharding info from the while_inst to the repeat.

@@ -116,6 +116,9 @@ StatusOr<std::vector<NativeT>> WideConstToNativeType(
 bool IsPopOpsFusion(const HloComputation*, const std::string& postfix = "");
 bool IsPopOpsFusion(const HloInstruction*, const std::string& postfix = "");
 bool IsRepeatLoop(const HloInstruction*);
+bool IsPipelineStage(const HloInstruction*);
+bool IsPipelineOp(const HloInstruction*);
+bool CallCanBeInlined(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 

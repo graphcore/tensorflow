@@ -24,12 +24,14 @@ py_library(
         "ops/embedding_ops.py",
         "ops/internal_ops.py",
         "ops/normalization_ops.py",
+        "ops/pipelining_ops.py",
         "ops/rand_ops.py",
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
         "//tensorflow/compiler/plugin/poplar:popops_ops_py",
         "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
@@ -44,12 +46,14 @@ py_library(
     srcs_version = "PY2AND3",
     srcs = [
         "ops/internal_ops_grad.py",
+        "ops/pipelining_ops_grad.py",
         "ops/normalization_ops_grad.py",
         "ops/rand_ops_grad.py",
         "ops/rnn_ops_grad.py",
     ],
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
         "//tensorflow/compiler/plugin/poplar:popops_ops_py",
         "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
@@ -76,6 +80,7 @@ py_library(
         "ops/embedding_ops.py",
         "ops/internal_ops.py",
         "ops/normalization_ops.py",
+        "ops/pipelining_ops.py",
         "ops/rand_ops.py",
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
@@ -364,6 +369,23 @@ tf_py_test(
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
+    ],
+)
+
+tf_py_test(
+    name = "pipelining_test",
+    size = "medium",
+    srcs = ["tests/pipelining_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
     ],
 )
 

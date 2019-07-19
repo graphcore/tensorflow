@@ -20,15 +20,42 @@ message PoplarBackendConfig {
     repeated int64 inplace_operands = 5;
   };
 
-  // Instruction config for a Call repeat instruction
-  message RepeatConfig {
-    bool is_repeat_loop = 1;
-    int64 repeat_count = 2;
+  // Instruction config for a Call instruction
+  message CallConfig {
+    enum Type {
+      // Call by default.
+      Call = 0;
+      RepeatLoop = 1;
+      PipelineStage = 2;
+      Pipeline = 3;
+    };
+
+    message RepeatConfig {
+      int64 repeat_count = 1;
+    }
+
+    message PipelineStageConfig {
+    }
+
+    message PipelineConfig {
+    }
+
+    message CallConfig {
+    }
+
+    Type type = 1;
+
+    oneof Config {
+      CallConfig call_config = 2;
+      RepeatConfig repeat_config = 3;
+      PipelineStageConfig pipeline_stage_config = 4;
+      PipelineConfig pipeline_config = 5;
+    }
   }
 
   oneof Config {
     FusionConfig fusion_config = 1;
-    RepeatConfig repeat_config = 2;
+    CallConfig call_config = 2;
   }
 
   bool is_inplace = 3;

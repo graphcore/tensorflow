@@ -158,11 +158,11 @@ int64 InsertIntoTuple(const Shape& tuple, int64 tuple_index,
   return tensor_count + original_index;
 }
 
-std::vector<xla::Shape> FlattenedXlaShape(const xla::Shape& shape) {
-  std::vector<xla::Shape> out;
+std::vector<Shape> FlattenedXlaShape(const Shape& shape) {
+  std::vector<Shape> out;
   if (shape.IsTuple()) {
     for (int i = 0; i < ShapeUtil::TupleElementCount(shape); i++) {
-      std::vector<xla::Shape> shapes =
+      std::vector<Shape> shapes =
           FlattenedXlaShape(ShapeUtil::GetTupleElementShape(shape, i));
       out.insert(out.end(), shapes.begin(), shapes.end());
     }
@@ -174,10 +174,10 @@ std::vector<xla::Shape> FlattenedXlaShape(const xla::Shape& shape) {
 }
 
 template <typename NativeT>
-StatusOr<NativeT> LiteralScalarToNativeType(const xla::Literal& lit) {
+StatusOr<NativeT> LiteralScalarToNativeType(const Literal& lit) {
   auto primitive_type = primitive_util::NativeToPrimitiveType<NativeT>();
   if (ShapeUtil::ElementsIn(lit.shape()) != 1) {
-    return xla::FailedPrecondition("Literal is not scalar");
+    return FailedPrecondition("Literal is not scalar");
   }
 
   TF_ASSIGN_OR_RETURN(Literal converted_lit, lit.Convert(primitive_type));
@@ -186,11 +186,10 @@ StatusOr<NativeT> LiteralScalarToNativeType(const xla::Literal& lit) {
 }
 
 template <typename NativeT>
-StatusOr<std::vector<NativeT>> LiteralVectorToNativeType(
-    const xla::Literal& lit) {
+StatusOr<std::vector<NativeT>> LiteralVectorToNativeType(const Literal& lit) {
   auto primitive_type = primitive_util::NativeToPrimitiveType<NativeT>();
   if (lit.shape().dimensions_size() != 1) {
-    return xla::FailedPrecondition("Literal rank != 1");
+    return FailedPrecondition("Literal rank != 1");
   }
 
   TF_ASSIGN_OR_RETURN(Literal converted_lit, lit.Convert(primitive_type));
@@ -203,10 +202,10 @@ StatusOr<std::vector<NativeT>> LiteralVectorToNativeType(
 
 template <typename NativeT>
 StatusOr<std::vector<NativeT>> WideConstToNativeType(
-    const xla::HloInstruction* wide_const) {
+    const HloInstruction* wide_const) {
   CHECK_EQ(wide_const->opcode(), HloOpcode::kBroadcast);
   if (wide_const->shape().dimensions_size() != 1) {
-    return xla::FailedPrecondition("Literal rank != 1");
+    return FailedPrecondition("Literal rank != 1");
   }
   const HloInstruction* constant = wide_const->operand(0);
   CHECK_EQ(constant->opcode(), HloOpcode::kConstant);
@@ -216,20 +215,20 @@ StatusOr<std::vector<NativeT>> WideConstToNativeType(
   return std::vector<NativeT>(wide_const->shape().dimensions(0), val);
 }
 
-template StatusOr<uint8> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<uint16> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<uint32> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<uint64> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<int8> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<int16> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<int32> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<int64> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<half> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<bfloat16> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<float> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<double> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<complex64> LiteralScalarToNativeType(const xla::Literal& lit);
-template StatusOr<bool> LiteralScalarToNativeType(const xla::Literal& lit);
+template StatusOr<uint8> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<uint16> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<uint32> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<uint64> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<int8> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<int16> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<int32> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<int64> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<half> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<bfloat16> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<float> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<double> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<complex64> LiteralScalarToNativeType(const Literal& lit);
+template StatusOr<bool> LiteralScalarToNativeType(const Literal& lit);
 
 #define INITIALISE_FOR_ALL_NATIVE_VECTOR_TYPES(func) \
   template StatusOr<std::vector<uint8>> func;        \
@@ -248,33 +247,52 @@ template StatusOr<bool> LiteralScalarToNativeType(const xla::Literal& lit);
   template StatusOr<std::vector<bool>> func;
 
 INITIALISE_FOR_ALL_NATIVE_VECTOR_TYPES(
-    LiteralVectorToNativeType(const xla::Literal& lit));
+    LiteralVectorToNativeType(const Literal& lit));
 INITIALISE_FOR_ALL_NATIVE_VECTOR_TYPES(
-    WideConstToNativeType(const xla::HloInstruction* wide_const));
+    WideConstToNativeType(const HloInstruction* wide_const));
 
 #undef INITIALISE_FOR_ALL_NATIVE_VECTOR_TYPES
 
-bool IsPopOpsFusion(const xla::HloComputation* comp,
-                    const std::string& postfix) {
+bool IsPopOpsFusion(const HloComputation* comp, const std::string& postfix) {
   return comp->IsFusionComputation() &&
          tensorflow::str_util::StartsWith(comp->name(), "_pop_op_" + postfix);
 }
 
-bool IsPopOpsFusion(const xla::HloInstruction* inst,
-                    const std::string& postfix) {
-  return inst->opcode() == xla::HloOpcode::kFusion &&
+bool IsPopOpsFusion(const HloInstruction* inst, const std::string& postfix) {
+  return inst->opcode() == HloOpcode::kFusion &&
          IsPopOpsFusion(inst->fused_instructions_computation(), postfix);
 }
 
-bool IsRepeatLoop(const xla::HloInstruction* inst) {
+namespace {
+bool CallConfigHasType(const HloInstruction* inst,
+                       const PoplarBackendConfig::CallConfig::Type type) {
   if (inst->opcode() == HloOpcode::kCall) {
     auto statusor = inst->backend_config<PoplarBackendConfig>();
     if (statusor.ok()) {
       PoplarBackendConfig cfg = statusor.ValueOrDie();
-      return cfg.repeat_config().is_repeat_loop();
+      return cfg.call_config().type() == type;
     }
   }
   return false;
+}
+}  // namespace
+
+bool IsRepeatLoop(const HloInstruction* inst) {
+  return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::RepeatLoop);
+}
+
+bool IsPipelineStage(const HloInstruction* inst) {
+  return CallConfigHasType(inst,
+                           PoplarBackendConfig::CallConfig::PipelineStage);
+}
+
+bool IsPipelineOp(const HloInstruction* inst) {
+  return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
+}
+
+bool CallCanBeInlined(const HloInstruction* inst) {
+  // Only allow inlining for actual calls.
+  return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Call);
 }
 
 bool IsInterIpuCopy(const HloInstruction* inst) {
