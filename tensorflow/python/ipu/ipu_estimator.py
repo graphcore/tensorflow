@@ -26,7 +26,7 @@ from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python import ipu
+from tensorflow.python.ipu import autoshard
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -164,7 +164,7 @@ class _ModelFnWrapper(object):
         raise ValueError("EstimatorSpec must contain train_op when training")
 
       if self._autosharding:
-        ipu.autoshard.automatic_sharding(self._num_shards, features, loss)
+        autoshard.automatic_sharding(self._num_shards, features, loss)
 
       # training_step will be run by xla.compile(). xla.compile() only supports
       # tensor output while train_op can be either an operation or a tensor.
@@ -206,7 +206,7 @@ class _ModelFnWrapper(object):
           eval_metric_ops)
 
       if self._autosharding:
-        ipu.autoshard.automatic_sharding(self._num_shards, features, loss)
+        autoshard.automatic_sharding(self._num_shards, features, loss)
 
       with ops.control_dependencies([update_op, loss]):
         total_loss += math_ops.cast(loss, dtypes.float32)
