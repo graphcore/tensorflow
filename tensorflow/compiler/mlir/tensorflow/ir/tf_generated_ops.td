@@ -1224,10 +1224,10 @@ for dtype in dtype_list:
                                       input_tensor, bitwise_ops.invert(input_tensor)),
                                     bitwise_ops.invert(
                                       tf.constant(0, dtype=dtype))]
-
+  
   expected = tf.constant([0, 0, 0, 0], dtype=tf.float32)
   tf.assert_equal(tf.cast(not_a_and_a, tf.float32), expected)
-
+  
   expected = tf.cast([not_0] * 4, tf.float32)
   tf.assert_equal(tf.cast(not_a_or_a, tf.float32), expected)
 
@@ -1250,6 +1250,39 @@ for dtype in dtype_list:
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let hasCanonicalizer = 1;
+}
+
+def TF_LRNOp : TF_Op<"LRN", [NoSideEffect]> {
+  let summary = "Local Response Normalization.";
+
+  let description = [{
+The 4-D `input` tensor is treated as a 3-D array of 1-D vectors (along the last
+dimension), and each vector is normalized independently.  Within a given vector,
+each component is divided by the weighted, squared sum of inputs within
+`depth_radius`.  In detail,
+
+    sqr_sum[a, b, c, d] =
+        sum(input[a, b, c, d - depth_radius : d + depth_radius + 1] ** 2)
+    output = input / (bias + alpha * sqr_sum) ** beta
+
+For details, see [Krizhevsky et al., ImageNet classification with deep
+convolutional neural networks (NIPS 2012)](http://papers.nips.cc/paper/4824-imagenet-classification-with-deep-convolutional-neural-networks).
+  }];
+
+  let arguments = (ins
+    TensorOf<[BF16, F16, F32]>:$input,
+
+    DefaultValuedAttr<I64Attr, "5">:$depth_radius,
+    DefaultValuedAttr<F32Attr, "1.0f">:$bias,
+    DefaultValuedAttr<F32Attr, "1.0f">:$alpha,
+    DefaultValuedAttr<F32Attr, "0.5f">:$beta
+  );
+
+  let results = (outs
+    TensorOf<[BF16, F16, F32]>:$output
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
 def TF_LeakyReluOp : TF_Op<"LeakyRelu", [NoSideEffect, SameOperandsAndResultType]> {
@@ -1698,6 +1731,116 @@ def TF_NotEqualOp : TF_Op<"NotEqual", [Broadcastable, Commutative, NoSideEffect]
   );
 
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
+def TF_OneHotOp : TF_Op<"OneHot", [NoSideEffect]> {
+  let summary = "Returns a one-hot tensor.";
+
+  let description = [{
+The locations represented by indices in `indices` take value `on_value`,
+while all other locations take value `off_value`.
+
+If the input `indices` is rank `N`, the output will have rank `N+1`,
+The new axis is created at dimension `axis` (default: the new axis is
+appended at the end).
+
+If `indices` is a scalar the output shape will be a vector of length `depth`.
+
+If `indices` is a vector of length `features`, the output shape will be:
+```
+  features x depth if axis == -1
+  depth x features if axis == 0
+```
+
+If `indices` is a matrix (batch) with shape `[batch, features]`,
+the output shape will be:
+```
+  batch x features x depth if axis == -1
+  batch x depth x features if axis == 1
+  depth x batch x features if axis == 0
+```
+
+
+Examples
+=========
+
+Suppose that
+```
+  indices = [0, 2, -1, 1]
+  depth = 3
+  on_value = 5.0
+  off_value = 0.0
+  axis = -1
+```
+
+Then output is `[4 x 3]`:
+```
+output =
+  [5.0 0.0 0.0]  // one_hot(0)
+  [0.0 0.0 5.0]  // one_hot(2)
+  [0.0 0.0 0.0]  // one_hot(-1)
+  [0.0 5.0 0.0]  // one_hot(1)
+```
+
+Suppose that
+```
+  indices = [0, 2, -1, 1]
+  depth = 3
+  on_value = 0.0
+  off_value = 3.0
+  axis = 0
+```
+
+Then output is `[3 x 4]`:
+```
+output =
+  [0.0 3.0 3.0 3.0]
+  [3.0 3.0 3.0 0.0]
+  [3.0 3.0 3.0 3.0]
+  [3.0 0.0 3.0 3.0]
+//  ^                one_hot(0)
+//      ^            one_hot(2)
+//          ^        one_hot(-1)
+//              ^    one_hot(1)
+```
+
+Suppose that
+```
+  indices = [[0, 2], [1, -1]]
+  depth = 3
+  on_value = 1.0
+  off_value = 0.0
+  axis = -1
+```
+
+Then output is `[2 x 2 x 3]`:
+```
+output =
+  [
+    [1.0, 0.0, 0.0]  // one_hot(0)
+    [0.0, 0.0, 1.0]  // one_hot(2)
+  ][
+    [0.0, 1.0, 0.0]  // one_hot(1)
+    [0.0, 0.0, 0.0]  // one_hot(-1)
+  ]
+```
+  }];
+
+  let arguments = (ins
+    TensorOf<[I32, I64, I8]>:$indices,
+    I32Tensor:$depth,
+    TF_Tensor:$on_value,
+    TF_Tensor:$off_value,
+
+    DefaultValuedAttr<I64Attr, "-1">:$axis
+  );
+
+  let results = (outs
+    TF_Tensor:$output
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<2>;
+  TF_DerivedOperandTypeAttr TI = TF_DerivedOperandTypeAttr<0>;
 }
 
 def TF_PackOp : TF_Op<"Pack", [NoSideEffect]> {
@@ -2323,7 +2466,7 @@ output[2:, :, 3, :, ...] = input[2:, :, 3, :, ...]
     TF_Tensor:$input,
     TF_I32OrI64Tensor:$seq_lengths,
 
-    Confined<I64Attr, [IntMinValue<0>]>:$seq_dim,
+    I64Attr:$seq_dim,
     DefaultValuedAttr<I64Attr, "0">:$batch_dim
   );
 

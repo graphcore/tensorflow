@@ -121,6 +121,9 @@ def : Pat<(TF_MaxPoolOp $value,
 
 def : Pat<(TF_MaximumOp $arg1, $arg2), (TFL_MaximumOp $arg1, $arg2)>;
 def : Pat<(TF_MinimumOp $arg1, $arg2), (TFL_MinimumOp $arg1, $arg2)>;
+def : Pat<(TF_OneHotOp $indices, $depth, $on_value, $off_value, $axis),
+          (TFL_OneHotOp $indices, $depth, $on_value, $off_value,
+           (convertIntAttrTo32Bit $axis))>;
 def : Pat<(TF_RangeOp $start, $limit, $delta), (TFL_RangeOp $start, $limit, $delta)>;
 def : Pat<(TF_Relu6Op $arg), (TFL_Relu6Op $arg)>;
 def : Pat<(TF_ReluOp $arg), (TFL_ReluOp $arg)>;
@@ -279,3 +282,5 @@ def : Pat<
     (convertIntAttrTo32Bit $new_axis_mask), (convertIntAttrTo32Bit $shrink_axis_mask))>;
 
 def : Pat<(TF_UniqueOp $arg0),(TFL_UniqueOp $arg0)>;
+
+def : Pat<(TF_LRNOp $arg0, $radius, F32Attr:$bias, F32Attr:$alpha, F32Attr:$beta), (TFL_LocalResponseNormalizationOp $arg0, (convertIntAttrTo32Bit $radius), $bias, $alpha, $beta)>;
