@@ -80,9 +80,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
 
       ok = [
-          '__seed*', 'Sigmoid/custom-call/Nonlinearity',
-          'Copy_XLA_Args/arg0.*_to_Sigmoid/custom-call.clone/OnTileCopy-0',
-          'add/add.*/AddTo'
+          '__seed*',
+          'Copy_XLA_Args/arg0.*_to_Sigmoid/custom-call/Nonlinearity/out/OnTileCopy-0',
+          'Sigmoid/custom-call/Nonlinearity', 'add/add.*/AddTo'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
@@ -159,9 +159,37 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
 
       ok = [
-          '__seed*', 'Relu/custom-call/Nonlinearity',
-          'Copy_XLA_Args/arg0.*_to_Relu/custom-call.clone/OnTileCopy-0',
-          'add/add.*/AddTo'
+          '__seed*',
+          'Copy_XLA_Args/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
+          'Relu/custom-call/Nonlinearity', 'add/add.*/AddTo'
+      ]
+      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+
+  def testReluNotInPlace2(self):
+    with ops.device("/device:IPU:0"):
+      pa = array_ops.placeholder(np.float32, [5], name="a")
+      b = array_ops.concat([pa, pa], axis=0)
+      c = nn_ops.relu(b)
+
+    with ops.device('cpu'):
+      report = gen_ipu_ops.ipu_event_trace()
+
+    tu.configure_ipu_system()
+
+    with tu.ipu_session() as sess:
+      fd = {pa: [-2, -1, 0, 1, 2]}
+      result = sess.run(c, fd)
+      self.assertAllClose(result, [0, 0, 0, 1, 2, 0, 0, 0, 1, 2])
+      self.assertTrue(len(result) == 10)
+
+      result_report = sess.run(report)
+
+      s = tu.extract_all_strings_from_event_trace(result_report)
+      cs_list = tu.get_compute_sets_from_report(s)
+      ok = [
+          '__seed*',
+          'Copy_XLA_Args/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
+          'Relu/custom-call/Nonlinearity'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 

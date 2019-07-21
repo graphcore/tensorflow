@@ -475,7 +475,7 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
 
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
                       inst->backend_config<PoplarBackendConfig>());
-  int64 repeat_count = cfg.repeat_config().repeat_count();
+  int64 repeat_count = cfg.call_config().repeat_config().repeat_count();
   TF_ASSIGN_OR_RETURN(ArgVectors inputs, FindInplaceOutputTensors(
                                              tensor_map, res, inst, main_seq));
   CHECK_EQ(inputs.size(), 1);

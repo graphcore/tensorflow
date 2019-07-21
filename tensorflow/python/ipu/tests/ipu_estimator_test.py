@@ -72,22 +72,6 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     self.assertTrue(estimator.model_dir == "bla")
     self.assertTrue(isinstance(estimator.config, ipu_run_config.RunConfig))
 
-  def testMoreThanOneIPUNotImplemented(self):
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_utils.select_ipus(ipu_options, indices=[0, 1])
-    config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(ipu_options=ipu_options))
-    with self.assertRaisesRegexp(NotImplementedError, "Only one IPU"):
-      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn, config=config)
-
-  def testMoreThanOneAutoSelectedIPUNotImplemented(self):
-    ipu_options = ipu_utils.create_ipu_config()
-    ipu_utils.auto_select_ipus(ipu_options, num_ipus=2)
-    config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(ipu_options=ipu_options))
-    with self.assertRaisesRegexp(NotImplementedError, "Only one IPU"):
-      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn, config=config)
-
   def testTrain(self):
     def my_model_fn(features, labels, mode):
       self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -643,6 +627,130 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     self.assertAllEqual([1, 0], next(outputs)["predictions"])
     self.assertAllEqual([0, 1], next(outputs)["predictions"])
     self.assertAllEqual([1, 0], next(outputs)["predictions"])
+
+  def testStepsMustBeMultipleOfIterationsPerLoop(self):
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=3))
+    estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                           config=config)
+
+    with self.assertRaisesRegexp(ValueError,
+                                 "must be a multiple of iterations_per_loop"):
+      estimator.train(input_fn=lambda: None, steps=1)
+
+    with self.assertRaisesRegexp(ValueError,
+                                 "must be a multiple of iterations_per_loop"):
+      estimator.evaluate(input_fn=lambda: None, steps=2)
+
+  def testIPURunConfig(self):
+    with self.assertRaisesRegexp(
+        ValueError, "configuration requires more than one device"):
+      ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                  num_replicas=3,
+                                  ipu_options=None,
+                                  compile_summary=True)
+
+    with self.assertRaisesRegexp(
+        ValueError, "configuration requires more than one device"):
+      ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                  num_shards=2,
+                                  ipu_options=None,
+                                  compile_summary=True)
+
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             num_replicas=1,
+                                             ipu_options=None,
+                                             compile_summary=True)
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
+
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             num_shards=1,
+                                             ipu_options=None,
+                                             compile_summary=True)
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
+
+    ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             ipu_options=ipu_options,
+                                             compile_summary=True)
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
+
+    with self.assertRaisesRegexp(ValueError, "`IpuOptions` configured with"):
+      ipu_options = ipu_utils.create_ipu_config(profiling=True)
+      ipu_options = ipu_utils.auto_select_ipus(ipu_options, 3)
+      ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                               ipu_options=ipu_options,
+                                               compile_summary=True)
+
+    with self.assertRaisesRegexp(ValueError, "`IpuOptions` configured with"):
+      ipu_options = ipu_utils.create_ipu_config(profiling=True)
+      ipu_options = ipu_utils.auto_select_ipus(ipu_options, 3)
+      ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                               num_replicas=4,
+                                               ipu_options=ipu_options,
+                                               compile_summary=True)
+
+    ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             num_replicas=4,
+                                             ipu_options=ipu_options,
+                                             compile_summary=True)
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
+
+    ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             num_replicas=2,
+                                             num_shards=2,
+                                             ipu_options=ipu_options,
+                                             compile_summary=True)
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
+
+    with self.assertRaisesRegexp(ValueError, "`IpuOptions` configured with"):
+      ipu_options = ipu_utils.create_ipu_config(profiling=True)
+      ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2])
+      ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                               num_replicas=4,
+                                               ipu_options=ipu_options,
+                                               compile_summary=True)
+
+    with self.assertRaisesRegexp(ValueError, "`IpuOptions` configured with"):
+      ipu_options = ipu_utils.create_ipu_config(profiling=True)
+      ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2])
+      ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                               num_shards=4,
+                                               ipu_options=ipu_options,
+                                               compile_summary=True)
+
+    ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2, 3])
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             num_shards=4,
+                                             ipu_options=ipu_options,
+                                             compile_summary=True)
+
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
+
+    ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2, 3])
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             num_replicas=2,
+                                             num_shards=2,
+                                             ipu_options=ipu_options,
+                                             compile_summary=True)
+
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
+
+    ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    ipu_options = ipu_utils.select_ipus(ipu_options, [0])
+    ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                             num_replicas=1,
+                                             num_shards=1,
+                                             ipu_options=ipu_options,
+                                             compile_summary=True)
+
+    self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
 
 if __name__ == "__main__":

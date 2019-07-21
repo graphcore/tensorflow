@@ -314,6 +314,9 @@ class XlaBuilder {
     ShapeIndex param_index;
   };
 
+  // Looks up the HloInstruction and sets the backend config field to "value".
+  Status SetBackendConfig(const XlaOp& op, std::string value);
+
  private:
   // Build helper which takes the id of the root operation..
   StatusOr<XlaComputation> Build(int64 root_id, bool remove_dynamic_dimensions);
@@ -598,6 +601,9 @@ class XlaBuilder {
   StatusOr<const HloInstructionProto*> LookUpInstruction(const XlaOp& op) const;
   StatusOr<const HloInstructionProto*> LookUpInstructionByHandle(
       int64 handle) const;
+
+  StatusOr<HloInstructionProto*> LookUpMutableInstruction(const XlaOp& op);
+  StatusOr<HloInstructionProto*> LookUpMutableInstructionByHandle(int64 handle);
 
   // Internal helper method that does the building for an arbitrary unary op.
   XlaOp UnaryOp(HloOpcode unop, const XlaOp& operand);

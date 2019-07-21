@@ -44,29 +44,27 @@ StatusOr<bool> ConstantNaN::Run(HloModule* module) {
                             literal.Reshape({num_elements}));
 
         for (int64 i = 0; i < num_elements; i++) {
+          bool error = false;
           switch (type) {
             case F16: {
               Eigen::half value = literal_flat.Get<Eigen::half>({i});
-              if (Eigen::half_impl::isnan(value)) {
-                return xla::FailedPrecondition(
-                    "Detected nan during graph construction. Type F16. "
-                    "Instruction: %s.",
-                    inst->name().c_str());
-              }
+              error |= Eigen::half_impl::isnan(value);
               break;
             }
             case F32: {
               float value = literal_flat.Get<float>({i});
-              if (std::isnan(value)) {
-                return xla::FailedPrecondition(
-                    "Detected nan during graph construction. Type F32. "
-                    "Instruction: %s.",
-                    inst->name().c_str());
-              }
+              error |= std::isnan(value);
               break;
             }
             default:
               break;
+          }
+          if (error) {
+            return xla::FailedPrecondition(
+                "Detected a NaN constant instruction `%s` in the Hlo graph "
+                "during graph construction. To disable this error message use "
+                "`TF_POPLAR_FLAGS=\"--allow_nans\"`.",
+                inst->ToString().c_str());
           }
         }
       }

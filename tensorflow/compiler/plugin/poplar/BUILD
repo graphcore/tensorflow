@@ -78,6 +78,7 @@ cc_library(
     name = "optimizers",
     srcs = [
         "driver/passes/allocation_finder.cc",
+        "driver/passes/backend_config_handler.cc",
         "driver/passes/casts_elimination.cc",
         "driver/passes/combine_instructions.cc",
         "driver/passes/commutative_instruction_reorder_operands.cc",
@@ -160,6 +161,7 @@ cc_library(
         "driver/compiler_annotations.h",
         "driver/compiler_information.h",
         "driver/passes/allocation_finder.h",
+        "driver/passes/backend_config_handler.h",
         "driver/passes/casts_elimination.h",
         "driver/passes/combine_instructions.h",
         "driver/passes/commutative_instruction_reorder_operands.h",
@@ -400,6 +402,7 @@ cc_library(
     srcs = [
         "kernels/datastream/feeds.cc",
         "kernels/ipu_kernels.cc",
+        "kernels/pipelining/pipelining.cc",
         "kernels/popnn/arg_min_max.cc",
         "kernels/popnn/lstm.cc",
         "kernels/popnn/norm.cc",
@@ -577,6 +580,27 @@ tf_custom_op_py_library(
     srcs_version = "PY2AND3",
 )
 
+cc_library(
+    name = "pipelining_ops",
+    srcs = ["ops/pipelining/pipelining.cc"],
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "pipelining_ops_wrapper_py",
+    out = "ops/gen_pipelining_ops.py",
+    deps = [":pipelining_ops"],
+    visibility = ["//tensorflow:internal"],
+)
+
+tf_custom_op_py_library(
+    name = "pipelining_ops_py",
+    kernels = [":pipelining_ops"],
+    deps = [":pipelining_ops_wrapper_py"],
+    srcs_version = "PY2AND3",
+)
+
 
 cc_library(
     name = "poplar_lib",
@@ -589,6 +613,7 @@ cc_library(
         ":kernels",
         ":poplar_backend",
         ":ipu_ops",
+        ":pipelining_ops",
         ":popnn_ops",
         ":popops_ops",
         ":poprand_ops",
