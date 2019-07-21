@@ -191,6 +191,14 @@ func @testReshape(%arg0: tensor<10x10x10xf32>) -> tensor<100x100xf32> {
 }
 
 // -----
+// tf.Reshape with a first operand that has non-static shape.
+func @testReshape(%arg0: tensor<10x10x?xf32>) -> tensor<10x10xf32> {
+  %shape1 = constant dense<[10, 10]> : tensor<2xi32>
+  %r1 = "tf.Reshape" (%arg0, %shape1) : (tensor<10x10x?xf32>, tensor<2xi32>) -> (tensor<10x10xf32>)
+  return %r1 : tensor<10x10xf32>
+}
+
+// -----
 
 // CHECK-LABEL: func @testValidAvgPool
 func @testValidAvgPool(tensor<1x7x7x16xf32>) -> tensor<1x1x1x16xf32> {
@@ -492,7 +500,7 @@ func @testIfElse(f32) -> f32
 // Test invalid tf.If operation
 func @testInvalidIfOp(tensor<i1>, f32) -> f32 {
 ^bb0(%arg0: tensor<i1>, %arg1: f32):
-  // expected-error @+1 {{requires operands to have a valid TensorFlow tensor type}}
+  // expected-error @+1 {{operand #1 must be tensor of tf.dtype values}}
   %1 = "tf.If"(%arg0, %arg1) {
     then_branch = @testIfThen,
     else_branch = @testIfElse
@@ -508,7 +516,7 @@ func @testIfElse(tensor<2xf32>) -> tensor<2xf32>
 // Test invalid tf.If operation
 func @testInvalidIfOp(tensor<i1>, tensor<2xf32>) -> tensor<2xf32> {
 ^bb0(%arg0: tensor<i1>, %arg1: tensor<2xf32>):
-  // expected-error @+1 {{requires then_branch attribute}}
+  // expected-error @+1 {{requires attribute 'then_branch'}}
   %1 = "tf.If"(%arg0, %arg1) {
     else_branch = @testIfElse
   } : (tensor<i1>, tensor<2xf32>) -> tensor<2xf32>

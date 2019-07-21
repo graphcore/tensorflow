@@ -73,7 +73,9 @@ def _make_execution_function(model, mode):
   if model.run_eagerly:
     execution_function = distributed_function
   else:
-    distributed_function = def_function.function(distributed_function)
+    distributed_function = def_function.function(
+        distributed_function, autograph=False)
+
     def execution_function(input_fn):
       # `numpy` translates Tensors to values in Eager mode.
       return [out.numpy() for out in distributed_function(input_fn)]
@@ -176,11 +178,11 @@ def train_on_batch(
             (in case the model has multiple inputs).
         - A dict mapping input names to the corresponding array/tensors,
             if the model has named inputs.
-        - A `tf.data` dataset or a dataset iterator.
+        - A `tf.data` dataset.
       y: Target data. Like the input data `x`, it could be either Numpy
         array(s) or TensorFlow tensor(s). It should be consistent with `x`
         (you cannot have Numpy inputs and tensor targets, or inversely). If
-        `x` is a dataset or a dataset iterator, `y` should not be specified
+        `x` is a dataset `y` should not be specified
         (since targets will be obtained from the iterator).
       sample_weight: Optional array of the same length as x, containing
         weights to apply to the model's loss for each sample. In the case of
@@ -188,7 +190,7 @@ def train_on_batch(
         sequence_length), to apply a different weight to every timestep of
         every sample. In this case you should make sure to specify
         sample_weight_mode="temporal" in compile(). This argument is not
-        supported when `x` is a dataset or a dataset iterator.
+        supported when `x` is a dataset.
       class_weight: Optional dictionary mapping class indices (integers) to a
         weight (float) to apply to the model's loss for the samples from this
         class during training. This can be useful to tell the model to "pay
@@ -247,12 +249,12 @@ def test_on_batch(model, x, y=None, sample_weight=None, reset_metrics=True):
           (in case the model has multiple inputs).
         - A dict mapping input names to the corresponding array/tensors,
           if the model has named inputs.
-        - A `tf.data` dataset or a dataset iterator.
+        - A `tf.data` dataset.
       y: Target data. Like the input data `x`,
         it could be either Numpy array(s) or TensorFlow tensor(s).
         It should be consistent with `x` (you cannot have Numpy inputs and
-        tensor targets, or inversely). If `x` is a dataset or a
-        dataset iterator, `y` should not be specified
+        tensor targets, or inversely). If `x` is a dataset,
+        `y` should not be specified
         (since targets will be obtained from the iterator).
       sample_weight: Optional array of the same length as x, containing
           weights to apply to the model's loss for each sample.
@@ -261,7 +263,7 @@ def test_on_batch(model, x, y=None, sample_weight=None, reset_metrics=True):
           to apply a different weight to every timestep of every sample.
           In this case you should make sure to specify
           sample_weight_mode="temporal" in compile(). This argument is not
-          supported when `x` is a dataset or a dataset iterator.
+          supported when `x` is a dataset.
       reset_metrics: If `True`, the metrics returned will be only for this
         batch. If `False`, the metrics will be statefully accumulated across
         batches.
@@ -308,7 +310,7 @@ def predict_on_batch(model, x):
           (in case the model has multiple inputs).
         - A TensorFlow tensor, or a list of tensors
           (in case the model has multiple inputs).
-        - A `tf.data` dataset or a dataset iterator.
+        - A `tf.data` dataset.
 
   Returns:
       Numpy array(s) of predictions.
