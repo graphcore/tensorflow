@@ -1064,7 +1064,7 @@ void PoplarExecutor::AddLoadEngineEventRecord(const std::string& module_name) {
 void PoplarExecutor::AddExecuteEventRecord(const std::string& module_name,
                                            const std::string& report) {
   std::string rep = std::move(report);
-  if (ReportDirectory().size() > 0) {
+  if (ReportDirectory().size() > 0 && report.size()) {
     std::unique_ptr<tensorflow::WritableFile> file;
 
     std::string filename = tensorflow::io::JoinPath(
@@ -1866,10 +1866,11 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       }
 
       if (current_config_.profiling().enable_ipu_trace_events()) {
-        std::stringstream report_stream;
+        std::string report;
         if (current_config_.profiling().enable_execution_trace() > 0) {
           if (executable.ExecutionCount() == 0 &&
               !executable.IsLoadedFromCache()) {
+            std::stringstream report_stream;
             auto graph_profile = current_engine_->getGraphProfile();
             auto exec_profile = current_engine_->getExecutionProfile();
 
@@ -1886,16 +1887,17 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
             }
 
             current_engine_->resetExecutionProfile();
+
+            if (report_stream.tellp() > MaxReportSize()) {
+              LOG(WARNING) << "Dropping Poplar execution report, size was "
+                           << report_stream.tellp();
+              report_stream.str(std::string());
+            }
+            report = report_stream.str();
           }
         }
 
-        if (report_stream.tellp() > MaxReportSize()) {
-          LOG(WARNING) << "Dropping Poplar execution report, size was "
-                       << report_stream.tellp();
-          report_stream.str(std::string());
-        }
-
-        AddExecuteEventRecord(executable.module().name(), report_stream.str());
+        AddExecuteEventRecord(executable.module().name(), report);
       }
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);
