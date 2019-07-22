@@ -25,7 +25,6 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
-from tensorflow.python.client import session as sl
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
@@ -49,43 +48,43 @@ next_feed_id.feed_count = 0
 
 class ShardedAndReplicatedTest(xla_test.XLATestCase):
   def testShardedAndReplicated(self):
-    shape = [2]
-    dataset = tu.create_single_increasing_dataset(3, shape)
+    with self.session() as sess:
+      shape = [2]
+      dataset = tu.create_single_increasing_dataset(3, shape)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset, feed_name=next_feed_id(), replication_factor=2)
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=next_feed_id(), replication_factor=2)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, feed_name=next_feed_id(), replication_factor=2)
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          feed_name=next_feed_id(), replication_factor=2)
 
-    def body(v, x):
-      with ipu.scopes.ipu_shard(0):
-        z = v + x
-        y = x * x
-      with ipu.scopes.ipu_shard(1):
-        z = (ipu.ops.cross_replica_ops.cross_replica_sum(z) +
-             ipu.ops.cross_replica_ops.cross_replica_sum(y))
-        outfeed = outfeed_queue.enqueue(z)
-      return (z, outfeed)
+      def body(v, x):
+        with ipu.scopes.ipu_shard(0):
+          z = v + x
+          y = x * x
+        with ipu.scopes.ipu_shard(1):
+          z = (ipu.ops.cross_replica_ops.cross_replica_sum(z) +
+               ipu.ops.cross_replica_ops.cross_replica_sum(y))
+          outfeed = outfeed_queue.enqueue(z)
+        return (z, outfeed)
 
-    def my_net():
-      v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
-      r = ipu.loops.repeat(2, body, [v], infeed_queue)
-      return r
+      def my_net():
+        v = constant_op.constant(0.0, shape=shape, dtype=np.float32)
+        r = ipu.loops.repeat(2, body, [v], infeed_queue)
+        return r
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      res = ipu.ipu_compiler.compile(my_net, inputs=[])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-    outfed = outfeed_queue.dequeue()
+      outfed = outfeed_queue.dequeue()
 
-    cfg = ipu.utils.create_ipu_config(
-        profiling=True,
-        max_cross_replica_sum_buffer_size=10000,
-        max_inter_ipu_copies_buffer_size=10000)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    cfg = ipu.utils.auto_select_ipus(cfg, 4)
-    ipu.utils.configure_ipu_system(cfg)
+      cfg = ipu.utils.create_ipu_config(
+          profiling=True,
+          max_cross_replica_sum_buffer_size=10000,
+          max_inter_ipu_copies_buffer_size=10000)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      cfg = ipu.utils.auto_select_ipus(cfg, 4)
+      ipu.utils.configure_ipu_system(cfg)
 
-    with sl.Session() as sess:
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(10, shape))
@@ -99,42 +98,42 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
       self.assertAllClose(outfed_result[1][0], np.broadcast_to(10, shape))
 
   def testShardedAndReplicatedTraining(self):
-    def my_graph(inp, lab):
-      with ops.device("/device:IPU:0"):
-        with ipu.scopes.ipu_shard(0):
-          x = layers.Conv2D(8, 3, padding='same', name="convA")(inp)
+    with self.session() as sess:
+      def my_graph(inp, lab):
+        with ops.device("/device:IPU:0"):
+          with ipu.scopes.ipu_shard(0):
+            x = layers.Conv2D(8, 3, padding='same', name="convA")(inp)
 
-        with ipu.scopes.ipu_shard(1):
-          x = layers.Conv2D(8, 1, padding='same', name="convB")(x)
-          x = math_ops.reduce_mean(x, axis=[1, 2])
+          with ipu.scopes.ipu_shard(1):
+            x = layers.Conv2D(8, 1, padding='same', name="convB")(x)
+            x = math_ops.reduce_mean(x, axis=[1, 2])
 
-          loss = nn.softmax_cross_entropy_with_logits_v2(
-              logits=x, labels=array_ops.stop_gradient(lab))
-          loss = math_ops.reduce_mean(loss)
+            loss = nn.softmax_cross_entropy_with_logits_v2(
+                logits=x, labels=array_ops.stop_gradient(lab))
+            loss = math_ops.reduce_mean(loss)
 
-        opt = ipu.ipu_optimizer.CrossReplicaOptimizer(
-            ipu.sharded_optimizer.ShardedOptimizer(
-                gradient_descent.GradientDescentOptimizer(0.000001)))
-        train = opt.minimize(loss)
+          opt = ipu.ipu_optimizer.CrossReplicaOptimizer(
+              ipu.sharded_optimizer.ShardedOptimizer(
+                  gradient_descent.GradientDescentOptimizer(0.000001)))
+          train = opt.minimize(loss)
 
-      return [loss, train]
+        return [loss, train]
 
-    with ops.device('cpu'):
-      inp = array_ops.placeholder(np.float32, [1, 32, 32, 4], name="data")
-      lab = array_ops.placeholder(np.float32, [1, 8], name="labels")
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        inp = array_ops.placeholder(np.float32, [1, 32, 32, 4], name="data")
+        lab = array_ops.placeholder(np.float32, [1, 8], name="labels")
+        report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu.ipu_compiler.compile(my_graph, [inp, lab])
+      out = ipu.ipu_compiler.compile(my_graph, [inp, lab])
 
-    cfg = ipu.utils.create_ipu_config(
-        profiling=True,
-        max_cross_replica_sum_buffer_size=10000,
-        max_inter_ipu_copies_buffer_size=10000)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    cfg = ipu.utils.auto_select_ipus(cfg, 4)
-    ipu.utils.configure_ipu_system(cfg)
+      cfg = ipu.utils.create_ipu_config(
+          profiling=True,
+          max_cross_replica_sum_buffer_size=10000,
+          max_inter_ipu_copies_buffer_size=10000)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      cfg = ipu.utils.auto_select_ipus(cfg, 4)
+      ipu.utils.configure_ipu_system(cfg)
 
-    with sl.Session() as sess:
 
       sess.run(report)
       sess.run(variables.global_variables_initializer())
@@ -169,50 +168,50 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
       self.assertEqual(n_inter_ipu_copies, 13)
 
   def testShardedAndReplicatedAndGradientAccumulateTraining(self):
-    dataset = tu.create_dual_increasing_dataset(3)
+    with self.session() as sess:
+      dataset = tu.create_dual_increasing_dataset(3)
 
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-        dataset, feed_name=next_feed_id(), replication_factor=2)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, feed_name=next_feed_id(), replication_factor=2)
 
-    def my_graph(loss, inp, lab):
-      with ops.device("/device:IPU:0"):
-        with ipu.scopes.ipu_shard(0):
-          x = layers.Conv2D(8, 3, padding='same', name="convA")(inp)
+      def my_graph(loss, inp, lab):
+        with ops.device("/device:IPU:0"):
+          with ipu.scopes.ipu_shard(0):
+            x = layers.Conv2D(8, 3, padding='same', name="convA")(inp)
 
-        with ipu.scopes.ipu_shard(1):
-          x = layers.Conv2D(8, 1, padding='same', name="convB")(x)
-          x = math_ops.reduce_mean(x, axis=[1, 2])
+          with ipu.scopes.ipu_shard(1):
+            x = layers.Conv2D(8, 1, padding='same', name="convB")(x)
+            x = math_ops.reduce_mean(x, axis=[1, 2])
 
-          loss = nn.softmax_cross_entropy_with_logits_v2(
-              logits=x, labels=array_ops.stop_gradient(lab))
-          loss = math_ops.reduce_mean(loss)
+            loss = nn.softmax_cross_entropy_with_logits_v2(
+                logits=x, labels=array_ops.stop_gradient(lab))
+            loss = math_ops.reduce_mean(loss)
 
-        opt = ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer(
-            ipu.sharded_optimizer.ShardedOptimizer(
-                gradient_descent.GradientDescentOptimizer(0.000001)), 10)
-        train = opt.minimize(loss)
+          opt = ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer(
+              ipu.sharded_optimizer.ShardedOptimizer(
+                  gradient_descent.GradientDescentOptimizer(0.000001)), 10)
+          train = opt.minimize(loss)
 
-      return [loss, train]
+        return [loss, train]
 
-    def my_net():
-      v = 0.0
-      r = ipu.loops.repeat(2, my_graph, [v], infeed_queue)
-      return r
+      def my_net():
+        v = 0.0
+        r = ipu.loops.repeat(2, my_graph, [v], infeed_queue)
+        return r
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    out = ipu.ipu_compiler.compile(my_net, [])
+      out = ipu.ipu_compiler.compile(my_net, [])
 
-    cfg = ipu.utils.create_ipu_config(
-        profiling=True,
-        max_cross_replica_sum_buffer_size=10000,
-        max_inter_ipu_copies_buffer_size=10000)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    cfg = ipu.utils.auto_select_ipus(cfg, 4)
-    ipu.utils.configure_ipu_system(cfg)
+      cfg = ipu.utils.create_ipu_config(
+          profiling=True,
+          max_cross_replica_sum_buffer_size=10000,
+          max_inter_ipu_copies_buffer_size=10000)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      cfg = ipu.utils.auto_select_ipus(cfg, 4)
+      ipu.utils.configure_ipu_system(cfg)
 
-    with sl.Session() as sess:
       sess.run(infeed_queue.initializer)
       sess.run(variables.global_variables_initializer())
       sess.run(report)

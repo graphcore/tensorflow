@@ -10,7 +10,6 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops

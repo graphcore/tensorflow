@@ -10,7 +10,6 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
@@ -20,100 +19,100 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 
 class ReplicatedStatefulGradientAccumulateTest(xla_test.XLATestCase):
   def testStatefulGradientAccumulateAndCrossReplica(self):
-    dtype = np.float32
-
-    def my_net(y):
-      def cond(i, y):
-        return i < 10
-
-      def body(i, y):
-        ga = gen_poputil_ops.ipu_stateful_gradient_accumulate(
-            array_ops.ones_like(y), num_mini_batches=5)
-        cr = gen_popops_ops.ipu_cross_replica_sum(ga)
-        y = y + cr
-        i = i + 1
-        return (i, y)
-
-      i = 0
-      return control_flow_ops.while_loop(cond, body, (i, y))
-
-    with ops.device('cpu'):
-      y = array_ops.placeholder(dtype, [1])
-      report = gen_ipu_ops.ipu_event_trace()
-
-    tu.configure_ipu_system(execution_trace=False, replicated=True)
-
-    with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[y])
-
     with self.session() as sess:
+      dtype = np.float32
+
+      def my_net(y):
+        def cond(i, y):
+          return i < 10
+
+        def body(i, y):
+          ga = gen_poputil_ops.ipu_stateful_gradient_accumulate(
+              array_ops.ones_like(y), num_mini_batches=5)
+          cr = gen_popops_ops.ipu_cross_replica_sum(ga)
+          y = y + cr
+          i = i + 1
+          return (i, y)
+
+        i = 0
+        return control_flow_ops.while_loop(cond, body, (i, y))
+
+      with ops.device('cpu'):
+        y = array_ops.placeholder(dtype, [1])
+        report = gen_ipu_ops.ipu_event_trace()
+
+      tu.configure_ipu_system(execution_trace=False, replicated=True)
+
+      with ops.device("/device:IPU:0"):
+        r = xla.compile(my_net, inputs=[y])
+
       sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)
       self.assertAllEqual(y[1], [30])
 
   def testCrossReplicaAndStatefulGradientAccumulate(self):
-    dtype = np.float32
-
-    def my_net(y):
-      def cond(i, y):
-        return i < 10
-
-      def body(i, y):
-        cr = gen_popops_ops.ipu_cross_replica_sum(array_ops.ones_like(y))
-        ga = gen_poputil_ops.ipu_stateful_gradient_accumulate(
-            cr, num_mini_batches=5)
-        y = y + ga
-        i = i + 1
-        return (i, y)
-
-      i = 0
-      return control_flow_ops.while_loop(cond, body, (i, y))
-
-    with ops.device('cpu'):
-      y = array_ops.placeholder(dtype, [1])
-      report = gen_ipu_ops.ipu_event_trace()
-
-    tu.configure_ipu_system(execution_trace=False, replicated=True)
-
-    with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[y])
-
     with self.session() as sess:
+      dtype = np.float32
+
+      def my_net(y):
+        def cond(i, y):
+          return i < 10
+
+        def body(i, y):
+          cr = gen_popops_ops.ipu_cross_replica_sum(array_ops.ones_like(y))
+          ga = gen_poputil_ops.ipu_stateful_gradient_accumulate(
+              cr, num_mini_batches=5)
+          y = y + ga
+          i = i + 1
+          return (i, y)
+
+        i = 0
+        return control_flow_ops.while_loop(cond, body, (i, y))
+
+      with ops.device('cpu'):
+        y = array_ops.placeholder(dtype, [1])
+        report = gen_ipu_ops.ipu_event_trace()
+
+      tu.configure_ipu_system(execution_trace=False, replicated=True)
+
+      with ops.device("/device:IPU:0"):
+        r = xla.compile(my_net, inputs=[y])
+
       sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)
       self.assertAllEqual(y[1], [30])
 
   def testCrossReplicaAndNormalizeAndStatefulGradientAccumulate(self):
-    dtype = np.float32
-
-    def my_net(y):
-      def cond(i, y):
-        return i < 10
-
-      def body(i, y):
-        cr = gen_popops_ops.ipu_cross_replica_sum(array_ops.ones_like(y))
-        norm = gen_poputil_ops.ipu_replication_normalise(cr)
-        ga = gen_poputil_ops.ipu_stateful_gradient_accumulate(
-            norm, num_mini_batches=5)
-        y = y + ga
-        i = i + 1
-        return (i, y)
-
-      i = 0
-      return control_flow_ops.while_loop(cond, body, (i, y))
-
-    with ops.device('cpu'):
-      y = array_ops.placeholder(dtype, [1])
-      report = gen_ipu_ops.ipu_event_trace()
-
-    tu.configure_ipu_system(execution_trace=False, replicated=True)
-
-    with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[y])
-
     with self.session() as sess:
+      dtype = np.float32
+
+      def my_net(y):
+        def cond(i, y):
+          return i < 10
+
+        def body(i, y):
+          cr = gen_popops_ops.ipu_cross_replica_sum(array_ops.ones_like(y))
+          norm = gen_poputil_ops.ipu_replication_normalise(cr)
+          ga = gen_poputil_ops.ipu_stateful_gradient_accumulate(
+              norm, num_mini_batches=5)
+          y = y + ga
+          i = i + 1
+          return (i, y)
+
+        i = 0
+        return control_flow_ops.while_loop(cond, body, (i, y))
+
+      with ops.device('cpu'):
+        y = array_ops.placeholder(dtype, [1])
+        report = gen_ipu_ops.ipu_event_trace()
+
+      tu.configure_ipu_system(execution_trace=False, replicated=True)
+
+      with ops.device("/device:IPU:0"):
+        r = xla.compile(my_net, inputs=[y])
+
       sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)
