@@ -141,6 +141,7 @@ class _ModelFnWrapper(object):
     self._replication_factor = config.ipu_run_config.num_replicas
     self._num_shards = config.ipu_run_config.num_shards
     self._autosharding = config.ipu_run_config.autosharding
+    self._captured_hooks = []
 
   def _loop_replica_mean(self, loop_sum):
     if self._replication_factor == 1:
@@ -149,6 +150,15 @@ class _ModelFnWrapper(object):
     loop_replica_sum = ipu_ops.cross_replica_ops.cross_replica_sum(loop_sum)
     return loop_replica_sum / (self._iterations_per_loop *
                                self._replication_factor)
+
+  def _capture_hooks(self, hooks):
+    if hooks:
+      assert not self._captured_hooks, "Can only capture hooks once"
+      self._captured_hooks = hooks
+
+  @property
+  def captured_hooks(self):
+    return self._captured_hooks
 
   def create_training_loop(self):
     def training_step(total_loss, features, labels=None):
@@ -162,6 +172,8 @@ class _ModelFnWrapper(object):
       train_op = estimator_spec.train_op
       if train_op is None:
         raise ValueError("EstimatorSpec must contain train_op when training")
+
+      self._capture_hooks(estimator_spec.training_hooks)
 
       if self._autosharding:
         autoshard.automatic_sharding(self._num_shards, features, loss)
@@ -202,6 +214,8 @@ class _ModelFnWrapper(object):
         raise ValueError(
             "EstimatorSpec must contain eval_metric_ops when evaluating")
 
+      self._capture_hooks(estimator_spec.evaluation_hooks)
+
       update_op, value_ops = estimator_lib._extract_metric_update_ops(  # pylint: disable=protected-access
           eval_metric_ops)
 
@@ -231,6 +245,8 @@ class _ModelFnWrapper(object):
       if predictions is None:
         raise ValueError(
             "EstimatorSpec must contain predictions when predicting")
+
+      self._capture_hooks(estimator_spec.prediction_hooks)
 
       outfeed = outfeed_queue.enqueue(predictions)
       return outfeed
@@ -291,7 +307,7 @@ def _augment_model_fn(model_fn):
 
     if config.ipu_run_config.ipu_options is not None:
       ipu_options = config.ipu_run_config.ipu_options
-      hooks += [_IPUConfigureIPUSystemHook(ipu_options, host_device="cpu")]
+      hooks.append(_IPUConfigureIPUSystemHook(ipu_options, host_device="cpu"))
 
     model_fn_wrapper = _ModelFnWrapper(model_fn, config, params, infeed_queue)
 
@@ -319,6 +335,8 @@ def _augment_model_fn(model_fn):
       ipu_ops.summary_ops.ipu_compile_summary("compile_summary", compiled_loop)
 
     ipu_utils.move_variable_initialization_to_cpu()
+
+    hooks.extend(model_fn_wrapper.captured_hooks)
 
     loss = None
     train_op = None

@@ -791,6 +791,51 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     scores = estimator.evaluate(my_input_fn, steps=1)
     self.assertAllClose(10.0, scores["loss"])
 
+  def testPassingHooksFromModelFunction(self):
+    def my_input_fn():
+      features = np.array([[1.0]], dtype=np.float32)
+      labels = np.array([[2.0]], dtype=np.float32)
+      dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+      return dataset.batch(1, drop_remainder=True)
+
+    training_hook = _SessionRunCounter()
+    evaluation_hook = _SessionRunCounter()
+    prediction_hook = _SessionRunCounter()
+
+    def my_model_fn(features, labels, mode):
+      loss = features + labels
+      train_op = array_ops.identity(loss)
+      predictions = loss
+      eval_metric_ops = { "mean_loss": metrics_impl.mean(loss) }
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        train_op=train_op,
+                                        predictions=predictions,
+                                        eval_metric_ops=eval_metric_ops,
+                                        training_hooks=[training_hook],
+                                        evaluation_hooks=[evaluation_hook],
+                                        prediction_hooks=[prediction_hook])
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                           config=ipu_run_config.RunConfig())
+
+    # train
+    self.assertEquals(0, training_hook.num_session_runs)
+    estimator.train(input_fn=my_input_fn, steps=1)
+    self.assertEquals(1, training_hook.num_session_runs)
+
+    # predict: not evaluated before generator is consumed
+    self.assertEquals(0, prediction_hook.num_session_runs)
+    predictions = estimator.predict(input_fn=my_input_fn)
+    self.assertEquals(0, prediction_hook.num_session_runs)
+    next(predictions)
+    self.assertEquals(1, prediction_hook.num_session_runs)
+
+    # evaluate
+    self.assertEquals(0, evaluation_hook.num_session_runs)
+    estimator.evaluate(my_input_fn, steps=1)
+    self.assertEquals(1, evaluation_hook.num_session_runs)
+
 
 if __name__ == "__main__":
   googletest.main()
