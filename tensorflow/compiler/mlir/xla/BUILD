@@ -152,7 +152,6 @@ cc_library(
         "@local_config_mlir//:StandardOps",
         "@local_config_mlir//:Support",
         "@local_config_mlir//:TransformUtils",
-        "@local_config_mlir//:TypeUtilities",
     ],
     alwayslink = 1,
 )
@@ -258,6 +257,7 @@ cc_library(
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/compiler/xla:xla_proto",
         "//tensorflow/compiler/xla/service:hlo",
+        "//tensorflow/core:lib",
         "@llvm//:support",
         "@local_config_mlir//:IR",
         "@local_config_mlir//:StandardOps",

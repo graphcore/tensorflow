@@ -1,5 +1,5 @@
 load("@local_config_mlir//:tblgen.bzl", "gentbl")
-load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_cc_test", "tf_native_cc_binary")
+load("//tensorflow:tensorflow.bzl", "tf_cc_test", "tf_native_cc_binary")
 
 package(
     default_visibility = [":friends"],
@@ -105,6 +105,7 @@ cc_library(
         "transforms/optimize.cc",
         "transforms/raise_control_flow.cc",
         "translate/control_to_executor_dialect.cc",
+        "translate/executor_to_control_dialect.cc",
     ],
     hdrs = [
         "ir/control_flow_ops.h",
@@ -131,7 +132,6 @@ cc_library(
         "@local_config_mlir//:StandardOps",
         "@local_config_mlir//:Support",
         "@local_config_mlir//:TransformUtils",
-        "@local_config_mlir//:TypeUtilities",
     ],
     # TODO(jpienaar): Merge in the dialect registration.
     alwayslink = 1,
@@ -281,6 +281,7 @@ cc_library(
         "//tensorflow/core:core_cpu_lib",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_proto_cc",
+        "@local_config_mlir//:Analysis",
         "@local_config_mlir//:IR",
         "@local_config_mlir//:StandardOps",
     ],
