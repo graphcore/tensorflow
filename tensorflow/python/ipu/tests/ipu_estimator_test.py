@@ -752,6 +752,45 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
+  def testDatasetWithDicts(self):
+    def my_input_fn():
+      features = {
+          "x0": np.array([[1.0]], dtype=np.float32),
+          "x1": np.array([[2.0]], dtype=np.float32)
+      }
+      labels = {
+          "y0": np.array([[3.0]], dtype=np.float32),
+          "y1": np.array([[4.0]], dtype=np.float32)
+      }
+      dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+      return dataset.batch(1, drop_remainder=True)
+
+    def my_model_fn(features, labels, mode):
+      loss = math_ops.reduce_sum(features["x0"] + features["x1"] +
+                                 labels["y0"] + labels["y1"], axis=-1)
+      train_op = array_ops.identity(loss)
+      predictions = loss
+      eval_metric_ops = { "mean_loss": metrics_impl.mean(loss) }
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        train_op=train_op,
+                                        predictions=predictions,
+                                        eval_metric_ops=eval_metric_ops)
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                           config=ipu_run_config.RunConfig())
+
+    # train
+    estimator.train(input_fn=my_input_fn, steps=1)
+
+    # predict
+    predictions = estimator.predict(input_fn=my_input_fn)
+    self.assertEquals(10.0, next(predictions))
+
+    # evaluate
+    scores = estimator.evaluate(my_input_fn, steps=1)
+    self.assertAllClose(10.0, scores["loss"])
+
 
 if __name__ == "__main__":
   googletest.main()
