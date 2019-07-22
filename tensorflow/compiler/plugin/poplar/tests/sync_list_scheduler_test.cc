@@ -64,7 +64,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(CreateSyncListMemoryScheduler(64 * 1024)));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateSyncListMemoryScheduler(64 * 1024))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());
@@ -122,7 +124,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(CreateSyncListMemoryScheduler(64 * 1024)));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateSyncListMemoryScheduler(64 * 1024))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());

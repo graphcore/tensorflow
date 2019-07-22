@@ -1034,7 +1034,7 @@ ENTRY c1 {
   p2 = f16[4] parameter(2)
 
   conv = f16[1,16,16,4] convolution(p0, p1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
-  call = f16[1,16,16,64] fusion(conv, p2), kind=kCustom, calls=_pop_op_conv_biasadd
+  call = f16[1,16,16,4] fusion(conv, p2), kind=kCustom, calls=_pop_op_conv_biasadd
 
   ROOT t = (f16[1,16,16,4]) tuple(call)
 }
@@ -1092,7 +1092,7 @@ ENTRY c1 {
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
-TEST_F(AllocationFinderTest, BiasAddAndMultiply) {
+TEST_F(AllocationFinderTest, BiasAddATwice) {
   std::string hlo = R"(
 HloModule top
 
@@ -1104,21 +1104,21 @@ _pop_op_conv_biasadd {
 }
 
 _pop_op_conv_biasadd.1 {
-  arg_0 = f16[1,16,16,64] parameter(0)
-  arg_1 = f16[64] parameter(1)
-  bcast = f16[1,16,16,64] broadcast(arg_1), dimensions={3}
-  ROOT add = f16[1,16,16,64] add(arg_0, bcast)
+  arg_0 = f16[1,16,16,4] parameter(0)
+  arg_1 = f16[4] parameter(1)
+  bcast = f16[1,16,16,4] broadcast(arg_1), dimensions={3}
+  ROOT add = f16[1,16,16,4] add(arg_0, bcast)
 }
 
 ENTRY c1 {
   p0 = f16[1,16,16,2] parameter(0)
   p1 = f16[3,3,2,4] parameter(1)
   p2 = f16[4] parameter(2)
-  p3 = f16[64] parameter(3)
+  p3 = f16[4] parameter(3)
 
   conv = f16[1,16,16,4] convolution(p0, p1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
-  call = f16[1,16,16,64] fusion(conv, p2), kind=kCustom, calls=_pop_op_conv_biasadd
-  call.1 = f16[1,16,16,64] fusion(call, p3), kind=kCustom, calls=_pop_op_conv_biasadd.1
+  call = f16[1,16,16,4] fusion(conv, p2), kind=kCustom, calls=_pop_op_conv_biasadd
+  call.1 = f16[1,16,16,4] fusion(call, p3), kind=kCustom, calls=_pop_op_conv_biasadd.1
 
   ROOT t = (f16[1,16,16,4]) tuple(call.1)
 }
@@ -1209,7 +1209,7 @@ ENTRY c1 {
   p2_r = f16[4] reshape(p2)
 
   conv = f16[1,16,16,4] convolution(p0, p1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
-  call = f16[1,16,16,64] fusion(conv, p2_r), kind=kCustom, calls=_pop_op_conv_biasadd
+  call = f16[1,16,16,4] fusion(conv, p2_r), kind=kCustom, calls=_pop_op_conv_biasadd
 
   ROOT t = (f16[1,16,16,4]) tuple(call)
 }
@@ -2187,9 +2187,9 @@ ENTRY c1 {
   p2_r = f16[4] reshape(p2)
 
   conv = f16[1,16,16,4] convolution(p0, p1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
-  call = f16[1,16,16,64] fusion(conv, p2_r), kind=kCustom, calls=_pop_op_conv_biasadd
-  p3 = f16[1,16,16,64] parameter(3)
-  ROOT add = f16[1,16,16,64] add(p3, call)
+  call = f16[1,16,16,4] fusion(conv, p2_r), kind=kCustom, calls=_pop_op_conv_biasadd
+  p3 = f16[1,16,16,4] parameter(3)
+  ROOT add = f16[1,16,16,4] add(p3, call)
 }
 )";
 
@@ -2288,10 +2288,10 @@ ENTRY c1 {
   p2_r = f16[4] reshape(p2)
 
   conv = f16[1,16,16,4] convolution(p0, p1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
-  call = f16[1,16,16,64] fusion(conv, p2_r), kind=kCustom, calls=_pop_op_conv_biasadd
-  p3 = f32[1,16,16,64] parameter(3)
-  p3.c = f16[1,16,16,64] convert(p3)
-  ROOT add = f16[1,16,16,64] add(p3.c, call)
+  call = f16[1,16,16,4] fusion(conv, p2_r), kind=kCustom, calls=_pop_op_conv_biasadd
+  p3 = f32[1,16,16,4] parameter(3)
+  p3.c = f16[1,16,16,4] convert(p3)
+  ROOT add = f16[1,16,16,4] add(p3.c, call)
 }
 )";
 

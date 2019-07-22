@@ -23,6 +23,7 @@ ConvolutionHloTest.ConvolveF64BackwardInput POPLAR
 ConvolutionHloTest.ConvolveF64Forward POPLAR
 ComparatorsTest.CompareLtF64 POPLAR
 ComparatorsTest.CompareGtF64 POPLAR
+ReducedPrecisionAccuracyTest POPLAR
 
 Bfloat16Test POPLAR // No bfloat16
 DynamicSliceTest.Int32R1BF16 POPLAR

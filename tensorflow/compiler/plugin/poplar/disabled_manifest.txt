@@ -1,15 +1,44 @@
-ReduceOpsTest.testReduceSumC64            # No support for C64
-ReduceOpsTest.testReduceProdC64           # No support for C64
-ReduceOpsTest.testReduceMeanC64           # No support for C64
-DepthwiseConv2DTest.testDepthwiseConv2DInputGradCompare # Fails on Valid - T4475
-DepthwiseConv2DTest.testDepthwiseConv2DFilterGradCompare # Fails - T4475
-Pooling3DTest.testMaxPool3dSamePaddingDifferentStrides  # Too slow at the moment
-FFTTest # No support for FFT
-SegmentReductionOpsTest.testUnsortedSegmentSum1DIndices1DDataNegativeIndices # Tests negative indices, not allowed in TF Op
+AdjustContrastTest # Currently taking too long when run alongside other processes
+AdjustHueTest
+AdjustSaturationTest
+ArrayElementwiseOpTest.ClampF32 # Incorrect NaN passing
+BinaryOpsTest.testNextAfter # Unsigned int
 BinaryOpsTest.testS64Comparisons # No S64
-PoolGradTest.testMaxPool # Tests MaxPoolGradGrad
+CategoricalTest.testCategoricalIsNotConstant # disable until poplar CPU random works
+CategoricalTest.testEmpty # Integer output
+CategoricalTest.testStatelessMultinomialIsInRange # No U64
+CategoricalTest.testDeterminismMultinomial # disable until poplar CPU random works
+CondTest.testCondConstPropagation # Switch node in cluster
+CondTest.testCondNoInputs # Switch node in cluster
+CumsumTest.test3D # Too long
+CumsumTest.test6D # Too long
+CumprodTest.test3D # Too long
+CumprodTest.test6D # Too long
+DepthwiseConv2DTest.testDepthwiseConv2DInputGradCompare # Fails on Valid - T4475
+DeuantizedOpsTest # No bfloat16
+DepthwiseConv2DTest.testDepthwiseConv2DFilterGradCompare # Fails - T4475
+EagerFunctionTest # No registered OpKernel
+EagerTest.testAdam
+EagerTest.testAdamSparse
+EagerTest.testAssignAddVariable
+EagerTest.testIdentityOnVariable # Copy back from device failing
+EagerTest.testMultipleVariableReads
+EagerTest.testReadAssignRead
+EagerTest.testVariableGradient
+ExcessivePaddingTest.testAsFunctionInput
+ExcessivePaddingTest.testAsFunctionOutput
+ExcessivePaddingTest.testAsFunctionInput # No registered OpKernel
+ExcessivePaddingTest.testAsFunctionOutput # No registered OpKernel
+FFTTest # No support for FFT
+GatherTest.testHigherRank # Bad
+InverseOpTest # matrix inversing
+ListDiffTest.testEmptyY # no int64 iota
+ListDiffTest.testNonOverlapping # no int64 iota
+MatrixBandPartTest  # Too slow
+NonMaxSuppressionTest # Complex reductions
 OutOfMemoryTest.testOutputOutOfMemory # Don't do out of memory yet
-WhileTest.testCountingLoopHandrolledC64 # C64
+PoolGradTest.testMaxPool # Tests MaxPoolGradGrad
+Pooling3DTest.testMaxPool3dSamePaddingDifferentStrides  # Too slow at the moment
 Pooling3DTest.testMaxPoolGradValidPadding1_1_3d  # 3D grad_grad
 Pooling3DTest.testMaxPoolGradValidPadding2_1_6_3d  # 3D grad_grad
 Pooling3DTest.testMaxPoolGradValidPadding2_2_3d  # 3D grad_grad
@@ -17,53 +46,17 @@ Pooling3DTest.testMaxPoolGradSamePadding1_1_3d  # 3D grad_grad
 Pooling3DTest.testMaxPoolGradSamePadding2_1_3d  # 3D grad_grad
 Pooling3DTest.testMaxPoolGradSamePadding2_2_3d  # 3D grad_grad
 Pooling3DTest.testMaxPoolGradSamePadding3_1_3d  # 3D grad_grad
-RandomOpsTest.testTruncatedNormalIsInRange  # Too slow
-RandomOpsTest.testShuffle1d # Need to implement 'sort'
-MatrixBandPartTest  # Too slow
-UnaryOpsTest.testAllTypeOps # Need bitwise reductions
 QrOpTest # No QR support
-GatherTest.testHigherRank # Bad
-EagerTest.testIdentityOnVariable # Copy back from device failing
-EagerTest.testAssignAddVariable
-EagerTest.testReadAssignRead
-EagerTest.testVariableGradient
-EagerTest.testMultipleVariableReads
-EagerTest.testAdam
-EagerTest.testAdamSparse
-ExcessivePaddingTest.testAsFunctionInput
-ExcessivePaddingTest.testAsFunctionOutput
-EagerFunctionTest # No registered OpKernel
-ExcessivePaddingTest.testAsFunctionInput # No registered OpKernel
-ExcessivePaddingTest.testAsFunctionOutput # No registered OpKernel
-AdjustContrastTest # Currently taking too long when run alongside other processes
-AdjustHueTest
-AdjustSaturationTest
-ResamplerOpsTest # Don't support the op
-ListDiffTest.testNonOverlapping # no int64 iota
-ListDiffTest.testEmptyY # no int64 iota
-CategoricalTest.testDeterminismMultinomial # disable until poplar CPU random works
-CumsumTest.test6D # Too long
-CumsumTest.test3D # Too long
-CumprodTest.test6D # Too long
-CumprodTest.test3D # Too long
 QuantizedOpsTest # No bfloat16
-DeuantizedOpsTest # No bfloat16
-ArrayElementwiseOpTest.ClampF32 # Incorrect NaN passing
-WhileTest.testNestedWhileLoopWithMaxItersFromOuterContext # badly constructed test
-BinaryOpsTest.testNextAfter # Unsigned int
-SelfAdjointEigOpTest # seg fault
-SvdOpTest # Seg fault
-CondTest.testCondConstPropagation # Switch node in cluster
-CondTest.testCondNoInputs # Switch node in cluster
-SegmentReductionOpsTest.testUnsortedSegmentOps1DIndices1DDataNegativeIndices #Scatter negative indices
-CategoricalTest.testCategoricalIsNotConstant # disable until poplar CPU random works
-CategoricalTest.testStatelessMultinomialIsInRange # No U64
+RandomOpsTest.testParameterizedTruncatedNormalIsInRange # Too slow
 RandomOpsTest.testRandomNormalIsNotConstant # disable until poplar CPU random works
 RandomOpsTest.testRandomUniformIsNotConstant # disable until poplar CPU random works
+RandomOpsTest.testShuffle1d # Need to implement 'sort'
 RandomOpsTest.testTruncatedNormalIsNotConstant # disable until poplar CPU random works
-StatelessRandomOpsTest.testDeterminism # poplibs CPU mode does not obey seed
-StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random uniform int doesn't obey limits
-StatelessRandomOpsTest.testTruncatedNormal # Tests float64
+RandomOpsTest.testTruncatedNormalIsInRange  # Too slow
+ReduceOpsTest.testReduceMeanC64           # No support for C64
+ReduceOpsTest.testReduceProdC64           # No support for C64
+ReduceOpsTest.testReduceSumC64            # No support for C64
 ResizeBilinearTest.test112x112To512x512 # Too slow
 ResizeBilinearTest.test112x112To512x512 # Too slow
 ResizeBilinearTest.test256x48To2048x384 # Too slow
@@ -89,14 +82,22 @@ ResizeBilinearGradTest.test72x72To456x456 # Too slow
 ResizeBilinearGradTest.test86x86To456x456 # Too slow
 ResizeBilinearGradTest.test100x100To456x456 # Too slow
 ResizeBilinearGradTest.test112x112To512x512 # Too slow
-CategoricalTest.testEmpty # Integer output
-NonMaxSuppressionTest # Complex reductions
-XlaOpsNumericalTest.testShiftRightLogical # Unsigned int
+ResamplerOpsTest # Don't support the op
+SegmentReductionOpsTest.testUnsortedSegmentOps1DIndices1DDataNegativeIndices #Scatter negative indices
+SegmentReductionOpsTest.testUnsortedSegmentSum1DIndices1DDataNegativeIndices # Tests negative indices, not allowed in TF Op
+SelfAdjointEigOpTest # seg fault
+StatelessRandomOpsTest.testDeterminism # poplibs CPU mode does not obey seed
+StatelessRandomOpsTest.testRandomUniformIsInRange # poplar CPU model random uniform int doesn't obey limits
+StatelessRandomOpsTest.testTruncatedNormal # Tests float64
+SvdOpTest # Seg fault
+UnaryOpsTest.testAllTypeOps # Need bitwise reductions
+WhileTest.testCountingLoopHandrolledC64 # C64
+WhileTest.testNestedWhileLoopWithMaxItersFromOuterContext # badly constructed test
 XlaOpsNumericalTest.testShiftRightArithmetic  # Unsigned int
+XlaOpsNumericalTest.testShiftRightLogical # Unsigned int
 XlaSortOpTest.testTopK_200000
 XlaSortOpTest.testTopKLarge
 XlaSortOpTest.testTopK2D_200000
 XlaSortOpTest.testTopK2DLarge
 XlaSortOpTest.testInTopKLarge
 XlaSortOpTest.testInTopKLarge
-InverseOpTest # matrix inversing

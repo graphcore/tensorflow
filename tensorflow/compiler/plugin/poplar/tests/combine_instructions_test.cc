@@ -73,7 +73,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(CreateSyncListMemoryScheduler(64 * 1024)));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateSyncListMemoryScheduler(64 * 1024))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -129,8 +131,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(
-          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0})));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -212,8 +215,9 @@ ENTRY entry () -> f32[2] {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(
-          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0})));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
@@ -273,8 +277,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(
-          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0})));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -347,8 +352,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(
-          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0})));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -423,8 +429,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(
-          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0})));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -468,8 +475,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(
-          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0})));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -524,8 +532,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(
-          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0})));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -568,8 +577,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      IpuToMemorySchedulerAlgorithm(
-          CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0})));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(
+              CreateLookAheadMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());

@@ -82,7 +82,7 @@ HloPassPipeline GetMockPipeline(CompilerResources& resources) {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      DefaultMemoryScheduler);
+      ComputationSchedulerToModuleScheduler(DefaultMemoryScheduler));
   return pipeline;
 }
 
