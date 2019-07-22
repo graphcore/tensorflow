@@ -61,9 +61,11 @@ class MultiIpuTest(xla_test.XLATestCase):
 
       rep = sess.run(report)
 
+      cs_list = []
       evts = ipu.utils.extract_all_events(rep)
       for evt in evts:
         if evt.type == IpuTraceEvent.COMPILE_END:
+          cs_list = tu.get_compute_sets_from_json_report(evt)
           js = json.loads(evt.compile_end.tensor_map.decode('utf-8'))
 
           mods = list(js['mappings'].keys())
@@ -76,6 +78,16 @@ class MultiIpuTest(xla_test.XLATestCase):
 
           self.assertEqual(len(tiles), 3)
           self.assertEqual(tiles, set((0, 1, 1216)))
+
+      ok = [
+          '__seed*',
+          'add*/add*/AddTo',
+          '/OnTileCopy',
+          'switchControlBroadcast2/GlobalPre/Copy/OnTileCopy',
+          'Copy_XLA_Args/arg0.1_to_/custom-call*/GlobalPre/Copy/OnTileCopy',
+      ]
+
+      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testMultipleConfigureIpuShouldFail(self):
     with self.session() as sess:

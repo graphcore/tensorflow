@@ -545,11 +545,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.annotations);
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<DependencyReplacer>(true);
-    pipeline.AddPass<InplaceFinder>();
-    pipeline.AddPass<ExpressionOutliner>();
     pipeline.AddPass<HloSubcomputationUnification>();
     pipeline.AddPass<ShardingPass>();
     pipeline.AddPass<InterIpuCopyInserter>();
+    pipeline.AddPass<InplaceFinder>();
+    pipeline.AddPass<ExpressionOutliner>();
     pipeline.AddPass<HloDCE>();
     // Beyond this point non of the passes in the pipeline are allowed to modify
     // the instructions in the HloModule.
