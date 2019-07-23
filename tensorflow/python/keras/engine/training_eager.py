@@ -243,15 +243,16 @@ def _process_single_batch(model,
       else:
         scaled_total_loss = total_loss
     if training:
-      if not model.trainable_weights:
+      trainable_weights = model.trainable_weights
+      if trainable_weights:
+        grads = tape.gradient(scaled_total_loss, trainable_weights)
+        if isinstance(model.optimizer, loss_scale_optimizer.LossScaleOptimizer):
+          grads = model.optimizer.get_unscaled_gradients(grads)
+        model.optimizer.apply_gradients(zip(grads, trainable_weights))
+      else:
         logging.warning('The list of trainable weights is empty. Make sure that'
                         ' you are not setting model.trainable to False before '
                         'compiling the model.')
-      else:
-        grads = tape.gradient(scaled_total_loss, model.trainable_weights)
-        if isinstance(model.optimizer, loss_scale_optimizer.LossScaleOptimizer):
-          grads = model.optimizer.get_unscaled_gradients(grads)
-        model.optimizer.apply_gradients(zip(grads, model.trainable_weights))
     model._set_trainable_state(current_trainable_state)
     return outs, total_loss, output_losses, masks
 
@@ -307,12 +308,7 @@ def train_on_batch(model,
   total_loss = nest.flatten(total_loss)
   results = total_loss + output_losses + metrics_results
 
-  return [_non_none_constant_value(v) for v in results]
-
-
-def _non_none_constant_value(v):
-  constant_value = tensor_util.constant_value(v)
-  return constant_value if constant_value is not None else v
+  return results
 
 
 def test_on_batch(model,
@@ -365,4 +361,4 @@ def test_on_batch(model,
   total_loss = nest.flatten(total_loss)
   results = total_loss + output_losses + metrics_results
 
-  return [_non_none_constant_value(v) for v in results]
+  return results

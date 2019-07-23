@@ -251,7 +251,7 @@ class Model(network.Network):
       self._run_distributed = False
 
     if distribute is not None:
-      if tf2.enabled():
+      if tf2.enabled() or self._run_distributed:
         raise ValueError(
             'Distribute argument in compile is not available in TF 2.0 please '
             'create the model under the distribution strategy scope.')
@@ -946,9 +946,14 @@ class Model(network.Network):
       ValueError: In case of invalid user-provided arguments.
     """
     if self._run_distributed:
-      return training_v2_utils.train_on_batch(
+      outputs = training_v2_utils.train_on_batch(
           self, x, y=y, sample_weight=sample_weight,
           class_weight=class_weight, reset_metrics=reset_metrics)
+      outputs = [
+          training_v2_utils._non_none_constant_value(v) for v in outputs]  # pylint: disable=protected-access
+      if len(outputs) == 1:
+        outputs = outputs[0]
+      return outputs
 
     self._assert_compile_was_called()
     # If at this point we are in the replica context, then it is okay to execute
@@ -974,6 +979,8 @@ class Model(network.Network):
           y,
           sample_weights=sample_weights,
           output_loss_metrics=self._output_loss_metrics)
+      outputs = [
+          training_v2_utils._non_none_constant_value(v) for v in outputs]  # pylint: disable=protected-access
     else:
       x = training_utils.ModelInputs(x).as_list()
       ins = x + (y or []) + (sample_weights or [])
@@ -1031,9 +1038,14 @@ class Model(network.Network):
         ValueError: In case of invalid user-provided arguments.
     """
     if self._run_distributed:
-      return training_v2_utils.test_on_batch(
+      outputs = training_v2_utils.test_on_batch(
           self, x, y=y, sample_weight=sample_weight,
           reset_metrics=reset_metrics)
+      outputs = [
+          training_v2_utils._non_none_constant_value(v) for v in outputs]  # pylint: disable=protected-access
+      if len(outputs) == 1:
+        outputs = outputs[0]
+      return outputs
 
     self._assert_compile_was_called()
     if (self._distribution_strategy and
@@ -1053,6 +1065,8 @@ class Model(network.Network):
           y,
           sample_weights=sample_weights,
           output_loss_metrics=self._output_loss_metrics)
+      outputs = [
+          training_v2_utils._non_none_constant_value(v) for v in outputs]  # pylint: disable=protected-access
     else:
       x = training_utils.ModelInputs(x).as_list()
       inputs = x + (y or []) + (sample_weights or [])
@@ -1490,7 +1504,8 @@ class Model(network.Network):
       return
     if sample_weights and any([s is not None for s in sample_weights]):
       for endpoint in self._training_endpoints:
-        endpoint.sample_weight_mode = self.sample_weight_mode or 'samplewise'
+        endpoint.sample_weight_mode = (
+            endpoint.sample_weight_mode or 'samplewise')
     else:
       for endpoint in self._training_endpoints:
         endpoint.sample_weight_mode = None
@@ -1774,7 +1789,7 @@ class Model(network.Network):
     else:
       sample_weights = [None] * len(self._training_endpoints)
     for endpoint, weight in zip(self._training_endpoints, sample_weights):
-      endpoint.populate_sample_weight(weight)
+      endpoint.populate_sample_weight(weight, endpoint.sample_weight_mode)
 
   def _cache_output_metric_attributes(self, metrics, weighted_metrics):
     """Caches metric name and function attributes for every model output."""
@@ -2424,6 +2439,7 @@ class Model(network.Network):
           weighted_metrics=self._compile_weighted_metrics,
           loss_weights=self.loss_weights,
           target_tensors=target_tensors,
+          sample_weight_mode=self.sample_weight_mode,
           run_eagerly=self.run_eagerly,
           run_distributed=self._run_distributed)
 
@@ -2491,16 +2507,16 @@ class Model(network.Network):
       nest.assert_same_structure(a, b, expand_composites=True)
 
     if y is not None:
+      # Prepare self._sample_weight_modes. List with the same length as
+      # model outputs.
+      training_utils.prepare_sample_weight_modes(self._training_endpoints,
+                                                 self.sample_weight_mode)
+      feed_output_names = self._feed_output_names
+      feed_sample_weight_modes = self._sample_weight_modes
       if not self._is_graph_network:
-        feed_output_names = self._feed_output_names
         feed_output_shapes = None
-        # Sample weighting not supported in this case.
-        # TODO(fchollet): consider supporting it.
-        feed_sample_weight_modes = [None for _ in self.outputs]
       else:
-        feed_output_names = self._feed_output_names
         feed_output_shapes = self._feed_output_shapes
-        feed_sample_weight_modes = self._sample_weight_modes
 
       # Standardize the outputs.
       y = training_utils.standardize_input_data(
@@ -3022,20 +3038,20 @@ class _TrainingEndpoint(object):
         (self.sample_weight_mode is not None and self.sample_weight is None) or
         (self.sample_weight_mode is None and self.sample_weight is not None))
 
-  def populate_sample_weight(self, sample_weight=None):
+  def populate_sample_weight(self, sample_weight, sample_weight_mode):
     """Populate the sample weight and based on the sample weight mode."""
-    if (sample_weight is None and (self.should_skip_target_weights() or
-                                   self.sample_weight_mode is None or
-                                   context.executing_eagerly())):
+    if (sample_weight is None and
+        (self.should_skip_target_weights() or sample_weight_mode is None or
+         context.executing_eagerly())):
       self._sample_weight = None
       return
 
-    assert self.sample_weight_mode in ['temporal', 'samplewise']
-    if self.sample_weight_mode == 'temporal':
+    assert sample_weight_mode in ['temporal', 'samplewise']
+    if sample_weight_mode == 'temporal':
       default_value = [[1.]]
       shape = [None, None]
     else:
-      # self.sample_weight_mode == 'samplewise'
+      # sample_weight_mode == 'samplewise'
       default_value = [1.]
       shape = [None]
 
