@@ -171,9 +171,10 @@ class PopopsSparseSoftmaxXentWithLogitsOp : public XlaOpKernel, IpuOpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsSparseSoftmaxXentWithLogitsOp);
 };
 
-REGISTER_XLA_OP(
-    Name("SparseSoftmaxCrossEntropyWithLogits").Device(DEVICE_IPU_XLA_JIT),
-    PopopsSparseSoftmaxXentWithLogitsOp);
+// TODO(T10195)
+// REGISTER_XLA_OP(
+//     Name("SparseSoftmaxCrossEntropyWithLogits").Device(DEVICE_IPU_XLA_JIT),
+//     PopopsSparseSoftmaxXentWithLogitsOp);
 
 }  // namespace
 }  // namespace tensorflow
