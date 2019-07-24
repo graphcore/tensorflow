@@ -9,6 +9,7 @@ import numpy as np
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
+from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -29,13 +30,13 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          with tu.ipu_shard(0):
+          with ipu.scopes.ipu_shard(0):
             y = layers.Conv2D(
                 2,
                 1,
                 use_bias=False,
                 kernel_initializer=init_ops.ones_initializer())(x)
-          with tu.ipu_shard(1):
+          with ipu.scopes.ipu_shard(1):
             y = layers.Conv2D(
                 2,
                 1,
