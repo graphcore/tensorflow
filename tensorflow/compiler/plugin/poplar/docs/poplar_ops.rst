@@ -61,41 +61,56 @@ The original paper on layer normalization:
 See :py:func:`tensorflow.python.ipu.normalization_ops.layer_norm`.
 
 
-Adding User Operations
-~~~~~~~~~~~~~~~~~~~~~~
+Adding custom user operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Custom precompiled Poplar code can be added to the graph via ipu.internal_ops.precompiled_user_op.
+Custom precompiled Poplar code can be added to the graph via
+`tensorflow.python.ipu.internal_ops.precompiled_user_op`.
 
-The user operation should be exposed via a function which takes in a poplar::Graph, vector of const
-tensors for the input and a reference to a vector of tensors in which the output should be stored. Like
-so:
+The user operation should be exposed via a function which takes in a
+poplar::Graph, vector of const tensors for the input and a reference to a
+vector of tensors in which the output should be stored.
 
-``namespace tensorflow {
+::
 
-poplar::program::Program MY_CUSTOM_OP(
-    poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs) {
-  poplar::program::Sequence seq;
-  outputs.push_back(SomeFunc(graph, seq, input[0]));
-  outputs.push_back(SomeFunc(graph, seq, input[1]));
-  return seq;
-}
+  namespace tensorflow {
 
-}``
+  poplar::program::Program MY_CUSTOM_OP(
+      poplar::Graph& graph,
+      const std::vector<poplar::Tensor>& inputs,
+      std::vector<poplar::Tensor>& outputs) {
 
-This function *must* be only in the tensorflow namespace cannot be nested further. It should then be
-built as a shared library. Once you have this it can then be used in python like so:
+    poplar::program::Sequence seq;
+    poplar::Tensor out1, out2;
 
-``
-outs = {
+    // Create a compute set, add vertices, map, create output tensors and map,
+    // add the compute set to the sequence
+
+    outputs.push_back(out1);
+    outputs.push_back(out2);
+
+    return seq;
+  }
+
+  }
+
+This function *must* be in the tensorflow namespace and must not be nested
+further. It should then be built into shared library. Once you have this it
+can then be used in normal TensorFlow python code.
+
+::
+
+  outs = {
     "output_types": [np.float32, np.float16],
     "output_shapes": [[10,2], [30,1,2]],
-}
+  }
 
-def my_net(x,y,z):
+  def my_net(x,y,z):
     res = ipu.internal_ops.precompiled_user_op([x,y,z], "MY_CUSTOM_OP", "my_library.so", outs=outs)
-``
 
-In this case outputing two tensors. One tensor of type float32 and shape (10,2) and one float16 tensor of shape (30,1,2).
+
+In this example, the operation MY_CUSTOM_OP is expected to produce two
+tensors. One tensor of type float32 and shape (10,2) and one float16
+tensor of shape (30,1,2).
 
 

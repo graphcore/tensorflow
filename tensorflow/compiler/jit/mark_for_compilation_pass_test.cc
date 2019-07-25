@@ -31,7 +31,6 @@ limitations under the License.
 #include "tensorflow/compiler/jit/node_matchers.h"
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
-#include "tensorflow/compiler/xla/service/platform_util.h"
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/graph/algorithm.h"
@@ -984,11 +983,6 @@ TEST(XlaCompilationTest, RandomShapeWithFunc) {
 }
 
 TEST(XlaCompilationTest, RandomShapeOnXlaDevice) {
-  auto plat = xla::PlatformUtil::GetPlatform("gpu");
-  if (!plat.ok()) {
-    return;
-  }
-
   absl::string_view xla_gpu_device =
       "/job:worker/replica:0/task:0/device:XLA_GPU:0";
 
@@ -1021,11 +1015,6 @@ TEST(XlaCompilationTest, RandomShapeOnXlaDevice) {
 }
 
 TEST(XlaCompilationTest, TensorArrayShapeOnXlaDevice) {
-  auto plat = xla::PlatformUtil::GetPlatform("gpu");
-  if (!plat.ok()) {
-    return;
-  }
-
   absl::string_view xla_gpu_device =
       "/job:worker/replica:0/task:0/device:XLA_GPU:0";
   Scope root = Scope::NewRootScope().ExitOnError();
