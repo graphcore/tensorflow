@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===================================================================
-"""A RunConfig subclass with IPU support."""
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -28,21 +26,18 @@ class IPURunConfig(
         'iterations_per_loop', 'ipu_options', 'compile_summary',
         'num_replicas', 'num_shards', 'autosharding'
     ])):
-  r"""IPU related configuration required by `IPUEstimator`.
+  """IPU related configuration required by `IPUEstimator`.
 
   Args:
-    iterations_per_loop: This is the number of train steps running in IPU
-      system before returning to CPU host for each `Session.run`. This means
+    iterations_per_loop: This is the number of iterations running on the IPU device
+      before returning to the CPU host for each `Session.run`. This means that the
       global step is increased `iterations_per_loop` times in one `Session.run`.
-      It is recommended to be set as number of global steps for next checkpoint.
-      Note that in evaluation don't use this value, instead we run total eval
-      `steps` on IPU for a single `Session.run`.
     ipu_options: An IpuOptions configuration protobuf which is populated prior
       to being passed into IPURunConfig. Note that if more than one device is
       being used then `ipu_options` needs to be populated with a `device_config`.
     compile_summary: Generate compilation summary
-    num_replicas: Number of replicated graphs(data parallel)
-    num_shards: Number of IPU devices the on which the graph is sharded (model parallel)
+    num_replicas: Number of replicated graphs (data parallelism)
+    num_shards: Number of IPU devices on which the graph is sharded (model parallelism)
     autosharding: Use the IPU `automatic_sharding` to automatically shard the graph
       across `num_shards` devices
   """
@@ -85,15 +80,14 @@ class IPURunConfig(
 
 
 class RunConfig(run_config_lib.RunConfig):
-  """RunConfig with IPU support."""
+  """RunConfig with IPU support.
+
+  Args:
+    ipu_run_config: :class:`.IPURunConfig` object for IPU-specific configuration.
+    **kwargs: keyword config parameters.
+  """
 
   def __init__(self, ipu_run_config=None, **kwargs):
-    """Constructs a RunConfig.
-
-    Args:
-      ipu_run_config: the IPURunConfig that specifies IPU-specific configuration.
-      **kwargs: keyword config parameters.
-    """
     super(RunConfig, self).__init__(**kwargs)
     self._ipu_run_config = ipu_run_config or IPURunConfig()
 

@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===================================================================
-"""IPUEstimator class."""
+"""
+IPUEstimator
+~~~~~~~~~~~~
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -371,7 +374,42 @@ def _augment_model_fn(model_fn):
 
 
 class IPUEstimator(estimator_lib.Estimator):
-  """Estimator with IPU support."""
+  """Estimator with IPU support.
+
+  IPUEstimator handles many of the details of running on IPUs, such as
+  placement of operations and tensors, graph compilation and usage of
+  data feeds. It also provides a simple way to use multiple IPUs in the
+  form of either data parallelism or model parallelism.
+
+  For efficency, it supports compiling a graph that contains multiple
+  iterations of the training/prediction/evaluation loop, which will be
+  fully executed on the IPU before yielding back to the TensorFlow
+  Python runtime on the CPU.
+
+  See https://tensorflow.org/guide/estimators for general information
+  about estimators.
+
+  Args:
+    model_fn: The model function. Refer to
+      https://www.tensorflow.org/guide/custom_estimators#write_a_model_function
+      for details on how to write this function.
+    model_dir: Directory to save model parameters, graph and etc. This can
+      also be used to load checkpoints from the directory into an estimator to
+      continue training a previously saved model. If `PathLike` object, the
+      path will be resolved. If `None`, the model_dir in `config` will be used
+      if set. If both are set, they must be same. If both are `None`, a
+      temporary directory will be used.
+    config: `tf.ipu.ipu_run_config.RunConfig` configuration object.
+    params: `dict` of hyper parameters that will be passed into `model_fn`.
+            Keys are names of parameters, values are basic python types.
+    warm_start_from: Optional string filepath to a checkpoint or SavedModel to
+                     warm-start from, or a `tf.estimator.WarmStartSettings`
+                     object to fully configure warm-starting.  If the string
+                     filepath is provided instead of a
+                     `tf.estimator.WarmStartSettings`, then all variables are
+                     warm-started, and it is assumed that vocabularies
+                     and `tf.Tensor` names are unchanged.
+  """
 
   def __init__(self,
                model_fn,
@@ -409,6 +447,34 @@ class IPUEstimator(estimator_lib.Estimator):
             steps=None,
             max_steps=None,
             saving_listeners=None):
+    """Trains a model given training data `input_fn`.
+
+    Args:
+      input_fn: A function that provides input data for training as minibatches.
+        The function should return a `tf.data.Dataset` object. The outputs of
+        the `Dataset` object must be a tuple `(features, labels)` where
+
+          * `features` is a `tf.Tensor` or a dictionary of string feature name to `Tensor`
+          * `labels` is a `Tensor` or a dictionary of string label name to `Tensor`
+
+        Both `features` and `labels` are consumed by `model_fn`.
+      hooks: List of `tf.train.SessionRunHook` subclass instances. Used for
+        callbacks inside the training loop.
+      steps: Number of steps for which to train the model. `steps` works
+        incrementally. If you call two times `train(steps=10)` then training
+        occurs in total 20 steps. If you don't want to have incremental behavior
+        please set `max_steps` instead. If set, `max_steps` must be `None`.
+      max_steps: Number of total steps for which to train model. If set,
+        `steps` must be `None`. Two calls to `train(steps=100)` means 200
+        training iterations. On the other hand, two calls to `train(max_steps=100)`
+        means that the second call will not do any iteration since first call did all
+        100 steps.
+      saving_listeners: list of `CheckpointSaverListener` objects. Used for
+        callbacks that run immediately before or after checkpoint savings.
+
+    Returns:
+      `self`, for chaining.
+    """
     self._validate_steps(steps)
     self._params[_INPUT_FN_KEY] = input_fn
     return super(IPUEstimator, self).train(input_fn=input_fn,
@@ -439,6 +505,35 @@ class IPUEstimator(estimator_lib.Estimator):
                hooks=None,
                checkpoint_path=None,
                name=None):
+    """Evaluates the model given evaluation data `input_fn`.
+
+    Args:
+      input_fn: A function that constructs the input data for evaluation.
+        The function should return a `tf.data.Dataset` object. The outputs of
+        the `Dataset` object must be a tuple `(features, labels)` where
+
+          * `features` is a `tf.Tensor` or a dictionary of string feature name to `Tensor`
+          * `labels` is a `Tensor` or a dictionary of string label name to `Tensor`
+
+        Both `features` and `labels` are consumed by `model_fn`.
+      steps: Number of steps for which to evaluate model.
+      hooks: List of `tf.train.SessionRunHook` subclass instances. Used for
+        callbacks inside the evaluation call.
+      checkpoint_path: Path of a specific checkpoint to evaluate. If `None`, the
+        latest checkpoint in `model_dir` is used.  If there are no checkpoints
+        in `model_dir`, evaluation is run with newly initialized `Variables`
+        instead of ones restored from checkpoint.
+      name: Name of the evaluation if user needs to run multiple evaluations on
+        different data sets, such as on training data vs test data. Metrics for
+        different evaluations are saved in separate folders, and appear
+        separately in tensorboard.
+
+    Returns:
+      A dict containing the evaluation metrics specified in `model_fn` keyed by
+      name, as well as an entry `global_step` which contains the value of the
+      global step for which this evaluation was performed.
+    """
+
     self._validate_steps(steps)
     self._params[_INPUT_FN_KEY] = input_fn
     return super(IPUEstimator, self).evaluate(input_fn=input_fn,
@@ -453,13 +548,43 @@ class IPUEstimator(estimator_lib.Estimator):
               hooks=None,
               checkpoint_path=None,
               yield_single_examples=True):
-    """The returned generator will block forever if you try to consume
+    """Yields predictions for given features.
+
+    Note: The returned generator will block forever if you try to consume
     more elements than what is generated, instead of raising the regular
     `StopIteration` exception. This is caused by the current behaviour
     when requesting to run a loop on the IPU for more iterations than there
     are elements remaining in the dataset. So you cannot simply drain it by
-    using `list(predictions)`, you have to consume the expected number of
-    elements, e.g. using `[next(predictions) for _ in range(num_examples)]`."""
+    using :code:`list(predictions)`, you have to consume the expected number of
+    elements, e.g. using :code:`[next(predictions) for _ in range(num_examples)]`.
+
+    Args:
+      input_fn: A function that constructs the features. The function should
+        return a `tf.data.Dataset` object. The outputs of the `Dataset` object
+        should be one of the following:
+
+          * features: A `Tensor` or a dictionary of string feature name to
+            `Tensor`. features are consumed by `model_fn`.
+          * A tuple, in which case the first item is extracted as features.
+
+      predict_keys: list of `str`, name of the keys to predict. It is used if
+        the `tf.estimator.EstimatorSpec.predictions` is a `dict`. If
+        `predict_keys` is used then rest of the predictions will be filtered
+        from the dictionary. If `None`, returns all.
+      hooks: List of `tf.train.SessionRunHook` subclass instances. Used for
+        callbacks inside the prediction call.
+      checkpoint_path: Path of a specific checkpoint to predict. If `None`, the
+        latest checkpoint in `model_dir` is used.  If there are no checkpoints
+        in `model_dir`, prediction is run with newly initialized `Variables`
+        instead of ones restored from checkpoint.
+      yield_single_examples: If `False`, yields the whole batch as returned by
+        the `model_fn` instead of decomposing the batch into individual
+        elements. This is useful if `model_fn` returns some tensors whose first
+        dimension is not equal to the batch size.
+
+    Yields:
+      Evaluated values of `predictions` tensors.
+    """
 
     self._params[_INPUT_FN_KEY] = input_fn
     predictions = super(IPUEstimator, self).predict(

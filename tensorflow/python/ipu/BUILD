@@ -132,7 +132,7 @@ tf_py_test(
 
 tf_py_test(
     name = "embedding_lookup_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/embedding_lookup_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",

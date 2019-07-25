@@ -16,7 +16,8 @@ Targeting the IPU from TensorFlow
     poplar_ops 
     perf_training
     troubleshooting
-    examples
+    perf_training_example
+    ipu_estimator_example
     references
     api
     build

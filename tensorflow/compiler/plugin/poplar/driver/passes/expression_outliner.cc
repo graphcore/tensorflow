@@ -43,8 +43,11 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
     case HloOpcode::kLog1p:
     case HloOpcode::kNot:
     case HloOpcode::kNegate:
+    case HloOpcode::kPopulationCount:
+    case HloOpcode::kRsqrt:
     case HloOpcode::kSign:
     case HloOpcode::kSin:
+    case HloOpcode::kSqrt:
     case HloOpcode::kTanh:
     // Binary
     case HloOpcode::kAdd:
@@ -59,9 +62,11 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
     case HloOpcode::kSubtract:
     case HloOpcode::kAnd:
     case HloOpcode::kOr:
+    case HloOpcode::kXor:
     case HloOpcode::kShiftLeft:
     case HloOpcode::kShiftRightArithmetic:
     case HloOpcode::kShiftRightLogical:
+
     // Ternary
     case HloOpcode::kSelect:
       return !inst->shape().IsTuple();
@@ -83,11 +88,7 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
   }
 }
 
-}  // namespace
-
-StatusOr<bool> ExpressionOutliner::Run(HloModule* module) {
-  HloComputation* comp = module->entry_computation();
-
+StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
   std::list<HloInstruction*> all_ops;
   for (auto* inst : comp->MakeInstructionPostOrder()) {
     if (IsPopopsElementwise(inst) && inst->user_count() == 1 &&
@@ -148,6 +149,8 @@ StatusOr<bool> ExpressionOutliner::Run(HloModule* module) {
       }
     }
   }
+
+  bool was_outlined = false;
 
   while (all_ops.size() > 0) {
     HloInstruction* root = all_ops.front();
@@ -218,6 +221,7 @@ StatusOr<bool> ExpressionOutliner::Run(HloModule* module) {
 
       auto* call = comp->parent()->OutlineExpressionFromComputation(
           instructions_to_outline, "__arithmetic_expression", comp);
+      was_outlined = true;
 
       if (has_sharding) {
         call->set_sharding(sharding);
@@ -225,8 +229,22 @@ StatusOr<bool> ExpressionOutliner::Run(HloModule* module) {
     }
   }
 
-  return true;
-}  // namespace poplarplugin
+  return was_outlined;
+}
+
+}  // namespace
+
+StatusOr<bool> ExpressionOutliner::Run(HloModule* module) {
+  bool was_outlined = false;
+  for (auto* comp : module->MakeNonfusionComputations()) {
+    TF_ASSIGN_OR_RETURN(bool was_modified, ModuleExpressionOutliner(comp));
+    if (was_modified) {
+      was_outlined = true;
+    }
+  }
+
+  return was_outlined;
+}
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -23,6 +23,14 @@ Python API
   :members:
   :noindex:
 
+.. automodule:: tensorflow.python.ipu.ipu_estimator
+  :members:
+  :noindex:
+
+.. automodule:: tensorflow.python.ipu.ipu_run_config
+  :members:
+  :noindex:
+
 .. automodule:: tensorflow.python.ipu.loops
   :members:
   :noindex:

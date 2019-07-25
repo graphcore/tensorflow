@@ -2140,6 +2140,16 @@ tf_xla_py_test(
     ],
 )
 
+py_test(
+    name = "ipu_estimator_example",
+    size = "large",
+    srcs = ["docs/ipu_estimator_example.py"],
+    args = ["--iterations-per-loop=1", "--training-steps=1"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
 tf_xla_py_test(
     name = "tutorial_basic",
     size = "small",
@@ -2276,6 +2286,7 @@ test_suite(
 test_suite(
     name = "doc_examples",
     tests = [
+        "ipu_estimator_example",
         "logging_example_1",
         "perf_training_example",
         "tutorial_basic",

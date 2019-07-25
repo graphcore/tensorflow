@@ -139,7 +139,7 @@ HloModule top
   auto* module = module_or_status.ValueOrDie().get();
 
   ExpressionOutliner eo;
-  EXPECT_TRUE(eo.Run(module).ValueOrDie());
+  EXPECT_FALSE(eo.Run(module).ValueOrDie());
 
   auto* comp = module->entry_computation();
   auto* inst = comp->root_instruction();
@@ -383,6 +383,114 @@ HloModule top
   EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
   EXPECT_THAT(inst->operand(0)->operand_count(), 3);
   EXPECT_THAT(inst->operand(0)->to_apply()->instruction_count(), 7);
+}
+
+//  i i  i  i
+//  \ /  \ /
+//   a    b
+//    \  /
+//     c
+//     |
+TEST_F(ExpressionOutlinerTest, CallToComputationWhithOutlinedExpression) {
+  std::string hlo_string = R"(
+HloModule top
+
+subcomp {
+  a0 = f16[] parameter(0)
+  a1 = f16[] parameter(1)
+  a2 = f16[] parameter(2)
+  a3 = f16[] parameter(3)
+  add1 = f16[] add(a0, a1)
+  sub1 = f16[] subtract(a2, a3)
+  ROOT mul1 = f16[] multiply(add1, sub1), sharding={maximal device=1}
+}
+
+ENTRY cluster_1  {
+  a0 = f16[] parameter(0)
+  a1 = f16[] parameter(1)
+  a2 = f16[] parameter(2)
+  a3 = f16[] parameter(3)  
+  c0 = f16[] call(a0, a1, a2, a3), to_apply=subcomp
+  ROOT %tuple = (f16[]) tuple(c0)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ExpressionOutliner eo;
+  EXPECT_FALSE(eo.Run(module).ValueOrDie());
+
+  auto* comp = module->entry_computation();
+  auto* inst = comp->root_instruction();
+
+  EXPECT_THAT(comp->instruction_count(), 6);
+  ASSERT_THAT(inst->operand_count(), 1);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->operand_count(), 4);
+}
+
+// Two independent networks outlined separately
+//
+//  i i  i i
+//  | |  | |
+//  a b  c d
+//  \ /  \ /
+//   e    f
+//   --\/--
+//     o
+TEST_F(ExpressionOutlinerTest, CallToComputationWhithOutlinedExpression2) {
+  std::string hlo_string = R"(
+HloModule top
+
+subcomp {
+  a0 = f16[] parameter(0)
+  a1 = f16[] parameter(1)  
+  a2 = f16[] parameter(2)
+  a3 = f16[] parameter(3)
+  sin3 = f16[] sine(a2)
+  sin4 = f16[] sine(a3)
+  ROOT sub2 = f16[] subtract(sin3, sin4)    
+}
+
+ENTRY cluster_1  {
+  a0 = f16[] parameter(0)
+  a1 = f16[] parameter(1)
+  a2 = f16[] parameter(2)
+  a3 = f16[] parameter(3)  
+  sin1 = f16[] sine(a0)
+  sin2 = f16[] sine(a1)
+  sub1 = f16[] subtract(sin1, sin2)
+  c0 = f16[] call(a0, a1, a2, a3), to_apply=subcomp  
+  ROOT %tuple = (f16[], f16[]) tuple(sub1, c0)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ExpressionOutliner eo;
+  EXPECT_TRUE(eo.Run(module).ValueOrDie());
+
+  auto* comp = module->entry_computation();
+  auto* inst = comp->root_instruction();
+
+  EXPECT_THAT(comp->instruction_count(), 7);
+  ASSERT_THAT(inst->operand_count(), 2);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->operand_count(), 2);
+  EXPECT_THAT(inst->operand(1)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(1)->operand_count(), 4);
 }
 
 }  // namespace

@@ -1,5 +1,5 @@
-Example
--------
+Example using data feeds with loop
+----------------------------------
 
 This example shows how to use the IPU to train using a high performance
 streaming data infeed.
