@@ -27,8 +27,10 @@ import six
 
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import ops
+from tensorflow.python.framework.ops import composite_tensor
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.utils import data_utils
+from tensorflow.python.ops import array_ops
 from tensorflow.python.util import nest
 from tensorflow.python.util import tf_inspect
 
@@ -152,6 +154,14 @@ class DataAdapter(object):
     """Whether the dataset has partial batch at the end."""
     raise NotImplementedError
 
+  @abc.abstractmethod
+  def partial_batch_size(self):
+    """The size of the final partial batch for dataset.
+
+    Will return None if has_partial_batch is False or batch_size is None.
+    """
+    raise NotImplementedError
+
 
 class TensorLikeDataAdapter(DataAdapter):
   """Adapter that handles Tensor-like objects, e.g. EagerTensor and NumPy."""
@@ -162,7 +172,16 @@ class TensorLikeDataAdapter(DataAdapter):
     if y is not None:
       flat_inputs += nest.flatten(y)
 
-    return all(isinstance(v, (ops.Tensor, np.ndarray)) for v in flat_inputs)
+    def _is_tensor_or_composite(v):
+      if isinstance(v, (ops.Tensor, np.ndarray)):
+        return True
+      # Dataset inherits from CompositeTensor but shouldn't be handled here.
+      if (isinstance(v, composite_tensor.CompositeTensor) and
+          not isinstance(v, dataset_ops.DatasetV2)):
+        return True
+      return False
+
+    return all(_is_tensor_or_composite(v) for v in flat_inputs)
 
   def __init__(self, x, y=None, sample_weights=None, batch_size=None,
                shuffle=False, **kwargs):
@@ -170,6 +189,15 @@ class TensorLikeDataAdapter(DataAdapter):
     x = _process_numpy_inputs(x)
     y = _process_numpy_inputs(y)
     sample_weights = _process_numpy_inputs(sample_weights)
+
+    # If sample_weights are not specified for an output use 1.0 as weights.
+    if sample_weights is not None and None in sample_weights:
+      weight = next(s for s in sample_weights if s is not None)
+      sample_weights = training_utils.list_to_tuple([
+          array_ops.ones((weight.shape[0],)) if sw is None else sw
+          for sw in sample_weights
+      ])
+
     if y is not None and sample_weights is not None:
       inputs = (x, y, sample_weights)
     elif y is not None:
@@ -196,6 +224,11 @@ class TensorLikeDataAdapter(DataAdapter):
       self._size = 1
       self._batch_size = num_samples
       self._has_partial_batch = False
+    self._partial_batch_size = None
+    if self._has_partial_batch:
+      self._partial_batch_size = (
+          num_samples - (self._size - 1) * self._batch_size)
+
     self._dataset = dataset
 
   def get_dataset(self):
@@ -209,6 +242,9 @@ class TensorLikeDataAdapter(DataAdapter):
 
   def has_partial_batch(self):
     return self._has_partial_batch
+
+  def partial_batch_size(self):
+    return self._partial_batch_size
 
 
 class DatasetAdapter(DataAdapter):
@@ -242,6 +278,9 @@ class DatasetAdapter(DataAdapter):
 
   def has_partial_batch(self):
     return False
+
+  def partial_batch_size(self):
+    return None
 
 
 class GeneratorDataAdapter(DataAdapter):
@@ -288,6 +327,9 @@ class GeneratorDataAdapter(DataAdapter):
   def has_partial_batch(self):
     return False
 
+  def partial_batch_size(self):
+    return None
+
 
 class KerasSequenceAdapter(DataAdapter):
   """Adapter that handles `keras.utils.Sequence`."""
@@ -330,6 +372,9 @@ class KerasSequenceAdapter(DataAdapter):
 
   def has_partial_batch(self):
     return False
+
+  def partial_batch_size(self):
+    return None
 
 
 ALL_ADAPTER_CLS = [

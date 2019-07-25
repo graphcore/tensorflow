@@ -245,6 +245,12 @@ def _process_single_batch(model,
     if training:
       trainable_weights = model._unique_trainable_weights
       if trainable_weights:
+        # TODO(tanzheny) b/132690565: Provide mechanism for user to override
+        # model.train_on_batch.
+        if isinstance(model.optimizer,
+                      list) and not hasattr(model, '_backwards'):
+          raise ValueError('The `optimizer` in `compile` should be a single '
+                           'optimizer.')
         grads = tape.gradient(scaled_total_loss, trainable_weights)
         if isinstance(model.optimizer, loss_scale_optimizer.LossScaleOptimizer):
           grads = model.optimizer.get_unscaled_gradients(grads)
@@ -283,10 +289,9 @@ def train_on_batch(model,
         targets = training_utils.cast_if_floating_dtype(targets)
     else:
       inputs = training_utils.cast_if_floating_to_model_input_dtypes(
-          [ops.convert_to_tensor(val) for val in inputs], model)
+          inputs, model)
       if targets:
-        targets = training_utils.cast_if_floating_dtype(
-            [ops.convert_to_tensor(val) for val in targets])
+        targets = training_utils.cast_if_floating_dtype(targets)
   if sample_weights:
     sample_weights = [
         training_utils.cast_if_floating_dtype(ops.convert_to_tensor(val))
@@ -337,10 +342,9 @@ def test_on_batch(model,
         targets = training_utils.cast_if_floating_dtype(targets)
     else:
       inputs = training_utils.cast_if_floating_to_model_input_dtypes(
-          [ops.convert_to_tensor(val) for val in inputs], model)
+          inputs, model)
       if targets:
-        targets = training_utils.cast_if_floating_dtype(
-            [ops.convert_to_tensor(val) for val in targets])
+        targets = training_utils.cast_if_floating_dtype(targets)
   if sample_weights:
     sample_weights = [
         training_utils.cast_if_floating_dtype(ops.convert_to_tensor(val))
