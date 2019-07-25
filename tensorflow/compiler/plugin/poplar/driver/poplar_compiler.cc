@@ -554,9 +554,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     // Beyond this point non of the passes in the pipeline are allowed to modify
     // the instructions in the HloModule.
 
-    if (!PoplarXlaFlags::Get().allow_nans) {
-      pipeline.AddPass<ConstantNaN>();
-    }
+    // TODO(T10195) re-enable.
+    // if (!PoplarXlaFlags::Get().allow_nans) {
+    //   pipeline.AddPass<ConstantNaN>();
+    // }
 
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<AllocationFinder>(resources.annotations);
