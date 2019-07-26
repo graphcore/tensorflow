@@ -389,9 +389,14 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
 
         bool end_of_sequence = false;
         std::vector<tensorflow::Tensor> outputs;
-        TF_CHECK_OK(infeed_dataset_iterator->iterator->GetNext(
+        auto status = infeed_dataset_iterator->iterator->GetNext(
             infeed_dataset_iterator->iterator_ctx.get(), &outputs,
-            &end_of_sequence));
+            &end_of_sequence);
+
+        if (!status.ok()) {
+          infeed_thread_cancelled_ = true;
+          continue;
+        }
 
         if (!end_of_sequence) {
           for (auto j = 0; j < outputs.size(); ++j) {

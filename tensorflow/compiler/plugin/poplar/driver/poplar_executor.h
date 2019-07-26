@@ -66,6 +66,7 @@ limitations under the License.
 namespace se = stream_executor;
 
 namespace tensorflow {
+class CancellationManager;
 class TensorBuffer;
 class FunctionLibraryDefinition;
 class ProcessFunctionLibraryRuntime;
@@ -275,6 +276,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   const poplar::OptionFlags& GetOptionsFlags() const { return option_flags_; }
 
   const poplar::OptionFlags& GetReportFlags() const { return report_options_; }
+
+  tensorflow::CancellationManager* cancellation_manager() { return cm_.get(); }
 
   bool IpuTraceEventsEnabled() const {
     return current_config_.profiling().enable_ipu_trace_events();
@@ -603,6 +606,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   std::atomic<bool> outfeed_thread_cancelled_;
 
   std::atomic<bool> outfeeds_done_;
+
+  std::unique_ptr<tensorflow::CancellationManager> cm_;
 
   poplar::Engine* current_engine_;
 

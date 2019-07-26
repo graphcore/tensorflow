@@ -158,9 +158,18 @@ class IPUConsumeDatasetOp : public OpKernel {
 
     auto fhc = absl::make_unique<data::FunctionHandleCache>(flr);
 
+    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+    OP_REQUIRES(ctx, platform.ok(), platform.status());
+    auto* p =
+        static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
+    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+    auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
+        stream_executor->implementation());
+
     // Set up IteratorContext for iterator initialization
     IteratorContext::Params params(ctx);
     params.resource_mgr = ctx->resource_manager();
+    params.cancellation_manager = poplar_executor->cancellation_manager();
     params.function_handle_cache = fhc.get();
     params.flr = flr;
     auto iter_ctx = absl::make_unique<IteratorContext>(params);
@@ -174,13 +183,6 @@ class IPUConsumeDatasetOp : public OpKernel {
     OP_REQUIRES_OK(ctx, dataset->MakeIterator(iter_ctx.get(),
                                               "IPUDatasetIterator", &iterator));
     // Pass to the correct executor
-    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
-    OP_REQUIRES(ctx, platform.ok(), platform.status());
-    auto* p =
-        static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
-    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
-    auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
-        stream_executor->implementation());
     poplar_executor->CreateInfeedDatasetIterator(
         config_, iterator, iter_ctx, fhc, flib_def, pflr, xla_shapes_);
   }
