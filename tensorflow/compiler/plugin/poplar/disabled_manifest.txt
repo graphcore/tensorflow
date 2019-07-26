@@ -101,3 +101,4 @@ XlaSortOpTest.testTopK2D_200000
 XlaSortOpTest.testTopK2DLarge
 XlaSortOpTest.testInTopKLarge
 XlaSortOpTest.testInTopKLarge
+MatrixDiagPartTest.testV1 # need popops::reduce(OR, int)
