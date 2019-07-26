@@ -33,8 +33,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
-#include "absl/strings/str_replace.h"
-
 namespace xla {
 namespace {
 
