@@ -18,25 +18,26 @@ from tensorflow.python.platform import googletest
 
 class MappingTest(xla_test.XLATestCase):
   def testConcat(self):
-    def my_net(a, b, c, d):
-      with ipu.scopes.ipu_shard(0):
-        c1 = array_ops.concat([a, b, d], axis=0)
-        c2 = array_ops.concat([a, b, c], axis=0)
-      return [c1, c2]
+    with self.session() as sess:
 
-    with ops.device('cpu'):
-      a = array_ops.placeholder(np.int32, [1])
-      b = array_ops.placeholder(np.int32, [1])
-      c = array_ops.placeholder(np.int32, [1])
-      d = array_ops.placeholder(np.int32, [1])
+      def my_net(a, b, c, d):
+        with ipu.scopes.ipu_shard(0):
+          c1 = array_ops.concat([a, b, d], axis=0)
+          c2 = array_ops.concat([a, b, c], axis=0)
+        return [c1, c2]
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c, d])
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.int32, [1])
+        b = array_ops.placeholder(np.int32, [1])
+        c = array_ops.placeholder(np.int32, [1])
+        d = array_ops.placeholder(np.int32, [1])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-    with sl.Session() as sess:
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c, d])
+
+      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
 
       result = sess.run(r, {a: [0], b: [1], c: [2], d: [3]})
       self.assertAllClose(result[0], [0, 1, 3])
