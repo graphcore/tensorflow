@@ -168,6 +168,8 @@ class TensorLikeDataAdapter(DataAdapter):
 
   @staticmethod
   def can_handle(x, y=None):
+    # TODO(kaftan): Check performance implications of using a flatten
+    #  here for other types of inputs.
     flat_inputs = nest.flatten(x)
     if y is not None:
       flat_inputs += nest.flatten(y)
@@ -184,7 +186,7 @@ class TensorLikeDataAdapter(DataAdapter):
     return all(_is_tensor_or_composite(v) for v in flat_inputs)
 
   def __init__(self, x, y=None, sample_weights=None, batch_size=None,
-               shuffle=False, **kwargs):
+               steps=None, shuffle=False, **kwargs):
     super(TensorLikeDataAdapter, self).__init__(x, y, **kwargs)
     x = _process_numpy_inputs(x)
     y = _process_numpy_inputs(y)
@@ -207,23 +209,25 @@ class TensorLikeDataAdapter(DataAdapter):
     else:
       inputs = (x,)
 
-    if not batch_size:
-      raise ValueError(
-          "`batch_size` is required for `Tensor` or `NumPy` input data.")
-
     dataset = dataset_ops.DatasetV2.from_tensor_slices(inputs)
     num_samples = int(nest.flatten(x)[0].shape[0])
     if shuffle:
       dataset = dataset.shuffle(num_samples)
-    if batch_size:
-      dataset = dataset.batch(batch_size)
-      self._size = int(math.ceil(num_samples / batch_size))
-      self._batch_size = batch_size
-      self._has_partial_batch = (self._size != (num_samples // batch_size))
-    else:
-      self._size = 1
-      self._batch_size = num_samples
-      self._has_partial_batch = False
+
+    # If batch_size is not passed but steps is, calculate from the input data.
+    if steps and not batch_size:
+      batch_size = int(math.ceil(num_samples/steps))
+
+    if not batch_size:
+      raise ValueError(
+          "`batch_size` or `steps` is required for `Tensor` or `NumPy`"
+          " input data.")
+
+    dataset = dataset.batch(batch_size)
+    self._size = int(math.ceil(num_samples / batch_size))
+    self._batch_size = batch_size
+    self._has_partial_batch = (self._size != (num_samples // batch_size))
+
     self._partial_batch_size = None
     if self._has_partial_batch:
       self._partial_batch_size = (
@@ -245,6 +249,55 @@ class TensorLikeDataAdapter(DataAdapter):
 
   def partial_batch_size(self):
     return self._partial_batch_size
+
+
+class ListsOfScalarsDataAdapter(DataAdapter):
+  """Adapter that handles lists of scalars and lists of lists of scalars."""
+
+  @staticmethod
+  def can_handle(x, y=None):
+    handles_x = ListsOfScalarsDataAdapter._is_list_of_scalars(x)
+    handles_y = True
+    if y is not None:
+      handles_y = ListsOfScalarsDataAdapter._is_list_of_scalars(y)
+    return handles_x and handles_y
+
+  @staticmethod
+  def _is_list_of_scalars(inp):
+    if isinstance(inp, (float, int, str)):
+      return True
+    if isinstance(inp, (list, tuple)):
+      return ListsOfScalarsDataAdapter._is_list_of_scalars(inp[0])
+    return False
+
+  def __init__(
+      self, x, y=None, sample_weights=None, batch_size=None,
+      shuffle=False, **kwargs):
+    super(ListsOfScalarsDataAdapter, self).__init__(x, y, **kwargs)
+    x = np.asarray(x)
+    if y is not None:
+      y = np.asarray(y)
+    if sample_weights is not None:
+      sample_weights = np.asarray(sample_weights)
+
+    self._internal_adapter = TensorLikeDataAdapter(
+        x, y=y, sample_weights=sample_weights,
+        batch_size=batch_size, shuffle=shuffle, **kwargs)
+
+  def get_dataset(self):
+    return self._internal_adapter.get_dataset()
+
+  def get_size(self):
+    return self._internal_adapter.get_size()
+
+  def batch_size(self):
+    return self._internal_adapter.batch_size()
+
+  def has_partial_batch(self):
+    return self._internal_adapter.has_partial_batch()
+
+  def partial_batch_size(self):
+    return self._internal_adapter.partial_batch_size()
 
 
 class DatasetAdapter(DataAdapter):
@@ -378,6 +431,7 @@ class KerasSequenceAdapter(DataAdapter):
 
 
 ALL_ADAPTER_CLS = [
+    ListsOfScalarsDataAdapter,
     TensorLikeDataAdapter, DatasetAdapter, GeneratorDataAdapter,
     KerasSequenceAdapter
 ]
