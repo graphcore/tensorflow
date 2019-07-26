@@ -1679,8 +1679,8 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        ":ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",

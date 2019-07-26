@@ -204,8 +204,7 @@ class LSTMTest(xla_test.XLATestCase):
     with self.session() as sess:
       pinputs = array_ops.placeholder(
           dataType, [seq_len, batch_size, input_size], name="inputs")
-      plabels = array_ops.placeholder(
-          dataType, [seq_len, batch_size, num_channels], name="labels")
+      plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
 
       with ops.device(device_string):
         with variable_scope.variable_scope("lstm_layer", use_resource=True):
@@ -224,7 +223,8 @@ class LSTMTest(xla_test.XLATestCase):
             forget_bias=forget_bias,
             training=True,
             name=name)
-        softmax = nn.softmax_cross_entropy_with_logits_v2(
+        logits = math_ops.reduce_mean(logits, axis=0)
+        softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
             logits=logits, labels=array_ops.stop_gradient(plabels))
         loss = math_ops.reduce_mean(softmax)
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
@@ -243,8 +243,7 @@ class LSTMTest(xla_test.XLATestCase):
 
   def _RunTrainingComparison(self, name, input_value, forget_bias,
                              weights_value, h_value, c_value, training_steps):
-    labels_array = np.ones(
-        shape=[seq_len, batch_size, num_channels], dtype=np.float32)
+    labels_array = np.ones(shape=[batch_size], dtype=np.int32)
     ops.reset_default_graph()
     popnn_losses = self._RunLSTMLayerTraining(
         name=name,

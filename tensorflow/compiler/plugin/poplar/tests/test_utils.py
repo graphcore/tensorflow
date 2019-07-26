@@ -81,28 +81,6 @@ def ipu_session():
   with session_lib.Session() as sess:
     yield sess
 
-
-@contextlib.contextmanager
-def ipu_shard(index):
-
-  ipus = []
-  if hasattr(index, '__iter__'):
-    ipus = index
-  else:
-    ipus = [index]
-
-  proto = xla_data_pb2.OpSharding(
-      type=xla_data_pb2.OpSharding.MAXIMAL, tile_assignment_devices=ipus)
-
-  attr_value = attr_value_pb2.AttrValue(s=proto.SerializeToString())
-  attrs = {"_XlaSharding": attr_value}
-
-  # pylint: disable=protected-access
-  with ops.get_default_graph()._attr_scope(attrs):
-    yield
-  # pylint: enable=protected-access
-
-
 def get_total_memory_from_report(report):
   lines = report.split('\n')
   found = False
