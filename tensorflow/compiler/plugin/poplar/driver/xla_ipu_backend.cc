@@ -42,6 +42,9 @@ static bool OpFilter(KernelDef* kdef) {
   if (kdef->op() == "Qr") return false;
   if (kdef->op() == "Real") return false;
 
+  if (kdef->op() == "Assert") {
+    AddDtypeToKernelDefConstraint("T", DT_STRING, kdef);
+  }
   if (kdef->op() == "Const") {
     AddDtypeToKernelDefConstraint("dtype", DT_STRING, kdef);
   }
