@@ -30,6 +30,7 @@ from tensorflow.python.training import gradient_descent
 
 
 class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testDropout(self):
     def testDropoutImpl(rate):
       def ipu_dropout(w):
@@ -65,6 +66,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
       testDropoutImpl(np.random.uniform())
 
   # Check user provided seed works
+  @test_util.deprecated_graph_mode_only
   def testDropoutUserSeed(self):
     def testDropoutImpl(rate, seed, in_data):
       def ipu_dropout(w):
@@ -102,6 +104,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
 
 # Check user provided seed works
 
+  @test_util.deprecated_graph_mode_only
   def testDropoutBackwardPass(self):
     def testDropoutImpl():
       def ipu_dropout_back(w):

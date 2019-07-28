@@ -156,10 +156,11 @@ class PopnnLSTM(base_layer.Layer):
     if input_shape.ndims != 3:
       raise ValueError(
           "Expecting input_shape with 3 dims, got %d" % input_shape.ndims)
-    if input_shape[-1].value is None:
+    input_shape = input_shape.as_list()
+    if input_shape[-1] is None:
       raise ValueError("The last dimension of the inputs to `PopnnLSTM` "
                        "should be defined. Found `None`.")
-    self._input_size = input_shape[-1].value
+    self._input_size = input_shape[-1]
     self.input_spec = base_layer.InputSpec(ndim=3, axes={-1: self._input_size})
 
     # Create the variables

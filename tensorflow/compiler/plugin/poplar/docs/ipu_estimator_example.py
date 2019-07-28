@@ -3,8 +3,10 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import tensorflow as tf
 import time
+
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 from tensorflow.keras import Sequential
 from tensorflow.keras.datasets import cifar10
@@ -46,9 +48,11 @@ def model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.EVAL:
     predictions = tf.argmax(input=logits, axis=-1)
     eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions),
+        "accuracy": tf.metrics.accuracy(
+            labels=labels, predictions=predictions),
     }
-    return tf.estimator.EstimatorSpec(mode, loss=loss, eval_metric_ops=eval_metric_ops)
+    return tf.estimator.EstimatorSpec(
+        mode, loss=loss, eval_metric_ops=eval_metric_ops)
   elif mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.GradientDescentOptimizer(params["learning_rate"])
     train_op = optimizer.minimize(loss=loss)
@@ -66,10 +70,7 @@ def parse_args():
       help="Skip training and test using latest checkpoint from model_dir.")
 
   parser.add_argument(
-      "--batch-size",
-      type=int,
-      default=32,
-      help="The batch size.")
+      "--batch-size", type=int, default=32, help="The batch size.")
 
   parser.add_argument(
       "--iterations-per-loop",
@@ -137,12 +138,15 @@ def create_ipu_estimator(args):
 
 def train(ipu_estimator, args, x_train, y_train):
   """Train a model on IPU and save checkpoints to the given `args.model_dir`."""
+
   def input_fn():
     # If using Dataset.from_tensor_slices, the data will be embedded
     # into the graph as constants, which makes the training graph very
     # large and impractical. So use Dataset.from_generator here instead.
 
-    def generator(): return zip(x_train, y_train)
+    def generator():
+      return zip(x_train, y_train)
+
     types = (x_train.dtype, y_train.dtype)
     shapes = (x_train.shape[1:], y_train.shape[1:])
 
@@ -163,7 +167,7 @@ def train(ipu_estimator, args, x_train, y_train):
   duration_seconds = t1 - t0
   images_per_second = args.training_steps * args.batch_size / duration_seconds
   print("Took {:.2f} minutes, i.e. {:.0f} images per second".format(
-        duration_seconds / 60, images_per_second))
+      duration_seconds / 60, images_per_second))
 
 
 def calc_batch_size(num_examples, iterations_per_loop, batch_size):
@@ -181,8 +185,8 @@ def test(ipu_estimator, args, x_test, y_test):
 
   num_test_examples = len(x_test)
 
-  test_batch_size = calc_batch_size(
-      num_test_examples, args.iterations_per_loop, args.batch_size)
+  test_batch_size = calc_batch_size(num_test_examples,
+                                    args.iterations_per_loop, args.batch_size)
 
   if test_batch_size != args.batch_size:
     print("Test batch size changed to {}.".format(test_batch_size))
@@ -207,10 +211,9 @@ def main():
 
   num_test_examples = len(test_data[0])
   if num_test_examples % args.iterations_per_loop != 0:
-    raise ValueError(
-        ("iterations_per_loop ({}) must evenly " +
-         "divide the number of test examples ({})").format(
-            args.iterations_per_loop, num_test_examples))
+    raise ValueError(("iterations_per_loop ({}) must evenly " +
+                      "divide the number of test examples ({})").format(
+                          args.iterations_per_loop, num_test_examples))
 
   ipu_estimator = create_ipu_estimator(args)
 

@@ -20,8 +20,9 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.python.ipu import normalization_ops
-from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variables
@@ -36,7 +37,8 @@ def get_variables(given_name):
   return ops.get_collection(ops.GraphKeys.GLOBAL_VARIABLES, name)
 
 
-class PopnnGroupNormTest(test.TestCase):
+class PopnnGroupNormTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testInvalidGroupSize(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(5, 2, 10, 10))
     with self.assertRaisesRegexp(ValueError,
@@ -44,6 +46,7 @@ class PopnnGroupNormTest(test.TestCase):
       normalization_ops.group_norm(
           inputs, groups=10, reduction_axes=[-2, -1], channels_axis=-3)
 
+  @test_util.deprecated_graph_mode_only
   def testBadCommensurateGroup(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(5, 4, 10, 10))
     with self.assertRaisesRegexp(
@@ -52,6 +55,7 @@ class PopnnGroupNormTest(test.TestCase):
       normalization_ops.group_norm(
           inputs, groups=3, reduction_axes=[-2, -1], channels_axis=-3)
 
+  @test_util.deprecated_graph_mode_only
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
@@ -59,6 +63,7 @@ class PopnnGroupNormTest(test.TestCase):
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
       normalization_ops.group_norm(inputs, reduction_axes=[1, 5])
 
+  @test_util.deprecated_graph_mode_only
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
@@ -74,22 +79,26 @@ class PopnnGroupNormTest(test.TestCase):
       normalization_ops.group_norm(
           inputs, channels_axis=-1, reduction_axes=[3])
 
+  @test_util.deprecated_graph_mode_only
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
     with self.assertRaisesRegexp(ValueError, 'undefined rank'):
       normalization_ops.group_norm(inputs)
 
+  @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
     with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
       normalization_ops.group_norm(inputs)
 
+  @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
     with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
       normalization_ops.group_norm(
           inputs, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testCreateOp(self):
     height, width, groups = 3, 3, 4
     images = random_ops.random_uniform((5, height, width, 2 * groups), seed=1)
@@ -98,6 +107,7 @@ class PopnnGroupNormTest(test.TestCase):
     self.assertListEqual([5, height, width, 2 * groups],
                          output.shape.as_list())
 
+  @test_util.deprecated_graph_mode_only
   def testCreateOpNoScaleCenter(self):
     height, width, groups = 3, 3, 7
     images = random_ops.random_uniform((5, height, width, 3 * groups),
@@ -110,6 +120,7 @@ class PopnnGroupNormTest(test.TestCase):
     self.assertEqual(0, len(get_variables('beta')))
     self.assertEqual(0, len(get_variables('gamma')))
 
+  @test_util.deprecated_graph_mode_only
   def testCreateVariables_NHWC(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 8), seed=1)
@@ -125,6 +136,7 @@ class PopnnGroupNormTest(test.TestCase):
     self.assertEqual('GroupNorm/beta', beta.op.name)
     self.assertEqual('GroupNorm/gamma', gamma.op.name)
 
+  @test_util.deprecated_graph_mode_only
   def testCreateVariables_NCHW(self):
     height, width, groups = 3, 3, 4
     images = random_ops.random_uniform((5, 2 * groups, height, width), seed=1)
@@ -140,6 +152,7 @@ class PopnnGroupNormTest(test.TestCase):
     self.assertEqual('GroupNorm/beta', beta.op.name)
     self.assertEqual('GroupNorm/gamma', gamma.op.name)
 
+  @test_util.deprecated_graph_mode_only
   def testReuseVariables(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 4), seed=1)
@@ -151,6 +164,7 @@ class PopnnGroupNormTest(test.TestCase):
     self.assertEqual(1, len(beta))
     self.assertEqual(1, len(gamma))
 
+  @test_util.deprecated_graph_mode_only
   def testValueCorrectWithReuseVars(self):
     height, width = 3, 3
     image_shape = (10, height, width, 4)
@@ -164,6 +178,7 @@ class PopnnGroupNormTest(test.TestCase):
       train_np, eval_np = sess.run([output_train, output_eval])
       self.assertAllClose(train_np, eval_np)
 
+  @test_util.deprecated_graph_mode_only
   def doOutputTest(self,
                    input_shape,
                    channels_axis=None,
@@ -237,6 +252,7 @@ class PopnnGroupNormTest(test.TestCase):
       self.assertAllClose(expected_mean, mean, rtol=tol, atol=tol)
       self.assertAllClose(expected_var, var, rtol=tol, atol=tol)
 
+  @test_util.deprecated_graph_mode_only
   def testOutput4D_NHWC(self):
     input_shape = [10, 10, 10, 30]
     # Specify axes with positive values.
@@ -244,6 +260,7 @@ class PopnnGroupNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput3D_NHWC(self):
     input_shape = [10, 10, 30]
     # Specify axes with positive values.
@@ -251,6 +268,7 @@ class PopnnGroupNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput4D_NCHW(self):
     input_shape = [10, 10, 10, 30]
     # Specify axes with positive values.
@@ -258,6 +276,7 @@ class PopnnGroupNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-3, reduction_axes=[-2, -1])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput3D_NCHW(self):
     input_shape = [10, 10, 30]
     # Specify axes with positive values.
@@ -265,12 +284,14 @@ class PopnnGroupNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-2, reduction_axes=[-3, -1])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput2D_NC(self):
     self.doOutputTest([10, 7 * 100],
                       channels_axis=1,
                       reduction_axes=[],
                       groups=7)
 
+  @test_util.deprecated_graph_mode_only
   def testOutput5D_NCXXX(self):
     self.doOutputTest([4, 4, 4, 10, 4],
                       channels_axis=1,
@@ -278,7 +299,8 @@ class PopnnGroupNormTest(test.TestCase):
                       groups=2)
 
 
-class PopnnInstanceNormTest(test.TestCase):
+class PopnnInstanceNormTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
@@ -286,6 +308,7 @@ class PopnnInstanceNormTest(test.TestCase):
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
       normalization_ops.instance_norm(inputs, reduction_axes=[1, 5])
 
+  @test_util.deprecated_graph_mode_only
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
@@ -301,22 +324,26 @@ class PopnnInstanceNormTest(test.TestCase):
       normalization_ops.instance_norm(
           inputs, channels_axis=-1, reduction_axes=[3])
 
+  @test_util.deprecated_graph_mode_only
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
     with self.assertRaisesRegexp(ValueError, 'undefined rank'):
       normalization_ops.instance_norm(inputs)
 
+  @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
     with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
       normalization_ops.instance_norm(inputs)
 
+  @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
     with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
       normalization_ops.instance_norm(
           inputs, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testCreateOp(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 2), seed=1)
@@ -324,6 +351,7 @@ class PopnnInstanceNormTest(test.TestCase):
         images, channels_axis=-1, reduction_axes=[-3, -2])
     self.assertListEqual([5, height, width, 2], output.shape.as_list())
 
+  @test_util.deprecated_graph_mode_only
   def testCreateOpNoScaleCenter(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 3),
@@ -334,6 +362,7 @@ class PopnnInstanceNormTest(test.TestCase):
     self.assertEqual(0, len(get_variables('beta')))
     self.assertEqual(0, len(get_variables('gamma')))
 
+  @test_util.deprecated_graph_mode_only
   def testCreateVariables_NHWC(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 8), seed=1)
@@ -348,6 +377,7 @@ class PopnnInstanceNormTest(test.TestCase):
     self.assertEqual('InstanceNorm/beta', beta.op.name)
     self.assertEqual('InstanceNorm/gamma', gamma.op.name)
 
+  @test_util.deprecated_graph_mode_only
   def testCreateVariables_NCHW(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, 2, height, width), seed=1)
@@ -362,6 +392,7 @@ class PopnnInstanceNormTest(test.TestCase):
     self.assertEqual('InstanceNorm/beta', beta.op.name)
     self.assertEqual('InstanceNorm/gamma', gamma.op.name)
 
+  @test_util.deprecated_graph_mode_only
   def testReuseVariables(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 4), seed=1)
@@ -372,6 +403,7 @@ class PopnnInstanceNormTest(test.TestCase):
     self.assertEqual(1, len(beta))
     self.assertEqual(1, len(gamma))
 
+  @test_util.deprecated_graph_mode_only
   def testValueCorrectWithReuseVars(self):
     height, width = 3, 3
     image_shape = (10, height, width, 4)
@@ -385,6 +417,7 @@ class PopnnInstanceNormTest(test.TestCase):
       train_np, eval_np = sess.run([output_train, output_eval])
       self.assertAllClose(train_np, eval_np)
 
+  @test_util.deprecated_graph_mode_only
   def doOutputTest(self,
                    input_shape,
                    channels_axis=None,
@@ -446,6 +479,7 @@ class PopnnInstanceNormTest(test.TestCase):
       self.assertAllClose(expected_mean, mean, rtol=tol, atol=tol)
       self.assertAllClose(expected_var, var, rtol=tol, atol=tol)
 
+  @test_util.deprecated_graph_mode_only
   def testOutput4D_NHWC(self):
     input_shape = [10, 10, 10, 30]
     # Specify axes with positive values.
@@ -453,6 +487,7 @@ class PopnnInstanceNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput3D_NHWC(self):
     input_shape = [10, 10, 30]
     # Specify axes with positive values.
@@ -460,6 +495,7 @@ class PopnnInstanceNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput4D_NCHW(self):
     input_shape = [10, 10, 10, 30]
     # Specify axes with positive values.
@@ -467,6 +503,7 @@ class PopnnInstanceNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-3, reduction_axes=[-2, -1])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput3D_NCHW(self):
     input_shape = [10, 10, 30]
     # Specify axes with positive values.
@@ -474,6 +511,7 @@ class PopnnInstanceNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-2, reduction_axes=[-3, -1])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput2D_NC(self):
     self.doOutputTest([10, 7 * 100], channels_axis=1, reduction_axes=[])
 
@@ -483,7 +521,8 @@ class PopnnInstanceNormTest(test.TestCase):
                       reduction_axes=[2, 3, 4])
 
 
-class PopnnLayerNormTest(test.TestCase):
+class PopnnLayerNormTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
@@ -491,6 +530,7 @@ class PopnnLayerNormTest(test.TestCase):
     with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
       normalization_ops.layer_norm(inputs, reduction_axes=[1, 5])
 
+  @test_util.deprecated_graph_mode_only
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
@@ -506,22 +546,26 @@ class PopnnLayerNormTest(test.TestCase):
       normalization_ops.layer_norm(
           inputs, channels_axis=-1, reduction_axes=[3])
 
+  @test_util.deprecated_graph_mode_only
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
     with self.assertRaisesRegexp(ValueError, 'undefined rank'):
       normalization_ops.layer_norm(inputs)
 
+  @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
     with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
       normalization_ops.layer_norm(inputs)
 
+  @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
     with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
       normalization_ops.layer_norm(
           inputs, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testCreateOp(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 2), seed=1)
@@ -529,6 +573,7 @@ class PopnnLayerNormTest(test.TestCase):
         images, channels_axis=-1, reduction_axes=[-3, -2])
     self.assertListEqual([5, height, width, 2], output.shape.as_list())
 
+  @test_util.deprecated_graph_mode_only
   def testCreateOpNoScaleCenter(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 3),
@@ -539,6 +584,7 @@ class PopnnLayerNormTest(test.TestCase):
     self.assertEqual(0, len(get_variables('beta')))
     self.assertEqual(0, len(get_variables('gamma')))
 
+  @test_util.deprecated_graph_mode_only
   def testCreateVariables_NHWC(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 8), seed=1)
@@ -553,6 +599,7 @@ class PopnnLayerNormTest(test.TestCase):
     self.assertEqual('LayerNorm/beta', beta.op.name)
     self.assertEqual('LayerNorm/gamma', gamma.op.name)
 
+  @test_util.deprecated_graph_mode_only
   def testCreateVariables_NCHW(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, 2, height, width), seed=1)
@@ -567,6 +614,7 @@ class PopnnLayerNormTest(test.TestCase):
     self.assertEqual('LayerNorm/beta', beta.op.name)
     self.assertEqual('LayerNorm/gamma', gamma.op.name)
 
+  @test_util.deprecated_graph_mode_only
   def testReuseVariables(self):
     height, width = 3, 3
     images = random_ops.random_uniform((5, height, width, 4), seed=1)
@@ -577,6 +625,7 @@ class PopnnLayerNormTest(test.TestCase):
     self.assertEqual(1, len(beta))
     self.assertEqual(1, len(gamma))
 
+  @test_util.deprecated_graph_mode_only
   def testValueCorrectWithReuseVars(self):
     height, width = 3, 3
     image_shape = (10, height, width, 4)
@@ -589,6 +638,7 @@ class PopnnLayerNormTest(test.TestCase):
       train_np, eval_np = sess.run([output_train, output_eval])
       self.assertAllClose(train_np, eval_np)
 
+  @test_util.deprecated_graph_mode_only
   def doOutputTest(self,
                    input_shape,
                    channels_axis=None,
@@ -659,6 +709,7 @@ class PopnnLayerNormTest(test.TestCase):
       self.assertAllClose(expected_mean, mean, rtol=tol, atol=tol)
       self.assertAllClose(expected_var, var, rtol=tol, atol=tol)
 
+  @test_util.deprecated_graph_mode_only
   def testOutput4D_NHWC(self):
     input_shape = [10, 10, 10, 30]
     # Specify axes with positive values.
@@ -666,6 +717,7 @@ class PopnnLayerNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput3D_NHWC(self):
     input_shape = [10, 10, 30]
     # Specify axes with positive values.
@@ -673,6 +725,7 @@ class PopnnLayerNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-1, reduction_axes=[-3, -2])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput4D_NCHW(self):
     input_shape = [10, 10, 10, 30]
     # Specify axes with positive values.
@@ -680,6 +733,7 @@ class PopnnLayerNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-3, reduction_axes=[-2, -1])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput3D_NCHW(self):
     input_shape = [10, 10, 30]
     # Specify axes with positive values.
@@ -687,6 +741,7 @@ class PopnnLayerNormTest(test.TestCase):
     # Specify axes with negative values.
     self.doOutputTest(input_shape, channels_axis=-2, reduction_axes=[-3, -1])
 
+  @test_util.deprecated_graph_mode_only
   def testOutput5D_NCXXX(self):
     self.doOutputTest([4, 4, 4, 10, 4],
                       channels_axis=1,

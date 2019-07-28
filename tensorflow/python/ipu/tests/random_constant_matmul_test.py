@@ -34,7 +34,9 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python import ipu
 
+
 class RandomConstantTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testRandomConstant(self):
     def my_net(x, w):
       b = random_ops.random_uniform([2, 2])
@@ -49,6 +51,7 @@ class RandomConstantTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       # We don't care about the value, just that it doesn't throw an exception
       sess.run(run_loop, {x: np.ones([2, 3]), w: np.ones([3, 2])})
+
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = (

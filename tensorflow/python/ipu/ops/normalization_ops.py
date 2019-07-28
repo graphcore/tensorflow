@@ -73,7 +73,7 @@ def _group_norm_impl(inputs,
   # Standardize the channels_axis to be positive and identify # of channels.
   if channels_axis < 0:
     channels_axis = inputs.shape.ndims + channels_axis
-  channels = inputs.shape[channels_axis].value
+  channels = inputs.shape.as_list()[channels_axis]
 
   if channels_axis == 1:
     data_format = DATA_FORMAT_NCHW
@@ -96,7 +96,7 @@ def _group_norm_impl(inputs,
   for a in reduction_axes:
     if a > inputs.shape.ndims:
       raise ValueError('Axis is out of bounds.')
-    if inputs.shape[a].value is None:
+    if inputs.shape.as_list()[a] is None:
       raise ValueError(
           'Inputs %s has undefined dimensions %d.' % (inputs.name, a))
     if channels_axis == a:
@@ -342,7 +342,7 @@ def layer_norm(inputs,
 
   if channels_axis < 0:
     channels_axis = inputs.shape.ndims + channels_axis
-  groups = inputs.shape[channels_axis].value
+  groups = inputs.shape.as_list()[channels_axis]
 
   return _group_norm_impl(inputs, groups, channels_axis, reduction_axes,
                           center, scale, epsilon, param_initializers, reuse,

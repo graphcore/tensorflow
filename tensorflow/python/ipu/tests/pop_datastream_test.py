@@ -39,6 +39,7 @@ next_feed_id.feed_count = 0
 
 
 class PopDatastreamTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testSingleOutfeed(self):
     feed_name = next_feed_id()
     shape = [10, 10]
@@ -71,6 +72,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       self.assertEqual(len(outfed[0]), 1)
       self.assertAllClose(outfed[0][0], 2 * np.ones(shape, np.float32))
 
+  @test_util.deprecated_graph_mode_only
   def testTupleOutfeedGetAll(self):
     feed_name = next_feed_id()
     shape_1 = [10, 10]
@@ -127,6 +129,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed[1][0], np.broadcast_to(0, [4, 4]))
       self.assertAllClose(outfed[1][1], np.broadcast_to(1, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testTupleOutfeedGetLast(self):
     feed_name = next_feed_id()
     shape_1 = [10, 10]
@@ -183,6 +186,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed[0], np.broadcast_to(3, [10, 10]))
       self.assertAllClose(outfed[1], np.broadcast_to(1, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testOutfeedGetAll(self):
     feed_name = next_feed_id()
     shape = [2, 2]
@@ -225,6 +229,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed[0][0], 2 * np.ones(shape, np.float32))
       self.assertAllClose(outfed[0][1], (3.1 + 2) * np.ones(shape, np.float32))
 
+  @test_util.deprecated_graph_mode_only
   def testOutfeedGetLast(self):
     feed_name = next_feed_id()
     shape = [2, 2]

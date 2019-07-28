@@ -25,6 +25,7 @@ from tensorflow.python.training import training_util
 
 
 class IpuMonitoredSessionTest(xla_test.XLATestCase):
+  @test_util.run_v1_only('MonitoredSession not compatible with v2')
   def testMonitoredSession(self):
     random_seed.set_random_seed(1)
 
@@ -43,6 +44,7 @@ class IpuMonitoredSessionTest(xla_test.XLATestCase):
       result = sess.run(output, fd)
       self.assertAllClose(result, [[2., 1.], [5., 6.]])
 
+  @test_util.run_v1_only('MonitoredSession not compatible with v2')
   def testTrainingLoop(self):
     random_seed.set_random_seed(1)
 
@@ -82,6 +84,7 @@ class IpuMonitoredSessionTest(xla_test.XLATestCase):
         self.assertTrue(measured_loss < previous_loss)
         previous_loss = measured_loss
 
+  @test_util.run_v1_only('MonitoredSession not compatible with v2')
   def testMonitoredSessionStopAtStepHook(self):
     random_seed.set_random_seed(1)
 

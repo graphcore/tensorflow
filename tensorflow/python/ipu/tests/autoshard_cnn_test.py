@@ -37,16 +37,14 @@ def get_single_while_op_body(g):
 
 
 class AutoshardTest(test_util.TensorFlowTestCase):
-
+  @test_util.deprecated_graph_mode_only
   def testFrozenInference(self):
     def my_model(inp):
-      weight_ih = array_ops.constant(np.random.rand(1024, 512),
-                                     dtype=np.float32,
-                                     name="W_ih")
+      weight_ih = array_ops.constant(
+          np.random.rand(1024, 512), dtype=np.float32, name="W_ih")
       hidden = math_ops.matmul(weight_ih, inp)
-      weight_ho = array_ops.constant(np.random.rand(1000, 1024),
-                                     dtype=np.float32,
-                                     name="W_ho")
+      weight_ho = array_ops.constant(
+          np.random.rand(1000, 1024), dtype=np.float32, name="W_ho")
       output = math_ops.matmul(weight_ho, hidden)
       return [output]
 
@@ -63,6 +61,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       if o.device == '/device:IPU:0' and o.type != 'NoOp':
         self.assertTrue(o.get_attr('_XlaSharding') is not None)
 
+  @test_util.deprecated_graph_mode_only
   def testSimpleXlaCompileInference(self):
     def my_model(inp):
       output = inp * inp
@@ -81,6 +80,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       if o.device == '/device:IPU:0' and o.type != 'NoOp':
         self.assertTrue(o.get_attr('_XlaSharding') is not None)
 
+  @test_util.deprecated_graph_mode_only
   def testSimpleXlaCompileTraining(self):
     def my_model(inp, lab):
 
@@ -116,6 +116,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       if o.device == '/device:IPU:0' and o.type not in allowed_op_types:
         self.assertTrue(o.get_attr('_XlaSharding') is not None)
 
+  @test_util.deprecated_graph_mode_only
   def testSimpleTraining(self):
     def my_model(x, y):
       x = layers.Conv2D(8, 3, padding='same', name="conv1", use_bias=False)(x)
@@ -146,6 +147,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       if o.device == '/device:IPU:0' and o.type not in allowed_op_types:
         self.assertTrue(o.get_attr('_XlaSharding') is not None)
 
+  @test_util.deprecated_graph_mode_only
   def testSimpleTrainingWithEdgeFilter(self):
     def my_model(x, y):
       x = layers.Conv2D(8, 3, padding='same', name="conv1", use_bias=False)(x)
@@ -178,6 +180,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       if o.device == '/device:IPU:0' and o.type not in allowed_op_types:
         self.assertTrue(o.get_attr('_XlaSharding') is not None)
 
+  @test_util.deprecated_graph_mode_only
   def testSimpleXlaCompileTrainingInLoop(self):
     dataset = tu.create_dual_increasing_dataset(3)
 
@@ -228,6 +231,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
     self.assertTrue('Conv2DBackpropFilter' in op_types)
     self.assertTrue('ResourceApplyGradientDescent' in op_types)
 
+  @test_util.deprecated_graph_mode_only
   def testPopnnLstmXlaCompileTrainingInLoop(self):
     dataset = tu.create_dual_increasing_dataset(
         3, data_shape=[16, 2, 8], label_shape=[16, 2, 256])
@@ -276,6 +280,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
     self.assertTrue('SoftmaxCrossEntropyWithLogits' in op_types)
     self.assertTrue('ResourceApplyGradientDescent' in op_types)
 
+  @test_util.deprecated_graph_mode_only
   def testSimpleXlaCompileTrainingInLoopWithParam(self):
     dataset = tu.create_dual_increasing_dataset(3)
 
@@ -375,6 +380,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
     #   self.assertTrue('SoftmaxCrossEntropyWithLogits' in op_types)
     #   self.assertTrue('ResourceApplyGradientDescent' in op_types)
 
+  @test_util.deprecated_graph_mode_only
   def testSimpleXlaCompileTrainingInLoopV1WithEarlySharding(self):
 
     dataset = tu.create_dual_increasing_dataset(3)
@@ -426,6 +432,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
     self.assertTrue('Conv2DBackpropFilter' in op_types)
     self.assertTrue('ResourceApplyGradientDescent' in op_types)
 
+  @test_util.deprecated_graph_mode_only
   def testMarkOpsWithAutoshardingContext(self):
 
     with ops.device("/device:IPU:0"):

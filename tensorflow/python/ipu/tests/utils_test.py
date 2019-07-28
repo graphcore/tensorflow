@@ -32,6 +32,7 @@ def count_compile_end_events(events):
 
 
 class ContribIpuOpsTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testSummary(self):
     with ops.device("/device:IPU:0"):
       a = array_ops.placeholder(np.float32, [1], name="a")
@@ -53,6 +54,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result, [3.0])
       self.assertTrue(len(s) > 100)
 
+  @test_util.deprecated_graph_mode_only
   def testCreateConfig(self):
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, [1, 1])
@@ -99,6 +101,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       cfg = ipu.utils.create_ipu_config(
           profiling=False, profile_execution=True)
 
+  @test_util.deprecated_graph_mode_only
   def testEventFetchAndStringDecode(self):
     with ops.device("/device:IPU:0"):
       a = array_ops.placeholder(np.float32, [1], name="a")
@@ -129,6 +132,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       dump = ipu.utils.extract_all_strings_from_event_trace(e)
       self.assertTrue(len(dump) > 100)
 
+  @test_util.deprecated_graph_mode_only
   def testMaxReportSize(self):
     with ops.device("/device:IPU:0"):
       a = array_ops.placeholder(np.float32, [1], name="a")
@@ -159,6 +163,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       reps = ipu.utils.extract_execute_reports(e)
       self.assertEqual(len(reps), 0)
 
+  @test_util.deprecated_graph_mode_only
   def testDumpReportsToFile(self):
     with ops.device("/device:IPU:0"):
       a = array_ops.placeholder(np.float32, [1], name="a")
@@ -201,6 +206,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
         self.assertTrue(len(rep) > 1000)
         self.assertEqual(rep[0], '{')
 
+  @test_util.deprecated_graph_mode_only
   def testIpuSimpleScopeAndExecutionReport(self):
     def my_net(a, b):
       c = a + b
@@ -250,6 +256,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue(len(execution_rep[0][1]) > 1000)
       self.assertTrue(execution_rep[0][1].startswith('{'))
 
+  @test_util.deprecated_graph_mode_only
   def testIpuWhileScope(self):
     # 1: design is targetted at the device
     # 2: variables are resource variables
@@ -303,6 +310,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
       self.assertTrue(l_initial > l_final)
 
+  @test_util.deprecated_graph_mode_only
   def testInitializerDeviceChange(self):
 
     inp = array_ops.placeholder(np.float32, [1, 8, 8, 4])
@@ -327,6 +335,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       e = sess.run(events)
       self.assertEqual(len(e), 2)  # compile begin/end, no load/execute
 
+  @test_util.deprecated_graph_mode_only
   def testVarsInitializedByStreamsAreLoggedAsOnDevice(self):
     # This verifies that when an initialization graph has no ops in it (it is
     # a pass through of streaming inputs to initialized resources) then the
@@ -377,6 +386,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
         out = sess.run(y)
         self.assertAllClose(out, w_val1 + w_val2 + w_val3)
 
+  @test_util.deprecated_graph_mode_only
   def testMultiScopeTest(self):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, [2, 2])
@@ -412,6 +422,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       self.assertEqual(num_compiles, 1)
       self.assertEqual(num_executions, 1)
 
+  @test_util.deprecated_graph_mode_only
   def testResetSeedTest(self):
     # This tests that the API can be called - full testing must be performed
     # on hardware because the IPU_MODEL doesn't have full random number support.
