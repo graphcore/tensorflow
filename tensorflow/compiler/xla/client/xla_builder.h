@@ -158,6 +158,16 @@ class XlaBuilder {
   // Sets an OpSharding that will be attached to all instructions until cleared.
   void SetSharding(const OpSharding& sharding) { sharding_ = sharding; }
 
+  void SetFrontendAttributes(const FrontendAttributes& frontend_attributes) {
+    frontend_attributes_ = frontend_attributes;
+  }
+
+  const FrontendAttributes& frontend_attributes() const {
+    return frontend_attributes_;
+  }
+
+  void ClearFrontendAttributes() { frontend_attributes_.Clear(); }
+
   // Clears the sharding. Ops will be sharded according to the default placement
   // policy.
   void ClearSharding() { sharding_ = absl::nullopt; }
@@ -316,6 +326,10 @@ class XlaBuilder {
 
   // Looks up the HloInstruction and sets the backend config field to "value".
   Status SetBackendConfig(const XlaOp& op, std::string value);
+
+  // Looks up the HloInstruction and sets the frontend attribute "attribute" to
+  // "value".
+  Status AddFrontendAttribute(const XlaOp& op, string attribute, string value);
 
  private:
   // Build helper which takes the id of the root operation..
@@ -721,6 +735,8 @@ class XlaBuilder {
 
   XlaBuilder* parent_builder_{nullptr};
 
+  FrontendAttributes frontend_attributes_;
+
   friend XlaOp Parameter(XlaBuilder* builder, int64 parameter_number,
                          const Shape& shape, const string& name,
                          const std::vector<bool>& replicated_at_leaf_buffers);
@@ -1047,6 +1063,37 @@ class XlaScopedShardingAssignment {
   absl::optional<OpSharding> prev_sharding_;
 };
 
+// RAII-style object: sets the current frontend attributes in builder on
+// construction, and clears it on destruction.
+class XlaScopedFrontendAttributesAssignment {
+ public:
+  XlaScopedFrontendAttributesAssignment(
+      xla::XlaBuilder* builder, absl::optional<FrontendAttributes> attributes)
+      : builder_(builder) {
+    SetFrontendAttributes(attributes);
+  }
+
+  XlaScopedFrontendAttributesAssignment(
+      const XlaScopedFrontendAttributesAssignment&) = delete;
+  XlaScopedFrontendAttributesAssignment& operator=(
+      const XlaScopedFrontendAttributesAssignment&) = delete;
+
+  ~XlaScopedFrontendAttributesAssignment() {
+    SetFrontendAttributes(absl::nullopt);
+  }
+
+ private:
+  void SetFrontendAttributes(
+      const absl::optional<FrontendAttributes>& attributes) {
+    if (attributes.has_value()) {
+      builder_->SetFrontendAttributes(attributes.value());
+    } else {
+      builder_->ClearFrontendAttributes();
+    }
+  }
+
+  xla::XlaBuilder* const builder_;
+};
 // Free functions for building XlaOps. The intention is that these will
 // become the public API for building XlaOps rather than calling methods on
 // XlaBuilder directly.
