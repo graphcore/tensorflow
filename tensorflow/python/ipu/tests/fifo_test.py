@@ -32,7 +32,9 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python import ipu
 
+
 class FifoTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testFifoCompleteLoop(self):
     def my_net(x):
       body = lambda z: ipu.internal_ops.fifo(z, 5)
@@ -47,20 +49,21 @@ class FifoTest(test_util.TensorFlowTestCase):
       res = sess.run(run_loop, {x: np.ones([2])})
       self.assertAllClose(res, np.ones([1, 2]))
 
+  @test_util.deprecated_graph_mode_only
+  def testFifo(self):
+    def my_net(x):
+      body = lambda z: ipu.internal_ops.fifo(z, 5)
+      return ipu.loops.repeat(3, body, [x])
 
-    def testFifo(self):
-      def my_net(x):
-        body = lambda z: ipu.internal_ops.fifo(z, 5)
-        return ipu.loops.repeat(3, body, [x])
+    with ipu.scopes.ipu_scope('/device:IPU:0'):
+      x = array_ops.placeholder(np.float32, shape=[2])
+      run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
 
-      with ipu.scopes.ipu_scope('/device:IPU:0'):
-        x = array_ops.placeholder(np.float32, shape=[2])
-        run_loop = ipu.ipu_compiler.compile(my_net, inputs=[x])
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      res = sess.run(run_loop, {x: np.ones([2])})
+      self.assertAllClose(res, np.zeros([1, 2]))
 
-      with tu.ipu_session() as sess:
-        sess.run(variables.global_variables_initializer())
-        res = sess.run(run_loop, {x: np.ones([2])})
-        self.assertAllClose(res, np.zeros([1, 2]))
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = (

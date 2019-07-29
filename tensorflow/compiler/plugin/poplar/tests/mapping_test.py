@@ -12,7 +12,6 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
-from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.platform import googletest
@@ -20,22 +19,24 @@ from tensorflow.python.platform import googletest
 
 class MappingTest(xla_test.XLATestCase):
   def testGather(self):
-    def my_net(w, i):
-      out = array_ops.gather(w, i)
-      return [out]
+    with self.session() as sess:
 
-    with ops.device('cpu'):
-      i = array_ops.placeholder(np.int32, [256])
-      w = array_ops.placeholder(np.float32, [1024, 8])
-      report = gen_ipu_ops.ipu_event_trace()
+      def my_net(w, i):
+        out = array_ops.gather(w, i)
+        return [out]
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
+      with ops.device('cpu'):
+        i = array_ops.placeholder(np.int32, [256])
+        w = array_ops.placeholder(np.float32, [1024, 8])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-    with sl.Session() as sess:
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
+
       i_h = np.arange(0, 3 * 256, 3)
       w_h = np.arange(8192).reshape(1024, 8)
       expect = np.take(w_h, i_h, axis=0)
@@ -65,26 +66,27 @@ class MappingTest(xla_test.XLATestCase):
       self.assertEqual(bad_maps, [])
 
   def testMappingJson(self):
-    def my_net(a, b, c):
-      a = array_ops.broadcast_to(a, shape=[1024])
-      b = array_ops.strided_slice(b, [0], [8192], [8])
-      c = array_ops.pad(c, paddings=[[256, 256]])
-      out = a + b + c
-      return [out]
+    with self.session() as sess:
 
-    with ops.device('cpu'):
-      a = array_ops.placeholder(np.float32, [])
-      b = array_ops.placeholder(np.float32, [8192])
-      c = array_ops.placeholder(np.float32, [512])
-      report = gen_ipu_ops.ipu_event_trace()
+      def my_net(a, b, c):
+        a = array_ops.broadcast_to(a, shape=[1024])
+        b = array_ops.strided_slice(b, [0], [8192], [8])
+        c = array_ops.pad(c, paddings=[[256, 256]])
+        out = a + b + c
+        return [out]
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c])
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [])
+        b = array_ops.placeholder(np.float32, [8192])
+        c = array_ops.placeholder(np.float32, [512])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-    with sl.Session() as sess:
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c])
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
 
       fd = {a: 1.0, b: np.ones([8192]), c: np.ones([512])}
       result = sess.run(r, fd)
@@ -143,24 +145,26 @@ class MappingTest(xla_test.XLATestCase):
             self.assertEqual(slice_layout[7], add_layout[7])
 
   def testInplaceReadWrite(self):
-    def my_net(x, y, a):
-      z = x + y
-      c = a + x
-      return c, z
+    with self.session() as sess:
 
-    with ops.device('cpu'):
-      x = array_ops.placeholder(np.int32, [100])
-      y = array_ops.placeholder(np.int32, [100])
-      a = array_ops.placeholder(np.int32, [100])
-      report = gen_ipu_ops.ipu_event_trace()
+      def my_net(x, y, a):
+        z = x + y
+        c = a + x
+        return c, z
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      r = ipu.ipu_compiler.compile(my_net, inputs=[x, y, a])
+      with ops.device('cpu'):
+        x = array_ops.placeholder(np.int32, [100])
+        y = array_ops.placeholder(np.int32, [100])
+        a = array_ops.placeholder(np.int32, [100])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-    with sl.Session() as sess:
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_net, inputs=[x, y, a])
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
+
       i_x = np.full(100, 1)
       i_y = np.full(100, 2)
       i_a = np.full(100, 10)

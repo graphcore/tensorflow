@@ -2137,6 +2137,7 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -2147,6 +2148,7 @@ py_test(
     args = ["--iterations-per-loop=1", "--training-steps=1"],
     deps = [
         "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 

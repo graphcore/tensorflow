@@ -166,17 +166,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
   def testReluNotInPlace2(self):
-    with ops.device("/device:IPU:0"):
-      pa = array_ops.placeholder(np.float32, [5], name="a")
-      b = array_ops.concat([pa, pa], axis=0)
-      c = nn_ops.relu(b)
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [5], name="a")
+        b = array_ops.concat([pa, pa], axis=0)
+        c = nn_ops.relu(b)
 
-    with ops.device('cpu'):
-      report = gen_ipu_ops.ipu_event_trace()
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
 
-    tu.configure_ipu_system()
+      tu.configure_ipu_system()
 
-    with tu.ipu_session() as sess:
       fd = {pa: [-2, -1, 0, 1, 2]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0, 0, 0, 1, 2, 0, 0, 0, 1, 2])

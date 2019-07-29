@@ -29,9 +29,11 @@ from tensorflow.python.platform import googletest
 
 
 class EmbeddingLookupTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testGather(self):
     def my_net(w, i):
-      out = ipu.ops.embedding_ops.embedding_lookup(w, i, min_encoding_size=1200)
+      out = ipu.ops.embedding_ops.embedding_lookup(
+          w, i, min_encoding_size=1200)
       return [out]
 
     with ops.device('cpu'):

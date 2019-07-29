@@ -46,6 +46,7 @@ next_feed_id.feed_count = 0
 
 
 class InfeedOutfeedTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTuple(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
@@ -74,6 +75,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTupleFiniteDataset(self):
     dataset = tu.create_single_increasing_dataset(
         10, shape=[4, 4], repeat=False)
@@ -103,6 +105,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(46, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatTuple(self):
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
@@ -136,6 +139,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatTupleMerge(self):
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
@@ -169,6 +173,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNamed(self):
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
@@ -206,6 +211,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0], np.broadcast_to(4, [4, 4]))
       self.assertAllClose(result[1], np.broadcast_to(27, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedMultipleRepeats(self):
     dataset = tu.create_single_increasing_dataset(2, shape=[4, 4])
 
@@ -233,6 +239,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(5, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedWhileLoopNonTuple(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
@@ -265,6 +272,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedWhileLoopTuple(self):
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
@@ -304,6 +312,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(129.5, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedMultipleRuns(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
@@ -340,6 +349,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(program(2))
       self.assertAllClose(result[0], np.broadcast_to(9, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testTwoInfeedsDifferentPrograms(self):
     dataset1 = tu.create_single_increasing_dataset(20, shape=[4, 4])
     dataset2 = tu.create_single_increasing_dataset(3, shape=[4, 4])
@@ -378,6 +388,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(program(5, infeed_queue2))
       self.assertAllClose(result[0], np.broadcast_to(5, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testUndefinedShape(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     dataset = dataset.batch(10, drop_remainder=False)
@@ -385,6 +396,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id())
 
+  @test_util.deprecated_graph_mode_only
   def testMultipleInitializations(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -395,6 +407,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     ):
       infeed_queue.initializer
 
+  @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeed(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -432,6 +445,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       final_loss = sess.run(r, {iters: 1000})
       self.assertTrue(initial_loss > final_loss)
 
+  @test_util.deprecated_graph_mode_only
   def testSingleOutfeedRepeatNonTuple(self):
 
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
@@ -464,6 +478,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       for i in range(20):
         self.assertAllClose(outfed[i], np.broadcast_to(i + 1, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testMultipleOutfeedsRepeatNonTuple(self):
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
@@ -497,6 +512,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
           'Only one IPUOutfeedQueue supported per graph'):
         result = sess.run(res, {v: np.ones([4, 4], np.float32)})
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNonTuple(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
@@ -532,6 +548,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed[-1], result[0])
       self.assertAllClose(outfed[5], np.broadcast_to(16, [4, 4]))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatTuple(self):
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
@@ -588,6 +605,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed_result[2][3], np.broadcast_to(5, shape))
       self.assertAllClose(outfed_result[2][4], np.broadcast_to(5.5, shape))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatTupleLast(self):
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
@@ -631,6 +649,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed_result[1], np.broadcast_to(1, shape))
       self.assertAllClose(outfed_result[2], np.broadcast_to(5.5, shape))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNamed(self):
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
@@ -697,6 +716,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed_result["image2"][4],
                           np.broadcast_to(5.5, shape))
 
+  @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNamedLast(self):
     dataset = tu.create_single_increasing_dataset(3, shape=[4, 4])
     shape = [4, 4]
@@ -740,6 +760,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed_result["image1"], np.broadcast_to(1, shape))
       self.assertAllClose(outfed_result["image2"], np.broadcast_to(5.5, shape))
 
+  @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeedAndOutfeedGetAll(self):
 
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
@@ -785,6 +806,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertTrue(outfed.shape[0], 1001)
       self.assertTrue(type(outfed) == np.ndarray)
 
+  @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeedAndOutfeedGetLast(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -833,6 +855,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       # Check that a scalar is returned instead of a numpy array
       self.assertTrue(type(outfed) == np.float32)
 
+  @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentPrograms(self):
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
@@ -885,6 +908,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       for i in range(7):
         self.assertAllClose(outfed2[i], np.broadcast_to(i + 4, [5, 5]))
 
+  @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentProgramsDelayedOutfeedRead(self):
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
@@ -937,6 +961,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       for i in range(7):
         self.assertAllClose(outfed2[i], np.broadcast_to(i + 4, [5, 5]))
 
+  @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentProgramsSameFeedName(self):
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name="a")
@@ -980,14 +1005,16 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
                                    'Outfeed with id=\'a\' already exists'):
         result2 = sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
 
+  @test_util.deprecated_graph_mode_only
   def testInfeedUsingDatasetWithNestedDictNotUnpacked(self):
     x = {
-      "x0": np.ones(shape=[2], dtype=np.float32),
-      "x1": np.ones(shape=[2], dtype=np.float32)
+        "x0": np.ones(shape=[2], dtype=np.float32),
+        "x1": np.ones(shape=[2], dtype=np.float32)
     }
     y = np.ones(shape=[2], dtype=np.float32)
     ds = dataset_ops.Dataset.from_tensor_slices((x, y))
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(ds, feed_name=next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+        ds, feed_name=next_feed_id())
 
     def body(total, x, y):
       total += x["x0"] + x["x1"] + y
@@ -1006,13 +1033,15 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     self.assertEqual(result, [6.0])
 
+  @test_util.deprecated_graph_mode_only
   def testInfeedUsingDatasetWithOnlyDictIsUnpacked(self):
     x = {
-      "x0": np.ones(shape=[2], dtype=np.float32),
-      "x1": np.ones(shape=[2], dtype=np.float32)
+        "x0": np.ones(shape=[2], dtype=np.float32),
+        "x1": np.ones(shape=[2], dtype=np.float32)
     }
     ds = dataset_ops.Dataset.from_tensor_slices((x, ))
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(ds, feed_name=next_feed_id())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+        ds, feed_name=next_feed_id())
 
     def body(total, x0, x1):
       total += x0 + x1

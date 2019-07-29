@@ -49,10 +49,10 @@ def embedding_lookup(params,
         A `Tensor` with the same type as the tensors in `params`.
     """
   name = name or "embedding_lookup"
-  ids_shape = ids.shape
-  M = reduce(mul, ids.shape, 1).value
-  K = params.shape[0].value
-  N = params.shape[1].value
+  ids_shape = ids.shape.as_list()
+  M = reduce(mul, ids.shape, 1)
+  K = params.shape[0]
+  N = params.shape[1]
   ids_flat = array_ops.reshape(ids, [M])
 
   # Handle the small case with a one-hot and matmul
@@ -88,8 +88,9 @@ def embedding_lookup(params,
         one_hot_threshold=one_hot_threshold,
         min_encoding_size=0)
 
-    M1 = rows.shape[0].value
-    N1 = rows.shape[1].value
+    row_shape = rows.shape.as_list()
+    M1 = row_shape[0]
+    N1 = row_shape[1]
 
     # Build new indices which extract the desired elements from the rows tensor
     ids1 = (math_ops.range(0, M1) * balance_factor) + (

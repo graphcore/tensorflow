@@ -20,24 +20,26 @@ from tensorflow.python.platform import googletest
 
 class MappingTest(xla_test.XLATestCase):
   def testGather(self):
-    def my_net(w, i):
-      w = ipu.ops.internal_ops.remap(w)
-      i = ipu.ops.internal_ops.remap(i)
-      out = array_ops.gather(w, i)
-      return [out]
+    with self.session() as sess:
 
-    with ops.device('cpu'):
-      i = array_ops.placeholder(np.int32, [8])
-      w = array_ops.placeholder(np.float32, [32 * 1024])
-      report = gen_ipu_ops.ipu_event_trace()
+      def my_net(w, i):
+        w = ipu.ops.internal_ops.remap(w)
+        i = ipu.ops.internal_ops.remap(i)
+        out = array_ops.gather(w, i)
+        return [out]
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
+      with ops.device('cpu'):
+        i = array_ops.placeholder(np.int32, [8])
+        w = array_ops.placeholder(np.float32, [32 * 1024])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-    with sl.Session() as sess:
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
+
       i_h = np.arange(0, 8)
       w_h = np.arange(32 * 1024)
 

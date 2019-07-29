@@ -24,45 +24,45 @@ from tensorflow.python.platform import googletest
 
 class CaseTest(xla_test.XLATestCase):
   def testCaseSimple(self):
-    def my_graph(pa, pb, pc):
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
+    with self.session() as sess:
 
-        @eager_function.defun
-        def b0(x, y):
-          return x + y
+      def my_graph(pa, pb, pc):
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
 
-        @eager_function.defun
-        def b1(x, y):
-          return x - y
+          @eager_function.defun
+          def b0(x, y):
+            return x + y
 
-        @eager_function.defun
-        def b2(x, y):
-          return x * y
+          @eager_function.defun
+          def b1(x, y):
+            return x - y
 
-        branches = [
-            f.get_concrete_function(
-                array_ops.zeros_like(pb), array_ops.zeros_like(pc))
-            for f in [b0, b1, b2]
-        ]
+          @eager_function.defun
+          def b2(x, y):
+            return x * y
 
-        c_out = gen_functional_ops.case(
-            pa, input=[pb, pc], Tout=[dtypes.float32], branches=branches)
+          branches = [
+              f.get_concrete_function(
+                  array_ops.zeros_like(pb), array_ops.zeros_like(pc))
+              for f in [b0, b1, b2]
+          ]
 
-        return [c_out[0]]
+          c_out = gen_functional_ops.case(
+              pa, input=[pb, pc], Tout=[dtypes.float32], branches=branches)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(np.int32, [], name="a")
-      pb = array_ops.placeholder(np.float32, [2], name="b")
-      pc = array_ops.placeholder(np.float32, [2], name="c")
-      report = gen_ipu_ops.ipu_event_trace()
+          return [c_out[0]]
 
-    out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(np.int32, [], name="a")
+        pb = array_ops.placeholder(np.float32, [2], name="b")
+        pc = array_ops.placeholder(np.float32, [2], name="c")
+        report = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
+      out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
-    with sl.Session() as sess:
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
 
       sess.run(report)
 
@@ -89,47 +89,47 @@ class CaseTest(xla_test.XLATestCase):
       self.assertEqual(num_compiles, 1)
 
   def testCaseVariables(self):
-    def my_graph(pa, pb):
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
+    with self.session() as sess:
 
-        @eager_function.defun
-        def b0(x, y):
-          return x + y
+      def my_graph(pa, pb):
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
 
-        @eager_function.defun
-        def b1(x, y):
-          return x - y
+          @eager_function.defun
+          def b0(x, y):
+            return x + y
 
-        @eager_function.defun
-        def b2(x, y):
-          return x * y
+          @eager_function.defun
+          def b1(x, y):
+            return x - y
 
-        v = variable_scope.get_variable(
-            'b0', dtype=dtypes.float32, initializer=[1., 5.])
+          @eager_function.defun
+          def b2(x, y):
+            return x * y
 
-        branches = [
-            f.get_concrete_function(
-                array_ops.zeros_like(pb), array_ops.zeros_like(v))
-            for f in [b0, b1, b2]
-        ]
+          v = variable_scope.get_variable(
+              'b0', dtype=dtypes.float32, initializer=[1., 5.])
 
-        c_out = gen_functional_ops.case(
-            pa, input=[pb, v], Tout=[dtypes.float32], branches=branches)
+          branches = [
+              f.get_concrete_function(
+                  array_ops.zeros_like(pb), array_ops.zeros_like(v))
+              for f in [b0, b1, b2]
+          ]
 
-        return [c_out[0]]
+          c_out = gen_functional_ops.case(
+              pa, input=[pb, v], Tout=[dtypes.float32], branches=branches)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(np.int32, [], name="a")
-      pb = array_ops.placeholder(np.float32, [2], name="b")
-      report = gen_ipu_ops.ipu_event_trace()
+          return [c_out[0]]
 
-    out = ipu.ipu_compiler.compile(my_graph, [pa, pb])
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(np.int32, [], name="a")
+        pb = array_ops.placeholder(np.float32, [2], name="b")
+        report = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
+      out = ipu.ipu_compiler.compile(my_graph, [pa, pb])
 
-    with sl.Session() as sess:
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
 
       sess.run(variables_lib.global_variables_initializer())
 
@@ -156,86 +156,6 @@ class CaseTest(xla_test.XLATestCase):
           num_compiles = num_compiles + 1
 
       self.assertEqual(num_compiles, 1)
-
-  # Case operation does not have a gradient function at the moment
-  # def testCaseTraining(self):
-  #   def my_graph(pa, pb, ref):
-  #     with ipu.scopes.ipu_scope("/device:IPU:0"):
-  #
-  #       @eager_function.defun
-  #       def b0(x, y):
-  #         return x + y
-  #
-  #       @eager_function.defun
-  #       def b1(x, y):
-  #         return x - y
-  #
-  #       @eager_function.defun
-  #       def b2(x, y):
-  #         return x * y
-  #
-  #       v = variable_scope.get_variable('b0', dtype=dtypes.float32,
-  #                                       initializer=[1.])
-  #
-  #       branches = [f.get_concrete_function(array_ops.zeros_like(pb),
-  #                                           array_ops.zeros_like(v))
-  #                   for f in [b0, b1, b2]]
-  #
-  #       c_out = gen_functional_ops.case(
-  #         pa,
-  #         input=[pb, v],
-  #         Tout=[dtypes.float32],
-  #         branches=branches)
-  #
-  #       loss = losses.mean_squared_error(c_out[0], ref)
-  #
-  #       opt = gradient_descent.GradientDescentOptimizer(0.01)
-  #       train = opt.minimize(loss)
-  #
-  #       return [train]
-  #
-  #   with ops.device('cpu'):
-  #     pa = array_ops.placeholder(np.int32, [], name="a")
-  #     pb = array_ops.placeholder(np.float32, [1], name="b")
-  #     ref = array_ops.placeholder(np.float32, [1], name="ref")
-  #     report = gen_ipu_ops.ipu_event_trace()
-  #
-  #   out = ipu_compiler.compile(my_graph, [pa, pb, ref])
-  #
-  #   cfg = ipu.utils.create_ipu_config(profiling=True)
-  #   cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-  #   ipu.utils.configure_ipu_system(cfg)
-  #
-  #   with sl.Session() as sess:
-  #
-  #     sess.run(variables_lib.global_variables_initializer())
-  #
-  #     sess.run(report)
-  #
-  #     for _ in range(1000):
-  #       f = np.random.randint(2)
-  #       pb_d = np.random.random([1])
-  #
-  #       ref = np.array([0.])
-  #       if f == 0:
-  #         ref = pb_d + np.array([2.])
-  #       if f == 1:
-  #         ref = pb_d - np.array([2.])
-  #       if f == 2:
-  #         ref = pb_d * np.array([2.])
-  #
-  #       sess.run(out, {pa: f, pb: pb_d, ref: ref})
-  #
-  #
-  #     rep = sess.run(report)
-  #     evts = ipu.utils.extract_all_events(rep)
-  #
-  #     num_compiles = 0
-  #     for evt in evts:
-  #       if evt.type == IpuTraceEvent.COMPILE_END:
-  #         num_compiles = num_compiles + 1
-  #
-  #     self.assertEqual(num_compiles, 1)
 
 
 if __name__ == "__main__":

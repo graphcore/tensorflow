@@ -27,31 +27,32 @@ def count_event_type(events, type):
 
 class WhileLoopPerfTest(xla_test.XLATestCase):
   def testIpuWhilePerfTest(self):
-    def cond(i, v):
-      return math_ops.less(i, 15)
+    with self.session() as sess:
 
-    def body(i, v):
-      v = v + i
-      i = i + 1
-      return (i, v)
+      def cond(i, v):
+        return math_ops.less(i, 15)
 
-    def my_net(v):
-      i = constant_op.constant(0)
-      r = control_flow_ops.while_loop(
-          cond, body, (i, v), maximum_iterations=10)
-      return [r[1]]
+      def body(i, v):
+        v = v + i
+        i = i + 1
+        return (i, v)
 
-    with ops.device('cpu'):
-      v = array_ops.placeholder(np.int32, [500])
-      report = gen_ipu_ops.ipu_event_trace()
+      def my_net(v):
+        i = constant_op.constant(0)
+        r = control_flow_ops.while_loop(
+            cond, body, (i, v), maximum_iterations=10)
+        return [r[1]]
 
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      r = ipu.ipu_compiler.compile(my_net, inputs=[v])
+      with ops.device('cpu'):
+        v = array_ops.placeholder(np.int32, [500])
+        report = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-    with sl.Session() as sess:
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_net, inputs=[v])
+
+      cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      ipu.utils.configure_ipu_system(cfg)
 
       result = sess.run(r, {v: np.zeros([500], np.int32)})
       self.assertAllClose(result[0], np.broadcast_to(45, [500]))
