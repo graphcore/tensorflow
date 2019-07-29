@@ -25,6 +25,7 @@ import numpy as np
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import errors
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
@@ -118,9 +119,9 @@ class MatrixTriangularSolveOpTest(xla_test.XLATestCase):
     for dtype in self.float_types:
       a = rng.randn(3, 4).astype(dtype)
       b = rng.randn(4, 4).astype(dtype)
-      with self.assertRaises(ValueError):
+      with self.assertRaises((ValueError, errors.InvalidArgumentError)):
         linalg_ops.matrix_triangular_solve(a, b)
-      with self.assertRaises(ValueError):
+      with self.assertRaises((ValueError, errors.InvalidArgumentError)):
         linalg_ops.matrix_triangular_solve(a, b)
 
   def testWrongDimensions(self):
@@ -128,9 +129,9 @@ class MatrixTriangularSolveOpTest(xla_test.XLATestCase):
     for dtype in self.float_types:
       lhs = constant_op.constant(randn(3, 3), dtype=dtype)
       rhs = constant_op.constant(randn(4, 3), dtype=dtype)
-      with self.assertRaises(ValueError):
+      with self.assertRaises((ValueError, errors.InvalidArgumentError)):
         linalg_ops.matrix_triangular_solve(lhs, rhs)
-      with self.assertRaises(ValueError):
+      with self.assertRaises((ValueError, errors.InvalidArgumentError)):
         linalg_ops.matrix_triangular_solve(lhs, rhs)
 
 
