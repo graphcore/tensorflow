@@ -69,7 +69,7 @@ HloModule top
 
   EXPECT_THAT(comp->instruction_count(), 6);
   ASSERT_THAT(inst->operand_count(), 1);
-  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(0)->operand_count(), 4);
   ASSERT_TRUE(inst->operand(0)->has_sharding());
   EXPECT_THAT(inst->operand(0)->sharding().UniqueDevice(), 1);
@@ -113,7 +113,7 @@ HloModule top
   auto* inst = comp->root_instruction();
 
   EXPECT_THAT(comp->instruction_count(), 5);
-  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(0)->operand_count(), 3);
 }
 
@@ -195,7 +195,7 @@ HloModule top
 
   EXPECT_THAT(comp->instruction_count(), 7);
   ASSERT_THAT(inst->operand_count(), 1);
-  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(0)->operand_count(), 3);
   EXPECT_TRUE(HasOperandIn(inst->operand(0), {add1, add2}));
 }
@@ -241,7 +241,7 @@ HloModule top
 
   EXPECT_THAT(comp->instruction_count(), 6);
   ASSERT_THAT(inst->operand_count(), 2);
-  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(0)->operand_count(), 2);
   EXPECT_THAT(inst->operand(1)->opcode(), HloOpcode::kCos);
 }
@@ -278,9 +278,9 @@ HloModule top
 
   EXPECT_THAT(comp->instruction_count(), 5);
   ASSERT_THAT(inst->operand_count(), 2);
-  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(0)->operand_count(), 2);
-  EXPECT_THAT(inst->operand(1)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(1)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(1)->operand_count(), 2);
 }
 
@@ -328,9 +328,9 @@ HloModule top
 
   EXPECT_THAT(comp->instruction_count(), 7);
   ASSERT_THAT(inst->operand_count(), 2);
-  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(0)->operand_count(), 2);
-  EXPECT_THAT(inst->operand(1)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(1)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(1)->operand_count(), 2);
 }
 
@@ -380,9 +380,11 @@ HloModule top
 
   EXPECT_THAT(comp->instruction_count(), 7);
   ASSERT_THAT(inst->operand_count(), 1);
-  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(0)->operand_count(), 3);
-  EXPECT_THAT(inst->operand(0)->to_apply()->instruction_count(), 7);
+  EXPECT_THAT(
+      inst->operand(0)->fused_instructions_computation()->instruction_count(),
+      7);
 }
 
 //  i i  i  i
@@ -487,7 +489,7 @@ ENTRY cluster_1  {
 
   EXPECT_THAT(comp->instruction_count(), 7);
   ASSERT_THAT(inst->operand_count(), 2);
-  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kCall);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
   EXPECT_THAT(inst->operand(0)->operand_count(), 2);
   EXPECT_THAT(inst->operand(1)->opcode(), HloOpcode::kCall);
   EXPECT_THAT(inst->operand(1)->operand_count(), 4);

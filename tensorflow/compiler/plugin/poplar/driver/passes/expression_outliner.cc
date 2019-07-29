@@ -219,12 +219,13 @@ StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
       std::reverse(instructions_to_outline.begin(),
                    instructions_to_outline.end());
 
-      auto* call = comp->parent()->OutlineExpressionFromComputation(
+      auto* fusion = OutlineExpressionFromComputationWithFusion(
           instructions_to_outline, "__arithmetic_expression", comp);
+
       was_outlined = true;
 
       if (has_sharding) {
-        call->set_sharding(sharding);
+        fusion->set_sharding(sharding);
       }
     }
   }

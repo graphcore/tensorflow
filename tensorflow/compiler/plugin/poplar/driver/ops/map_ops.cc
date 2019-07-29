@@ -295,17 +295,6 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
       TF_CHECK_OK(
           AddOutputTensor(tensor_map, inst, i, inline_visitor.outputs()[i]));
     }
-  } else if (StartsWith(comp->name(), "__arithmetic")) {
-    ArgVectors args = GetCallInputs(res, inst, tensor_map, seq, false);
-    ArithmeticExprVisitor arithmetic_visitor(res, args);
-    TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
-
-    seq.add(arithmetic_visitor.GetSequence());
-
-    for (size_t i = 0; i < arithmetic_visitor.outputs().size(); i++) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
-                                  arithmetic_visitor.outputs()[i]));
-    }
   } else if (IsRepeatLoop(inst)) {
     TF_ASSIGN_OR_RETURN(seq, CreateRepeatOp(res, inst, output, tensor_map));
   } else {

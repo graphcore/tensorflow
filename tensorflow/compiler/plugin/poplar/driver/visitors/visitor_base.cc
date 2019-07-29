@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
@@ -47,6 +48,8 @@ limitations under the License.
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
+
+using tensorflow::str_util::StartsWith;
 
 namespace xla {
 namespace poplarplugin {
@@ -296,12 +299,37 @@ Status BaseVisitor::HandleTranspose(HloInstruction* inst) {
   return Unimplemented(inst);
 }
 
+namespace {
+ArgVectors GetFusionInputs(CompilerResources& res, const HloInstruction* inst,
+                           TensorMap& tensor_map,
+                           poplar::program::Sequence& seq,
+                           const bool expand_constants = true) {
+  ArgVectors args;
+  for (int64 i = 0; i < inst->operand_count(); i++) {
+    ArgVector t =
+        FindInstructionInputs(tensor_map, res, inst, i, seq, expand_constants);
+    args.push_back(t);
+  }
+  return args;
+}
+}  // namespace
+
 Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   poplar::program::Program prog;
   HloComputation* comp = inst->fused_instructions_computation();
 
-  // If is is a special fusion-type op
-  if (IsPopOpsFusion(inst)) {
+  if (StartsWith(comp->name(), "__arithmetic")) {
+    ArgVectors args = GetFusionInputs(resources_, inst, tensor_map, sequence);
+    ArithmeticExprVisitor arithmetic_visitor(resources_, args);
+    TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
+    prog = arithmetic_visitor.GetSequence();
+
+    for (size_t i = 0; i < arithmetic_visitor.outputs().size(); i++) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i,
+                                  arithmetic_visitor.outputs()[i]));
+    }
+  } else if (IsPopOpsFusion(inst)) {
+    // If is is a special fusion-type op
     VLOG(1) << "Processing " << inst->name()
             << " as Poplibs fusion: " << comp->name();
     auto end = comp->name().find('.');
@@ -319,6 +347,7 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
     TF_ASSIGN_OR_RETURN(prog, CreateFusionOp(resources_, inst,
                                              GetOutputShape(inst), tensor_map));
   }
+
   sequence.add(prog);
   return Status::OK();
 };

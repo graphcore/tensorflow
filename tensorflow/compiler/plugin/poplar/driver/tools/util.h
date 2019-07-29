@@ -166,6 +166,10 @@ absl::flat_hash_set<const HloInstruction*> GetInplaceInstructions(
 HloInstruction* ConvertInstruction(HloInstruction* inst,
                                    const PrimitiveType& new_type);
 
+HloInstruction* OutlineExpressionFromComputationWithFusion(
+    absl::Span<HloInstruction* const> instructions_to_outline,
+    const string& outlined_computation_name, HloComputation* computation);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

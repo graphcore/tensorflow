@@ -403,5 +403,110 @@ HloInstruction* ConvertInstruction(HloInstruction* inst,
   return new_inst;
 }
 
+namespace {
+// Returns whether `hlo` is used outside the given subcomputation.
+// `instructions_in_subcomputation` is the instruction set of the given
+// subcomputation.
+bool IsUsedOutsideSubcomputation(const HloInstruction& hlo,
+                                 const absl::flat_hash_set<HloInstruction*>&
+                                     instructions_in_subcomputation) {
+  return absl::c_any_of(hlo.users(), [&](HloInstruction* user) {
+    return !instructions_in_subcomputation.contains(user);
+  });
+}
+}  // anonymous namespace
+
+// This code is from HloModule::OutlineExpressionFromComputation.
+// It creates fusion instead of call.
+HloInstruction* OutlineExpressionFromComputationWithFusion(
+    absl::Span<HloInstruction* const> instructions_to_outline,
+    const string& outlined_computation_name, HloComputation* computation) {
+  auto builder = HloComputation::Builder(outlined_computation_name);
+
+  // A map from original instructions to their counterparts in the new outlined
+  // function.
+  absl::flat_hash_map<HloInstruction*, HloInstruction*> outlined_instructions;
+  // A set that contains all instructions to be outlined.
+  absl::flat_hash_set<HloInstruction*> instruction_set_to_outline(
+      instructions_to_outline.begin(), instructions_to_outline.end());
+  std::vector<HloInstruction*> arguments;
+  std::vector<HloInstruction*> outputs;
+  int64 parameter_count = 0;
+  for (HloInstruction* instruction_to_outline : instructions_to_outline) {
+    // Clone the original instruction.
+    HloInstruction* outlined_instruction =
+        builder.AddInstruction(instruction_to_outline->Clone());
+
+    // Replace its operands to their counterparts in the new function.
+    for (int64 operand_num = 0;
+         operand_num < outlined_instruction->operand_count(); ++operand_num) {
+      HloInstruction* old_operand =
+          outlined_instruction->mutable_operand(operand_num);
+
+      HloInstruction** operand_slot = &(outlined_instructions[old_operand]);
+      if (*operand_slot == nullptr) {
+        // Because instructions_to_outline is in topological order, if
+        // old_operand is not in outlined_instructions, old_operand must be an
+        // input of the outlined subcomputation and thus should be represented
+        // as a parameter in the new function.
+        arguments.push_back(old_operand);
+        *operand_slot = builder.AddInstruction(HloInstruction::CreateParameter(
+            parameter_count, old_operand->shape(), "p"));
+        ++parameter_count;
+      }
+      TF_CHECK_OK(
+          outlined_instruction->ReplaceOperandWith(operand_num, *operand_slot));
+    }
+
+    // Insert the new instruction into the outlined_instructions map.
+    InsertOrDie(&outlined_instructions, instruction_to_outline,
+                outlined_instruction);
+
+    // Mark instruction_to_outline an output if it is used outside the
+    // subcomputation or is the output of the original computation (i.e. used
+    // externally).
+    if (instruction_to_outline->user_count() == 0 ||
+        IsUsedOutsideSubcomputation(*instruction_to_outline,
+                                    instruction_set_to_outline)) {
+      outputs.push_back(instruction_to_outline);
+    }
+  }
+
+  if (outputs.size() != 1) {
+    string error_message =
+        "The subcomputation to outline has multiple outputs:\n";
+    for (HloInstruction* output : outputs) {
+      absl::StrAppend(&error_message, output->ToString(), "\n");
+    }
+    LOG(FATAL) << error_message;
+  }
+  HloInstruction* output = outputs[0];
+
+  // Creates a fusion to the nested computation.
+  HloComputation* nested_computation =
+      computation->parent()->AddEmbeddedComputation(
+          builder.Build(FindOrDie(outlined_instructions, output)));
+
+  HloInstruction* fusion =
+      computation->AddInstruction(HloInstruction::CreateFusion(
+          output->shape(), HloInstruction::FusionKind::kCustom, arguments,
+          nested_computation));
+
+  VLOG(2) << "Outlining the following instructions";
+  for (auto* instruction_to_outline : instructions_to_outline) {
+    VLOG(2) << "  " << instruction_to_outline->ToString();
+  }
+  VLOG(2) << "as a fusion " << fusion->ToString();
+  VLOG(2) << "to " << nested_computation->ToString();
+
+  TF_CHECK_OK(output->ReplaceAllUsesWith(fusion));
+  for (auto i = instructions_to_outline.rbegin();
+       i != instructions_to_outline.rend(); ++i) {
+    TF_CHECK_OK(computation->RemoveInstruction(*i));
+  }
+
+  return fusion;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
