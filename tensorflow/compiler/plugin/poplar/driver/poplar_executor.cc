@@ -1006,6 +1006,19 @@ void PoplarExecutor::AddCompileBeginEventRecord(
   reports_.push_back(evt);
 };
 
+std::string PoplarExecutor::ReportFileExtension() const {
+  std::string report_file_extension = "";
+  if (CompilerReportingTextFormat()) {
+    report_file_extension = "txt";
+  } else if (CompilerReportingCborFormat()) {
+    report_file_extension = "cbor";
+  } else {
+    report_file_extension = "json";
+  }
+
+  return report_file_extension;
+}
+
 void PoplarExecutor::AddCompileEndEventRecord(const std::string& module_name,
                                               const std::string& report,
                                               const std::string& tensor_map,
@@ -1016,16 +1029,20 @@ void PoplarExecutor::AddCompileEndEventRecord(const std::string& module_name,
   if (ReportDirectory().size() > 0) {
     std::unique_ptr<tensorflow::WritableFile> file;
 
+    std::string report_file_extension = ReportFileExtension();
+
     std::string filename = tensorflow::io::JoinPath(
-        ReportDirectory(), module_name + ".compile_report.json");
+        ReportDirectory(),
+        module_name + ".compile_report." + report_file_extension);
 
     TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
     TF_CHECK_OK(file->Append(rep));
     TF_CHECK_OK(file->Close());
     rep = filename;
 
-    filename = tensorflow::io::JoinPath(ReportDirectory(),
-                                        module_name + ".tensor_map.json");
+    filename = tensorflow::io::JoinPath(
+        ReportDirectory(),
+        module_name + ".tensor_map." + report_file_extension);
     TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
     TF_CHECK_OK(file->Append(map));
     TF_CHECK_OK(file->Close());
@@ -1072,8 +1089,11 @@ void PoplarExecutor::AddExecuteEventRecord(const std::string& module_name,
   if (ReportDirectory().size() > 0 && report.size()) {
     std::unique_ptr<tensorflow::WritableFile> file;
 
+    std::string report_file_extension = ReportFileExtension();
+
     std::string filename = tensorflow::io::JoinPath(
-        ReportDirectory(), module_name + ".execute_report.json");
+        ReportDirectory(),
+        module_name + ".execute_report." + report_file_extension);
     TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
     TF_CHECK_OK(file->Append(rep));
     TF_CHECK_OK(file->Close());

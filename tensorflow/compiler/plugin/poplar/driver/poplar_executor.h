@@ -690,6 +690,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
       outfeed_contexts_;
 
   std::mt19937_64 seed_gen;
+
+  std::string ReportFileExtension() const;
 };
 
 }  // namespace poplarplugin
