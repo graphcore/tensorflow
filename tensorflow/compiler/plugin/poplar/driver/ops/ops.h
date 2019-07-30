@@ -39,9 +39,6 @@ class Shape;
 namespace poplarplugin {
 
 struct CompilerResources;
-class SubComputationVisitor;
-
-class PoplarExecutor;
 
 enum class NormType {
   BatchNorm,
@@ -52,59 +49,12 @@ using TensorKey = std::pair<std::string, int64>;
 using TensorMap = std::map<TensorKey, poplar::Tensor>;
 using TensorMaps = std::map<std::string, TensorMap>;
 
-using OutVector = std::vector<poplar::Tensor>;
-using ArgVector = std::vector<poplar::Tensor>;
-using ArgVectors = std::vector<ArgVector>;
-
-typedef void (*popops_inplace_fn)(poplar::Graph& graph, poplar::Tensor A,
-                                  poplar::Tensor B,
-                                  poplar::program::Sequence& prog,
-                                  const std::string& debugPrefix);
-
-StatusOr<std::shared_ptr<SubComputationVisitor>> GetOrCompileSubComputation(
-    CompilerResources& res, const ArgVectors& inputs,
-    const HloComputation* comp,
-    const std::vector<const SubComputationVisitor*>& dependent_subcomputations =
-        {});
-
 StatusOr<popops::expr::UnaryOpType> LookupUnaryFn(const HloInstruction*);
 
 StatusOr<popops::expr::BinaryOpType> LookupBinaryFn(const HloInstruction*);
 
 StatusOr<popops::expr::BinaryOpType> LookupComparisonFn(
     const HloInstruction* inst);
-
-Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
-                      const Literal& literal);
-
-// Get the master graph
-poplar::Graph& GetMasterGraph(CompilerResources&);
-
-// Get the appropriate virtual graph, or the replicated/master graph if not
-poplar::Graph& GetGraph(CompilerResources&, const HloInstruction*);
-
-// Get the shard Id for a given output of the given instruction.
-uint64 GetShardForOutputIndex(const HloInstruction* inst,
-                              int flattened_output_tuple_index);
-
-// Get the virtual graph for a particular output of an operation. Operations
-// like Parameter, Infeed, Call, While, Tuple can have multiple tensor
-// outputs on different IPUs.
-poplar::Graph& GetGraphWithOutputIndex(CompilerResources&,
-                                       const HloInstruction*,
-                                       int flattened_output_tuple_index);
-
-// Convert a poplar/poplibs exception to a Tensorflow error Status
-Status PoplarExceptionToTensorflowStatus(const std::string& prefix,
-                                         const std::exception& e);
-
-void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
-                         const std::string& value);
-
-poplar::OptionFlags GetReplicateAllReduceOptions();
-
-// Try and dump the profiler report to a file if a OOM exception occurs.
-void DumpIfPoplarOutOfMemoryAllocationException(const PoplarExecutor*);
 
 StatusOr<poplin::ConvParams> GetConvolutionParameters(
     const HloInstruction* operand_op, int64 input_index, int64 kernel_index);
@@ -425,16 +375,6 @@ StatusOr<poplar::program::Program> CreateSelectScalarFromRows(
 StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map);
-
-/* Optimization tests */
-
-bool IsPoplibsPool(const HloInstruction*, const HloComputation*);
-
-bool IsSimpleSelection(const HloComputation*);
-
-bool IsReducableArtithmetic(const HloComputation*);
-
-StatusOr<bool> IsParallelMap(const HloInstruction*, const HloComputation*);
 
 /* Op Creation Helpers */
 
