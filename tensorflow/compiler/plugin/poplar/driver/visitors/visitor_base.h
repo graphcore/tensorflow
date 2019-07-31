@@ -165,6 +165,8 @@ class BaseVisitor : public DfsHloVisitor {
 
   Status HandleCopyDone(HloInstruction* hlo) override;
 
+  Status Preprocess(HloInstruction* hlo) override;
+
   virtual poplar::program::Sequence GetSequence() const { return sequence; }
 
   // This should only be used for unit tests
@@ -180,6 +182,7 @@ class BaseVisitor : public DfsHloVisitor {
   poplar::program::Sequence sequence;
 
   bool has_infeed_ = false;
+  bool stochastic_rounding_enabled_;
 };
 
 }  // namespace poplarplugin

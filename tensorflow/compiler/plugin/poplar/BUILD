@@ -13,6 +13,10 @@ load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 load("//tensorflow/core:platform/default/build_config.bzl", "tf_proto_library")
 load("//tensorflow/compiler/xla:xla.bzl", "xla_proto_library")
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_library")
+load(
+    "//tensorflow/core:platform/default/build_config.bzl",
+    "tf_proto_library_py",
+)
 
 # Rule for creating the vertex program pre-compiled object
 genrule(
@@ -47,6 +51,19 @@ xla_proto_library(
     ],
 )
 
+tf_proto_library_py(
+    name = "backend_protos", # bzl adds a _py suffix
+    srcs = [
+      "driver/backend_config.proto",
+      "driver/poplar_executable.proto",
+      "driver/poplar_feed_config.proto",
+    ],
+    deps = [
+      "//tensorflow/compiler/xla:xla_data_proto_py",
+      "//tensorflow/core:protos_all_py",
+    ],
+)
+
 tf_proto_library(
     name = "poplibs_ops",
     srcs = ["kernels/poplibs_ops.proto"],
@@ -78,7 +95,6 @@ cc_library(
     name = "optimizers",
     srcs = [
         "driver/passes/allocation_finder.cc",
-        "driver/passes/backend_config_handler.cc",
         "driver/passes/casts_elimination.cc",
         "driver/passes/combine_instructions.cc",
         "driver/passes/commutative_instruction_reorder_operands.cc",
@@ -102,6 +118,7 @@ cc_library(
         "driver/passes/inter_ipu_copy_inserter.cc",
         "driver/passes/not_supported_gather_expander.cc",
         "driver/passes/not_supported_scatter_expander.cc",
+        "driver/passes/parse_poplar_backend_config.cc",
         "driver/passes/recompute_instructions.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
@@ -161,7 +178,6 @@ cc_library(
         "driver/compiler_annotations.h",
         "driver/compiler_information.h",
         "driver/passes/allocation_finder.h",
-        "driver/passes/backend_config_handler.h",
         "driver/passes/casts_elimination.h",
         "driver/passes/combine_instructions.h",
         "driver/passes/commutative_instruction_reorder_operands.h",
@@ -185,6 +201,7 @@ cc_library(
         "driver/passes/inter_ipu_copy_inserter.h",
         "driver/passes/not_supported_gather_expander.h",
         "driver/passes/not_supported_scatter_expander.h",
+        "driver/passes/parse_poplar_backend_config.h",
         "driver/passes/recompute_instructions.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
@@ -239,6 +256,7 @@ cc_library(
         ":common",
         ":backend_protos",
         ":custom_kernels_util",
+        ":config_protos_cc_impl",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:call_inliner",
         "//tensorflow/compiler/xla/service:hlo_memory_scheduler",

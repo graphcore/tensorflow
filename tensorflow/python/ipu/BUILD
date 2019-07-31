@@ -95,6 +95,7 @@ py_library(
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
+        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/estimator:estimator_py",
     ],
@@ -269,6 +270,18 @@ py_test(
 )
 
 tf_py_test(
+    name = "frontend_attributes_test",
+    size = "small",
+    srcs = ["tests/frontend_attributes_test.py"],
+    additional_deps = [
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/compiler/xla:xla_data_proto_py",
+    ],
+)
+
+tf_py_test(
     name = "popnn_normalization_test",
     size = "small",
     srcs = ["tests/popnn_normalization_test.py"],
@@ -389,6 +402,7 @@ test_suite(
         "embedding_lookup_test",
         "estimator_test",
         "fifo_test",
+        "frontend_attributes_test",
         "infeed_outfeed_test",
         "ipu_estimator_test",
         "pop_datastream_test",

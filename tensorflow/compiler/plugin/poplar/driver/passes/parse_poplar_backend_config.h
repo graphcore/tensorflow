@@ -13,19 +13,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_BACKEND_CONFIG_HANDLER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_BACKEND_CONFIG_HANDLER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PARSE_POPLAR_BACKEND_CONFIG_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PARSE_POPLAR_BACKEND_CONFIG_H_
 
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
+
 namespace poplarplugin {
 
-// Pass ran at the begining of the pipeline stage to handle any backend config
-// set by tf2xla.
-class BackendConfigHandler : public HloModulePass {
+class ParsePoplarBackendConfig : public HloModulePass {
  public:
-  absl::string_view name() const override { return "backend-config-handler"; }
+  ParsePoplarBackendConfig() = default;
+
+  ~ParsePoplarBackendConfig() override = default;
+
+  absl::string_view name() const override {
+    return "parse-poplar-backend-config";
+  }
+
   StatusOr<bool> Run(HloModule* module) override;
 };
 
