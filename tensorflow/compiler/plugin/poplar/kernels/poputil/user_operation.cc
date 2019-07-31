@@ -114,37 +114,18 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
     // Extract the function pointer as a void*
     void* function_ptr = nullptr;
 
-    // We expect (and require) the user function to be in the from:
-    /*
-    namespace tensorflow {
-      poplar::program::Program ${OP_NAME}(
-          poplar::Graph&s, const std::vector<poplar::Tensor>& in,
-          std::vector<poplar::Tensor>& out);
-    }
-    */
-    // We then search for that mangled name within the shared library
-    // substituing ${OP_NAME} for the name of the operation. Only itanium
-    // mangled names are currently supported.
+    // Extract that symbol from the library. We expect (and require) the user
+    // function to be an undecorated 'C' type symbol
 
-    // The tensorflow namespace.
-    std::string symbol_name{"_ZN10tensorflow"};
-
-    // Get the name and add it and its size (itanium specifies strings are
-    // preceded by their length).
-    symbol_name += std::to_string(op_name.length()) + op_name;
-
-    // The parameters.
-    symbol_name += "ERN6poplar5GraphERKSt6vectorINS0_6TensorESaIS4_EERS6_";
-
-    // Extract that symbol from the library.
+    //
     status = Env::Default()->GetSymbolFromLibrary(
-        library.handle, symbol_name.c_str(), &function_ptr);
+        library.handle, op_name.c_str(), &function_ptr);
 
     if (!status.ok()) {
       OP_REQUIRES_OK(
           context,
           errors::InvalidArgument(
-              "Couldn't read symbol from library. Symbol: " + symbol_name));
+              "Couldn't read symbol from library. Symbol: " + op_name));
     }
 
     // Convert the pointer to a uint64 (attribute map/json doesn't store
