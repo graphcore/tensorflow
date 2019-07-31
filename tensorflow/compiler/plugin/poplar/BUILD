@@ -342,6 +342,7 @@ cc_library(
         "driver/tools/convolution_preplanning.h",
         "driver/tools/data_initializer.h",
         "driver/tools/mapping_helper.h",
+        "driver/tools/poplar_util.h",
         "driver/tools/spsc_queue.h",
         "driver/tools/spsc_outfeed_queue.h",
         "driver/vertex_templates.h",

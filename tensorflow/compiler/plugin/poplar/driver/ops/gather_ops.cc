@@ -1,5 +1,5 @@
-#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
 
