@@ -828,14 +828,18 @@ Status HloComputation::ReplaceInstruction(HloInstruction* old_instruction,
 
   VLOG(10) << "transformed " << old_instruction->ToString() << " to "
            << new_instruction->ToString();
-  // Try to add metadata for HLO instructions that are created to replace
-  // existing HLO instructions (e.g. during optimizations). The assumption is
-  // that the old instruction and the new instruction would perform the same
-  // function, and that they would be correlated to the same TF op. This might
-  // not always be correct since HLO optimizations can cross TF op boundaries.
-  // But still this seems to be better than nothing.
+  // Try to add metadata and frontend_attributes for HLO instructions that are
+  // created to replace existing HLO instructions (e.g. during optimizations).
+  // The assumption is that the old instruction and the new instruction would
+  // perform the same function, and that they would be correlated to the same
+  // TF op. This might not always be correct since HLO optimizations can cross
+  // TF op boundaries. But still this seems to be better than nothing.
   if (new_instruction->metadata().op_name().empty()) {
     new_instruction->set_metadata(old_instruction->metadata());
+  }
+  if (new_instruction->frontend_attributes().map().empty()) {
+    new_instruction->set_frontend_attributes(
+        old_instruction->frontend_attributes());
   }
 
   // Like the metadata above, if the user didn't specify any sharding

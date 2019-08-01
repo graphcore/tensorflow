@@ -19,20 +19,17 @@ limitations under the License.
 
 namespace tensorflow {
 
-namespace {
-const char kFrontendAttributesAttribute[] = "_XlaFrontendAttributes";
-}  // namespace
+const char kXlaFrontendAttributesAttrName[] = "_XlaFrontendAttributes";
 
 xla::StatusOr<absl::optional<xla::FrontendAttributes>>
-GetFrontendAttributesFromNodeDef(const NodeDef& node_def) {
-  if (!HasNodeAttr(node_def, kFrontendAttributesAttribute)) {
-    return absl::optional<xla::FrontendAttributes>();
+GetFrontendAttributesFromAttrSlice(const AttrSlice& attrs) {
+  const AttrValue* attr = attrs.Find(kXlaFrontendAttributesAttrName);
+  if (attr == nullptr) {
+    return xla::StatusOr<absl::optional<xla::FrontendAttributes>>(
+        absl::nullopt);
   }
-  string value;
   xla::FrontendAttributes attributes;
-  TF_RETURN_IF_ERROR(
-      GetNodeAttr(node_def, kFrontendAttributesAttribute, &value));
-  if (!attributes.ParseFromString(value)) {
+  if (!attributes.ParseFromString(attr->s())) {
     return errors::InvalidArgument(
         "Experimental _XlaFrontendAttributes attribute was not a valid encoded "
         "xla::FrontendAttributes proto.");

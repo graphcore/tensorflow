@@ -1888,6 +1888,14 @@ class HloInstruction {
 
   // Attributes passed from the frontend to give hints to the backend about
   // how to compile this HLO.
+  // HLO -> HLO transforms are expected to preserve these attributes on a
+  // "best effort" basis only.
+  // For example:
+  //    x = const(10, frontend_attributes={x}
+  //    y = const(10, frontend_attributes={y}
+  //    z = add(x,y), frontend_attributes={y}
+  // Could be simplified to:
+  //    z' = const(20), frontend_attributes={?}
   FrontendAttributes frontend_attributes_;
 
   // This field is assigned to true when backend_config_ is assigned to
@@ -1920,6 +1928,8 @@ StatusOr<HloInstruction::FusionKind> StringToFusionKind(
 // Custom (de)stringification functions for protos that live inside
 // HloInstruction.
 string PaddingConfigToString(const PaddingConfig& padding);
+string FrontendAttributesToString(
+    const FrontendAttributes& frontend_attributes);
 string OpMetadataToString(const OpMetadata& metadata);
 string RandomDistributionToString(const RandomDistribution& distribution);
 string PrecisionToString(const PrecisionConfig::Precision& precision);

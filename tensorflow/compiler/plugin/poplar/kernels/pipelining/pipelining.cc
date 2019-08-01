@@ -115,7 +115,7 @@ class FunctionCompileOp : public XlaOpKernel {
 
     auto outputs = xla::Call(builder, *to_apply_func.computation, inputs);
     // Set the config type of the call.
-    OP_REQUIRES_OK(ctx, builder->AddFrontendAttribute(
+    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
                             outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
                             call_config_type_));
     // Sets non-variable outputs.

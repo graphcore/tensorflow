@@ -289,11 +289,12 @@ Status XlaBuilder::SetDynamicBinding(int64 dynamic_size_param_num,
   return Status::OK();
 }
 
-Status XlaBuilder::AddFrontendAttribute(const XlaOp& op, std::string attribute,
-                                        std::string value) {
+Status XlaBuilder::SetInstructionFrontendAttribute(const XlaOp& op,
+                                                   std::string attribute,
+                                                   std::string value) {
   TF_ASSIGN_OR_RETURN(auto instr_proto, LookUpMutableInstruction(op));
   auto* frontend_attributes = instr_proto->mutable_frontend_attributes();
-  (*frontend_attributes->mutable_map())[attribute] = value;
+  (*frontend_attributes->mutable_map())[attribute] = std::move(value);
   return Status::OK();
 }
 
@@ -2741,24 +2742,23 @@ void XlaBuilder::AddCalledComputation(const XlaComputation& computation,
 
 namespace {
 
-template <typename InstructionType, typename HandleToIndexType,
-          typename InstructionProtoVectorType>
+template <typename InstructionType>
 StatusOr<InstructionType> LookUpInstructionByHandleInternal(
-    HandleToIndexType& handle_to_index,
-    InstructionProtoVectorType& instructions, int64 handle) {
+    const absl::flat_hash_map<int64, int64>& handle_to_index,
+    const std::vector<HloInstructionProto>& instructions, int64 handle) {
   auto it = handle_to_index.find(handle);
   if (it == handle_to_index.end()) {
     return InvalidArgument("No XlaOp with handle %d", handle);
   }
-  return &instructions[it->second];
+  return const_cast<InstructionType>(&instructions.at(it->second));
 }
 
-template <typename InstructionType, typename HandleToIndexType,
-          typename InstructionProtoVectorType, typename OpBuilderType,
+template <typename InstructionType,
+          typename OpBuilderType,
           typename BuilderType, typename OpType>
 StatusOr<InstructionType> LookUpInstructionInternal(
-    HandleToIndexType& handle_to_index,
-    InstructionProtoVectorType& instructions, OpBuilderType op_builder,
+    const absl::flat_hash_map<int64, int64>& handle_to_index,
+    const std::vector<HloInstructionProto>& instructions, OpBuilderType op_builder,
     BuilderType builder, OpType op_handle) {
   if (op_builder == nullptr) {
     return InvalidArgument(
