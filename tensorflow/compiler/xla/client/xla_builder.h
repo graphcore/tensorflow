@@ -324,9 +324,6 @@ class XlaBuilder {
     ShapeIndex param_index;
   };
 
-  // Looks up the HloInstruction and sets the backend config field to "value".
-  Status SetBackendConfig(const XlaOp& op, std::string value);
-
   // Looks up the HloInstruction and sets the frontend attribute "attribute" to
   // "value".
   Status AddFrontendAttribute(const XlaOp& op, string attribute, string value);

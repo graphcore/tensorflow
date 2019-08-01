@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
+#include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/conv_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/dot_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/norm_graph_caching.h"
@@ -59,6 +60,8 @@ struct CompilerResources {
 
   poplin::matmul::PlanningCache dot_cache;
 
+  const IpuOptions::FloatingPointBehaviour global_floating_point_behaviour;
+
   const poplar::OptionFlags default_conv_options;
 
   const poplar::OptionFlags default_pooling_options;
@@ -92,14 +95,15 @@ struct CompilerResources {
 
   dot_graph_caching::DotGraphCache dot_graph_cache;
 
-  CompilerResources(const poplar::OptionFlags& conv_options,
-                    const poplar::OptionFlags& pooling_options,
-                    bool disable_graph_convolution_caching,
-                    bool merge_infeed_io_copies, uint32 replication_factor,
-                    int64 max_all_reduce_buffer_size,
-                    int64 max_inter_ipu_copies_buffer_size,
-                    int64 max_scheduler_lookahead_depth,
-                    int64 max_scheduler_search_space_size, HloModule* module)
+  CompilerResources(
+      const poplar::OptionFlags& conv_options,
+      const poplar::OptionFlags& pooling_options,
+      bool disable_graph_convolution_caching, bool merge_infeed_io_copies,
+      uint32 replication_factor, int64 max_all_reduce_buffer_size,
+      int64 max_inter_ipu_copies_buffer_size,
+      int64 max_scheduler_lookahead_depth,
+      int64 max_scheduler_search_space_size, HloModule* module,
+      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour)
       : annotations(module),
         information(
             max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
@@ -108,7 +112,8 @@ struct CompilerResources {
         default_pooling_options(pooling_options),
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         replication_factor(replication_factor),
-        merge_infeed_io_copies(merge_infeed_io_copies) {}
+        merge_infeed_io_copies(merge_infeed_io_copies),
+        global_floating_point_behaviour(floating_point_behaviour) {}
 };
 
 }  // namespace poplarplugin

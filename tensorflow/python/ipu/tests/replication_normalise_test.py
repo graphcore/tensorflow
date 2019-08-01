@@ -29,7 +29,9 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import variables
 
+
 class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testReplicationNormalise(self):
     with ops.device("/device:IPU:0"):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])

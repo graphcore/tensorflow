@@ -60,6 +60,7 @@ class _SessionRunCounter(session_run_hook.SessionRunHook):
 
 
 class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testTrainReplicated(self):
     def my_model_fn(features, labels, mode):  # pylint: disable=unused-argument
       self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -68,23 +69,20 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
 
       train_op = array_ops.identity(loss)
 
-      return model_fn_lib.EstimatorSpec(mode=mode,
-                                        loss=loss,
-                                        train_op=train_op)
+      return model_fn_lib.EstimatorSpec(
+          mode=mode, loss=loss, train_op=train_op)
 
     def my_input_fn():
-      dataset = tu.create_dual_increasing_dataset(10,
-                                                  data_shape=[1],
-                                                  label_shape=[1])
+      dataset = tu.create_dual_increasing_dataset(
+          10, data_shape=[1], label_shape=[1])
       dataset = dataset.batch(batch_size=1, drop_remainder=True)
       return dataset
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
     config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   num_replicas=4,
-                                                   ipu_options=ipu_options),
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            iterations_per_loop=2, num_replicas=4, ipu_options=ipu_options),
         log_step_count_steps=1,
         save_summary_steps=1)
 
@@ -93,9 +91,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     session_run_counter = _SessionRunCounter()
 
     num_steps = 6
-    estimator.train(input_fn=my_input_fn,
-                    steps=num_steps,
-                    hooks=[session_run_counter])
+    estimator.train(
+        input_fn=my_input_fn, steps=num_steps, hooks=[session_run_counter])
 
     self.assertEquals(session_run_counter.num_session_runs,
                       num_steps // config.ipu_run_config.iterations_per_loop)
@@ -113,6 +110,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     # loss is averaged across iterations per loop
     self.assertEqual(loss_output, [14.0, 16.0, 18.0])
 
+  @test_util.deprecated_graph_mode_only
   def testTrainReplicatedOnRegressionDataset(self):
     def my_model_fn(features, labels, mode):
       self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -127,9 +125,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
           sharded_optimizer)
       train_op = cross_replica_optimizer.minimize(loss)
 
-      return model_fn_lib.EstimatorSpec(mode=mode,
-                                        loss=loss,
-                                        train_op=train_op)
+      return model_fn_lib.EstimatorSpec(
+          mode=mode, loss=loss, train_op=train_op)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices(
@@ -140,9 +137,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
     config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   num_replicas=4,
-                                                   ipu_options=ipu_options),
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            iterations_per_loop=2, num_replicas=4, ipu_options=ipu_options),
         log_step_count_steps=1,
         save_summary_steps=1)
 
@@ -151,9 +147,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     session_run_counter = _SessionRunCounter()
 
     num_steps = 6
-    estimator.train(input_fn=my_input_fn,
-                    steps=num_steps,
-                    hooks=[session_run_counter])
+    estimator.train(
+        input_fn=my_input_fn, steps=num_steps, hooks=[session_run_counter])
 
     self.assertEquals(session_run_counter.num_session_runs,
                       num_steps // config.ipu_run_config.iterations_per_loop)
@@ -170,6 +165,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
 
     self.assertTrue(loss_output[0] > loss_output[-1])
 
+  @test_util.deprecated_graph_mode_only
   def testShardedAndReplicatedTraining(self):
     def my_model_fn(features, labels, mode):
       self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -188,9 +184,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
           sharded_optimizer)
       train_op = cross_replica_optimizer.minimize(loss)
 
-      return model_fn_lib.EstimatorSpec(mode=mode,
-                                        loss=loss,
-                                        train_op=train_op)
+      return model_fn_lib.EstimatorSpec(
+          mode=mode, loss=loss, train_op=train_op)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices(
@@ -201,10 +196,11 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
     config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   num_replicas=2,
-                                                   num_shards=2,
-                                                   ipu_options=ipu_options),
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            iterations_per_loop=2,
+            num_replicas=2,
+            num_shards=2,
+            ipu_options=ipu_options),
         log_step_count_steps=1,
         save_summary_steps=1)
 
@@ -213,9 +209,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     session_run_counter = _SessionRunCounter()
 
     num_steps = 10
-    estimator.train(input_fn=my_input_fn,
-                    steps=num_steps,
-                    hooks=[session_run_counter])
+    estimator.train(
+        input_fn=my_input_fn, steps=num_steps, hooks=[session_run_counter])
 
     self.assertEquals(session_run_counter.num_session_runs,
                       num_steps // config.ipu_run_config.iterations_per_loop)
@@ -232,6 +227,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
 
     self.assertTrue(loss_output[0] > loss_output[-1])
 
+  @test_util.deprecated_graph_mode_only
   def testReplicatedEvaluation(self):
     def my_input_fn():
       # IPU0 mean: 2, max: 3
@@ -254,9 +250,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
       eval_metric_ops = {
           "feature_mean": metrics_impl.mean(features),
       }
-      return model_fn_lib.EstimatorSpec(mode,
-                                        loss=loss,
-                                        eval_metric_ops=eval_metric_ops)
+      return model_fn_lib.EstimatorSpec(
+          mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
     ipu_options = ipu_utils.create_ipu_config()
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
@@ -269,6 +264,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     self.assertEqual(3., scores["feature_mean"])
     self.assertEqual(4., scores[model_fn_lib.LOSS_METRIC_KEY])
 
+  @test_util.deprecated_graph_mode_only
   def testReplicatedPrediction(self):
     def my_input_fn():
       features = [
@@ -297,15 +293,16 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
             iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
 
-    outputs = estimator.predict(input_fn=my_input_fn,
-                                yield_single_examples=True)
+    outputs = estimator.predict(
+        input_fn=my_input_fn, yield_single_examples=True)
     self.assertEqual(3.0, next(outputs))
     self.assertEqual(5.0, next(outputs))
 
-    outputs = estimator.predict(input_fn=my_input_fn,
-                                yield_single_examples=False)
+    outputs = estimator.predict(
+        input_fn=my_input_fn, yield_single_examples=False)
     np.testing.assert_array_equal([3.0, 5.0, 7.0, 9.0], next(outputs))
 
+  @test_util.deprecated_graph_mode_only
   def testTrainWithAutomaticSharding(self):
     def my_model_fn(features, labels, mode):
       self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -318,9 +315,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
           gradient_descent.GradientDescentOptimizer(0.1))
       train_op = sharded_optimizer.minimize(loss)
 
-      return model_fn_lib.EstimatorSpec(mode=mode,
-                                        loss=loss,
-                                        train_op=train_op)
+      return model_fn_lib.EstimatorSpec(
+          mode=mode, loss=loss, train_op=train_op)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices(
@@ -332,10 +328,11 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     ipu_options = ipu_utils.auto_select_ipus(ipu_options, 4)
 
     config = ipu_run_config.RunConfig(
-        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                                   num_shards=4,
-                                                   autosharding=True,
-                                                   ipu_options=ipu_options),
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            iterations_per_loop=2,
+            num_shards=4,
+            autosharding=True,
+            ipu_options=ipu_options),
         log_step_count_steps=1,
         save_summary_steps=1)
 
@@ -355,6 +352,7 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
 
     self.assertTrue(loss_output[0] > loss_output[-1])
 
+  @test_util.deprecated_graph_mode_only
   def testReplicatedTrainingWithoutCrossReplicaSumShouldThrow(self):
     def my_input_fn():
       return dataset_ops.Dataset.from_tensor_slices([])

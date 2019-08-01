@@ -25,9 +25,8 @@ limitations under the License.
 
 namespace pe = popops::expr;
 
-namespace tensorflow {
-
 // Custom poplar kernel.
+extern "C"
 poplar::program::Program AddIncrCustom(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
     std::vector<poplar::Tensor>& outputs) {
@@ -45,4 +44,3 @@ poplar::program::Program AddIncrCustom(
   return seq;
 }
 
-}  // namespace tensorflow

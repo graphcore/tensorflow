@@ -17,6 +17,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_base.h"
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
@@ -48,6 +49,7 @@ limitations under the License.
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
+#include <popsys/CSRFunctions.hpp>
 
 using tensorflow::str_util::StartsWith;
 
@@ -78,7 +80,9 @@ static std::map<std::string, CustomCallFn> custom_call_map = {
     {"scatter_update_inplace", CreateScatterUpdateOp},
 };
 
-BaseVisitor::BaseVisitor(CompilerResources& res) : resources_(res) {}
+BaseVisitor::BaseVisitor(CompilerResources& res) : resources_(res) {
+  stochastic_rounding_enabled_ = res.global_floating_point_behaviour.esr();
+}
 
 const Shape& BaseVisitor::GetOutputShape(HloInstruction* inst) const {
   return inst->shape();
@@ -631,6 +635,34 @@ Status BaseVisitor::HandleCopyStart(HloInstruction* inst) {
 
 Status BaseVisitor::HandleCopyDone(HloInstruction* inst) {
   return Unimplemented(inst);
+}
+
+Status BaseVisitor::Preprocess(HloInstruction* inst) {
+  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  bool new_stochastic_rounding_enabled;
+  switch (poplar_backend_config.stochastic_rounding()) {
+    case PoplarBackendConfig::NOT_SET:
+      new_stochastic_rounding_enabled =
+          resources_.global_floating_point_behaviour.esr();
+      break;
+    case PoplarBackendConfig::FORCE_ON:
+      new_stochastic_rounding_enabled = true;
+      break;
+    case PoplarBackendConfig::FORCE_OFF:
+      new_stochastic_rounding_enabled = false;
+      break;
+    default:
+      return InvalidArgument(
+          "Invalid value for PoplarBackendConfig.stochastic_rounding()");
+  }
+  if (new_stochastic_rounding_enabled != stochastic_rounding_enabled_) {
+    popsys::setStochasticRounding(*resources_.main_graph, sequence,
+                                  new_stochastic_rounding_enabled,
+                                  "Preprocess");
+    stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;
+  }
+  return Status::OK();
 }
 
 }  // namespace poplarplugin

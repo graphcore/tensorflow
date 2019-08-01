@@ -95,6 +95,7 @@ py_library(
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
+        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/estimator:estimator_py",
     ],
@@ -269,6 +270,18 @@ py_test(
 )
 
 tf_py_test(
+    name = "frontend_attributes_test",
+    size = "small",
+    srcs = ["tests/frontend_attributes_test.py"],
+    additional_deps = [
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/compiler/xla:xla_data_proto_py",
+    ],
+)
+
+tf_py_test(
     name = "popnn_normalization_test",
     size = "small",
     srcs = ["tests/popnn_normalization_test.py"],
@@ -312,33 +325,23 @@ py_test(
     srcs_version = "PY2AND3",
 )
 
-cc_library(
-	name = "add_incrementing_custom",
-	srcs = ["tests/add_incrementing_custom.cc"],
- 	copts = ["-fexceptions"], 
-	nocopts = "-fno-exceptions",
+cc_binary(
+	  name = "libadd_incrementing_custom.so",
+	  srcs = ["tests/add_incrementing_custom.cc"],
+ 	  copts = ["-fexceptions"],
+	  nocopts = "-fno-exceptions",
     deps = ["@local_config_poplar//poplar:poplar_headers",
-            "//tensorflow/core:framework",
-        ],
-
+        "//tensorflow/core:framework",
+    ],
     linkopts = [
         "$(locations @local_config_poplar//poplar:poplar_lib)",
         "-Wl,-rpath," + poplar_lib_directory(),
         "-Wl,-rpath," + poplibs_lib_directory(),
     ],
+    linkshared = True,
     data = [
         "@local_config_poplar//poplar:poplar_lib",
     ],
-    )
-
-tf_gen_op_wrapper_py(
-    name = "add_incrementing_custom_python_target",
-    deps = [":add_incrementing_custom"],
-)
-
-tf_custom_op_py_library(
-    name = "add_incrementing_custom_python_target_lib",
-    deps = [":add_incrementing_custom_python_target"],
 )
 
 tf_py_test(
@@ -355,7 +358,9 @@ tf_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        ":add_incrementing_custom_python_target_lib",
+    ],
+    data = [
+        ":libadd_incrementing_custom.so",
     ],
 )
 
@@ -397,12 +402,14 @@ test_suite(
         "embedding_lookup_test",
         "estimator_test",
         "fifo_test",
+        "frontend_attributes_test",
         "infeed_outfeed_test",
         "ipu_estimator_test",
         "pop_datastream_test",
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
+        "user_ops_test",
         "utils_test",
     ],
 )

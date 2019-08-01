@@ -31,7 +31,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/backend_config_handler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/casts_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
@@ -53,6 +52,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
@@ -471,7 +471,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplarExecutor->GetMaxAllReduceBufferSize(),
       poplarExecutor->GetMaxInterIpuCopyBufferSize(),
       poplarExecutor->GetMaxSchedulerLookaheadDepth(),
-      poplarExecutor->GetMaxSchedulerSearchSpaceSize(), module.get());
+      poplarExecutor->GetMaxSchedulerSearchSpaceSize(), module.get(),
+      poplarExecutor->FloatingPointBehaviour());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -492,7 +493,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
     pipeline.AddPass<HloGetDimensionSizeRewriter>();
     pipeline.AddPass<CustomOpReplacer>();
-    pipeline.AddPass<BackendConfigHandler>();
+    pipeline.AddPass<ParsePoplarBackendConfig>();
     pipeline.AddPass<ReplicationFactorToConstant>(resources.replication_factor);
     pipeline.AddPass<GradientAccumulationFuser>(resources.annotations);
     pipeline.AddPass<HloComputationNameUniquify>();

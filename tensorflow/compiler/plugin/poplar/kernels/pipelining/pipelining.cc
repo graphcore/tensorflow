@@ -38,8 +38,7 @@ class FunctionCompileOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types_));
-    attribute_map_.AddAttribute("type",
-                                PoplarBackendConfig_CallConfig_Type_Name(type));
+    call_config_type_ = PoplarBackendConfig_CallConfig_Type_Name(type);
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -115,9 +114,10 @@ class FunctionCompileOp : public XlaOpKernel {
     }
 
     auto outputs = xla::Call(builder, *to_apply_func.computation, inputs);
-    // Set the backend config of the call.
-    OP_REQUIRES_OK(
-        ctx, builder->SetBackendConfig(outputs, attribute_map_.Serialise()));
+    // Set the config type of the call.
+    OP_REQUIRES_OK(ctx, builder->AddFrontendAttribute(
+                            outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
+                            call_config_type_));
     // Sets non-variable outputs.
     for (int i = 0; i < output_types_.size(); ++i) {
       xla::XlaOp output_handle = xla::GetTupleElement(outputs, i);
@@ -150,7 +150,7 @@ class FunctionCompileOp : public XlaOpKernel {
   const NameAttrList* to_apply;
   DataTypeVector input_types_;
   DataTypeVector output_types_;
-  IPUCustomKernelsUtil::AttributeMap attribute_map_;
+  string call_config_type_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(FunctionCompileOp);
 };

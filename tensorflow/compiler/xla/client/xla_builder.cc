@@ -289,13 +289,6 @@ Status XlaBuilder::SetDynamicBinding(int64 dynamic_size_param_num,
   return Status::OK();
 }
 
-Status XlaBuilder::SetBackendConfig(const XlaOp& op,
-                                            std::string value) {
-  TF_ASSIGN_OR_RETURN(auto instr_proto, LookUpMutableInstruction(op));
-  instr_proto->set_backend_config(value);
-  return Status::OK();
-}
-
 Status XlaBuilder::AddFrontendAttribute(const XlaOp& op, std::string attribute,
                                         std::string value) {
   TF_ASSIGN_OR_RETURN(auto instr_proto, LookUpMutableInstruction(op));

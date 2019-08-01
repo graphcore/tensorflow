@@ -22,6 +22,10 @@ from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.framework import ops
 from tensorflow.python.ops.variable_scope import variable_scope
 from tensorflow.python.util import tf_contextlib
+from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
+
+FRONTEND_ATTRIBUTES_NAME = "_XlaFrontendAttributes"
+
 
 @tf_contextlib.contextmanager
 def ipu_jit_scope(ipu_scope):
@@ -86,8 +90,8 @@ def ipu_shard(index):
   else:
     ipus = [index]
 
-  proto = xla_data_pb2.OpSharding(
-      type=xla_data_pb2.OpSharding.MAXIMAL, tile_assignment_devices=ipus)
+  proto = xla_data_pb2.OpSharding(type=xla_data_pb2.OpSharding.MAXIMAL,
+                                  tile_assignment_devices=ipus)
 
   attr_value = attr_value_pb2.AttrValue(s=proto.SerializeToString())
   attrs = {"_XlaSharding": attr_value}
@@ -96,3 +100,41 @@ def ipu_shard(index):
   with ops.get_default_graph()._attr_scope(attrs):
     yield
   # pylint: enable=protected-access
+
+
+@tf_contextlib.contextmanager
+def frontend_attribute(attribute_name, attribute_value):
+
+  proto = xla_data_pb2.FrontendAttributes()
+  # pylint: disable=protected-access
+  attr_value = ops.get_default_graph()._attr_scope_map.get(
+      FRONTEND_ATTRIBUTES_NAME)
+  # pylint: enable=protected-access
+  new_attribute = True
+  if attr_value:
+    proto.ParseFromString(attr_value.s)
+  proto.map[attribute_name] = attribute_value
+
+  attr_value = attr_value_pb2.AttrValue(s=proto.SerializeToString())
+  attrs = {FRONTEND_ATTRIBUTES_NAME: attr_value}
+
+  # pylint: disable=protected-access
+  with ops.get_default_graph()._attr_scope(attrs):
+    yield
+  # pylint: enable=protected-access
+
+
+@tf_contextlib.contextmanager
+def stochastic_rounding(override):
+  """Control stochastic rounding for a set of operations.
+
+  Manually sets the stochastic rounding method to use for intermediate results.
+
+  Returns:
+     A context
+  """
+  with frontend_attribute(
+      backend_config_pb2.FrontendAttributeId.Name(
+          backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING),
+      "on" if override else "off"):
+    yield
