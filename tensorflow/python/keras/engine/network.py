@@ -41,7 +41,6 @@ from tensorflow.python.keras.engine import base_layer
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine import node as node_module
 from tensorflow.python.keras.engine import training_utils
-from tensorflow.python.keras.mixed_precision.experimental import policy
 from tensorflow.python.keras.utils import generic_utils
 from tensorflow.python.keras.utils import layer_utils
 from tensorflow.python.keras.utils import tf_utils
@@ -54,6 +53,7 @@ from tensorflow.python.training.tracking import layer_utils as trackable_layer_u
 from tensorflow.python.training.tracking import tracking
 from tensorflow.python.training.tracking import util as trackable_utils
 from tensorflow.python.util import nest
+from tensorflow.python.util import object_identity
 from tensorflow.python.util import serialization
 from tensorflow.python.util import tf_inspect
 
@@ -189,7 +189,8 @@ class Network(base_layer.Layer):
     # self.losses
     # self.updates
 
-    generic_utils.validate_kwargs(kwargs, {'trainable', 'dtype', 'dynamic'})
+    generic_utils.validate_kwargs(kwargs, {'trainable', 'dtype', 'dynamic',
+                                           'experimental_autocast'})
 
     # Object to store all thread local layer properties.
     self._thread_local = threading.local()
@@ -227,8 +228,14 @@ class Network(base_layer.Layer):
       self._graph = None
     else:
       self._graph = ops.get_default_graph()  # Used in symbolic mode only.
-      # A Network does not create weights of its own, thus has no dtype.
-    self._dtype = kwargs.get('dtype', None)
+
+    # Both graph and subclassed networks have a dtype policy. The policy is
+    # currently ignored for a graph network, as graph networks disable
+    # autocasting (making the policy's compute dtype meaningless) and graph
+    # networks have no variables (making the policy's variable_dtype
+    # meaningless). For subclassed networks, the dtype policy acts as it does
+    # for any ordinary layer.
+    self._set_dtype_policy(kwargs.get('dtype', None))
 
     # All layers in order of horizontal graph traversal.
     # Entries are unique. Includes input and output layers.
@@ -240,12 +247,6 @@ class Network(base_layer.Layer):
 
     self._trackable_saver = (
         trackable_utils.saver_with_op_caching(self))
-
-    # Networks do not need to do any casting of inputs or variables, because
-    # each of its layers will handle casting through the layer's own
-    # implementation. Therefore networks use the 'infer' policy, which does no
-    # casting.
-    self._mixed_precision_policy = policy.Policy('infer')
 
   @trackable.no_automatic_dependency_tracking
   def _init_graph_network(self, inputs, outputs, name=None, **kwargs):
@@ -278,6 +279,9 @@ class Network(base_layer.Layer):
     # present in the signature of the `call` method of a graph network.
     self._expects_training_arg = True
     self._expects_mask_arg = True
+    # A graph network does not autocast inputs, as its layers will cast them
+    # instead.
+    self._autocast = False
 
     self._input_layers = []
     self._output_layers = []
@@ -372,6 +376,8 @@ class Network(base_layer.Layer):
     self._base_init(name=name, **kwargs)
     self._is_graph_network = False
     self._init_call_fn_args()
+    self._autocast = kwargs.get('experimental_autocast',
+                                base_layer_utils.v2_dtype_behavior_enabled())
     self.outputs = []
     self.inputs = []
     self.built = False
@@ -1448,7 +1454,7 @@ class Network(base_layer.Layer):
   def _validate_graph_inputs_and_outputs(self):
     """Validates the inputs and outputs of a Graph Network."""
     # Check for redundancy in inputs.
-    if len(set(self.inputs)) != len(self.inputs):
+    if len(object_identity.ObjectIdentitySet(self.inputs)) != len(self.inputs):
       raise ValueError('The list of inputs passed to the model '
                        'is redundant. '
                        'All inputs should only appear once.'
@@ -1786,9 +1792,9 @@ def _map_graph_network(inputs, outputs):
   # Check that all tensors required are computable.
   # computable_tensors: all tensors in the graph
   # that can be computed from the inputs provided.
-  computable_tensors = []
+  computable_tensors = object_identity.ObjectIdentitySet()
   for x in inputs:
-    computable_tensors.append(x)
+    computable_tensors.add(x)
 
   layers_with_complete_input = []  # To provide a better error msg.
   for depth in depth_keys:
@@ -1804,7 +1810,7 @@ def _map_graph_network(inputs, outputs):
                              'were accessed without issue: ' +
                              str(layers_with_complete_input))
         for x in nest.flatten(node.output_tensors):
-          computable_tensors.append(x)
+          computable_tensors.add(x)
         layers_with_complete_input.append(layer.name)
 
   # Ensure name unicity, which will be crucial for serialization

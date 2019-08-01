@@ -63,6 +63,7 @@ from tensorflow.python.util import deprecation
 from tensorflow.python.util import function_utils
 from tensorflow.python.util import lock_util
 from tensorflow.python.util import memory
+from tensorflow.python.util import object_identity
 from tensorflow.python.util import tf_contextlib
 from tensorflow.python.util import tf_stack
 from tensorflow.python.util.compat import collections_abc
@@ -726,6 +727,15 @@ class Tensor(_TensorLike):
   # mechanism, which allows more control over how Tensors interact
   # with ndarrays.
   __array_priority__ = 100
+
+  def __array__(self):
+    raise NotImplementedError("Cannot convert a symbolic Tensor ({}) to a numpy"
+                              " array.".format(self.name))
+
+  def __len__(self):
+    raise TypeError("len is not well defined for symbolic Tensors. ({}) "
+                    "Please call `x.shape` rather than `len(x)` for "
+                    "shape information.".format(self.name))
 
   @staticmethod
   def _override_operator(operator, func):
@@ -2808,7 +2818,7 @@ class Graph(object):
     # self._thread_local._colocation_stack is used instead.
     self._graph_colocation_stack = traceable_stack.TraceableStack()
     # Set of tensors that are dangerous to feed!
-    self._unfeedable_tensors = set()
+    self._unfeedable_tensors = object_identity.ObjectIdentitySet()
     # Set of operations that are dangerous to fetch!
     self._unfetchable_ops = set()
     # A map of tensor handle placeholder to tensor dtype.

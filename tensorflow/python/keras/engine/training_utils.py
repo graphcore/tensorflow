@@ -475,9 +475,14 @@ def standardize_input_data(data,
   Raises:
       ValueError: in case of improperly formatted user-provided data.
   """
+  try:
+    data_len = len(data)
+  except TypeError:
+    # For instance if data is `None` or a symbolic Tensor.
+    data_len = None
+
   if not names:
-    if (data is not None and hasattr(data, '__len__') and len(data) and
-        not isinstance(data, dict)):
+    if data_len and not isinstance(data, dict):
       raise ValueError(
           'Error when checking model ' + exception_prefix + ': '
           'expected no data, but got:', data)
@@ -1597,8 +1602,9 @@ def infer_steps_for_dataset(dataset, steps, epochs=1, steps_name='steps'):
 
   Returns:
     Integer or `None`. Inferred number of steps to loop through the dataset.
-    `None` is returned if the size of the dataset is unknown and `steps` was
-    not specified.
+    `None` is returned if 1) the size of the dataset is unknown and `steps` was
+    not specified, or 2) this is multi-worker training and auto sharding is
+    enabled.
 
   Raises:
     ValueError: In case of invalid argument values.
