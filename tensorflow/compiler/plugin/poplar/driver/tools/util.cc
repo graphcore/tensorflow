@@ -253,9 +253,19 @@ INITIALISE_FOR_ALL_NATIVE_VECTOR_TYPES(
 
 #undef INITIALISE_FOR_ALL_NATIVE_VECTOR_TYPES
 
-bool IsPopOpsFusion(const HloComputation* comp, const std::string& postfix) {
+namespace {
+
+bool IsFusionComputationWithPrefix(const HloComputation* comp,
+                                   const std::string& prefix) {
   return comp->IsFusionComputation() &&
-         tensorflow::str_util::StartsWith(comp->name(), "_pop_op_" + postfix);
+         tensorflow::str_util::StartsWith(comp->name(), prefix);
+}
+
+}  //  namespace
+
+bool IsPopOpsFusion(const HloComputation* comp, const std::string& postfix) {
+  return IsFusionComputationWithPrefix(comp,
+                                       absl::StrCat("_pop_op_" + postfix));
 }
 
 bool IsPopOpsFusion(const HloInstruction* inst, const std::string& postfix) {
@@ -263,15 +273,25 @@ bool IsPopOpsFusion(const HloInstruction* inst, const std::string& postfix) {
          IsPopOpsFusion(inst->fused_instructions_computation(), postfix);
 }
 
+bool IsArithmeticExpressionFusion(const HloComputation* comp) {
+  return IsFusionComputationWithPrefix(comp, "__arithmetic_expression");
+}
+
+bool IsArithmeticExpressionFusion(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kFusion &&
+         IsArithmeticExpressionFusion(inst->fused_instructions_computation());
+}
+
 namespace {
 bool CallConfigHasType(const HloInstruction* inst,
                        const PoplarBackendConfig::CallConfig::Type type) {
   if (inst->opcode() == HloOpcode::kCall) {
     auto statusor = inst->backend_config<PoplarBackendConfig>();
-    if (statusor.ok()) {
-      PoplarBackendConfig cfg = statusor.ValueOrDie();
-      return cfg.call_config().type() == type;
+    if (!statusor.ok()) {
+      LOG(FATAL) << "Could not parse the PoplarBackendConfig";
     }
+    PoplarBackendConfig cfg = statusor.ValueOrDie();
+    return cfg.call_config().type() == type;
   }
   return false;
 }
