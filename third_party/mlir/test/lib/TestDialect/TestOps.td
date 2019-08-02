@@ -309,6 +309,48 @@ def : Pat<(OpAllAttrConstraint1
           (OpAllAttrConstraint2 $attr)>;
 
 //===----------------------------------------------------------------------===//
+// Test Patterns (Symbol Binding)
+
+// Test symbol binding.
+def OpSymbolBindingA : TEST_Op<"symbol_binding_a", []> {
+  let arguments = (ins I32:$operand, I64Attr:$attr);
+  let results = (outs I32:$result);
+}
+def OpSymbolBindingB : TEST_Op<"symbol_binding_b", []> {
+  let arguments = (ins I32:$operand);
+  let results = (outs I32:$result);
+
+  let builders = [
+    OpBuilder<
+      "Builder *builder, OperationState *state, Value *operand",
+      [{
+        state->types.assign({builder->getIntegerType(32)});
+        state->addOperands({operand});
+      }]>
+  ];
+}
+def OpSymbolBindingC : TEST_Op<"symbol_binding_c", []> {
+  let arguments = (ins I32:$operand);
+  let results = (outs I32:$result);
+  let builders = OpSymbolBindingB.builders;
+}
+def OpSymbolBindingD : TEST_Op<"symbol_binding_d", []> {
+  let arguments = (ins I32:$input1, I32:$input2, I64Attr:$attr);
+  let results = (outs I32:$result);
+}
+def HasOneUse: Constraint<CPred<"$0->hasOneUse()">, "has one use">;
+def : Pattern<
+    // Bind to source pattern op operand/attribute/result
+    (OpSymbolBindingA:$res_a $operand, $attr), [
+        // Bind to auxiliary op result
+        (OpSymbolBindingC:$res_c (OpSymbolBindingB:$res_b $operand)),
+
+        // Use bound symbols in resultant ops
+        (OpSymbolBindingD $res_b, $res_c, $attr)],
+    // Use bound symbols in additional constraints
+    [(HasOneUse $res_a)]>;
+
+//===----------------------------------------------------------------------===//
 // Test Patterns (Attributes)
 
 // Test matching against op attributes.
@@ -433,13 +475,11 @@ def : Pattern<(ThreeResultOp MultiResultOpKind4),
                (TwoResultOp:$res2__1 MultiResultOpKind4)]>;
 
 // Test referencing a single value in the value pack
-def HasNoUse: Constraint<
-    CPred<"$0->use_begin() == $0->use_end()">, "has no use">;
 // This rule only matches TwoResultOp if its second result has no use.
 def : Pattern<(TwoResultOp:$res MultiResultOpKind5),
               [(OneResultOp2 MultiResultOpKind5),
                (OneResultOp1 MultiResultOpKind5)],
-              [(HasNoUse $res__1)]>;
+              [(HasNoUseOf:$res__1)]>;
 
 // Test using auxiliary ops for replacing multi-result op
 def : Pattern<
@@ -451,20 +491,6 @@ def : Pattern<
         (OneResultOp3 $interm__1),
         (AnotherTwoResultOp MultiResultOpKind6)
     ]>;
-
-//===----------------------------------------------------------------------===//
-// Test Directives
-//===----------------------------------------------------------------------===//
-
-// Test 'verifyUnusedValue'
-def VUVTwoResultOp : TEST_Op<"vuv_two_result_op", []> {
-  let arguments = (ins I32:$input);
-  let results = (outs I32:$r1, I32:$r2);
-}
-def VUVFoldTwoResultOp : Pattern<(VUVTwoResultOp $input), [
-        (verifyUnusedValue),
-        (replaceWithValue $input)
-      ]>;
 
 //===----------------------------------------------------------------------===//
 // Test Legalization
