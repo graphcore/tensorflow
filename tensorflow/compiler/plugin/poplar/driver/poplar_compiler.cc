@@ -575,8 +575,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         auto scheduler,
         BestIpuSchedule(
             {CreateLookAheadMemoryScheduler(resources.information),
-             MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler),
-             CreateLivenessLookAheadMemoryScheduler(resources.information)}));
+             MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler)}));
 
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
 
