@@ -330,8 +330,8 @@ cc_binary(
 	  srcs = ["tests/add_incrementing_custom.cc"],
  	  copts = ["-fexceptions"],
 	  nocopts = "-fno-exceptions",
-    deps = ["@local_config_poplar//poplar:poplar_headers",
-        "//tensorflow/core:framework",
+    deps = [
+        "@local_config_poplar//poplar:poplar_headers",
     ],
     linkopts = [
         "$(locations @local_config_poplar//poplar:poplar_lib)",

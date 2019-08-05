@@ -27,6 +27,15 @@ genrule(
     cmd = "$(location @local_config_poplar//poplar:popc) -DNDEBUG -O3 -I . -o $@ $<",
 )
 
+# Rule for generating the custom codelet example
+genrule(
+    name = "custom_codelet_example",
+    srcs = ["docs/custom_codelet.cpp"],
+    outs = ["custom_codelet.gp"],
+    tools = ["@local_config_poplar//poplar:popc"],
+    cmd = "$(location @local_config_poplar//poplar:popc) -DNDEBUG -O3 -I . -o $@ $<",
+)
+
 tf_proto_library(
     name = "config_protos",
     srcs = [
@@ -2204,6 +2213,40 @@ tf_xla_py_test(
     ],
 )
 
+cc_binary(
+	  name = "libcustom_rotate_op.so",
+	  srcs = ["docs/custom_rotate_op.cc"],
+ 	  copts = ["-fexceptions"],
+	  nocopts = "-fno-exceptions",
+    deps = [
+        "@local_config_poplar//poplar:poplar_headers",
+    ],
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
+    ],
+    linkshared = True,
+    data = [
+        "@local_config_poplar//poplar:poplar_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "tutorial_custom_codelet",
+    size = "small",
+    srcs = ["docs/tutorial_custom_codelet.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+    data = [
+        ":libcustom_rotate_op.so",
+        ":custom_codelet_example",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -2313,6 +2356,7 @@ test_suite(
         "tutorial_basic",
         "tutorial_sharding",
         "tutorial_xla_compile",
+        "tutorial_custom_codelet",
     ],
 )
 

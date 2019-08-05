@@ -61,7 +61,7 @@ class UserOpImpl : public PoplibsOpDef {
     // Get the function pointer from the HLO.
     poplar::program::Program (*as_function_ptr)(
         poplar::Graph&, const std::vector<poplar::Tensor>&,
-        std::vector<poplar::Tensor>& outputs);
+        std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix);
 
     as_function_ptr = reinterpret_cast<decltype(as_function_ptr)>(
         user_op_inst->GetPointerToFunc());
@@ -79,7 +79,7 @@ class UserOpImpl : public PoplibsOpDef {
     }
 
     // Call the user operation and add it to the sequence.s
-    seq.add(as_function_ptr(graph, inputs, outputs));
+    seq.add(as_function_ptr(graph, inputs, outputs, GetDebugName(inst)));
 
     // Register each of the returned tuple elements (if any) as outputs.
     for (int i = 0; i < outputs.size(); ++i) {

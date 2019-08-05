@@ -26,7 +26,6 @@ REGISTER_OP("IpuUserOp")
     .Attr("output_types: list(type) >= 0")
     .Attr("output_shapes: list(shape) >= 0")
     .Attr("library_path: string")
-    .Attr("op_name: string")
     .Attr("gp_path: string")
 
     // We don't know what the user is going to do.
@@ -49,8 +48,6 @@ REGISTER_OP("IpuUserOp")
         output_shapes: The shape of each tuple element output
         output_types: The type of each tuple element output
         library_path: The path to the shared library containing
-            the operation.
-        op_name: The function in the shared library which implements
             the operation.
         gp_path (optional): Path to the gp file if provided.s
     )doc");

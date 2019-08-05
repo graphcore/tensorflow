@@ -35,12 +35,17 @@ from tensorflow.python.util import deprecation
 from tensorflow.python.util.tf_export import tf_export
 
 
-def precompiled_user_op(inputs, op_name, library_path, gp_path=None, outs=None, name=None):
+def precompiled_user_op(inputs,
+                        library_path,
+                        gp_path=None,
+                        outs=None,
+                        name=None):
   """
-    Call the poplar function 'op_name' located in the shared library at 'library_path'
-    as part of the normal tensorflow execution with the given 'inputs'. The shape and 
-    type of the output should be specified by 'outs' if it is None it will default to 
-    no output. 'outs' should be a dictionary with two elements like so:
+    Call the poplar function located in the shared library at 'library_path'
+    as part of the normal tensorflow execution with the given 'inputs'. The
+    shape and type of the output should be specified by 'outs' if it is None it
+    will default to no output. 'outs' should be a dictionary with two elements
+    like so:
 
     outs = {
           "output_types": [my_types_as_a_list],
@@ -49,14 +54,14 @@ def precompiled_user_op(inputs, op_name, library_path, gp_path=None, outs=None, 
   """
 
   if outs is None:
-      outs = {
-          "output_types": [],
-          "output_shapes": [],
-      }
+    outs = {
+        "output_types": [],
+        "output_shapes": [],
+    }
   gp_path = gp_path if gp_path else ""
-  name = name if name else "UserOp/" + op_name
-  return gen_poputil_ops.ipu_user_op(inputs, op_name=op_name, library_path=library_path, gp_path=gp_path, name=name, **outs)
-
+  name = name if name else "UserOp"
+  return gen_poputil_ops.ipu_user_op(
+      inputs, library_path=library_path, gp_path=gp_path, name=name, **outs)
 
 
 def remap(x, name=None):
@@ -72,6 +77,7 @@ def remap(x, name=None):
 
   logging.warning("remap is a Graphcore internal op")
   return gen_poputil_ops.ipu_remap(x, name=name)
+
 
 def fifo(x, depth, name=None):
   """Introduces a first-in-first-out queue with a fixed depth.
@@ -89,6 +95,7 @@ def fifo(x, depth, name=None):
     return x
 
   return gen_poputil_ops.ipu_fifo(x, depth=depth, name=name)
+
 
 def print_tensor(input, name=None):
   """Print the specified input.
