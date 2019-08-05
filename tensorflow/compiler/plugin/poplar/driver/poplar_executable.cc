@@ -103,11 +103,11 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteOnStream(
 
   uint64 end_micros = tensorflow::Env::Default()->NowMicros();
 
-  {
-    tensorflow::mutex_lock lock(mutex_);
+  if (run_options->run_options().execution_profile()) {
+    auto profile = run_options->run_options().execution_profile();
     const double nanoseconds = (end_micros - start_micros) * 1000.0;
-    execution_profile_.set_compute_time_ns(std::max(nanoseconds, 1.0));
-    execution_profile_.set_compute_cycle_count(1);
+    profile->set_compute_time_ns(std::max(nanoseconds, 1.0));
+    profile->set_compute_cycle_count(1);
   }
 
   ScopedShapedBuffer result_buffer(result_shape(), result_shape(),
