@@ -124,7 +124,7 @@ class MappingTest(xla_test.XLATestCase):
             # The slice contains 4 elements on 256 tiles
             self.assertEqual(len(slice_layout[7]), 256)
             for tile in range(256):
-              self.assertEqual(slice_layout[7][tile], [1 + tile, 4])
+              self.assertEqual(slice_layout[7][tile], [tile, 4])
 
             # The broadcast add will have the same layout as the slice as it
             # should be done inplace.
