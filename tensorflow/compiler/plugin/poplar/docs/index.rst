@@ -18,6 +18,7 @@ Targeting the IPU from TensorFlow
     troubleshooting
     perf_training_example
     ipu_estimator_example
+    custom_codelet
     references
     api
     build

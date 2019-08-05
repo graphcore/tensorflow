@@ -24,7 +24,8 @@ namespace poplarplugin {
 class HloUserOpInstruction : public HloPoplarInstruction {
  public:
   explicit HloUserOpInstruction(absl::Span<HloInstruction* const> operands,
-                                const Shape& shape, std::string gp_path, void*);
+                                const Shape& shape, const std::string& gp_path,
+                                void*, void*, void*);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -46,6 +47,12 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   // The pointer to the function provided by the user via the shared library.
   void* function_ptr_;
 
+  // The pointer to the function provided by the user via the shared library.
+  void* elementwise_ptr_;
+
+  // The pointer to the function provided by the user via the shared library.
+  void* allocate_input_ptr_;
+
   // The number of inputs to this operation.
   size_t num_inputs_;
 
@@ -54,7 +61,7 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> operands, const Shape& shape,
-    std::string gp_path, void*);
+    const std::string& gp_path, void*, void*, void*);
 
 }  // namespace poplarplugin
 }  // namespace xla

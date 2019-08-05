@@ -89,8 +89,6 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
     // Extract the library path from the operation.
     OP_REQUIRES_OK(context, context->GetAttr("library_path", &library_path));
 
-    OP_REQUIRES_OK(context, context->GetAttr("op_name", &op_name));
-
     OP_REQUIRES_OK(context, context->GetAttr("gp_path", &gp_path));
 
     XlaShapesFromAttr(context, output_shape);
@@ -108,35 +106,21 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
                                              library_path));
     }
 
-    std::string str{reinterpret_cast<const char*>(library.buffer),
-                    library.size};
-
-    // Extract the function pointer as a void*
-    void* function_ptr = nullptr;
-
-    // Extract that symbol from the library. We expect (and require) the user
-    // function to be an undecorated 'C' type symbol
-
-    //
-    status = Env::Default()->GetSymbolFromLibrary(
-        library.handle, op_name.c_str(), &function_ptr);
-
-    if (!status.ok()) {
-      OP_REQUIRES_OK(
-          context,
-          errors::InvalidArgument(
-              "Couldn't read symbol from library. Symbol: " + op_name));
+    int64 fn_ptr = GetSymbolAddressAsInt64(library, "Build");
+    if (fn_ptr == 0) {
+      OP_REQUIRES_OK(context, errors::InvalidArgument(
+                                  "Couldn't read 'Build' symbol from library"));
     }
+    attribute_map_.AddAttribute("operation_fn", fn_ptr);
 
-    // Convert the pointer to a uint64 (attribute map/json doesn't store
-    // pointers).
-    uint64 as_int = reinterpret_cast<uint64>(function_ptr);
-    attribute_map_.AddAttribute("pointer_to_function_as_int", as_int);
+    attribute_map_.AddAttribute(
+        "elementwise_fn", GetSymbolAddressAsInt64(library, "IsElementWise"));
 
-    // Also add the codelet path provided.
+    attribute_map_.AddAttribute(
+        "allocate_input_fn", GetSymbolAddressAsInt64(library, "AllocateInput"));
+
     attribute_map_.AddAttribute("gp_path", gp_path);
 
-    const DataType dtype = output_type(0);
     const auto num_inputs = context->num_inputs();
 
     // Create the input tuple.
@@ -166,13 +150,28 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
   }
 
  private:
+  int64 GetSymbolAddressAsInt64(const LibraryLoadInfo& library,
+                                const std::string& sym_name) {
+    // Extract the function from the library. We expect (and require) the user
+    // function to be an undecorated 'C' type symbol
+    void* function_ptr = nullptr;
+    Status status = Env::Default()->GetSymbolFromLibrary(
+        library.handle, sym_name.c_str(), &function_ptr);
+
+    if (!status.ok()) {
+      return 0l;
+    }
+
+    // Convert the pointer to a uint64 (attribute map/json doesn't store
+    // pointers).
+    return reinterpret_cast<uint64>(function_ptr);
+  }
+
+ private:
   TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOp);
 
   // The path to the shared library as provided by the user.
   std::string library_path;
-
-  // Each library can contain multiple user ops
-  std::string op_name;
 
   // The (optional) path to any codelets which have been added.
   std::string gp_path;

@@ -44,11 +44,9 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
         ],
     }
     lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
-    op_name = "AddIncrCustom"
 
     def my_net(x, y, z):
       x = ipu.internal_ops.precompiled_user_op([x, y, z],
-                                               op_name,
                                                lib_path,
                                                outs=outputs)
       return x

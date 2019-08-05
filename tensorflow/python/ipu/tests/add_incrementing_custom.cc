@@ -13,23 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/core/framework/op.h"
-#include "tensorflow/core/framework/op_kernel.h"
-#include "tensorflow/core/framework/shape_inference.h"
+#include <algorithm>
 
-#include <iostream>
 #include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 #include <popops/ElementWise.hpp>
-#include <poprand/RandomGen.hpp>
 
 namespace pe = popops::expr;
 
 // Custom poplar kernel.
 extern "C"
-poplar::program::Program AddIncrCustom(
+poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs) {
+    std::vector<poplar::Tensor>& outputs, const std::string &debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(inputs.size());
