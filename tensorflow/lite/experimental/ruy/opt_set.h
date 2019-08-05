@@ -23,7 +23,7 @@ limitations under the License.
 // Each bit in RUY_OPT_SET controls a particular optimization done in Ruy.
 #if !defined(RUY_OPT_SET)
 // Default to all optimizations.
-#define RUY_OPT_SET 0x7ff
+#define RUY_OPT_SET 0x0
 #endif
 
 #define RUY_OPT_INTRINSICS 0x1
