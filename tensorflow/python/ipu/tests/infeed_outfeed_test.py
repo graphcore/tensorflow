@@ -392,7 +392,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   def testUndefinedShape(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     dataset = dataset.batch(10, drop_remainder=False)
-    with self.assertRaisesRegexp(ValueError, 'Output shape \(\?,'):
+    with self.assertRaisesRegexp(ValueError, 'Output shape \((\?|None),'):
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id())
 
