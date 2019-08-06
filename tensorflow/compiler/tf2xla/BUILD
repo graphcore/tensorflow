@@ -30,6 +30,7 @@ package_group(
     packages = [
         "//learning/brain/tools/tf_replay/...",
         "//tensorflow/...",
+        "//tensorflow_models/...",
     ],
 )
 
