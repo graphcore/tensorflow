@@ -2178,7 +2178,7 @@ def TFL_SpaceToDepthOp: TFL_Op<"space_to_depth", [
   let hasOptions = 1;
 }
 
-def TFL_SplitOp : TFL_Op<"split", [NoSideEffect]> {
+def TFL_SplitOp : TFL_Op<"split", [NoSideEffect, TFL_SameOperandsAndResultsScale]> {
   let summary = "Splits a tensor into `num_split` tensors along one dimension.";
 
   let description = [{
@@ -2189,18 +2189,18 @@ def TFL_SplitOp : TFL_Op<"split", [NoSideEffect]> {
 
   let arguments = (ins
     I32Tensor:$split_dim,
-    TensorOf<[F32, I16, I32, I64]>:$value,
+    TensorOf<[F32, I16, I32, I64, TFL_QI8, TFL_QUI8]>:$value,
     I32Attr:$num_splits
   );
 
   let results = (outs
-    Variadic<TensorOf<[F32, I16, I32, I64]>>:$outputs
+    Variadic<TensorOf<[F32, I16, I32, I64, TFL_QI8, TFL_QUI8]>>:$outputs
   );
 
   let hasOptions = 1;
 }
 
-def TFL_SplitVOp : TFL_Op<"split_v", [NoSideEffect]> {
+def TFL_SplitVOp : TFL_Op<"split_v", [NoSideEffect, TFL_SameOperandsAndResultsScale]> {
   let summary = "Splits a tensor into `num_split` tensors along one dimension.";
 
   let description = [{
@@ -2210,14 +2210,14 @@ def TFL_SplitVOp : TFL_Op<"split_v", [NoSideEffect]> {
   }];
 
   let arguments = (ins
-    TensorOf<[F32, I16, I32, I64]>:$value,
+    TensorOf<[F32, I16, I32, I64, TFL_QI8, TFL_QUI8]>:$value,
     I32Tensor:$size_splits,
     I32Tensor:$split_dim,
     I32Attr:$num_splits
   );
 
   let results = (outs
-    Variadic<TensorOf<[F32, I16, I32, I64]>>:$outputs
+    Variadic<TensorOf<[F32, I16, I32, I64, TFL_QI8, TFL_QUI8]>>:$outputs
   );
 
   let hasOptions = 1;
@@ -2720,6 +2720,29 @@ def TFL_UnidirectionalSequenceRNNOp :
   let customOption = "SequenceRNNOptions";
 
   let verifier = [{ return Verify(*this); }];
+}
+
+def TFL_WhereOp : TFL_Op<"where", [NoSideEffect]> {
+  let summary = "Returns locations of nonzero / true values in a tensor.";
+
+  let description = [{
+This operation returns the coordinates of true elements in `condition`. The
+coordinates are returned in a 2-D tensor where the first dimension (rows)
+represents the number of true elements, and the second dimension (columns)
+represents the coordinates of the true elements. Keep in mind, the shape of
+the output tensor can vary depending on how many true values there are in
+`condition`. Indices are output in row-major order.
+  }];
+
+  let arguments = (ins
+    I1Tensor:$input
+  );
+
+  // TODO(haoliang): TF Lite only support I32 output right now, need to fix
+  // either here or in the kernel.
+  let results = (outs
+    TFL_I32OrI64Tensor:$index
+  );
 }
 
 #endif // TFL_OPS

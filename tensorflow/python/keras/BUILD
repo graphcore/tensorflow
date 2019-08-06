@@ -3,7 +3,6 @@
 
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
 load("//tensorflow:tensorflow.bzl", "cuda_py_test")
-load("//tensorflow/core:platform/default/distribute.bzl", "distribute_py_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -1588,6 +1587,7 @@ tf_py_test(
         "//tensorflow/python:client_testlib",
     ],
     tags = [
+        "nomac",  # TODO(mihaimaruseac): b/127695564
         "notsan",
     ],
 )

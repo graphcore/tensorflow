@@ -20,16 +20,15 @@ load("//tensorflow:tensorflow.bzl", "if_nccl")
 load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")
 load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_tests")
 load(
-    "//tensorflow/core:platform/default/cuda_build_defs.bzl",
+    "//tensorflow/core/platform:default/cuda_build_defs.bzl",
     "if_cuda_is_configured",
 )
 load(
-    "//tensorflow/core:platform/default/build_config.bzl",
+    "//tensorflow/core/platform:default/build_config.bzl",
     "tf_kernel_tests_linkstatic",
 )
 load(
-    "//tensorflow/core:platform/default/build_config_root.bzl",
-    "if_static",
+    "//tensorflow/core/platform:default/build_config_root.bzl",
     "tf_cuda_tests_tags",
 )
 load(
@@ -819,7 +818,6 @@ cc_library(
         "eigen_backward_spatial_convolutions.h",
         "eigen_cuboid_convolution.h",
         "eigen_pooling.h",
-        "eigen_softmax.h",
         "eigen_spatial_convolutions.h",
         "eigen_volume_patch.h",
     ],
@@ -840,7 +838,6 @@ cc_library(
         "eigen_backward_spatial_convolutions.h",
         "eigen_cuboid_convolution.h",
         "eigen_pooling.h",
-        "eigen_softmax.h",
         "eigen_spatial_convolutions.h",
         "eigen_volume_patch.h",
     ],
@@ -2933,7 +2930,6 @@ tf_cc_tests(
         "eigen_attention_test.cc",
         "eigen_backward_spatial_convolutions_test.cc",
         "eigen_pooling_test.cc",
-        "eigen_softmax_test.cc",
         "eigen_spatial_convolutions_test.cc",
     ],
     deps = [
@@ -3300,16 +3296,9 @@ tf_kernel_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core/platform/default/build_config:cublas_plugin",
-    ] + if_static(
-        [
-            "@local_config_cuda//cuda:cusolver",
-            "@local_config_cuda//cuda:cublas",
-        ],
-        [
-            "//tensorflow/stream_executor/cuda:cusolver_stub",
-            "//tensorflow/stream_executor/cuda:cublas_stub",
-        ],
-    ),
+        "//tensorflow/stream_executor/cuda:cublas_lib",
+        "//tensorflow/stream_executor/cuda:cusolver_lib",
+    ],
 )
 
 tf_kernel_library(
@@ -3319,10 +3308,8 @@ tf_kernel_library(
     deps = [
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
-    ] + if_static(
-        ["@local_config_cuda//cuda:cusparse"],
-        ["//tensorflow/stream_executor/cuda:cusparse_stub"],
-    ),
+        "//tensorflow/stream_executor/cuda:cusparse_lib",
+    ],
 )
 
 LINALG_DEPS = [
@@ -5976,7 +5963,6 @@ filegroup(
         "eigen_convolution_helpers.h",
         "eigen_cuboid_convolution.h",
         "eigen_pooling.h",
-        "eigen_softmax.h",
         "eigen_spatial_convolutions.h",
         "eigen_spatial_convolutions-inl.h",
         "eigen_volume_patch.h",

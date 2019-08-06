@@ -27,6 +27,7 @@ import threading
 import numpy as np
 from six.moves import zip  # pylint: disable=redefined-builtin
 
+from google.protobuf import json_format
 from tensorflow.core.framework import node_def_pb2
 from tensorflow.python.autograph.core import ag_ctx
 from tensorflow.python.autograph.impl import api as autograph
@@ -41,6 +42,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import func_graph
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import sparse_tensor
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.keras import backend
@@ -64,6 +66,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import resource_variable_ops
 from tensorflow.python.ops import variables as tf_variables
+from tensorflow.python.ops.ragged import ragged_tensor
 from tensorflow.python.platform import tf_logging
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.training.tracking import data_structures
@@ -1731,14 +1734,16 @@ class Layer(module.Module):
     if (self._autocast and compute_dtype and
         dtypes.as_dtype(compute_dtype).is_floating):
       def f(x):
-        if (isinstance(x, ops.Tensor) and x.dtype.is_floating and
+        cast_types = (ops.Tensor, sparse_tensor.SparseTensor,
+                      ragged_tensor.RaggedTensor)
+        if (isinstance(x, cast_types) and x.dtype.is_floating and
             x.dtype.base_dtype.name != compute_dtype):
           if self._dtype_defaulted_to_floatx:
             self._warn_about_input_casting(x.dtype.base_dtype)
           return math_ops.cast(x, compute_dtype)
         else:
           return x
-      return nest.map_structure(f, inputs, expand_composites=True)
+      return nest.map_structure(f, inputs)
     else:
       return inputs
 
@@ -2451,7 +2456,7 @@ class Layer(module.Module):
   def _unique_trainable_weights(self):
     """Dedupe trainable weights while maintaining order as much as possible."""
     trainable_weights = self.trainable_weights
-    output, seen_weights = [], set()
+    output, seen_weights = [], object_identity.ObjectIdentitySet()
     for w in trainable_weights:
       if w not in seen_weights:
         output.append(w)
@@ -2501,9 +2506,12 @@ class TensorFlowOpLayer(Layer):
     super(TensorFlowOpLayer, self).__init__(
         name=_TF_OP_LAYER_NAME_PREFIX + name, trainable=trainable, dtype=dtype,
         autocast=False)
-    if not isinstance(node_def, bytes):
-      node_def = node_def.encode('utf-8')
-    self.node_def = node_def_pb2.NodeDef.FromString(node_def)
+    if isinstance(node_def, dict):
+      self.node_def = json_format.ParseDict(node_def, node_def_pb2.NodeDef())
+    else:
+      if not isinstance(node_def, bytes):
+        node_def = node_def.encode('utf-8')
+      self.node_def = node_def_pb2.NodeDef.FromString(node_def)
     # JSON serialization stringifies keys which are integer input indices.
     self.constants = ({
         int(index): constant for index, constant in constants.items()
@@ -2567,7 +2575,7 @@ class TensorFlowOpLayer(Layer):
     config.update({
         # `__init__` prefixes the name. Revert to the constructor argument.
         'name': config['name'][len(_TF_OP_LAYER_NAME_PREFIX):],
-        'node_def': self.node_def.SerializeToString().decode('utf-8'),
+        'node_def': json_format.MessageToDict(self.node_def),
         'constants': {
             i: backend.get_value(c) for i, c in self.constants.items()
         }

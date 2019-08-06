@@ -3,8 +3,7 @@
 
 load("//tensorflow/compiler/xla:xla.bzl", "xla_proto_library")
 load(
-    "//tensorflow/core:platform/default/build_config_root.bzl",
-    "if_static",
+    "//tensorflow/core/platform:default/build_config_root.bzl",
     "tf_cuda_tests_tags",
 )
 load("//tensorflow:tensorflow.bzl", "tf_cc_test", "tf_copts", "tf_cuda_library")
@@ -622,18 +621,6 @@ cc_library(
 )
 
 cc_library(
-    name = "scratch_allocator",
-    srcs = ["scratch_allocator.cc"],
-    hdrs = ["scratch_allocator.h"],
-    deps = [
-        "//tensorflow/compiler/xla:status_macros",
-        "//tensorflow/compiler/xla:util",
-        "//tensorflow/core:stream_executor_no_cuda",
-        "//tensorflow/stream_executor:device_memory_allocator",
-    ],
-)
-
-cc_library(
     name = "cudnn_conv_runner",
     srcs = ["cudnn_conv_runner.cc"],
     hdrs = ["cudnn_conv_runner.h"],
@@ -704,10 +691,8 @@ cc_library(
         "//tensorflow/core:lib",
         "//tensorflow/core:stream_executor_no_cuda",
         "//tensorflow/stream_executor:blas",
-    ] + if_static(
-        ["@local_config_cuda//cuda:cusolver"],
-        ["//tensorflow/stream_executor/cuda:cusolver_stub"],
-    ),
+        "//tensorflow/stream_executor/cuda:cusolver_lib",
+    ],
 )
 
 cc_library(
