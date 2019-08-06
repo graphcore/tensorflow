@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -528,5 +529,26 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
   return fusion;
 }
 
+SliceInfo GetSliceInfo(const Shape& shape_to_slice, const Shape& slice_shape) {
+  return GetSliceInfo(
+      {shape_to_slice.dimensions().begin(), shape_to_slice.dimensions().end()},
+      {slice_shape.dimensions().begin(), slice_shape.dimensions().end()});
+}
+
+SliceInfo GetSliceInfo(const std::vector<size_t>& shape_to_slice,
+                       const std::vector<size_t>& slice_shape) {
+  CHECK_EQ(shape_to_slice.size(), slice_shape.size());
+  SliceInfo slice_info;
+  // Get the dimensions we slice in and the slice sizes.
+  for (uint64 dim = 0; dim != slice_shape.size(); ++dim) {
+    size_t slice_size = slice_shape[dim];
+    if (slice_size != shape_to_slice[dim]) {
+      slice_info.sliced_dims.push_back(dim);
+      slice_info.slice_sizes.push_back(slice_size);
+    }
+  }
+
+  return slice_info;
+}
 }  // namespace poplarplugin
 }  // namespace xla

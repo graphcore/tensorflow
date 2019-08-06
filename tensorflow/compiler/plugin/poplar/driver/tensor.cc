@@ -416,19 +416,9 @@ static StatusOr<poplar::Tensor> ReversePathTransform(
 StatusOr<poplar::Tensor> AddDynamicSliceTensor(
     poplar::Graph& graph, const std::string& debug_name,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla) {
-  auto input_shape = PoplarShapeFromXlaShape(shape_xla);
-  // Get the dimensions we slice in and the slice sizes.
-  std::vector<size_t> sliced_dims;
-  std::vector<size_t> slice_sizes;
-  for (int i = 0; i < slice_shape_xla.dimensions_size(); i++) {
-    auto slice_dim = slice_shape_xla.dimensions(i);
-    if (slice_dim != input_shape[i]) {
-      sliced_dims.push_back(i);
-      slice_sizes.push_back(slice_dim);
-    }
-  }
+  const SliceInfo slice_info = GetSliceInfo(shape_xla, slice_shape_xla);
 
-  if (sliced_dims.size() == slice_shape_xla.rank()) {
+  if (slice_info.sliced_dims.size() == shape_xla.rank()) {
     // Use the old dynamic slice allocator when we are slicing in all
     // dimensions.
     // TODO Remove this special case once T8594 is fixed.
@@ -437,9 +427,31 @@ StatusOr<poplar::Tensor> AddDynamicSliceTensor(
                                  unused);
   } else {
     TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape_xla));
+    const auto input_shape = PoplarShapeFromXlaShape(shape_xla);
     return popops::createSliceableTensor(graph, poplar_type, input_shape,
-                                         sliced_dims, slice_sizes, 0,
-                                         debug_name);
+                                         slice_info.sliced_dims,
+                                         slice_info.slice_sizes, 0, debug_name);
+  }
+}
+
+StatusOr<poplar::Tensor> AddDynamicUpdateSliceTensor(
+    poplar::Graph& graph, const std::string& debug_name,
+    const xla::Shape& input_shape_xla, const xla::Shape& update_shape_xla) {
+  const SliceInfo slice_info = GetSliceInfo(input_shape_xla, update_shape_xla);
+
+  if (slice_info.sliced_dims.size() == update_shape_xla.rank()) {
+    // Use the old dynamic slice allocator when we are slicing in all
+    // dimensions.
+    // TODO Remove this special case once T8594 is fixed.
+    poplar::Tensor unused;
+    return AddDynamicSliceTensor(graph, debug_name, update_shape_xla,
+                                 update_shape_xla, unused);
+  } else {
+    TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(update_shape_xla));
+    const auto update_shape = PoplarShapeFromXlaShape(update_shape_xla);
+    return popops::createSliceableTensor(graph, poplar_type, update_shape,
+                                         slice_info.sliced_dims,
+                                         slice_info.slice_sizes, 0, debug_name);
   }
 }
 
@@ -901,6 +913,8 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
                                     *optional_layout_output_idx, forward_path,
                                     tensor_map));
     } else {
+      const std::string error_msg = absl::StrCat(
+          "Invalid operand for tensor allocation on ", src.first->name());
       switch (target->opcode()) {
         case HloOpcode::kBatchNormInference:
         case HloOpcode::kBatchNormTraining: {
@@ -924,9 +938,7 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
               break;
             }
             default:
-              return xla::FailedPrecondition(
-                  "invalid operand for tensor allocation on %s",
-                  src.first->name().c_str());
+              return xla::FailedPrecondition("%s", error_msg);
           }
           break;
         }
@@ -943,9 +955,7 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
               break;
             }
             default:
-              return xla::FailedPrecondition(
-                  "invalid operand for tensor allocation on %s",
-                  src.first->name().c_str());
+              return xla::FailedPrecondition("%s", error_msg);
           }
           break;
         }
@@ -962,63 +972,76 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
               break;
             }
             default:
-              return xla::FailedPrecondition(
-                  "invalid operand for tensor allocation on %s",
-                  src.first->name().c_str());
+              return xla::FailedPrecondition("%s", error_msg);
           }
           break;
         }
         case HloOpcode::kDynamicSlice: {
-          if (input_index == 0) {
-            TF_ASSIGN_OR_RETURN(out, AddDynamicSliceTensor(graph, name, tshape,
-                                                           target->shape()));
-          } else {
-            TF_ASSIGN_OR_RETURN(
-                out, AddPlainTensor(graph, name, tshape, resources, false));
+          switch (input_index) {
+            case 0: {
+              TF_ASSIGN_OR_RETURN(
+                  out,
+                  AddDynamicSliceTensor(graph, name, tshape, target->shape()));
+              break;
+            }
+            default:
+              return xla::FailedPrecondition("%s", error_msg);
           }
           break;
         }
         case HloOpcode::kDynamicUpdateSlice: {
-          if (input_index == 0) {
-            TF_ASSIGN_OR_RETURN(
-                out, AddDynamicSliceTensor(graph, name, tshape,
-                                           target->operand(1)->shape()));
-          } else {
-            TF_ASSIGN_OR_RETURN(
-                out, AddPlainTensor(graph, name, tshape, resources, false));
+          switch (input_index) {
+            case 0: {
+              TF_ASSIGN_OR_RETURN(
+                  out, AddDynamicSliceTensor(graph, name, tshape,
+                                             target->operand(1)->shape()));
+              break;
+            }
+            case 1: {
+              TF_ASSIGN_OR_RETURN(
+                  out, AddDynamicUpdateSliceTensor(
+                           graph, name, target->operand(0)->shape(), tshape));
+              break;
+            }
+            default:
+              return xla::FailedPrecondition("%s", error_msg);
           }
+
           break;
         }
         case HloOpcode::kScatter: {
           auto scatter = Cast<HloScatterInstruction>(target);
-
-          if (input_index == 0) {
-            const auto inserted_window_dims =
-                scatter->scatter_dimension_numbers().inserted_window_dims();
-            xla::Shape slice_shape = target->operand(0)->shape();
-            for (int i = 0; i < tshape.rank(); ++i) {
-              if (absl::c_binary_search(inserted_window_dims, i)) {
-                slice_shape.set_dimensions(i, 1);
+          switch (input_index) {
+            case 0: {
+              const auto inserted_window_dims =
+                  scatter->scatter_dimension_numbers().inserted_window_dims();
+              xla::Shape slice_shape = target->operand(0)->shape();
+              for (int i = 0; i < tshape.rank(); ++i) {
+                if (absl::c_binary_search(inserted_window_dims, i)) {
+                  slice_shape.set_dimensions(i, 1);
+                }
               }
-            }
 
-            TF_ASSIGN_OR_RETURN(
-                out, AddScatterTensor(graph, name, tshape, slice_shape));
-          } else if (input_index == 2) {
-            const auto update_window_dims =
-                scatter->scatter_dimension_numbers().update_window_dims();
-            xla::Shape slice_shape = target->operand(2)->shape();
-            for (int i = 0; i < tshape.rank(); ++i) {
-              if (!absl::c_binary_search(update_window_dims, i)) {
-                slice_shape.set_dimensions(i, 1);
+              TF_ASSIGN_OR_RETURN(
+                  out, AddScatterTensor(graph, name, tshape, slice_shape));
+              break;
+            }
+            case 2: {
+              const auto update_window_dims =
+                  scatter->scatter_dimension_numbers().update_window_dims();
+              xla::Shape slice_shape = target->operand(2)->shape();
+              for (int i = 0; i < tshape.rank(); ++i) {
+                if (!absl::c_binary_search(update_window_dims, i)) {
+                  slice_shape.set_dimensions(i, 1);
+                }
               }
-            }
 
-            TF_ASSIGN_OR_RETURN(
-                out, AddScatterTensor(graph, name, tshape, slice_shape));
-          } else {
-            TF_ASSIGN_OR_RETURN(
-                out, AddPlainTensor(graph, name, tshape, resources, false));
+              TF_ASSIGN_OR_RETURN(
+                  out, AddScatterTensor(graph, name, tshape, slice_shape));
+              break;
+            }
+            default:
+              return xla::FailedPrecondition("%s", error_msg);
           }
           break;
         }
@@ -1064,19 +1087,21 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
           break;
         }
         case HloOpcode::kGather: {
-          if (input_index == 0) {
-            const auto dim_numbers = target->gather_dimension_numbers();
-            const auto slice_sizes = target->gather_slice_sizes();
-            const auto start_index_map = dim_numbers.start_index_map();
+          switch (input_index) {
+            case 0: {
+              const auto dim_numbers = target->gather_dimension_numbers();
+              const auto slice_sizes = target->gather_slice_sizes();
+              const auto start_index_map = dim_numbers.start_index_map();
 
-            TF_ASSIGN_OR_RETURN(
-                out, AddGatherTensor(
-                         graph, name, tshape,
-                         {slice_sizes.begin(), slice_sizes.end()},
-                         {start_index_map.begin(), start_index_map.end()}));
-          } else {
-            TF_ASSIGN_OR_RETURN(out,
-                                AddPlainTensor(graph, name, tshape, resources));
+              TF_ASSIGN_OR_RETURN(
+                  out, AddGatherTensor(
+                           graph, name, tshape,
+                           {slice_sizes.begin(), slice_sizes.end()},
+                           {start_index_map.begin(), start_index_map.end()}));
+              break;
+            }
+            default:
+              return xla::FailedPrecondition("%s", error_msg);
           }
           break;
         }

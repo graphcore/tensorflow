@@ -172,6 +172,21 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
     absl::Span<HloInstruction* const> instructions_to_outline,
     const string& outlined_computation_name, HloComputation* computation);
 
+// Helper for storing slice dimensions.
+struct SliceInfo {
+  // Dimensions we slice in.
+  std::vector<size_t> sliced_dims;
+  // Corresponding slice sizes.
+  std::vector<size_t> slice_sizes;
+};
+
+// Given a shape and a slice, work out which dimensions are sliced.
+SliceInfo GetSliceInfo(const std::vector<size_t>& shape_to_slice,
+                       const std::vector<size_t>& slice_shape);
+
+// Same as above, but for XLA shapes.
+SliceInfo GetSliceInfo(const Shape& shape_to_slice, const Shape& slice_shape);
+
 }  // namespace poplarplugin
 }  // namespace xla
 
