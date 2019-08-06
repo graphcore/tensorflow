@@ -84,6 +84,7 @@ py_library(
         "ops/rand_ops.py",
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
+        "optimizers/map_gradient_optimizer.py",
         "scopes.py",
         "sharded_optimizer.py",
         "sharding.py",
@@ -105,6 +106,19 @@ tf_py_test(
     name = "autoshard_cnn_test",
     size = "medium",
     srcs = ["tests/autoshard_cnn_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
+    name = "map_gradient_optimizer_test",
+    size = "medium",
+    srcs = ["tests/map_gradient_optimizer_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
@@ -405,6 +419,7 @@ test_suite(
         "frontend_attributes_test",
         "infeed_outfeed_test",
         "ipu_estimator_test",
+        "map_gradient_optimizer_test",
         "pop_datastream_test",
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
