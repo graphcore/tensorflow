@@ -26,8 +26,8 @@ const char* const DEVICE_XLA_IPU = "IPU";
 const char* const DEVICE_IPU_XLA_JIT = "XLA_IPU_JIT";
 const char* const PLATFORM_NAME = "Poplar";
 
-constexpr std::array<DataType, 6> kIpuAllTypes = {
-    {DT_INT32, DT_INT64, DT_FLOAT, DT_HALF, DT_BOOL, DT_RESOURCE}};
+constexpr std::array<DataType, 5> kIpuAllTypes = {
+    {DT_INT32, DT_INT64, DT_FLOAT, DT_HALF, DT_BOOL}};
 
 }  // namespace tensorflow
 
