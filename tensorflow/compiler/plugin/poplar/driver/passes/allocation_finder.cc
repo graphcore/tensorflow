@@ -15,9 +15,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/classification_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -156,7 +156,7 @@ void AllocationFinder::AddTensorTarget(const TensorSource& source,
 
 bool AllocationFinder::CompareTargets(const TensorTarget& a,
                                       const TensorTarget& b) {
-  return IsForward(a.tgt, annotations) && !IsForward(b.tgt, annotations);
+  return IsTrainingForward(a.tgt) && !IsTrainingForward(b.tgt);
 }
 
 void AllocationFinder::FindConsumers(const TensorSource& src,

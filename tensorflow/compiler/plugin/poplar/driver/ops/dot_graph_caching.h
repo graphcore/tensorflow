@@ -19,6 +19,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_DOT_GRAPH_CACHING_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_DOT_GRAPH_CACHING_H_
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/graph_caching_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 
@@ -31,28 +32,19 @@ struct CompilerResources;
 
 namespace dot_graph_caching {
 
-// Fwd and bwd convolution caches
-
-enum class MatMulPass {
-  TRAINING_FWD,
-  TRAINING_BWD,
-  TRAINING_WU,
-  INFERENCE_FWD
-};
-
 // The dot cache key is:
 // * Shape of the rhs tensor
 // * Shape of the lhs tensor
-// * MatMulPass type
+// * MLType type
 // * sharding device ID
-using DotCacheKey = std::tuple<PoplarTensorSignature, PoplarTensorSignature,
-                               MatMulPass, uint64>;
+using DotCacheKey =
+    std::tuple<PoplarTensorSignature, PoplarTensorSignature, MLType, uint64>;
 using DotGraphCache = std::map<DotCacheKey, poputil::graphfn::TensorFunction>;
 
 poplar::Tensor DoCachedDot(poplar::Graph& graph, CompilerResources& res,
                            const poplar::Tensor& A, const poplar::Tensor& B,
-                           poplar::program::Sequence& prog,
-                           const MatMulPass pass, const uint64 device_id,
+                           poplar::program::Sequence& prog, const MLType pass,
+                           const uint64 device_id,
                            const std::string& debugPrefix = "");
 
 }  // namespace dot_graph_caching

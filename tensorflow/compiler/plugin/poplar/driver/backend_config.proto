@@ -15,8 +15,17 @@ enum FrontendAttributeId {
     CALL_CONFIG_TYPE = 1;
 };
 
+// An enum representing the "Machine Learning" type of the instruction.
+enum MLType {
+  NONE = 0;
+  INFERENCE_FWD = 1;
+  TRAINING_FWD = 2;
+  TRAINING_BWD = 3;
+  TRAINING_WU = 4;
+};
+
 // Backend specific HloInstruction config
-// NEXT ID = 6
+// NEXT ID = 7
 message PoplarBackendConfig {
 
   // Instruction config for a fusion instruction
@@ -79,4 +88,6 @@ message PoplarBackendConfig {
   }
 
   StochasticRounding stochastic_rounding = 5;
+
+  MLType ml_type = 6;
 };

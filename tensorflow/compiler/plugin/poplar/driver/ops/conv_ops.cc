@@ -8,6 +8,7 @@
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
 
@@ -327,7 +328,7 @@ StatusOr<poplar::program::Program> CreateConv2D(CompilerResources& res,
 
   kernel = AddGroupsDimensionToWeights(params, kernel, false);
 
-  const auto conv_type = GetConvClassificationType(inst, res.annotations);
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
 
   auto out = conv_graph_caching::DoCachedConvolution(
       graph, res, in, kernel, params, conv_type, false,
@@ -364,7 +365,7 @@ StatusOr<poplar::program::Program> Create2DConvWithReverse(
 
   kernel = AddGroupsDimensionToWeights(params, kernel, true);
 
-  auto conv_type = GetConvClassificationType(inst, res.annotations);
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
 
   auto out = conv_graph_caching::DoCachedConvolution(
       graph, res, in, kernel, params, conv_type, true,
@@ -407,7 +408,7 @@ StatusOr<poplar::program::Program> CreateDepthwiseBackpropFilter(
 
   kernel = AddGroupsDimensionToWeights(params, kernel, false);
 
-  auto conv_type = GetConvClassificationType(inst, res.annotations);
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
 
   poplar::Tensor out = conv_graph_caching::DoCachedConvolution(
       graph, res, in, kernel, params, conv_type, false,

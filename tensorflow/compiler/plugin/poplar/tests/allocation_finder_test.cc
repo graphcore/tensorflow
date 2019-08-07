@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -303,9 +304,9 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations1) {
   hlo_module->AddEntryComputation(std::move(computation_main));
 
   CompilerAnnotations annotations(hlo_module.get());
-  annotations.classification_map[conv1] = ConvClassificationType::FORWARD;
-  annotations.classification_map[conv2] =
-      ConvClassificationType::BACKPROP_INPUT;
+
+  TF_ASSERT_OK(SetInstructionMLType(conv1, MLType::TRAINING_FWD));
+  TF_ASSERT_OK(SetInstructionMLType(conv2, MLType::TRAINING_BWD));
 
   AllocationFinder finder(annotations);
   EXPECT_TRUE(finder.Run(hlo_module.get()).ValueOrDie());
@@ -433,9 +434,8 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations2) {
   hlo_module->AddEntryComputation(std::move(computation_main));
 
   CompilerAnnotations annotations(hlo_module.get());
-  annotations.classification_map[conv1] =
-      ConvClassificationType::BACKPROP_INPUT;
-  annotations.classification_map[conv2] = ConvClassificationType::FORWARD;
+  TF_ASSERT_OK(SetInstructionMLType(conv1, MLType::TRAINING_BWD));
+  TF_ASSERT_OK(SetInstructionMLType(conv2, MLType::TRAINING_FWD));
 
   AllocationFinder finder(annotations);
   EXPECT_TRUE(finder.Run(hlo_module.get()).ValueOrDie());

@@ -76,7 +76,7 @@ HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   pipeline.AddPass<InplaceFinder>();
   pipeline.AddPass<ShardingPass>();
   pipeline.AddPass<HloDCE>();
-  pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
+  pipeline.AddPass<ConvolutionClassifier>();
   pipeline.AddPass<AllocationFinder>(resources.annotations);
   pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
   pipeline.AddPass<HloMemoryScheduler>(

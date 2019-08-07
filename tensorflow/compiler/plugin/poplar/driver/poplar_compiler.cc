@@ -528,7 +528,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloCSE>(true);
     pipeline.AddPass<WideConstFinder>();
     pipeline.AddPass<CommutativeInstructionReorderOperands>();
-    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     {
       auto& pass =
           pipeline.AddPass<HloPassFix<HloPassPipeline>>("repeated-fusing");
@@ -548,10 +547,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
     pipeline.AddPass<HloSubcomputationUnification>();
-    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<RecomputeInstructions>(
-        poplarExecutor->InstructionRecomputationEnabled(),
-        resources.annotations);
+        poplarExecutor->InstructionRecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<DependencyReplacer>(true);
     pipeline.AddPass<HloSubcomputationUnification>();
@@ -568,7 +565,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     //   pipeline.AddPass<ConstantNaN>();
     // }
 
-    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
+    pipeline.AddPass<ConvolutionClassifier>();
     pipeline.AddPass<AllocationFinder>(resources.annotations);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
     if (resources.information.max_all_reduce_buffer_size > 0 ||

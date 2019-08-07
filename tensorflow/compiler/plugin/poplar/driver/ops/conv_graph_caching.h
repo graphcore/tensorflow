@@ -45,7 +45,7 @@ namespace conv_graph_caching {
 // * sharding device ID
 using ConvolutionCacheKey =
     std::tuple<PoplarTensorSignature, PoplarTensorSignature, poplin::ConvParams,
-               ConvClassificationType, bool, uint64>;
+               MLType, bool, uint64>;
 using ConvolutionGraphCache =
     std::map<ConvolutionCacheKey, poputil::graphfn::TensorFunction>;
 
@@ -57,7 +57,7 @@ using BwdWeightGraphCache =
 poplar::Tensor DoCachedConvolution(
     poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& in,
     const poplar::Tensor& weights, const poplin::ConvParams& params,
-    const ConvClassificationType& conv_type, bool transpose_and_flip_weights,
+    const MLType& conv_type, bool transpose_and_flip_weights,
     const uint64 device_id, poplar::program::Sequence& prog,
     const std::string& debug_prefix);
 
@@ -73,7 +73,7 @@ poplar::Tensor DoCachedConvolution(
 // * sharding device ID
 using ConvolutionScaledInplaceCacheKey =
     std::tuple<PoplarTensorSignature, PoplarTensorSignature, poplin::ConvParams,
-               ConvClassificationType, bool, double, HloOpcode, uint64>;
+               MLType, bool, double, HloOpcode, uint64>;
 using ConvolutionScaledInplaceGraphCache =
     std::map<ConvolutionScaledInplaceCacheKey, poputil::graphfn::VoidFunction>;
 

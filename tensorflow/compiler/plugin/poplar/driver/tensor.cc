@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -548,8 +549,9 @@ static StatusOr<poplar::Tensor> AddConvolutionInput(
 
   auto name = StrCat(debug_name, "_input");
   poplar::OptionFlags opts = resources.default_conv_options;
-  opts.set("pass",
-           ConvClassificationTypeToString(target, resources.annotations));
+
+  TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
+  opts.set("pass", ml_type);
 
   poplar::Tensor out = poplin::createInput(graph, params, name, opts,
                                            &resources.convolution_cache);
@@ -564,8 +566,9 @@ static StatusOr<poplar::Tensor> AddConvolutionWeights(
 
   auto name = StrCat(debug_name, "_weights");
   poplar::OptionFlags opts = resources.default_conv_options;
-  opts.set("pass",
-           ConvClassificationTypeToString(target, resources.annotations));
+
+  TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
+  opts.set("pass", ml_type);
 
   poplar::Tensor out = poplin::createWeights(graph, params, name, opts,
                                              &resources.convolution_cache);
@@ -737,8 +740,9 @@ static StatusOr<poplar::Tensor> AddLeftMatMul(poplar::Graph& graph,
   b_shape = PoplarRightMatMulShape(b_shape, target->dot_dimension_numbers());
   auto name = StrCat(debug_name, "_lhs");
   poplar::OptionFlags opts;
-  opts.set("fullyConnectedPass",
-           ConvClassificationTypeToString(target, resources.annotations));
+
+  TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
+  opts.set("fullyConnectedPass", ml_type);
 
   auto result = poplin::createMatMulGroupedInputLHS(
       graph, type, type, a_shape, b_shape, name, opts, &resources.dot_cache);
@@ -805,8 +809,9 @@ static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
   b_shape = PoplarRightMatMulShape(b_shape, target->dot_dimension_numbers());
   auto name = StrCat(debug_name, "_rhs");
   poplar::OptionFlags opts;
-  opts.set("fullyConnectedPass",
-           ConvClassificationTypeToString(target, resources.annotations));
+
+  TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
+  opts.set("fullyConnectedPass", ml_type);
 
   auto result = poplin::createMatMulGroupedInputRHS(
       graph, type, type, a_shape, b_shape, name, opts, &resources.dot_cache);

@@ -12,8 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -209,16 +208,14 @@ TEST_F(NormInputRecomputationTest, RecomputeInput) {
   ASSERT_EQ(bn2->operand(0), input2);
   ASSERT_EQ(bn_grad2->operand(0), input2);
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  ASSERT_TRUE(
-      RecomputeInstructions(true, annotations).Run(module).ValueOrDie());
+  ASSERT_TRUE(RecomputeInstructions(true).Run(module).ValueOrDie());
 
   ASSERT_EQ(bn1->operand(0), input1);
   ASSERT_NE(bn1->operand(0), bn_grad1->operand(0));
@@ -237,16 +234,14 @@ TEST_F(NormInputRecomputationTest, RecomputeInputOff) {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  ASSERT_FALSE(
-      RecomputeInstructions(false, annotations).Run(module).ValueOrDie());
+  ASSERT_FALSE(RecomputeInstructions(false).Run(module).ValueOrDie());
 }
 
 const std::string hlo_string_relu = R"(
@@ -402,8 +397,7 @@ TEST_F(NormInputRecomputationTest, RecomputeRelu) {
 
   ASSERT_EQ(relu_grad2->operand(0), relu1);
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
   CustomOpReplacer replacer{};
 
   auto replacer_res = replacer.Run(module);
@@ -416,8 +410,7 @@ TEST_F(NormInputRecomputationTest, RecomputeRelu) {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  ASSERT_TRUE(
-      RecomputeInstructions(true, annotations).Run(module).ValueOrDie());
+  ASSERT_TRUE(RecomputeInstructions(true).Run(module).ValueOrDie());
 
   ASSERT_EQ(bn1->operand(0), input1);
   ASSERT_NE(bn1->operand(0), bn_grad1->operand(0));
@@ -439,16 +432,14 @@ TEST_F(NormInputRecomputationTest, RecomputeReluOff) {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  ASSERT_FALSE(
-      RecomputeInstructions(false, annotations).Run(module).ValueOrDie());
+  ASSERT_FALSE(RecomputeInstructions(false).Run(module).ValueOrDie());
 }
 
 }  // namespace
