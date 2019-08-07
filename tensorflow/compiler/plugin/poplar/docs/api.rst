@@ -70,3 +70,8 @@ Python API
 .. automodule tensorflow.python.ipu.internal_ops.precompiled_user_op
   :members:
   :noindex:
+
+  .. automodule:: tensorflow.python.ipu.optimizers.map_gradient_optimizer
+  :members:
+  :noindex:
+  

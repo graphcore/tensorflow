@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -253,9 +254,19 @@ INITIALISE_FOR_ALL_NATIVE_VECTOR_TYPES(
 
 #undef INITIALISE_FOR_ALL_NATIVE_VECTOR_TYPES
 
-bool IsPopOpsFusion(const HloComputation* comp, const std::string& postfix) {
+namespace {
+
+bool IsFusionComputationWithPrefix(const HloComputation* comp,
+                                   const std::string& prefix) {
   return comp->IsFusionComputation() &&
-         tensorflow::str_util::StartsWith(comp->name(), "_pop_op_" + postfix);
+         tensorflow::str_util::StartsWith(comp->name(), prefix);
+}
+
+}  //  namespace
+
+bool IsPopOpsFusion(const HloComputation* comp, const std::string& postfix) {
+  return IsFusionComputationWithPrefix(comp,
+                                       absl::StrCat("_pop_op_" + postfix));
 }
 
 bool IsPopOpsFusion(const HloInstruction* inst, const std::string& postfix) {
@@ -263,15 +274,25 @@ bool IsPopOpsFusion(const HloInstruction* inst, const std::string& postfix) {
          IsPopOpsFusion(inst->fused_instructions_computation(), postfix);
 }
 
+bool IsArithmeticExpressionFusion(const HloComputation* comp) {
+  return IsFusionComputationWithPrefix(comp, "__arithmetic_expression");
+}
+
+bool IsArithmeticExpressionFusion(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kFusion &&
+         IsArithmeticExpressionFusion(inst->fused_instructions_computation());
+}
+
 namespace {
 bool CallConfigHasType(const HloInstruction* inst,
                        const PoplarBackendConfig::CallConfig::Type type) {
   if (inst->opcode() == HloOpcode::kCall) {
     auto statusor = inst->backend_config<PoplarBackendConfig>();
-    if (statusor.ok()) {
-      PoplarBackendConfig cfg = statusor.ValueOrDie();
-      return cfg.call_config().type() == type;
+    if (!statusor.ok()) {
+      LOG(FATAL) << "Could not parse the PoplarBackendConfig";
     }
+    PoplarBackendConfig cfg = statusor.ValueOrDie();
+    return cfg.call_config().type() == type;
   }
   return false;
 }
@@ -508,5 +529,26 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
   return fusion;
 }
 
+SliceInfo GetSliceInfo(const Shape& shape_to_slice, const Shape& slice_shape) {
+  return GetSliceInfo(
+      {shape_to_slice.dimensions().begin(), shape_to_slice.dimensions().end()},
+      {slice_shape.dimensions().begin(), slice_shape.dimensions().end()});
+}
+
+SliceInfo GetSliceInfo(const std::vector<size_t>& shape_to_slice,
+                       const std::vector<size_t>& slice_shape) {
+  CHECK_EQ(shape_to_slice.size(), slice_shape.size());
+  SliceInfo slice_info;
+  // Get the dimensions we slice in and the slice sizes.
+  for (uint64 dim = 0; dim != slice_shape.size(); ++dim) {
+    size_t slice_size = slice_shape[dim];
+    if (slice_size != shape_to_slice[dim]) {
+      slice_info.sliced_dims.push_back(dim);
+      slice_info.slice_sizes.push_back(slice_size);
+    }
+  }
+
+  return slice_info;
+}
 }  // namespace poplarplugin
 }  // namespace xla

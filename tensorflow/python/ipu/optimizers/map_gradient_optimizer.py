@@ -1,0 +1,91 @@
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
+from tensorflow.python.framework import ops
+from tensorflow.python.ipu.ops import cross_replica_ops
+from tensorflow.python.training import optimizer
+import tensorflow as tf
+
+
+class MapGradientOptimizer(optimizer.Optimizer):
+  """
+  This class enables modification of the computed gradients, before they are
+  passed to the final optimizer for application.
+
+  MapGradientOptimizer needs a map function that will modify the gradients,
+  and an optimizer to which the modified gradients are passed.
+
+  The map function has two arguments: gradient and variable. The map function
+  must return the modified gradient.
+
+
+  Example 
+  .. code-block:: python
+
+  #Define function which should modify computed gradients. Decay gradient function.
+
+  def map_fn_decay(grad, var):
+    return grad + (WEIGHT_DECAY * var)
+
+  #  To run the code we need session.
+  with self.cached_session():
+  # We can employ AdamWOptimizer
+    optimizer = weight_decay_optimizers.AdamWOptimizer(WEIGHT_DECAY)
+  # We define MapGradientOptimizer   
+    map_optimizer = map_gradient_optimizer.MapGradientOptimizer(
+        optimizer, map_fn_decay)
+  # Gradients are computed by compute_gradients(), where our map function
+  # modifies computed gradients. compute_gradients(loss, var_list) argument 
+  # are loss and var_list. Define some and employ map_optimizer, compute_gradients().
+    values = [1.0, 2.0, 3.0]  
+    vars_ = [variables.Variable([v], dtype=dtypes.float32) for v in values]          
+    grads_and_vars = map_optimizer.compute_gradients(
+        vars_[0] * vars_[1] + vars_[0] * vars_[2] + vars_[1] * vars_[2],
+        vars_)
+  # The output grads_and_vars contains modified computed gradients by decay map function.
+  # grads are 5.01, 4.02 and 3.03. If we did not use MapGradientOptimizer they would 
+  # be 5, 4 and 3. 
+
+  Args:
+    wrapped_optimizer: tensorflow (derived) optimizer.
+    gradient_mapping_function: is applied on grads and variables which are provided by wrapped_optimizer.compute_gradients().
+
+  Returns:
+    compute_gradients() returns a list of (gradient, variable) pairs.
+  """
+
+  def __init__(self,
+               wrapped_optimizer,
+               gradient_mapping_function,
+               name="MapGradientOptimizer"):
+
+    super(MapGradientOptimizer, self).__init__(False, name)
+    self._wrapped_optimizer = wrapped_optimizer
+    self._gradient_mapping_function = gradient_mapping_function
+
+  def compute_gradients(self, loss, var_list=None, **kwargs):
+    kwargs['colocate_gradients_with_ops'] = True
+    grads_and_vars = self._wrapped_optimizer.compute_gradients(
+        loss, var_list=var_list, **kwargs)
+    grads_and_vars = list(
+        map(
+            lambda x: (self._gradient_mapping_function(x[0], x[1].value()), x[
+                1]), grads_and_vars))
+    return grads_and_vars

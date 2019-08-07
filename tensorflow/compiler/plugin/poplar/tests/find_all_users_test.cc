@@ -558,7 +558,7 @@ ENTRY in {
   constant.4 = s32[] constant(10)
   p0 = f16[4] parameter(0)
   in = (s32[], f16[4], f16[4]) tuple(s32[] constant.4, f16[4] p0, f16[4] p0)
-  r0 = (s32[], f16[4], f16[4]) call((s32[], f16[4], f16[4]) in), to_apply=body, backend_config="{\"repeatConfig\":{\"isRepeatLoop\":true,\"repeatCount\":\"100\"}}"
+  r0 = (s32[], f16[4], f16[4]) call((s32[], f16[4], f16[4]) in), to_apply=body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
   e1 = f16[4] get-tuple-element(r0), index=1
   e2 = f16[4] get-tuple-element(r0), index=2
   s0 = f16[4] sine(e1)

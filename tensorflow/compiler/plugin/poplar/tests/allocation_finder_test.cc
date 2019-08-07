@@ -2570,7 +2570,7 @@ ENTRY top {
   constant.5 = f32[] constant(0)
   arg0.1 = f32[1,1,2,2] parameter(0)
   tuple.6.clone = (s32[], f32[], f32[1,1,2,2]) tuple(constant.7, constant.5, arg0.1)
-  call = (s32[], f32[], f32[1,1,2,2]) call(tuple.6.clone), to_apply=_body, backend_config="{\"repeatConfig\":{\"isRepeatLoop\":true,\"repeatCount\":\"100\"}}"
+  call = (s32[], f32[], f32[1,1,2,2]) call(tuple.6.clone), to_apply=_body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
   ROOT get-tuple-element.45 = f32[] get-tuple-element(call), index=1
 }
 
@@ -2656,7 +2656,7 @@ ENTRY top {
   constant.7 = s32[] constant(100)
   constant.4 = f32[] constant(0)
   tuple.5.clone = (s32[], f32[]) tuple(constant.7, constant.4)
-  call = (s32[], f32[]) call(tuple.5.clone), to_apply=_body, backend_config="{\"repeatConfig\":{\"isRepeatLoop\":true,\"repeatCount\":\"100\"}}"
+  call = (s32[], f32[]) call(tuple.5.clone), to_apply=_body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
   ROOT get-tuple-element.41 = f32[] get-tuple-element(call), index=1
 }
 

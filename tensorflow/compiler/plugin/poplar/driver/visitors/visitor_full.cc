@@ -231,7 +231,7 @@ Status FullVisitor::HandleDynamicSlice(HloInstruction* inst) {
 Status FullVisitor::HandleDynamicUpdateSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
-                      CreateDynamicSliceUpdateOp(
+                      CreateDynamicUpdateSliceOp(
                           resources_, inst, GetOutputShape(inst), tensor_map));
   sequence.add(prog);
   return Status::OK();

@@ -322,7 +322,7 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   poplar::program::Program prog;
   HloComputation* comp = inst->fused_instructions_computation();
 
-  if (StartsWith(comp->name(), "__arithmetic")) {
+  if (IsArithmeticExpressionFusion(inst)) {
     ArgVectors args = GetFusionInputs(resources_, inst, tensor_map, sequence);
     ArithmeticExprVisitor arithmetic_visitor(resources_, args);
     TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));

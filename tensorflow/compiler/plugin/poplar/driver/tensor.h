@@ -52,6 +52,10 @@ StatusOr<poplar::Tensor> AddDynamicSliceTensor(
     poplar::Graph& graph, const std::string& debug_name,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla);
 
+StatusOr<poplar::Tensor> AddDynamicUpdateSliceTensor(
+    poplar::Graph& graph, const std::string& debug_name,
+    const xla::Shape& input_shape_xla, const xla::Shape& update_shape_xla);
+
 StatusOr<poplar::Tensor> AddDynamicSliceTensor(
     poplar::Graph& graph, const std::string& debug_name,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla,
