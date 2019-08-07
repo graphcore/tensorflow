@@ -79,6 +79,19 @@ def remap(x, name=None):
   return gen_poputil_ops.ipu_remap(x, name=name)
 
 
+def remap_deduce(x, name=None):
+  """Clone the tensor and deduce the tile mapping.
+
+  Args:
+    x: The tensor to remap.
+    name: Optional op name.
+
+  Returns:
+    A `Tensor` which is has been mapped across the IPU by deducing the tile layout from the input parameter.
+  """
+  return gen_poputil_ops.ipu_remap_deduce(x, name=name)
+
+
 def fifo(x, depth, name=None):
   """Introduces a first-in-first-out queue with a fixed depth.
 

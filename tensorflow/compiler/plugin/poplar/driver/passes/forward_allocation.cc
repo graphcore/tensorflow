@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -363,9 +364,11 @@ ForwardAllocation::FindInputs(HloComputation* comp) {
   absl::flat_hash_map<HloInstruction*, DeferredAllocationsPath>
       input_to_deferred_allocation_path;
   for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+    // Check if it is either a custom call or has already been replaced.
     if (inst->opcode() == HloOpcode::kConstant ||
         inst->opcode() == HloOpcode::kInfeed ||
-        inst->opcode() == HloOpcode::kParameter) {
+        inst->opcode() == HloOpcode::kParameter ||
+        DynCast<HloRemapDeduceInstruction>(inst) != nullptr) {
       FlattenInputs(inst, {inst}, input_to_deferred_allocation_path);
     }
   }

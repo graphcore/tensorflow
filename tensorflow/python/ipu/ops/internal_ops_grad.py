@@ -29,6 +29,12 @@ def _poputil_remap_layer_backward(op, grads):
   return grads
 
 
+@ops.RegisterGradient("IpuRemapDeduce")
+def _poputil_remap_deduce_layer_backward(op, grads):
+  """Gradients for the IpuRemapDeduce op."""
+  return grads
+
+
 @ops.RegisterGradient("IpuPrintTensor")
 def _poputil_print_tensor_layer_backward(op, grads):
   """Gradients for the IpuPrintTensor op."""

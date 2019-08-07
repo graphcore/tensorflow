@@ -69,4 +69,35 @@ class PoputilRemapOp : public XlaOpKernel, IpuOpKernel {
 
 REGISTER_XLA_OP(Name("IpuRemap").Device(DEVICE_IPU_XLA_JIT), PoputilRemapOp);
 
+class PoputilRemapDeduceOp : public XlaOpKernel, IpuOpKernel {
+ public:
+  explicit PoputilRemapDeduceOp(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx), IpuOpKernel() {}
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    const DataType dtype = output_type(0);
+    xla::XlaBuilder* b = ctx->builder();
+
+    auto input = ctx->Input(0);
+    auto shape = ctx->InputShape(0);
+
+    xla::Shape xla_shape;
+    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
+
+    xla::XlaOp output =
+        xla::CustomCall(b,
+                        GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
+                                                       PoplibsOp::RemapDeduce),
+                        {input}, xla_shape, attribute_map_.Serialise());
+
+    ctx->SetOutput(0, output);
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(PoputilRemapDeduceOp);
+};
+
+REGISTER_XLA_OP(Name("IpuRemapDeduce").Device(DEVICE_IPU_XLA_JIT),
+                PoputilRemapDeduceOp);
+
 }  // namespace tensorflow

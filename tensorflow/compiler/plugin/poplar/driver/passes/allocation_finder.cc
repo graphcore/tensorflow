@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/classification_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -29,7 +30,6 @@ limitations under the License.
 #include "tensorflow/core/lib/core/status.h"
 
 #include "absl/container/flat_hash_set.h"
-
 namespace xla {
 namespace poplarplugin {
 
@@ -84,6 +84,18 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
     auto shapes = FlattenedXlaShape(infeed->infeed_shape());
     for (unsigned int i = 0; i < shapes.size(); i++) {
       allocating_instructions.push_back(std::make_pair(inst, i));
+    }
+    return Status::OK();
+  }
+
+  Status HandleCustomCall(HloInstruction* inst) override {
+    HloCustomCallInstruction* remap = DynCast<HloCustomCallInstruction>(inst);
+
+    if (remap != nullptr) {
+      auto shapes = FlattenedXlaShape(remap->shape());
+      for (unsigned int i = 0; i < shapes.size(); i++) {
+        allocating_instructions.push_back(std::make_pair(inst, i));
+      }
     }
     return Status::OK();
   }
