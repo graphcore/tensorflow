@@ -334,6 +334,11 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
 
 void PoplarExecutor::ConnectOutfeedToStreamCallback(
     const OutfeedInfos& outfeed_infos) {
+  // Don't connect any streams if using synthetic data
+  if (UseSyntheticData()) {
+    return;
+  }
+
   for (const auto& outfeed_info : outfeed_infos) {
     auto* outfeed_context =
         outfeed_contexts_.at(outfeed_info.config.feed_id()).get();
@@ -1739,6 +1744,10 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
 
 void PoplarExecutor::ConnectSeedCallback() {
   auto& gen = seed_gen;
+  // Don't connect any streams if using synthetic data
+  if (UseSyntheticData()) {
+    return;
+  }
 
   // This callbacks are executed in a single thread so it is safe to call the
   // random number generator from each callback.
