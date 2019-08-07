@@ -36,11 +36,6 @@ package(
 )
 
 cc_library(
-    name = "byte_order",
-    hdrs = ["byte_order.h"],
-)
-
-cc_library(
     name = "abi",
     srcs = ["abi.cc"],
     hdrs = ["abi.h"],
@@ -48,51 +43,28 @@ cc_library(
 )
 
 cc_library(
-    name = "macros",
-    hdrs = ["macros.h"],
-)
-
-cc_library(
-    name = "platform",
-    hdrs = ["platform.h"],
-)
-
-cc_library(
-    name = "tstring",
-    hdrs = ["tstring.h"],
-)
-
-cc_library(
-    name = "types",
-    srcs = tf_platform_hdrs(["integral_types.h"]),
-    hdrs = ["types.h"],
+    name = "annotation",
+    hdrs = ["annotation.h"],
     deps = [
-        ":platform",
-        ":tstring",
-        "//tensorflow/core/platform/default/build_config:base",
-    ],
-)
-
-cc_library(
-    name = "env_time",
-    srcs = ["env_time.cc"] + tf_env_time_srcs(),
-    hdrs = ["env_time.h"],
-    deps = [
-        ":types",
-    ],
-)
-
-cc_library(
-    name = "logging",
-    srcs = tf_platform_hdrs(["logging.h"]) + tf_platform_srcs(["logging.cc"]),
-    hdrs = ["logging.h"],
-    deps = [
-        ":env_time",
         ":macros",
-        ":platform",
-        ":types",
-        "//tensorflow/core/platform/default/build_config:base",
-    ] + tf_logging_absl_deps(),
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "byte_order",
+    hdrs = ["byte_order.h"],
+)
+
+cc_library(
+    name = "cpu_feature_guard",
+    srcs = ["cpu_feature_guard.cc"],
+    hdrs = ["cpu_feature_guard.h"],
+    deps = [
+        ":byte_order",
+        ":cpu_info",
+        ":logging",
+    ],
 )
 
 cc_library(
@@ -111,6 +83,63 @@ cc_library(
 )
 
 cc_library(
+    name = "denormal",
+    srcs = ["denormal.cc"],
+    hdrs = ["denormal.h"],
+    deps = [
+        ":byte_order",
+        ":cpu_info",
+        ":logging",
+        ":macros",
+        ":platform",
+    ],
+)
+
+cc_library(
+    name = "env_time",
+    srcs = ["env_time.cc"] + tf_env_time_srcs(),
+    hdrs = ["env_time.h"],
+    deps = [
+        ":types",
+    ],
+)
+
+cc_library(
+    name = "file_statistics",
+    hdrs = ["file_statistics.h"],
+    deps = [":types"],
+)
+
+cc_library(
+    name = "host_info",
+    hdrs = ["host_info.h"],
+    deps = [":types"],
+)
+
+cc_library(
+    name = "logging",
+    srcs = tf_platform_hdrs(["logging.h"]) + tf_platform_srcs(["logging.cc"]),
+    hdrs = ["logging.h"],
+    deps = [
+        ":env_time",
+        ":macros",
+        ":platform",
+        ":types",
+        "//tensorflow/core/platform/default/build_config:base",
+    ] + tf_logging_absl_deps(),
+)
+
+cc_library(
+    name = "macros",
+    hdrs = ["macros.h"],
+)
+
+cc_library(
+    name = "platform",
+    hdrs = ["platform.h"],
+)
+
+cc_library(
     name = "stacktrace",
     srcs = glob(["*/stacktrace.h"]),
     hdrs = ["stacktrace.h"],
@@ -118,6 +147,32 @@ cc_library(
         ":abi",
         ":platform",
         "//tensorflow/core/platform/default/build_config:stacktrace",
+    ],
+)
+
+cc_library(
+    name = "setround",
+    srcs = ["setround.cc"],
+    hdrs = ["setround.h"],
+    deps = [
+        ":logging",
+        ":macros",
+    ],
+)
+
+cc_library(
+    name = "tstring",
+    hdrs = ["tstring.h"],
+)
+
+cc_library(
+    name = "types",
+    srcs = tf_platform_hdrs(["integral_types.h"]),
+    hdrs = ["types.h"],
+    deps = [
+        ":platform",
+        ":tstring",
+        "//tensorflow/core/platform/default/build_config:base",
     ],
 )
 
