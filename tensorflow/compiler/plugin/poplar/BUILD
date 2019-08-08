@@ -1443,6 +1443,25 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "matmul_option_test",
+    size = "small",
+    srcs = ["tests/matmul_option_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:nn",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "conv_test",
     size = "large",
     srcs = ["tests/conv_test.py"],
@@ -2349,6 +2368,7 @@ test_suite(
         "lstm_test",
         "mapping_test",
         "matmul_test",
+        "matmul_option_test",
         "monitored_session_test",
         "multi_ipu_test",
         "multi_run_test",

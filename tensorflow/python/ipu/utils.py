@@ -61,6 +61,7 @@ def create_ipu_config(profiling=False,
                       report_directory="",
                       always_rearrange_copies_on_the_host=False,
                       merge_infeed_io_copies=False,
+                      clear_matmul_pass=False,
                       disable_graph_convolution_caching=False,
                       retain_control_dependencies=False,
                       max_cross_replica_sum_buffer_size=0,
@@ -93,6 +94,9 @@ def create_ipu_config(profiling=False,
       host->device input copies into one larger copy.  This may reduce the time
       to copy data from the host, at the expense of increasing the live tensor
       memory on the device.
+    clear_matmul_pass: When set, the pass-type will not be passed to the poplibs
+      matmul operation.  This can result in a smaller memory requirement for
+      these operations.
     disable_graph_convolution_caching: By default, the convolution operation
       searches for an equivalent cached operation, and uses this  instead of
       creating a new convolution. Setting this flag forces the creation of a
@@ -138,11 +142,12 @@ def create_ipu_config(profiling=False,
   opts.speed_size_config.always_rearrange_copies_on_the_host = always_rearrange_copies_on_the_host
   opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
   opts.speed_size_config.disable_graph_convolution_caching = disable_graph_convolution_caching
+  opts.speed_size_config.clear_matmul_pass = clear_matmul_pass
 
   opts.retain_control_dependencies = retain_control_dependencies
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
-  
+
   opts.max_scheduler_lookahead_depth = max_scheduler_lookahead_depth
   opts.max_scheduler_search_space_size = max_scheduler_search_space_size
 

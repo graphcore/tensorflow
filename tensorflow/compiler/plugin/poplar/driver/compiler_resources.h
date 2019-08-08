@@ -71,6 +71,8 @@ struct CompilerResources {
 
   bool merge_infeed_io_copies;
 
+  bool clear_matmul_pass;
+
   std::map<std::string, TensorMap> tensor_maps;
 
   LinearMapperState linear_mapping_state;
@@ -89,7 +91,8 @@ struct CompilerResources {
       int64 max_inter_ipu_copies_buffer_size,
       int64 max_scheduler_lookahead_depth,
       int64 max_scheduler_search_space_size, HloModule* module,
-      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour)
+      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
+      bool clear_matmul_pass)
       : annotations(module),
         information(
             max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
@@ -99,7 +102,8 @@ struct CompilerResources {
         default_pooling_options(pooling_options),
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         replication_factor(replication_factor),
-        merge_infeed_io_copies(merge_infeed_io_copies) {}
+        merge_infeed_io_copies(merge_infeed_io_copies),
+        clear_matmul_pass(clear_matmul_pass) {}
 };
 
 }  // namespace poplarplugin

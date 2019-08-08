@@ -84,6 +84,11 @@ message IpuOptions {
     // count.  This may decrease the device->host read latency at the expense of
     // having more live tensors in memory on the device.
     bool merge_infeed_io_copies = 5;
+
+    // When this is true, the Pass type is not set in the poplibs matmul options
+    // structure.  In some cases this reduces the memory requirement (for
+    // instance in resnet50 batch size > 1)
+    bool clear_matmul_pass = 6;
   }
   SpeedSizeConfig speed_size_config = 5;
 

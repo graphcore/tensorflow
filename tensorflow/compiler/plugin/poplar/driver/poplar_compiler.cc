@@ -480,7 +480,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplarExecutor->GetMaxInterIpuCopyBufferSize(),
       poplarExecutor->GetMaxSchedulerLookaheadDepth(),
       poplarExecutor->GetMaxSchedulerSearchSpaceSize(), module.get(),
-      poplarExecutor->FloatingPointBehaviour());
+      poplarExecutor->FloatingPointBehaviour(),
+      poplarExecutor->ClearMatMulPass());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";

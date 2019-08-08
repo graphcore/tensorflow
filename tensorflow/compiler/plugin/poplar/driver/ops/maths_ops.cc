@@ -698,14 +698,17 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
     poplar::Tensor& lhs = args[0];
     poplar::Tensor& rhs = args[1];
     poplar::OptionFlags opts;
-    opts.set("fullyConnectedPass", dot_type);
+    if (!res.clear_matmul_pass) {
+      opts.set("fullyConnectedPass", dot_type);
+    }
 
     if (VLOG_IS_ON(2)) {
       std::stringstream stream;
       poplin::matMulGroupedReportPlan(stream, graph, lhs.elementType(),
                                       lhs.elementType(), lhs.shape(),
                                       rhs.shape(), opts, &res.dot_cache);
-      VLOG(2) << "MatMul " << debug_prefix << ". Type " << dot_type << ". Plan "
+      VLOG(2) << "MatMul " << debug_prefix << ". Type " << dot_type
+              << (res.clear_matmul_pass ? " (cleared)" : "") << ". Plan "
               << stream.str();
     }
 
