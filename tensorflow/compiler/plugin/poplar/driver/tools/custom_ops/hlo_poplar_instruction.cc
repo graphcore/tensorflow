@@ -30,51 +30,12 @@ namespace poplarplugin {
 
 std::vector<string> HloPoplarInstruction::ExtraAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  const string& custom_call_target_l = custom_call_target();
-  const Window& window_l = window();
-  const ConvolutionDimensionNumbers& convolution_dimension_numbers_l =
-      convolution_dimension_numbers();
-  int64 feature_group_count_l = feature_group_count();
-  int64 batch_group_count_l = batch_group_count();
-  bool layout_constrained_l = layout_constrained();
-  const std::vector<Shape>& operand_shapes_with_layout_l =
-      operand_shapes_with_layout();
-  bool custom_call_has_side_effect_l = custom_call_has_side_effect();
-
-  // extras, similar to HloCustomCallInstruction::ExtraAttributesToStringImpl
   std::vector<string> extras;
-  if (window_l.dimensions_size() != 0) {
-    extras.push_back(
-        absl::StrCat("window={", window_util::ToString(window_l), "}"));
-  }
-  extras.push_back(absl::StrCat(
-      "dim_labels=",
-      ConvolutionDimensionNumbersToString(convolution_dimension_numbers_l)));
-
-  if (feature_group_count_l != 1) {
-    extras.push_back(
-        absl::StrCat("feature_group_count=", feature_group_count_l));
-  }
-  if (batch_group_count_l != 1) {
-    extras.push_back(absl::StrCat("batch_group_count=", batch_group_count_l));
-  }
-
   extras.push_back(absl::StrCat("custom_call_target=\"",
-                                absl::CEscape(custom_call_target_l), "\""));
+                                absl::CEscape(custom_call_target()), "\""));
 
-  if (layout_constrained()) {
-    std::vector<string> shape_strings;
-    for (const Shape& shape : operand_shapes_with_layout_l) {
-      shape_strings.push_back(ShapeUtil::HumanStringWithLayout(shape));
-    }
-    extras.push_back(absl::StrCat("operand_layout_constraints={",
-                                  absl::StrJoin(shape_strings, ", "), "}"));
-  }
-  if (custom_call_has_side_effect_l) {
+  if (custom_call_has_side_effect()) {
     extras.push_back("custom_call_has_side_effect=true");
-  }
-  if (layout_constrained_l) {
-    extras.push_back("layout_constrained_=true");
   }
 
   std::vector<string> attributes = ExtraPoplarAttributesToStringImpl(options);
