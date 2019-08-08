@@ -70,6 +70,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/convolution_preplanning.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
@@ -313,20 +314,27 @@ HloPrintOptions GetPrintOptions() {
   return opts;
 }
 
-poplar::program::Program InitializeSeed(poplar::Graph& graph,
-                                        int replication_factor) {
+StatusOr<poplar::program::Program> InitializeSeed(poplar::Graph& graph,
+                                                  int replication_factor) {
   const std::string seed_prefix = "__seed";
 
   auto seed =
       graph.addVariable(poplar::UNSIGNED_INT, {2}, seed_prefix + "/tensor");
   graph.setTileMapping(seed, 0);
 
-  auto data_stream = graph.addHostToDeviceFIFO(
-      GetRandomNumberSeedStream(), seed.elementType(), seed.numElements());
-
   poplar::program::Sequence seq;
-  // Copy the seed from the data stream and set it.
-  seq.add(poplar::program::Copy(data_stream, seed));
+  if (!UseSyntheticData()) {
+    // Copy the seed from the data stream and set it.
+    auto data_stream = graph.addHostToDeviceFIFO(
+        GetRandomNumberSeedStream(), seed.elementType(), seed.numElements());
+    seq.add(poplar::program::Copy(data_stream, seed));
+  } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
+    // Initialize the seed on the device.
+    auto& initializer = DataInitializer::GetSyntheticDataInitializer();
+    TF_ASSIGN_OR_RETURN(auto literal,
+                        initializer.GetData(ShapeUtil::MakeShape(U32, {2})));
+    TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, seed, literal));
+  }
   poprand::setSeed(graph, seed, 0, seq, seed_prefix + "/set");
 
   return seq;
@@ -520,7 +528,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloCSE>(true);
     pipeline.AddPass<WideConstFinder>();
     pipeline.AddPass<CommutativeInstructionReorderOperands>();
-    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     {
       auto& pass =
           pipeline.AddPass<HloPassFix<HloPassPipeline>>("repeated-fusing");
@@ -540,10 +547,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
     pipeline.AddPass<HloSubcomputationUnification>();
-    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<RecomputeInstructions>(
-        poplarExecutor->InstructionRecomputationEnabled(),
-        resources.annotations);
+        poplarExecutor->InstructionRecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<DependencyReplacer>(true);
     pipeline.AddPass<HloSubcomputationUnification>();
@@ -560,7 +565,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     //   pipeline.AddPass<ConstantNaN>();
     // }
 
-    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
+    pipeline.AddPass<ConvolutionClassifier>();
     pipeline.AddPass<AllocationFinder>(resources.annotations);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
     if (resources.information.max_all_reduce_buffer_size > 0 ||
@@ -654,7 +659,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     TF_RETURN_IF_ERROR(
         poplarExecutor->RegisterOutfeeds(resources.annotations.outfeed_infos));
     // Set up the random seed
-    auto seed_setup = InitializeSeed(main_graph, replication_factor);
+    TF_ASSIGN_OR_RETURN(auto seed_setup,
+                        InitializeSeed(main_graph, replication_factor));
     main_program.add(seed_setup);
 
     // Set up the floating point control register if required

@@ -4,7 +4,7 @@
 #include "tensorflow/compiler/plugin/poplar/driver/ops/dot_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/classification_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -180,20 +180,6 @@ StatusOr<popops::expr::BinaryOpType> LookupBinaryFn(
 
   return tensorflow::errors::Unknown(
       StrCat("[Poplar] Invalid opcode lookup ", HloOpcodeString(opcode)));
-}
-
-static dot_graph_caching::MatMulPass GetMatMulPass(
-    const HloInstruction* inst, const CompilerAnnotations& annotations) {
-  if (IsForward(inst, annotations)) {
-    return dot_graph_caching::MatMulPass::TRAINING_FWD;
-  }
-  if (IsBackpropInput(inst, annotations)) {
-    return dot_graph_caching::MatMulPass::TRAINING_BWD;
-  }
-  if (IsBackpropFilter(inst, annotations)) {
-    return dot_graph_caching::MatMulPass::TRAINING_WU;
-  }
-  return dot_graph_caching::MatMulPass::INFERENCE_FWD;
 }
 
 namespace {
@@ -688,9 +674,10 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
                       std::multiplies<std::size_t>());
   in1 = in1.reshape({rhs_b, rhs_k, rhs_n});
 
+  TF_ASSIGN_OR_RETURN(const MLType dot_type, GetMLType(inst));
   poplar::Tensor out = dot_graph_caching::DoCachedDot(
-      graph, res, in0, in1, seq, GetMatMulPass(inst, res.annotations),
-      GetSingleShardingDeviceId(inst), GetDebugName(inst));
+      graph, res, in0, in1, seq, dot_type, GetSingleShardingDeviceId(inst),
+      GetDebugName(inst));
 
   // Reshape to XLA shape
   out = out.reshape(PoplarShapeFromXlaShape(output_shape));

@@ -16,11 +16,12 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_CONVOLUTION_CLASSIFIER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_CONVOLUTION_CLASSIFIER_H_
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
-#include <string>
-#include <vector>
+#include "absl/container/flat_hash_map.h"
 
 namespace xla {
 
@@ -29,24 +30,6 @@ class HloInstruction;
 
 namespace poplarplugin {
 
-struct CompilerAnnotations;
-
-enum ConvClassificationType {
-  FORWARD,
-  BACKPROP_INPUT,
-  BACKPROP_FILTER,
-  INFERENCE,
-};
-
-ConvClassificationType GetConvClassificationType(const HloInstruction*,
-                                                 const CompilerAnnotations&);
-std::string ConvClassificationTypeToString(const ConvClassificationType&);
-std::string ConvClassificationTypeToString(const HloInstruction*,
-                                           const CompilerAnnotations&);
-
-using ConvClassification =
-    std::map<const HloInstruction*, ConvClassificationType>;
-
 /**
  * This class marks each convolution as either a forward pass, a backprop input
  * (gradient), a backprop filter (weight update), or a standalone inference only
@@ -54,16 +37,9 @@ using ConvClassification =
  */
 class ConvolutionClassifier : public HloModulePass {
  public:
-  ConvolutionClassifier(CompilerAnnotations& annotations);
-
-  ~ConvolutionClassifier() = default;
-
   absl::string_view name() const override { return "convolution-classifier"; }
 
   StatusOr<bool> Run(HloModule* module) override;
-
- private:
-  ConvClassification& classification_;
 };
 
 }  // namespace poplarplugin

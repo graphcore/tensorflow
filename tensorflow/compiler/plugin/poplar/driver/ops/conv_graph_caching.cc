@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include <poplar/Tensor.hpp>
@@ -42,10 +43,10 @@ namespace poplarplugin {
 namespace conv_graph_caching {
 namespace {
 
-poplar::OptionFlags GetConvolutionOptions(
-    CompilerResources& res, const ConvClassificationType conv_type) {
+poplar::OptionFlags GetConvolutionOptions(CompilerResources& res,
+                                          const MLType conv_type) {
   poplar::OptionFlags opts = res.default_conv_options;
-  opts.set("pass", ConvClassificationTypeToString(conv_type));
+  opts.set("pass", MLType_Name(conv_type));
   return opts;
 }
 
@@ -83,9 +84,10 @@ void CreateCachedBwdWeights(poplar::Graph& graph, CompilerResources& res,
   f(args, prog);
 }
 
-ConvolutionCacheKey GetConvolutionCacheKey(
-    const poplin::ConvParams& params, const ConvClassificationType& conv_type,
-    bool transpose_and_flip_weights, const uint64 device_id) {
+ConvolutionCacheKey GetConvolutionCacheKey(const poplin::ConvParams& params,
+                                           const MLType& conv_type,
+                                           bool transpose_and_flip_weights,
+                                           const uint64 device_id) {
   // Create signature for the convolution input
   std::vector<std::size_t> in_shape = {params.getBatchSize(),
                                        params.getNumInputChans()};
@@ -105,7 +107,7 @@ ConvolutionCacheKey GetConvolutionCacheKey(
 }
 
 ConvolutionScaledInplaceCacheKey GetConvolutionScaledInplaceCacheKey(
-    const poplin::ConvParams& params, const ConvClassificationType& conv_type,
+    const poplin::ConvParams& params, const MLType& conv_type,
     const bool learning_rate_is_constant, const double learning_rate,
     const HloOpcode op_type, const uint64 device_id) {
   // Create signature for the convolution input
@@ -141,20 +143,20 @@ BiasApplyCacheKey GetBiasApplyCacheKey(
 poplar::Tensor DoCachedConvolution(
     poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& in,
     const poplar::Tensor& input_weights, const poplin::ConvParams& params,
-    const ConvClassificationType& input_conv_type,
-    bool input_transpose_and_flip_weights, const uint64 device_id,
-    poplar::program::Sequence& prog, const std::string& debug_prefix) {
+    const MLType& input_conv_type, bool input_transpose_and_flip_weights,
+    const uint64 device_id, poplar::program::Sequence& prog,
+    const std::string& debug_prefix) {
   // If this is a pass bwd convolution, turn it into a
   // weightsTransposeChansFlipXY and a fwd pass convolution - this allows us to
   // reuse the graph for the convolution and save code space.
-  ConvClassificationType conv_type = input_conv_type;
+  MLType conv_type = input_conv_type;
   poplar::Tensor weights = input_weights;
   bool transpose_and_flip_weights = input_transpose_and_flip_weights;
   // If this is a backprop input convolution perform the
   // weightsTransposeChansFlipXY on weights.
-  if (conv_type == ConvClassificationType::BACKPROP_INPUT &&
+  if (conv_type == MLType::TRAINING_BWD &&
       !res.disable_graph_convolution_caching && transpose_and_flip_weights) {
-    conv_type = ConvClassificationType::FORWARD;
+    conv_type = MLType::TRAINING_FWD;
     transpose_and_flip_weights = false;
     auto fwd_opts = GetConvolutionOptions(res, conv_type);
     auto bwd_weights = poplin::createWeights(graph, params, "bwd_weights",
@@ -179,8 +181,7 @@ poplar::Tensor DoCachedConvolution(
     std::stringstream stream;
     poplin::reportPlanInfo(stream, graph, params, opts, &res.convolution_cache);
     VLOG(2) << "Convolution " << debug_prefix << ". Type "
-            << ConvClassificationTypeToString(conv_type) << ". Plan "
-            << stream.str();
+            << MLType_Name(conv_type) << ". Plan " << stream.str();
   }
 
   using namespace poputil::graphfn;
@@ -210,7 +211,7 @@ Status DoCachedConvolutionScaledInplace(
   }
 
   std::vector<poplar::Tensor> args = {in, deltas, w};
-  auto conv_type = GetConvClassificationType(inst, res.annotations);
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
   auto opts = GetConvolutionOptions(res, conv_type);
 
   // Handle both constant and variant (Tensor) scale.

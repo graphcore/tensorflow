@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -303,9 +304,9 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations1) {
   hlo_module->AddEntryComputation(std::move(computation_main));
 
   CompilerAnnotations annotations(hlo_module.get());
-  annotations.classification_map[conv1] = ConvClassificationType::FORWARD;
-  annotations.classification_map[conv2] =
-      ConvClassificationType::BACKPROP_INPUT;
+
+  TF_ASSERT_OK(SetInstructionMLType(conv1, MLType::TRAINING_FWD));
+  TF_ASSERT_OK(SetInstructionMLType(conv2, MLType::TRAINING_BWD));
 
   AllocationFinder finder(annotations);
   EXPECT_TRUE(finder.Run(hlo_module.get()).ValueOrDie());
@@ -433,9 +434,8 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations2) {
   hlo_module->AddEntryComputation(std::move(computation_main));
 
   CompilerAnnotations annotations(hlo_module.get());
-  annotations.classification_map[conv1] =
-      ConvClassificationType::BACKPROP_INPUT;
-  annotations.classification_map[conv2] = ConvClassificationType::FORWARD;
+  TF_ASSERT_OK(SetInstructionMLType(conv1, MLType::TRAINING_BWD));
+  TF_ASSERT_OK(SetInstructionMLType(conv2, MLType::TRAINING_FWD));
 
   AllocationFinder finder(annotations);
   EXPECT_TRUE(finder.Run(hlo_module.get()).ValueOrDie());
@@ -3454,6 +3454,61 @@ ENTRY cast4 {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], f_cast);
   EXPECT_EQ(t.forward_path[0], d_conv_cast);
+}
+
+TEST_F(AllocationFinderTest, AllocationsWithIpuRemapDeduce) {
+  std::string hlo = R"(
+HloModule top
+ENTRY cast4 {
+  %a = f16[1,16,16,2] parameter(0)
+  %b = f32[3,3,2,4] parameter(1)
+  %c_cast = f16[3,3,2,4] convert(%b)
+  %remap_deduce = f16[3,3,2,4] custom-call(c_cast), custom_call_target="Poputil::RemapDeduce"
+  %d_conv = f16[1,16,16,4] convolution(%a, %remap_deduce), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
+  %d_conv_cast = f32[1,16,16,4] convert(%d_conv)
+  %e = f16[1,16,16,4] parameter(2)
+  %f_cast = f32[1,16,16,4] convert(%e)
+  %g_add = f32[1,16,16,4] add(%d_conv_cast, %f_cast)
+  ROOT %t = (f32[1,16,16,4]) tuple(%g_add)
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(3);
+  config.set_resource_input_count(3);
+  config.set_input_mapping({0, 1, 2});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module0);
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* g_add = root->operand(0);
+  const auto* d_conv_cast = g_add->operand(0);
+  const auto* f_cast = g_add->operand(1);
+  const auto* e = f_cast->operand(0);
+
+  const auto* d_conv = d_conv_cast->operand(0);
+  const auto* a = d_conv->operand(0);
+  const auto* remap_deduce = d_conv->operand(1);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  ForwardAllocation fwd_finder(annotations);
+  EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
+
+  auto allocation_map = annotations.tensor_allocation_map;
+  EXPECT_EQ(allocation_map.size(), 3);
+  EXPECT_TRUE(allocation_map.count(std::make_pair(remap_deduce, 0)) == 1);
+  EXPECT_TRUE(allocation_map.count(std::make_pair(a, 0)) == 1);
+  EXPECT_TRUE(allocation_map.count(std::make_pair(e, 0)) == 1);
 }
 
 // // TODO:

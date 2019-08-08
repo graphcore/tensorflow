@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 
@@ -185,27 +185,29 @@ _cluster_1  {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  EXPECT_EQ(annotations.classification_map.size(), 5);
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 5);
 
-  for (auto it : annotations.classification_map) {
+  for (auto it : all_classifications) {
     if (it.first->name() == "call.2.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_INPUT);
+      EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "convolution.19.17.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "convolution.19.14.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "convolution.19.66.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else if (it.first->name() == "convolution.19.86.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
       // Should not have missing convolutions
       EXPECT_EQ(1, 0);
@@ -389,27 +391,29 @@ ENTRY in {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  EXPECT_EQ(annotations.classification_map.size(), 5);
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 5);
 
-  for (auto it : annotations.classification_map) {
+  for (auto it : all_classifications) {
     if (it.first->name() == "call.2.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_INPUT);
+      EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "convolution.19.17.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "convolution.19.14.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "convolution.19.66.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else if (it.first->name() == "convolution.19.86.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
       // Should not have missing convolutions
       EXPECT_EQ(1, 0);
@@ -594,27 +598,29 @@ ENTRY in {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  EXPECT_EQ(annotations.classification_map.size(), 5);
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 5);
 
-  for (auto it : annotations.classification_map) {
+  for (auto it : all_classifications) {
     if (it.first->name() == "call.2.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_INPUT);
+      EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "convolution.19.17.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "convolution.19.14.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "convolution.19.66.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else if (it.first->name() == "convolution.19.86.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
       // Should not have missing convolutions
       EXPECT_EQ(1, 0);
@@ -709,21 +715,23 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  EXPECT_EQ(annotations.classification_map.size(), 2);
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 2);
 
-  for (auto it : annotations.classification_map) {
+  for (auto it : all_classifications) {
     if (it.first->name() == "convolution.7.51.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else if (it.first->name() == "convolution.7.13.clone") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else {
       // Should not have missing convolutions
       EXPECT_EQ(1, 0);
@@ -817,27 +825,29 @@ ENTRY cluster_1 {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  EXPECT_EQ(annotations.classification_map.size(), 5);
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 5);
 
-  for (auto it : annotations.classification_map) {
+  for (auto it : all_classifications) {
     if (it.first->name() == "dot.9.9") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "dot.9.13") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "dot.9.36") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else if (it.first->name() == "dot.9.38") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_INPUT);
+      EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "dot.9.47") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
       // Should not have missing matmuls
       EXPECT_EQ(1, 0);
@@ -948,27 +958,29 @@ ENTRY in {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  EXPECT_EQ(annotations.classification_map.size(), 5);
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 5);
 
-  for (auto it : annotations.classification_map) {
+  for (auto it : all_classifications) {
     if (it.first->name() == "dot.9.9") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "dot.9.13") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "dot.9.36") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else if (it.first->name() == "dot.9.38") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_INPUT);
+      EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "dot.9.47") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
       // Should not have missing matmuls
       EXPECT_EQ(1, 0);
@@ -1080,27 +1092,29 @@ ENTRY in {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  EXPECT_EQ(annotations.classification_map.size(), 5);
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 5);
 
-  for (auto it : annotations.classification_map) {
+  for (auto it : all_classifications) {
     if (it.first->name() == "dot.9.9") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "dot.9.13") {
-      EXPECT_EQ(it.second, ConvClassificationType::FORWARD);
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD);
     } else if (it.first->name() == "dot.9.36") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else if (it.first->name() == "dot.9.38") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_INPUT);
+      EXPECT_EQ(it.second, MLType::TRAINING_BWD);
     } else if (it.first->name() == "dot.9.47") {
-      EXPECT_EQ(it.second, ConvClassificationType::BACKPROP_FILTER);
+      EXPECT_EQ(it.second, MLType::TRAINING_WU);
     } else {
       // Should not have missing matmuls
       EXPECT_EQ(1, 0);
@@ -1155,21 +1169,23 @@ ENTRY cluster_9 {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-  ConvolutionClassifier classifier(annotations);
+  ConvolutionClassifier classifier;
 
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  EXPECT_EQ(annotations.classification_map.size(), 2);
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 2);
 
-  for (auto it : annotations.classification_map) {
+  for (auto it : all_classifications) {
     if (it.first->name() == "dot.17.12") {
-      EXPECT_EQ(it.second, ConvClassificationType::INFERENCE);
+      EXPECT_EQ(it.second, MLType::INFERENCE_FWD);
     } else if (it.first->name() == "dot.17.6") {
-      EXPECT_EQ(it.second, ConvClassificationType::INFERENCE);
+      EXPECT_EQ(it.second, MLType::INFERENCE_FWD);
     } else {
       // Should not have missing matmuls
       EXPECT_EQ(1, 0);

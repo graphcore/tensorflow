@@ -15,7 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/classification_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_module.h"
@@ -26,42 +27,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-ConvClassificationType GetConvClassificationType(
-    const HloInstruction* inst, const CompilerAnnotations& annotations) {
-  if (IsForward(inst, annotations)) {
-    return ConvClassificationType::FORWARD;
-  }
-  if (IsBackpropInput(inst, annotations)) {
-    return ConvClassificationType::BACKPROP_INPUT;
-  }
-  if (IsBackpropFilter(inst, annotations)) {
-    return ConvClassificationType::BACKPROP_FILTER;
-  }
-  return ConvClassificationType::INFERENCE;
-}
-
-std::string ConvClassificationTypeToString(const ConvClassificationType& x) {
-  switch (x) {
-    case ConvClassificationType::FORWARD:
-      return "TRAINING_FWD";
-    case ConvClassificationType::BACKPROP_INPUT:
-      return "TRAINING_BWD";
-    case ConvClassificationType::BACKPROP_FILTER:
-      return "TRAINING_WU";
-    case ConvClassificationType::INFERENCE:
-      return "INFERENCE_FWD";
-    default:
-      return "NONE";
-  }
-}
-
-std::string ConvClassificationTypeToString(
-    const HloInstruction* inst, const CompilerAnnotations& annotations) {
-  return ConvClassificationTypeToString(
-      GetConvClassificationType(inst, annotations));
-}
-
-using ArgMap = std::multimap<const HloInstruction*, const HloInstruction*>;
+using ArgMap = std::multimap<HloInstruction*, HloInstruction*>;
 
 /*
  * 1) find groups of convolutions which share the same inputs
@@ -75,12 +41,13 @@ using ArgMap = std::multimap<const HloInstruction*, const HloInstruction*>;
  */
 
 namespace {
+using ConvClassification = absl::flat_hash_map<HloInstruction*, MLType>;
 
 // Find the actual source of an input. Entry/Exit from tuples and kFusion
 // instructions are traced though.
-const HloInstruction* FindOperand(
-    const HloInstruction* inst, const std::unique_ptr<CallGraph>& call_graph) {
-  const HloInstruction* source = inst;
+HloInstruction* FindOperand(HloInstruction* inst,
+                            const std::unique_ptr<CallGraph>& call_graph) {
+  HloInstruction* source = inst;
   std::vector<int64> tuple_stack;
   bool done = false;
   while (!done) {
@@ -89,22 +56,22 @@ const HloInstruction* FindOperand(
       const auto& sites = call_graph->GetNode(comp).caller_callsites();
       if (sites.size() > 0) {
         int64 param_num = source->parameter_number();
-        source = sites[0].instruction()->operand(param_num);
+        source = sites[0].instruction()->mutable_operand(param_num);
       } else {
         done = true;
       }
     } else if (source->opcode() == HloOpcode::kGetTupleElement) {
       // push tuple element index onto stack
       tuple_stack.push_back(source->tuple_index());
-      source = source->operand(0);
+      source = source->mutable_operand(0);
     } else if (source->opcode() == HloOpcode::kTuple) {
       // pull tuple element index off stack and move to that operand
       int64 op_num = tuple_stack.back();
       tuple_stack.pop_back();
-      source = source->operand(op_num);
+      source = source->mutable_operand(op_num);
     } else if (source->opcode() == HloOpcode::kTranspose) {
       // We allow ourselves to look through transpose ops
-      source = source->operand(0);
+      source = source->mutable_operand(0);
     } else {
       done = true;
     }
@@ -115,39 +82,36 @@ const HloInstruction* FindOperand(
 }  // namespace
 
 StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
-  classification_.clear();
+  ConvClassification classifications;
 
-  std::map<const HloInstruction*, std::pair<int, int>> operands;
+  std::map<HloInstruction*, std::pair<int, int>> operands;
 
   const int64 num_res = GetResourceVariableParameterCount(module);
-  std::set<const HloInstruction*> variable_inputs(
+  std::set<HloInstruction*> variable_inputs(
       module->entry_computation()->parameter_instructions().end() - num_res,
       module->entry_computation()->parameter_instructions().end());
 
-  for (const auto& comp : module->computations()) {
+  for (HloComputation* comp : module->computations()) {
     if (!IsPopOpsFusion(comp)) {
-      for (const auto* inst : comp->instructions()) {
+      for (HloInstruction* inst : comp->instructions()) {
         switch (inst->opcode()) {
           case HloOpcode::kConvolution: {
-            classification_[inst] = ConvClassificationType::INFERENCE;
+            classifications[inst] = MLType::INFERENCE_FWD;
             operands[inst] = std::make_pair(0, 1);
             break;
           }
           case HloOpcode::kDot: {
-            classification_[inst] = ConvClassificationType::INFERENCE;
+            classifications[inst] = MLType::INFERENCE_FWD;
             operands[inst] = std::make_pair(0, 1);
             break;
           }
           case HloOpcode::kFusion: {
             std::string name = inst->fused_instructions_computation()->name();
-            if (IsPopOpsFusion(inst, "depthwise_conv") ||
-                IsPopOpsFusion(inst, "conv_with_reverse") ||
-                IsPopOpsFusion(inst, "depthwise_filter")) {
-              classification_[inst] = ConvClassificationType::INFERENCE;
+            if (IsPopOpsConvolution(inst)) {
+              classifications[inst] = MLType::INFERENCE_FWD;
               operands[inst] = std::make_pair(0, 1);
-            }
-            if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
-              classification_[inst] = ConvClassificationType::INFERENCE;
+            } else if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
+              classifications[inst] = MLType::INFERENCE_FWD;
               operands[inst] = std::make_pair(1, 2);
             }
             break;
@@ -165,22 +129,24 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
   ArgMap arg1_fwd_map;
   ArgMap arg1_rev_map;
 
-  for (auto it : classification_) {
-    const auto& args = operands.at(it.first);
-    const auto* arg0 = FindOperand(it.first->operand(args.first), call_graph);
+  for (auto it : classifications) {
+    auto& args = operands.at(it.first);
+    HloInstruction* arg0 =
+        FindOperand(it.first->mutable_operand(args.first), call_graph);
     arg0_fwd_map.insert(std::make_pair(arg0, it.first));
-    const auto* arg1 = FindOperand(it.first->operand(args.second), call_graph);
+    HloInstruction* arg1 =
+        FindOperand(it.first->mutable_operand(args.second), call_graph);
     arg1_fwd_map.insert(std::make_pair(arg1, it.first));
     arg1_rev_map.insert(std::make_pair(it.first, arg1));
   }
 
-  std::set<const HloInstruction*> arg0_set;
+  std::set<HloInstruction*> arg0_set;
   for (auto it : arg0_fwd_map) {
     arg0_set.insert(it.first);
   }
 
-  std::set<const HloInstruction*> fwd;
-  std::set<const HloInstruction*> wu;
+  std::set<HloInstruction*> fwd;
+  std::set<HloInstruction*> wu;
 
   for (auto it : arg0_set) {
     if (arg0_fwd_map.count(it) > 1) {
@@ -198,40 +164,39 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
       }
 
       if (fwd.size() > 0 && wu.size() > 0) {
-        for (const auto* i : fwd) {
-          classification_[i] = ConvClassificationType::FORWARD;
+        for (HloInstruction* i : fwd) {
+          classifications[i] = MLType::TRAINING_FWD;
         }
-        for (const auto* i : wu) {
-          classification_[i] = ConvClassificationType::BACKPROP_FILTER;
+        for (HloInstruction* i : wu) {
+          classifications[i] = MLType::TRAINING_WU;
         }
       }
     }
   }
 
-  for (auto& it : classification_) {
-    if (it.second == ConvClassificationType::INFERENCE) {
+  for (auto& it : classifications) {
+    if (it.second == MLType::INFERENCE_FWD) {
       auto weight = arg1_rev_map.find(it.first);
       auto targets = arg1_fwd_map.equal_range(weight->second);
       for (auto t = targets.first; t != targets.second; ++t) {
-        if (classification_[t->second] == ConvClassificationType::FORWARD) {
-          it.second = ConvClassificationType::BACKPROP_INPUT;
+        if (classifications[t->second] == MLType::TRAINING_FWD) {
+          it.second = MLType::TRAINING_BWD;
         }
       }
     }
   }
+  for (auto& it : classifications) {
+    TF_RETURN_IF_ERROR(SetInstructionMLType(it.first, it.second));
+  }
 
   if (VLOG_IS_ON(2)) {
-    for (const auto& it : classification_) {
-      VLOG(2) << it.first->name() << " : "
-              << ConvClassificationTypeToString(it.second);
+    for (const auto& it : classifications) {
+      VLOG(2) << it.first->name() << " : " << MLType_Name(it.second);
     }
   }
 
   return true;
 }
-
-ConvolutionClassifier::ConvolutionClassifier(CompilerAnnotations& annotations)
-    : classification_(annotations.classification_map) {}
 
 }  // namespace poplarplugin
 }  // namespace xla

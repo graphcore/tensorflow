@@ -39,15 +39,15 @@ namespace poplarplugin {
 namespace dot_graph_caching {
 
 namespace {
-std::string GetMatMulPassName(MatMulPass pass) {
+std::string GetMLTypeName(MLType pass) {
   switch (pass) {
-    case MatMulPass::TRAINING_FWD:
+    case MLType::TRAINING_FWD:
       return "TRAINING_FWD";
-    case MatMulPass::TRAINING_BWD:
+    case MLType::TRAINING_BWD:
       return "TRAINING_BWD";
-    case MatMulPass::TRAINING_WU:
+    case MLType::TRAINING_WU:
       return "TRAINING_WU";
-    case MatMulPass::INFERENCE_FWD:
+    case MLType::INFERENCE_FWD:
       return "INFERENCE_FWD";
   }
 }
@@ -55,8 +55,8 @@ std::string GetMatMulPassName(MatMulPass pass) {
 
 poplar::Tensor DoCachedDot(poplar::Graph& graph, CompilerResources& res,
                            const poplar::Tensor& lhs, const poplar::Tensor& rhs,
-                           poplar::program::Sequence& prog,
-                           const MatMulPass pass, const uint64 device_id,
+                           poplar::program::Sequence& prog, const MLType pass,
+                           const uint64 device_id,
                            const std::string& debugPrefix) {
   const auto lhs_sig = graph_caching_util::GetPoplarTensorSignature(lhs);
   const auto rhs_sig = graph_caching_util::GetPoplarTensorSignature(rhs);
@@ -73,15 +73,15 @@ poplar::Tensor DoCachedDot(poplar::Graph& graph, CompilerResources& res,
                      std::vector<poplar::Tensor>& args,
                      poplar::program::Sequence& p) {
       poplar::OptionFlags opts;
-      opts.set("fullyConnectedPass", GetMatMulPassName(pass));
+      opts.set("fullyConnectedPass", GetMLTypeName(pass));
 
       if (VLOG_IS_ON(2)) {
         std::stringstream stream;
         poplin::matMulGroupedReportPlan(stream, graph, args[0].elementType(),
                                         args[0].elementType(), args[0].shape(),
                                         args[1].shape(), opts, &res.dot_cache);
-        VLOG(2) << "MatMul " << debugPrefix << ". Type "
-                << GetMatMulPassName(pass) << ". Plan " << stream.str();
+        VLOG(2) << "MatMul " << debugPrefix << ". Type " << GetMLTypeName(pass)
+                << ". Plan " << stream.str();
       }
 
       return poplin::matMulGrouped(graph, args[0], args[1], p,

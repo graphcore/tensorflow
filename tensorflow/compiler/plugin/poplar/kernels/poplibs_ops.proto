@@ -45,6 +45,7 @@ message PoplibsOp {
     Fifo = 33;
     TopK = 34;
     UserOp = 35;
+    RemapDeduce = 36;
   }
   required Op op = 2;
 }

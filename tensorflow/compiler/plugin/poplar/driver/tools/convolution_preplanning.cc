@@ -16,6 +16,7 @@ limitations under the License.
 #include <poplar/Target.hpp>
 #include "tensorflow/compiler/plugin/poplar/driver/ops/conv_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 namespace xla {
@@ -59,8 +60,7 @@ Status ConvolutionPreplanning::StorePreplanConv(const HloInstruction* inst,
   TF_ASSIGN_OR_RETURN(
       poplin::ConvParams conv_params,
       GetConvolutionParameters(inst, input_index, kernel_index));
-  auto conv_type = ConvClassificationTypeToString(
-      GetConvClassificationType(inst, resources.annotations));
+  TF_ASSIGN_OR_RETURN(const std::string conv_type, GetMLTypeAsString(inst));
 
   poplar::OptionFlags option_flags = resources.default_conv_options;
   option_flags.set("pass", conv_type);

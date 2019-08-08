@@ -20,7 +20,6 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -57,8 +56,6 @@ struct CompilerAnnotations {
   TensorAllocationMap tensor_allocation_map;
 
   DeferredAllocations deferred_allocations;
-
-  ConvClassification classification_map;
 
   InfeedInfos infeed_infos;
 

@@ -16,9 +16,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/relu.h"
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/classification_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -86,21 +86,9 @@ static HloInstruction* LookThroughTupleOperands(HloInstruction* inst,
   return nullptr;
 }
 
-// Helper wrapper so we can keep the API of the "Is" check functions taking a
-// single instruction as input while still providing access to the annotation
-// structure.
-struct CheckWrapper {
-  static const CompilerAnnotations* annotations;
-
-  static void InitAnnotations(const CompilerAnnotations* a) { annotations = a; }
-
-  static bool IsBackwardsConv(HloInstruction* inst) {
-    return poplarplugin::IsBackpropInput(inst, *annotations) ||
-           poplarplugin::IsBackpropFilter(inst, *annotations);
-  }
-};
-
-const CompilerAnnotations* CheckWrapper::annotations = nullptr;
+bool IsBackwardsConv(HloInstruction* inst) {
+  return IsTrainingBackward(inst) || IsTrainingWU(inst);
+}
 
 struct Replacer {
   virtual Status Replace() = 0;
@@ -407,8 +395,7 @@ struct ConvNormNLMatcher : public Matcher {
     FindInContainer(replacer->forward_non_linearity_tuple.first->users(),
                     std::ref(replacer->backward_non_linearity),
                     IsNonLinearityGradient,
-                    std::ref(replacer->backwards_convolution),
-                    CheckWrapper::IsBackwardsConv);
+                    std::ref(replacer->backwards_convolution), IsBackwardsConv);
 
     if (!replacer->backward_non_linearity || !replacer->backwards_convolution) {
       return nullptr;
@@ -472,11 +459,8 @@ struct ConvNormMatcher : public Matcher {
 
 }  // namespace
 
-RecomputeInstructions::RecomputeInstructions(bool allow_recompute,
-                                             CompilerAnnotations& annotations)
-    : allow_recompute_(allow_recompute), annotations_(annotations) {
-  CheckWrapper::InitAnnotations(&annotations_);
-}
+RecomputeInstructions::RecomputeInstructions(bool allow_recompute)
+    : allow_recompute_(allow_recompute) {}
 
 StatusOr<bool> RecomputeInstructions::Run(HloModule* module) {
   if (!allow_recompute_) {

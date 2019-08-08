@@ -137,7 +137,6 @@ cc_library(
         "driver/passes/while_loop_condition_simplify.cc",
         "driver/passes/while_loop_to_repeat_simplify.cc",
         "driver/passes/wide_const_finder.cc",
-        "driver/tools/classification_predicates.cc",
 
         # DO NOT build any files which create a HloPoplarInstructionFactory before this point
         # See https://phabricator.sourcevertex.net/T8409 for further information.
@@ -159,6 +158,7 @@ cc_library(
         "driver/tools/custom_ops/print_tensor.cc",
         "driver/tools/custom_ops/relu.cc",
         "driver/tools/custom_ops/remap.cc",
+        "driver/tools/custom_ops/remap_deduce.cc",
         "driver/tools/custom_ops/replication_factor.cc",
         "driver/tools/custom_ops/sigmoid.cc",
         "driver/tools/custom_ops/sparse.cc",
@@ -175,6 +175,7 @@ cc_library(
         "driver/tools/input_output_aliasing_map.cc",
         "driver/tools/instruction_colocator_helper.cc",
         "driver/tools/matcher_predicates.cc",
+        "driver/tools/ml_type_helper.cc",
         "driver/tools/single_hlo_matcher.cc",
         "driver/tools/util.cc",
         "driver/tools/while_loop_util.cc",
@@ -220,7 +221,6 @@ cc_library(
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
-        "driver/tools/classification_predicates.h",
         "driver/tools/custom_ops/arg_min_max.h",
         "driver/tools/custom_ops/dropout_hlo.h",
         "driver/tools/custom_ops/fifo.h",
@@ -233,6 +233,7 @@ cc_library(
         "driver/tools/custom_ops/print_tensor.h",
         "driver/tools/custom_ops/relu.h",
         "driver/tools/custom_ops/remap.h",
+        "driver/tools/custom_ops/remap_deduce.h",
         "driver/tools/custom_ops/replication_factor.h",
         "driver/tools/custom_ops/sigmoid.h",
         "driver/tools/custom_ops/sparse.h",
@@ -251,6 +252,7 @@ cc_library(
         "driver/tools/instruction_colocator_helper.h",
         "driver/tools/matcher_predicates.h",
         "driver/tools/meta_graph.h",
+        "driver/tools/ml_type_helper.h",
         "driver/tools/single_hlo_matcher.h",
         "driver/tools/util.h",
         "driver/tools/while_loop_util.h",
@@ -312,6 +314,7 @@ cc_library(
         "driver/ops/custom_ops/poputil/ipu_inter_copy.cc",
         "driver/ops/custom_ops/poputil/print_tensor.cc",
         "driver/ops/custom_ops/poputil/remap.cc",
+        "driver/ops/custom_ops/poputil/remap_deduce.cc",
         "driver/ops/custom_ops/poputil/replication_factor.cc",
         "driver/ops/custom_ops/poputil/stateful_gradient_accumulate.cc",
         "driver/ops/custom_ops/poputil/user_op.cc",
@@ -566,6 +569,7 @@ cc_library(
         "ops/poputil/fifo.cc",
         "ops/poputil/print_tensor.cc",
         "ops/poputil/remap.cc",
+        "ops/poputil/remap_deduce.cc",
         "ops/poputil/replication_factor.cc",
         "ops/poputil/stateful_gradient_accumulate.cc",
         "ops/poputil/user_operation.cc"

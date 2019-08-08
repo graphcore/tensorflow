@@ -16,7 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RECOMPUTE_INSTRUCTIONS_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RECOMPUTE_INSTRUCTIONS_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -43,10 +42,7 @@ namespace poplarplugin {
 // backprop instructions, leaving the Non-linearity in the forward pass.
 class RecomputeInstructions : public HloModulePass {
  public:
-  RecomputeInstructions(bool recompute_norm_inputs,
-                        CompilerAnnotations& annotations);
-
-  ~RecomputeInstructions() override = default;
+  RecomputeInstructions(bool allow_recompute);
 
   absl::string_view name() const override {
     return "non-linearity-recomputation";
@@ -56,7 +52,6 @@ class RecomputeInstructions : public HloModulePass {
 
  private:
   bool allow_recompute_;
-  CompilerAnnotations& annotations_;
 };
 
 }  // namespace poplarplugin

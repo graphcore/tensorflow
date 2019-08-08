@@ -108,12 +108,12 @@ struct CompilerResources {
         information(
             max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
             max_scheduler_lookahead_depth, max_scheduler_search_space_size),
+        global_floating_point_behaviour(floating_point_behaviour),
         default_conv_options(conv_options),
         default_pooling_options(pooling_options),
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         replication_factor(replication_factor),
-        merge_infeed_io_copies(merge_infeed_io_copies),
-        global_floating_point_behaviour(floating_point_behaviour) {}
+        merge_infeed_io_copies(merge_infeed_io_copies) {}
 };
 
 }  // namespace poplarplugin
