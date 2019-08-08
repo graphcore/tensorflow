@@ -20,9 +20,11 @@ from __future__ import print_function
 
 import os
 import numpy as np
+import test_utils as tu
 
 # pylint: disable=unused-import
 from tensorflow.compiler.tests import xla_test
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
@@ -161,6 +163,7 @@ class LSTMTest(xla_test.XLATestCase):
     self.assertAllClose(popnn_out, ref_out)
 
   def testLSTMLayerInference(self):
+    tu.configure_ipu_system(True, True, True)
     np.random.seed(0)
     # Run with all-0 weights
     weight0 = 1.
@@ -271,6 +274,7 @@ class LSTMTest(xla_test.XLATestCase):
     self.assertAllClose(popnn_losses, ref_losses)
 
   def testLSTMLayerTraining(self):
+    tu.configure_ipu_system(True, True, True)
     np.random.seed(42)
 
     # Run with random weights
@@ -285,6 +289,140 @@ class LSTMTest(xla_test.XLATestCase):
               h_value=h_init,
               c_value=c_init,
               training_steps=3)
+
+  def testLSTMCached(self):
+    with self.session() as sess:
+      pinputs1 = array_ops.placeholder(
+          dataType, [seq_len, batch_size, input_size], name="inputs1")
+      pinputs2 = array_ops.placeholder(
+          dataType, [seq_len, batch_size, input_size], name="inputs2")
+      plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
+
+      with ops.device("/device:IPU:0"):
+
+        def lstm_layer(inputs, name):
+          initial_h_state = _get_variable(
+              "initial_h_state",
+              shape=[batch_size, num_channels],
+              initializer=init_ops.constant_initializer(0.1, dataType))
+          initial_c_state = _get_variable(
+              "initial_c_state",
+              shape=[batch_size, num_channels],
+              initializer=init_ops.constant_initializer(0.2, dataType))
+          return self._LSTMLayer(
+              inputs=inputs,
+              weights_value=1.,
+              initial_state=(initial_h_state, initial_c_state),
+              forget_bias=0.,
+              training=True,
+              name=name)
+
+        with variable_scope.variable_scope("lstm_layer1", use_resource=True):
+          logits1 = lstm_layer(pinputs1, "layer1")
+        with variable_scope.variable_scope("lstm_layer2", use_resource=True):
+          logits2 = lstm_layer(pinputs2, "layer2")
+
+        logits = (math_ops.reduce_mean(logits1, axis=0) + math_ops.reduce_mean(
+            logits2, axis=0))
+        softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
+            logits=logits, labels=array_ops.stop_gradient(plabels))
+        loss = math_ops.reduce_mean(softmax)
+        train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+
+      tu.configure_ipu_system(True, True, True)
+
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(report)
+      sess.run(
+          [loss, train], {
+              pinputs1: _createLSTMInput(0.5, batch_size, seq_len, input_size),
+              pinputs2: _createLSTMInput(1.5, batch_size, seq_len, input_size),
+              plabels: np.ones(shape=[batch_size], dtype=np.int32),
+          })
+
+      result = sess.run(report)
+
+      s = tu.extract_all_strings_from_event_trace(result)
+      cs_list = tu.get_compute_sets_from_report(s)
+      # Check there is one fwd LSTM
+      self.assertEqual(
+          tu.count_compute_sets_matching(cs_list, '*/OutputGate/Op/Multiply'),
+          1)
+      # Check there is one bwd LSTM
+      self.assertEqual(
+          tu.count_compute_sets_matching(cs_list, '*/MulOGate/Op/Multiply'), 1)
+
+  def testLSTMNotCached(self):
+    with self.session() as sess:
+      # Note here the second LSTM is larger.
+      pinputs1 = array_ops.placeholder(
+          dataType, [seq_len, batch_size, input_size], name="inputs1")
+      pinputs2 = array_ops.placeholder(
+          dataType, [seq_len * 2, batch_size, input_size], name="inputs2")
+      plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
+
+      with ops.device("/device:IPU:0"):
+
+        def lstm_layer(inputs, name):
+          initial_h_state = _get_variable(
+              "initial_h_state",
+              shape=[batch_size, num_channels],
+              initializer=init_ops.constant_initializer(0.1, dataType))
+          initial_c_state = _get_variable(
+              "initial_c_state",
+              shape=[batch_size, num_channels],
+              initializer=init_ops.constant_initializer(0.2, dataType))
+          return self._LSTMLayer(
+              inputs=inputs,
+              weights_value=1.,
+              initial_state=(initial_h_state, initial_c_state),
+              forget_bias=0.,
+              training=True,
+              name=name)
+
+        with variable_scope.variable_scope("lstm_layer1", use_resource=True):
+          logits1 = lstm_layer(pinputs1, "layer1")
+        with variable_scope.variable_scope("lstm_layer2", use_resource=True):
+          logits2 = lstm_layer(pinputs2, "layer2")
+
+        logits = (math_ops.reduce_mean(logits1, axis=0) + math_ops.reduce_mean(
+            logits2, axis=0))
+        softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
+            logits=logits, labels=array_ops.stop_gradient(plabels))
+        loss = math_ops.reduce_mean(softmax)
+        train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+
+      tu.configure_ipu_system(True, True, True)
+
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(report)
+      sess.run(
+          [loss, train], {
+              pinputs1: _createLSTMInput(0.5, batch_size, seq_len, input_size),
+              pinputs2: _createLSTMInput(1.5, batch_size, seq_len * 2,
+                                         input_size),
+              plabels: np.ones(shape=[batch_size], dtype=np.int32),
+          })
+
+      result = sess.run(report)
+
+      s = tu.extract_all_strings_from_event_trace(result)
+      cs_list = tu.get_compute_sets_from_report(s)
+      # Check there are two fwd LSTMs.
+      self.assertEqual(
+          tu.count_compute_sets_matching(cs_list, '*/OutputGate/Op/Multiply'),
+          2)
+      # Check there are two bwd LSTMs.
+      self.assertEqual(
+          tu.count_compute_sets_matching(cs_list, '*/MulOGate/Op/Multiply'), 2)
 
 
 if __name__ == "__main__":
