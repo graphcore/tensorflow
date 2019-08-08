@@ -441,8 +441,8 @@ def get_small_mlp(num_hidden, num_classes, input_dim):
 class _SubclassModel(keras.Model):
   """A Keras subclass model."""
 
-  def __init__(self, layers):
-    super(_SubclassModel, self).__init__()
+  def __init__(self, layers, *args, **kwargs):
+    super(_SubclassModel, self).__init__(*args, **kwargs)
     # Note that clone and build doesn't support lists of layers in subclassed
     # models. Adding each layer directly here.
     for i, layer in enumerate(layers):
@@ -464,8 +464,8 @@ class _SubclassModel(keras.Model):
 class _SubclassModelCustomBuild(keras.Model):
   """A Keras subclass model that uses a custom build method."""
 
-  def __init__(self, layer_generating_func):
-    super(_SubclassModelCustomBuild, self).__init__()
+  def __init__(self, layer_generating_func, *args, **kwargs):
+    super(_SubclassModelCustomBuild, self).__init__(*args, **kwargs)
     self.all_layers = None
     self._layer_generating_func = layer_generating_func
 
@@ -482,21 +482,43 @@ class _SubclassModelCustomBuild(keras.Model):
     return x
 
 
-def get_model_from_layers(layers, input_shape=None, input_dtype=None):
-  """Builds a model from a sequence of layers."""
+def get_model_from_layers(layers,
+                          input_shape=None,
+                          input_dtype=None,
+                          name=None,
+                          input_ragged=None,
+                          input_sparse=None):
+  """Builds a model from a sequence of layers.
+
+  Args:
+    layers: The layers used to build the network.
+    input_shape: Shape tuple of the input or 'TensorShape' instance.
+    input_dtype: Datatype of the input.
+    name: Name for the model.
+    input_ragged: Boolean, whether the input data is a ragged tensor.
+    input_sparse: Boolean, whether the input data is a sparse tensor.
+
+  Returns:
+    A Keras model.
+  """
+
   model_type = get_model_type()
   if model_type == 'subclass':
-    return _SubclassModel(layers)
+    return _SubclassModel(layers, name=name)
 
   if model_type == 'subclass_custom_build':
     layer_generating_func = lambda: layers
-    return _SubclassModelCustomBuild(layer_generating_func)
+    return _SubclassModelCustomBuild(layer_generating_func, name=name)
 
   if model_type == 'sequential':
-    model = keras.models.Sequential()
+    model = keras.models.Sequential(name=name)
     if input_shape:
-      model.add(keras.layers.InputLayer(input_shape=input_shape,
-                                        dtype=input_dtype))
+      model.add(
+          keras.layers.InputLayer(
+              input_shape=input_shape,
+              dtype=input_dtype,
+              ragged=input_ragged,
+              sparse=input_sparse))
     for layer in layers:
       model.add(layer)
     return model
@@ -505,11 +527,15 @@ def get_model_from_layers(layers, input_shape=None, input_dtype=None):
     if not input_shape:
       raise ValueError('Cannot create a functional model from layers with no '
                        'input shape.')
-    inputs = keras.Input(shape=input_shape, dtype=input_dtype)
+    inputs = keras.Input(
+        shape=input_shape,
+        dtype=input_dtype,
+        ragged=input_ragged,
+        sparse=input_sparse)
     outputs = inputs
     for layer in layers:
       outputs = layer(outputs)
-    return keras.Model(inputs, outputs)
+    return keras.Model(inputs, outputs, name=name)
 
   raise ValueError('Unknown model type {}'.format(model_type))
 

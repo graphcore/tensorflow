@@ -167,6 +167,16 @@ config_setting(
     },
 )
 
+config_setting(
+    name = "raspberry_pi_with_neon",
+    define_values = {
+        "raspberry_pi_with_neon": "true",
+    },
+    values = {
+        "cpu": "armeabi",
+    },
+)
+
 cc_library(
     name = "common",
     srcs = [],
@@ -347,6 +357,7 @@ cc_library(
     name = "reference_base",
     srcs = [],
     hdrs = [
+        "reference/add.h",
         "reference/arg_min_max.h",
         "reference/binary_function.h",
         "reference/comparisons.h",
@@ -371,9 +382,11 @@ cc_library(
         "reference/maximum_minimum.h",
         "reference/pooling.h",
         "reference/prelu.h",
+        "reference/process_broadcast_shapes.h",
         "reference/reference_ops.h",
         "reference/softmax.h",
         "reference/strided_slice.h",
+        "reference/svdf.h",
     ],
     deps = [
         ":common",
@@ -382,6 +395,7 @@ cc_library(
         ":round",
         ":strided_slice_logic",
         ":tensor",
+        ":tensor_utils",
         ":types",
         "@gemmlowp//:fixedpoint",
         "@gemmlowp//:profiler",
@@ -405,6 +419,7 @@ cc_library(
     name = "legacy_reference_base",
     srcs = [],
     hdrs = [
+        "reference/add.h",
         "reference/arg_min_max.h",
         "reference/binary_function.h",
         "reference/comparisons.h",
@@ -417,6 +432,7 @@ cc_library(
         "reference/maximum_minimum.h",
         "reference/pooling.h",
         "reference/prelu.h",
+        "reference/process_broadcast_shapes.h",
         "reference/reference_ops.h",
         "reference/softmax.h",
         "reference/strided_slice.h",
@@ -611,6 +627,9 @@ cc_library(
             ":neon_tensor_utils",
         ],
         ":ios_arm64": [
+            ":neon_tensor_utils",
+        ],
+        ":raspberry_pi_with_neon": [
             ":neon_tensor_utils",
         ],
         ":ios_x86_64": [

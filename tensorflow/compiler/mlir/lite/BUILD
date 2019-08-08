@@ -162,11 +162,12 @@ cc_library(
         "utils/attribute_utils.cc",
     ],
     hdrs = [
+        "ir/quantization_traits.h",
         "ir/tfl_ops.h",
         "ir/tfl_traits.h",
+        "quantization/quantization_utils.h",
         "transforms/passes.h",
         "utils/attribute_utils.h",
-        "utils/quantization_utils.h",
     ],
     deps = [
         ":tensorflow_lite_ops_inc_gen",
@@ -188,11 +189,11 @@ cc_library(
 cc_library(
     name = "tensorflow_lite_quantization_utils",
     srcs = [
-        "utils/quantization_driver.cc",
-        "utils/quantization_utils.cc",
+        "quantization/quantization_driver.cc",
+        "quantization/quantization_utils.cc",
     ],
     hdrs = [
-        "utils/quantization_utils.h",
+        "quantization/quantization_utils.h",
     ],
     deps = [
         ":tensorflow_lite",
@@ -252,6 +253,7 @@ cc_library(
         "@local_config_mlir//:Analysis",
         "@local_config_mlir//:IR",
         "@local_config_mlir//:Pass",
+        "@local_config_mlir//:StandardOps",
         "@local_config_mlir//:Support",
     ],
     alwayslink = 1,

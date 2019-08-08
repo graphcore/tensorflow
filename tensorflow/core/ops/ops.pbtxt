@@ -13311,7 +13311,7 @@ op {
     type: DT_VARIANT
   }
   input_arg {
-    name: "num_workers"
+    name: "num_replicas"
     type: DT_INT64
   }
   output_arg {
@@ -25569,6 +25569,13 @@ op {
       i: 0
     }
   }
+  attr {
+    name: "legacy_autotune"
+    type: "bool"
+    default_value {
+      b: true
+    }
+  }
 }
 op {
   name: "Prelinearize"
@@ -31257,7 +31264,7 @@ op {
     type: DT_VARIANT
   }
   input_arg {
-    name: "num_workers"
+    name: "num_replicas"
     type: DT_INT64
   }
   output_arg {

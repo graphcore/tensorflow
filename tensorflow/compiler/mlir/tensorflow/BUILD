@@ -112,6 +112,7 @@ cc_library(
         "ir/control_flow_ops.h",
         "ir/tf_executor.h",
         "ir/tf_ops.h",
+        "ir/tf_traits.h",
         "ir/tf_types.def",
         "ir/tf_types.h",
         "transforms/passes.h",
@@ -153,11 +154,11 @@ cc_library(
     name = "convert_graphdef",
     srcs = [
         "translate/export_graphdef.cc",
-        "translate/import_graphdef.cc",
+        "translate/import_model.cc",
     ],
     hdrs = [
         "translate/export_graphdef.h",
-        "translate/import_graphdef.h",
+        "translate/import_model.h",
     ],
     deps = [
         ":convert_tensor",
@@ -174,6 +175,7 @@ cc_library(
         "//tensorflow/core:graph",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_proto_cc",
+        "//tensorflow/core/platform:types",
         "//tensorflow/stream_executor/lib",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",

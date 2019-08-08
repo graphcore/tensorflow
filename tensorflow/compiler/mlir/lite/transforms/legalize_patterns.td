@@ -29,7 +29,6 @@ class ExtractI32At<int i> : NativeCodeCall<
     "$_builder.getI32IntegerAttr($_self.cast<ArrayAttr>().getValue()[" # i #
     "].cast<IntegerAttr>().getInt())">;
 
-
 // Merge the two Attributes to a ArrayAttr;
 def Merge2AttrsToArray : NativeCodeCall<"$_builder.getArrayAttr({$0, $1})">;
 
@@ -254,6 +253,8 @@ def : Pat<(TF_ReverseV2Op $arg0, $arg1), (TFL_ReverseV2Op $arg0, $arg1)>;
 def : Pat<(TF_EqualOp $arg0, $arg1), (TFL_EqualOp $arg0, $arg1)>;
 
 def : Pat<(TF_PadOp $arg0, $arg1), (TFL_PadOp $arg0, $arg1)>;
+
+def : Pat<(TF_TileOp $arg0, $arg1), (TFL_TileOp $arg0, $arg1)>;
 
 def : Pat<(TF_PadV2Op $arg0, $arg1, $cst), (TFL_PadV2Op $arg0, $arg1, $cst)>;
 
