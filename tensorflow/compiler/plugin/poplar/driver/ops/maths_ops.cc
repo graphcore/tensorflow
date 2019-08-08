@@ -1,9 +1,23 @@
+/* Copyright 2018-2019 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 #include <algorithm>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/dot_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
@@ -674,14 +688,40 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
                       std::multiplies<std::size_t>());
   in1 = in1.reshape({rhs_b, rhs_k, rhs_n});
 
-  TF_ASSIGN_OR_RETURN(const MLType dot_type, GetMLType(inst));
-  poplar::Tensor out = dot_graph_caching::DoCachedDot(
-      graph, res, in0, in1, seq, dot_type, GetSingleShardingDeviceId(inst),
-      GetDebugName(inst));
+  // Created a cached dot.
+  using namespace poputil::graphfn;
+  TF_ASSIGN_OR_RETURN(const std::string dot_type, GetMLTypeAsString(inst));
+  const std::string debug_prefix = GetDebugName(inst);
+  auto func = [&graph, &res, dot_type, debug_prefix](
+                  std::vector<poplar::Tensor>& args,
+                  poplar::program::Sequence& prog) {
+    poplar::Tensor& lhs = args[0];
+    poplar::Tensor& rhs = args[1];
+    poplar::OptionFlags opts;
+    opts.set("fullyConnectedPass", dot_type);
+
+    if (VLOG_IS_ON(2)) {
+      std::stringstream stream;
+      poplin::matMulGroupedReportPlan(stream, graph, lhs.elementType(),
+                                      lhs.elementType(), lhs.shape(),
+                                      rhs.shape(), opts, &res.dot_cache);
+      VLOG(2) << "MatMul " << debug_prefix << ". Type " << dot_type << ". Plan "
+              << stream.str();
+    }
+
+    args[2] = poplin::matMulGrouped(graph, lhs, rhs, prog, lhs.elementType(),
+                                    debug_prefix, opts, &res.dot_cache);
+  };
+
+  poplar::Tensor output;
+  std::vector<poplar::Tensor> args = {in0, in1, output};
+  Signature sig = {input(in0, "lhs"), input(in1, "rhs"), created("output")};
+  TF_RETURN_IF_ERROR(
+      res.graph_cache.ExecuteCached(inst, graph, seq, func, sig, args));
 
   // Reshape to XLA shape
-  out = out.reshape(PoplarShapeFromXlaShape(output_shape));
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+  output = args[2].reshape(PoplarShapeFromXlaShape(output_shape));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
   return seq;
 }

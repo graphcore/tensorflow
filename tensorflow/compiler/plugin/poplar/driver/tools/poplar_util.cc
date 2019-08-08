@@ -1,14 +1,28 @@
-#include "include/json/json.h"
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
-#include "absl/container/inlined_vector.h"
-#include "absl/strings/str_cat.h"
-#include "absl/types/optional.h"
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+
+#include "include/json/json.h"
+
+#include "absl/container/inlined_vector.h"
+#include "absl/strings/str_cat.h"
+#include "absl/types/optional.h"
 
 #include <algorithm>
 #include <fstream>
@@ -218,6 +232,13 @@ void DumpIfPoplarOutOfMemoryAllocationException(
       }
     }
   }
+}
+
+poplar::OptionFlags GetConvolutionOptionsForType(CompilerResources& res,
+                                                 const MLType conv_type) {
+  poplar::OptionFlags opts = res.default_conv_options;
+  opts.set("pass", MLType_Name(conv_type));
+  return opts;
 }
 
 }  // namespace poplarplugin

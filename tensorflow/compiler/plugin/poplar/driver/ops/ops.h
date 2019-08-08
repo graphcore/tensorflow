@@ -275,10 +275,9 @@ StatusOr<poplar::program::Program> CreateDepthwiseBackpropFilter(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> ConvBiasApply(CompilerResources& res,
-                                                 const HloInstruction* inst,
-                                                 const xla::Shape& output_shape,
-                                                 TensorMap& tensor_map);
+StatusOr<poplar::program::Program> CreateBiasApply(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateWideConstant(
     CompilerResources& res, const HloInstruction* inst,

@@ -23,9 +23,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/conv_graph_caching.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/dot_graph_caching.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/norm_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
 
@@ -80,20 +79,7 @@ struct CompilerResources {
 
   conv_graph_caching::BwdWeightGraphCache bwd_weight_graph_cache;
 
-  conv_graph_caching::ConvolutionScaledInplaceGraphCache
-      conv_scaled_inplace_graph_cache;
-
-  conv_graph_caching::BiasApplyGraphCache bias_apply_graph_cache;
-
-  norm_graph_caching::NormInferenceGraphCache norm_inf_graph_cache;
-
-  norm_graph_caching::NormTrainingGraphCache norm_tr_graph_cache;
-
-  norm_graph_caching::NormGradGraphCache norm_grad_graph_cache;
-
-  norm_graph_caching::NormStatisticsGraphCache norm_statistics_graph_cache;
-
-  dot_graph_caching::DotGraphCache dot_graph_cache;
+  generic_graph_caching::GenericGraphCache graph_cache;
 
   CompilerResources(
       const poplar::OptionFlags& conv_options,

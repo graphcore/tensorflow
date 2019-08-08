@@ -10,12 +10,14 @@ import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
@@ -304,6 +306,134 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'vs/conv*/Conv2D/convolution*/Conv_1x1',
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+
+  def testConvolutionApply(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        filter_sizes = constant_op.constant([2, 2, 3, 5], np.int32)
+        input1 = array_ops.placeholder(np.float32, [2, 8, 8, 3])
+        input2 = array_ops.placeholder(np.float32, [2, 8, 8, 3])
+        input3 = array_ops.placeholder(np.float32, [2, 8, 8, 3])
+        grads1 = array_ops.placeholder(np.float32, [2, 8, 8, 5])
+        grads2 = array_ops.placeholder(np.float32, [2, 8, 8, 5])
+        grads3 = array_ops.placeholder(np.float32, [2, 8, 8, 5])
+        weights1 = array_ops.placeholder(np.float32, [2, 2, 3, 5])
+        weights2 = array_ops.placeholder(np.float32, [2, 2, 3, 5])
+        weights3 = array_ops.placeholder(np.float32, [2, 2, 3, 5])
+        vlr = array_ops.placeholder(np.float32, [])
+
+        def conv_scaled_inplace(input, grads, weights, lr):
+          return weights - lr * nn_ops.conv2d_backprop_filter(
+              input, filter_sizes, grads, strides=[1, 1, 1, 1], padding="SAME")
+
+        result = (conv_scaled_inplace(input1, grads1, weights1, vlr) +
+                  conv_scaled_inplace(input2, grads2, weights2, 0.1) +
+                  conv_scaled_inplace(input3, grads3, weights3, 0.2))
+
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
+
+      tu.configure_ipu_system(True, True, True)
+
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(report)
+
+      r = sess.run(
+          result, {
+              input1: np.ones([2, 8, 8, 3]),
+              input2: np.ones([2, 8, 8, 3]),
+              input3: np.ones([2, 8, 8, 3]),
+              grads1: np.ones([2, 8, 8, 5]),
+              grads2: np.ones([2, 8, 8, 5]),
+              grads3: np.ones([2, 8, 8, 5]),
+              weights1: np.ones([2, 2, 3, 5]),
+              weights2: np.ones([2, 2, 3, 5]),
+              weights3: np.ones([2, 2, 3, 5]),
+              vlr: 0.1,
+          })
+      # yapf: disable
+      self.assertAllClose(r, [[[[-48.2, -48.2, -48.2, -48.2, -48.2],
+                                [-48.2, -48.2, -48.2, -48.2, -48.2],
+                                [-48.2, -48.2, -48.2, -48.2, -48.2],],
+                               [[-41.8, -41.8, -41.8, -41.8, -41.8],
+                                [-41.8, -41.8, -41.8, -41.8, -41.8],
+                                [-41.8, -41.8, -41.8, -41.8, -41.8],],],
+                              [[[-41.8, -41.8, -41.8, -41.8, -41.8],
+                                [-41.8, -41.8, -41.8, -41.8, -41.8],
+                                [-41.8, -41.8, -41.8, -41.8, -41.8],],
+                               [[-36.2, -36.2, -36.2, -36.2, -36.2],
+                                [-36.2, -36.2, -36.2, -36.2, -36.2],
+                                [-36.2, -36.2, -36.2, -36.2, -36.2],]]])
+      # yapf: enable
+      result = sess.run(report)
+
+      s = tu.extract_all_strings_from_event_trace(result)
+      cs_list = tu.get_compute_sets_from_report(s)
+      self.assertEqual(tu.count_compute_sets_matching(cs_list, '*Convolve'), 1)
+
+  def testConvolutionApplyNotInplace(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        filter_sizes = constant_op.constant([2, 2, 3, 5], np.int32)
+        input1 = array_ops.placeholder(np.float32, [2, 8, 8, 3])
+        input2 = array_ops.placeholder(np.float32, [2, 8, 8, 3])
+        input3 = array_ops.placeholder(np.float32, [2, 8, 8, 3])
+        grads1 = array_ops.placeholder(np.float32, [2, 8, 8, 5])
+        grads2 = array_ops.placeholder(np.float32, [2, 8, 8, 5])
+        grads3 = array_ops.placeholder(np.float32, [2, 8, 8, 5])
+        weights = array_ops.placeholder(np.float32, [2, 2, 3, 5])
+        vlr = array_ops.placeholder(np.float32, [])
+
+        def conv_scaled_inplace(input, grads, lr):
+          return weights - nn_ops.conv2d_backprop_filter(
+              input, filter_sizes, grads, strides=[1, 1, 1, 1],
+              padding="SAME") * lr
+
+        result = (conv_scaled_inplace(
+            input1, grads1, vlr) + conv_scaled_inplace(input2, grads2, 0.1) +
+                  conv_scaled_inplace(input3, grads3, 0.2))
+
+        with ops.device('cpu'):
+          report = gen_ipu_ops.ipu_event_trace()
+
+      tu.configure_ipu_system(True, True, True)
+
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(report)
+
+      r = sess.run(
+          result, {
+              input1: np.ones([2, 8, 8, 3]),
+              input2: np.ones([2, 8, 8, 3]),
+              input3: np.ones([2, 8, 8, 3]),
+              grads1: np.ones([2, 8, 8, 5]),
+              grads2: np.ones([2, 8, 8, 5]),
+              grads3: np.ones([2, 8, 8, 5]),
+              weights: np.ones([2, 2, 3, 5]),
+              vlr: 0.1,
+          })
+      # yapf: disable
+      self.assertAllClose(r, [[[[-48.2, -48.2, -48.2, -48.2, -48.2],
+                                [-48.2, -48.2, -48.2, -48.2, -48.2],
+                                [-48.2, -48.2, -48.2, -48.2, -48.2],],
+                               [[-41.8, -41.8, -41.8, -41.8, -41.8],
+                                [-41.8, -41.8, -41.8, -41.8, -41.8],
+                                [-41.8, -41.8, -41.8, -41.8, -41.8],],],
+                              [[[-41.8, -41.8, -41.8, -41.8, -41.8],
+                                [-41.8, -41.8, -41.8, -41.8, -41.8],
+                                [-41.8, -41.8, -41.8, -41.8, -41.8],],
+                               [[-36.2, -36.2, -36.2, -36.2, -36.2],
+                                [-36.2, -36.2, -36.2, -36.2, -36.2],
+                                [-36.2, -36.2, -36.2, -36.2, -36.2],]]])
+      # yapf: enable
+
+      result = sess.run(report)
+
+      s = tu.extract_all_strings_from_event_trace(result)
+      cs_list = tu.get_compute_sets_from_report(s)
+      self.assertEqual(tu.count_compute_sets_matching(cs_list, '*Convolve'), 2)
 
 
 if __name__ == "__main__":
