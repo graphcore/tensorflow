@@ -17,6 +17,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
 
+#include "absl/strings/str_cat.h"
+
 namespace xla {
 namespace poplarplugin {
 
@@ -56,6 +58,32 @@ bool HloUserOpInstruction::IsPopOpsElementwise() const {
   } else {
     return false;
   }
+}
+
+std::vector<string> HloUserOpInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::stringstream ss;
+  ss << function_ptr_;
+  std::string function_ptr_address = ss.str();
+  ss.clear();
+
+  ss << elementwise_ptr_;
+  std::string elementwise_ptr_address = ss.str();
+  ss.clear();
+
+  ss << allocate_input_ptr_;
+  std::string allocate_input_ptr_address = ss.str();
+
+  std::vector<string> attributes;
+  attributes.push_back(absl::StrCat("function_ptr=", function_ptr_address));
+  attributes.push_back(
+      absl::StrCat("elementwise_ptr_=", elementwise_ptr_address));
+  attributes.push_back(
+      absl::StrCat("allocate_input_ptr_=", allocate_input_ptr_address));
+  attributes.push_back(absl::StrCat("num_inputs_=", num_inputs_));
+  attributes.push_back(absl::StrCat("gp_path=", gp_path));
+
+  return attributes;
 }
 
 std::unique_ptr<HloInstruction> HloUserOpInstruction::CloneWithNewOperandsImpl(

@@ -48,6 +48,12 @@ std::unique_ptr<HloInstruction> HloSigmoidInstruction::CloneWithNewOperandsImpl(
   return absl::make_unique<HloSigmoidInstruction>(new_operands[0]);
 }
 
+std::vector<std::string>
+HloSigmoidInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 std::unique_ptr<HloInstruction> CreateSigmoid(HloInstruction* operand) {
   return absl::make_unique<HloSigmoidInstruction>(operand);
 }
@@ -91,6 +97,12 @@ HloSigmoidGradInstruction::CloneWithNewOperandsImpl(
 std::unique_ptr<HloInstruction> CreateSigmoidGrad(HloInstruction* out,
                                                   HloInstruction* grad) {
   return absl::make_unique<HloSigmoidGradInstruction>(out, grad);
+}
+
+std::vector<std::string>
+HloSigmoidGradInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
 }
 
 namespace {

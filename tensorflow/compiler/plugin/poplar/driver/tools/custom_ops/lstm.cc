@@ -36,7 +36,7 @@ xla::PrimitiveType HloLSTMInstruction::partials_type() const {
   return partials_type_;
 }
 
-std::vector<std::string> HloLSTMInstruction::ExtraAttributesToStringImpl(
+std::vector<std::string> HloLSTMInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
   attributes.push_back("is_training=" + std::to_string(is_training_));

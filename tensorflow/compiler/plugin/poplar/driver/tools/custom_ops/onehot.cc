@@ -63,6 +63,16 @@ std::unique_ptr<HloInstruction> HloOneHotInstruction::CloneWithNewOperandsImpl(
                       shape);
 }
 
+std::vector<std::string>
+HloOneHotInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes;
+  attributes.push_back(absl::StrCat("depth=", depth_));
+  attributes.push_back(absl::StrCat("axis=", axis_));
+
+  return attributes;
+}
+
 namespace {
 
 static HloPoplarInstructionFactory onehot_factory(

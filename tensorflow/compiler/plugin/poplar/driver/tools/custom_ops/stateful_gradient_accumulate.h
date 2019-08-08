@@ -36,6 +36,10 @@ class HloStatefulGradientAccumulate : public HloPoplarInstruction {
   // The number of mini batches which will be accumulated.
   int32 MiniBatchesToAccumulate() const { return num_mini_batches_; }
 
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,

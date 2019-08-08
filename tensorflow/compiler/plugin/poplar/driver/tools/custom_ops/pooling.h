@@ -35,11 +35,12 @@ class HloPoolingInstruction : public HloPoplarInstruction {
   uint64 NumberOfInplaceOperands() const override;
   bool IsPopOpsElementwise() const override;
 
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
   xla::Window window_;
-
-  std::vector<std::string> ExtraAttributesToStringImpl(
-      const HloPrintOptions& options) const override;
 };
 
 class HloMaxPoolInstruction : public HloPoolingInstruction {

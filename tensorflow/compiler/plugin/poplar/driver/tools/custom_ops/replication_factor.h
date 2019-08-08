@@ -31,6 +31,10 @@ class HloReplicationFactorInstruction : public HloPoplarInstruction {
 
   bool IsPopOpsElementwise() const;
 
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
@@ -50,6 +54,10 @@ class HloReplicationNormaliseInstruction : public HloPoplarInstruction {
   uint64 NumberOfInplaceOperands() const override;
 
   bool IsPopOpsElementwise() const;
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(

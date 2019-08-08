@@ -53,6 +53,12 @@ HloReplicationFactorInstruction::CloneWithNewOperandsImpl(
   return absl::make_unique<HloReplicationFactorInstruction>();
 }
 
+std::vector<std::string>
+HloReplicationFactorInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 std::unique_ptr<HloInstruction> CreateReplicationFactorInstruction() {
   return absl::make_unique<HloReplicationFactorInstruction>();
 }
@@ -96,6 +102,12 @@ HloReplicationNormaliseInstruction::CloneWithNewOperandsImpl(
 std::unique_ptr<HloInstruction> CreateReplicationNormalise(
     HloInstruction* operand) {
   return absl::make_unique<HloReplicationNormaliseInstruction>(operand);
+}
+
+std::vector<std::string>
+HloReplicationNormaliseInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
 }
 
 namespace {

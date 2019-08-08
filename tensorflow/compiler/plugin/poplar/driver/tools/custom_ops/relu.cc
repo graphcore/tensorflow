@@ -46,6 +46,11 @@ std::unique_ptr<HloInstruction> HloReluInstruction::CloneWithNewOperandsImpl(
   return absl::make_unique<HloReluInstruction>(new_operands[0]);
 }
 
+std::vector<std::string> HloReluInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 std::unique_ptr<HloInstruction> CreateRelu(HloInstruction* operand) {
   return absl::make_unique<HloReluInstruction>(operand);
 }
@@ -81,6 +86,12 @@ HloReluGradInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return absl::make_unique<HloReluGradInstruction>(new_operands[0],
                                                    new_operands[1]);
+}
+
+std::vector<std::string>
+HloReluGradInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
 }
 
 std::unique_ptr<HloInstruction> CreateReluGrad(HloInstruction* out,

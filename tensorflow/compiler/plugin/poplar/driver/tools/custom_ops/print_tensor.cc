@@ -54,6 +54,14 @@ std::unique_ptr<HloInstruction> HloPrintTensor::CloneWithNewOperandsImpl(
   return CreateHloPrintTensor(operands[0]);
 }
 
+std::vector<std::string> HloPrintTensor::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes;
+  attributes.push_back("axis=" + std::to_string(axis));
+
+  return attributes;
+}
+
 namespace {
 
 static HloPoplarInstructionFactory print_tensor_factory(

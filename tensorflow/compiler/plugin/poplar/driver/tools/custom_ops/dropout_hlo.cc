@@ -58,6 +58,18 @@ std::unique_ptr<HloInstruction> HloDropoutInstruction::CloneWithNewOperandsImpl(
       IsUserSeed());
 }
 
+std::vector<std::string>
+HloDropoutInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes;
+  attributes.push_back("scale=" + std::to_string(scale));
+  attributes.push_back("rate=" + std::to_string(rate));
+  attributes.push_back("seed_modifier=" + std::to_string(seed_modifier));
+  attributes.push_back("is_user_seed=" + std::to_string(is_user_seed));
+
+  return attributes;
+}
+
 std::unique_ptr<HloInstruction> CreateDropout(HloInstruction* operand,
                                               HloInstruction* seed, float rate,
                                               float scale,

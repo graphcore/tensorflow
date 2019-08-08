@@ -42,6 +42,11 @@ std::unique_ptr<HloInstruction> HloIpuInterCopy::CloneWithNewOperandsImpl(
   return CreateIpuInterCopy(new_operands);
 }
 
+std::vector<std::string> HloIpuInterCopy::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 std::unique_ptr<HloInstruction> CreateIpuInterCopy(
     absl::Span<HloInstruction* const> operands) {
   return absl::make_unique<HloIpuInterCopy>(operands);

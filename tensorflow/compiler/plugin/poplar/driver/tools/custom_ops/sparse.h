@@ -30,6 +30,10 @@ class HloSelectScalarFromRowsInstruction : public HloPoplarInstruction {
   uint64 NumberOfInplaceOperands() const override;
   bool IsPopOpsElementwise() const override;
 
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -48,6 +52,10 @@ class HloUpdateScalarInRowsInstruction : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
   bool IsPopOpsElementwise() const override;
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(

@@ -33,13 +33,14 @@ class HloLSTMInstruction : public HloPoplarInstruction {
   int32 num_channels() const;
   xla::PrimitiveType partials_type() const;
 
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
   bool is_training_;
   int32 num_channels_;
   xla::PrimitiveType partials_type_;
-
-  std::vector<std::string> ExtraAttributesToStringImpl(
-      const HloPrintOptions& options) const override;
 };
 
 class HloLSTMFwdInstruction : public HloLSTMInstruction {

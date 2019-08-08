@@ -34,7 +34,7 @@ int32 HloNormInstruction::num_groups() const { return num_groups_; }
 int32 HloNormInstruction::feature_index() const { return feature_index_; }
 float HloNormInstruction::epsilon() const { return epsilon_; }
 
-std::vector<std::string> HloNormInstruction::ExtraAttributesToStringImpl(
+std::vector<std::string> HloNormInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
   attributes.push_back("num_groups=" + std::to_string(num_groups_));

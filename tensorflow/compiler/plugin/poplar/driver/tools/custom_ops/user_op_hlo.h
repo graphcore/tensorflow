@@ -39,6 +39,10 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   const std::string& GetPath() const { return gp_path; }
 
+ protected:
+  std::vector<string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
