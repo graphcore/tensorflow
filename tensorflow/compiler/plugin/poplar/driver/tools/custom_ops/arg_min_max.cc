@@ -66,6 +66,14 @@ std::unique_ptr<HloInstruction> HloArgMinMax::CloneWithNewOperandsImpl(
   return CreateHloArgMinMax(operands[0], shape, Axis(), isArgMin);
 }
 
+std::vector<std::string> HloArgMinMax::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<string> attributes;
+  attributes.push_back(absl::StrCat("axis=", axis));
+
+  return attributes;
+}
+
 namespace {
 
 static HloPoplarInstructionFactory argmax_factory(

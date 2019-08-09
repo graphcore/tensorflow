@@ -69,10 +69,17 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
   // Returns whether this is an elementwise instruction.
   virtual bool IsPopOpsElementwise() const = 0;
 
+ protected:
+  virtual std::vector<string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const = 0;
+
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> new_operands,
       HloCloneContext*) const override = 0;
+
+  std::vector<string> ExtraAttributesToStringImpl(
+      const HloPrintOptions& options) const override final;
 };
 
 class HloPoplarInstructionFactory {

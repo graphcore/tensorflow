@@ -53,6 +53,12 @@ HloTruncatedNormalInstruction::CloneWithNewOperandsImpl(
   return absl::make_unique<HloTruncatedNormalInstruction>(shape);
 }
 
+std::vector<std::string>
+HloTruncatedNormalInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 std::unique_ptr<HloInstruction> CreateTruncatedNormal(const Shape& shape) {
   return absl::make_unique<HloTruncatedNormalInstruction>(shape);
 }

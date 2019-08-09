@@ -45,6 +45,10 @@ class HloDropoutInstruction : public HloPoplarInstruction {
   // Track whether or not we should use the user provided seed.
   bool IsUserSeed() const { return is_user_seed; }
 
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,

@@ -58,6 +58,12 @@ std::unique_ptr<HloInstruction> CreateTanhGrad(HloInstruction* out,
   return absl::make_unique<HloTanhGradInstruction>(out, grad);
 }
 
+std::vector<std::string>
+HloTanhGradInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloTanhGradInstructionFactoryFunc(
     HloCustomCallInstruction* call) {

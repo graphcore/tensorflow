@@ -33,13 +33,14 @@ class HloNormInstruction : public HloPoplarInstruction {
   float epsilon() const;
   int feature_index() const;
 
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
  private:
   int32 num_groups_;
   float epsilon_;
   int feature_index_;
-
-  std::vector<std::string> ExtraAttributesToStringImpl(
-      const HloPrintOptions& options) const override;
 };
 
 class HloGroupNormInstruction : public HloNormInstruction {

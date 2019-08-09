@@ -27,6 +27,11 @@ HloStatelessRandom::HloStatelessRandom(
   set_custom_call_has_side_effect(true);
 }
 
+std::vector<std::string> HloStatelessRandom::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 HloStatelessRandomUniform::HloStatelessRandomUniform(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
     : HloStatelessRandom(

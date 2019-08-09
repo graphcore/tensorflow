@@ -79,21 +79,33 @@ They are divided into roughly three categories.
 3) Graph creation.
 
 In addition to ``auto_select_ipus`` and ``select_ipus``, several other functions
-exist for configuring the hardware and compiler. ``set_compilation_options``
-sets general options to be passed to the Poplar compiler.
-``set_convolution_options`` and ``set_pooling_options`` configure specific
-types of operation. ``set_report_options`` allows options to be passed directly
-to the Poplar summery report generator. ``set_ipu_model_options`` allows control
-of the Poplar IPU_MODEL device type. ``set_recomputation_options`` turns on
-recomputation, to reduce the memory requirement at the expense of speed.
-``set_floating_point_behaviour_options`` allows control of the IPUs floating
-point control register. ``max_scheduler_lookahead_depth`` controls how far the
-scheduler can look beyond a given scheduling decision to understand the
-max-liveness implications. This search space grows very quickly and can take an
-unacceptable amount of time, for large ``max_scheduler_lookahead_depth``.
-``max_scheduler_search_space_size`` introduces an upper-limit to the size of the
-schedule search space to guarantee that it will terminate in a reasonable amount
-of time.
+exist for configuring the hardware and compiler.
+
+* ``set_compilation_options`` sets general options to be passed to the Poplar
+compiler.
+* ``set_convolution_options`` and ``set_pooling_options`` pass specific options
+directly to the ``poplibs`` convolution and pooling operations.
+* ``set_report_options`` allows options to be passed directly to the Poplar
+summary report generator.
+* ``set_ipu_model_options`` allows control of the Poplar IPU_MODEL device type.
+* ``set_recomputation_options`` turns on recomputation, to reduce the memory
+requirement at the expense of speed.
+* ``set_floating_point_behaviour_options`` allows control of the IPUs floating
+point control register.
+
+More options are available on the ``create_ipu_config`` function itself. These
+mostly control specific features of the Poplar and poplibs operations.
+
+* ``max_scheduler_lookahead_depth`` controls how far the scheduler can look
+beyond a given scheduling decision to understand the max-liveness implications.
+This search space grows very quickly and can take an unacceptable amount of
+time for large ``max_scheduler_lookahead_depth``.
+* ``max_scheduler_search_space_size`` introduces an upper-limit to the size of
+the schedule search space to guarantee that it will terminate in a reasonable
+amount of time.
+* ``clear_matmul_pass`` does not set the Pass type on the ``poplibs`` ``matmul``
+operation.  This can save memory in some circumstances, such as large batch
+resnet models.
 
 See the documentation in :ref:`api-section` for more details.
 

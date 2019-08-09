@@ -18,11 +18,31 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/window_util.h"
 #include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/strings/strcat.h"
+
+#include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 
 namespace xla {
 namespace poplarplugin {
+
+std::vector<string> HloPoplarInstruction::ExtraAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<string> extras;
+  extras.push_back(absl::StrCat("custom_call_target=\"",
+                                absl::CEscape(custom_call_target()), "\""));
+
+  if (custom_call_has_side_effect()) {
+    extras.push_back("custom_call_has_side_effect=true");
+  }
+
+  std::vector<string> attributes = ExtraPoplarAttributesToStringImpl(options);
+  extras.insert(extras.end(), attributes.begin(), attributes.end());
+
+  return extras;
+}
 
 HloPoplarInstructionFactory::HloPoplarInstructionFactory(
     const std::string& name, HloPoplarInstructionFactory::FactoryType factory) {

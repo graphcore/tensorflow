@@ -24,6 +24,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include <poplar/Tensor.hpp>
@@ -42,13 +43,6 @@ namespace poplarplugin {
 
 namespace conv_graph_caching {
 namespace {
-
-poplar::OptionFlags GetConvolutionOptions(CompilerResources& res,
-                                          const MLType conv_type) {
-  poplar::OptionFlags opts = res.default_conv_options;
-  opts.set("pass", MLType_Name(conv_type));
-  return opts;
-}
 
 BwdWeightCacheKey GetBwdWeightCacheKey(const poplar::Tensor& weights,
                                        const poplar::Tensor& bwd_weights,
@@ -105,39 +99,6 @@ ConvolutionCacheKey GetConvolutionCacheKey(const poplin::ConvParams& params,
   return std::make_tuple(in_sig, weights_sig, params.canonicalize(), conv_type,
                          transpose_and_flip_weights, device_id);
 }
-
-ConvolutionScaledInplaceCacheKey GetConvolutionScaledInplaceCacheKey(
-    const poplin::ConvParams& params, const MLType& conv_type,
-    const bool learning_rate_is_constant, const double learning_rate,
-    const HloOpcode op_type, const uint64 device_id) {
-  // Create signature for the convolution input
-  std::vector<std::size_t> in_shape = {params.getBatchSize(),
-                                       params.getNumInputChans()};
-  in_shape.insert(in_shape.end(), params.inputFieldShape.begin(),
-                  params.inputFieldShape.end());
-  PoplarTensorSignature in_sig(params.inputType, std::move(in_shape));
-
-  // Create signature for the gradients
-  std::vector<std::size_t> grad_shape = {params.getNumConvGroups(),
-                                         params.getNumOutputChansPerConvGroup(),
-                                         params.getNumInputChansPerConvGroup()};
-  grad_shape.insert(grad_shape.end(), params.kernelShape.begin(),
-                    params.kernelShape.end());
-  PoplarTensorSignature grad_sig(params.inputType, std::move(grad_shape));
-  return std::make_tuple(in_sig, grad_sig, params.canonicalize(), conv_type,
-                         learning_rate_is_constant, learning_rate, op_type,
-                         device_id);
-}
-
-BiasApplyCacheKey GetBiasApplyCacheKey(
-    const poplar::Tensor& input, const poplar::Tensor& deltas,
-    const poplar::Tensor& scale, const std::vector<std::size_t>& reduction_dims,
-    const uint64 device_id) {
-  return std::make_tuple(graph_caching_util::GetPoplarTensorSignature(input),
-                         graph_caching_util::GetPoplarTensorSignature(deltas),
-                         graph_caching_util::GetPoplarTensorSignature(scale),
-                         reduction_dims, device_id);
-}
 }  // namespace
 
 poplar::Tensor DoCachedConvolution(
@@ -158,7 +119,7 @@ poplar::Tensor DoCachedConvolution(
       !res.disable_graph_convolution_caching && transpose_and_flip_weights) {
     conv_type = MLType::TRAINING_FWD;
     transpose_and_flip_weights = false;
-    auto fwd_opts = GetConvolutionOptions(res, conv_type);
+    auto fwd_opts = GetConvolutionOptionsForType(res, conv_type);
     auto bwd_weights = poplin::createWeights(graph, params, "bwd_weights",
                                              fwd_opts, &res.convolution_cache);
     CreateCachedBwdWeights(graph, res, weights, bwd_weights, device_id, prog,
@@ -175,7 +136,7 @@ poplar::Tensor DoCachedConvolution(
     auto& f = it->second;
     return f(args, prog);
   }
-  auto opts = GetConvolutionOptions(res, conv_type);
+  auto opts = GetConvolutionOptionsForType(res, conv_type);
 
   if (VLOG_IS_ON(2)) {
     std::stringstream stream;
@@ -194,159 +155,6 @@ poplar::Tensor DoCachedConvolution(
       });
   res.conv_graph_cache.emplace(key, f);
   return f(args, prog);
-}
-
-Status DoCachedConvolutionScaledInplace(
-    poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& w,
-    const poplar::Tensor& in, const poplar::Tensor& deltas,
-    const poplin::ConvParams& params, const uint64 device_id,
-    poplar::program::Sequence& prog, const HloInstruction* inst,
-    TensorMap& tensor_map) {
-  const auto operand_count = inst->operand_count();
-  if (!(operand_count == 3 || operand_count == 4)) {
-    return xla::FailedPrecondition(
-        "Unsupported use of scaled inplace op: %s. Too many operands, "
-        "expected 3 or 4, got %d.",
-        inst->name().c_str(), operand_count);
-  }
-
-  std::vector<poplar::Tensor> args = {in, deltas, w};
-  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
-  auto opts = GetConvolutionOptions(res, conv_type);
-
-  // Handle both constant and variant (Tensor) scale.
-  const bool scale_is_constant = operand_count == 3;
-  double constant_scale = 0.0;
-  poplar::Tensor variable_scale;
-
-  // Get the root of the fusion - it indicates whether this is add or subtract.
-  const auto* root_inst =
-      inst->fused_instructions_computation()->root_instruction();
-  auto op_type = root_inst->opcode();
-
-  if (scale_is_constant) {
-    // Get the constant scale.
-    const auto* const_inst = root_inst->operand(1)->operand(1)->operand(0);
-    CHECK_EQ(const_inst->opcode(), HloOpcode::kConstant);
-
-    TF_ASSIGN_OR_RETURN(constant_scale, LiteralScalarToNativeType<double>(
-                                            const_inst->literal()));
-  } else {
-    // Get the variable scale.
-    TF_ASSIGN_OR_RETURN(
-        variable_scale,
-        FindInstructionInput(tensor_map, res, inst, 3, prog, false));
-    args.push_back(variable_scale);
-  }
-
-  auto key = GetConvolutionScaledInplaceCacheKey(
-      params, conv_type, scale_is_constant, constant_scale, op_type, device_id);
-  auto it = res.conv_scaled_inplace_graph_cache.find(key);
-  if (it != res.conv_scaled_inplace_graph_cache.end() &&
-      !res.disable_graph_convolution_caching) {
-    auto& f = it->second;
-    f(args, prog);
-    return Status::OK();
-  }
-
-  using namespace poputil::graphfn;
-  Signature signature = {
-      input(in, "in"),
-      input(deltas, "deltas"),
-      inout(w, "w"),
-  };
-  if (!scale_is_constant) {
-    // Add the variable scale to the signature.
-    signature.push_back(input(variable_scale, "variable_scale"));
-  }
-
-  auto f = VoidFunction(
-      graph, signature,
-      [&](std::vector<poplar::Tensor>& args, poplar::program::Sequence& seq) {
-        auto c_out = poplin::convolution(graph, args[0], args[1], params, false,
-                                         seq, GetDebugName(inst), opts,
-                                         &res.convolution_cache);
-        if (scale_is_constant) {
-          TF_CHECK_OK(ScaledInplaceConstantOrTensor(
-              graph, args[2], c_out, constant_scale, seq, op_type,
-              GetDebugName(inst)));
-        } else {
-          TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, args[2], c_out,
-                                                    args[3], seq, op_type,
-                                                    GetDebugName(inst)));
-        }
-      });
-  res.conv_scaled_inplace_graph_cache.emplace(key, f);
-  f(args, prog);
-  return Status::OK();
-}
-
-Status DoCachedBiasApply(poplar::Graph& graph, CompilerResources& res,
-                         const poplar::Tensor& in, const poplar::Tensor& deltas,
-                         const std::vector<std::size_t> reduction_dims,
-                         const uint64 device_id,
-                         poplar::program::Sequence& prog,
-                         const HloInstruction* inst, TensorMap& tensor_map) {
-  const auto operand_count = inst->operand_count();
-  if (!(operand_count == 2 || operand_count == 3)) {
-    return xla::FailedPrecondition(
-        "Unsupported use of bias apply op: %s. Too many operands, "
-        "expected 2 or 3, got %d.",
-        inst->name().c_str(), operand_count);
-  }
-
-  poplar::Tensor scale;
-  const bool scale_is_constant = operand_count == 2;
-  if (scale_is_constant) {
-    // Get the constant scale.
-    const auto* root_inst =
-        inst->fused_instructions_computation()->root_instruction();
-    const auto* const_inst = root_inst->operand(1)->operand(1)->operand(0);
-    CHECK_EQ(const_inst->opcode(), HloOpcode::kConstant);
-
-    TF_ASSIGN_OR_RETURN(Literal lit, const_inst->literal().Convert(F32));
-
-    TF_ASSIGN_OR_RETURN(
-        scale, AddConstantTensor(graph, {const_inst, 0}, const_inst->shape(),
-                                 lit, res, tensor_map));
-
-  } else {
-    // Get the variable scale.
-    TF_ASSIGN_OR_RETURN(
-        scale, FindInstructionInput(tensor_map, res, inst, 2, prog, false));
-  }
-
-  std::vector<poplar::Tensor> args = {in, deltas, scale};
-
-  auto key = GetBiasApplyCacheKey(in, deltas, scale, reduction_dims, device_id);
-  auto it = res.bias_apply_graph_cache.find(key);
-  if (it != res.bias_apply_graph_cache.end() &&
-      !res.disable_graph_convolution_caching) {
-    auto& f = it->second;
-    f(args, prog);
-    return Status::OK();
-  }
-
-  using namespace poputil::graphfn;
-  auto f = VoidFunction(
-      graph,
-      {inout(in, "input"), input(deltas, "deltas"), input(scale, "scale")},
-      [&](std::vector<poplar::Tensor>& args, poplar::program::Sequence& seq) {
-        auto scale_float = args[2];
-        if (scale_float.elementType() != poplar::FLOAT) {
-          scale_float = popops::cast(graph, scale_float, poplar::FLOAT, seq,
-                                     GetDebugName(inst) + "/ScaleToFloat");
-        }
-        // Reduce with scale and update in place
-        popops::mapInPlace(graph, popops::expr::UnaryOpType::NEGATE,
-                           scale_float, seq, GetDebugName(inst) + "/negate");
-        popops::reduceWithOutput(graph, args[1], args[0], reduction_dims,
-                                 {popops::Operation::ADD, true, scale_float},
-                                 seq, GetDebugName(inst));
-      });
-  res.bias_apply_graph_cache.emplace(key, f);
-  f(args, prog);
-  return Status::OK();
 }
 }  // namespace conv_graph_caching
 }  // namespace poplarplugin

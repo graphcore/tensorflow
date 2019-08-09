@@ -81,6 +81,7 @@ def ipu_session():
   with session_lib.Session() as sess:
     yield sess
 
+
 def get_total_memory_from_report(report):
   lines = report.split('\n')
   found = False
@@ -171,6 +172,11 @@ def check_compute_sets_in_whitelist_entries(cs_list, whitelist):
 def check_all_compute_sets_and_list(cs_list, whitelist):
   return (check_whitelist_entries_in_compute_sets(cs_list, whitelist)
           and check_compute_sets_in_whitelist_entries(cs_list, whitelist))
+
+
+def count_compute_sets_matching(cs_list, to_match):
+  cs_set = set(cs_list)
+  return len([cs for cs in cs_set if fnmatch.fnmatch(cs, to_match)])
 
 
 def extract_all_strings_from_event_trace(events):

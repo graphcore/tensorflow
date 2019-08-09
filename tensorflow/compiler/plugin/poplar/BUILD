@@ -318,13 +318,11 @@ cc_library(
         "driver/ops/custom_ops/poputil/replication_factor.cc",
         "driver/ops/custom_ops/poputil/stateful_gradient_accumulate.cc",
         "driver/ops/custom_ops/poputil/user_op.cc",
-        "driver/ops/dot_graph_caching.cc",
         "driver/ops/graph_caching_util.cc",
         "driver/ops/gather_ops.cc",
         "driver/ops/map_ops.cc",
         "driver/ops/maths_ops.cc",
         "driver/ops/multiupdate_ops.cc",
-        "driver/ops/norm_graph_caching.cc",
         "driver/ops/norm_ops.cc",
         "driver/ops/random_ops.cc",
         "driver/ops/reduction_ops.cc",
@@ -341,6 +339,7 @@ cc_library(
         "driver/tools/conversions.cc",
         "driver/tools/convolution_preplanning.cc",
         "driver/tools/data_initializer.cc",
+        "driver/tools/generic_graph_caching.cc",
         "driver/tools/mapping_helper.cc",
         "driver/tools/poplar_util.cc",
         "driver/visitors/deferred_allocation_visitor.cc",
@@ -357,9 +356,7 @@ cc_library(
         "driver/ops/conv_graph_caching.h",
         "driver/ops/custom_ops/custom_ops.h",
         "driver/ops/custom_ops/poplibs_ops.h",
-        "driver/ops/dot_graph_caching.h",
         "driver/ops/graph_caching_util.h",
-        "driver/ops/norm_graph_caching.h",
         "driver/ops/ops.h",
         "driver/poplar_compiler.h",
         "driver/poplar_executable.h",
@@ -371,6 +368,7 @@ cc_library(
         "driver/tools/conversions.h",
         "driver/tools/convolution_preplanning.h",
         "driver/tools/data_initializer.h",
+        "driver/tools/generic_graph_caching.h",
         "driver/tools/mapping_helper.h",
         "driver/tools/poplar_util.h",
         "driver/tools/spsc_queue.h",
@@ -1445,6 +1443,25 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "matmul_option_test",
+    size = "small",
+    srcs = ["tests/matmul_option_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:nn",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "conv_test",
     size = "large",
     srcs = ["tests/conv_test.py"],
@@ -2253,6 +2270,23 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "bias_apply_graph_caching_test",
+    size = "medium",
+    srcs = ["tests/bias_apply_graph_caching_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
 cc_binary(
 	  name = "libcustom_rotate_op.so",
 	  srcs = ["docs/custom_rotate_op.cc"],
@@ -2293,6 +2327,7 @@ test_suite(
         "64_bit_test",
         "allocation_finder_test",
         "batch_norm_test",
+        "bias_apply_graph_caching_test",
         "case_test",
         "casts_elimination_test",
         "combine_instructions_test",
@@ -2333,6 +2368,7 @@ test_suite(
         "lstm_test",
         "mapping_test",
         "matmul_test",
+        "matmul_option_test",
         "monitored_session_test",
         "multi_ipu_test",
         "multi_run_test",

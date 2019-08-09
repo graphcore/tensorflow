@@ -54,6 +54,15 @@ std::unique_ptr<HloInstruction> HloTopK::CloneWithNewOperandsImpl(
   return CreateHloTopK(operands[0], shape, NumK(), ShouldBeSorted());
 }
 
+std::vector<std::string> HloTopK::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes;
+  attributes.push_back("num_k=" + std::to_string(num_k));
+  attributes.push_back("sorted=" + std::to_string(sorted));
+
+  return attributes;
+}
+
 namespace {
 
 static HloPoplarInstructionFactory argmax_factory(

@@ -46,6 +46,11 @@ std::unique_ptr<HloInstruction> HloRemapInstruction::CloneWithNewOperandsImpl(
   return absl::make_unique<HloRemapInstruction>(new_operands[0]);
 }
 
+std::vector<std::string> HloRemapInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 std::unique_ptr<HloInstruction> CreateRemap(HloInstruction* operand) {
   return absl::make_unique<HloRemapInstruction>(operand);
 }

@@ -178,26 +178,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
-  // Bias reduction and application (constant)
-  HloMatcherPattern(
-    PatternType("bias_apply"),
-    PatternMetaTarget(0),
-    PatternInputs({5, 6}),
-    PatternInplaceInputs({5}),
-    PatternOutputs({0}),
-    Pattern({
-      {HloOpcode::kSubtract, NodeOperands({5, 1}), IsOutputFeed},
-      {HloOpcode::kMultiply, NodeOperands({3, 2})},
-      {HloOpcode::kBroadcast, NodeOperands({7})},
-      {HloOpcode::kReduce, NodeOperands({6, 4}), IsBiasReduce},
-      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant},
-    })
-  ),
-
-  // Bias reduction and application (tensor)
+  // Bias reduction and application.
   HloMatcherPattern(
     PatternType("bias_apply"),
     PatternMetaTarget(0),
@@ -205,7 +186,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternInplaceInputs({5}),
     PatternOutputs({0}),
     Pattern({
-      {HloOpcode::kSubtract, NodeOperands({5, 1}), IsOutputFeed},
+      {HloOpcode::kSubtract, NodeOperands({5, 1})},
       {HloOpcode::kMultiply, NodeOperands({3, 2})},
       {HloOpcode::kBroadcast, NodeOperands({7})},
       {HloOpcode::kReduce, NodeOperands({6, 4}), IsBiasReduce},
@@ -216,26 +197,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
-  // Convolution followed by scaled add/subtract to - A = A +/- B * c (constant)
-  HloMatcherPattern(
-    PatternType("conv_scaled_inplace"),
-    PatternMetaTarget(3),
-    PatternInputs({4, 5, 6}),
-    PatternInplaceInputs({4}),
-    PatternOutputs({0}),
-    Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({4, 1}), IsAddOrSubtract},
-      {HloOpcode::kMultiply, NodeOperands({3, 2})},
-      {HloOpcode::kBroadcast, NodeOperands({7})},
-      {HloOpcode::kConvolution, NodeOperands({5, 6})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant}
-    })
-  ),
-
-  // Convolution followed by scaled add/subtract to - A = A +/- B * c (tensor)
+  // Convolution followed by scaled add/subtract to - A = A +/- B * c
   HloMatcherPattern(
     PatternType("conv_scaled_inplace"),
     PatternMetaTarget(3),

@@ -13,11 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/convolution_preplanning.h"
-#include <poplar/Target.hpp>
-#include "tensorflow/compiler/plugin/poplar/driver/ops/conv_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+
+#include <poplar/Target.hpp>
 
 namespace xla {
 namespace poplarplugin {

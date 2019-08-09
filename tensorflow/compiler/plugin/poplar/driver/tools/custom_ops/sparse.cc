@@ -52,6 +52,12 @@ HloSelectScalarFromRowsInstruction::CloneWithNewOperandsImpl(
                                                                new_operands);
 }
 
+std::vector<std::string>
+HloSelectScalarFromRowsInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 std::unique_ptr<HloInstruction> CreateSelectScalarFromRows(
     const Shape& shape, absl::Span<HloInstruction* const> operands) {
   return absl::make_unique<HloSelectScalarFromRowsInstruction>(shape, operands);
@@ -93,6 +99,12 @@ HloUpdateScalarInRowsInstruction::CloneWithNewOperandsImpl(
 std::unique_ptr<HloInstruction> CreateUpdateScalarInRows(
     const Shape& shape, absl::Span<HloInstruction* const> operands) {
   return absl::make_unique<HloUpdateScalarInRowsInstruction>(shape, operands);
+}
+
+std::vector<std::string>
+HloUpdateScalarInRowsInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
 }
 
 namespace {

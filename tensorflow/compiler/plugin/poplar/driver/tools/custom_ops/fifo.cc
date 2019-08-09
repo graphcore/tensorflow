@@ -52,6 +52,14 @@ std::unique_ptr<HloInstruction> HloFifoInstruction::CloneWithNewOperandsImpl(
   return absl::make_unique<HloFifoInstruction>(new_operands[0], depth_);
 }
 
+std::vector<std::string> HloFifoInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes;
+  attributes.push_back(absl::StrCat("depth=", depth_));
+
+  return attributes;
+}
+
 std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand,
                                            int64 depth) {
   return absl::make_unique<HloFifoInstruction>(operand, depth);

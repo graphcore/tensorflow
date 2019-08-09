@@ -8,6 +8,7 @@
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
@@ -23,6 +24,8 @@
 #include "tensorflow/core/util/bcast.h"
 
 #include <poplin/Convolution.hpp>
+#include <popops/Cast.hpp>
+#include <popops/ElementWise.hpp>
 #include <popops/Reduce.hpp>
 #include <popops/ScaledAdd.hpp>
 
@@ -431,22 +434,27 @@ StatusOr<poplar::program::Program> CreateConvScaledInplace(
     const xla::Shape& output_shape, TensorMap& tensor_map) {
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence prog;
+  poplar::program::Sequence seq;
 
   // Find the weights tensor
   TF_ASSIGN_OR_RETURN(ArgVectors inputs,
-                      FindInplaceOutputTensors(tensor_map, res, inst, prog));
+                      FindInplaceOutputTensors(tensor_map, res, inst, seq));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor weights = inputs[0][0];
 
   // Find the input tensor
   TF_ASSIGN_OR_RETURN(poplar::Tensor in,
-                      FindInstructionInput(tensor_map, res, inst, 1, prog));
+                      FindInstructionInput(tensor_map, res, inst, 1, seq));
 
   // Find the deltas tensor
   TF_ASSIGN_OR_RETURN(poplar::Tensor deltas,
-                      FindInstructionInput(tensor_map, res, inst, 2, prog));
+                      FindInstructionInput(tensor_map, res, inst, 2, seq));
+
+  // Find the scale.
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor scale,
+      FindInstructionInput(tensor_map, res, inst, 3, seq, false));
 
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(inst, 1, 2));
@@ -458,15 +466,43 @@ StatusOr<poplar::program::Program> CreateConvScaledInplace(
 
   weights = ShuffleConvolutionOutputToPoplar(inst, weights);
 
-  TF_CHECK_OK(conv_graph_caching::DoCachedConvolutionScaledInplace(
-      graph, res, weights, in, deltas, params, GetSingleShardingDeviceId(inst),
-      prog, inst, tensor_map));
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
+  auto opts = GetConvolutionOptionsForType(res, conv_type);
 
-  weights = ShuffleConvolutionOutputToTensorflow(inst, weights);
+  // Get the root of the fusion - it indicates whether this is add or subtract.
+  const auto* root_inst =
+      inst->fused_instructions_computation()->root_instruction();
+  auto op_type = root_inst->opcode();
+
+  using namespace poputil::graphfn;
+  const std::string debug_prefix = GetDebugName(inst);
+  auto func = [&graph, &res, op_type, params, opts, debug_prefix](
+                  std::vector<poplar::Tensor>& args,
+                  poplar::program::Sequence& prog) {
+    auto c_out =
+        poplin::convolution(graph, args[1], args[2], params, false, prog,
+                            debug_prefix, opts, &res.convolution_cache);
+
+    TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, args[0], c_out, args[3],
+                                              prog, op_type, debug_prefix));
+  };
+
+  std::vector<poplar::Tensor> args = {weights, in, deltas, scale};
+  Signature signature = {
+      inout(weights, "w"),
+      input(in, "in"),
+      input(deltas, "deltas"),
+      input(scale, "scale"),
+  };
+
+  TF_RETURN_IF_ERROR(
+      res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+
+  weights = ShuffleConvolutionOutputToTensorflow(inst, args[0]);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, weights));
 
-  return prog;
+  return seq;
 }
 
 StatusOr<poplar::program::Program> CreateConvBiasAddOp(
@@ -495,42 +531,68 @@ StatusOr<poplar::program::Program> CreateConvBiasAddOp(
   return prog;
 }
 
-StatusOr<poplar::program::Program> ConvBiasApply(CompilerResources& res,
-                                                 const HloInstruction* inst,
-                                                 const xla::Shape& output_shape,
-                                                 TensorMap& tensor_map) {
+StatusOr<poplar::program::Program> CreateBiasApply(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence prog;
+  poplar::program::Sequence seq;
 
   const HloInstruction* root =
       inst->fused_instructions_computation()->root_instruction();
 
-  // Find the biases
+  // Find the biases.
   TF_ASSIGN_OR_RETURN(ArgVectors inputs,
-                      FindInplaceOutputTensors(tensor_map, res, inst, prog));
+                      FindInplaceOutputTensors(tensor_map, res, inst, seq));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor biases = inputs[0][0];
 
-  // Find the deltas
-  TF_ASSIGN_OR_RETURN(poplar::Tensor deltas,
-                      FindInstructionInput(tensor_map, res, inst, 1, prog));
+  // Find the deltas.
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor deltas,
+      FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+  // Find the scale.
+  TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
+                      FindInstructionInput(tensor_map, res, inst, 2, seq));
 
-  // // Find reduction dimensions
+  // Find reduction dimensions
   const auto* reduce = root->operand(1)->operand(0);
   std::vector<std::size_t> reduction_dims;
   for (auto d : reduce->dimensions()) {
     reduction_dims.push_back(d);
   }
 
-  TF_CHECK_OK(conv_graph_caching::DoCachedBiasApply(
-      graph, res, biases, deltas, reduction_dims,
-      GetSingleShardingDeviceId(inst), prog, inst, tensor_map));
+  using namespace poputil::graphfn;
+  const std::string debug_prefix = GetDebugName(inst);
+  auto func = [&graph, reduction_dims, debug_prefix](
+                  std::vector<poplar::Tensor>& args,
+                  poplar::program::Sequence& prog) {
+    poplar::Tensor scale_float = args[2];
+    if (scale_float.elementType() != poplar::FLOAT) {
+      scale_float = popops::cast(graph, scale_float, poplar::FLOAT, prog,
+                                 debug_prefix + "/ScaleToFloat");
+    }
+    // Reduce with scale and update in place
+    popops::mapInPlace(graph, popops::expr::UnaryOpType::NEGATE, scale_float,
+                       prog, debug_prefix + "/negate");
+    popops::reduceWithOutput(graph, args[1], args[0], reduction_dims,
+                             {popops::Operation::ADD, true, scale_float}, prog,
+                             debug_prefix);
+  };
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, biases));
+  // Depending on whether this is performed inplace or not, the output could be
+  // a new tensor or the biases tensor.
+  std::vector<poplar::Tensor> args = {biases, deltas, scale};
+  Signature signature = {inout(biases, "biases"), input(deltas, "deltas"),
+                         input(scale, "scale")};
 
-  return prog;
+  TF_RETURN_IF_ERROR(
+      res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, args[0]));
+
+  return seq;
 }
 
 }  // namespace poplarplugin

@@ -62,6 +62,15 @@ HloStatefulGradientAccumulate::CloneWithNewOperandsImpl(
                                                           num_mini_batches_);
 }
 
+std::vector<std::string>
+HloStatefulGradientAccumulate::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes;
+  attributes.push_back("num_mini_batches=" + std::to_string(num_mini_batches_));
+
+  return attributes;
+}
+
 std::unique_ptr<HloInstruction> CreateStatefulGradientAccumulation(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches) {
   return absl::make_unique<HloStatefulGradientAccumulate>(operands,

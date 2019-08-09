@@ -43,9 +43,13 @@ uint64 HloPoolingInstruction::NumberOfInplaceOperands() const { return 0; }
 
 bool HloPoolingInstruction::IsPopOpsElementwise() const { return false; }
 
-std::vector<std::string> HloPoolingInstruction::ExtraAttributesToStringImpl(
+std::vector<std::string>
+HloPoolingInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  std::vector<std::string> attributes;
+  attributes.push_back(absl::StrCat("window=", window_util::ToString(window_)));
+
+  return attributes;
 }
 
 HloMaxPoolInstruction::HloMaxPoolInstruction(const Shape& shape,

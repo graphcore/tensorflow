@@ -61,7 +61,7 @@ std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
   auto resources = absl::make_unique<CompilerResources>(
       poplar::OptionFlags(), poplar::OptionFlags(), false, merge_infeeds, 1, 0,
 
-      0, 1, 64, module, IpuOptions::FloatingPointBehaviour());
+      0, 1, 64, module, IpuOptions::FloatingPointBehaviour(), false);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       poplar::Device::createCPUDevice(), 0, poplar::replication_factor(1));
   poplin::addCodelets(*resources->main_graph);

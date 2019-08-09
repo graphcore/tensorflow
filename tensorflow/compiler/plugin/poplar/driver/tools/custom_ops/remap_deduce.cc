@@ -54,6 +54,12 @@ std::unique_ptr<HloInstruction> CreateRemapDeduce(HloInstruction* operand) {
   return absl::make_unique<HloRemapDeduceInstruction>(operand);
 }
 
+std::vector<std::string>
+HloRemapDeduceInstruction::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloRemapDeduceInstructionFactoryFunc(
     HloCustomCallInstruction* call) {

@@ -67,7 +67,7 @@ static std::map<std::string, CustomCallFn> custom_call_map = {
     {"wide_const", CreateWideConstant},
     {"depthwise_conv", CreateConv2D},
     {"conv_with_reverse", Create2DConvWithReverse},
-    {"bias_apply", ConvBiasApply},
+    {"bias_apply", CreateBiasApply},
     {"zero_pad", CreateZeroPadOp},
     {"depthwise_filter", CreateDepthwiseBackpropFilter},
     {"scaled_inplace", CreateScaledInplace},

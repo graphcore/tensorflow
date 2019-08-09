@@ -23,9 +23,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/conv_graph_caching.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/dot_graph_caching.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/norm_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
 
@@ -72,6 +71,8 @@ struct CompilerResources {
 
   bool merge_infeed_io_copies;
 
+  bool clear_matmul_pass;
+
   std::map<std::string, TensorMap> tensor_maps;
 
   LinearMapperState linear_mapping_state;
@@ -80,20 +81,7 @@ struct CompilerResources {
 
   conv_graph_caching::BwdWeightGraphCache bwd_weight_graph_cache;
 
-  conv_graph_caching::ConvolutionScaledInplaceGraphCache
-      conv_scaled_inplace_graph_cache;
-
-  conv_graph_caching::BiasApplyGraphCache bias_apply_graph_cache;
-
-  norm_graph_caching::NormInferenceGraphCache norm_inf_graph_cache;
-
-  norm_graph_caching::NormTrainingGraphCache norm_tr_graph_cache;
-
-  norm_graph_caching::NormGradGraphCache norm_grad_graph_cache;
-
-  norm_graph_caching::NormStatisticsGraphCache norm_statistics_graph_cache;
-
-  dot_graph_caching::DotGraphCache dot_graph_cache;
+  generic_graph_caching::GenericGraphCache graph_cache;
 
   CompilerResources(
       const poplar::OptionFlags& conv_options,
@@ -103,7 +91,8 @@ struct CompilerResources {
       int64 max_inter_ipu_copies_buffer_size,
       int64 max_scheduler_lookahead_depth,
       int64 max_scheduler_search_space_size, HloModule* module,
-      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour)
+      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
+      bool clear_matmul_pass)
       : annotations(module),
         information(
             max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
@@ -113,7 +102,8 @@ struct CompilerResources {
         default_pooling_options(pooling_options),
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         replication_factor(replication_factor),
-        merge_infeed_io_copies(merge_infeed_io_copies) {}
+        merge_infeed_io_copies(merge_infeed_io_copies),
+        clear_matmul_pass(clear_matmul_pass) {}
 };
 
 }  // namespace poplarplugin
