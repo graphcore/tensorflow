@@ -307,11 +307,9 @@ func @testFloorDivF32(%arg0: tensor<2 x f32>, %arg1: tensor<2 x i32>) -> tensor<
 // -----
 
 // CHECK-LABEL: testFloorMod
-func @testFloorMod(tensor<? x i32>, tensor<? x i32>) -> tensor<? x i32> {
-^bb0(%arg0: tensor<? x i32>, %arg1: tensor<? x i32>):
-  // CHECK: tfl.floor_mod %arg0, %arg1
-  %0 = tfl.floor_mod %arg0, %arg1 : tensor<? x i32>
-  return %0#0 : tensor<? x i32>
+func @testFloorMod(%arg0: tensor<? x i32>, %arg1: tensor<? x i32>) -> tensor<? x i32> {
+  %0 = "tfl.floor_mod"(%arg0, %arg1) : (tensor<? x i32>, tensor<? x i32>) -> tensor<? x i32>
+  return %0 : tensor<? x i32>
 }
 
 // CHECK-LABEL: testPow
@@ -1081,4 +1079,32 @@ func @whereWithI32Input(%arg0: tensor<3x5xi32>) -> tensor<?x2xi64> {
   // expected-error @+1 {{'tfl.where' op operand #0 must be tensor of 1-bit integer values}}
   %0 = "tfl.where"(%arg0) : (tensor<3x5xi32>) -> tensor<?x2xi64>
   return %0 : tensor<?x2xi64>
+}
+
+// -----
+
+func @testMinimumWithQuantizedTypes(%arg0 : tensor<10x!quant.uniform<u8:f32, 1.0>>, %arg1 : tensor<10x!quant.uniform<u8:f32, 1.0>>) -> tensor<10x!quant.uniform<u8:f32, 1.0>> {
+  %0 = "tfl.minimum"(%arg0, %arg1) : (tensor<10x!quant.uniform<u8:f32, 1.0>>, tensor<10x!quant.uniform<u8:f32, 1.0>>) -> tensor<10x!quant.uniform<u8:f32, 1.0>>
+  return %0 : tensor<10x!quant.uniform<u8:f32, 1.0>>
+}
+
+// -----
+
+func @testMaximumWithQuantizedTypes(%arg0 : tensor<10x!quant.uniform<u8:f32, 1.0>>, %arg1 : tensor<10x!quant.uniform<u8:f32, 1.0>>) -> tensor<10x!quant.uniform<u8:f32, 1.0>> {
+  %0 = "tfl.maximum"(%arg0, %arg1) : (tensor<10x!quant.uniform<u8:f32, 1.0>>, tensor<10x!quant.uniform<u8:f32, 1.0>>) -> tensor<10x!quant.uniform<u8:f32, 1.0>>
+  return %0 : tensor<10x!quant.uniform<u8:f32, 1.0>>
+}
+
+// -----
+
+func @testReluWithQuantizedTypes(%arg0 : tensor<10x!quant.uniform<u8:f32, 1.0>>) -> tensor<10x!quant.uniform<u8:f32, 1.0>> {
+  %0 = "tfl.relu"(%arg0) : (tensor<10x!quant.uniform<u8:f32, 1.0>>) -> tensor<10x!quant.uniform<u8:f32, 1.0>>
+  return %0 : tensor<10x!quant.uniform<u8:f32, 1.0>>
+}
+
+// -----
+
+func @testRelu6WithQuantizedTypes(%arg0 : tensor<10x!quant.uniform<u8:f32, 1.0>>) -> tensor<10x!quant.uniform<u8:f32, 1.0>> {
+  %0 = "tfl.relu6"(%arg0) : (tensor<10x!quant.uniform<u8:f32, 1.0>>) -> tensor<10x!quant.uniform<u8:f32, 1.0>>
+  return %0 : tensor<10x!quant.uniform<u8:f32, 1.0>>
 }

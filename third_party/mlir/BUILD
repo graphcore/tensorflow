@@ -13,11 +13,15 @@ package_group(
     packages = ["//..."],
 )
 
-# Please do not depend on this from any other packages.
+# Before adding a project here, please read go/mlir-sla
+# In particular the OWNERS file of the dependent project should be updated.
 package_group(
     name = "friends",
     includes = ["@org_tensorflow//tensorflow/compiler/mlir:subpackages"],
-    packages = ["//..."],
+    packages = [
+        "//...",
+        "//learning/glassbox/evaluation/compiler/...",
+    ],
 )
 
 exports_files([
@@ -1389,6 +1393,7 @@ cc_library(
         ":Support",
         ":Transforms",
         "@llvm//:core",
+        "@llvm//:orc_jit",
         "@llvm//:support",
     ],
     alwayslink = 1,

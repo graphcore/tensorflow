@@ -100,8 +100,8 @@ class StreamExecutor {
   //    instantiation should not be loaded into more than once.
   //
   // If an error occurs, or there is no kernel available for the StreamExecutor
-  // platform, false is returned.
-  bool GetKernel(const MultiKernelLoaderSpec &spec, KernelBase *kernel);
+  // platform, error status is returned.
+  port::Status GetKernel(const MultiKernelLoaderSpec &spec, KernelBase *kernel);
 
   // Releases any state associated with the previously loaded kernel.
   void UnloadKernel(const KernelBase *kernel);
@@ -109,9 +109,10 @@ class StreamExecutor {
   // Loads a module for the platform this StreamExecutor is acting upon.
   //
   // `spec` describes the module to be loaded.  On success writes the handle for
-  // the loaded module to `module_handle` and returns true.  Else returns false.
-  bool LoadModule(const MultiModuleLoaderSpec &spec,
-                  ModuleHandle *module_handle);
+  // the loaded module to `module_handle` and returns Status::OK.
+  // Otherwise, returns the error which has occurred.
+  port::Status LoadModule(const MultiModuleLoaderSpec &spec,
+                          ModuleHandle *module_handle);
 
   // Unloads the module with handle `module_handle`.
   bool UnloadModule(ModuleHandle module_handle);
@@ -185,9 +186,6 @@ class StreamExecutor {
   //
   // Resets the internal contents of mem to be null-representative, but this
   // null-out effect should not be relied upon in client code.
-  //
-  // TODO(jlebar): Change this to accept a DeviceMemoryBase by value, see
-  // discussion in cl/195744342.
   void Deallocate(DeviceMemoryBase *mem);
 
   // Retrieves a mapping of active opaque device memory pointer to a string
@@ -474,6 +472,19 @@ class StreamExecutor {
   // underlying platform.
   dnn::DnnSupport *AsDnn();
 
+  // Gets-or-creates (creates with memoization) a BlasSupport datatype that can
+  // be used to execute BLAS routines on the current platform. This is typically
+  // not user-facing, as users will use the Stream::ThenBlas* family of routines
+  // to entrain BLAS operations. See blas.h for additional details.
+  //
+  // Ownership is not transferred to the caller -- ownership is retained by this
+  // object for memoization. This BLAS interface is also only expected to be
+  // used by a Stream for entraining calls to BLAS functionality.
+  //
+  // Returns null if there was an error initializing the BLAS support for the
+  // underlying platform.
+  blas::BlasSupport *AsBlas();
+
   // Turns StreamExecutor operation tracing on or off.
   void EnableTracing(bool enable);
 
@@ -494,9 +505,6 @@ class StreamExecutor {
 
   // Return an allocator which delegates to this stream executor for memory
   // allocation.
-  //
-  // Creates the allocator object on the first access, as the device ordinal
-  // of this stream_executor is not set in constructor.
   StreamExecutorMemoryAllocator *GetAllocator() { return &allocator_; }
 
  private:
@@ -511,18 +519,10 @@ class StreamExecutor {
   template <typename... Args>
   friend struct ThenBlasImpl;
 
-  // Gets-or-creates (creates with memoization) a BlasSupport datatype that can
-  // be used to execute BLAS routines on the current platform. This is typically
-  // not user-facing, as users will use the Stream::ThenBlas* family of routines
-  // to entrain BLAS operations. See blas.h for additional details.
-  //
-  // Ownership is not transferred to the caller -- ownership is retained by this
-  // object for memoization. This BLAS interface is also only expected to be
-  // used by a Stream for entraining calls to BLAS functionality.
-  //
-  // Returns null if there was an error initializing the BLAS support for the
-  // underlying platform.
-  blas::BlasSupport *AsBlas();
+  // Synchronously allocates size bytes on the underlying platform and returns
+  // an opaque void* representing that allocation. In the case of failure,
+  // nullptr is returned.
+  void *Allocate(uint64 size);
 
   // Gets-or-creates (creates with memoization) an RngSupport datatype that can
   // be used for random-number-generation routines on the current platform.
@@ -540,11 +540,6 @@ class StreamExecutor {
 
   // Without blocking the device, retrieve the current stream status.
   port::Status GetStatus(Stream *stream);
-
-  // Synchronously allocates size bytes on the underlying platform and returns
-  // an opaque void* representing that allocation. In the case of failure,
-  // nullptr is returned.
-  void *Allocate(uint64 size);
 
   // Finds and retrieves device memory for the symbol on the underlying
   // platform.
@@ -786,10 +781,7 @@ StreamExecutor::CreateTypedKernel(absl::string_view kernel_name,
         reinterpret_cast<const char *>(cubin_data.data()), kernel_name);
   }
 
-  if (!GetKernel(loader_spec, kernel_base.get())) {
-    return port::InternalError("Unable to load kernel");
-  }
-
+  TF_RETURN_IF_ERROR(GetKernel(loader_spec, kernel_base.get()));
   return std::move(kernel_base);
 }
 
