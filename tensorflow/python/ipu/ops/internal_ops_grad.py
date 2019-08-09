@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
 """
     These gradient function should *never* be called directly.
@@ -45,3 +46,24 @@ def _poputil_print_tensor_layer_backward(op, grads):
 def _poputil_fifo_backward(op, grads):
   """Gradients for the IpuFifo op."""
   return [None] * len(grads)
+
+
+@ops.RegisterGradient("IpuUserOp")
+def _poputil_precompiled_user_op_layer_backward(op, *grads):
+  library_path = op.get_attr("library_path").decode("utf-8")
+  op_name = op.get_attr("op_name").decode("utf-8")
+  gp_path = op.get_attr("gp_path").decode("utf-8")
+
+  outs = {
+      "output_types": [t.dtype for t in op.inputs],
+      "output_shapes": [t.shape for t in op.inputs],
+  }
+
+  return gen_poputil_ops.ipu_user_op(
+      list(grads) + list(op.outputs) + list(op.inputs),
+      library_path=library_path,
+      op_name=op_name + "_grad",
+      gp_path=gp_path,
+      name=op.name + "_grad",
+      is_gradient=True,
+      **outs)

@@ -91,6 +91,9 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
 
     OP_REQUIRES_OK(context, context->GetAttr("gp_path", &gp_path));
 
+    OP_REQUIRES_OK(context, context->GetAttr("op_name", &op_name));
+
+    OP_REQUIRES_OK(context, context->GetAttr("is_gradient", &is_gradient));
     XlaShapesFromAttr(context, output_shape);
   }
 
@@ -102,16 +105,20 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
 
     if (!status.ok()) {
       OP_REQUIRES_OK(context,
-                     errors::InvalidArgument("Couldn't read shared library: " +
-                                             library_path));
+                     errors::InvalidArgument(
+                         "Couldn't read shared library: " + library_path +
+                         " with error:" + status.ToString()));
     }
 
-    int64 fn_ptr = GetSymbolAddressAsInt64(library, "Build");
+    int64 fn_ptr = GetSymbolAddressAsInt64(library, op_name);
     if (fn_ptr == 0) {
-      OP_REQUIRES_OK(context, errors::InvalidArgument(
-                                  "Couldn't read 'Build' symbol from library"));
+      OP_REQUIRES_OK(context,
+                     errors::InvalidArgument("Couldn't read " + op_name +
+                                             " symbol from library"));
     }
     attribute_map_.AddAttribute("operation_fn", fn_ptr);
+
+    attribute_map_.AddAttribute("is_gradient", is_gradient);
 
     attribute_map_.AddAttribute(
         "elementwise_fn", GetSymbolAddressAsInt64(library, "IsElementWise"));
@@ -176,7 +183,13 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
   // The (optional) path to any codelets which have been added.
   std::string gp_path;
 
+  // Path to the name of the user op which will be looked up in the shared
+  // library.
+  std::string op_name;
+
   std::vector<xla::Shape> output_shape;
+
+  bool is_gradient;
 };
 
 REGISTER_XLA_OP(Name("IpuUserOp")

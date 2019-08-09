@@ -25,17 +25,17 @@ namespace poplarplugin {
 HloUserOpInstruction::HloUserOpInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& path, void* fn_ptr, void* elementwise_fn_ptr,
-    void* allocate_input_fn_ptr)
+    void* allocate_input_fn_ptr, bool is_gradient)
     : HloPoplarInstruction(
           shape, inputs,
           GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::UserOp),
-          fn_ptr, elementwise_fn_ptr, allocate_input_fn_ptr, path),
+          fn_ptr, elementwise_fn_ptr, allocate_input_fn_ptr, path, is_gradient),
       function_ptr_(fn_ptr),
       elementwise_ptr_(elementwise_fn_ptr),
       allocate_input_ptr_(allocate_input_fn_ptr),
-      gp_path(path) {
+      gp_path(path),
+      is_gradient_(is_gradient) {
   set_custom_call_has_side_effect(true);
-
   num_inputs_ = inputs.size();
 }
 
@@ -90,15 +90,16 @@ std::unique_ptr<HloInstruction> HloUserOpInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
   return CreateUserOp(new_operands, shape, GetPath(), function_ptr_,
-                      elementwise_ptr_, allocate_input_ptr_);
+                      elementwise_ptr_, allocate_input_ptr_, is_gradient_);
 }
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& gp_path, void* function_ptr, void* elementwise_fn,
-    void* allocate_fn) {
-  return absl::make_unique<HloUserOpInstruction>(
-      inputs, shape, gp_path, function_ptr, elementwise_fn, allocate_fn);
+    void* allocate_fn, bool is_gradient) {
+  return absl::make_unique<HloUserOpInstruction>(inputs, shape, gp_path,
+                                                 function_ptr, elementwise_fn,
+                                                 allocate_fn, is_gradient);
 }
 
 namespace {
@@ -125,9 +126,12 @@ static HloPoplarInstructionFactory user_op_factory(
       TF_ASSIGN_OR_RETURN(std::string gp_path,
                           attribute_map.GetAttributeAsString("gp_path"));
 
+      TF_ASSIGN_OR_RETURN(bool is_gradient,
+                          attribute_map.GetAttributeAsBool("is_gradient"));
+
       return CreateUserOp(call->operands(), call->shape(), gp_path,
                           operation_fn_ptr, elementwise_fn_ptr,
-                          allocate_input_fn_ptr);
+                          allocate_input_fn_ptr, is_gradient);
     });
 }  // namespace
 

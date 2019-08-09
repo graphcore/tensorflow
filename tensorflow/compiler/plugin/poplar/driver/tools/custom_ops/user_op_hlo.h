@@ -25,7 +25,7 @@ class HloUserOpInstruction : public HloPoplarInstruction {
  public:
   explicit HloUserOpInstruction(absl::Span<HloInstruction* const> operands,
                                 const Shape& shape, const std::string& gp_path,
-                                void*, void*, void*);
+                                void*, void*, void*, bool is_gradient);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -38,6 +38,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   void* GetPointerToFunc() const { return function_ptr_; }
 
   const std::string& GetPath() const { return gp_path; }
+
+  bool IsGradient() const { return is_gradient_; }
 
  protected:
   std::vector<string> ExtraPoplarAttributesToStringImpl(
@@ -61,11 +63,13 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   size_t num_inputs_;
 
   std::string gp_path;
+
+  bool is_gradient_;
 };
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> operands, const Shape& shape,
-    const std::string& gp_path, void*, void*, void*);
+    const std::string& gp_path, void*, void*, void*, bool is_gradient);
 
 }  // namespace poplarplugin
 }  // namespace xla

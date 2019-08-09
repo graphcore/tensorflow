@@ -39,7 +39,8 @@ def precompiled_user_op(inputs,
                         library_path,
                         gp_path=None,
                         outs=None,
-                        name=None):
+                        name=None,
+                        op_name=None):
   """
     Call the poplar function located in the shared library at 'library_path'
     as part of the normal tensorflow execution with the given 'inputs'. The
@@ -60,8 +61,15 @@ def precompiled_user_op(inputs,
     }
   gp_path = gp_path if gp_path else ""
   name = name if name else "UserOp"
+  op_name = op_name if op_name else "Build"
   return gen_poputil_ops.ipu_user_op(
-      inputs, library_path=library_path, gp_path=gp_path, name=name, **outs)
+      inputs,
+      library_path=library_path,
+      gp_path=gp_path,
+      op_name=op_name,
+      name=name,
+      is_gradient=False,
+      **outs)
 
 
 def remap(x, name=None):

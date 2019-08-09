@@ -22,10 +22,9 @@ limitations under the License.
 namespace pe = popops::expr;
 
 // Custom poplar kernel.
-extern "C"
-poplar::program::Program Build(
+extern "C" poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string &debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(inputs.size());
@@ -40,3 +39,23 @@ poplar::program::Program Build(
   return seq;
 }
 
+// Custom poplar kernel.
+extern "C" poplar::program::Program Build_grad(
+    poplar::Graph& graph, const std::vector<poplar::Tensor>& gradients,
+    const std::vector<poplar::Tensor>& old_outputs,
+    const std::vector<poplar::Tensor>& old_inputs,
+    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+  poplar::program::Sequence seq;
+
+  outputs.resize(gradients.size());
+
+  float i = 1.0f;
+  std::transform(
+      gradients.begin(), gradients.end(), outputs.begin(),
+      [&](const poplar::Tensor& input) {
+        seq.add(poplar::program::PrintTensor(std::to_string(i), input));
+        return popops::map(graph, pe::Mul(pe::_1, pe::Const(i++)), {input},
+                           seq);
+      });
+  return seq;
+}
