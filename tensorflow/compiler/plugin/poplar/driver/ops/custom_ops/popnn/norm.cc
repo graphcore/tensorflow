@@ -40,13 +40,15 @@ StatusOr<std::tuple<uint32, uint32, float>> GetNormOpts(
   auto optional_feature_index =
       convert_scalar<uint32>(norm_inst->feature_index());
   if (!optional_feature_index) {
-    return xla::FailedPrecondition("Norm - Feature index can't be casted.");
+    return xla::FailedPrecondition(
+        "Norm - Feature index cannot be interpreted as an unsigned integer.");
   }
   const auto feature_index = *optional_feature_index;
 
   auto optional_num_groups = convert_scalar<uint32>(norm_inst->num_groups());
   if (!optional_num_groups) {
-    return xla::FailedPrecondition("Norm - Num groups can't be casted.");
+    return xla::FailedPrecondition(
+        "Norm - Num groups cannot be interpreted as an unsigned integer.");
   }
   const auto num_groups = *optional_num_groups;
 
@@ -70,7 +72,8 @@ class NormInferenceAndTrainingOp : public PoplibsOpDef {
     auto optional_feature_index =
         convert_scalar<uint32>(norm_inst->feature_index());
     if (!optional_feature_index) {
-      return xla::FailedPrecondition("Norm - Feature index can't be casted.");
+      return xla::FailedPrecondition(
+          "Norm - Feature index cannot be interpreted as an unsigned integer.");
     }
     const auto feature_index = *optional_feature_index;
 

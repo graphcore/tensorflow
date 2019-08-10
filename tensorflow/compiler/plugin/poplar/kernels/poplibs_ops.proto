@@ -1,3 +1,5 @@
+syntax = "proto2";
+
 message PoplibsOp {
   enum Lib {
 	  Poplin = 0;
@@ -46,6 +48,8 @@ message PoplibsOp {
     TopK = 34;
     UserOp = 35;
     RemapDeduce = 36;
+    GRULayerBwd = 37;
+    GRULayerFwd = 38;
   }
   required Op op = 2;
 }

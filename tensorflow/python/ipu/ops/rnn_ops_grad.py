@@ -46,3 +46,24 @@ def _popnn_lstm_layer_backward(op, *grads):
       num_channels=op.get_attr("num_channels"),
       partials_dtype=op.get_attr("partials_dtype"),
       is_training=op.get_attr("is_training"))
+
+
+@ops.RegisterGradient("PopnnGRULayer")
+def _popnn_gru_layer_backward(op, *grads):
+  """Gradients for the PopnnGRULayer op."""
+  if not op.get_attr("is_training"):
+    raise ValueError(
+        "To use PopnnGRULayer in gradients, is_training must be set to True.")
+  return gen_popnn_ops.popnn_gru_layer_backprop(
+      inputs=op.inputs[0],
+      initial_state=op.inputs[1],
+      kernel=op.inputs[2],
+      biases=op.inputs[3],
+      output=op.outputs[0],
+      output_state=op.outputs[1],
+      intermediates=op.outputs[2],
+      output_backprop=grads[0],
+      output_state_backprop=grads[1],
+      num_channels=op.get_attr("num_channels"),
+      partials_dtype=op.get_attr("partials_dtype"),
+      is_training=op.get_attr("is_training"))

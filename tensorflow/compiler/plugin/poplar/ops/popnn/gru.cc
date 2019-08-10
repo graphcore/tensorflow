@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,15 +20,13 @@ limitations under the License.
 
 namespace tensorflow {
 
-REGISTER_OP("PopnnLstmLayer")
+REGISTER_OP("PopnnGRULayer")
     .Input("inputs: dtype")
-    .Input("input_h_state: dtype")
-    .Input("input_c_state: dtype")
+    .Input("initial_state: dtype")
     .Input("kernel: dtype")
     .Input("biases: dtype")
     .Output("output: dtype")
-    .Output("output_h_state: dtype")
-    .Output("output_c_state: dtype")
+    .Output("output_state: dtype")
     .Output("intermediates: dtype")
     .Attr("num_channels: int")
     .Attr("is_training: bool")
@@ -46,30 +44,25 @@ REGISTER_OP("PopnnLstmLayer")
       c->set_output(0,
                     c->MakeShape({time_steps, batch_size, doc_num_channels}));
       c->set_output(1, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(2, c->MakeShape({batch_size, doc_num_channels}));
-      c->set_output(3, c->MakeShape({}));
+      c->set_output(2, c->MakeShape({}));
       return Status::OK();
     })
     .Doc(R"doc(
-Internal implementation of PopnnLstmLayer.
+Internal implementation of PopnnGRULayer.
 )doc");
 
-REGISTER_OP("PopnnLstmLayerBackprop")
+REGISTER_OP("PopnnGRULayerBackprop")
     .Input("inputs: dtype")
-    .Input("input_h_state: dtype")
-    .Input("input_c_state: dtype")
+    .Input("initial_state: dtype")
     .Input("kernel: dtype")
     .Input("biases: dtype")
     .Input("output: dtype")
-    .Input("output_h_state: dtype")
-    .Input("output_c_state: dtype")
+    .Input("output_state: dtype")
     .Input("intermediates: dtype")
     .Input("output_backprop: dtype")
-    .Input("output_h_state_backprop: dtype")
-    .Input("output_c_state_backprop: dtype")
+    .Input("output_state_backprop: dtype")
     .Output("inputs_backprop: dtype")
-    .Output("input_h_state_backprop: dtype")
-    .Output("input_c_state_backprop: dtype")
+    .Output("initial_state_backprop: dtype")
     .Output("kernel_backprop: dtype")
     .Output("biases_backprop: dtype")
     .Attr("num_channels: int")
@@ -78,19 +71,17 @@ REGISTER_OP("PopnnLstmLayerBackprop")
     .Attr("partials_dtype: {float16, float32}")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
-      auto in_h_shape = c->input(1);
-      auto in_c_shape = c->input(2);
-      auto kernel_shape = c->input(3);
-      auto biases_shape = c->input(4);
+      auto in_state_shape = c->input(1);
+      auto kernel_shape = c->input(2);
+      auto biases_shape = c->input(3);
       c->set_output(0, in_shape);
-      c->set_output(1, in_h_shape);
-      c->set_output(2, in_c_shape);
-      c->set_output(3, kernel_shape);
-      c->set_output(4, biases_shape);
+      c->set_output(1, in_state_shape);
+      c->set_output(2, kernel_shape);
+      c->set_output(3, biases_shape);
       return Status::OK();
     })
     .Doc(R"doc(
-Internal implementation of PopnnLstmLayerBackprop.
+Internal implementation of PopnnGRULayerBackprop.
 )doc");
 
 }  // namespace tensorflow
