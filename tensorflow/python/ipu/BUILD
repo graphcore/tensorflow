@@ -420,6 +420,7 @@ test_suite(
         "infeed_outfeed_test",
         "ipu_estimator_test",
         "map_gradient_optimizer_test",
+        "pipelining_test",
         "pop_datastream_test",
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",

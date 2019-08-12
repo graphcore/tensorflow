@@ -26,8 +26,9 @@ REGISTER_OP("IpuUserOp")
     .Attr("output_types: list(type) >= 0")
     .Attr("output_shapes: list(shape) >= 0")
     .Attr("library_path: string")
+    .Attr("op_name: string")
     .Attr("gp_path: string")
-
+    .Attr("is_gradient: bool")
     // We don't know what the user is going to do.
     .SetIsStateful()
 

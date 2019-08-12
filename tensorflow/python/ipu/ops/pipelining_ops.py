@@ -29,6 +29,7 @@ from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 
+
 def pipeline(stages, inputs=None, infeed_queue=None, name=None):
   """
   Sets up a series of computational stages, where the output of one element is
@@ -113,31 +114,35 @@ def pipeline(stages, inputs=None, infeed_queue=None, name=None):
 
   # We expect at least one stage.
   if len(stages) < 2:
-    raise ValueError("Pipeline requires at least one stage.")
+    raise ValueError("Pipeline requires at least two stages.")
 
   def _pipeline(*args):
     last_outputs = args
     for i, stage in enumerate(stages):
       stage_infeed_queue = infeed_queue if i == 0 else None
       stage_name = name + "_stage_" + str(i)
-      last_outputs = _pipeline_stage(stage,
-                                     last_outputs,
-                                     infeed_queue=stage_infeed_queue,
-                                     name=stage_name)
+      last_outputs = _pipeline_stage(
+          stage,
+          last_outputs,
+          infeed_queue=stage_infeed_queue,
+          name=stage_name)
     return last_outputs
 
   with ops.name_scope(name) as scope:
-    func_graph, captured_args = _compile_function(_pipeline, inputs, scope, name)
+    func_graph, captured_args = _compile_function(_pipeline, inputs, scope,
+                                                  name)
 
     # Create the pipeline and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):
-      tensors = gen_pipelining_ops.pipeline(captured_args,
+      tensors = gen_pipelining_ops.pipeline(
+          captured_args,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes)
 
     return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
                                               tensors)
+
 
 def _pipeline_stage(func, args, kwargs=None, infeed_queue=None, name=None):
   """Internal function for compiling a pipeline stage. This should not be called
@@ -165,7 +170,9 @@ def _pipeline_stage(func, args, kwargs=None, infeed_queue=None, name=None):
   # dequeues the infeed.
   if infeed_queue:
     if not isinstance(infeed_queue, ipu_infeed_queue.IPUInfeedQueue):
-      raise TypeError("infeed_queue is not an instance of ipu_infeed_queue.IPUInfeedQueue")
+      raise TypeError(
+          "infeed_queue is not an instance of ipu_infeed_queue.IPUInfeedQueue")
+
     def func_wrapper(*args):
       args = _convert_to_list(args)
       dequeue_ops = _convert_to_list(infeed_queue._dequeue())
@@ -175,6 +182,7 @@ def _pipeline_stage(func, args, kwargs=None, infeed_queue=None, name=None):
         return func(*(args), **kwargs)
       else:
         return func(*(args + dequeue_ops))
+
     func_to_compile = func_wrapper
 
   with ops.name_scope(name) as scope:
@@ -183,13 +191,15 @@ def _pipeline_stage(func, args, kwargs=None, infeed_queue=None, name=None):
 
     # Create the pipeline stage and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):
-      tensors = gen_pipelining_ops.pipeline_stage(captured_args,
+      tensors = gen_pipelining_ops.pipeline_stage(
+          captured_args,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes)
 
     return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
                                               tensors)
+
 
 def _compile_function(func, args, scope, name):
   # Automatic control dependencies are added in defuns, but not in v1
@@ -201,8 +211,10 @@ def _compile_function(func, args, scope, name):
 
   # Compile the function to a graph.
   func_graph = func_graph_module.func_graph_from_py_func(
-    func_name, func, captured_args, {},
-    add_control_dependencies=add_control_dependencies)
+      func_name,
+      func,
+      captured_args, {},
+      add_control_dependencies=add_control_dependencies)
 
   # Add the external captures (resources) to arguments.
   captured_args += func_graph.external_captures

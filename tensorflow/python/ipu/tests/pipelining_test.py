@@ -97,6 +97,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
             dtype=np.float32,
             initializer=init_ops.constant_initializer(1))
         return w1
+
     def my_net():
       l_pipeline = pipelining_ops._pipeline_stage(stage, [])
       optimizer1 = gradient_descent.GradientDescentOptimizer(0.1)
@@ -107,12 +108,17 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       l = stage("non_pipeline")
       optimizer2 = gradient_descent.GradientDescentOptimizer(0.1)
       # Get the new variables.
-      non_pipeline_stage_vars = [x for x in variables.trainable_variables() if x not in pipeline_stage_vars]
+      non_pipeline_stage_vars = [
+          x for x in variables.trainable_variables()
+          if x not in pipeline_stage_vars
+      ]
       train = optimizer2.minimize(l)
 
       # Subtract the loss and all the variables to make sure we get the same results.
       with ops.control_dependencies([train_pipeline, train]):
-        diffs = [x - y for x,y in zip(pipeline_stage_vars, non_pipeline_stage_vars)]
+        diffs = [
+            x - y for x, y in zip(pipeline_stage_vars, non_pipeline_stage_vars)
+        ]
         diffs.append(l_pipeline - l)
         return diffs
 
@@ -150,12 +156,17 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       l = stage(x, "non_pipeline")
       optimizer2 = gradient_descent.GradientDescentOptimizer(0.1)
       # Get the new variables.
-      non_pipeline_stage_vars = [x for x in variables.trainable_variables() if x not in pipeline_stage_vars]
+      non_pipeline_stage_vars = [
+          x for x in variables.trainable_variables()
+          if x not in pipeline_stage_vars
+      ]
       train = optimizer2.minimize(l)
 
       # Subtract the loss and all the variables to make sure we get the same results.
       with ops.control_dependencies([train_pipeline, train]):
-        diffs = [x - y for x,y in zip(pipeline_stage_vars, non_pipeline_stage_vars)]
+        diffs = [
+            x - y for x, y in zip(pipeline_stage_vars, non_pipeline_stage_vars)
+        ]
         diffs.append(l_pipeline - l)
         return diffs
 
@@ -198,7 +209,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     def my_net():
       def body(loss):
-        return loss + pipelining_ops._pipeline_stage(stage, [], infeed_queue=infeed_queue)
+        return loss + pipelining_ops._pipeline_stage(
+            stage, [], infeed_queue=infeed_queue)
+
       r = loops.repeat(10, body, [0.0])
       return r
 
@@ -238,7 +251,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     def my_net():
       def body(loss):
-        return loss + pipelining_ops._pipeline_stage(stage, [10.0], infeed_queue=infeed_queue)
+        return loss + pipelining_ops._pipeline_stage(
+            stage, [10.0], infeed_queue=infeed_queue)
+
       r = loops.repeat(10, body, [0.0])
       return r
 
@@ -262,14 +277,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
             use_bias=True,
             kernel_initializer=init_ops.ones_initializer())(x)
         return y
+
     def stage2(x):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer())(x)
-        loss = math_ops.reduce_sum(y)
-        return loss
+      y = layers.Conv2D(
+          2, 1, use_bias=True,
+          kernel_initializer=init_ops.ones_initializer())(x)
+      loss = math_ops.reduce_sum(y)
+      return loss
 
     def my_net(x):
       # Compute with and without the pipeline stage.
@@ -311,6 +325,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
             kernel_initializer=init_ops.ones_initializer(),
             name='conv1')(kwargs["a"])
         return y + kwargs["b"], c
+
     def stage2(x, c):
       return math_ops.reduce_sum(x) + c
 
@@ -318,6 +333,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       def body(loss):
         return loss + pipelining_ops.pipeline([stage1, stage2], [10.0],
                                               infeed_queue=infeed_queue)
+
       r = loops.repeat(10, body, [0.0])
       return r
 
@@ -343,6 +359,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
             bias_initializer=init_ops.ones_initializer(),
             kernel_initializer=init_ops.ones_initializer())(x)
         return y
+
     def stage2(x, name=None):
       name = "stage2_vs" + name if name else ""
       with variable_scope.variable_scope(name, use_resource=True):
@@ -365,12 +382,17 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       l = stage2(stage1(x, "non_pipeline"), "non_pipeline")
       optimizer2 = gradient_descent.GradientDescentOptimizer(0.1)
       # Get the new variables.
-      non_pipeline_stage_vars = [x for x in variables.trainable_variables() if x not in pipeline_stage_vars]
+      non_pipeline_stage_vars = [
+          x for x in variables.trainable_variables()
+          if x not in pipeline_stage_vars
+      ]
       train = optimizer2.minimize(l)
 
       # Subtract the loss and all the variables to make sure we get the same results.
       with ops.control_dependencies([train_pipeline, train]):
-        diffs = [x - y for x,y in zip(pipeline_stage_vars, non_pipeline_stage_vars)]
+        diffs = [
+            x - y for x, y in zip(pipeline_stage_vars, non_pipeline_stage_vars)
+        ]
         diffs.append(l_pipeline - l)
         return diffs
 
@@ -401,9 +423,10 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      with self.assertRaisesRegexp(
-        ValueError, 'Pipeline requires at least one stage.' ):
+      with self.assertRaisesRegexp(ValueError,
+                                   'Pipeline requires at least two stages.'):
         r = xla.compile(my_net, inputs=[x])
+
 
 if __name__ == "__main__":
   googletest.main()
