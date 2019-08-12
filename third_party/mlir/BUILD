@@ -21,6 +21,7 @@ package_group(
     packages = [
         "//...",
         "//learning/glassbox/evaluation/compiler/...",
+        "//tensorflow/compiler/xla/service/gpu/mlir/...",
     ],
 )
 
@@ -385,6 +386,7 @@ cc_library(
     deps = [
         ":IR",
         ":Support",
+        ":VectorOpsIncGen",
         "@llvm//:support",
     ],
 )
@@ -1829,6 +1831,33 @@ cc_library(
         "@llvm//:support",
     ],
     alwayslink = 1,
+)
+
+filegroup(
+    name = "VectorOpsTdFiles",
+    srcs = [
+        "include/mlir/VectorOps/VectorOps.td",
+        ":OpBaseTdFiles",
+    ],
+)
+
+gentbl(
+    name = "VectorOpsIncGen",
+    tbl_outs = [
+        (
+            "-gen-op-decls",
+            "include/mlir/VectorOps/VectorOps.h.inc",
+        ),
+        (
+            "-gen-op-defs",
+            "include/mlir/VectorOps/VectorOps.cpp.inc",
+        ),
+    ],
+    tblgen = ":mlir-tblgen",
+    td_file = "include/mlir/VectorOps/VectorOps.td",
+    td_srcs = [
+        ":VectorOpsTdFiles",
+    ],
 )
 
 # To reference all tablegen files here when checking for updates to them.
