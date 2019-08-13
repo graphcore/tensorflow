@@ -35,7 +35,6 @@ from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.engine import training_v2_utils
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
 from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.util import nest
 from tensorflow.python.util import tf_contextlib
 
 
@@ -149,15 +148,11 @@ def run_one_epoch(model,
         batch_logs['data_exhausted'] = True
         break
 
-      if mode != ModeKeys.PREDICT:
-        data_batch_size = batch_outs['batch_size']
-        batch_outs = (batch_outs['total_loss'] + batch_outs['output_losses']
-                      + batch_outs['metrics'])
-        if current_batch_size != data_batch_size:
-          batch_logs['size'] = data_batch_size
-          current_batch_size = data_batch_size
-      else:
-        batch_outs = _aggregate_predict_results(strategy, batch_outs, model)
+      if not isinstance(batch_outs, list):
+        batch_outs = [batch_outs]
+      if strategy:
+        batch_outs = dist_utils._per_replica_aggregate_batch(
+            strategy, batch_outs, model, mode)
 
       if step == 0:
         aggregator.create(batch_outs)
@@ -191,7 +186,8 @@ class Loop(training_utils.TrainingLoop):
       self, model, x=None, y=None, batch_size=None, epochs=1, verbose=1,
       callbacks=None, validation_split=0., validation_data=None, shuffle=True,
       class_weight=None, sample_weight=None, initial_epoch=0,
-      steps_per_epoch=None, validation_steps=None, validation_freq=1, **kwargs):
+      steps_per_epoch=None, validation_steps=None, validation_freq=1,
+      max_queue_size=10, workers=1, use_multiprocessing=False, **kwargs):
     batch_size = model._validate_or_infer_batch_size(
         batch_size, steps_per_epoch, x)
 
@@ -214,7 +210,10 @@ class Loop(training_utils.TrainingLoop):
           shuffle=shuffle,
           validation_data=validation_data,
           validation_steps=validation_steps,
-          distribution_strategy=strategy)
+          distribution_strategy=strategy,
+          max_queue_size=max_queue_size,
+          workers=workers,
+          use_multiprocessing=use_multiprocessing)
 
       total_samples = _get_total_number_of_samples(training_data_adapter)
       use_sample = total_samples is not None
@@ -356,7 +355,8 @@ class Loop(training_utils.TrainingLoop):
 
   def _model_iteration(
       self, model, mode, x=None, y=None, batch_size=None, verbose=1,
-      sample_weight=None, steps=None, callbacks=None, **kwargs):
+      sample_weight=None, steps=None, callbacks=None, max_queue_size=10,
+      workers=1, use_multiprocessing=False, **kwargs):
 
     batch_size = model._validate_or_infer_batch_size(
         batch_size, steps, x)
@@ -374,7 +374,10 @@ class Loop(training_utils.TrainingLoop):
           batch_size=batch_size,
           sample_weights=sample_weight,
           steps=steps,
-          distribution_strategy=strategy)
+          distribution_strategy=strategy,
+          max_queue_size=max_queue_size,
+          workers=workers,
+          use_multiprocessing=use_multiprocessing)
       total_samples = _get_total_number_of_samples(adapter)
       use_sample = total_samples is not None
 
@@ -434,16 +437,21 @@ class Loop(training_utils.TrainingLoop):
 
   def evaluate(
       self, model, x=None, y=None, batch_size=None, verbose=1,
-      sample_weight=None, steps=None, callbacks=None, **kwargs):
+      sample_weight=None, steps=None, callbacks=None, max_queue_size=10,
+      workers=1, use_multiprocessing=False, **kwargs):
     return self._model_iteration(
         model, ModeKeys.TEST, x=x, y=y, batch_size=batch_size, verbose=verbose,
-        sample_weight=sample_weight, steps=steps, callbacks=callbacks, **kwargs)
+        sample_weight=sample_weight, steps=steps, callbacks=callbacks,
+        max_queue_size=max_queue_size, workers=workers,
+        use_multiprocessing=use_multiprocessing, **kwargs)
 
   def predict(self, model, x, batch_size=None, verbose=0, steps=None,
-              callbacks=None, **kwargs):
+              callbacks=None, max_queue_size=10, workers=1,
+              use_multiprocessing=False, **kwargs):
     return self._model_iteration(
         model, ModeKeys.PREDICT, x=x, batch_size=batch_size, verbose=verbose,
-        steps=steps, callbacks=callbacks, **kwargs)
+        steps=steps, callbacks=callbacks, max_queue_size=max_queue_size,
+        workers=workers, use_multiprocessing=use_multiprocessing, **kwargs)
 
 
 def _get_distribution_strategy(model):
@@ -461,7 +469,9 @@ def _process_training_inputs(model, x, y, batch_size=None,
                              sample_weights=None, class_weights=None,
                              steps_per_epoch=None, validation_split=0.,
                              validation_data=None, validation_steps=None,
-                             shuffle=True, distribution_strategy=None):
+                             shuffle=True, distribution_strategy=None,
+                             max_queue_size=10, workers=1,
+                             use_multiprocessing=False):
   """Process the data input for fit() with respect to validation_split."""
   if validation_split and 0. < validation_split < 1. and validation_data:
     raise ValueError('validation_data and validation_split cannot be used '
@@ -501,7 +511,10 @@ def _process_training_inputs(model, x, y, batch_size=None,
                                     batch_size=batch_size,
                                     class_weights=class_weights,
                                     shuffle=shuffle, steps=steps_per_epoch,
-                                    distribution_strategy=distribution_strategy)
+                                    distribution_strategy=distribution_strategy,
+                                    max_queue_size=max_queue_size,
+                                    workers=workers,
+                                    use_multiprocessing=use_multiprocessing)
     val_adapter = None
     if validation_data:
       (val_x, val_y,
@@ -526,7 +539,8 @@ def _process_training_inputs(model, x, y, batch_size=None,
 
 def _process_inputs(model, x, y, batch_size=None, sample_weights=None,
                     class_weights=None, shuffle=False, steps=None,
-                    distribution_strategy=None):
+                    distribution_strategy=None, max_queue_size=10, workers=1,
+                    use_multiprocessing=False):
   """Process the inputs for fit/eval/predict()."""
   adapter_cls = data_adapter.select_data_adapter(x, y)
   if adapter_cls in _ADAPTER_FOR_STANDARDIZE_USER_DATA:
@@ -540,7 +554,9 @@ def _process_inputs(model, x, y, batch_size=None, sample_weights=None,
         steps=steps)
   adapter = adapter_cls(x, y, batch_size=batch_size, steps=steps,
                         sample_weights=sample_weights, shuffle=shuffle,
-                        distribution_strategy=distribution_strategy)
+                        distribution_strategy=distribution_strategy,
+                        max_queue_size=max_queue_size, workers=workers,
+                        use_multiprocessing=use_multiprocessing)
   # As a fallback for the data type that does not work with
   # _standardize_user_data, use the _prepare_model_with_inputs.
   if adapter_cls not in _ADAPTER_FOR_STANDARDIZE_USER_DATA:
@@ -555,18 +571,6 @@ def _get_total_number_of_samples(adapter):
   if adapter.has_partial_batch():
     total_sample -= (adapter.batch_size() - adapter.partial_batch_size())
   return total_sample
-
-
-def _aggregate_predict_results(strategy, batch_outs, model):
-  if not isinstance(batch_outs, list):
-    batch_outs = [batch_outs]
-  total_batch_outs = []
-  for i in range(len(model.outputs)):
-    num_replicas = strategy.num_replicas_in_sync
-    nested_outs = batch_outs[i * num_replicas:i * num_replicas + num_replicas]
-    total_batch_outs.append(
-        dist_utils.concat_along_batch_dimension(nest.flatten(nested_outs)))
-  return total_batch_outs
 
 
 class TrainingContext(object):

@@ -2484,6 +2484,7 @@ tf_py_test(
     additional_deps = [
         ":client_testlib",
         ":collective_ops",
+        ":kernels",
         ":framework_for_generated_wrappers",
         "//third_party/py/numpy",
     ],
@@ -2501,6 +2502,7 @@ cuda_py_test(
     ],
     tags = [
         "no_cuda_on_cpu_tap",
+        "no_rocm",
         "no_windows",
     ],
 )
