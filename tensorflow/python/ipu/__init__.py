@@ -39,6 +39,7 @@ from tensorflow.python.ipu.ops import normalization_ops
 from tensorflow.python.ipu.ops import normalization_ops_grad
 from tensorflow.python.ipu.ops import rand_ops
 from tensorflow.python.ipu.ops import rand_ops_grad
+from tensorflow.python.ipu.ops import replication_ops
 from tensorflow.python.ipu.ops import rnn_ops
 from tensorflow.python.ipu.ops import rnn_ops_grad
 from tensorflow.python.ipu.ops import summary_ops

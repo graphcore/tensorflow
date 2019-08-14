@@ -50,6 +50,7 @@ message PoplibsOp {
     RemapDeduce = 36;
     GRULayerBwd = 37;
     GRULayerFwd = 38;
+    ReplicationIndex = 39;
   }
   required Op op = 2;
 }
