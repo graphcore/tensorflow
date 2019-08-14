@@ -30,6 +30,10 @@ REGISTER_OP("IpuDropout")
     .Attr("scale: float")
     .Attr("is_using_user_seed: bool")
     .Attr("seed_modifier: int")
-    .SetShapeFn(shape_inference::UnchangedShape);
-
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      auto in_shape = c->input(0);
+      c->set_output(0, in_shape);
+      c->set_output(1, c->MakeShape({2}));
+      return Status::OK();
+    });
 }  // namespace tensorflow
