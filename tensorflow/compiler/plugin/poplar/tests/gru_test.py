@@ -309,8 +309,8 @@ class GRUTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
       # Check there is one fwd GRU
       self.assertEqual(
-          tu.count_compute_sets_matching(cs_list,
-                                         '*/CalcNextOutput/Op/Multiply'), 1)
+          tu.count_compute_sets_matching(
+              cs_list, '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve'), 1)
       # Check there is one bwd GRU
       self.assertEqual(
           tu.count_compute_sets_matching(cs_list, '*/MulOGate/Op/Multiply'), 1)
@@ -372,8 +372,8 @@ class GRUTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
       # Check there are two fwd GRUs.
       self.assertEqual(
-          tu.count_compute_sets_matching(cs_list,
-                                         '*/CalcNextOutput/Op/Multiply'), 2)
+          tu.count_compute_sets_matching(
+              cs_list, '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve'), 2)
       # Check there are two bwd GRUs.
       self.assertEqual(
           tu.count_compute_sets_matching(cs_list, '*/MulOGate/Op/Multiply'), 2)
