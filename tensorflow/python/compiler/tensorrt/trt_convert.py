@@ -148,7 +148,6 @@ TrtConversionParams = collections.namedtuple(
         "use_calibration",
 
         # Max size for the input batch.
-        # This option is deprecated in TF 2.0.
         "max_batch_size",
     ])
 
@@ -217,12 +216,11 @@ def _check_trt_version_compatibility():
 
 
 def get_tensorrt_rewriter_config(
-    conversion_params=DEFAULT_TRT_CONVERSION_PARAMS, is_v2=False):
+    conversion_params=DEFAULT_TRT_CONVERSION_PARAMS):
   """Returns a RewriterConfig proto for TRT transformation.
 
   Args:
     conversion_params: a TrtConversionParams instance.
-    is_v2: whether we're getting a RewriterConfig for TF 2.0.
 
   Returns:
     A RewriterConfig proto which sets a TensorRTOptimizer to run Grappler.
@@ -265,15 +263,9 @@ def get_tensorrt_rewriter_config(
       "maximum_cached_engines"].i = conversion_params.maximum_cached_engines
   optimizer.parameter_map[
       "use_calibration"].b = conversion_params.use_calibration
-
-  if is_v2:
-    # Static mode (a.k.a pre-generating TRT engines and make them node
-    # attributes) is deprecated in TF 2.0.
-    optimizer.parameter_map["is_dynamic_op"].b = True
-  else:
-    optimizer.parameter_map[
-        "max_batch_size"].i = conversion_params.max_batch_size
-    optimizer.parameter_map["is_dynamic_op"].b = conversion_params.is_dynamic_op
+  optimizer.parameter_map[
+      "max_batch_size"].i = conversion_params.max_batch_size
+  optimizer.parameter_map["is_dynamic_op"].b = conversion_params.is_dynamic_op
   return rewriter_config_with_trt
 
 
@@ -282,7 +274,7 @@ def get_tensorrt_rewriter_config(
 # this will result in the same TRTEngineOp being initialized multiple times
 # with different cache and duplicate TRT engines.
 # TODO(laigd): this may be caused by the fact that TRTEngineOp is not
-# stataful, need to investigate.
+# stateful, need to investigate.
 # TODO(laigd): we rely on the fact that all functions are fully inlined
 # before TF-TRT optimizer is called, as otherwise it may generate the same
 # name when optimizing a different function graph. Fix this.
@@ -728,11 +720,11 @@ def _get_resource_handle(name, device):
     return gen_trt_ops.create_trt_resource_handle(resource_name=name)
 
 
-class TRTEngineResourceDeleter(tracking.CapturableResourceDeleter):
+class _TRTEngineResourceDeleter(tracking.CapturableResourceDeleter):
   """Resource deleter for destroying TRT engine cache resource."""
 
   def __init__(self, resource_name, device):
-    super(TRTEngineResourceDeleter, self).__init__()
+    super(_TRTEngineResourceDeleter, self).__init__()
     self._resource_name = resource_name
     self._device = device
 
@@ -743,7 +735,7 @@ class TRTEngineResourceDeleter(tracking.CapturableResourceDeleter):
           handle, ignore_lookup_error=True)
 
 
-class TRTEngineResource(tracking.TrackableResource):
+class _TRTEngineResource(tracking.TrackableResource):
   """Class to track the serialized engines resource."""
 
   def __init__(self,
@@ -751,8 +743,8 @@ class TRTEngineResource(tracking.TrackableResource):
                filename,
                maximum_cached_engines,
                device="GPU"):
-    super(TRTEngineResource, self).__init__(
-        device=device, deleter=TRTEngineResourceDeleter(resource_name, device))
+    super(_TRTEngineResource, self).__init__(
+        device=device, deleter=_TRTEngineResourceDeleter(resource_name, device))
     self._resource_name = resource_name
     # Track the serialized engine file in the SavedModel.
     self._filename = self._track_trackable(
@@ -772,48 +764,89 @@ class TRTEngineResource(tracking.TrackableResource):
 class TrtGraphConverterV2(object):
   """An offline converter for TF-TRT transformation for TF 2.0 SavedModels.
 
-  To run the conversion without quantization calibration (e.g. for FP32/FP16
-  precision modes):
+  There are several ways to run the conversion:
 
-  ```python
-  params = DEFAULT_TRT_CONVERSION_PARAMS._replace(precision_mode='FP16')
-  converter = TrtGraphConverterV2(
-      input_saved_model_dir="my_dir", conversion_params=params)
-  converter.convert()
-  converter.save(output_saved_model_dir)
-  ```
+  1. FP32/FP16 precision, static mode (i.e. one TRT engine will be built for
+     each segment without executing the TRTEngineOp)
 
-  As a result, a TF-TRT converted SavedModel will be generated and saved to
-  `output_saved_model_dir`. The SavedModel will have TRT compatible subgraph
-  replaced by TRTEngineOps, but no TRT engines will be pre-built until execution
-  time. We can also build the TRT engines offline by running the converted
-  function with some input data:
+     ```python
+     params = DEFAULT_TRT_CONVERSION_PARAMS._replace(
+         precision_mode='FP16',
+         is_dynamic_op=False)
+     converter = TrtGraphConverterV2(
+         input_saved_model_dir="my_dir", conversion_params=params)
+     converter.convert()
+     converter.save(output_saved_model_dir)  # Save the converted SavedModel.
+     ```
 
-  ```python
-  params = DEFAULT_TRT_CONVERSION_PARAMS._replace(
-      precision_mode='FP16',
-      # Set this to a large enough number so it can cache all the TRT engines.
-      maximum_cached_engines=16)
-  converter = TrtGraphConverterV2(
-      input_saved_model_dir="my_dir", conversion_params=params)
-  converted_func = converter.convert()
-  for data in my_input_data:
-    converted_func(my_input_data)
-  converter.save(output_saved_model_dir)
-  ```
+     This saves the cost of building engines during inference, but also requires
+     that the input model has all tensor shapes fully specified (except for the
+     batch dimension).
 
-  In this way, for each unique shapes of the inputs to the TRTEngineOp, if it
-  cannot be handled by any previously generated TRT engine, a new engine will be
-  generated and serialized to the output SavedModel in `output_saved_model_dir`.
-  This is good for applications that cannot afford building TRT engines at
-  runtime but have access to input data that is similar to the one used in
-  production (for example, that will result in the same input shapes to the
-  TRTEngineOps). Also, the generated TRT engines is platform dependent, so we
-  need to run `converted_func` in an environment that is similar to production
-  (at least with same type of GPU).
+  2. FP32/FP16 precision, dynamic mode (i.e. TRT engines will be built only when
+     the corresponding TRTEngineOp is executed)
 
-  TODO(laigd/hinsu): running conversion with calibration in INT8 mode should
-  follow exactly the same steps.
+     ```python
+     params = DEFAULT_TRT_CONVERSION_PARAMS._replace(
+         precision_mode='FP16',
+         is_dynamic_op=True)
+     converter = TrtGraphConverterV2(
+         input_saved_model_dir="my_dir", conversion_params=params)
+     converter.convert()
+     converter.save(output_saved_model_dir)
+     ```
+
+     In this case, no TRT engines will be built or saved in the converted
+     SavedModel. But if input data is available during conversion, we can still
+     build and save the TRT engines to reduce the cost during inference (see
+     option 3 below).
+
+  3. FP32/FP16 precision, dynamic mode with pre-built engines
+
+     ```python
+     params = DEFAULT_TRT_CONVERSION_PARAMS._replace(
+         precision_mode='FP16',
+         is_dynamic_op=True,
+         # Set this to a large enough number so it can cache all the engines.
+         maximum_cached_engines=16)
+     converter = TrtGraphConverterV2(
+         input_saved_model_dir="my_dir", conversion_params=params)
+     converted_func = converter.convert()
+     for data in my_input_data:
+       converted_func(my_input_data)  # Generate corresponding TRT engines.
+     converter.save(output_saved_model_dir)  # Generated engines will be saved.
+     ```
+
+     In this way, one engine will be built/saved for each unique input shapes of
+     the TRTEngineOp. This is good for applications that cannot afford building
+     engines during inference but have access to input data that is similar to
+     the one used in production (for example, that has the same input shapes).
+     Also, the generated TRT engines is platform dependent, so we need to run
+     `converted_func` in an environment that is similar to production (e.g. with
+     same type of GPU).
+
+  4. INT8 precision with calibration, dynamic mode with pre-built engine
+
+     ```python
+     params = DEFAULT_TRT_CONVERSION_PARAMS._replace(
+         precision_mode='INT8',
+         is_dynamic_op=True,
+         # Currently only one INT8 engine is supported in this mode.
+         maximum_cached_engines=1,
+         use_calibration=True)
+     converter = TrtGraphConverterV2(
+         input_saved_model_dir="my_dir", conversion_params=params)
+     converted_func = converter.convert()
+
+     # Run INT8 calibration.
+     for data in my_input_data:
+       converted_func(my_input_data)
+
+     # Finalize the calibration, generate and save the TRT engine.
+     converter.save(output_saved_model_dir)
+     ```
+
+     The steps are similar to option 3 for FP32/FP16 precisions.
   """
 
   def __init__(self,
@@ -865,7 +898,7 @@ class TrtGraphConverterV2(object):
       The optimized GraphDef.
     """
     rewriter_config = get_tensorrt_rewriter_config(
-        conversion_params=self._conversion_params, is_v2=True)
+        conversion_params=self._conversion_params)
     grappler_session_config = config_pb2.ConfigProto()
     grappler_session_config.graph_options.rewrite_options.CopyFrom(
         rewriter_config)
@@ -948,7 +981,7 @@ class TrtGraphConverterV2(object):
         return
 
       # TODO(laigd): add an option for the user to choose the device.
-      resource_map[canonical_engine_name] = TRTEngineResource(
+      resource_map[canonical_engine_name] = _TRTEngineResource(
           canonical_engine_name, filename,
           self._conversion_params.maximum_cached_engines)
 

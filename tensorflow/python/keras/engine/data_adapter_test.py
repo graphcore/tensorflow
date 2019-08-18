@@ -18,11 +18,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import math
+import os
+import unittest
+
 from absl.testing import parameterized
 import numpy as np
 
 from tensorflow.python import keras
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.eager import context
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras.engine import data_adapter
@@ -134,6 +139,39 @@ class TensorLikeDataAdapterTest(DataAdapterTestBase):
     self.assertEqual(adapter.get_size(), 10)
     self.assertFalse(adapter.has_partial_batch())
 
+  def test_shuffle_correctness(self):
+    with context.eager_mode():
+      num_samples = 100
+      batch_size = 32
+      x = np.arange(num_samples)
+      np.random.seed(99)
+      adapter = self.adapter_cls(
+          x, y=None, batch_size=batch_size, shuffle=True, epochs=2)
+
+      def _get_epoch(ds_iter):
+        ds_data = []
+        for _ in range(int(math.ceil(num_samples / batch_size))):
+          ds_data.append(next(ds_iter)[0].numpy())
+        return np.concatenate(ds_data)
+
+      ds_iter = iter(adapter.get_dataset())
+
+      # First epoch.
+      epoch_data = _get_epoch(ds_iter)
+      # Check that shuffling occurred.
+      self.assertNotAllClose(x, epoch_data)
+      # Check that each elements appears, and only once.
+      self.assertAllClose(x, np.sort(epoch_data))
+
+      # Second epoch.
+      second_epoch_data = _get_epoch(ds_iter)
+      # Check that shuffling occurred.
+      self.assertNotAllClose(x, second_epoch_data)
+      # Check that shuffling is different across epochs.
+      self.assertNotAllClose(epoch_data, second_epoch_data)
+      # Check that each elements appears, and only once.
+      self.assertAllClose(x, np.sort(second_epoch_data))
+
   @parameterized.named_parameters(
       ('batch_size_5', 5, None, 5),
       ('batch_size_50', 50, 4, 50),  # Sanity check: batch_size takes precedence
@@ -212,6 +250,9 @@ class GeneratorDataAdapterTest(DataAdapterTestBase):
     self.model.compile(loss='sparse_categorical_crossentropy', optimizer='sgd')
     self.model.fit(self.generator_input, steps_per_epoch=10)
 
+  @unittest.skipIf(
+      os.name == 'nt',
+      'use_multiprocessing=True does not work on windows properly.')
   @test_util.run_v2_only
   def test_with_multiprocessing_training(self):
     self.model.compile(loss='sparse_categorical_crossentropy', optimizer='sgd')
@@ -253,6 +294,9 @@ class KerasSequenceAdapterTest(DataAdapterTestBase):
     self.model.compile(loss='sparse_categorical_crossentropy', optimizer='sgd')
     self.model.fit(self.sequence_input)
 
+  @unittest.skipIf(
+      os.name == 'nt',
+      'use_multiprocessing=True does not work on windows properly.')
   @test_util.run_v2_only
   def test_with_multiprocessing_training(self):
     self.model.compile(loss='sparse_categorical_crossentropy', optimizer='sgd')

@@ -77,6 +77,7 @@ cc_library(
         "include/mlir/IR/Diagnostics.h",
         "include/mlir/IR/Dialect.h",
         "include/mlir/IR/DialectHooks.h",
+        "include/mlir/IR/DialectInterface.h",
         "include/mlir/IR/DialectSymbolRegistry.def",
         "include/mlir/IR/Function.h",
         "include/mlir/IR/FunctionSupport.h",
@@ -1432,9 +1433,6 @@ cc_binary(
         ":tools/libcuda-runtime-wrappers.so",
     ],
     includes = ["include"],
-    # cl/262981524 introduced a regression to test/mlir-cuda-runner:gpu-to-cubin.mlir.test.
-    # TODO(timshen): Remove the following workaround.
-    linkopts = ["-Wl,-rpath,/var/google/persistent/kibbles/libcuda_running"],
     deps = [
         ":GPUDialect",
         ":GPUDialectRegistration",

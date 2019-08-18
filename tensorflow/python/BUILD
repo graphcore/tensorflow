@@ -3692,6 +3692,24 @@ py_library(
     ],
 )
 
+py_test(
+    name = "rnn_grad_test",
+    srcs = ["ops/rnn_grad_test.py"],
+    python_version = "PY3",
+    deps = [
+        ":array_ops",
+        ":client_testlib",
+        ":dtypes",
+        ":framework_ops",
+        ":framework_test_lib",
+        ":gradients",
+        ":math_ops",
+        ":rnn_grad",
+        ":rnn_ops_gen",
+        "//third_party/py/numpy",
+    ],
+)
+
 py_library(
     name = "standard_ops",
     srcs = ["ops/standard_ops.py"],
@@ -4885,6 +4903,7 @@ tf_py_wrap_cc(
         "util/kernel_registry.i",
         "util/port.i",
         "util/py_checkpoint_reader.i",
+        "util/scoped_annotation.i",
         "util/stat_summarizer.i",
         "util/tfprof.i",
         "util/traceme.i",
@@ -4937,6 +4956,7 @@ tf_py_wrap_cc(
         "//tensorflow/core/distributed_runtime:server_lib",
         "//tensorflow/core/profiler/internal:print_model_analysis",
         "//tensorflow/core/profiler/internal:python_traceme",
+        "//tensorflow/core/profiler/internal:python_scoped_annotation",
         "//tensorflow/tools/graph_transforms:transform_graph_lib",
         "//tensorflow/lite/toco/python:toco_python_api",
         "//tensorflow/python/eager:pywrap_tfe_lib",

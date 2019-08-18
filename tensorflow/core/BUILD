@@ -804,7 +804,6 @@ cc_library(
     hdrs = ["//tensorflow/core/platform:stacktrace_handler.h"],
     deps = [
         "//tensorflow/core/platform",
-        "//tensorflow/core/platform:abi",
         "//tensorflow/core/platform:stacktrace",
     ],
 )
@@ -4708,6 +4707,7 @@ tf_cuda_cc_test(
         ":framework",
         ":framework_internal",
         ":lib",
+        ":protos_all_cc",
         ":test",
         ":test_main",
         ":testlib",
