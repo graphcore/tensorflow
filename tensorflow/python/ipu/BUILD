@@ -82,6 +82,7 @@ py_library(
         "ops/normalization_ops.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
+        "ops/replication_ops.py",
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
         "optimizers/map_gradient_optimizer.py",

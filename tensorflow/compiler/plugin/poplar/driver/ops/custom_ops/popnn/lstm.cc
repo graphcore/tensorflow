@@ -43,21 +43,23 @@ static const size_t basic_lstm_cell_num_units = 4;
 
 StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
     const HloInstruction* inst) {
-  auto lstm_inst = Cast<HloLSTMInstruction>(inst);
+  auto lstm_inst = Cast<HloRNNInstruction>(inst);
 
   const auto input_shape = inst->operand(0)->shape();
   const auto time_steps = input_shape.dimensions(0);
   const auto batch_size = input_shape.dimensions(1);
   auto optional_input_size = convert_scalar<uint32>(input_shape.dimensions(2));
   if (!optional_input_size) {
-    return xla::FailedPrecondition("LSTM - Input size can't be casted.");
+    return xla::FailedPrecondition(
+        "LSTM - Input size cannot be interpreted as an unsigned integer.");
   }
   const auto input_size = *optional_input_size;
 
   auto optional_num_channels =
       convert_scalar<uint32>(lstm_inst->num_channels());
   if (!optional_num_channels) {
-    return xla::FailedPrecondition("LSTM - Num Channels can't be casted.");
+    return xla::FailedPrecondition(
+        "LSTM - Num Channels cannot be interpreted as an unsigned integer.");
   }
   const auto num_channels = *optional_num_channels;
 
@@ -70,7 +72,7 @@ StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
 }
 
 StatusOr<poplar::OptionFlags> GetLstmOpts(const HloInstruction* inst) {
-  auto lstm_inst = Cast<HloLSTMInstruction>(inst);
+  auto lstm_inst = Cast<HloRNNInstruction>(inst);
 
   poplar::OptionFlags lstm_opts;
   bool is_training = lstm_inst->is_training();
@@ -192,7 +194,7 @@ class LstmLayerFwdOp : public PoplibsOpDef {
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
 
-    auto lstm_inst = Cast<HloLSTMInstruction>(inst);
+    auto lstm_inst = Cast<HloRNNInstruction>(inst);
     bool is_training = lstm_inst->is_training();
 
     using namespace poputil::graphfn;

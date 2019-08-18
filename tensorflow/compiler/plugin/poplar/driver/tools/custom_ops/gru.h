@@ -1,4 +1,4 @@
-/* Copyright 2019 Graphcore Ltd
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_LSTM_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_LSTM_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_GRU_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_GRU_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
@@ -22,12 +22,12 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-class HloLSTMFwdInstruction : public HloRNNFwdInstruction {
+class HloGRUFwdInstruction : public HloRNNFwdInstruction {
  public:
-  explicit HloLSTMFwdInstruction(const Shape& shape,
-                                 absl::Span<HloInstruction* const> operands,
-                                 bool is_training, int32 num_channels,
-                                 xla::PrimitiveType partials_type);
+  explicit HloGRUFwdInstruction(const Shape& shape,
+                                absl::Span<HloInstruction* const> operands,
+                                bool is_training, int32 num_channels,
+                                xla::PrimitiveType partials_type);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -37,12 +37,12 @@ class HloLSTMFwdInstruction : public HloRNNFwdInstruction {
       HloCloneContext* ctx) const override;
 };
 
-class HloLSTMBwdInstruction : public HloRNNBwdInstruction {
+class HloGRUBwdInstruction : public HloRNNBwdInstruction {
  public:
-  explicit HloLSTMBwdInstruction(const Shape& shape,
-                                 absl::Span<HloInstruction* const> operands,
-                                 bool is_training, int32 num_channels,
-                                 xla::PrimitiveType partials_type);
+  explicit HloGRUBwdInstruction(const Shape& shape,
+                                absl::Span<HloInstruction* const> operands,
+                                bool is_training, int32 num_channels,
+                                xla::PrimitiveType partials_type);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -50,14 +50,14 @@ class HloLSTMBwdInstruction : public HloRNNBwdInstruction {
       HloCloneContext* ctx) const override;
 };
 
-std::unique_ptr<HloInstruction> CreateLSTMFwd(
+std::unique_ptr<HloInstruction> CreateGRUFwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, int32 num_channels, xla::PrimitiveType partials_type);
 
-std::unique_ptr<HloInstruction> CreateLSTMBwd(
+std::unique_ptr<HloInstruction> CreateGRUBwd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, int32 num_channels, xla::PrimitiveType partials_type);
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_LSTM_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_GRU_H_

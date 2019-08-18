@@ -39,37 +39,39 @@ timesteps = 5
 num_hidden = 512
 
 
-def _PopnnLSTM(x, h, c):
-  lstm_cell = ipu.ops.rnn_ops.PopnnLSTM(
+def _PopnnGRU(x, initial_state):
+  gru_cell = ipu.ops.rnn_ops.PopnnGRU(
       num_hidden,
       dtype=dataType,
       weights_initializer=init_ops.zeros_initializer(dtype=dataType),
-      bias_initializer=init_ops.zeros_initializer(dtype=dataType))
-  state = rnn_cell.LSTMStateTuple(c, h)
-  return lstm_cell(x, initial_state=state, training=False)
+      bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType))
+  return gru_cell(x, initial_state=initial_state, training=False)
 
 
-def _tfLSTM(x, h, c):
-  lstm_cell = rnn_cell.LSTMCell(
+def _tfGRU(x, initial_state):
+  gru_cell = rnn_cell.GRUCell(
       num_hidden,
-      name='basic_lstm_cell',
-      forget_bias=0.,
-      initializer=init_ops.zeros_initializer(dtype=dataType))
-  state = rnn_cell.LSTMStateTuple(c, h)
+      name='gru_cell',
+      kernel_initializer=init_ops.zeros_initializer(dtype=dataType),
+      bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType))
   return rnn.dynamic_rnn(
-      lstm_cell, x, dtype=dataType, initial_state=state, time_major=True)
+      gru_cell,
+      x,
+      dtype=dataType,
+      initial_state=initial_state,
+      time_major=True)
 
 
-class LstmSizeTest(xla_test.XLATestCase):
+class GRUSizeTest(xla_test.XLATestCase):
   def RunLayer(self, layer_func, x):
     with self.session() as sess:
       with ops.device('cpu'):
         px = array_ops.placeholder(dataType, shape=x.shape)
-        ph = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
-        pc = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
+        pinitial_state = array_ops.placeholder(
+            dataType, shape=[batch_size, num_hidden])
         report = gen_ipu_ops.ipu_event_trace()
       with ipu.scopes.ipu_scope("/device:IPU:0"):
-        r = ipu.ipu_compiler.compile(layer_func, inputs=[px, ph, pc])
+        r = ipu.ipu_compiler.compile(layer_func, inputs=[px, pinitial_state])
 
       opts = ipu.utils.create_ipu_config(profiling=True)
       ipu.utils.configure_ipu_system(opts)
@@ -78,8 +80,7 @@ class LstmSizeTest(xla_test.XLATestCase):
       out = sess.run(report)
       result = sess.run(r, {
           px: x,
-          ph: np.ones(ph.shape),
-          pc: np.ones(pc.shape)
+          pinitial_state: np.ones(pinitial_state.shape),
       })
       out = sess.run(report)
       evts = ipu.utils.extract_all_events(out)
@@ -92,10 +93,10 @@ class LstmSizeTest(xla_test.XLATestCase):
   def testCustomOpIsSmaller(self):
     np.random.seed(42)
     x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
-    size_custom_op, result_custom_op = self.RunLayer(_PopnnLSTM, x)
-    size_tf, result_tf = self.RunLayer(_tfLSTM, x)
-    self.assertAllClose(result_custom_op, result_tf)
+    size_custom_op, result_custom_op = self.RunLayer(_PopnnGRU, x)
+    size_tf, result_tf = self.RunLayer(_tfGRU, x)
     self.assertTrue(size_custom_op < size_tf)
+    self.assertAllClose(result_custom_op, result_tf)
 
 
 if __name__ == "__main__":

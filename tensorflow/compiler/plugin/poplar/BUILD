@@ -150,6 +150,7 @@ cc_library(
         "driver/tools/custom_ops/group_norm_train.cc",
         "driver/tools/custom_ops/group_norm_grad.cc",
         "driver/tools/custom_ops/group_norm_stats.cc",
+        "driver/tools/custom_ops/gru.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
         "driver/tools/custom_ops/lstm.cc",
         "driver/tools/custom_ops/onehot.cc",
@@ -160,6 +161,8 @@ cc_library(
         "driver/tools/custom_ops/remap.cc",
         "driver/tools/custom_ops/remap_deduce.cc",
         "driver/tools/custom_ops/replication_factor.cc",
+        "driver/tools/custom_ops/replication_index.cc",
+        "driver/tools/custom_ops/rnn.cc",
         "driver/tools/custom_ops/sigmoid.cc",
         "driver/tools/custom_ops/sparse.cc",
         "driver/tools/custom_ops/stateful_gradient_accumulate.cc",
@@ -224,6 +227,7 @@ cc_library(
         "driver/tools/custom_ops/arg_min_max.h",
         "driver/tools/custom_ops/dropout_hlo.h",
         "driver/tools/custom_ops/fifo.h",
+        "driver/tools/custom_ops/gru.h",
         "driver/tools/custom_ops/hlo_poplar_instruction.h",
         "driver/tools/custom_ops/ipu_inter_copy.h",
         "driver/tools/custom_ops/lstm.h",
@@ -235,6 +239,8 @@ cc_library(
         "driver/tools/custom_ops/remap.h",
         "driver/tools/custom_ops/remap_deduce.h",
         "driver/tools/custom_ops/replication_factor.h",
+        "driver/tools/custom_ops/replication_index.h",
+        "driver/tools/custom_ops/rnn.h",
         "driver/tools/custom_ops/sigmoid.h",
         "driver/tools/custom_ops/sparse.h",
         "driver/tools/custom_ops/stateful_gradient_accumulate.h",
@@ -299,6 +305,7 @@ cc_library(
         "driver/ops/custom_ops/custom_ops.cc",
         "driver/ops/custom_ops/poplibs_ops.cc",
         "driver/ops/custom_ops/popnn/arg_min_max.cc",
+        "driver/ops/custom_ops/popnn/gru.cc",
         "driver/ops/custom_ops/popnn/lstm.cc",
         "driver/ops/custom_ops/popnn/norm.cc",
         "driver/ops/custom_ops/popnn/onehot.cc",
@@ -316,6 +323,7 @@ cc_library(
         "driver/ops/custom_ops/poputil/remap.cc",
         "driver/ops/custom_ops/poputil/remap_deduce.cc",
         "driver/ops/custom_ops/poputil/replication_factor.cc",
+        "driver/ops/custom_ops/poputil/replication_index.cc",
         "driver/ops/custom_ops/poputil/stateful_gradient_accumulate.cc",
         "driver/ops/custom_ops/poputil/user_op.cc",
         "driver/ops/graph_caching_util.cc",
@@ -433,6 +441,7 @@ cc_library(
         "kernels/ipu_kernels.cc",
         "kernels/pipelining/pipelining.cc",
         "kernels/popnn/arg_min_max.cc",
+        "kernels/popnn/gru.cc",
         "kernels/popnn/lstm.cc",
         "kernels/popnn/norm.cc",
         "kernels/popnn/onehot.cc",
@@ -450,6 +459,7 @@ cc_library(
         "kernels/poputil/print_tensor.cc",
         "kernels/poputil/remap.cc",
         "kernels/poputil/replication_factor.cc",
+        "kernels/poputil/replication_index.cc",
         "kernels/poputil/stateful_gradient_accumulate.cc",
         "kernels/poputil/user_operation.cc"
     ],
@@ -494,6 +504,7 @@ tf_custom_op_py_library(
 cc_library(
     name = "popnn_ops",
     srcs = [
+        "ops/popnn/gru.cc",
         "ops/popnn/lstm.cc",
         "ops/popnn/norm.cc",
     ],
@@ -569,6 +580,7 @@ cc_library(
         "ops/poputil/remap.cc",
         "ops/poputil/remap_deduce.cc",
         "ops/poputil/replication_factor.cc",
+        "ops/poputil/replication_index.cc",
         "ops/poputil/stateful_gradient_accumulate.cc",
         "ops/poputil/user_operation.cc"
     ],
@@ -2030,6 +2042,20 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "gru_size_test",
+    size = "large",
+    srcs = ["tests/size_speed_tests/gru_size_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+tf_xla_py_test(
     name = "lstm_size_test",
     size = "large",
     srcs = ["tests/size_speed_tests/lstm_size_test.py"],
@@ -2040,6 +2066,20 @@ tf_xla_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+tf_xla_py_test(
+    name = "gru_training_test",
+    size = "large",
+    srcs = ["tests/training_tests/gru_training_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python:layers",
     ],
 )
 
@@ -2321,6 +2361,24 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "gru_test",
+    size = "medium",
+    srcs = ["tests/gru_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -2359,6 +2417,7 @@ test_suite(
         "gradient_accumulation_fuser_test",
         "graph_compile_io_map_test",
         "group_norm_test",
+        "gru_test",
         "hlo_computation_name_uniquify_test",
         "hlo_hash_test",
         "hlo_matcher_test",
@@ -2411,15 +2470,17 @@ test_suite(
     name = "size_speed_tests",
     tests = [
         "combined_weights_test",
+        "gru_size_test",
+        "lstm_size_test",
         "matmul_size_test",
         "resnet_size_test",
-        "lstm_size_test",
     ],
 )
 
 test_suite(
     name = "training_tests",
     tests = [
+       "gru_training_test",
        "lstm_training_test",
     ],
 )

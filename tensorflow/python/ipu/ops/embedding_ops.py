@@ -57,8 +57,10 @@ def embedding_lookup(params,
 
   # Handle the small case with a one-hot and matmul
   if K < one_hot_threshold:
-    ids_one_hot = array_ops.one_hot(
-        ids, K, name=name + "_one_hot", dtype=params.dtype)
+    ids_one_hot = array_ops.one_hot(ids,
+                                    K,
+                                    name=name + "_one_hot",
+                                    dtype=params.dtype)
     ids_one_hot = array_ops.reshape(ids_one_hot, [M, K])
     result = math_ops.matmul(ids_one_hot, params, name=name + "_lookup")
     return array_ops.reshape(result, list(ids.shape) + [N])
@@ -66,6 +68,12 @@ def embedding_lookup(params,
   # Handle a badly balanced case by splitting and applying two embedding lookups
   elif N < min_encoding_size:
     balance_factor = (min_encoding_size + N - 1) // N
+
+    # If the intermediate tensor would be larger than the embedding tensor,
+    # then fallback to the default embedding_lookup.
+    if (reduce(mul, ids.shape, 1) * N * balance_factor) > reduce(
+        mul, params.shape, 1):
+      return embedding_ops.embedding_lookup(params, ids, name=name)
 
     # Do we need to pad the input tensor?
     if K % balance_factor != 0:
@@ -81,31 +89,29 @@ def embedding_lookup(params,
                                [K // balance_factor, N * balance_factor])
 
     # This embedding lookup will get balance_factor more elements than desired
-    rows = embedding_lookup(
-        params,
-        ids_flat // balance_factor,
-        name=name + "_balanced",
-        one_hot_threshold=one_hot_threshold,
-        min_encoding_size=0)
+    rows = embedding_lookup(params,
+                            ids_flat // balance_factor,
+                            name=name + "_balanced",
+                            one_hot_threshold=one_hot_threshold,
+                            min_encoding_size=0)
 
     row_shape = rows.shape.as_list()
     M1 = row_shape[0]
     N1 = row_shape[1]
 
     # Build new indices which extract the desired elements from the rows tensor
-    ids1 = (math_ops.range(0, M1) * balance_factor) + (
-        ids_flat % balance_factor)
+    ids1 = (math_ops.range(0, M1) * balance_factor) + (ids_flat %
+                                                       balance_factor)
 
     # Reshape the rows, so that a single embedding encoding is in each row
     rows = array_ops.reshape(rows, [M1 * balance_factor, N1 // balance_factor])
 
     # Extract the desired embedding elements
-    result = embedding_lookup(
-        rows,
-        ids1,
-        name=name + "_reduce",
-        one_hot_threshold=one_hot_threshold,
-        min_encoding_size=0)
+    result = embedding_lookup(rows,
+                              ids1,
+                              name=name + "_reduce",
+                              one_hot_threshold=one_hot_threshold,
+                              min_encoding_size=0)
 
     # Reshape back to the user shape
     return array_ops.reshape(result, list(ids_shape) + [N])
