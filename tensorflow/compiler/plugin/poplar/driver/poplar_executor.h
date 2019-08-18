@@ -41,6 +41,7 @@ limitations under the License.
 #include "tensorflow/stream_executor/device_memory_allocator.h"
 #include "tensorflow/stream_executor/host/host_stream.h"
 #include "tensorflow/stream_executor/host/host_timer.h"
+#include "tensorflow/stream_executor/kernel_spec.h"
 #include "tensorflow/stream_executor/lib/error.h"
 #include "tensorflow/stream_executor/rng.h"
 #include "tensorflow/stream_executor/stream_executor.h"
@@ -117,14 +118,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return Status::OK();
   }
 
-  bool GetKernel(const se::MultiKernelLoaderSpec& spec,
-                 se::KernelBase* kernel) override {
-    return false;
+  Status GetKernel(const se::MultiKernelLoaderSpec &spec,
+                         se::KernelBase *kernel) override {
+    return xla::Unimplemented("Not Implemented");
   }
-  bool Launch(se::Stream* stream, const se::ThreadDim& thread_dims,
+  Status Launch(se::Stream *stream, const se::ThreadDim &thread_dims,
               const se::BlockDim& block_dims, const se::KernelBase& kernel,
               const se::KernelArgsArrayBase& args) override {
-    return false;
+    return xla::Unimplemented("Not Implemented");
   }
 
   void* Allocate(uint64 size) override;
