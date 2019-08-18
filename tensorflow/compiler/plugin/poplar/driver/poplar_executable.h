@@ -56,14 +56,10 @@ class PoplarExecutable : public Executable {
 
   ~PoplarExecutable() override;
 
-  StatusOr<ScopedShapedBuffer> ExecuteOnStream(
-      const ServiceExecutableRunOptions* run_options,
-      tensorflow::gtl::ArraySlice<const ShapedBuffer*> arguments,
-      HloExecutionProfile* hlo_execution_profile) override;
-
   StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStream(
       const ServiceExecutableRunOptions* run_options,
-      tensorflow::gtl::ArraySlice<const ShapedBuffer*> arguments) override;
+      absl::Span<const ShapedBuffer* const> arguments,
+      HloExecutionProfile* hlo_execution_profile) override;
 
   static int64 ShapeSizeBytes(const Shape& shape);
 

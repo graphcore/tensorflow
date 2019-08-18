@@ -63,9 +63,9 @@ PoplarExecutable::~PoplarExecutable() {
   }
 }
 
-StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteOnStream(
+StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     const ServiceExecutableRunOptions* run_options,
-    tensorflow::gtl::ArraySlice<const ShapedBuffer*> arguments,
+    absl::Span<const ShapedBuffer* const> arguments,
     HloExecutionProfile* hlo_execution_profile) {
   se::Stream* stream = run_options->stream();
 
@@ -134,13 +134,6 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteOnStream(
       }));
 
   return std::move(result_buffer);
-}
-
-StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
-    const ServiceExecutableRunOptions* run_options,
-    tensorflow::gtl::ArraySlice<const ShapedBuffer*> arguments) {
-  return xla::Unimplemented(
-      "ExecuteAsyncOnStream is not yet supported on Poplar.");
 }
 
 /*static*/ int64 PoplarExecutable::ShapeSizeBytes(const Shape& shape) {
