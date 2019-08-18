@@ -364,3 +364,4 @@ ArrayElementwiseOpTest.CompareLtF32s POPLAR // NaNs
 ArrayElementwiseOpTest.CompareNeF32s POPLAR // NaNs
 ArrayElementwiseOpTest.PowF32s POPLAR // NaNs
 
+SlicingTest.TorchGatherDense POPLAR // requires bitwise reduce OR
