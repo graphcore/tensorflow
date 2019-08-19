@@ -32,6 +32,7 @@ from tensorflow.python.keras.layers.convolutional import *
 from tensorflow.python.keras.layers.convolutional_recurrent import *
 from tensorflow.python.keras.layers.core import *
 from tensorflow.python.keras.layers.cudnn_recurrent import *
+from tensorflow.python.keras.layers.dense_attention import *
 from tensorflow.python.keras.layers.embeddings import *
 from tensorflow.python.keras.layers.local import *
 from tensorflow.python.keras.layers.merge import *
@@ -77,6 +78,8 @@ def deserialize(config, custom_objects=None):
   """
   # Prevent circular dependencies.
   from tensorflow.python.keras import models  # pylint: disable=g-import-not-at-top
+  from tensorflow.python.keras.premade.linear import LinearModel  # pylint: disable=g-import-not-at-top
+  from tensorflow.python.keras.premade.wide_deep import WideDeepModel  # pylint: disable=g-import-not-at-top
   from tensorflow.python.feature_column import dense_features  # pylint: disable=g-import-not-at-top
   from tensorflow.python.feature_column import sequence_feature_column as sfc  # pylint: disable=g-import-not-at-top
 
@@ -84,6 +87,8 @@ def deserialize(config, custom_objects=None):
   globs['Network'] = models.Network
   globs['Model'] = models.Model
   globs['Sequential'] = models.Sequential
+  globs['LinearModel'] = LinearModel
+  globs['WideDeepModel'] = WideDeepModel
 
   # Prevent circular dependencies with FeatureColumn serialization.
   globs['DenseFeatures'] = dense_features.DenseFeatures

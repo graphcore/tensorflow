@@ -3217,7 +3217,7 @@ class InputLayerTest(test.TestCase):
       # additional variables
       _ = input_layer(features)
       self.assertEqual(1, len(variables))
-      self.assertEqual(variables[0], input_layer.variables[0])
+      self.assertIs(variables[0], input_layer.variables[0])
 
   def test_feature_column_input_layer_gradient(self):
     with context.eager_mode():
@@ -5014,17 +5014,13 @@ class IdentityCategoricalColumnTest(test.TestCase):
     column = fc.categorical_column_with_identity(key='aaa', num_buckets=3)
     inputs = sparse_tensor.SparseTensorValue(
         indices=((0, 0), (1, 0), (1, 1)), values=(1, -1, 0), dense_shape=(2, 2))
-    id_weight_pair = column.get_sparse_tensors(
-        fc.FeatureTransformationCache({
-            'aaa': inputs
-        }), None)
-    self.assertIsNone(id_weight_pair.weight_tensor)
-
-    self.evaluate(variables_lib.global_variables_initializer())
-    self.evaluate(lookup_ops.tables_initializer())
-
-    with self.assertRaisesRegexp(errors.OpError, 'assert'):
-      self.evaluate(id_weight_pair.id_tensor)
+    with self.assertRaisesRegexp(
+        errors.InvalidArgumentError,
+        'Negative bucket index for categorical column "aaa"'):
+      column.get_sparse_tensors(
+          fc.FeatureTransformationCache({
+              'aaa': inputs
+          }), None)
 
   @test_util.run_deprecated_v1
   def test_get_sparse_tensors_with_inputs_too_small(self):
@@ -5039,17 +5035,13 @@ class IdentityCategoricalColumnTest(test.TestCase):
     column = fc.categorical_column_with_identity(key='aaa', num_buckets=3)
     inputs = sparse_tensor.SparseTensorValue(
         indices=((0, 0), (1, 0), (1, 1)), values=(1, 99, 0), dense_shape=(2, 2))
-    id_weight_pair = column.get_sparse_tensors(
-        fc.FeatureTransformationCache({
-            'aaa': inputs
-        }), None)
-    self.assertIsNone(id_weight_pair.weight_tensor)
-
-    self.evaluate(variables_lib.global_variables_initializer())
-    self.evaluate(lookup_ops.tables_initializer())
-
-    with self.assertRaisesRegexp(errors.OpError, 'assert'):
-      self.evaluate(id_weight_pair.id_tensor)
+    with self.assertRaisesRegexp(
+        errors.InvalidArgumentError,
+        'Bucket index for categorical column "aaa" exceeds number of buckets'):
+      column.get_sparse_tensors(
+          fc.FeatureTransformationCache({
+              'aaa': inputs
+          }), None)
 
   @test_util.run_deprecated_v1
   def test_get_sparse_tensors_with_inputs_too_big(self):

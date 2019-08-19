@@ -125,12 +125,28 @@ private:
     return funcIDMap.lookup(fnName);
   }
 
+  uint32_t findVariableID(StringRef varName) const {
+    return globalVarIDMap.lookup(varName);
+  }
+
+  /// Emit OpName for the given `resultID`.
+  LogicalResult processName(uint32_t resultID, StringRef name);
+
   /// Processes a SPIR-V function op.
   LogicalResult processFuncOp(FuncOp op);
+
+  /// Process a SPIR-V GlobalVariableOp
+  LogicalResult processGlobalVariableOp(spirv::GlobalVariableOp varOp);
 
   /// Process attributes that translate to decorations on the result <id>
   LogicalResult processDecoration(Location loc, uint32_t resultID,
                                   NamedAttribute attr);
+
+  template <typename DType>
+  LogicalResult processTypeDecoration(Location loc, DType type,
+                                      uint32_t resultId) {
+    return emitError(loc, "unhandled decoraion for type:") << type;
+  }
 
   //===--------------------------------------------------------------------===//
   // Types
@@ -148,7 +164,7 @@ private:
 
   /// Method for preparing basic SPIR-V type serialization. Returns the type's
   /// opcode and operands for the instruction via `typeEnum` and `operands`.
-  LogicalResult prepareBasicType(Location loc, Type type,
+  LogicalResult prepareBasicType(Location loc, Type type, uint32_t resultID,
                                  spirv::Opcode &typeEnum,
                                  SmallVectorImpl<uint32_t> &operands);
 
@@ -209,6 +225,9 @@ private:
 
   uint32_t findValueID(Value *val) const { return valueIDMap.lookup(val); }
 
+  /// Process spv.addressOf operations.
+  LogicalResult processAddressOfOp(spirv::AddressOfOp addressOfOp);
+
   /// Main dispatch method for serializing an operation.
   LogicalResult processOperation(Operation *op);
 
@@ -258,6 +277,9 @@ private:
 
   /// Map from FuncOps name to <id>s.
   llvm::StringMap<uint32_t> funcIDMap;
+
+  /// Map from GlobalVariableOps name to <id>s
+  llvm::StringMap<uint32_t> globalVarIDMap;
 
   /// Map from results of normal operations to their <id>s
   DenseMap<Value *, uint32_t> valueIDMap;
@@ -366,6 +388,31 @@ LogicalResult Serializer::processDecoration(Location loc, uint32_t resultID,
   return encodeInstructionInto(decorations, spirv::Opcode::OpDecorate, args);
 }
 
+LogicalResult Serializer::processName(uint32_t resultID, StringRef name) {
+  SmallVector<uint32_t, 4> nameOperands;
+  nameOperands.push_back(resultID);
+  if (failed(encodeStringLiteralInto(nameOperands, name))) {
+    return failure();
+  }
+  return encodeInstructionInto(names, spirv::Opcode::OpName, nameOperands);
+}
+
+namespace {
+template <>
+LogicalResult Serializer::processTypeDecoration<spirv::ArrayType>(
+    Location loc, spirv::ArrayType type, uint32_t resultID) {
+  if (type.hasLayout()) {
+    // OpDecorate %arrayTypeSSA ArrayStride strideLiteral
+    SmallVector<uint32_t, 3> args;
+    args.push_back(resultID);
+    args.push_back(static_cast<uint32_t>(spirv::Decoration::ArrayStride));
+    args.push_back(type.getArrayStride());
+    return encodeInstructionInto(decorations, spirv::Opcode::OpDecorate, args);
+  }
+  return success();
+}
+} // namespace
+
 LogicalResult Serializer::processFuncOp(FuncOp op) {
   uint32_t fnTypeID = 0;
   // Generate type of the function.
@@ -394,10 +441,9 @@ LogicalResult Serializer::processFuncOp(FuncOp op) {
   encodeInstructionInto(functions, spirv::Opcode::OpFunction, operands);
 
   // Add function name.
-  SmallVector<uint32_t, 4> nameOperands;
-  nameOperands.push_back(funcID);
-  encodeStringLiteralInto(nameOperands, op.getName());
-  encodeInstructionInto(names, spirv::Opcode::OpName, nameOperands);
+  if (failed(processName(funcID, op.getName()))) {
+    return failure();
+  }
 
   // Declare the parameters.
   for (auto arg : op.getArguments()) {
@@ -428,6 +474,61 @@ LogicalResult Serializer::processFuncOp(FuncOp op) {
   return encodeInstructionInto(functions, spirv::Opcode::OpFunctionEnd, {});
 }
 
+LogicalResult
+Serializer::processGlobalVariableOp(spirv::GlobalVariableOp varOp) {
+  // Get TypeID.
+  uint32_t resultTypeID = 0;
+  SmallVector<StringRef, 4> elidedAttrs;
+  if (failed(processType(varOp.getLoc(), varOp.type(), resultTypeID))) {
+    return failure();
+  }
+  elidedAttrs.push_back("type");
+  SmallVector<uint32_t, 4> operands;
+  operands.push_back(resultTypeID);
+  auto resultID = getNextID();
+
+  // Encode the name.
+  auto varName = varOp.sym_name();
+  elidedAttrs.push_back(SymbolTable::getSymbolAttrName());
+  if (failed(processName(resultID, varName))) {
+    return failure();
+  }
+  globalVarIDMap[varName] = resultID;
+  operands.push_back(resultID);
+
+  // Encode StorageClass.
+  operands.push_back(static_cast<uint32_t>(varOp.storageClass()));
+
+  // Encode initialization.
+  if (auto initializer = varOp.initializer()) {
+    auto initializerID = findVariableID(initializer.getValue());
+    if (!initializerID) {
+      return emitError(varOp.getLoc(),
+                       "invalid usage of undefined variable as initializer");
+    }
+    operands.push_back(initializerID);
+    elidedAttrs.push_back("initializer");
+  }
+
+  if (failed(encodeInstructionInto(functions, spirv::Opcode::OpVariable,
+                                   operands))) {
+    elidedAttrs.push_back("initializer");
+    return failure();
+  }
+
+  // Encode decorations.
+  for (auto attr : varOp.getAttrs()) {
+    if (llvm::any_of(elidedAttrs,
+                     [&](StringRef elided) { return attr.first.is(elided); })) {
+      continue;
+    }
+    if (failed(processDecoration(varOp.getLoc(), resultID, attr))) {
+      return failure();
+    }
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Type
 //===----------------------------------------------------------------------===//
@@ -445,7 +546,7 @@ LogicalResult Serializer::processType(Location loc, Type type,
   if ((type.isa<FunctionType>() &&
        succeeded(prepareFunctionType(loc, type.cast<FunctionType>(), typeEnum,
                                      operands))) ||
-      succeeded(prepareBasicType(loc, type, typeEnum, operands))) {
+      succeeded(prepareBasicType(loc, type, typeID, typeEnum, operands))) {
     typeIDMap[type] = typeID;
     return encodeInstructionInto(typesGlobalValues, typeEnum, operands);
   }
@@ -453,7 +554,8 @@ LogicalResult Serializer::processType(Location loc, Type type,
 }
 
 LogicalResult
-Serializer::prepareBasicType(Location loc, Type type, spirv::Opcode &typeEnum,
+Serializer::prepareBasicType(Location loc, Type type, uint32_t resultID,
+                             spirv::Opcode &typeEnum,
                              SmallVectorImpl<uint32_t> &operands) {
   if (isVoidType(type)) {
     typeEnum = spirv::Opcode::OpTypeVoid;
@@ -501,9 +603,8 @@ Serializer::prepareBasicType(Location loc, Type type, spirv::Opcode &typeEnum,
             loc, mlirBuilder.getI32IntegerAttr(arrayType.getNumElements()),
             /*isSpec=*/false)) {
       operands.push_back(elementCountID);
-      return success();
     }
-    return failure();
+    return processTypeDecoration(loc, arrayType, resultID);
   }
 
   if (auto ptrType = type.dyn_cast<spirv::PointerType>()) {
@@ -890,6 +991,17 @@ uint32_t Serializer::prepareConstantFp(Location loc, FloatAttr floatAttr,
 // Operation
 //===----------------------------------------------------------------------===//
 
+LogicalResult Serializer::processAddressOfOp(spirv::AddressOfOp addressOfOp) {
+  auto varName = addressOfOp.variable();
+  auto variableID = findVariableID(varName);
+  if (!variableID) {
+    return addressOfOp.emitError("unknown result <id> for variable ")
+           << varName;
+  }
+  valueIDMap[addressOfOp.pointer()] = variableID;
+  return success();
+}
+
 LogicalResult Serializer::processOperation(Operation *op) {
   // First dispatch the methods that do not directly mirror an operation from
   // the SPIR-V spec
@@ -901,6 +1013,12 @@ LogicalResult Serializer::processOperation(Operation *op) {
   }
   if (isa<spirv::ModuleEndOp>(op)) {
     return success();
+  }
+  if (auto varOp = dyn_cast<spirv::GlobalVariableOp>(op)) {
+    return processGlobalVariableOp(varOp);
+  }
+  if (auto addressOfOp = dyn_cast<spirv::AddressOfOp>(op)) {
+    return processAddressOfOp(addressOfOp);
   }
   return dispatchToAutogenSerialization(op);
 }
@@ -925,14 +1043,16 @@ Serializer::processOp<spirv::EntryPointOp>(spirv::EntryPointOp op) {
   encodeStringLiteralInto(operands, op.fn());
 
   // Add the interface values.
-  for (auto val : op.interface()) {
-    auto id = findValueID(val);
-    if (!id) {
-      return op.emitError("referencing unintialized variable <id>. "
-                          "spv.EntryPoint is at the end of spv.module. All "
-                          "referenced variables should already be defined");
+  if (auto interface = op.interface()) {
+    for (auto var : interface.getValue()) {
+      auto id = findVariableID(var.cast<SymbolRefAttr>().getValue());
+      if (!id) {
+        return op.emitError("referencing undefined global variable."
+                            "spv.EntryPoint is at the end of spv.module. All "
+                            "referenced variables should already be defined");
+      }
+      operands.push_back(id);
     }
-    operands.push_back(id);
   }
   return encodeInstructionInto(entryPoints, spirv::Opcode::OpEntryPoint,
                                operands);
