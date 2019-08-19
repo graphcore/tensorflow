@@ -772,13 +772,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   return std::move(executable);
 }
 
-Status PoplarCompiler::RunHloPassesOnModuleGroup(
-    HloModuleGroup* module_group,
-    absl::Span<se::StreamExecutor* const> executors,
-    se::DeviceMemoryAllocator* device_allocator) {
-  return xla::InvalidArgument("Module groups not supported on Poplar");
-}
-
 StatusOr<std::vector<std::unique_ptr<Executable>>>
 PoplarCompiler::RunBackendOnModuleGroup(
     std::unique_ptr<HloModuleGroup> module_group,
