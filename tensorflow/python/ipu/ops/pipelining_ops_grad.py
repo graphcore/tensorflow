@@ -88,8 +88,8 @@ def _compiled_function_grad(gen_op_to_call, op, *grads):
   for external_t, internal_t in zip(inputs, func_graph.inputs):
     custom_gradient.copy_handle_data(external_t, internal_t)
 
-  func_graph.captures = collections.OrderedDict(zip(inputs,
-                                                    func_graph.inputs))
+  func_graph.reset_captures(zip(inputs, func_graph.inputs))
+
   # Link the op so that the gradient code can use it.
   func_graph._forward_cond = op
 

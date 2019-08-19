@@ -38,10 +38,9 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.ops import pipelining_ops_grad
+from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import loops
-from tensorflow.python.compiler.xla import xla
-
 
 def next_feed_id():
   result = 'feed' + str(next_feed_id.feed_count)
@@ -80,7 +79,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[x])
+      r = ipu_compiler.compile(my_net, inputs=[x])
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -125,7 +124,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[])
+      r = ipu_compiler.compile(my_net, inputs=[])
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -176,7 +175,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[x])
+      r = ipu_compiler.compile(my_net, inputs=[x])
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -218,7 +217,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[])
+      r = ipu_compiler.compile(my_net, inputs=[])
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -260,7 +259,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[])
+      r = ipu_compiler.compile(my_net, inputs=[])
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -296,7 +295,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[x])
+      r = ipu_compiler.compile(my_net, inputs=[x])
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -340,7 +339,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[])
+      r = ipu_compiler.compile(my_net, inputs=[])
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -402,7 +401,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     tu.configure_ipu_system()
 
     with ops.device("/device:IPU:0"):
-      r = xla.compile(my_net, inputs=[x])
+      r = ipu_compiler.compile(my_net, inputs=[x])
 
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -425,7 +424,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegexp(ValueError,
                                    'Pipeline requires at least two stages.'):
-        r = xla.compile(my_net, inputs=[x])
+        r = ipu_compiler.compile(my_net, inputs=[x])
 
 
 if __name__ == "__main__":

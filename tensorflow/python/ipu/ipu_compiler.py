@@ -21,8 +21,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.framework import ops
 from tensorflow.python.compiler.xla import xla
+from tensorflow.python.framework import ops
+from tensorflow.python.ipu import scopes as ipu_scope
 
 
 def compile(computation, inputs=None):
@@ -62,7 +63,9 @@ def compile(computation, inputs=None):
     Exception: If the computation was not compiled for an IPU device.
   """
   old_op_list = ops.get_default_graph().get_operations()
-  result = xla.compile(computation, inputs)
+
+  with ipu_scope.ipu_jit_scope(0):
+    result = xla.compile(computation, inputs)
 
   new_op_list = ops.get_default_graph().get_operations()
 
