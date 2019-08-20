@@ -345,7 +345,8 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
   HloInstruction* repeat_call =
       parent_computation->AddInstruction(HloInstruction::CreateCall(
           input_tuple->shape(), {input_tuple}, repeat_body));
-  PoplarBackendConfig backend_config;
+  auto backend_config =
+      while_inst->backend_config<PoplarBackendConfig>().ValueOrDie();
   auto* call_config = backend_config.mutable_call_config();
   call_config->set_type(PoplarBackendConfig::CallConfig::RepeatLoop);
   auto* repeat_cfg = call_config->mutable_repeat_config();

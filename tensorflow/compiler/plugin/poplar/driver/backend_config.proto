@@ -8,11 +8,19 @@ package xla.poplarplugin;
 // tensorflow/compiler/xla/xla_data.proto for the Poplar specific
 // attributes.
 enum FrontendAttributeId {
-    // Scope override for stochastic rounding
-    // (See tensorflow/python/ipu/scopes.py)
-    STOCHASTIC_ROUNDING = 0;
-    // Custom call's type (Used in pipelining).
-    CALL_CONFIG_TYPE = 1;
+  // Scope override for stochastic rounding
+  // (See tensorflow/python/ipu/scopes.py)
+  STOCHASTIC_ROUNDING = 0;
+  // Custom call's type (Used in pipelining).
+  CALL_CONFIG_TYPE = 1;
+  // Type to use to store the partials results.
+  PARTIALS_TYPE = 2;
+};
+
+enum StochasticRounding {
+  NOT_SET = 0;
+  FORCE_ON = 1;
+  FORCE_OFF = 2;
 };
 
 // An enum representing the "Machine Learning" type of the instruction.
@@ -81,11 +89,6 @@ message PoplarBackendConfig {
   bool is_inplace = 3;
 
   int64 hash_of_custom_attributes = 4;
-  enum StochasticRounding {
-    NOT_SET = 0;
-    FORCE_ON = 1;
-    FORCE_OFF = 2;
-  }
 
   StochasticRounding stochastic_rounding = 5;
 

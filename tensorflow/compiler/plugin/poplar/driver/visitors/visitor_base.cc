@@ -642,14 +642,14 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
                       inst->backend_config<PoplarBackendConfig>());
   bool new_stochastic_rounding_enabled;
   switch (poplar_backend_config.stochastic_rounding()) {
-    case PoplarBackendConfig::NOT_SET:
+    case NOT_SET:
       new_stochastic_rounding_enabled =
           resources_.global_floating_point_behaviour.esr();
       break;
-    case PoplarBackendConfig::FORCE_ON:
+    case FORCE_ON:
       new_stochastic_rounding_enabled = true;
       break;
-    case PoplarBackendConfig::FORCE_OFF:
+    case FORCE_OFF:
       new_stochastic_rounding_enabled = false;
       break;
     default:
@@ -657,7 +657,7 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
           "Invalid value for PoplarBackendConfig.stochastic_rounding()");
   }
   if (new_stochastic_rounding_enabled != stochastic_rounding_enabled_) {
-    popsys::setStochasticRounding(*resources_.main_graph, sequence,
+    popsys::setStochasticRounding(GetGraph(resources_, inst), sequence,
                                   new_stochastic_rounding_enabled,
                                   "Preprocess");
     stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;

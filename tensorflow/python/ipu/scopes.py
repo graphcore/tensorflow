@@ -103,24 +103,42 @@ def ipu_shard(index):
 
 
 @tf_contextlib.contextmanager
-def frontend_attribute(attribute_name, attribute_value):
+def frontend_attribute(attribute_name, attribute_value, restore_to=None):
+  """Sets the specified scope attribute to the specified value in the graph.
 
+  Args:
+    attribute_name:  Name of the attribute.
+    attribute_value: Attribute's value as a string.
+    restore_to:      If at the end of the scope the attribute was to be
+                     undefined sets it to this value instead.
+
+  Returns:
+    A context
+  """
+
+  saved = xla_data_pb2.FrontendAttributes()
   proto = xla_data_pb2.FrontendAttributes()
   # pylint: disable=protected-access
   attr_value = ops.get_default_graph()._attr_scope_map.get(
       FRONTEND_ATTRIBUTES_NAME)
   # pylint: enable=protected-access
-  new_attribute = True
   if attr_value:
     proto.ParseFromString(attr_value.s)
+    saved.ParseFromString(attr_value.s)
   proto.map[attribute_name] = attribute_value
 
   attr_value = attr_value_pb2.AttrValue(s=proto.SerializeToString())
   attrs = {FRONTEND_ATTRIBUTES_NAME: attr_value}
 
   # pylint: disable=protected-access
-  with ops.get_default_graph()._attr_scope(attrs):
+  graph = ops.get_default_graph()
+  with graph._attr_scope(attrs):
     yield
+
+  if restore_to != None and attribute_name not in saved.map:
+    saved.map[attribute_name] = restore_to
+    graph._attr_scope_map[FRONTEND_ATTRIBUTES_NAME] = attr_value_pb2.AttrValue(
+        s=saved.SerializeToString())
   # pylint: enable=protected-access
 
 
@@ -128,7 +146,7 @@ def frontend_attribute(attribute_name, attribute_value):
 def stochastic_rounding(override):
   """Control stochastic rounding for a set of operations.
 
-  Manually sets the stochastic rounding method to use for intermediate results.
+  Manually sets the stochastic rounding method to use.
 
   Returns:
      A context
@@ -136,5 +154,9 @@ def stochastic_rounding(override):
   with frontend_attribute(
       backend_config_pb2.FrontendAttributeId.Name(
           backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING),
-      "on" if override else "off"):
+      backend_config_pb2.StochasticRounding.Name(
+          backend_config_pb2.StochasticRounding.FORCE_ON
+          if override else backend_config_pb2.StochasticRounding.FORCE_OFF),
+      backend_config_pb2.StochasticRounding.Name(
+          backend_config_pb2.StochasticRounding.NOT_SET)):
     yield
