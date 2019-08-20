@@ -1,6 +1,16 @@
 Custom IPU operations
 ---------------------
 
+There are two mechanisms for providing custom operations to the IPU through the
+TensorFlow interface.  The first allows a fully custom codelet and host build
+file.  The second allows a custom fused elementwise arithmetic operation.
+
+In both of these cases, the gradient creation in the Optimizers will not
+produce a gradient operation for the custom operation.
+
+Fully customized operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 A user can provide a custom operation that can be compiled into the Poplar
 executable and run on the IPU hardware.  The user must provide a host side
 shard object library which implements the action of adding vertices to a
@@ -55,4 +65,30 @@ This is an example of it in use:
 When compiling the host-size shared object file, it is not necessary to include
 or link against any TensorFlow header or library files.  Only the Poplar
 headers and link libraries should be necessary.
+
+Custom elementwise expressions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The python class `ipu.custom_ops.codelet_expression_op` provides an interface
+for giving a custom fused expression to the compiler.  This will be encoded into
+a single compute set.
+
+The arguments to the python function are a callable python function which
+encodes the arithmetic expression, and the tensor arguemnts to the operation.
+
+For instance:
+
+::
+
+  def my_custom_op(x, y, z):
+      return x * x + y * z
+
+  ipu.custom_ops.codelet_expression_op(my_custom_op, a, b, c)
+
+In this example, the python function `my_custom_op` provides the expression,
+and the arguments `a`, `b` and `c` are the three inputs from other parts of the
+TensorFlow graph.
+
+Python operators which are supported in the function are `+`, `-`, `*`, and
+`abs`.
 

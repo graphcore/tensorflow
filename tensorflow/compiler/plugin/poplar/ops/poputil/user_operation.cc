@@ -50,7 +50,7 @@ REGISTER_OP("IpuUserOp")
         output_types: The type of each tuple element output
         library_path: The path to the shared library containing
             the operation.
-        gp_path (optional): Path to the gp file if provided.s
+        gp_path (optional): Path to the gp file if provided.
     )doc");
 
 }  // namespace tensorflow

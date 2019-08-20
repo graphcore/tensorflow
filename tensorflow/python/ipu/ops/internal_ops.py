@@ -34,42 +34,21 @@ from tensorflow.python.util import compat
 from tensorflow.python.util import deprecation
 from tensorflow.python.util.tf_export import tf_export
 
+from tensorflow.python.ipu import custom_ops
 
+
+@deprecation.deprecated(
+    None,
+    "This function has been moved to the tensorflow.python.ipu.custom_ops"
+    "namespace.")
 def precompiled_user_op(inputs,
                         library_path,
                         gp_path=None,
                         outs=None,
                         name=None,
                         op_name=None):
-  """
-    Call the poplar function located in the shared library at 'library_path'
-    as part of the normal tensorflow execution with the given 'inputs'. The
-    shape and type of the output should be specified by 'outs' if it is None it
-    will default to no output. 'outs' should be a dictionary with two elements
-    like so:
-
-    outs = {
-          "output_types": [my_types_as_a_list],
-          "output_shapes": [my_shapes_as_a_list],
-      }
-  """
-
-  if outs is None:
-    outs = {
-        "output_types": [],
-        "output_shapes": [],
-    }
-  gp_path = gp_path if gp_path else ""
-  name = name if name else "UserOp"
-  op_name = op_name if op_name else "Build"
-  return gen_poputil_ops.ipu_user_op(
-      inputs,
-      library_path=library_path,
-      gp_path=gp_path,
-      op_name=op_name,
-      name=name,
-      is_gradient=False,
-      **outs)
+  return custom_ops.precompiled_user_op(inputs, library_path, gp_path, outs,
+                                        name, op_name)
 
 
 def remap(x, name=None):

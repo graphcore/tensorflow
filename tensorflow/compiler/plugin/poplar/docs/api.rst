@@ -67,7 +67,7 @@ Python API
   :members:
   :noindex:
 
-.. automodule tensorflow.python.ipu.internal_ops.precompiled_user_op
+.. automodule:: tensorflow.python.ipu.custom_ops
   :members:
   :noindex:
 

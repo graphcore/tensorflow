@@ -143,6 +143,7 @@ cc_library(
         "driver/tools/custom_ops/hlo_poplar_instruction.cc",
 
         # Place HloPoplarInstructionFactory files below here.
+        "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
         "driver/tools/custom_ops/arg_min_max.cc",
@@ -225,6 +226,7 @@ cc_library(
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
         "driver/tools/custom_ops/arg_min_max.h",
+        "driver/tools/custom_ops/codelet_expression_op.h",
         "driver/tools/custom_ops/dropout_hlo.h",
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
@@ -317,6 +319,7 @@ cc_library(
         "driver/ops/custom_ops/popops/select_scalars.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
         "driver/ops/custom_ops/poprand/random.cc",
+        "driver/ops/custom_ops/poputil/codelet_expression_op.cc",
         "driver/ops/custom_ops/poputil/fifo.cc",
         "driver/ops/custom_ops/poputil/ipu_inter_copy.cc",
         "driver/ops/custom_ops/poputil/print_tensor.cc",
@@ -455,6 +458,7 @@ cc_library(
         "kernels/poprand/random.cc",
         "kernels/popops/all_reduce.cc",
         "kernels/popops/sparse_softmax_cross_entropy.cc",
+        "kernels/poputil/codelet_expression.cc",
         "kernels/poputil/fifo.cc",
         "kernels/poputil/print_tensor.cc",
         "kernels/poputil/remap.cc",
@@ -575,6 +579,7 @@ tf_custom_op_py_library(
 cc_library(
     name = "poputil_ops",
     srcs = [
+        "ops/poputil/codelet_expression.cc",
         "ops/poputil/fifo.cc",
         "ops/poputil/print_tensor.cc",
         "ops/poputil/remap.cc",

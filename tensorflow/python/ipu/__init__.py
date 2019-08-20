@@ -30,7 +30,9 @@ from tensorflow.python.ipu import sharded_optimizer
 from tensorflow.python.ipu import sharding
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import ipu_estimator
+from tensorflow.python.ipu import vertex_edsl
 
+from tensorflow.python.ipu.ops import custom_ops
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ipu.ops import embedding_ops
 from tensorflow.python.ipu.ops import internal_ops

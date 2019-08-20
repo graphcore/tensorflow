@@ -161,6 +161,9 @@ void AttributeMap::AddAttribute(const std::string& field_name,
       LOG(FATAL) << "Could not parse the window.";
     }
     attributes_[field_name] = GetAsJsonValue(window_proto_str);
+  } else if (tinfo == typeid(std::string)) {
+    auto casted_val = absl::any_cast<std::string>(attr);
+    attributes_[field_name] = GetAsJsonValue(casted_val);
   } else {
     LOG(FATAL) << "Unsupported attribute value type " << tinfo.name();
   }

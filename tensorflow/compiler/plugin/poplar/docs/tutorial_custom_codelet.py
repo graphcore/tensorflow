@@ -30,10 +30,10 @@ def rotate_op(x, y, a):
   lib_path = os.path.join(base_path, "libcustom_rotate_op.so")
   gp_path = os.path.join(base_path, "custom_codelet.gp")
 
-  o = ipu.internal_ops.precompiled_user_op([x, y, a],
-                                           lib_path,
-                                           gp_path,
-                                           outs=outputs)
+  o = ipu.custom_ops.precompiled_user_op([x, y, a],
+                                         lib_path,
+                                         gp_path,
+                                         outs=outputs)
   return o
 
 

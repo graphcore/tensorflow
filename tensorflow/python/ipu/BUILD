@@ -77,6 +77,7 @@ py_library(
         "ipu_run_config.py",
         "loops.py",
         "ops/cross_replica_ops.py",
+        "ops/custom_ops.py",
         "ops/embedding_ops.py",
         "ops/internal_ops.py",
         "ops/normalization_ops.py",
@@ -91,6 +92,7 @@ py_library(
         "sharding.py",
         "sharding_utils.py",
         "utils.py",
+        "vertex_edsl.py",
     ],
     deps = [
         ":ipu_ops_lib",
@@ -120,6 +122,19 @@ tf_py_test(
     name = "map_gradient_optimizer_test",
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
+    name = "expression_op_test",
+    size = "medium",
+    srcs = ["tests/expression_op_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
@@ -413,6 +428,7 @@ test_suite(
     name = "all_tests",
     tests = [
         "autoshard_cnn_test",
+        "expression_op_test",
         "dropout_test",
         "embedding_lookup_test",
         "estimator_test",

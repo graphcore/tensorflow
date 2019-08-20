@@ -48,9 +48,7 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
     lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
 
     def my_net(x, y, z):
-      x = ipu.internal_ops.precompiled_user_op([x, y, z],
-                                               lib_path,
-                                               outs=outputs)
+      x = ipu.custom_ops.precompiled_user_op([x, y, z], lib_path, outs=outputs)
       return x
 
     with ipu.scopes.ipu_scope('/device:IPU:0'):
