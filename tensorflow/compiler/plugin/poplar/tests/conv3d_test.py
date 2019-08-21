@@ -216,7 +216,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
 
       ok = [
-          '__seed*', 'host-exchange-local-copy-',
+          '__seed*', 'host-exchange-local-copy-', 'Copy_',
           'Conv3DBackpropFilterV2/convolution.*/Conv_8x8x8'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
