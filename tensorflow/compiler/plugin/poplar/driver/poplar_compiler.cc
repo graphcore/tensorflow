@@ -602,6 +602,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     TF_CHECK_OK(comp_layout->CopyLayoutFromShape(shape));
   }
 
+  // Strip all layout information, as the Poplar lowering does not use
+  // layout information
+  StripAllInstructionLayouts(module.get());
+
   VLOG(1) << "Compiling main computation " << entry->name();
   if (VLOG_IS_ON(1)) {
     XLA_VLOG_LINES(1, module->ToString(GetPrintOptions()));

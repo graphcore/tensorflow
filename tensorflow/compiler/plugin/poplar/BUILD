@@ -736,6 +736,17 @@ xla_test(
 )
 
 xla_test(
+    name = "layout_strip_test",
+    srcs = ["tests/layout_strip_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "conversions_test",
     srcs = ["tests/conversions_test.cc"],
     backends = ["poplar"],
@@ -2429,6 +2440,7 @@ test_suite(
         "inplace_test",
         "inter_ipu_copy_inserter_test",
         "ipu_model_device_test",
+        "layout_strip_test",
         "lstm_test",
         "mapping_test",
         "matmul_test",

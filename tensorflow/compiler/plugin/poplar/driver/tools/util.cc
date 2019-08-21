@@ -30,6 +30,21 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+void StripAllInstructionLayouts(const HloModule* module) {
+  for (auto* comp : module->computations()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
+    for (auto* inst : comp->instructions()) {
+      if (!LayoutUtil::HasLayout(inst->shape()) ||
+          LayoutUtil::IsDense(inst->shape().layout())) {
+        LayoutUtil::SetToDefaultLayout(inst->mutable_shape());
+      }
+    }
+  }
+}
+
 int64 GetResourceVariableParameterCount(const HloModule* module) {
   /*
    * An XLA entry computation has a set of input parameters.  These map to a

@@ -66,6 +66,9 @@ absl::optional<To> convert_scalar(const From& from) {
   return check_convert_ok(to, from) ? absl::optional<To>(to) : absl::nullopt;
 };
 
+// Strip all Layout information from the Shapes of HloInstructions.
+void StripAllInstructionLayouts(const HloModule*);
+
 // Calculate the number of resource variable parameters
 int64 GetResourceVariableParameterCount(const HloModule*);
 
