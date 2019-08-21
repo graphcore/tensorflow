@@ -22,6 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.python.compiler.xla import xla
+from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import scopes as ipu_scope
 
@@ -75,7 +76,8 @@ def compile(computation, inputs=None):
   placed_on_ipu = False
   all_no_ops = True
   for o in added_ops:
-    if o.device.startswith('/device:IPU'):
+    device_spec = tf_device.DeviceSpec.from_string(o.device)
+    if device_spec.device_type == 'IPU':
       placed_on_ipu = True
       break
     elif o.type != 'NoOp':

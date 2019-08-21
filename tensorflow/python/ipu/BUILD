@@ -247,6 +247,15 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "ipu_compiler_test",
+    size = "small",
+    srcs = ["tests/ipu_compiler_test.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
+tf_py_test(
     name = "ipu_estimator_test",
     size = "large",
     shard_count = 4,
@@ -435,6 +444,7 @@ test_suite(
         "fifo_test",
         "frontend_attributes_test",
         "infeed_outfeed_test",
+        "ipu_compiler_test",
         "ipu_estimator_test",
         "map_gradient_optimizer_test",
         "pipelining_test",
