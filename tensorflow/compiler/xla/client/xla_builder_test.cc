@@ -1068,7 +1068,7 @@ TEST_F(XlaBuilderTest, ComplexSetFrontendAttributes) {
   ExpectInstructionsAttributesMatch(*module, expected);
 }
 
-TEST_F(XlaBuilderTest, AddFrontendAttribute) {
+TEST_F(XlaBuilderTest, SetInstructionFrontendAttribute) {
   XlaBuilder b(TestName());
 
   ConstantR0(&b, 0);
@@ -1086,7 +1086,7 @@ TEST_F(XlaBuilderTest, AddFrontendAttribute) {
   // Two attributes: {"attra": "a", "attr_c": "c"}
   {
     auto op = ConstantR0(&b, 0);
-    EXPECT_IS_OK(b.AddFrontendAttribute(op, "attr_c", "c"));
+    EXPECT_IS_OK(b.SetInstructionFrontendAttribute(op, "attr_c", "c"));
 
     FrontendAttributes attributes;
     (*attributes.mutable_map())["attr_a"] = "a";
@@ -1098,7 +1098,7 @@ TEST_F(XlaBuilderTest, AddFrontendAttribute) {
   // One attribute: { "attr_a", "a2"}
   {
     auto op = ConstantR0(&b, 0);
-    EXPECT_IS_OK(b.AddFrontendAttribute(op, "attr_a", "a2"));
+    EXPECT_IS_OK(b.SetInstructionFrontendAttribute(op, "attr_a", "a2"));
     FrontendAttributes attributes;
     (*attributes.mutable_map())["attr_a"] = "a2";
     expected.push_back(attributes);
@@ -1120,7 +1120,7 @@ TEST_F(XlaBuilderTest, AddFrontendAttribute) {
   // One attribute: { "attr_d", "d"}
   {
     auto op = ConstantR0(&b, 0);
-    EXPECT_IS_OK(b.AddFrontendAttribute(op, "attr_d", "d"));
+    EXPECT_IS_OK(b.SetInstructionFrontendAttribute(op, "attr_d", "d"));
     FrontendAttributes attributes;
     (*attributes.mutable_map())["attr_d"] = "d";
     expected.push_back(attributes);
