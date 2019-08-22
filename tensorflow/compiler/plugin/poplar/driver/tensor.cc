@@ -739,10 +739,9 @@ static StatusOr<poplar::Tensor> AddLeftMatMul(poplar::Graph& graph,
   a_shape = PoplarLeftMatMulShape(a_shape, target->dot_dimension_numbers());
   b_shape = PoplarRightMatMulShape(b_shape, target->dot_dimension_numbers());
   auto name = StrCat(debug_name, "_lhs");
-  poplar::OptionFlags opts;
 
-  TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
-  opts.set("fullyConnectedPass", ml_type);
+  TF_ASSIGN_OR_RETURN(const MLType ml_type, GetMLType(target));
+  auto opts = GetMatMulOptionsForType(resources, ml_type);
 
   auto result = poplin::createMatMulGroupedInputLHS(
       graph, type, type, a_shape, b_shape, name, opts, &resources.dot_cache);
@@ -808,10 +807,9 @@ static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
   a_shape = PoplarLeftMatMulShape(a_shape, target->dot_dimension_numbers());
   b_shape = PoplarRightMatMulShape(b_shape, target->dot_dimension_numbers());
   auto name = StrCat(debug_name, "_rhs");
-  poplar::OptionFlags opts;
 
-  TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
-  opts.set("fullyConnectedPass", ml_type);
+  TF_ASSIGN_OR_RETURN(const MLType ml_type, GetMLType(target));
+  auto opts = GetMatMulOptionsForType(resources, ml_type);
 
   auto result = poplin::createMatMulGroupedInputRHS(
       graph, type, type, a_shape, b_shape, name, opts, &resources.dot_cache);

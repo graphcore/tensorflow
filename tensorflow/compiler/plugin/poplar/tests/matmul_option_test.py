@@ -24,7 +24,7 @@ class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
   def testMatMulFwdBackwd(self):
     with self.session() as sess:
 
-      cfg = ipu.utils.create_ipu_config(profiling=True, clear_matmul_pass=True)
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
       ipu.utils.configure_ipu_system(cfg)
@@ -36,8 +36,9 @@ class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
               shape=[4, 3],
               dtype=np.float32,
               initializer=init_ops.constant_initializer(
-                  np.array([[1, 2, 1], [1, 3, 4], [1, 5, 6], [1, 7, 8]],
-                           dtype=np.float32)))
+                  np.array(
+                      [[1, 2, 1], [1, 3, 4], [1, 5, 6], [1, 7, 8]],
+                      dtype=np.float32)))
           b1 = variable_scope.get_variable(
               "b1",
               shape=[3],
@@ -70,8 +71,8 @@ class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
 
         fd = {
             x:
-            np.array([[7, 3, 5, 9], [1, 2, 3, 4], [5, 6, 7, 8]],
-                     dtype=np.float32),
+            np.array(
+                [[7, 3, 5, 9], [1, 2, 3, 4], [5, 6, 7, 8]], dtype=np.float32),
             expected: [[1, 2], [3, 4], [5, 6]]
         }
 

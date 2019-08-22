@@ -59,9 +59,9 @@ class DeferredAllocationsVisitorTest : public HloTestBase {};
 std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
                                                     bool merge_infeeds) {
   auto resources = absl::make_unique<CompilerResources>(
-      poplar::OptionFlags(), poplar::OptionFlags(), false, merge_infeeds, 1, 0,
-
-      0, 1, 64, module, IpuOptions::FloatingPointBehaviour(), false);
+      poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
+      false, false, merge_infeeds, 1, 0, 0, 1, 64, module,
+      IpuOptions::FloatingPointBehaviour());
   resources->main_graph = absl::make_unique<poplar::Graph>(
       poplar::Device::createCPUDevice(), 0, poplar::replication_factor(1));
   poplin::addCodelets(*resources->main_graph);

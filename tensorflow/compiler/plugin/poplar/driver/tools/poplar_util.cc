@@ -241,5 +241,14 @@ poplar::OptionFlags GetConvolutionOptionsForType(CompilerResources& res,
   return opts;
 }
 
+poplar::OptionFlags GetMatMulOptionsForType(CompilerResources& res,
+                                            const MLType mm_type) {
+  poplar::OptionFlags opts = res.default_matmul_options;
+  if (!res.clear_matmul_pass_type) {
+    opts.set("fullyConnectedPass", MLType_Name(mm_type));
+  }
+  return opts;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

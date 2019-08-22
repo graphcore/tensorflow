@@ -473,15 +473,15 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   CompilerResources resources(
       poplarExecutor->GetConvolutionOptions(),
-      poplarExecutor->GetPoolingOptions(),
+      poplarExecutor->GetMatMulOptions(), poplarExecutor->GetPoolingOptions(),
+      poplarExecutor->ClearMatmulPassType(),
       poplarExecutor->DisableGraphConvCaching(),
       poplarExecutor->MergeInfeedCopies(), replication_factor,
       poplarExecutor->GetMaxAllReduceBufferSize(),
       poplarExecutor->GetMaxInterIpuCopyBufferSize(),
       poplarExecutor->GetMaxSchedulerLookaheadDepth(),
       poplarExecutor->GetMaxSchedulerSearchSpaceSize(), module.get(),
-      poplarExecutor->FloatingPointBehaviour(),
-      poplarExecutor->ClearMatMulPass());
+      poplarExecutor->FloatingPointBehaviour());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";

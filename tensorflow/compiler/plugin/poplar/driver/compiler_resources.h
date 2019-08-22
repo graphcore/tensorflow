@@ -63,15 +63,17 @@ struct CompilerResources {
 
   const poplar::OptionFlags default_conv_options;
 
+  const poplar::OptionFlags default_matmul_options;
+
   const poplar::OptionFlags default_pooling_options;
+
+  bool clear_matmul_pass_type;
 
   bool disable_graph_convolution_caching;
 
   uint32 replication_factor;
 
   bool merge_infeed_io_copies;
-
-  bool clear_matmul_pass;
 
   std::map<std::string, TensorMap> tensor_maps;
 
@@ -85,25 +87,26 @@ struct CompilerResources {
 
   CompilerResources(
       const poplar::OptionFlags& conv_options,
-      const poplar::OptionFlags& pooling_options,
+      const poplar::OptionFlags& matmul_options,
+      const poplar::OptionFlags& pooling_options, bool clear_matmul_pass_type,
       bool disable_graph_convolution_caching, bool merge_infeed_io_copies,
       uint32 replication_factor, int64 max_all_reduce_buffer_size,
       int64 max_inter_ipu_copies_buffer_size,
       int64 max_scheduler_lookahead_depth,
       int64 max_scheduler_search_space_size, HloModule* module,
-      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
-      bool clear_matmul_pass)
+      const IpuOptions::FloatingPointBehaviour& floating_point_behaviour)
       : annotations(module),
         information(
             max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
             max_scheduler_lookahead_depth, max_scheduler_search_space_size),
         global_floating_point_behaviour(floating_point_behaviour),
         default_conv_options(conv_options),
+        default_matmul_options(matmul_options),
         default_pooling_options(pooling_options),
+        clear_matmul_pass_type(clear_matmul_pass_type),
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         replication_factor(replication_factor),
-        merge_infeed_io_copies(merge_infeed_io_copies),
-        clear_matmul_pass(clear_matmul_pass) {}
+        merge_infeed_io_copies(merge_infeed_io_copies) {}
 };
 
 }  // namespace poplarplugin

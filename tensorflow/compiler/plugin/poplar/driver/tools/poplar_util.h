@@ -116,6 +116,9 @@ StatusOr<bool> IsParallelMap(const HloInstruction*, const HloComputation*);
 
 poplar::OptionFlags GetConvolutionOptionsForType(CompilerResources& res,
                                                  const MLType conv_type);
+
+poplar::OptionFlags GetMatMulOptionsForType(CompilerResources& res,
+                                            const MLType conv_type);
 }  // namespace poplarplugin
 }  // namespace xla
 

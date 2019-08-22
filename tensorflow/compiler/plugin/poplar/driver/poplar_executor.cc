@@ -908,6 +908,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     conv_options_.set(opt.option(), opt.value());
   }
 
+  for (const auto& opt : current_config_.matmul_options()) {
+    matmul_options_.set(opt.option(), opt.value());
+  }
+
   for (const auto& opt : current_config_.pooling_options()) {
     pooling_options_.set(opt.option(), opt.value());
   }
@@ -933,6 +937,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
 
   for (auto opt : conv_options_) {
     VLOG(1) << "Convolution option: " << opt.first << " = " << opt.second;
+  }
+
+  for (auto opt : matmul_options_) {
+    VLOG(1) << "MatMul option: " << opt.first << " = " << opt.second;
   }
 
   for (auto opt : pooling_options_) {

@@ -118,13 +118,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return Status::OK();
   }
 
-  Status GetKernel(const se::MultiKernelLoaderSpec &spec,
-                         se::KernelBase *kernel) override {
+  Status GetKernel(const se::MultiKernelLoaderSpec& spec,
+                   se::KernelBase* kernel) override {
     return xla::Unimplemented("Not Implemented");
   }
-  Status Launch(se::Stream *stream, const se::ThreadDim &thread_dims,
-              const se::BlockDim& block_dims, const se::KernelBase& kernel,
-              const se::KernelArgsArrayBase& args) override {
+  Status Launch(se::Stream* stream, const se::ThreadDim& thread_dims,
+                const se::BlockDim& block_dims, const se::KernelBase& kernel,
+                const se::KernelArgsArrayBase& args) override {
     return xla::Unimplemented("Not Implemented");
   }
 
@@ -321,10 +321,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.speed_size_config().merge_infeed_io_copies();
   }
 
-  bool ClearMatMulPass() const {
-    return current_config_.speed_size_config().clear_matmul_pass();
-  }
-
   bool DisableGraphConvCaching() const {
     return current_config_.speed_size_config()
         .disable_graph_convolution_caching();
@@ -340,7 +336,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   poplar::OptionFlags GetConvolutionOptions() const { return conv_options_; }
 
+  poplar::OptionFlags GetMatMulOptions() const { return matmul_options_; }
+
   poplar::OptionFlags GetPoolingOptions() const { return pooling_options_; }
+
+  bool ClearMatmulPassType() const {
+    return current_config_.clear_matmul_pass_type();
+  }
 
   bool RetainControlDependencies() const {
     return current_config_.retain_control_dependencies();
@@ -627,6 +629,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   poplar::OptionFlags option_flags_;
 
   poplar::OptionFlags conv_options_;
+
+  poplar::OptionFlags matmul_options_;
 
   poplar::OptionFlags pooling_options_;
 

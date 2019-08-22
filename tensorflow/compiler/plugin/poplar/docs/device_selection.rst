@@ -83,8 +83,9 @@ exist for configuring the hardware and compiler.
 
 * ``set_compilation_options`` sets general options to be passed to the Poplar
 compiler.
-* ``set_convolution_options`` and ``set_pooling_options`` pass specific options
-directly to the ``poplibs`` convolution and pooling operations.
+* ``set_convolution_options``, ``set_matmul_options`` and
+``set_pooling_options`` pass specific options directly to the ``poplibs``
+convolution and pooling operations.
 * ``set_report_options`` allows options to be passed directly to the Poplar
 summary report generator.
 * ``set_ipu_model_options`` allows control of the Poplar IPU_MODEL device type.
@@ -103,9 +104,6 @@ time for large ``max_scheduler_lookahead_depth``.
 * ``max_scheduler_search_space_size`` introduces an upper-limit to the size of
 the schedule search space to guarantee that it will terminate in a reasonable
 amount of time.
-* ``clear_matmul_pass`` does not set the Pass type on the ``poplibs`` ``matmul``
-operation.  This can save memory in some circumstances, such as large batch
-resnet models.
 
 See the documentation in :ref:`api-section` for more details.
 

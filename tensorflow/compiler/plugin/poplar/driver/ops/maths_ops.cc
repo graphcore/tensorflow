@@ -691,25 +691,23 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
 
   // Created a cached dot.
   using namespace poputil::graphfn;
-  TF_ASSIGN_OR_RETURN(const std::string dot_type, GetMLTypeAsString(inst));
+  TF_ASSIGN_OR_RETURN(const std::string dot_type_s, GetMLTypeAsString(inst));
+  TF_ASSIGN_OR_RETURN(const MLType dot_type, GetMLType(inst));
   const std::string debug_prefix = GetDebugName(inst);
-  auto func = [&graph, &res, dot_type, debug_prefix](
+  auto func = [&graph, &res, dot_type_s, dot_type, debug_prefix](
                   std::vector<poplar::Tensor>& args,
                   poplar::program::Sequence& prog) {
     poplar::Tensor& lhs = args[0];
     poplar::Tensor& rhs = args[1];
-    poplar::OptionFlags opts;
-    if (!res.clear_matmul_pass) {
-      opts.set("fullyConnectedPass", dot_type);
-    }
+    auto opts = GetMatMulOptionsForType(res, dot_type);
 
     if (VLOG_IS_ON(2)) {
       std::stringstream stream;
       poplin::matMulGroupedReportPlan(stream, graph, lhs.elementType(),
                                       lhs.elementType(), lhs.shape(),
                                       rhs.shape(), opts, &res.dot_cache);
-      VLOG(2) << "MatMul " << debug_prefix << ". Type " << dot_type
-              << (res.clear_matmul_pass ? " (cleared)" : "") << ". Plan "
+      VLOG(2) << "MatMul " << debug_prefix << ". Type " << dot_type_s
+              << (res.clear_matmul_pass_type ? " (cleared)" : "") << ". Plan "
               << stream.str();
     }
 

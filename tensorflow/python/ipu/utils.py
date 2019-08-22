@@ -61,7 +61,6 @@ def create_ipu_config(profiling=False,
                       report_directory="",
                       always_rearrange_copies_on_the_host=False,
                       merge_infeed_io_copies=False,
-                      clear_matmul_pass=False,
                       disable_graph_convolution_caching=False,
                       retain_control_dependencies=False,
                       max_cross_replica_sum_buffer_size=0,
@@ -94,9 +93,6 @@ def create_ipu_config(profiling=False,
       host->device input copies into one larger copy.  This may reduce the time
       to copy data from the host, at the expense of increasing the live tensor
       memory on the device.
-    clear_matmul_pass: When set, the pass-type will not be passed to the poplibs
-      matmul operation.  This can result in a smaller memory requirement for
-      these operations.
     disable_graph_convolution_caching: By default, the convolution operation
       searches for an equivalent cached operation, and uses this  instead of
       creating a new convolution. Setting this flag forces the creation of a
@@ -142,7 +138,6 @@ def create_ipu_config(profiling=False,
   opts.speed_size_config.always_rearrange_copies_on_the_host = always_rearrange_copies_on_the_host
   opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
   opts.speed_size_config.disable_graph_convolution_caching = disable_graph_convolution_caching
-  opts.speed_size_config.clear_matmul_pass = clear_matmul_pass
 
   opts.retain_control_dependencies = retain_control_dependencies
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
@@ -156,7 +151,6 @@ def create_ipu_config(profiling=False,
 
 def set_compilation_options(opts, compilation_options=None):
   """Set the IPU compilation options for the session..
-
 
   .. code-block:: python
 
@@ -190,9 +184,7 @@ def set_compilation_options(opts, compilation_options=None):
 
 
 def set_convolution_options(opts, convolution_options=None):
-  """Set the IPU convolution compilation options for the session.
-
-  *** This is an experimental function which might be removed in the future. ***
+  """Set the IPU convolution options for the session.
 
   .. code-block:: python
 
@@ -224,10 +216,45 @@ def set_convolution_options(opts, convolution_options=None):
   return opts
 
 
+def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
+  """Set the IPU matrix multiplication options for the session.
+
+  .. code-block:: python
+
+      # Set "availableMemoryProportion" flag to "50"
+      opts = create_ipu_config()
+      opts = set_matmul_options(opts,
+          matmul_options={"availableMemoryProportion": "50"})
+      ipu.utils.configure_ipu_system(cfg)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    matmul_options: A dictionary of poplar option flags for the
+      matrix multiplication operations.
+    clear_pass_type: When set to True, the Pass type will not
+      be set in the options passed to the poplar operation.
+
+  Returns:
+    The IpuOptions configuration protobuf, with matmul options set.
+  """
+  if not (isinstance(matmul_options, dict)):
+    raise Exception("`matmul_options` must be a dictionary")
+
+  if (matmul_options is not None):
+    for (option_name, value) in matmul_options.items():
+      opt = opts.matmul_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  opts.set_clear_matmul_pass_type(clear_pass_type)
+
+  return opts
+
+
 def set_pooling_options(opts, pooling_options=None):
   """Set the IPU pooling compilation options for the session.
-
-  *** This is an experimental function which might be removed in the future. ***
 
   .. code-block:: python
 
