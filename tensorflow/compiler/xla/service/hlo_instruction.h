@@ -967,7 +967,9 @@ class HloInstruction {
           eq_operands = std::equal_to<const HloInstruction*>(),
       const std::function<bool(const HloComputation*, const HloComputation*)>&
           eq_computations = std::equal_to<const HloComputation*>(),
-      bool layout_sensitive = true) const {
+      bool layout_sensitive = true,
+      const std::function<bool(const std::string&, const std::string&)>&
+          eq_backend_config = std::equal_to<std::string>()) const {
     // An instruction is always identical to itself.
     if (this == &other) {
       return true;
@@ -998,7 +1000,7 @@ class HloInstruction {
       }
     }
 
-    if (backend_config_ != other.backend_config_) {
+    if (!eq_backend_config(backend_config_, other.backend_config_)) {
       return false;
     }
 
