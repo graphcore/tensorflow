@@ -221,10 +221,10 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
 
   .. code-block:: python
 
-      # Set "availableMemoryProportion" flag to "50"
+      # Set "availableMemoryProportion" flag to "0.5"
       opts = create_ipu_config()
       opts = set_matmul_options(opts,
-          matmul_options={"availableMemoryProportion": "50"})
+          matmul_options={"availableMemoryProportion": "0.5"})
       ipu.utils.configure_ipu_system(cfg)
       with tf.Session() as s:
         ...
