@@ -143,6 +143,9 @@ poplar::Tensor DoCachedConvolution(
     poplin::reportPlanInfo(stream, graph, params, opts, &res.convolution_cache);
     VLOG(2) << "Convolution " << debug_prefix << ". Type "
             << MLType_Name(conv_type) << ". Plan " << stream.str();
+    for (auto opt : opts) {
+      VLOG(2) << "- option: " << opt.first << " = " << opt.second;
+    }
   }
 
   using namespace poputil::graphfn;

@@ -709,6 +709,9 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
       VLOG(2) << "MatMul " << debug_prefix << ". Type " << dot_type_s
               << (res.clear_matmul_pass_type ? " (cleared)" : "") << ". Plan "
               << stream.str();
+      for (auto opt : opts) {
+        VLOG(2) << "- option: " << opt.first << " = " << opt.second;
+      }
     }
 
     args[2] = poplin::matMulGrouped(graph, lhs, rhs, prog, lhs.elementType(),
