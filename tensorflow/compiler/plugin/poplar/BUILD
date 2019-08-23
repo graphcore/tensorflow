@@ -143,6 +143,7 @@ cc_library(
         "driver/tools/custom_ops/hlo_poplar_instruction.cc",
 
         # Place HloPoplarInstructionFactory files below here.
+        "driver/tools/conv_util.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
@@ -225,6 +226,7 @@ cc_library(
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
+        "driver/tools/conv_util.h",
         "driver/tools/custom_ops/arg_min_max.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
         "driver/tools/custom_ops/dropout_hlo.h",

@@ -8,6 +8,7 @@
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -33,59 +34,6 @@ using ::absl::StrCat;
 
 namespace xla {
 namespace poplarplugin {
-
-static Window GetConvolutionWindow(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kFusion) {
-    auto cfg = inst->backend_config<PoplarBackendConfig>();
-    return cfg.ValueOrDie().fusion_config().window();
-  } else {
-    if (!CastOrNull<HloConvolutionInstruction>(inst)) {
-      LOG(FATAL) << "Trying to access convolution window on a non convolution "
-                    "operation.";
-    }
-    return inst->window();
-  }
-}
-
-static ConvolutionDimensionNumbers GetConvolutionDims(
-    const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kFusion) {
-    auto cfg = inst->backend_config<PoplarBackendConfig>();
-    return cfg.ValueOrDie().fusion_config().dimension_numbers();
-  } else {
-    if (!CastOrNull<HloConvolutionInstruction>(inst)) {
-      LOG(FATAL) << "Trying to access convolution dimension numbers on a non "
-                    "convolution operation.";
-    }
-    return inst->convolution_dimension_numbers();
-  }
-}
-
-static int64 GetFeatureGroupCount(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kFusion) {
-    auto cfg = inst->backend_config<PoplarBackendConfig>();
-    return cfg.ValueOrDie().fusion_config().feature_group_count();
-  } else {
-    if (!CastOrNull<HloConvolutionInstruction>(inst)) {
-      LOG(FATAL) << "Trying to access convolution feature group count numbers "
-                    "on a non convolution operation.";
-    }
-    return inst->feature_group_count();
-  }
-}
-
-static int64 GetBatchGroupCount(const HloInstruction* inst) {
-  if (inst->opcode() == HloOpcode::kFusion) {
-    auto cfg = inst->backend_config<PoplarBackendConfig>();
-    return cfg.ValueOrDie().fusion_config().batch_group_count();
-  } else {
-    if (!CastOrNull<HloConvolutionInstruction>(inst)) {
-      LOG(FATAL) << "Trying to access convolution batch group count numbers on "
-                    "a non convolution operation.";
-    }
-    return inst->batch_group_count();
-  }
-}
 
 StatusOr<poplin::ConvParams> GetConvolutionParameters(
     const HloInstruction* inst, int64 input_index, int64 kernel_index) {
