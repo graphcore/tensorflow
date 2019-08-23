@@ -248,7 +248,7 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
       opt.option = option_name
       opt.value = value
 
-  opts.set_clear_matmul_pass_type(clear_pass_type)
+  opts.clear_matmul_pass_type = clear_pass_type
 
   return opts
 
