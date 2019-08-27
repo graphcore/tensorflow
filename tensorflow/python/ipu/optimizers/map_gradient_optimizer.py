@@ -17,11 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
-from tensorflow.python.framework import ops
-from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.training import optimizer
-import tensorflow as tf
 
 
 class MapGradientOptimizer(optimizer.Optimizer):
@@ -36,7 +32,7 @@ class MapGradientOptimizer(optimizer.Optimizer):
   must return the modified gradient.
 
 
-  Example 
+  Example
   .. code-block:: python
 
   #Define function which should modify computed gradients. Decay gradient function.
@@ -48,29 +44,29 @@ class MapGradientOptimizer(optimizer.Optimizer):
   with self.cached_session():
   # We can employ AdamWOptimizer
     optimizer = weight_decay_optimizers.AdamWOptimizer(WEIGHT_DECAY)
-  # We define MapGradientOptimizer   
+  # We define MapGradientOptimizer
     map_optimizer = map_gradient_optimizer.MapGradientOptimizer(
         optimizer, map_fn_decay)
   # Gradients are computed by compute_gradients(), where our map function
-  # modifies computed gradients. compute_gradients(loss, var_list) argument 
+  # modifies computed gradients. compute_gradients(loss, var_list) argument
   # are loss and var_list. Define some and employ map_optimizer, compute_gradients().
-    values = [1.0, 2.0, 3.0]  
-    vars_ = [variables.Variable([v], dtype=dtypes.float32) for v in values]          
+    values = [1.0, 2.0, 3.0]
+    vars_ = [variables.Variable([v], dtype=dtypes.float32) for v in values]
     grads_and_vars = map_optimizer.compute_gradients(
         vars_[0] * vars_[1] + vars_[0] * vars_[2] + vars_[1] * vars_[2],
         vars_)
   # The output grads_and_vars contains modified computed gradients by decay map function.
-  # grads are 5.01, 4.02 and 3.03. If we did not use MapGradientOptimizer they would 
-  # be 5, 4 and 3. 
+  # grads are 5.01, 4.02 and 3.03. If we did not use MapGradientOptimizer they would
+  # be 5, 4 and 3.
 
   Args:
     wrapped_optimizer: tensorflow (derived) optimizer.
-    gradient_mapping_function: is applied on grads and variables which are provided by wrapped_optimizer.compute_gradients().
+    gradient_mapping_function: is applied on grads and variables which are
+      provided by wrapped_optimizer.compute_gradients().
 
   Returns:
     compute_gradients() returns a list of (gradient, variable) pairs.
   """
-
   def __init__(self,
                wrapped_optimizer,
                gradient_mapping_function,
@@ -80,12 +76,53 @@ class MapGradientOptimizer(optimizer.Optimizer):
     self._wrapped_optimizer = wrapped_optimizer
     self._gradient_mapping_function = gradient_mapping_function
 
-  def compute_gradients(self, loss, var_list=None, **kwargs):
-    kwargs['colocate_gradients_with_ops'] = True
+  # Override method from tensorflow.python.training.optimizer.Optimizer
+  def compute_gradients(self,
+                        loss,
+                        var_list=None,
+                        gate_gradients=optimizer.Optimizer.GATE_OP,
+                        aggregation_method=None,
+                        colocate_gradients_with_ops=False,
+                        grad_loss=None):
     grads_and_vars = self._wrapped_optimizer.compute_gradients(
-        loss, var_list=var_list, **kwargs)
-    grads_and_vars = list(
-        map(
-            lambda x: (self._gradient_mapping_function(x[0], x[1].value()), x[
-                1]), grads_and_vars))
+        loss, var_list, gate_gradients, aggregation_method, True, grad_loss)
+    grads_and_vars = [(self._gradient_mapping_function(x[0],
+                                                       x[1].value()), x[1])
+                      for x in grads_and_vars]
     return grads_and_vars
+
+  # Override method from tensorflow.python.training.optimizer.Optimizer
+  def get_name(self):
+    return self._wrapped_optimizer.get_name()
+
+  # Override method from tensorflow.python.training.optimizer.Optimizer
+  def minimize(self,
+               loss,
+               global_step=None,
+               var_list=None,
+               gate_gradients=optimizer.Optimizer.GATE_OP,
+               aggregation_method=None,
+               colocate_gradients_with_ops=False,
+               name=None,
+               grad_loss=None):
+    return self._wrapped_optimizer.minimize(loss, global_step, var_list,
+                                            gat_gradients, aggregation_method,
+                                            colocate_gradients_with_ops, name,
+                                            grad_loss)
+
+  # Override method from tensorflow.python.training.optimizer.Optimizer
+  def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+    return self._wrapped_optimizer.apply_gradients(grads_and_vars, global_step,
+                                                   name)
+
+  # Override method from tensorflow.python.training.optimizer.Optimizer
+  def get_slot(self, var, name):
+    return self._wrapped_optmizer.get_slot(var, name)
+
+  # Override method from tensorflow.python.training.optimizer.Optimizer
+  def get_slot_names(self):
+    return self._wrapped_optimizer.get_slot_names()
+
+  # Override method from tensorflow.python.training.optimizer.Optimizer
+  def variables(self):
+    return self._wrapped_optimizer.variables()
