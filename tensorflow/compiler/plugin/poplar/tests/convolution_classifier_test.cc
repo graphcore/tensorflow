@@ -1193,6 +1193,428 @@ ENTRY cluster_9 {
   }
 }
 
+TEST_F(ConvolutionClassifierTest, MatMulWithCastWeights) {
+  std::string hlo_string = R"(HloModule module
+
+max_half_.50 (x.51: f16[], y.52: f16[]) -> f16[] {
+  x.51 = f16[] parameter(0), backend_config="{}"
+  y.52 = f16[] parameter(1), backend_config="{}"
+  ROOT maximum.53 = f16[] maximum(x.51, y.52), backend_config="{\"isInplace\":true}"
+}
+
+add_float_.60 (x.61: f32[], y.62: f32[]) -> f32[] {
+  x.61 = f32[] parameter(0), backend_config="{}"
+  y.62 = f32[] parameter(1), backend_config="{}"
+  ROOT add.63 = f32[] add(x.61, y.62), backend_config="{\"isInplace\":true}"
+}
+
+_pop_op_matmul_biasadd (arg_0: f16[1024,3000], arg_1: f16[3000]) -> f16[1024,3000] {
+  arg_0 = f16[1024,3000] parameter(0)
+  arg_1 = f16[3000] parameter(1)
+  broadcast.23.clone = f16[1024,3000] broadcast(arg_1), dimensions={1}, backend_config="{}"
+  ROOT add.24.clone = f16[1024,3000] add(arg_0, broadcast.23.clone), backend_config="{}"
+}
+
+_pop_op_matmul_biasadd.1 (arg_0.1: f16[1024,3000], arg_1.1: f16[3000]) -> f16[1024,3000] {
+  arg_0.1 = f16[1024,3000] parameter(0)
+  arg_1.1 = f16[3000] parameter(1)
+  broadcast.18.clone = f16[1024,3000] broadcast(arg_1.1), dimensions={1}, backend_config="{}"
+  ROOT add.19.clone = f16[1024,3000] add(arg_0.1, broadcast.18.clone), backend_config="{}"
+}
+
+_pop_op_scaled_inplace (arg_0.2: f32[128,3000], arg_1.2: f32[128,3000]) -> f32[128,3000] {
+  arg_0.2 = f32[128,3000] parameter(0)
+  arg_1.2 = f32[128,3000] parameter(1)
+  constant.103.clone = f32[] constant(0.001), backend_config="{}"
+  broadcast.138.clone = f32[128,3000] broadcast(constant.103.clone), dimensions={}, backend_config="{}"
+  multiply.175.clone = f32[128,3000] multiply(arg_1.2, broadcast.138.clone), backend_config="{}"
+  ROOT subtract.176.clone = f32[128,3000] subtract(arg_0.2, multiply.175.clone), backend_config="{}"
+}
+
+_pop_op_scaled_inplace.1 (arg_0.3: f32[3000], arg_1.3: f32[3000]) -> f32[3000] {
+  arg_0.3 = f32[3000] parameter(0)
+  arg_1.3 = f32[3000] parameter(1)
+  constant.103.clone.1 = f32[] constant(0.001), backend_config="{}"
+  broadcast.123.clone = f32[3000] broadcast(constant.103.clone.1), dimensions={}, backend_config="{}"
+  multiply.160.clone = f32[3000] multiply(arg_1.3, broadcast.123.clone), backend_config="{}"
+  ROOT subtract.161.clone = f32[3000] subtract(arg_0.3, multiply.160.clone), backend_config="{}"
+}
+
+_pop_op_scaled_inplace.2 (arg_0.4: f32[128,3000], arg_1.4: f32[128,3000]) -> f32[128,3000] {
+  arg_0.4 = f32[128,3000] parameter(0)
+  arg_1.4 = f32[128,3000] parameter(1)
+  constant.103.clone.2 = f32[] constant(0.001), backend_config="{}"
+  broadcast.138.clone.1 = f32[128,3000] broadcast(constant.103.clone.2), dimensions={}, backend_config="{}"
+  multiply.139.clone = f32[128,3000] multiply(arg_1.4, broadcast.138.clone.1), backend_config="{}"
+  ROOT subtract.140.clone = f32[128,3000] subtract(arg_0.4, multiply.139.clone), backend_config="{}"
+}
+
+_pop_op_scaled_inplace.3 (arg_0.5: f32[3000], arg_1.5: f32[3000]) -> f32[3000] {
+  arg_0.5 = f32[3000] parameter(0)
+  arg_1.5 = f32[3000] parameter(1)
+  constant.103.clone.3 = f32[] constant(0.001), backend_config="{}"
+  broadcast.123.clone.1 = f32[3000] broadcast(constant.103.clone.3), dimensions={}, backend_config="{}"
+  multiply.124.clone = f32[3000] multiply(arg_1.5, broadcast.123.clone.1), backend_config="{}"
+  ROOT subtract.125.clone = f32[3000] subtract(arg_0.5, multiply.124.clone), backend_config="{}"
+}
+
+_pop_op_scaled_inplace.4 (arg_0.6: f32[1024,1024], arg_1.6: f32[1024,1024]) -> f32[1024,1024] {
+  arg_0.6 = f32[1024,1024] parameter(0)
+  arg_1.6 = f32[1024,1024] parameter(1)
+  constant.103.clone.4 = f32[] constant(0.001), backend_config="{}"
+  broadcast.104.clone = f32[1024,1024] broadcast(constant.103.clone.4), dimensions={}, backend_config="{}"
+  multiply.105.clone = f32[1024,1024] multiply(arg_1.6, broadcast.104.clone), backend_config="{}"
+  ROOT subtract.106.clone = f32[1024,1024] subtract(arg_0.6, multiply.105.clone), backend_config="{}"
+}
+
+_pop_op_implicit_binary (arg_0.7: s32[1024]) -> pred[1024] {
+  constant.42.clone = s32[] constant(0), backend_config="{}"
+  broadcast.3 = s32[1024] broadcast(constant.42.clone), dimensions={}, backend_config="{}"
+  arg_0.7 = s32[1024] parameter(0)
+  ROOT compare = pred[1024] compare(broadcast.3, arg_0.7), direction=LE, backend_config="{}"
+}
+
+_pop_op_implicit_binary_inplace (arg_0.8: f16[1024,3000], arg_1.7: f16[1024]) -> f16[1024,3000] {
+  arg_0.8 = f16[1024,3000] parameter(0)
+  arg_1.7 = f16[1024] parameter(1)
+  broadcast.4 = f16[1024,3000] broadcast(arg_1.7), dimensions={0}, backend_config="{}"
+  ROOT subtract = f16[1024,3000] subtract(arg_0.8, broadcast.4), backend_config="{}"
+}
+
+_pop_op_implicit_binary_inplace.1 (arg_0.9: f16[1024,3000], arg_1.8: f16[1024]) -> f16[1024,3000] {
+  arg_0.9 = f16[1024,3000] parameter(0)
+  arg_1.8 = f16[1024] parameter(1)
+  broadcast.5 = f16[1024,3000] broadcast(arg_1.8), dimensions={0}, backend_config="{}"
+  ROOT divide = f16[1024,3000] divide(arg_0.9, broadcast.5), backend_config="{}"
+}
+
+_pop_op_implicit_binary_inplace.2 (arg_0.10: f16[1024,3000], arg_1.9: f16[1024]) -> f16[1024,3000] {
+  arg_0.10 = f16[1024,3000] parameter(0)
+  arg_1.9 = f16[1024] parameter(1)
+  broadcast.6 = f16[1024,3000] broadcast(arg_1.9), dimensions={0}, backend_config="{}"
+  ROOT subtract.1 = f16[1024,3000] subtract(arg_0.10, broadcast.6), backend_config="{}"
+}
+
+_pop_op_implicit_binary_inplace.3 (arg_0.11: f16[1024,3000], arg_1.10: f16[1024]) -> f16[1024,3000] {
+  arg_0.11 = f16[1024,3000] parameter(0)
+  arg_1.10 = f16[1024] parameter(1)
+  broadcast.7 = f16[1024,3000] broadcast(arg_1.10), dimensions={0}, backend_config="{}"
+  ROOT add = f16[1024,3000] add(arg_0.11, broadcast.7), backend_config="{}"
+}
+
+_pop_op_implicit_binary.1 (arg_0.12: s32[1024], arg_1.11: s32[1024,3000]) -> pred[1024,3000] {
+  arg_0.12 = s32[1024] parameter(0)
+  broadcast.8 = s32[1024,3000] broadcast(arg_0.12), dimensions={0}, backend_config="{}"
+  arg_1.11 = s32[1024,3000] parameter(1)
+  ROOT compare.1 = pred[1024,3000] compare(broadcast.8, arg_1.11), direction=EQ, backend_config="{}"
+}
+
+_pop_op_implicit_binary.2 (arg_0.13: s32[1024]) -> pred[1024] {
+  arg_0.13 = s32[1024] parameter(0)
+  constant.39.clone = s32[] constant(3000), backend_config="{}"
+  broadcast.9 = s32[1024] broadcast(constant.39.clone), dimensions={}, backend_config="{}"
+  ROOT compare.2 = pred[1024] compare(arg_0.13, broadcast.9), direction=LT, backend_config="{}"
+}
+
+_pop_op_implicit_ternary (arg_0.14: pred[1024]) -> f16[1024] {
+  arg_0.14 = pred[1024] parameter(0)
+  constant.8.clone = f16[] constant(0)
+  broadcast.10 = f16[1024] broadcast(constant.8.clone), dimensions={}, backend_config="{}"
+  constant.10.clone = f16[] constant(nan)
+  broadcast.11 = f16[1024] broadcast(constant.10.clone), dimensions={}, backend_config="{}"
+  ROOT select = f16[1024] select(arg_0.14, broadcast.10, broadcast.11), backend_config="{}"
+}
+
+_pop_op_implicit_ternary.1 (arg_0.15: pred[1024,3000]) -> f16[1024,3000] {
+  arg_0.15 = pred[1024,3000] parameter(0)
+  constant.7.clone = f16[] constant(1)
+  broadcast.12 = f16[1024,3000] broadcast(constant.7.clone), dimensions={}, backend_config="{}"
+  constant.8.clone.1 = f16[] constant(0)
+  broadcast.13 = f16[1024,3000] broadcast(constant.8.clone.1), dimensions={}, backend_config="{}"
+  ROOT select.1 = f16[1024,3000] select(arg_0.15, broadcast.12, broadcast.13), backend_config="{}"
+}
+
+ENTRY cluster_8480411329397286444__.191 (arg0.1: s32[1024], arg1.2: f16[1024,128], arg2.3: f16[1024,128], arg3.4: f32[1024,1024], arg4.5: f32[3000], arg5.6: f32[128,3000], arg6.7: f32[3000], arg7.8: f32[128,3000]) -> (f16[], f32[1024,1024], f32[3000], f32[128,3000], f32[3000], f32[128,3000]) {
+  arg3.4 = f32[1024,1024] parameter(3), parameter_replication={false}, backend_config="{}"
+  convert.12 = f16[1024,1024] convert(arg3.4), backend_config="{}"
+  arg1.2 = f16[1024,128] parameter(1), parameter_replication={false}, backend_config="{}"
+  arg5.6 = f32[128,3000] parameter(5), parameter_replication={false}, backend_config="{}"
+  convert.16 = f16[128,3000] convert(arg5.6), backend_config="{}"
+  dot.17 = f16[1024,3000] dot(arg1.2, convert.16), lhs_contracting_dims={1}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  arg4.5 = f32[3000] parameter(4), parameter_replication={false}, control-predecessors={dot.17}, backend_config="{}"
+  convert.15 = f16[3000] convert(arg4.5), backend_config="{}"
+  fusion.1 = f16[1024,3000] fusion(dot.17, convert.15), kind=kCustom, calls=_pop_op_matmul_biasadd.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  tanh.20 = f16[1024,3000] tanh(fusion.1), backend_config="{\"isInplace\":true}"
+  dot.21 = f16[1024,3000] dot(convert.12, tanh.20), lhs_contracting_dims={1}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  arg2.3 = f16[1024,128] parameter(2), parameter_replication={false}, backend_config="{}"
+  arg7.8 = f32[128,3000] parameter(7), parameter_replication={false}, backend_config="{}"
+  convert.14 = f16[128,3000] convert(arg7.8), backend_config="{}"
+  dot.22 = f16[1024,3000] dot(arg2.3, convert.14), lhs_contracting_dims={1}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  arg6.7 = f32[3000] parameter(6), parameter_replication={false}, control-predecessors={dot.22}, backend_config="{}"
+  convert.13 = f16[3000] convert(arg6.7), backend_config="{}"
+  fusion = f16[1024,3000] fusion(dot.22, convert.13), kind=kCustom, calls=_pop_op_matmul_biasadd, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  tanh.25 = f16[1024,3000] tanh(fusion), backend_config="{\"isInplace\":true}"
+  add.26 = f16[1024,3000] add(dot.21, tanh.25), backend_config="{\"isInplace\":true}"
+  constant.11 = f16[] constant(-inf)
+  reduce.54 = f16[1024] reduce(add.26, constant.11), dimensions={1}, to_apply=max_half_.50, backend_config="{}"
+  fusion.8 = f16[1024,3000] fusion(add.26, reduce.54), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  exponential.57 = f16[1024,3000] exponential(fusion.8), backend_config="{}"
+  constant.8 = f16[] constant(0)
+  reduce.64.clone = f16[1024] reduce(exponential.57, constant.8), dimensions={1}, to_apply=add_float_.60, backend_config="{}"
+  fusion.9 = f16[1024,3000] fusion(exponential.57, reduce.64.clone), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  arg0.1 = s32[1024] parameter(0), parameter_replication={false}, backend_config="{}"
+  iota.31 = s32[1024,3000] iota(), iota_dimension=1, backend_config="{}"
+  fusion.12 = pred[1024,3000] fusion(arg0.1, iota.31), kind=kCustom, calls=_pop_op_implicit_binary.1, backend_config="{\"fusionConfig\":{}}"
+  fusion.15 = f16[1024,3000] fusion(fusion.12), kind=kCustom, calls=_pop_op_implicit_ternary.1, backend_config="{\"fusionConfig\":{}}"
+  fusion.7 = pred[1024] fusion(arg0.1), kind=kCustom, calls=_pop_op_implicit_binary, backend_config="{\"fusionConfig\":{}}"
+  fusion.13 = pred[1024] fusion(arg0.1), kind=kCustom, calls=_pop_op_implicit_binary.2, backend_config="{\"fusionConfig\":{}}"
+  and.45 = pred[1024] and(fusion.7, fusion.13), backend_config="{\"isInplace\":true}"
+  fusion.14 = f16[1024] fusion(and.45), kind=kCustom, calls=_pop_op_implicit_ternary, backend_config="{\"fusionConfig\":{}}"
+  fusion.11 = f16[1024,3000] fusion(fusion.15, fusion.14), kind=kCustom, calls=_pop_op_implicit_binary_inplace.3, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  subtract.81 = f16[1024,3000] subtract(fusion.9, fusion.11), backend_config="{\"isInplace\":true}"
+  negate.69 = f16[1024,3000] negate(fusion.11), control-predecessors={subtract.81}, backend_config="{\"isInplace\":true}"
+  log.66 = f16[1024] log(reduce.64.clone), control-predecessors={fusion.9}, backend_config="{\"isInplace\":true}"
+  fusion.10 = f16[1024,3000] fusion(fusion.8, log.66), kind=kCustom, calls=_pop_op_implicit_binary_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  multiply.70 = f16[1024,3000] multiply(negate.69, fusion.10), backend_config="{\"isInplace\":true}"
+  reduce = f16[] reduce(multiply.70, constant.8), dimensions={0,1}, to_apply=add_float_.60
+  transpose.95 = f16[3000,1024] transpose(tanh.20), dimensions={1,0}, backend_config="{\"isInplace\":true}"
+  dot.96 = f16[1024,1024] dot(subtract.81, transpose.95), lhs_contracting_dims={1}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  convert.102 = f32[1024,1024] convert(dot.96), backend_config="{}"
+  fusion.6 = f32[1024,1024] fusion(arg3.4, convert.102), kind=kCustom, calls=_pop_op_scaled_inplace.4, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  transpose.98 = f16[1024,1024] transpose(convert.12), dimensions={1,0}, backend_config="{\"isInplace\":true}"
+  dot.99 = f16[1024,3000] dot(transpose.98, subtract.81), lhs_contracting_dims={1}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  custom-call = f16[1024,3000] custom-call(tanh.20, dot.99), custom_call_target="Popnn::TanhGrad", backend_config="{}"
+  reduce.117.clone = f16[3000] reduce(custom-call, constant.8), dimensions={0}, to_apply=add_float_.60, backend_config="{}"
+  convert.121 = f32[3000] convert(reduce.117.clone), backend_config="{}"
+  fusion.5 = f32[3000] fusion(arg4.5, convert.121), kind=kCustom, calls=_pop_op_scaled_inplace.3, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  transpose.132 = f16[128,1024] transpose(arg1.2), dimensions={1,0}, backend_config="{\"isInplace\":true}"
+  dot.133 = f16[128,3000] dot(transpose.132, custom-call), lhs_contracting_dims={1}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  convert.136 = f32[128,3000] convert(dot.133), backend_config="{}"
+  fusion.4 = f32[128,3000] fusion(arg5.6, convert.136), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  custom-call.1 = f16[1024,3000] custom-call(tanh.25, subtract.81), custom_call_target="Popnn::TanhGrad", backend_config="{}"
+  reduce.153.clone = f16[3000] reduce(custom-call.1, constant.8), dimensions={0}, to_apply=add_float_.60, backend_config="{}"
+  convert.157 = f32[3000] convert(reduce.153.clone), backend_config="{}"
+  fusion.3 = f32[3000] fusion(arg6.7, convert.157), kind=kCustom, calls=_pop_op_scaled_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  transpose.168 = f16[128,1024] transpose(arg2.3), dimensions={1,0}, backend_config="{\"isInplace\":true}"
+  dot.169 = f16[128,3000] dot(transpose.168, custom-call.1), lhs_contracting_dims={1}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  convert.172 = f32[128,3000] convert(dot.169), backend_config="{}"
+  fusion.2 = f32[128,3000] fusion(arg7.8, convert.172), kind=kCustom, calls=_pop_op_scaled_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  ROOT tuple.190 = (f16[], f32[1024,1024], f32[3000], f32[128,3000], f32[3000], f32[128,3000]) tuple(reduce, fusion.6, fusion.5, fusion.4, fusion.3, fusion.2), backend_config="{\"isInplace\":true}"
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  config.set_resource_update_to_input_index({});
+  config.set_resource_input_count(4);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ConvolutionClassifier classifier;
+
+  auto res = classifier.Run(module);
+
+  EXPECT_TRUE(res.ok());
+  EXPECT_TRUE(res.ValueOrDie());
+
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 7);
+
+  for (auto it : all_classifications) {
+    if (it.first->name() == "dot.17" || it.first->name() == "dot.21" ||
+        it.first->name() == "dot.22") {
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD) << it.first->name();
+    } else if (it.first->name() == "dot.96") {
+      EXPECT_EQ(it.second, MLType::TRAINING_BWD) << it.first->name();
+    } else if (it.first->name() == "dot.99" || it.first->name() == "dot.133" ||
+               it.first->name() == "dot.169") {
+      EXPECT_EQ(it.second, MLType::TRAINING_WU) << it.first->name();
+    } else {
+      // Should not have missing matmuls
+      EXPECT_EQ(1, 0);
+    }
+  }
+}
+
+TEST_F(ConvolutionClassifierTest, MatMulBatchsize1) {
+  std::string hlo_string = R"(HloModule module
+
+max_half_.26 (x.27: f16[], y.28: f16[]) -> f16[] {
+  x.27 = f16[] parameter(0), backend_config="{}"
+  y.28 = f16[] parameter(1), backend_config="{}"
+  ROOT maximum.29 = f16[] maximum(x.27, y.28), backend_config="{\"isInplace\":true}"
+}
+
+add_float_.36 (x.37: f32[], y.38: f32[]) -> f32[] {
+  x.37 = f32[] parameter(0), backend_config="{}"
+  y.38 = f32[] parameter(1), backend_config="{}"
+  ROOT add.39 = f32[] add(x.37, y.38), backend_config="{\"isInplace\":true}"
+}
+
+_pop_op_scaled_inplace (arg_0: f16[64,64], arg_1: f16[64,64]) -> f16[64,64] {
+  arg_0 = f16[64,64] parameter(0)
+  arg_1 = f16[64,64] parameter(1)
+  constant.4.clone = f16[] constant(0.0100021)
+  broadcast.87.clone = f16[64,64] broadcast(constant.4.clone), dimensions={}, backend_config="{}"
+  multiply.88.clone = f16[64,64] multiply(arg_1, broadcast.87.clone), backend_config="{}"
+  ROOT subtract.89.clone = f16[64,64] subtract(arg_0, multiply.88.clone), backend_config="{}"
+}
+
+_pop_op_scaled_inplace.1 (arg_0.1: f16[32,64], arg_1.1: f16[32,64]) -> f16[32,64] {
+  arg_0.1 = f16[32,64] parameter(0)
+  arg_1.1 = f16[32,64] parameter(1)
+  constant.4.clone.1 = f16[] constant(0.0100021)
+  broadcast.116.clone = f16[32,64] broadcast(constant.4.clone.1), dimensions={}, backend_config="{}"
+  multiply.117.clone = f16[32,64] multiply(arg_1.1, broadcast.116.clone), backend_config="{}"
+  ROOT subtract.118.clone = f16[32,64] subtract(arg_0.1, multiply.117.clone), backend_config="{}"
+}
+
+_pop_op_scaled_inplace.2 (arg_0.2: f16[50176,32], arg_1.2: f16[50176,32]) -> f16[50176,32] {
+  arg_0.2 = f16[50176,32] parameter(0)
+  arg_1.2 = f16[50176,32] parameter(1)
+  constant.4.clone.2 = f16[] constant(0.0100021)
+  broadcast.140.clone = f16[50176,32] broadcast(constant.4.clone.2), dimensions={}, backend_config="{}"
+  multiply.141.clone = f16[50176,32] multiply(arg_1.2, broadcast.140.clone), backend_config="{}"
+  ROOT subtract.142.clone = f16[50176,32] subtract(arg_0.2, multiply.141.clone), backend_config="{}"
+}
+
+_pop_op_implicit_binary_inplace (arg_0.3: f16[1,64], arg_1.3: f16[1]) -> f16[1,64] {
+  arg_0.3 = f16[1,64] parameter(0)
+  arg_1.3 = f16[1] parameter(1)
+  broadcast.3 = f16[1,64] broadcast(arg_1.3), dimensions={0}, backend_config="{}"
+  ROOT subtract = f16[1,64] subtract(arg_0.3, broadcast.3), backend_config="{}"
+}
+
+_pop_op_implicit_binary (arg_0.4: f16[1,64]) -> f16[1,64] {
+  constant.4.clone.3 = f16[] constant(0.0100021)
+  broadcast.4 = f16[1,64] broadcast(constant.4.clone.3), dimensions={}, backend_config="{}"
+  arg_0.4 = f16[1,64] parameter(0)
+  ROOT multiply.3 = f16[1,64] multiply(broadcast.4, arg_0.4), backend_config="{}"
+}
+
+_pop_op_implicit_binary.1 (arg_0.5: f16[1,64]) -> f16[1,64] {
+  constant.4.clone.4 = f16[] constant(0.0100021)
+  broadcast.5 = f16[1,64] broadcast(constant.4.clone.4), dimensions={}, backend_config="{}"
+  arg_0.5 = f16[1,64] parameter(0)
+  ROOT multiply.4 = f16[1,64] multiply(broadcast.5, arg_0.5), backend_config="{}"
+}
+
+_pop_op_implicit_binary.2 (arg_0.6: f16[1,32]) -> f16[1,32] {
+  constant.4.clone.5 = f16[] constant(0.0100021)
+  broadcast.6 = f16[1,32] broadcast(constant.4.clone.5), dimensions={}, backend_config="{}"
+  arg_0.6 = f16[1,32] parameter(0)
+  ROOT multiply.5 = f16[1,32] multiply(broadcast.6, arg_0.6), backend_config="{}"
+}
+
+_pop_op_implicit_binary_inplace.1 (arg_0.7: f16[1,64], arg_1.4: f16[1]) -> f16[1,64] {
+  arg_0.7 = f16[1,64] parameter(0)
+  arg_1.4 = f16[1] parameter(1)
+  broadcast.7 = f16[1,64] broadcast(arg_1.4), dimensions={0}, backend_config="{}"
+  ROOT divide = f16[1,64] divide(arg_0.7, broadcast.7), backend_config="{}"
+}
+
+ENTRY cluster_1__XlaCompiledKernel_true__XlaNumConstantArgs_0__XlaNumResourceArgs_6_.157 (arg0.1: f16[1,50176], arg1.2: f16[1,64], arg2.3: f16[50176,32], arg3.4: f16[32], arg4.5: f16[32,64], arg5.6: f16[64], arg6.7: f16[64,64], arg7.8: f16[64]) -> (f16[50176,32], f16[32], f16[32,64], f16[64], f16[64,64], f16[64]) {
+  arg2.3 = f16[50176,32] parameter(2), parameter_replication={false}, backend_config="{}"
+  arg0.1 = f16[1,50176] parameter(0), parameter_replication={false}, backend_config="{}"
+  reshape = f16[50176] reshape(arg0.1), backend_config="{\"isInplace\":true}"
+  dot = f16[32] dot(reshape, arg2.3), lhs_contracting_dims={0}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  arg3.4 = f16[32] parameter(3), parameter_replication={false}, control-predecessors={dot}, backend_config="{}"
+  add = f16[32] add(dot, arg3.4), backend_config="{\"isInplace\":true}"
+  reshape.32 = f16[1,32] reshape(add), backend_config="{\"isInplace\":true}"
+  custom-call = f16[1,32] custom-call(reshape.32), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  reshape.3 = f16[32] reshape(custom-call), backend_config="{\"isInplace\":true}"
+  arg4.5 = f16[32,64] parameter(4), parameter_replication={false}, backend_config="{}"
+  dot.1 = f16[64] dot(reshape.3, arg4.5), lhs_contracting_dims={0}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  arg5.6 = f16[64] parameter(5), parameter_replication={false}, control-predecessors={dot.1}, backend_config="{}"
+  add.1 = f16[64] add(dot.1, arg5.6), backend_config="{\"isInplace\":true}"
+  reshape.33 = f16[1,64] reshape(add.1), backend_config="{\"isInplace\":true}"
+  custom-call.1 = f16[1,64] custom-call(reshape.33), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  reshape.6 = f16[64] reshape(custom-call.1), backend_config="{\"isInplace\":true}"
+  arg6.7 = f16[64,64] parameter(6), parameter_replication={false}, backend_config="{}"
+  dot.2 = f16[64] dot(reshape.6, arg6.7), lhs_contracting_dims={0}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  arg7.8 = f16[64] parameter(7), parameter_replication={false}, control-predecessors={dot.2}, backend_config="{}"
+  add.2 = f16[64] add(dot.2, arg7.8), backend_config="{\"isInplace\":true}"
+  reshape.34 = f16[1,64] reshape(add.2), backend_config="{\"isInplace\":true}"
+  custom-call.2 = f16[1,64] custom-call(reshape.34), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  constant.3 = f16[] constant(-inf)
+  reduce.30 = f16[1] reduce(custom-call.2, constant.3), dimensions={1}, to_apply=max_half_.26, backend_config="{}"
+  fusion.3 = f16[1,64] fusion(custom-call.2, reduce.30), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
+  exponential.33 = f16[1,64] exponential(fusion.3), backend_config="{\"isInplace\":true}"
+  constant.9 = f16[] constant(0), backend_config="{}"
+  reduce.40.clone = f16[1] reduce(exponential.33, constant.9), dimensions={1}, to_apply=add_float_.36, backend_config="{}"
+  fusion.7 = f16[1,64] fusion(exponential.33, reduce.40.clone), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  arg1.2 = f16[1,64] parameter(1), parameter_replication={false}, backend_config="{}"
+  subtract.57 = f16[1,64] subtract(fusion.7, arg1.2), backend_config="{\"isInplace\":true}"
+  custom-call.3 = f16[1,64] custom-call(custom-call.2, subtract.57), custom_call_target="Popnn::ReluGrad", backend_config="{}"
+  reshape.11 = f16[64] reshape(custom-call.3), backend_config="{\"isInplace\":true}"
+  transpose.79 = f16[64,64] transpose(arg6.7), dimensions={1,0}, backend_config="{\"isInplace\":true}"
+  dot.3 = f16[64] dot(reshape.11, transpose.79), lhs_contracting_dims={0}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  reshape.12 = f16[1,64] reshape(dot.3), backend_config="{\"isInplace\":true}"
+  custom-call.4 = f16[1,64] custom-call(custom-call.1, reshape.12), custom_call_target="Popnn::ReluGrad", backend_config="{}"
+  reshape.13 = f16[64] reshape(custom-call.4), backend_config="{\"isInplace\":true}"
+  transpose.108 = f16[64,32] transpose(arg4.5), dimensions={1,0}, backend_config="{\"isInplace\":true}"
+  dot.4 = f16[32] dot(reshape.13, transpose.108), lhs_contracting_dims={0}, rhs_contracting_dims={0}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  reshape.14 = f16[1,32] reshape(dot.4), backend_config="{\"isInplace\":true}"
+  custom-call.5 = f16[1,32] custom-call(custom-call, reshape.14), custom_call_target="Popnn::ReluGrad", backend_config="{}"
+  reshape.17 = f16[32] reshape(custom-call.5), backend_config="{\"isInplace\":true}"
+  dot.5 = f16[50176,32] dot(reshape, reshape.17), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  fusion.2 = f16[50176,32] fusion(arg2.3, dot.5), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.6 = f16[1,32] fusion(custom-call.5), kind=kCustom, calls=_pop_op_implicit_binary.2, backend_config="{\"fusionConfig\":{}}"
+  reshape.40 = f16[32] reshape(fusion.6), backend_config="{\"isInplace\":true}"
+  subtract.134 = f16[32] subtract(arg3.4, reshape.40), backend_config="{\"isInplace\":true}"
+  dot.6 = f16[32,64] dot(reshape.3, reshape.13), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  fusion.1 = f16[32,64] fusion(arg4.5, dot.6), kind=kCustom, calls=_pop_op_scaled_inplace.1, control-predecessors={transpose.108, dot.4}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.5 = f16[1,64] fusion(custom-call.4), kind=kCustom, calls=_pop_op_implicit_binary.1, backend_config="{\"fusionConfig\":{}}"
+  reshape.39 = f16[64] reshape(fusion.5), backend_config="{\"isInplace\":true}"
+  subtract.105 = f16[64] subtract(arg5.6, reshape.39), backend_config="{\"isInplace\":true}"
+  dot.7 = f16[64,64] dot(reshape.6, reshape.11), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{\"mlType\":\"INFERENCE_FWD\"}"
+  fusion = f16[64,64] fusion(arg6.7, dot.7), kind=kCustom, calls=_pop_op_scaled_inplace, control-predecessors={transpose.79, dot.3}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
+  fusion.4 = f16[1,64] fusion(custom-call.3), kind=kCustom, calls=_pop_op_implicit_binary, backend_config="{\"fusionConfig\":{}}"
+  reshape.38 = f16[64] reshape(fusion.4), backend_config="{\"isInplace\":true}"
+  subtract.76 = f16[64] subtract(arg7.8, reshape.38), backend_config="{\"isInplace\":true}"
+  ROOT tuple.156 = (f16[50176,32], f16[32], f16[32,64], f16[64], f16[64,64], f16[64]) tuple(fusion.2, subtract.134, fusion.1, subtract.105, fusion, subtract.76), backend_config="{\"isInplace\":true}"
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  config.set_resource_update_to_input_index({});
+  config.set_resource_input_count(4);
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ConvolutionClassifier classifier;
+
+  auto res = classifier.Run(module);
+
+  EXPECT_TRUE(res.ok());
+  EXPECT_TRUE(res.ValueOrDie());
+
+  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  EXPECT_TRUE(all_classifications_or_status.ok());
+  auto all_classifications = all_classifications_or_status.ValueOrDie();
+  EXPECT_EQ(all_classifications.size(), 8);
+
+  for (auto it : all_classifications) {
+    if (it.first->name() == "dot" || it.first->name() == "dot.1" ||
+        it.first->name() == "dot.2") {
+      EXPECT_EQ(it.second, MLType::TRAINING_FWD) << it.first->name();
+    } else if (it.first->name() == "dot.3" || it.first->name() == "dot.4") {
+      EXPECT_EQ(it.second, MLType::TRAINING_BWD) << it.first->name();
+    } else if (it.first->name() == "dot.5" || it.first->name() == "dot.6" ||
+               it.first->name() == "dot.7") {
+      EXPECT_EQ(it.second, MLType::TRAINING_WU) << it.first->name();
+    } else {
+      // Should not have missing matmuls
+      EXPECT_EQ(1, 0);
+    }
+  }
+}
+
 // TODO:
 // - convolutions + matmuls which share common weights
 // - convolutions + matmuls which share common inputs

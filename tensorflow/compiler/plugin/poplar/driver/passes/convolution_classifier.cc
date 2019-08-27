@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -31,17 +32,49 @@ using ArgMap = std::multimap<HloInstruction*, HloInstruction*>;
 
 /*
  * 1) find groups of convolutions which share the same inputs
- * 2) if any such group has >= 1 conv which has a graph parameter as an input,
- *    and >= 1 conv which does not have a graph parameter as an input, then
- *    mark the ones with a graph parameter as forwards, and the rest as
- *    backprop-filters
- * 3) any remaining convs which share the same weights as one of the forward
- *    convs is a backprop-input
+ * 2) ops that share a common ARG0 input are analyzed to see which is likely
+ *    to be the gradient w.r.t. arg1 (Filter Grad)
+ * 3) any remaining convs which share the same ARG1 as one of the forward
+ *    convs is a Input Grad
  * 4) any remaining ones are inference only
  */
 
 namespace {
 using ConvClassification = absl::flat_hash_map<HloInstruction*, MLType>;
+
+bool IsTransposeLike(const HloInstruction* inst) {
+  switch (inst->opcode()) {
+    case HloOpcode::kTranspose: {
+      return true;
+    }
+    case HloOpcode::kReshape: {
+      auto output_shape = inst->shape();
+      auto input_shape = inst->operand(0)->shape();
+
+      if (output_shape.rank() != 2 || input_shape.rank() != 2) {
+        return false;
+      }
+
+      // If the input and output shape dims are a permutation of each
+      // other then this is a transpose
+      return ShapeUtil::Compatible(
+          output_shape, ShapeUtil::PermuteDimensions({1, 0}, input_shape));
+    }
+    default:
+      return false;
+  }
+}
+
+bool IsOuterProductOfVectors(const HloInstruction* inst) {
+  if (inst->operand(0)->shape().rank() != 1 ||
+      inst->operand(1)->shape().rank() != 1) {
+    return false;
+  }
+  const DotDimensionNumbers& dot_dims = inst->dot_dimension_numbers();
+  auto lhs = dot_dims.lhs_contracting_dimensions();
+  auto rhs = dot_dims.rhs_contracting_dimensions();
+  return lhs.size() == 0 && rhs.size() == 0;
+}
 
 // Find the actual source of an input. Entry/Exit from tuples and kFusion
 // instructions are traced though.
@@ -69,8 +102,8 @@ HloInstruction* FindOperand(HloInstruction* inst,
       int64 op_num = tuple_stack.back();
       tuple_stack.pop_back();
       source = source->mutable_operand(op_num);
-    } else if (source->opcode() == HloOpcode::kTranspose) {
-      // We allow ourselves to look through transpose ops
+    } else if (IsTransposeLike(source)) {
+      // We look through transpose ops
       source = source->mutable_operand(0);
     } else {
       done = true;
@@ -79,17 +112,34 @@ HloInstruction* FindOperand(HloInstruction* inst,
   return source;
 }
 
+bool IsArg1Gradient(const HloInstruction* inst, const HloInstruction* arg0) {
+  switch (inst->opcode()) {
+    case HloOpcode::kConvolution: {
+      // We assume that if the batch dimension (the non-reducing matrix
+      // dimensions) isn't 0, then it is a grad
+      const auto& d = GetConvolutionDims(inst);
+      return d.input_batch_dimension() != 0;
+    }
+    case HloOpcode::kDot: {
+      // We assume that if the arg0 input is transposed, then it is a grad
+      // or if the matmul is an outer product of 2 vectors
+      return IsTransposeLike(arg0) || IsOuterProductOfVectors(inst);
+    }
+    case HloOpcode::kFusion: {
+      return (IsPopOpsFusion(inst, "depthwise_filter") ||
+              IsPopOpsFusion(inst, "conv_scaled_inplace"));
+    }
+    default:
+      return false;
+  }
+}
+
 }  // namespace
 
 StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
   ConvClassification classifications;
 
   std::map<HloInstruction*, std::pair<int, int>> operands;
-
-  const int64 num_res = GetResourceVariableParameterCount(module);
-  std::set<HloInstruction*> variable_inputs(
-      module->entry_computation()->parameter_instructions().end() - num_res,
-      module->entry_computation()->parameter_instructions().end());
 
   for (HloComputation* comp : module->computations()) {
     if (!IsPopOpsFusion(comp)) {
@@ -106,7 +156,6 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
             break;
           }
           case HloOpcode::kFusion: {
-            std::string name = inst->fused_instructions_computation()->name();
             if (IsPopOpsConvolution(inst)) {
               classifications[inst] = MLType::INFERENCE_FWD;
               operands[inst] = std::make_pair(0, 1);
@@ -153,13 +202,11 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
       const auto& targets = arg0_fwd_map.equal_range(it);
 
       for (auto t = targets.first; t != targets.second; ++t) {
-        auto weight = arg1_rev_map.find(t->second);
-        if (weight != arg1_rev_map.end()) {
-          if (variable_inputs.count(weight->second) > 0) {
-            fwd.insert(t->second);
-          } else {
-            wu.insert(t->second);
-          }
+        auto* arg0 = t->second->operand(operands.at(t->second).first);
+        if (IsArg1Gradient(t->second, arg0)) {
+          wu.insert(t->second);
+        } else {
+          fwd.insert(t->second);
         }
       }
 
