@@ -46,6 +46,7 @@ REGISTER_OP("Pipeline")
     .Attr("Tin: list(type) >= 0")
     .Attr("Tout: list(type) >= 0")
     .Attr("output_shapes: list(shape) >= 0")
+    .SetIsStateful()
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       return SetOutputShape(c);
     })
@@ -62,6 +63,7 @@ REGISTER_OP("PipelineStage")
     .Attr("Tin: list(type) >= 0")
     .Attr("Tout: list(type) >= 0")
     .Attr("output_shapes: list(shape) >= 0")
+    .SetIsStateful()
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       return SetOutputShape(c);
     })
@@ -70,5 +72,23 @@ inputs: A list of input tensors.
 output: A list of tensors returned by computing to_apply on a device.
 to_apply: A function which takes 'inputs' and computes the pipeline stage on the
   IPU.
+)doc");
+
+REGISTER_OP("PipelineStageBackward")
+    .Input("inputs: Tin")
+    .Output("output: Tout")
+    .Attr("to_apply: func")
+    .Attr("Tin: list(type) >= 0")
+    .Attr("Tout: list(type) >= 0")
+    .Attr("output_shapes: list(shape) >= 0")
+    .SetIsStateful()
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      return SetOutputShape(c);
+    })
+    .Doc(R"doc(
+inputs: A list of input tensors.
+output: A list of tensors returned by computing to_apply on a device.
+to_apply: A function which takes 'inputs' and computes the gradient pipeline
+  stage on the IPU.
 )doc");
 }  // namespace tensorflow

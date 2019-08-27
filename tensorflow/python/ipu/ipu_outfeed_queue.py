@@ -342,7 +342,9 @@ class IPUOutfeedQueue:
     during execution for each of the replicated graphs.
 
     """
-
+    if not self.enqueued:
+      raise ValueError(
+          "Trying to dequeue an outfeed which has not been enqueued.")
     with ops.device('cpu'):
       outfeed_dequeue = \
         gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
@@ -362,6 +364,7 @@ class _OutfeedStructure:
   def __init__(self, tensors, replication_factor):
     self._singular = False
     self._tuple = False
+    self._list = False
     self._dict = False
     self._dict_keys = []
 
@@ -373,9 +376,10 @@ class _OutfeedStructure:
       flat_types = [tensors.dtype]
       flat_shapes = [tensors.get_shape()]
 
-    elif isinstance(tensors, tuple):
-      self._tuple = True
-      # We require all the elements of the tuple to be tensors.
+    elif isinstance(tensors, (tuple, list)):
+      self._tuple = isinstance(tensors, tuple)
+      self._list = isinstance(tensors, list)
+      # We require all the elements to be tensors.
       if not self._check_list_of_all_type(ops.Tensor, tensors):
         raise ValueError("""\
 Expected all values in the outfeed tuple to be TensorFlow tensors.""")
@@ -437,7 +441,7 @@ IPUOutfeedQueue Enqueue input needs to be either:
   def to_tensor_list(self, tensors):
     if self._singular:
       return [tensors]
-    elif self._tuple:
+    elif self._tuple or self._list:
       return list(tensors)
     elif self._dict:
       return list(tensors.values())
@@ -453,5 +457,7 @@ Expected flat_tensors to be a list of TensorFlow tensors.""")
       return flat_tensors[0]
     elif self._tuple:
       return tuple(flat_tensors)
+    elif self._list:
+      return flat_tensors
     elif self._dict:
       return dict(zip(self._dict_keys, flat_tensors))

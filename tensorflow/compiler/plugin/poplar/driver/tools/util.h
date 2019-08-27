@@ -122,6 +122,7 @@ bool IsArithmeticExpressionFusion(const HloComputation*);
 bool IsArithmeticExpressionFusion(const HloInstruction*);
 bool IsRepeatLoop(const HloInstruction*);
 bool IsPipelineStage(const HloInstruction*);
+bool IsPipelineStageBackward(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 bool CallCanBeInlined(const HloInstruction*);
 

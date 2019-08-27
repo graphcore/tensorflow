@@ -33,7 +33,9 @@ from tensorflow.python.ops import gen_dataset_ops
 """
     These gradient function should *never* be called directly.
 """
+
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
+
 
 class _XlaFuncGradGraph(FuncGraph):
   """FuncGraph for the gradient function of the to_apply function of a
@@ -62,9 +64,8 @@ class _XlaFuncGradGraph(FuncGraph):
     return self._xla_intermediates
 
   def _capture_helper(self, tensor, name):
-    if (tensor.graph is not self._forward_graph or
-        tensor in self._forward_graph.inputs or
-        tensor in self._forward_graph.outputs):
+    if (tensor.graph is not self._forward_graph
+        or tensor in self._forward_graph.outputs):
       return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
 
     if control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph()):
@@ -75,16 +76,19 @@ class _XlaFuncGradGraph(FuncGraph):
         self.op_needs_rewrite = True
     return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
 
+
 def _compiled_function_grad(gen_op_to_call, op, *grads):
   assert control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph())
   # Get the pipeline stage function to create a gradient for it.
   stage_op = op.outputs[0].op
   inputs = stage_op.inputs
   input_shapes = [t.shape for t in inputs]
-  fdef = stage_op.graph._get_function(stage_op.get_attr("to_apply").name).definition
+  fdef = stage_op.graph._get_function(
+      stage_op.get_attr("to_apply").name).definition
 
   with op.graph.as_default():
-    func_graph = function_def_to_graph.function_def_to_graph(fdef, input_shapes)
+    func_graph = function_def_to_graph.function_def_to_graph(
+        fdef, input_shapes)
   for external_t, internal_t in zip(inputs, func_graph.inputs):
     custom_gradient.copy_handle_data(external_t, internal_t)
 
@@ -101,46 +105,50 @@ def _compiled_function_grad(gen_op_to_call, op, *grads):
   # function will capture tensors from the forward pass function.
   grad_name = util.unique_grad_fn_name(func_graph.name)
   func_grad_graph = func_graph_module.func_graph_from_py_func(
-                      grad_name,
-                      lambda: cond_v2._grad_fn(func_graph, grads), [], {},
-                      func_graph=_XlaFuncGradGraph(grad_name, func_graph))
+      grad_name,
+      lambda: cond_v2._grad_fn(func_graph, grads), [], {},
+      func_graph=_XlaFuncGradGraph(grad_name, func_graph))
 
   if func_grad_graph.op_needs_rewrite:
     # Modify 'op' to output the intermediates needed by the grad functions. Note
     # that all needed intermediates are wrapped in optionals.
     extra_func_outputs, = cond_v2._make_intermediates_match_xla(
-          [func_graph], [func_grad_graph.xla_intermediates])
+        [func_graph], [func_grad_graph.xla_intermediates])
     func_graph.outputs.extend(extra_func_outputs)
 
     # Rewrite the forward function so that it outputs the intermediates.
     func_graph.name += "_rewritten"
     stage_op._set_func_attr("to_apply",
-                         util.create_new_tf_function(func_graph))
+                            util.create_new_tf_function(func_graph))
     stage_op._set_type_list_attr("Tout", func_graph.output_types)
     stage_op._set_shape_list_attr("output_shapes", func_graph.output_shapes)
-    stage_op._add_outputs(
-        [t.dtype for t in extra_func_outputs],
-        [t.shape for t in extra_func_outputs])
+    stage_op._add_outputs([t.dtype for t in extra_func_outputs],
+                          [t.shape for t in extra_func_outputs])
 
   func_grad_inputs = cond_v2._resolve_grad_inputs(func_graph, func_grad_graph)
 
-  outputs = gen_op_to_call(func_grad_inputs,
-          to_apply=util.create_new_tf_function(func_grad_graph),
-          Tout=func_grad_graph.output_types,
-          output_shapes=func_grad_graph.output_shapes)
-
+  outputs = gen_op_to_call(
+      func_grad_inputs,
+      to_apply=util.create_new_tf_function(func_grad_graph),
+      Tout=func_grad_graph.output_types,
+      output_shapes=func_grad_graph.output_shapes)
 
   return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
-                                              outputs)
+                                            outputs)
 
 
 @ops.RegisterGradient("PipelineStage")
 def _pipeline_stage_grad(op, *grads):
   """The gradient of a PipelineStage op."""
-  return _compiled_function_grad(gen_pipelining_ops.pipeline_stage, op, *grads)
+  return _compiled_function_grad(gen_pipelining_ops.pipeline_stage_backward,
+                                 op, *grads)
+
 
 @ops.RegisterGradient("Pipeline")
 def _pipeline_stage_grad(op, *grads):
   """The gradient of a Pipeline op."""
-  return _compiled_function_grad(gen_pipelining_ops.pipeline, op, *grads)
-
+  raise RuntimeError(
+      "Attempting to calculate the gradient of a Pipeline which is not allowed."
+      " If you are trying to generate the gradients of operations inside the"
+      " pipeline, use the `optimizer_stage` (see"
+      " tensorflow.python.ipu.pipelining_ops.pipeline for more information).")

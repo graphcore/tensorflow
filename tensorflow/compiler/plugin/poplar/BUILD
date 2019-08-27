@@ -128,6 +128,7 @@ cc_library(
         "driver/passes/not_supported_gather_expander.cc",
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
+        "driver/passes/pipeline_fixer.cc",
         "driver/passes/recompute_instructions.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
@@ -181,6 +182,7 @@ cc_library(
         "driver/tools/instruction_colocator_helper.cc",
         "driver/tools/matcher_predicates.cc",
         "driver/tools/ml_type_helper.cc",
+        "driver/tools/pipeline_util.cc",
         "driver/tools/single_hlo_matcher.cc",
         "driver/tools/util.cc",
         "driver/tools/while_loop_util.cc",
@@ -217,6 +219,7 @@ cc_library(
         "driver/passes/not_supported_gather_expander.h",
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
+        "driver/passes/pipeline_fixer.h",
         "driver/passes/recompute_instructions.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
@@ -263,6 +266,7 @@ cc_library(
         "driver/tools/matcher_predicates.h",
         "driver/tools/meta_graph.h",
         "driver/tools/ml_type_helper.h",
+        "driver/tools/pipeline_util.h",
         "driver/tools/single_hlo_matcher.h",
         "driver/tools/util.h",
         "driver/tools/while_loop_util.h",
@@ -285,6 +289,7 @@ cc_library(
         "//tensorflow/compiler/xla/service:hlo_query",
         "//tensorflow/compiler/xla/service:gather_expander",
         "//tensorflow/compiler/xla/service:scatter_expander",
+        "//tensorflow/compiler/xla/service:tuple_simplifier",
         "//tensorflow/compiler/xla/service:while_loop_analysis",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/core:framework_headers_lib",
@@ -1342,6 +1347,36 @@ xla_test(
         "//tensorflow/core:lib",
         "//tensorflow/core:test",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
+    name = "pipeline_util_test",
+    srcs = ["tests/pipeline_util_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "pipeline_fixer_test",
+    srcs = ["tests/pipeline_fixer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
@@ -2454,6 +2489,8 @@ test_suite(
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
+        "pipeline_fixer_test",
+        "pipeline_util_test",
         "recomputation_test",
         "reduce_test",
         "remapping_test",

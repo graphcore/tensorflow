@@ -55,7 +55,8 @@ message PoplarBackendConfig {
       Call = 0;
       RepeatLoop = 1;
       PipelineStage = 2;
-      Pipeline = 3;
+      PipelineStageBackward = 3;
+      Pipeline = 4;
     };
 
     message RepeatConfig {

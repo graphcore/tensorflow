@@ -322,6 +322,11 @@ bool IsPipelineStage(const HloInstruction* inst) {
                            PoplarBackendConfig::CallConfig::PipelineStage);
 }
 
+bool IsPipelineStageBackward(const HloInstruction* inst) {
+  return CallConfigHasType(
+      inst, PoplarBackendConfig::CallConfig::PipelineStageBackward);
+}
+
 bool IsPipelineOp(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
 }
@@ -565,5 +570,6 @@ SliceInfo GetSliceInfo(const std::vector<size_t>& shape_to_slice,
 
   return slice_info;
 }
+
 }  // namespace poplarplugin
 }  // namespace xla

@@ -48,7 +48,8 @@ static bool OpFilter(KernelDef* kdef) {
   if (kdef->op() == "Const") {
     AddDtypeToKernelDefConstraint("dtype", DT_STRING, kdef);
   }
-  if (kdef->op() == "Pipeline" || kdef->op() == "PipelineStage") {
+  if (kdef->op() == "Pipeline" || kdef->op() == "PipelineStage" ||
+      kdef->op() == "PipelineStageBackward") {
     AddDtypeToKernelDefConstraint("Tin", DT_RESOURCE, kdef);
     AddDtypeToKernelDefConstraint("Tout", DT_RESOURCE, kdef);
   }

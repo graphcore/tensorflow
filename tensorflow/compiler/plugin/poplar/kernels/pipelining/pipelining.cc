@@ -91,6 +91,7 @@ class FunctionCompileOp : public XlaOpKernel {
     XlaCompiler::CompileOptions compile_options;
     compile_options.use_tuple_arg = false;
     compile_options.resolve_compile_time_constants = true;
+    compile_options.always_return_tuple = true;
     compile_options.return_updated_values_for_all_resources = true;
     compile_options.is_entry_computation = false;
     compile_options.add_token_input_output = false;
@@ -165,6 +166,17 @@ class PipelineStageOp : public FunctionCompileOp {
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineStageOp);
 };
 REGISTER_IPU_OP("PipelineStage", PipelineStageOp);
+
+class PipelineStageBackwardOp : public FunctionCompileOp {
+ public:
+  explicit PipelineStageBackwardOp(OpKernelConstruction* ctx)
+      : FunctionCompileOp(
+            ctx, PoplarBackendConfig::CallConfig::PipelineStageBackward) {}
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(PipelineStageBackwardOp);
+};
+REGISTER_IPU_OP("PipelineStageBackward", PipelineStageBackwardOp);
 
 class PipelineOp : public FunctionCompileOp {
  public:
