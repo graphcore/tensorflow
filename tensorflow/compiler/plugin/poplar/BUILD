@@ -362,6 +362,7 @@ cc_library(
         "driver/tools/poplar_util.cc",
         "driver/visitors/deferred_allocation_visitor.cc",
         "driver/visitors/entry_visitor.cc",
+        "driver/visitors/pipeline_visitor.cc",
         "driver/visitors/visitor_arithmetic_expr.cc",
         "driver/visitors/visitor_base.cc",
         "driver/visitors/visitor_full.cc",
@@ -394,6 +395,7 @@ cc_library(
         "driver/vertex_templates.h",
         "driver/visitors/deferred_allocation_visitor.h",
         "driver/visitors/entry_visitor.h",
+        "driver/visitors/pipeline_visitor.h",
         "driver/visitors/visitor_arithmetic_expr.h",
         "driver/visitors/visitor_base.h",
         "driver/visitors/visitor_full.h",
@@ -1152,6 +1154,18 @@ xla_test(
 xla_test(
     name = "not_supported_scatter_expander_test",
     srcs = ["tests/not_supported_scatter_expander_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "pipeline_visitor_test",
+    srcs = ["tests/pipeline_visitor_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -2491,6 +2505,7 @@ test_suite(
         "not_supported_scatter_expander_test",
         "pipeline_fixer_test",
         "pipeline_util_test",
+        "pipeline_visitor_test",
         "recomputation_test",
         "reduce_test",
         "remapping_test",
