@@ -97,6 +97,13 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
 bool HasTensorAllocationTarget(const TensorSource& src,
                                const CompilerResources& resources);
 
+StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
+                                            const TensorTarget& tensor_target,
+                                            const xla::Shape& shape,
+                                            CompilerResources& resources,
+                                            const TensorMap& tensor_map,
+                                            const std::string& debug_name);
+
 StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
                                    const TensorSource& src,
                                    const xla::Shape& shape,

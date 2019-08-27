@@ -126,94 +126,132 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
   return params;
 }
 
-poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
-                                               const poplar::Tensor& tensor) {
-  const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
-
-  std::vector<unsigned int> shuffle(2 + d.input_spatial_dimensions_size());
-  shuffle[0] = d.input_batch_dimension();
-  shuffle[1] = d.input_feature_dimension();
-  for (int64 i = 0; i < d.input_spatial_dimensions_size(); i++) {
-    shuffle[2 + i] = d.input_spatial_dimensions(i);
+namespace {
+poplar::Tensor ShuffleConvolutionInputToPoplar(
+    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
+  std::vector<unsigned int> shuffle(2 + dims.input_spatial_dimensions_size());
+  shuffle[0] = dims.input_batch_dimension();
+  shuffle[1] = dims.input_feature_dimension();
+  for (int64 i = 0; i < dims.input_spatial_dimensions_size(); i++) {
+    shuffle[2 + i] = dims.input_spatial_dimensions(i);
   }
 
   return tensor.dimShuffle(shuffle);
 }
+}  // namespace
+
+poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
+                                               const poplar::Tensor& tensor) {
+  const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+  return ShuffleConvolutionInputToPoplar(d, tensor);
+}
+
+namespace {
+poplar::Tensor ShuffleConvolutionOutputToPoplar(
+    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
+  std::vector<unsigned int> shuffle(2 +
+                                    dims.output_spatial_dimensions().size());
+  shuffle[0] = dims.output_batch_dimension();
+  shuffle[1] = dims.output_feature_dimension();
+  for (int64 i = 0; i < dims.output_spatial_dimensions().size(); ++i) {
+    shuffle[2 + i] = dims.output_spatial_dimensions(i);
+  }
+
+  return tensor.dimShuffle(shuffle);
+}
+}  // namespace
 
 poplar::Tensor ShuffleConvolutionOutputToPoplar(const HloInstruction* inst,
                                                 const poplar::Tensor& tensor) {
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+  return ShuffleConvolutionOutputToPoplar(d, tensor);
+}
 
-  std::vector<unsigned int> shuffle(2 + d.output_spatial_dimensions().size());
-  shuffle[0] = d.output_batch_dimension();
-  shuffle[1] = d.output_feature_dimension();
-  for (int64 i = 0; i < d.output_spatial_dimensions().size(); ++i) {
-    shuffle[2 + i] = d.output_spatial_dimensions(i);
+namespace {
+poplar::Tensor ShuffleConvolutionWeightsToPoplar(
+    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor,
+    bool swap_features) {
+  std::vector<unsigned int> shuffle(2 + dims.kernel_spatial_dimensions_size());
+  if (swap_features) {
+    shuffle[0] = dims.kernel_input_feature_dimension();
+    shuffle[1] = dims.kernel_output_feature_dimension();
+  } else {
+    shuffle[0] = dims.kernel_output_feature_dimension();
+    shuffle[1] = dims.kernel_input_feature_dimension();
+  }
+  for (int64 i = 0; i < dims.kernel_spatial_dimensions_size(); i++) {
+    shuffle[2 + i] = dims.kernel_spatial_dimensions(i);
   }
 
   return tensor.dimShuffle(shuffle);
 }
+}  // namespace
 
 poplar::Tensor ShuffleConvolutionWeightsToPoplar(const HloInstruction* inst,
                                                  const poplar::Tensor& tensor,
                                                  bool swap_features) {
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+  return ShuffleConvolutionWeightsToPoplar(d, tensor, swap_features);
+}
 
-  std::vector<unsigned int> shuffle(2 + d.kernel_spatial_dimensions_size());
-  if (swap_features) {
-    shuffle[0] = d.kernel_input_feature_dimension();
-    shuffle[1] = d.kernel_output_feature_dimension();
-  } else {
-    shuffle[0] = d.kernel_output_feature_dimension();
-    shuffle[1] = d.kernel_input_feature_dimension();
-  }
-  for (int64 i = 0; i < d.kernel_spatial_dimensions_size(); i++) {
-    shuffle[2 + i] = d.kernel_spatial_dimensions(i);
+namespace {
+poplar::Tensor ShuffleConvolutionInputToTensorflow(
+    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
+  std::vector<unsigned int> shuffle(2 + dims.input_spatial_dimensions_size());
+  shuffle[dims.input_batch_dimension()] = 0;
+  shuffle[dims.input_feature_dimension()] = 1;
+  for (int64 i = 0; i < dims.input_spatial_dimensions_size(); i++) {
+    shuffle[dims.input_spatial_dimensions(i)] = i + 2;
   }
 
   return tensor.dimShuffle(shuffle);
 }
+}  // namespace
 
 poplar::Tensor ShuffleConvolutionInputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor) {
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+  return ShuffleConvolutionInputToTensorflow(d, tensor);
+}
 
-  std::vector<unsigned int> shuffle(2 + d.input_spatial_dimensions_size());
-  shuffle[d.input_batch_dimension()] = 0;
-  shuffle[d.input_feature_dimension()] = 1;
-  for (int64 i = 0; i < d.input_spatial_dimensions_size(); i++) {
-    shuffle[d.input_spatial_dimensions(i)] = i + 2;
+namespace {
+poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
+    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
+  std::vector<unsigned int> shuffle(2 + dims.kernel_spatial_dimensions_size());
+  shuffle[dims.kernel_output_feature_dimension()] = 0;
+  shuffle[dims.kernel_input_feature_dimension()] = 1;
+  for (int64 i = 0; i < dims.kernel_spatial_dimensions_size(); i++) {
+    shuffle[dims.kernel_spatial_dimensions(i)] = i + 2;
   }
 
   return tensor.dimShuffle(shuffle);
 }
+}  // namespace
 
 poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor) {
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
+  return ShuffleConvolutionWeightsToTensorflow(d, tensor);
+}
 
-  std::vector<unsigned int> shuffle(2 + d.kernel_spatial_dimensions_size());
-  shuffle[d.kernel_output_feature_dimension()] = 0;
-  shuffle[d.kernel_input_feature_dimension()] = 1;
-  for (int64 i = 0; i < d.kernel_spatial_dimensions_size(); i++) {
-    shuffle[d.kernel_spatial_dimensions(i)] = i + 2;
+namespace {
+poplar::Tensor ShuffleConvolutionOutputToTensorflow(
+    const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor) {
+  std::vector<unsigned int> shuffle(2 + dims.output_spatial_dimensions_size());
+  shuffle[dims.output_batch_dimension()] = 0;
+  shuffle[dims.output_feature_dimension()] = 1;
+  for (int64 i = 0; i < dims.output_spatial_dimensions_size(); i++) {
+    shuffle[dims.output_spatial_dimensions(i)] = i + 2;
   }
 
   return tensor.dimShuffle(shuffle);
 }
+}  // namespace
 
 poplar::Tensor ShuffleConvolutionOutputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor) {
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
-
-  std::vector<unsigned int> shuffle(2 + d.output_spatial_dimensions_size());
-  shuffle[d.output_batch_dimension()] = 0;
-  shuffle[d.output_feature_dimension()] = 1;
-  for (int64 i = 0; i < d.output_spatial_dimensions_size(); i++) {
-    shuffle[d.output_spatial_dimensions(i)] = i + 2;
-  }
-
-  return tensor.dimShuffle(shuffle);
+  return ShuffleConvolutionOutputToTensorflow(d, tensor);
 }
 
 // This function operates on the poplibs format weights (GOI...)
@@ -389,66 +427,75 @@ StatusOr<poplar::program::Program> CreateConvScaledInplace(
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
-  poplar::Tensor weights = inputs[0][0];
+  poplar::Tensor arg_weights = inputs[0][0];
 
   // Find the input tensor
-  TF_ASSIGN_OR_RETURN(poplar::Tensor in,
+  TF_ASSIGN_OR_RETURN(poplar::Tensor arg_in,
                       FindInstructionInput(tensor_map, res, inst, 1, seq));
 
   // Find the deltas tensor
-  TF_ASSIGN_OR_RETURN(poplar::Tensor deltas,
+  TF_ASSIGN_OR_RETURN(poplar::Tensor arg_deltas,
                       FindInstructionInput(tensor_map, res, inst, 2, seq));
 
   // Find the scale.
   TF_ASSIGN_OR_RETURN(
-      poplar::Tensor scale,
+      poplar::Tensor arg_scale,
       FindInstructionInput(tensor_map, res, inst, 3, seq, false));
 
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(inst, 1, 2));
 
-  in = ShuffleConvolutionInputToPoplar(inst, in);
-
-  deltas = ShuffleConvolutionWeightsToPoplar(inst, deltas, false);
-  deltas = AddGroupsDimensionToWeights(params, deltas, false);
-
-  weights = ShuffleConvolutionOutputToPoplar(inst, weights);
-
   TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
   auto opts = GetConvolutionOptionsForType(res, conv_type);
+  const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
 
-  // Get the root of the fusion - it indicates whether this is add or subtract.
+  // Get the root of the fusion - it indicates whether this is add or
+  // subtract.
   const auto* root_inst =
       inst->fused_instructions_computation()->root_instruction();
   auto op_type = root_inst->opcode();
 
-  using namespace poputil::graphfn;
   const std::string debug_prefix = GetDebugName(inst);
-  auto func = [&graph, &res, op_type, params, opts, debug_prefix](
+
+  using namespace poputil::graphfn;
+  auto func = [&graph, &res, params, opts, conv_dims, op_type, debug_prefix](
                   std::vector<poplar::Tensor>& args,
                   poplar::program::Sequence& prog) {
+    poplar::Tensor weights = args[0];
+    poplar::Tensor in = args[1];
+    poplar::Tensor deltas = args[2];
+    poplar::Tensor scale = args[3];
+
+    weights = ShuffleConvolutionOutputToPoplar(conv_dims, weights);
+    in = ShuffleConvolutionInputToPoplar(conv_dims, in);
+    deltas = ShuffleConvolutionWeightsToPoplar(conv_dims, deltas, false);
+    deltas = AddGroupsDimensionToWeights(params, deltas, false);
+
     auto c_out =
-        poplin::convolution(graph, args[1], args[2], params, false, prog,
+        poplin::convolution(graph, in, deltas, params, false, prog,
                             debug_prefix, opts, &res.convolution_cache);
 
-    TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, args[0], c_out, args[3],
+    TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, weights, c_out, scale,
                                               prog, op_type, debug_prefix));
+
+    args[0] = ShuffleConvolutionOutputToTensorflow(conv_dims, weights);
   };
 
-  std::vector<poplar::Tensor> args = {weights, in, deltas, scale};
+  std::vector<poplar::Tensor> args = {arg_weights, arg_in, arg_deltas,
+                                      arg_scale};
   Signature signature = {
-      inout(weights, "w"),
-      input(in, "in"),
-      input(deltas, "deltas"),
-      input(scale, "scale"),
+      inout(arg_weights, "w"),
+      input(arg_in, "in"),
+      input(arg_deltas, "deltas"),
+      input(arg_scale, "scale"),
   };
 
   TF_RETURN_IF_ERROR(
       res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
 
-  weights = ShuffleConvolutionOutputToTensorflow(inst, args[0]);
+  arg_weights = args[0];
 
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, weights));
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, arg_weights));
 
   return seq;
 }

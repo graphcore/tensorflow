@@ -608,97 +608,99 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
   poplar::program::Sequence seq;
 
   CHECK_EQ(inst->opcode(), HloOpcode::kDot);
-  TF_ASSIGN_OR_RETURN(poplar::Tensor in0,
+  TF_ASSIGN_OR_RETURN(poplar::Tensor arg_lhs,
                       FindInstructionInput(tensor_map, res, inst, 0, seq));
-  TF_ASSIGN_OR_RETURN(poplar::Tensor in1,
+  TF_ASSIGN_OR_RETURN(poplar::Tensor arg_rhs,
                       FindInstructionInput(tensor_map, res, inst, 1, seq));
 
-  const DotDimensionNumbers& dot_dims = inst->dot_dimension_numbers();
-  auto lhs_reduction_dimensions = dot_dims.lhs_contracting_dimensions();
-  auto rhs_reduction_dimensions = dot_dims.rhs_contracting_dimensions();
-  auto lhs_batch_dimensions = dot_dims.lhs_batch_dimensions();
-  auto rhs_batch_dimensions = dot_dims.rhs_batch_dimensions();
-
-  // DimShuffle the LHS to [Batch..., M..., Contracting...]
-  std::vector<unsigned> lhs_permutation;
-  lhs_permutation.reserve(in0.rank());
-
-  absl::c_copy(lhs_batch_dimensions, std::back_inserter(lhs_permutation));
-  for (int i = 0; i < in0.rank(); ++i) {
-    if (absl::c_find(lhs_reduction_dimensions, i) ==
-            lhs_reduction_dimensions.end() &&
-        absl::c_find(lhs_batch_dimensions, i) == lhs_batch_dimensions.end()) {
-      lhs_permutation.push_back(i);
-    }
-  }
-  absl::c_copy(lhs_reduction_dimensions, std::back_inserter(lhs_permutation));
-  in0 = in0.dimShuffle(lhs_permutation);
-
-  // DimShuffle the RHS to [Contracting..., Batch..., N...]
-  std::vector<unsigned> rhs_permutation;
-  rhs_permutation.reserve(in1.rank());
-
-  absl::c_copy(rhs_batch_dimensions, std::back_inserter(rhs_permutation));
-  absl::c_copy(rhs_reduction_dimensions, std::back_inserter(rhs_permutation));
-  for (int i = 0; i < in1.rank(); ++i) {
-    if (absl::c_find(rhs_reduction_dimensions, i) ==
-            rhs_reduction_dimensions.end() &&
-        absl::c_find(rhs_batch_dimensions, i) == rhs_batch_dimensions.end()) {
-      rhs_permutation.push_back(i);
-    }
-  }
-  in1 = in1.dimShuffle(rhs_permutation);
-
-  // Collapse the LHS dimensions down to [Batch, M, Contracting]
-  const auto lhs_shape = in0.shape();
-  const auto lhs_shape_itr_begin = lhs_shape.begin();
-  const auto lhs_shape_itr_a =
-      lhs_shape_itr_begin + lhs_batch_dimensions.size();
-  const auto lhs_shape_itr_end = lhs_shape.end();
-  const auto lhs_shape_itr_b =
-      lhs_shape_itr_end - lhs_reduction_dimensions.size();
-
-  const auto lhs_b =
-      std::accumulate(lhs_shape_itr_begin, lhs_shape_itr_a, std::size_t(1),
-                      std::multiplies<std::size_t>());
-  const auto lhs_m =
-      std::accumulate(lhs_shape_itr_a, lhs_shape_itr_b, std::size_t(1),
-                      std::multiplies<std::size_t>());
-  const auto lhs_k =
-      std::accumulate(lhs_shape_itr_b, lhs_shape_itr_end, std::size_t(1),
-                      std::multiplies<std::size_t>());
-  in0 = in0.reshape({lhs_b, lhs_m, lhs_k});
-
-  // Collapse the RHS dimensions down to [Batch, Contracting, N]
-  const auto rhs_shape = in1.shape();
-  const auto rhs_shape_itr_begin = rhs_shape.begin();
-  const auto rhs_shape_itr_a =
-      rhs_shape_itr_begin + lhs_batch_dimensions.size();
-  const auto rhs_shape_itr_b =
-      rhs_shape_itr_a + rhs_reduction_dimensions.size();
-  const auto rhs_shape_itr_end = rhs_shape.end();
-
-  const auto rhs_b =
-      std::accumulate(rhs_shape_itr_begin, rhs_shape_itr_a, std::size_t(1),
-                      std::multiplies<std::size_t>());
-  const auto rhs_k =
-      std::accumulate(rhs_shape_itr_a, rhs_shape_itr_b, std::size_t(1),
-                      std::multiplies<std::size_t>());
-  const auto rhs_n =
-      std::accumulate(rhs_shape_itr_b, rhs_shape_itr_end, std::size_t(1),
-                      std::multiplies<std::size_t>());
-  in1 = in1.reshape({rhs_b, rhs_k, rhs_n});
-
-  // Created a cached dot.
-  using namespace poputil::graphfn;
+  const DotDimensionNumbers dot_dims = inst->dot_dimension_numbers();
   TF_ASSIGN_OR_RETURN(const std::string dot_type_s, GetMLTypeAsString(inst));
   TF_ASSIGN_OR_RETURN(const MLType dot_type, GetMLType(inst));
   const std::string debug_prefix = GetDebugName(inst);
-  auto func = [&graph, &res, dot_type_s, dot_type, debug_prefix](
-                  std::vector<poplar::Tensor>& args,
-                  poplar::program::Sequence& prog) {
-    poplar::Tensor& lhs = args[0];
-    poplar::Tensor& rhs = args[1];
+
+  // Created a cached dot.
+  using namespace poputil::graphfn;
+  auto func = [&graph, &res, &output_shape, dot_dims, dot_type_s, dot_type,
+               debug_prefix](std::vector<poplar::Tensor>& args,
+                             poplar::program::Sequence& prog) {
+    poplar::Tensor lhs = args[0];
+    poplar::Tensor rhs = args[1];
+
+    auto lhs_reduction_dimensions = dot_dims.lhs_contracting_dimensions();
+    auto rhs_reduction_dimensions = dot_dims.rhs_contracting_dimensions();
+    auto lhs_batch_dimensions = dot_dims.lhs_batch_dimensions();
+    auto rhs_batch_dimensions = dot_dims.rhs_batch_dimensions();
+
+    // DimShuffle the LHS to [Batch..., M..., Contracting...]
+    std::vector<unsigned> lhs_permutation;
+    lhs_permutation.reserve(lhs.rank());
+
+    absl::c_copy(lhs_batch_dimensions, std::back_inserter(lhs_permutation));
+    for (int i = 0; i < lhs.rank(); ++i) {
+      if (absl::c_find(lhs_reduction_dimensions, i) ==
+              lhs_reduction_dimensions.end() &&
+          absl::c_find(lhs_batch_dimensions, i) == lhs_batch_dimensions.end()) {
+        lhs_permutation.push_back(i);
+      }
+    }
+    absl::c_copy(lhs_reduction_dimensions, std::back_inserter(lhs_permutation));
+    lhs = lhs.dimShuffle(lhs_permutation);
+
+    // DimShuffle the RHS to [Contracting..., Batch..., N...]
+    std::vector<unsigned> rhs_permutation;
+    rhs_permutation.reserve(rhs.rank());
+
+    absl::c_copy(rhs_batch_dimensions, std::back_inserter(rhs_permutation));
+    absl::c_copy(rhs_reduction_dimensions, std::back_inserter(rhs_permutation));
+    for (int i = 0; i < rhs.rank(); ++i) {
+      if (absl::c_find(rhs_reduction_dimensions, i) ==
+              rhs_reduction_dimensions.end() &&
+          absl::c_find(rhs_batch_dimensions, i) == rhs_batch_dimensions.end()) {
+        rhs_permutation.push_back(i);
+      }
+    }
+    rhs = rhs.dimShuffle(rhs_permutation);
+
+    // Collapse the LHS dimensions down to [Batch, M, Contracting]
+    const auto lhs_shape = lhs.shape();
+    const auto lhs_shape_itr_begin = lhs_shape.begin();
+    const auto lhs_shape_itr_a =
+        lhs_shape_itr_begin + lhs_batch_dimensions.size();
+    const auto lhs_shape_itr_end = lhs_shape.end();
+    const auto lhs_shape_itr_b =
+        lhs_shape_itr_end - lhs_reduction_dimensions.size();
+
+    const auto lhs_b =
+        std::accumulate(lhs_shape_itr_begin, lhs_shape_itr_a, std::size_t(1),
+                        std::multiplies<std::size_t>());
+    const auto lhs_m =
+        std::accumulate(lhs_shape_itr_a, lhs_shape_itr_b, std::size_t(1),
+                        std::multiplies<std::size_t>());
+    const auto lhs_k =
+        std::accumulate(lhs_shape_itr_b, lhs_shape_itr_end, std::size_t(1),
+                        std::multiplies<std::size_t>());
+    lhs = lhs.reshape({lhs_b, lhs_m, lhs_k});
+
+    // Collapse the RHS dimensions down to [Batch, Contracting, N]
+    const auto rhs_shape = rhs.shape();
+    const auto rhs_shape_itr_begin = rhs_shape.begin();
+    const auto rhs_shape_itr_a =
+        rhs_shape_itr_begin + lhs_batch_dimensions.size();
+    const auto rhs_shape_itr_b =
+        rhs_shape_itr_a + rhs_reduction_dimensions.size();
+    const auto rhs_shape_itr_end = rhs_shape.end();
+
+    const auto rhs_b =
+        std::accumulate(rhs_shape_itr_begin, rhs_shape_itr_a, std::size_t(1),
+                        std::multiplies<std::size_t>());
+    const auto rhs_k =
+        std::accumulate(rhs_shape_itr_a, rhs_shape_itr_b, std::size_t(1),
+                        std::multiplies<std::size_t>());
+    const auto rhs_n =
+        std::accumulate(rhs_shape_itr_b, rhs_shape_itr_end, std::size_t(1),
+                        std::multiplies<std::size_t>());
+    rhs = rhs.reshape({rhs_b, rhs_k, rhs_n});
+
     auto opts = GetMatMulOptionsForType(res, dot_type);
 
     if (VLOG_IS_ON(2)) {
@@ -716,16 +718,19 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
 
     args[2] = poplin::matMulGrouped(graph, lhs, rhs, prog, lhs.elementType(),
                                     debug_prefix, opts, &res.dot_cache);
+    // Reshape to XLA shape
+    args[2] = args[2].reshape(PoplarShapeFromXlaShape(output_shape));
   };
 
   poplar::Tensor output;
-  std::vector<poplar::Tensor> args = {in0, in1, output};
-  Signature sig = {input(in0, "lhs"), input(in1, "rhs"), created("output")};
+  std::vector<poplar::Tensor> args = {arg_lhs, arg_rhs, output};
+  Signature sig = {input(arg_lhs, "lhs"), input(arg_rhs, "rhs"),
+                   created("output")};
   TF_RETURN_IF_ERROR(
       res.graph_cache.ExecuteCached(inst, graph, seq, func, sig, args));
 
-  // Reshape to XLA shape
-  output = args[2].reshape(PoplarShapeFromXlaShape(output_shape));
+  output = args[2];
+
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
   return seq;

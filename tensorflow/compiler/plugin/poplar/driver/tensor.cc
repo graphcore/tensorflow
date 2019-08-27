@@ -892,242 +892,249 @@ bool HasTensorAllocationTarget(const TensorSource& src,
   return tensor_allocation_map.find(src) != tensor_allocation_map.end();
 }
 
+StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
+                                            const TensorTarget& tensor_target,
+                                            const xla::Shape& shape,
+                                            CompilerResources& resources,
+                                            const TensorMap& tensor_map,
+                                            const std::string& debug_name) {
+  poplar::Tensor out;
+  const auto* target = tensor_target.tgt;
+  const auto input_index = tensor_target.input_index;
+  auto tshape = target->operand(input_index)->shape();
+  const auto optional_layout = tensor_target.layout;
+  const auto optional_layout_output_idx = tensor_target.layout_output_idx;
+  const auto forward_path = tensor_target.forward_path;
+
+  if (IsPopOpsElementwiseBinary(target) && !IsPopOpsBiasAdd(target)) {
+    TF_ASSIGN_OR_RETURN(
+        out, AddElementwiseBinary(graph, debug_name, *optional_layout,
+                                  *optional_layout_output_idx, forward_path,
+                                  tensor_map));
+  } else {
+    const std::string error_msg =
+        absl::StrCat("Invalid operand for tensor allocation on ", debug_name);
+    switch (target->opcode()) {
+      case HloOpcode::kBatchNormInference:
+      case HloOpcode::kBatchNormTraining: {
+        const unsigned feature_dimension =
+            Cast<HloBatchNormInstruction>(target)->feature_index();
+        switch (input_index) {
+          case 1: {
+            TF_ASSIGN_OR_RETURN(
+                out, AddNormScaleTensor(graph, debug_name, *optional_layout,
+                                        *optional_layout_output_idx,
+                                        feature_dimension, forward_path,
+                                        tensor_map));
+            break;
+          }
+          case 2: {
+            TF_ASSIGN_OR_RETURN(
+                out, AddNormOffsetTensor(graph, debug_name, *optional_layout,
+                                         *optional_layout_output_idx,
+                                         feature_dimension, forward_path,
+                                         tensor_map));
+            break;
+          }
+          default:
+            return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      case HloOpcode::kConvolution: {
+        switch (input_index) {
+          case 0: {
+            TF_ASSIGN_OR_RETURN(
+                out, AddConvolutionInput(graph, debug_name, target, resources));
+            break;
+          }
+          case 1: {
+            TF_ASSIGN_OR_RETURN(out, AddConvolutionWeights(graph, debug_name,
+                                                           target, resources));
+            break;
+          }
+          default:
+            return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      case HloOpcode::kDot: {
+        switch (input_index) {
+          case 0: {
+            TF_ASSIGN_OR_RETURN(out, AddLeftMatMul(graph, debug_name, tshape,
+                                                   target, resources));
+            break;
+          }
+          case 1: {
+            TF_ASSIGN_OR_RETURN(out, AddRightMatMul(graph, debug_name, tshape,
+                                                    target, resources));
+            break;
+          }
+          default:
+            return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      case HloOpcode::kDynamicSlice: {
+        switch (input_index) {
+          case 0: {
+            TF_ASSIGN_OR_RETURN(out,
+                                AddDynamicSliceTensor(graph, debug_name, tshape,
+                                                      target->shape()));
+            break;
+          }
+          default:
+            return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      case HloOpcode::kDynamicUpdateSlice: {
+        switch (input_index) {
+          case 0: {
+            TF_ASSIGN_OR_RETURN(
+                out, AddDynamicSliceTensor(graph, debug_name, tshape,
+                                           target->operand(1)->shape()));
+            break;
+          }
+          case 1: {
+            TF_ASSIGN_OR_RETURN(out, AddDynamicUpdateSliceTensor(
+                                         graph, debug_name,
+                                         target->operand(0)->shape(), tshape));
+            break;
+          }
+          default:
+            return xla::FailedPrecondition("%s", error_msg);
+        }
+
+        break;
+      }
+      case HloOpcode::kScatter: {
+        auto scatter = Cast<HloScatterInstruction>(target);
+        switch (input_index) {
+          case 0: {
+            const auto inserted_window_dims =
+                scatter->scatter_dimension_numbers().inserted_window_dims();
+            xla::Shape slice_shape = target->operand(0)->shape();
+            for (int i = 0; i < tshape.rank(); ++i) {
+              if (absl::c_binary_search(inserted_window_dims, i)) {
+                slice_shape.set_dimensions(i, 1);
+              }
+            }
+
+            TF_ASSIGN_OR_RETURN(
+                out, AddScatterTensor(graph, debug_name, tshape, slice_shape));
+            break;
+          }
+          case 2: {
+            const auto update_window_dims =
+                scatter->scatter_dimension_numbers().update_window_dims();
+            xla::Shape slice_shape = target->operand(2)->shape();
+            for (int i = 0; i < tshape.rank(); ++i) {
+              if (!absl::c_binary_search(update_window_dims, i)) {
+                slice_shape.set_dimensions(i, 1);
+              }
+            }
+
+            TF_ASSIGN_OR_RETURN(
+                out, AddScatterTensor(graph, debug_name, tshape, slice_shape));
+            break;
+          }
+          default:
+            return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      case HloOpcode::kFusion: {
+        const HloComputation* comp = target->fused_instructions_computation();
+        if (IsPopOpsFusion(comp)) {
+          if (IsPopOpsFusion(comp, "depthwise_conv")) {
+            switch (input_index) {
+              case 0: {
+                TF_ASSIGN_OR_RETURN(
+                    out,
+                    AddConvolutionInput(graph, debug_name, target, resources));
+                break;
+              }
+              case 1: {
+                TF_ASSIGN_OR_RETURN(
+                    out, AddConvolutionWeights(graph, debug_name, target,
+                                               resources));
+                break;
+              }
+              default:
+                return xla::FailedPrecondition("%s", error_msg);
+            }
+          } else if (IsPopOpsFusion(comp, "conv_biasadd")) {
+            TF_ASSIGN_OR_RETURN(
+                out, AddConvAddBiasTensor(graph, debug_name, *optional_layout,
+                                          *optional_layout_output_idx,
+                                          forward_path, tensor_map));
+          } else if (IsPopOpsFusion(comp, "matmul_biasadd")) {
+            TF_ASSIGN_OR_RETURN(
+                out, AddMatMulAddBiasTensor(graph, debug_name, *optional_layout,
+                                            *optional_layout_output_idx,
+                                            forward_path, tensor_map));
+          } else {
+            return xla::FailedPrecondition(
+                "Unknown poplibs fusion for tensor %s", debug_name.c_str());
+          }
+        } else {
+          TF_ASSIGN_OR_RETURN(
+              out, AddPlainTensor(graph, debug_name, tshape, resources));
+        }
+        break;
+      }
+      case HloOpcode::kGather: {
+        switch (input_index) {
+          case 0: {
+            const auto dim_numbers = target->gather_dimension_numbers();
+            const auto slice_sizes = target->gather_slice_sizes();
+            const auto start_index_map = dim_numbers.start_index_map();
+
+            TF_ASSIGN_OR_RETURN(
+                out, AddGatherTensor(
+                         graph, debug_name, tshape,
+                         {slice_sizes.begin(), slice_sizes.end()},
+                         {start_index_map.begin(), start_index_map.end()}));
+            break;
+          }
+          default:
+            return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      case HloOpcode::kCustomCall: {
+        if (IsPoplibsHloCustomOp(target)) {
+          TF_ASSIGN_OR_RETURN(
+              out, AllocatePoplibsOpTensor(graph, resources, debug_name,
+                                           tensor_target, shape, tensor_map));
+        } else {
+          return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      default:
+        return xla::FailedPrecondition("%s", error_msg);
+    }
+  }
+
+  TF_ASSIGN_OR_RETURN(out,
+                      PathTransform(graph, out, tensor_target.backward_path));
+  return out;
+}
+
 StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
                                    const TensorSource& src,
                                    const xla::Shape& shape,
                                    CompilerResources& resources,
                                    const TensorMap& tensor_map) {
-  const auto& name = GetDebugName(src.first);
+  const std::string& name = GetDebugName(src.first);
   poplar::Tensor out;
 
-  auto tensor_target = resources.annotations.tensor_allocation_map.find(src);
-  if (tensor_target != resources.annotations.tensor_allocation_map.end()) {
-    const auto* target = tensor_target->second.tgt;
-    const auto input_index = tensor_target->second.input_index;
-    auto tshape = target->operand(input_index)->shape();
-    const auto optional_layout = tensor_target->second.layout;
-    const auto optional_layout_output_idx =
-        tensor_target->second.layout_output_idx;
-    const auto forward_path = tensor_target->second.forward_path;
-
-    if (IsPopOpsElementwiseBinary(target) && !IsPopOpsBiasAdd(target)) {
-      TF_ASSIGN_OR_RETURN(
-          out, AddElementwiseBinary(graph, name, *optional_layout,
-                                    *optional_layout_output_idx, forward_path,
-                                    tensor_map));
-    } else {
-      const std::string error_msg = absl::StrCat(
-          "Invalid operand for tensor allocation on ", src.first->name());
-      switch (target->opcode()) {
-        case HloOpcode::kBatchNormInference:
-        case HloOpcode::kBatchNormTraining: {
-          const unsigned feature_dimension =
-              Cast<HloBatchNormInstruction>(target)->feature_index();
-          switch (input_index) {
-            case 1: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddNormScaleTensor(graph, name, *optional_layout,
-                                          *optional_layout_output_idx,
-                                          feature_dimension, forward_path,
-                                          tensor_map));
-              break;
-            }
-            case 2: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddNormOffsetTensor(graph, name, *optional_layout,
-                                           *optional_layout_output_idx,
-                                           feature_dimension, forward_path,
-                                           tensor_map));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
-        case HloOpcode::kConvolution: {
-          switch (input_index) {
-            case 0: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddConvolutionInput(graph, name, target, resources));
-              break;
-            }
-            case 1: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddConvolutionWeights(graph, name, target, resources));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
-        case HloOpcode::kDot: {
-          switch (input_index) {
-            case 0: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddLeftMatMul(graph, name, tshape, target, resources));
-              break;
-            }
-            case 1: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddRightMatMul(graph, name, tshape, target, resources));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
-        case HloOpcode::kDynamicSlice: {
-          switch (input_index) {
-            case 0: {
-              TF_ASSIGN_OR_RETURN(
-                  out,
-                  AddDynamicSliceTensor(graph, name, tshape, target->shape()));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
-        case HloOpcode::kDynamicUpdateSlice: {
-          switch (input_index) {
-            case 0: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddDynamicSliceTensor(graph, name, tshape,
-                                             target->operand(1)->shape()));
-              break;
-            }
-            case 1: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddDynamicUpdateSliceTensor(
-                           graph, name, target->operand(0)->shape(), tshape));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-
-          break;
-        }
-        case HloOpcode::kScatter: {
-          auto scatter = Cast<HloScatterInstruction>(target);
-          switch (input_index) {
-            case 0: {
-              const auto inserted_window_dims =
-                  scatter->scatter_dimension_numbers().inserted_window_dims();
-              xla::Shape slice_shape = target->operand(0)->shape();
-              for (int i = 0; i < tshape.rank(); ++i) {
-                if (absl::c_binary_search(inserted_window_dims, i)) {
-                  slice_shape.set_dimensions(i, 1);
-                }
-              }
-
-              TF_ASSIGN_OR_RETURN(
-                  out, AddScatterTensor(graph, name, tshape, slice_shape));
-              break;
-            }
-            case 2: {
-              const auto update_window_dims =
-                  scatter->scatter_dimension_numbers().update_window_dims();
-              xla::Shape slice_shape = target->operand(2)->shape();
-              for (int i = 0; i < tshape.rank(); ++i) {
-                if (!absl::c_binary_search(update_window_dims, i)) {
-                  slice_shape.set_dimensions(i, 1);
-                }
-              }
-
-              TF_ASSIGN_OR_RETURN(
-                  out, AddScatterTensor(graph, name, tshape, slice_shape));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
-        case HloOpcode::kFusion: {
-          const HloComputation* comp = target->fused_instructions_computation();
-          if (IsPopOpsFusion(comp)) {
-            if (IsPopOpsFusion(comp, "depthwise_conv")) {
-              switch (input_index) {
-                case 0: {
-                  TF_ASSIGN_OR_RETURN(
-                      out, AddConvolutionInput(graph, name, target, resources));
-                  break;
-                }
-                case 1: {
-                  TF_ASSIGN_OR_RETURN(out, AddConvolutionWeights(
-                                               graph, name, target, resources));
-                  break;
-                }
-                default:
-                  return xla::FailedPrecondition(
-                      "invalid operand for tensor allocation on %s",
-                      src.first->name().c_str());
-              }
-            } else if (IsPopOpsFusion(comp, "conv_biasadd")) {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddConvAddBiasTensor(graph, name, *optional_layout,
-                                            *optional_layout_output_idx,
-                                            forward_path, tensor_map));
-            } else if (IsPopOpsFusion(comp, "matmul_biasadd")) {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddMatMulAddBiasTensor(graph, name, *optional_layout,
-                                              *optional_layout_output_idx,
-                                              forward_path, tensor_map));
-            } else {
-              return xla::FailedPrecondition(
-                  "Unknown poplibs fusion for tensor %s: %s",
-                  src.first->name().c_str(), name.c_str());
-            }
-          } else {
-            TF_ASSIGN_OR_RETURN(out,
-                                AddPlainTensor(graph, name, tshape, resources));
-          }
-          break;
-        }
-        case HloOpcode::kGather: {
-          switch (input_index) {
-            case 0: {
-              const auto dim_numbers = target->gather_dimension_numbers();
-              const auto slice_sizes = target->gather_slice_sizes();
-              const auto start_index_map = dim_numbers.start_index_map();
-
-              TF_ASSIGN_OR_RETURN(
-                  out, AddGatherTensor(
-                           graph, name, tshape,
-                           {slice_sizes.begin(), slice_sizes.end()},
-                           {start_index_map.begin(), start_index_map.end()}));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
-        case HloOpcode::kCustomCall: {
-          if (IsPoplibsHloCustomOp(target)) {
-            TF_ASSIGN_OR_RETURN(
-                out, AllocatePoplibsOpTensor(graph, resources, name,
-                                             tensor_target->second, shape,
-                                             tensor_map));
-          } else {
-            LOG(FATAL) << "Unsupported custom call " << target->name();
-          }
-          break;
-        }
-        default:
-          return xla::FailedPrecondition("Unknown tensor target for %s: %s",
-                                         src.first->name().c_str(),
-                                         target->name().c_str());
-      }
-    }
-
-    TF_ASSIGN_OR_RETURN(
-        out, PathTransform(graph, out, tensor_target->second.backward_path));
+  auto itr = resources.annotations.tensor_allocation_map.find(src);
+  if (itr != resources.annotations.tensor_allocation_map.end()) {
+    TF_ASSIGN_OR_RETURN(out, AddTensorForTarget(graph, itr->second, shape,
+                                                resources, tensor_map, name));
 
   } else {
     TF_ASSIGN_OR_RETURN(out, AddPlainTensor(graph, name, shape, resources));
