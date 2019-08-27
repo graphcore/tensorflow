@@ -372,7 +372,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
       self.assertEqual(tu.count_compute_sets_matching(cs_list, '*Convolve'), 1)
 
-  def testConvolutionApplyNotInplace(self):
+  def testConvolutionEvenWhenNotInplace(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         filter_sizes = constant_op.constant([2, 2, 3, 5], np.int32)
@@ -433,7 +433,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       s = tu.extract_all_strings_from_event_trace(result)
       cs_list = tu.get_compute_sets_from_report(s)
-      self.assertEqual(tu.count_compute_sets_matching(cs_list, '*Convolve'), 2)
+      # We still reuse the code even though only one conv is inplace.
+      self.assertEqual(tu.count_compute_sets_matching(cs_list, '*Convolve'), 1)
 
 
 if __name__ == "__main__":

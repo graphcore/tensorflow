@@ -13,10 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/core/platform/human_readable_json.h"
+#include "tensorflow/core/platform/protobuf.h"
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
@@ -33,8 +36,9 @@ size_t GenericGraphCache::HloInstructionHash::operator()(
   return inst->Hash();
 }
 
-// The instruction will produce the same graph if it is identical apart from
-// operands for which we just require to have the same shape.
+// The instruction will produce the same graph if it is identical apart from:
+// 1. Operand shapes - we just require to have the same shape.
+// 2. We ignore the inplace field in backend config.
 bool GenericGraphCache::HloInstructionEquals::operator()(
     const HloInstruction* a, const HloInstruction* b) const {
   auto compare_operands = [](const HloInstruction* operand_a,
@@ -46,7 +50,24 @@ bool GenericGraphCache::HloInstructionEquals::operator()(
                           const HloComputation* comp_b) {
     return *comp_a == *comp_b;
   };
-  return a->Identical(*b, compare_operands, compare_comps) &&
+  auto compare_backend_configs = [](const std::string& raw_backend_config_a,
+                                    const std::string& raw_backend_config_b) {
+    PoplarBackendConfig backend_config_a;
+    auto parse_a_status = tensorflow::HumanReadableJsonToProto(
+        raw_backend_config_a, &backend_config_a);
+    PoplarBackendConfig backend_config_b;
+    auto parse_b_status = tensorflow::HumanReadableJsonToProto(
+        raw_backend_config_b, &backend_config_b);
+    if (!parse_a_status.ok() || !parse_b_status.ok()) {
+      LOG(FATAL) << "Could not parse PoplarBackendConfig.";
+    }
+    // Ignore inplace field.
+    backend_config_a.set_is_inplace(false);
+    backend_config_b.set_is_inplace(false);
+    return protobuf_util::ProtobufEquals(backend_config_a, backend_config_b);
+  };
+  return a->Identical(*b, compare_operands, compare_comps, false,
+                      compare_backend_configs) &&
          GetSingleShardingDeviceId(a) == GetSingleShardingDeviceId(b);
 }
 

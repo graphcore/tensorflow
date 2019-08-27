@@ -75,7 +75,7 @@ class BiasApplyGraphCachingTest(xla_test.XLATestCase):
       self.assertEqual(
           tu.count_compute_sets_matching(cs_list, '*ReduceOnTile*'), 1)
 
-  def testDontMatchBecauseInplace(self):
+  def testMatchBecauseEvenWhenNotInplace(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         biases1 = array_ops.placeholder(np.float32, shape=[2])
@@ -107,9 +107,9 @@ class BiasApplyGraphCachingTest(xla_test.XLATestCase):
 
       s = tu.extract_all_strings_from_event_trace(result)
       cs_list = tu.get_compute_sets_from_report(s)
-
+      # We still reuse the code even though only one reduce is inplace.
       self.assertEqual(
-          tu.count_compute_sets_matching(cs_list, '*ReduceOnTile*'), 2)
+          tu.count_compute_sets_matching(cs_list, '*ReduceOnTile*'), 1)
 
 
 if __name__ == "__main__":
