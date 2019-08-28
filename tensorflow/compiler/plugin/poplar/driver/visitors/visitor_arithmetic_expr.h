@@ -40,6 +40,7 @@ class ArithmeticExprVisitor : public FullVisitor {
   Status HandleElementwiseUnary(HloInstruction* inst) override;
   Status HandleElementwiseBinary(HloInstruction* inst) override;
   Status HandleCompare(HloInstruction* inst) override;
+  Status HandleConvert(HloInstruction* inst) override;
   Status HandleSelect(HloInstruction* inst) override;
   Status HandleClamp(HloInstruction* inst) override;
   Status HandleParameter(HloInstruction* inst) override;
@@ -48,7 +49,6 @@ class ArithmeticExprVisitor : public FullVisitor {
 #define ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(Name) \
   Status Name(HloInstruction* inst) override { return Unimplemented(inst); };
 
-  ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleConvert);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleCopy);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleConcatenate);
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleBitcastConvert);

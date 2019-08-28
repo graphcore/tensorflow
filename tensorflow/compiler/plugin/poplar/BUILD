@@ -1365,6 +1365,42 @@ xla_test(
 )
 
 xla_test(
+    name = "arithmetic_expr_test",
+    srcs = ["tests/arithmetic_expr_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "medium",
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla:array3d",
+        "//tensorflow/compiler/xla:literal",
+        "//tensorflow/compiler/xla:reference_util",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:status_macros",
+        "//tensorflow/compiler/xla:statusor",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla/client:global_data",
+        "//tensorflow/compiler/xla/client:local_client",
+        "//tensorflow/compiler/xla/client:xla_builder",
+        "//tensorflow/compiler/xla/client:xla_computation",
+        "//tensorflow/compiler/xla/client/lib:arithmetic",
+        "//tensorflow/compiler/xla/client/lib:math",
+        "//tensorflow/compiler/xla/service:hlo",
+        "//tensorflow/compiler/xla/tests:client_library_test_base",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:literal_test_util",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
     name = "pipeline_util_test",
     srcs = ["tests/pipeline_util_test.cc"],
     backends = ["poplar"],
@@ -1393,6 +1429,7 @@ xla_test(
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
+
 
 py_library(
     name = "test_utils_py",
@@ -2451,6 +2488,7 @@ test_suite(
     tests = [
         "64_bit_test",
         "allocation_finder_test",
+        "arithmetic_expr_test",
         "batch_norm_test",
         "bias_apply_graph_caching_test",
         "case_test",

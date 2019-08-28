@@ -34,6 +34,7 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
     case HloOpcode::kRoundNearestAfz:
     case HloOpcode::kCeil:
     case HloOpcode::kClz:
+    case HloOpcode::kConvert:
     case HloOpcode::kCos:
     case HloOpcode::kExp:
     case HloOpcode::kExpm1:
@@ -75,7 +76,6 @@ bool IsPopopsElementwise(const HloInstruction* inst) {
     // Ops not supported in Expressions
     // Unary
     case HloOpcode::kBitcastConvert:
-    case HloOpcode::kConvert:
     case HloOpcode::kCopy:
     case HloOpcode::kImag:
     case HloOpcode::kReal:

@@ -114,6 +114,20 @@ Status ArithmeticExprVisitor::HandleCompare(HloInstruction* inst) {
   return Status::OK();
 }
 
+Status ArithmeticExprVisitor::HandleConvert(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+
+  TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(inst->shape()));
+
+  // Get the input.
+  TF_ASSIGN_OR_RETURN(auto in, FindExpressionInput(inst->operand(0)));
+
+  // Create new expression.
+  expressions_map_[inst] = std::unique_ptr<popops::expr::Cast>(
+      new popops::expr::Cast(*in.get(), poplar_type));
+  return Status::OK();
+}
+
 Status ArithmeticExprVisitor::HandleSelect(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   // set the op

@@ -495,6 +495,77 @@ ENTRY cluster_1  {
   EXPECT_THAT(inst->operand(1)->operand_count(), 4);
 }
 
+// General extraction
+
+//  i i   i
+//  \ /   |
+//   a    b
+//   |    |
+//   c    |
+//    \  /
+//     d
+//     |
+TEST_F(ExpressionOutlinerTest, OutlineTreeWithCast) {
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  a0 = f32[] parameter(0)
+  a1 = f32[] parameter(1)
+  a2 = f32[] parameter(2)
+  add1 = f32[] add(a0, a1)
+  con1 = f16[] convert(add1)  
+  con2 = f16[] convert(a2)
+  mul1 = f16[] multiply(con1, con2), sharding={maximal device=1}
+  ROOT %tuple = (f16[]) tuple(mul1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ExpressionOutliner eo;
+  EXPECT_TRUE(eo.Run(module).ValueOrDie());
+
+  auto* comp = module->entry_computation();
+  auto* inst = comp->root_instruction();
+
+  HloInstruction* inst_cluster = nullptr;
+  HloInstruction* inst_fusion = nullptr;
+
+  for (HloComputation* comp : module->computations()) {
+    if (comp->name() == "cluster_1") {
+      inst_cluster = comp->root_instruction();
+    } else if (comp->name() != "cluster_1") {
+      inst_fusion = comp->root_instruction();
+    }
+  }
+
+  EXPECT_THAT(comp->instruction_count(), 5);
+  ASSERT_THAT(inst->operand_count(), 1);
+  EXPECT_THAT(inst->opcode(), HloOpcode::kTuple);
+  EXPECT_THAT(inst->operand(0)->opcode(), HloOpcode::kFusion);
+  EXPECT_THAT(inst->operand(0)->operand_count(), 3);
+  ASSERT_TRUE(inst->operand(0)->has_sharding());
+  EXPECT_THAT(inst->operand(0)->sharding().UniqueDevice(), 1);
+
+  EXPECT_THAT(inst_cluster->opcode(), HloOpcode::kTuple);
+  EXPECT_THAT(inst_fusion->opcode(), HloOpcode::kMultiply);
+
+  EXPECT_THAT(inst_fusion->operand_count(), 2);
+  EXPECT_THAT(inst_fusion->operand(0)->opcode(), HloOpcode::kConvert);
+  EXPECT_THAT(inst_fusion->operand(1)->opcode(), HloOpcode::kConvert);
+
+  EXPECT_THAT(inst_fusion->operand(0)->operand(0)->opcode(), HloOpcode::kAdd);
+  EXPECT_THAT(inst_fusion->operand(1)->operand(0)->opcode(),
+              HloOpcode::kParameter);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
