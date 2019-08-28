@@ -2431,6 +2431,23 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "matmul_graph_caching_test",
+    size = "medium",
+    srcs = ["tests/matmul_graph_caching_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
 cc_binary(
 	  name = "libcustom_rotate_op.so",
 	  srcs = ["docs/custom_rotate_op.cc"],
@@ -2532,6 +2549,7 @@ test_suite(
         "layout_strip_test",
         "lstm_test",
         "mapping_test",
+        "matmul_graph_caching_test",
         "matmul_test",
         "matmul_option_test",
         "monitored_session_test",

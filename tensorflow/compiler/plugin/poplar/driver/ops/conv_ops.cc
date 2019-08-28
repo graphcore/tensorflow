@@ -319,9 +319,11 @@ StatusOr<poplar::program::Program> CreateConv2D(CompilerResources& res,
 
   TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
 
-  auto out = conv_graph_caching::DoCachedConvolution(
-      graph, res, in, kernel, params, conv_type, false,
-      GetSingleShardingDeviceId(inst), prog, GetDebugName(inst));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor out,
+      conv_graph_caching::DoCachedConvolution(
+          graph, res, in, kernel, params, conv_type, false,
+          GetSingleShardingDeviceId(inst), prog, GetDebugName(inst)));
 
   out = ShuffleConvolutionOutputToTensorflow(inst, out);
 
@@ -356,9 +358,11 @@ StatusOr<poplar::program::Program> Create2DConvWithReverse(
 
   TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
 
-  auto out = conv_graph_caching::DoCachedConvolution(
-      graph, res, in, kernel, params, conv_type, true,
-      GetSingleShardingDeviceId(inst), prog, GetDebugName(inst));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor out,
+      conv_graph_caching::DoCachedConvolution(
+          graph, res, in, kernel, params, conv_type, true,
+          GetSingleShardingDeviceId(inst), prog, GetDebugName(inst)));
 
   out = ShuffleConvolutionOutputToTensorflow(inst, out);
 
@@ -399,9 +403,11 @@ StatusOr<poplar::program::Program> CreateDepthwiseBackpropFilter(
 
   TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
 
-  poplar::Tensor out = conv_graph_caching::DoCachedConvolution(
-      graph, res, in, kernel, params, conv_type, false,
-      GetSingleShardingDeviceId(inst), prog, GetDebugName(inst));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor out,
+      conv_graph_caching::DoCachedConvolution(
+          graph, res, in, kernel, params, conv_type, false,
+          GetSingleShardingDeviceId(inst), prog, GetDebugName(inst)));
 
   // Move 'G' parts of the B back to I
   out = out.reshapePartial(1, 2, {n_g, out.dim(1) / n_g});
@@ -490,8 +496,8 @@ StatusOr<poplar::program::Program> CreateConvScaledInplace(
       input(arg_scale, "scale"),
   };
 
-  TF_RETURN_IF_ERROR(
-      res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+  TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq, func,
+                                                   signature, args));
 
   arg_weights = args[0];
 
@@ -582,8 +588,8 @@ StatusOr<poplar::program::Program> CreateBiasApply(
   Signature signature = {inout(biases, "biases"), input(deltas, "deltas"),
                          input(scale, "scale")};
 
-  TF_RETURN_IF_ERROR(
-      res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+  TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq, func,
+                                                   signature, args));
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, args[0]));
 

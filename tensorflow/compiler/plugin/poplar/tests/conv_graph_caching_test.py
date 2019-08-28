@@ -15,8 +15,10 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
@@ -435,6 +437,39 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
       # We still reuse the code even though only one conv is inplace.
       self.assertEqual(tu.count_compute_sets_matching(cs_list, '*Convolve'), 1)
+
+  def testConvolutionsWithBroadcast(self):
+    with self.session() as sess:
+
+      def model(device):
+        with ops.device(device):
+          x = array_ops.placeholder(np.float32, shape=[2])
+          x_bcast = gen_array_ops.broadcast_to(x, shape=[2, 256, 256, 2])
+          w_bcast = gen_array_ops.broadcast_to(x, shape=[2, 2, 2, 2])
+          y = nn.conv2d(x_bcast, w_bcast, strides=1, padding="SAME", name="a")
+          y = nn.conv2d(y, w_bcast, strides=1, padding="SAME", name="b")
+          return sess.run(y, {x: np.ones(x.shape)})
+
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+
+      tu.configure_ipu_system(True, True, True)
+
+      sess.run(report)
+      ipu_result = model("/device:IPU:0")
+      cpu_result = model("cpu")
+      self.assertAllClose(cpu_result, ipu_result)
+      result = sess.run(report)
+
+      s = tu.extract_all_strings_from_event_trace(result)
+
+      max_tile_size = tu.get_maximum_tile_size_from_events(s)
+      self.assertAllInRange([max_tile_size], 30000, 40000)
+
+      cs_list = tu.get_compute_sets_from_report(s)
+      # Would fail if there were two convolutions in the graph
+      ok = ['__seed*', 'host-exchange-local-copy-', 'a/convolution', 'Copy_']
+      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
 
 if __name__ == "__main__":

@@ -226,8 +226,9 @@ class GRULayerFwdOp : public PoplibsOpDef {
       signature.push_back(created("intermediates"));
     }
 
-    TF_RETURN_IF_ERROR(
-        res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
+        inst, graph, res, seq, func, signature, args,
+        gru_inst->AllocatingIndices(), gru_inst->LayoutDependencies()));
 
     output = args[4];
     output_state = args[5];
@@ -334,8 +335,8 @@ class GRULayerBwdOp : public PoplibsOpDef {
         created("kernel_backprop"),
         created("biases_backprop")};
 
-    TF_RETURN_IF_ERROR(
-        res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
+                                                     func, signature, args));
 
     input_backprop = args[9];
     input_state_backprop = args[10];

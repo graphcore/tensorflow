@@ -14,12 +14,15 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu.ops import normalization_ops_grad
 from tensorflow.python.layers import convolutional
 from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
@@ -559,6 +562,60 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*',
       ]
 
+      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+
+  def testNormCacheConstants(self):
+    with self.session() as sess:
+
+      def model(x, y, z):
+        scale = gen_array_ops.broadcast_to(z, shape=[65536])
+        offset = scale
+        b_mean, b_var = nn.moments(x, [0, 1, 2], name='moments')
+        a = nn.fused_batch_norm(
+            x, scale, offset, b_mean, b_var, 1e-3, is_training=False, name="a")
+        b = nn.fused_batch_norm(
+            y, scale, offset, b_mean, b_var, 1e-3, is_training=False, name="b")
+
+        return a[0] + b[0]
+
+      with ops.device('cpu'):
+        x = array_ops.placeholder(np.float16, [1, 1, 1, 65536], name="x")
+        y = array_ops.placeholder(np.float16, [1, 1, 1, 65536], name="y")
+        z = array_ops.placeholder(np.float16, shape=[1])
+        report = gen_ipu_ops.ipu_event_trace()
+
+      with ops.device("/device:IPU:0"):
+        res = ipu_compiler.compile(model, inputs=[x, y, z])
+
+      tu.configure_ipu_system(True, True, True)
+      tu.move_variable_initialization_to_cpu()
+
+      sess.run(variables.global_variables_initializer())
+
+      sess.run(report)
+
+      r = sess.run(res, {x: np.ones(x.shape), y: np.ones(y.shape), z: [1.0]})
+      self.assertAllClose(r[0], np.full(r[0].shape, 2))
+
+      result = sess.run(report)
+
+      s = tu.extract_all_strings_from_event_trace(result)
+
+      max_tile_size = tu.get_maximum_tile_size_from_events(s)
+      self.assertAllInRange([max_tile_size], 15000, 20000)
+
+      cs_list = tu.get_compute_sets_from_report(s)
+
+      # Would fail if there were two batch norms in the graph
+      ok = [
+          '__seed*',
+          'host-exchange-local-copy',
+          'Copy_',
+          'moments/SquaredDifference/',
+          'moments/SquaredDifference/',
+          'a/batch-norm-inference',
+          'add/add*/AddTo',
+      ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
 

@@ -726,8 +726,8 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
   std::vector<poplar::Tensor> args = {arg_lhs, arg_rhs, output};
   Signature sig = {input(arg_lhs, "lhs"), input(arg_rhs, "rhs"),
                    created("output")};
-  TF_RETURN_IF_ERROR(
-      res.graph_cache.ExecuteCached(inst, graph, seq, func, sig, args));
+  TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq, func,
+                                                   sig, args, {0, 1}));
 
   output = args[2];
 

@@ -177,8 +177,8 @@ StatusOr<poplar::program::Program> CreateNormInference(
       input(arg_variance_or_inv_std_dev, "variance_or_inv_std_dev"),
       created("output")};
 
-  TF_RETURN_IF_ERROR(
-      res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+  TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
+      inst, graph, res, seq, func, signature, args, {}, {{1, 0}, {2, 0}}));
 
   output = args[5];
 
@@ -285,8 +285,8 @@ StatusOr<poplar::program::Program> CreateNormTraining(
                          created("mean"),
                          created("variance_or_inv_std_dev")};
 
-  TF_RETURN_IF_ERROR(
-      res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+  TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
+      inst, graph, res, seq, func, signature, args, {}, {{1, 0}, {2, 0}}));
 
   output = args[3];
   mean = args[4];
@@ -418,8 +418,8 @@ StatusOr<poplar::program::Program> CreateNormGrad(
       created("scale_grad"),
       created("offset_grad")};
 
-  TF_RETURN_IF_ERROR(
-      res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+  TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq, func,
+                                                   signature, args));
 
   operand_grad = args[5];
   scale_grad = args[6];
@@ -490,8 +490,8 @@ StatusOr<poplar::program::Program> CreateNormStatistics(
   Signature signature = {input(arg_operand, "operand"), created("mean"),
                          created("variance_or_inv_std_dev")};
 
-  TF_RETURN_IF_ERROR(
-      res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+  TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq, func,
+                                                   signature, args));
   mean = args[1];
   variance_or_inv_std_dev = args[2];
 

@@ -54,7 +54,7 @@ using BwdWeightCacheKey =
 using BwdWeightGraphCache =
     std::map<BwdWeightCacheKey, poputil::graphfn::VoidFunction>;
 
-poplar::Tensor DoCachedConvolution(
+StatusOr<poplar::Tensor> DoCachedConvolution(
     poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& in,
     const poplar::Tensor& weights, const poplin::ConvParams& params,
     const MLType& conv_type, bool transpose_and_flip_weights,

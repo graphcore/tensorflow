@@ -74,9 +74,9 @@ struct TensorTarget {
 
   TensorTarget(const HloInstruction* tgt, int64 input_index,
                const HloInstruction* layout, const int64 layout_output_idx,
-               const std::vector<const HloInstruction*>& forward_path,
-               const std::vector<const HloInstruction*>& backward_path,
-               const DeferredAllocationsPath& deferred_allocations_path)
+               const std::vector<const HloInstruction*>& forward_path = {},
+               const std::vector<const HloInstruction*>& backward_path = {},
+               const DeferredAllocationsPath& deferred_allocations_path = {})
       : tgt(tgt),
         input_index(input_index),
         layout(layout),
@@ -86,7 +86,7 @@ struct TensorTarget {
         deferred_allocations_path(deferred_allocations_path) {}
 
   TensorTarget(const HloInstruction* tgt, int64 input_index,
-               const std::vector<const HloInstruction*>& backward_path)
+               const std::vector<const HloInstruction*>& backward_path = {})
       : tgt(tgt),
         input_index(input_index),
         layout(absl::nullopt),

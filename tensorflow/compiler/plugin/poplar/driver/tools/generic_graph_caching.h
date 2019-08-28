@@ -20,13 +20,14 @@ limitations under the License.
 #include "tensorflow/compiler/xla/status.h"
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/types/optional.h"
+#include "absl/container/flat_hash_set.h"
 
 #include <map>
 #include <poputil/GraphFunction.hpp>
 
 namespace xla {
 namespace poplarplugin {
+struct CompilerResources;
 
 using PoplarFunction = std::function<void(std::vector<poplar::Tensor>&,
                                           poplar::program::Sequence&)>;
@@ -37,10 +38,18 @@ class GenericGraphCache {
  public:
   // Execute the func and cache it for the given instruction if it has not been
   // executed before.
-  Status ExecuteCached(const HloInstruction* inst, poplar::Graph& graph,
-                       poplar::program::Sequence& seq, PoplarFunction func,
-                       poputil::graphfn::Signature signature,
-                       std::vector<poplar::Tensor>& args);
+  // `allocating_indices` indicates which of the args for inst have an
+  // allocation target.
+  // `layout_dependencies` indicates which of the args for inst have a layout
+  // dependency. Note that the dependent allocation cannot be an Allocating
+  // index or another layout dependency.
+  Status ExecuteCached(
+      const HloInstruction* inst, poplar::Graph& graph,
+      CompilerResources& resources, poplar::program::Sequence& seq,
+      PoplarFunction func, poputil::graphfn::Signature signature,
+      std::vector<poplar::Tensor>& args,
+      const absl::flat_hash_set<int64>& allocating_indices = {},
+      const absl::flat_hash_map<int64, int64>& layout_dependencies = {});
 
  private:
   // Helper structs for the unordered map.

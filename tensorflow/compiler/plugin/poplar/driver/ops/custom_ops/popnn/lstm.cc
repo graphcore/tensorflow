@@ -240,8 +240,9 @@ class LstmLayerFwdOp : public PoplibsOpDef {
       signature.push_back(created("intermediates"));
     }
 
-    TF_RETURN_IF_ERROR(
-        res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
+        inst, graph, res, seq, func, signature, args,
+        lstm_inst->AllocatingIndices(), lstm_inst->LayoutDependencies()));
 
     output = args[5];
     output_h_state = args[6];
@@ -378,8 +379,8 @@ class LstmLayerBwdOp : public PoplibsOpDef {
         created("kernel_backprop"),
         created("biases_backprop")};
 
-    TF_RETURN_IF_ERROR(
-        res.graph_cache.ExecuteCached(inst, graph, seq, func, signature, args));
+    TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
+                                                     func, signature, args));
 
     input_backprop = args[12];
     input_h_state_backprop = args[13];

@@ -101,7 +101,7 @@ ConvolutionCacheKey GetConvolutionCacheKey(const poplin::ConvParams& params,
 }
 }  // namespace
 
-poplar::Tensor DoCachedConvolution(
+StatusOr<poplar::Tensor> DoCachedConvolution(
     poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& in,
     const poplar::Tensor& input_weights, const poplin::ConvParams& params,
     const MLType& input_conv_type, bool input_transpose_and_flip_weights,
@@ -148,9 +148,39 @@ poplar::Tensor DoCachedConvolution(
     }
   }
 
+  poplar::Tensor sig_in = in;
+  if (sig_in.containsAliases()) {
+    VLOG(1) << "Reallocating input to cached convolution for " << debug_prefix;
+
+    sig_in = poplin::createInput(graph, params, debug_prefix + "/ReallocateIn",
+                                 opts, &res.convolution_cache);
+
+    if (sig_in.shape() != in.shape()) {
+      return InternalErrorStrCat(
+          "Mismatch of convolution input shape, expected: ",
+          absl::StrJoin(in.shape(), ", "),
+          ", got: ", absl::StrJoin(sig_in.shape(), ", "));
+    }
+  }
+
+  poplar::Tensor sig_weights = weights;
+  if (sig_weights.containsAliases()) {
+    VLOG(1) << "Reallocating weights to cached convolution for "
+            << debug_prefix;
+    sig_weights = poplin::createWeights(graph, params,
+                                        debug_prefix + "/ReallocateWeights",
+                                        opts, &res.convolution_cache);
+    if (sig_weights.shape() != weights.shape()) {
+      return InternalErrorStrCat(
+          "Mismatch of convolution weight shape, expected: ",
+          absl::StrJoin(weights.shape(), ", "),
+          ", got: ", absl::StrJoin(sig_weights.shape(), ", "));
+    }
+  }
+
   using namespace poputil::graphfn;
   auto f = TensorFunction(
-      graph, {input(in, "in"), input(weights, "weights")},
+      graph, {input(sig_in, "in"), input(sig_weights, "weights")},
       [&](std::vector<poplar::Tensor>& args, poplar::program::Sequence& prog) {
         return convolution(graph, args[0], args[1], params,
                            transpose_and_flip_weights, prog, debug_prefix, opts,

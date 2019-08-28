@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -71,18 +73,94 @@ bool GenericGraphCache::HloInstructionEquals::operator()(
          GetSingleShardingDeviceId(a) == GetSingleShardingDeviceId(b);
 }
 
-Status GenericGraphCache::ExecuteCached(const HloInstruction* inst,
-                                        poplar::Graph& graph,
-                                        poplar::program::Sequence& seq,
-                                        PoplarFunction func,
-                                        Signature signature,
-                                        std::vector<poplar::Tensor>& args) {
+Status GenericGraphCache::ExecuteCached(
+    const HloInstruction* inst, poplar::Graph& graph,
+    CompilerResources& resources, poplar::program::Sequence& seq,
+    PoplarFunction func, Signature signature, std::vector<poplar::Tensor>& args,
+    const absl::flat_hash_set<int64>& allocating_indices,
+    const absl::flat_hash_map<int64, int64>& layout_dependencies) {
   // Check if we have already executed this instruction.
   auto itr = table_.find(inst);
   if (itr != table_.end()) {
     // We have a cached graph for this dot operation.
     itr->second(args, seq);
   } else {
+    // Get the allocation order.
+    std::list<int64> alloc_order;
+    for (int64 sig_idx = 0; sig_idx != signature.size(); ++sig_idx) {
+      ArgSig& sig = signature[sig_idx];
+      if (sig.type == ArgType::InputArg || sig.type == ArgType::InOutArg) {
+        if (layout_dependencies.contains(sig_idx)) {
+          alloc_order.push_back(sig_idx);
+        } else {
+          alloc_order.push_front(sig_idx);
+        }
+      }
+    }
+
+    // Check which inputs have aliasing/are not parallel writable and therefore
+    // need reallocating.
+    // Note that we modify the signature and *not* the arguments.
+    TensorMap local_map;
+    for (int64 arg_idx : alloc_order) {
+      const HloInstruction* operand = inst->operand(arg_idx);
+      ArgSig& sig = signature[arg_idx];
+      poplar::Tensor input = sig.similarTensor;
+      bool needs_reallocating = false;
+      switch (sig.type) {
+        case ArgType::InOutArg: {
+          needs_reallocating = !input.isParallelWriteable();
+          break;
+        }
+        case ArgType::InputArg:
+        default: {
+          needs_reallocating = input.containsAliases();
+          break;
+        }
+      }
+
+      std::string name = absl::StrCat(GetDebugName(inst), "/Realloc", arg_idx);
+      if (needs_reallocating) {
+        VLOG(1) << "Reallocating argument " << arg_idx
+                << " for cached Poplar Function generated for "
+                << inst->ToString();
+        poplar::Tensor new_arg;
+        if (allocating_indices.contains(arg_idx)) {
+          // Just allocate the tensor.
+          TF_ASSIGN_OR_RETURN(
+              new_arg,
+              AddTensorForTarget(graph, {inst, arg_idx}, operand->shape(),
+                                 resources, local_map, name));
+        } else if (layout_dependencies.contains(arg_idx)) {
+          // Need to allocate a tensor given a previously allocated tensor.
+          int64 dependent_arg_idx = layout_dependencies.at(arg_idx);
+          const HloInstruction* dependent_operand =
+              inst->operand(dependent_arg_idx);
+          TF_ASSIGN_OR_RETURN(
+              new_arg,
+              AddTensorForTarget(
+                  graph, {inst, arg_idx, dependent_operand, dependent_arg_idx},
+                  operand->shape(), resources, local_map, name));
+        } else {
+          // We don't have an allocator function and we assume linear mapping is
+          // better than aliases.
+          TF_ASSIGN_OR_RETURN(
+              new_arg,
+              AddPlainTensor(graph, name, operand->shape(), resources, false));
+        }
+        if (input.shape() != new_arg.shape()) {
+          return InternalErrorStrCat(
+              "Mismatch of shapes in a cached execution, expected: ",
+              absl::StrJoin(input.shape(), ", "),
+              ", got: ", absl::StrJoin(new_arg.shape(), ", "));
+        }
+        input = new_arg;
+      }
+      TF_RETURN_IF_ERROR(AddOutputTensor(local_map, operand, arg_idx, input));
+      sig.similarTensor = input;
+    }
+
+    // Create the function.
     auto void_func = VoidFunction(graph, signature, func);
     void_func(args, seq);
     table_.insert({inst, std::move(void_func)});
