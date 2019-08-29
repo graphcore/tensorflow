@@ -28,6 +28,7 @@ from tensorflow.python.platform import googletest
 
 
 class IpuCompilerTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testCompileWrongDeviceRaisesException(self):
     def my_net(a):
       return a + a
@@ -37,6 +38,7 @@ class IpuCompilerTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegexp(Exception, "not placed on an IPU"):
         ipu_compiler.compile(my_net, inputs=[a])
 
+  @test_util.deprecated_graph_mode_only
   def testCompileNoopOnWrongDeviceIsOK(self):
     def my_net():
       return control_flow_ops.no_op()
@@ -44,6 +46,7 @@ class IpuCompilerTest(test_util.TensorFlowTestCase):
     with ops.device("/device:CPU:0"):
       ipu_compiler.compile(my_net)
 
+  @test_util.deprecated_graph_mode_only
   def testCompileForDevicesInWorkerTask(self):
     def my_net(a):
       return a + a

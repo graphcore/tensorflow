@@ -67,6 +67,7 @@ def _run_no_pipeline(stages, inputs=None, optimizer_stage=None):
 
 
 class PipeliningTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testPipelineNoOutfeedInference(self):
     def stage1(x):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -88,6 +89,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           ValueError, 'The last computational stage has tensor outputs'):
         r = ipu_compiler.compile(my_net, inputs=[x])
 
+  @test_util.deprecated_graph_mode_only
   def testPipelineNoOutfeedWithOutputsTraining(self):
     def stage1(x):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -120,6 +122,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                    'The optimizer_stage has tensor outputs'):
         r = ipu_compiler.compile(my_net, inputs=[x])
 
+  @test_util.deprecated_graph_mode_only
   def testPipelineWithInfeedsKwargs(self):
     dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
     dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -167,6 +170,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       losses_pipeline = sess.run(outfeed_op)
       self.assertAllClose(losses_pipeline, [[410.01]])
 
+  @test_util.deprecated_graph_mode_only
   def testPipelineGradIntermediates(self):
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -243,6 +247,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       losses_pipeline = sess.run(outfeed_op)
       self.assertAllClose(losses_pipeline, [[270.0]])
 
+  @test_util.deprecated_graph_mode_only
   def testIllegalCapture(self):
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -270,6 +275,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegexp(ValueError, 'Trying to capture the tensor'):
         ipu_compiler.compile(model_pipeline, inputs=[x])
 
+  @test_util.deprecated_graph_mode_only
   def testPipelineOnlyOneStage(self):
     def stage1(x, name=None):
       return x

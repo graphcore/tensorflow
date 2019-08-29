@@ -8,6 +8,8 @@ CategoricalTest.testCategoricalIsNotConstant # disable until poplar CPU random w
 CategoricalTest.testEmpty # Integer output
 CategoricalTest.testStatelessMultinomialIsInRange # No U64
 CategoricalTest.testDeterminismMultinomial # disable until poplar CPU random works
+CholeskyOpTest.testNonSquareMatrix # Not allowed in V2
+CholeskyOpTest.testWrongDimensions # out of memory on V2
 CondTest.testCondConstPropagation # Switch node in cluster
 CondTest.testCondNoInputs # Switch node in cluster
 CumsumTest.test3D # Too long

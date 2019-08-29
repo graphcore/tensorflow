@@ -31,6 +31,7 @@ time.sleep(20)
 
 
 class CodeletExpressionOpTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testCodeletExpressionOp(self):
     def my_custom_op_1(x, y, z):
       return x * x + y * z

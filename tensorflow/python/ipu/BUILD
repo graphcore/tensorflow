@@ -252,6 +252,7 @@ tf_py_test(
     srcs = ["tests/ipu_compiler_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
