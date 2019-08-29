@@ -115,7 +115,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
       evts = ipu.utils.extract_all_events(out)
       size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertTrue(size < 15820000)
+      self.assertTrue(size < 16250000)
 
   def testTrainingBs2(self):
     with self.session() as sess:

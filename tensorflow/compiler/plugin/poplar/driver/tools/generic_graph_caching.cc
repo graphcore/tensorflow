@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -66,6 +67,10 @@ bool GenericGraphCache::HloInstructionEquals::operator()(
     // Ignore inplace field.
     backend_config_a.set_is_inplace(false);
     backend_config_b.set_is_inplace(false);
+    // Ignore ML field - this means we will reuse the function with whatever
+    // ML type it was generated with.
+    backend_config_a.set_ml_type(MLType::NONE);
+    backend_config_b.set_ml_type(MLType::NONE);
     return protobuf_util::ProtobufEquals(backend_config_a, backend_config_b);
   };
   return a->Identical(*b, compare_operands, compare_comps, false,
