@@ -72,6 +72,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
         def body(i, x, y):
           s = array_ops.slice(x, [i, i, i], [1, 1, 2048])
           y = y + math_ops.reduce_mean(s)
+          x = x + constant_op.constant(1, shape=shape, dtype=dtype)
           i = i + 1
           return (i, x, y)
 
@@ -90,7 +91,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
 
       sess.run(report)
       y = sess.run(r, {y: [10]})
-      self.assertAllClose(y[0], [18])
+      self.assertAllClose(y[0], [19])
 
       result = sess.run(report)
       self.assertTrue(len(result) == 3)
@@ -99,8 +100,9 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
 
       ok = [
-          '__seed*', 'Copy_*_to_*', 'while/Slice/dynamic-slice*/dynamicSlice',
-          'while/Mean/reduce', 'while/Mean/multiply', 'while/add*/add*/AddTo'
+          '__seed*', 'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice',
+          'Mean/reduce', 'Mean/multiply', 'add*/add*/AddTo',
+          'add_1_0/fusion/Op/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
