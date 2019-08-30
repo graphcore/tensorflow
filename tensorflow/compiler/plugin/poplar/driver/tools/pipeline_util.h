@@ -130,6 +130,8 @@ struct StageID {
     return is_forward == other.is_forward && id == other.id;
   }
 
+  std::string ToString() const;
+
   bool is_forward;
   int64 id;
 };
@@ -143,9 +145,11 @@ std::ostream& operator<<(std::ostream& stream, const StageID& stage_id);
 class PipelineDataflowAnalysis {
  public:
   static StatusOr<std::unique_ptr<PipelineDataflowAnalysis>> GetAnalysis(
-      const PipelineStages& pipeline_stages);
+      const PipelineStages& pipeline_stages,
+      bool allow_duplicate_gte_edges = false);
 
-  explicit PipelineDataflowAnalysis(const PipelineStages& pipeline_stages);
+  explicit PipelineDataflowAnalysis(const PipelineStages& pipeline_stages,
+                                    bool allow_duplicate_gte_edges);
 
   // Returns whether the instruction needs to be lowered given the current
   // analysis.
@@ -207,6 +211,8 @@ class PipelineDataflowAnalysis {
   // Hash maps to speed up lookup.
   absl::flat_hash_map<HloInstruction*, int64> fwd_stages_lookup_;
   absl::flat_hash_map<HloInstruction*, int64> bwd_stages_lookup_;
+
+  bool allow_duplicate_gte_edges_;
 };
 }  // namespace poplarplugin
 }  // namespace xla

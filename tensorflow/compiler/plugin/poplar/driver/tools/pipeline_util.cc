@@ -28,10 +28,13 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+std::string StageID::ToString() const {
+  return absl::StrCat("PipelineStage (", (is_forward ? "Forward" : "Backward"),
+                      ") with ID ", id, ".");
+}
+
 std::ostream& operator<<(std::ostream& stream, const StageID& stage_id) {
-  stream << absl::StrCat("PipelineStage (",
-                         (stage_id.is_forward ? "Forward" : "Backward"),
-                         ") with ID ", stage_id.id, ".");
+  stream << stage_id.ToString();
   return stream;
 }
 
@@ -688,8 +691,9 @@ Status RemoveOutputsFromStage(HloInstruction* stage,
 }
 
 PipelineDataflowAnalysis::PipelineDataflowAnalysis(
-    const PipelineStages& pipeline_stages)
-    : pipeline_stages_(pipeline_stages) {
+    const PipelineStages& pipeline_stages, bool allow_duplicate_gte_edges)
+    : pipeline_stages_(pipeline_stages),
+      allow_duplicate_gte_edges_(allow_duplicate_gte_edges) {
   // Put stages into lookup tables so that we can quickly get the stage id from
   // an instruction.
   for (int64 id = 0; id != pipeline_stages_.forward.size(); ++id) {
@@ -859,9 +863,9 @@ Status PipelineDataflowAnalysis::VerifyPipelineStageOperands(
         // A parameter can only be lowered if it was used in the fwd
         // stage.
         const HloInstruction* fwd_stage = pipeline_stages_.forward[stage_id.id];
-        if (!fwd_stage->IsUserOf(producer)) {
+        if (fwd_stage->IsUserOf(producer)) {
+          break;
         }
-        break;
       }
       case HloOpcode::kCall: {
         if (IsPiplineStageOrBackwardOp(producer)) {
@@ -900,16 +904,17 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       if (IsPiplineStageOrBackwardOp(inst->operand(0))) {
         // DuplicateGTEEdges should make sure each GTE only has one user.
         const HloInstruction* gte_input = inst->operand(0);
-        if (inst->user_count() != 1) {
+        if (!allow_duplicate_gte_edges_ && inst->user_count() != 1) {
           return InternalErrorStrCat("Expected instruction ",
                                      gte_input->ToString(),
                                      " to have exactly one user.");
         }
-        const HloInstruction* gte_user = inst->users()[0];
-        // Verify that the pipeline usage is legal. If the user is not a
-        // PipelineStage(Backward) then the user will be lowered later.
-        if (IsPiplineStageOrBackwardOp(gte_user)) {
-          TF_RETURN_IF_ERROR(VerifyPipelineUsage(gte_input, gte_user));
+        for (const HloInstruction* gte_user : inst->users()) {
+          // Verify that the pipeline usage is legal. If the user is not a
+          // PipelineStage(Backward) then the user will be lowered later.
+          if (IsPiplineStageOrBackwardOp(gte_user)) {
+            TF_RETURN_IF_ERROR(VerifyPipelineUsage(gte_input, gte_user));
+          }
         }
         return false;
       } else {
@@ -949,8 +954,10 @@ Status PipelineDataflowAnalysis::UpdateThroughInstruction(
 }
 
 StatusOr<std::unique_ptr<PipelineDataflowAnalysis>>
-PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages) {
-  auto analysis = absl::make_unique<PipelineDataflowAnalysis>(pipeline_stages);
+PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages,
+                                      bool allow_duplicate_gte_edges) {
+  auto analysis = absl::make_unique<PipelineDataflowAnalysis>(
+      pipeline_stages, allow_duplicate_gte_edges);
 
   if (analysis->pipeline_stages_.forward.size()) {
     HloComputation* pipeline_computation =

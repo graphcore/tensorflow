@@ -53,6 +53,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
@@ -557,6 +558,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<DependencyReplacer>(true);
     pipeline.AddPass<HloSubcomputationUnification>();
+    pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<ShardingPass>();
     pipeline.AddPass<InterIpuCopyInserter>();
     pipeline.AddPass<InplaceFinder>();

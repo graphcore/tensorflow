@@ -310,12 +310,13 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
     TF_ASSIGN_OR_RETURN(std::set<int64> unused_parameters,
                         GetUnusedParametersInPipelineStage(stage));
     bool lowered_all_params =
-        unused_parameters.size() == parameters_to_replace.size() &&
-        absl::c_all_of(unused_parameters,
-                       [&parameters_to_replace](int64 param_number) {
-                         return parameters_to_replace.find(param_number) !=
-                                parameters_to_replace.end();
-                       });
+        parameters_to_replace.size() <= unused_parameters.size() &&
+        absl::c_all_of(
+            parameters_to_replace,
+            [&unused_parameters](std::pair<int64, HloInstruction*> replaced) {
+              return unused_parameters.find(replaced.first) !=
+                     unused_parameters.end();
+            });
     if (!lowered_all_params) {
       return InternalErrorStrCat("Failed to lower inputs for PipelineStage ",
                                  stage->ToString());

@@ -46,7 +46,8 @@ class HloFifoInstruction : public HloPoplarInstruction {
   int64 depth_;
 };
 
-std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand);
+std::unique_ptr<HloInstruction> CreateFifo(HloInstruction* operand,
+                                           int64 depth);
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -293,6 +293,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                    'Pipeline requires at least two'):
         r = ipu_compiler.compile(my_net, inputs=[x])
 
+  @test_util.deprecated_graph_mode_only
   def testDuplicateInputsOutputs(self):
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
