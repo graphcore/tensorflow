@@ -9,6 +9,7 @@ import numpy as np
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
+from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
@@ -77,13 +78,15 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
               2,
               1,
               use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(x)
+              kernel_initializer=init_ops.ones_initializer(),
+              dtype=np.float32)(x)
           y = math_ops.cast(y, np.float16)
           y = layers.Conv2D(
               2,
               1,
               use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(y)
+              kernel_initializer=init_ops.ones_initializer(),
+              dtype=np.float16)(y)
 
         with ops.device('cpu'):
           report = gen_ipu_ops.ipu_event_trace()
