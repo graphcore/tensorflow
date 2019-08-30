@@ -93,14 +93,34 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
         replace_parameter_with_lowered_instruction = {},
     absl::flat_hash_set<HloInstruction*> forced_parameters = {});
 
+// Get output tuple indices for unused stage outputs.
+StatusOr<std::set<int64>> GetUnusedPipelineStageOutputIndices(
+    const HloInstruction* stage);
+
 // Get parameter numbers for parameter instructions in the stage which have no
 // users.
 StatusOr<std::set<int64>> GetUnusedParametersInPipelineStage(
     const HloInstruction* stage);
 
+// Get tuple indices for stage outputs which are used in multiple places.
+// Returns a map from the tuple index of first occurrence to a set of all other
+// occurrences.
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageOutputs(
+    const HloInstruction* stage);
+
+// Get tuple indices for stage operands which are used in multiple places.
+// Returns a map from the tuple index of first occurrence to a set of all other
+// occurrences.
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageInputs(
+    const HloInstruction* stage);
+
 // Removes parameters from the stage, and any operands which now have no users.
 StatusOr<HloInstruction*> RemoveParametersFromStage(
     HloInstruction* stage, const std::set<int64>& parameters_to_remove);
+
+// Removes outputs from the stage, and GTEs which are not used by anything.
+Status RemoveOutputsFromStage(HloInstruction* stage,
+                              const std::set<int64>& outputs_to_remove);
 
 // Helper struct for identifying pipeline stages.
 struct StageID {

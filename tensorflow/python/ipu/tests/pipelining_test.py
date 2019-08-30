@@ -293,6 +293,41 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                    'Pipeline requires at least two'):
         r = ipu_compiler.compile(my_net, inputs=[x])
 
+  def testDuplicateInputsOutputs(self):
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    def stage1(x, y):
+      return x, y, y, x
+
+    # The above should be optimised to a single copy for each duplicate output.
+    def stage2(x1, y1, y2, x2):
+      return x2, y2
+
+    def model_pipeline(x, y):
+      return pipelining_ops.pipeline([stage1, stage2],
+                                     inputs=[x, y],
+                                     outfeed_queue=outfeed_queue)
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+      y = array_ops.placeholder(np.float32, shape=[1, 2])
+
+    tu.configure_ipu_system()
+
+    with ops.device("/device:IPU:0"):
+      compiled_model_pipeline = ipu_compiler.compile(
+          model_pipeline, inputs=[x, y])
+    #TODO(T10784) test how many IPU copies are here once we insert IPU copies.
+    outfeed_op = outfeed_queue.dequeue()
+    with tu.ipu_session() as sess:
+      sess.run(compiled_model_pipeline, {
+          x: np.ones(x.shape),
+          y: np.ones(y.shape)
+      })
+      output = sess.run(outfeed_op)
+      self.assertAllClose(output[0][0], np.ones(x.shape))
+      self.assertAllClose(output[1][0], np.ones(y.shape))
+
 
 if __name__ == "__main__":
   googletest.main()

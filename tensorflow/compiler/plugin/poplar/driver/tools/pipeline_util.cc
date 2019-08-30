@@ -491,6 +491,19 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   return new_stage;
 }
 
+StatusOr<std::set<int64>> GetUnusedPipelineStageOutputIndices(
+    const HloInstruction* stage) {
+  std::set<int64> unused_outputs;
+  for (int64 i = 0; i != ShapeUtil::TupleElementCount(stage->shape()); ++i) {
+    unused_outputs.insert(i);
+  }
+  for (HloInstruction* user : stage->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    unused_outputs.erase(user->tuple_index());
+  }
+  return unused_outputs;
+}
+
 StatusOr<std::set<int64>> GetUnusedParametersInPipelineStage(
     const HloInstruction* stage) {
   const HloComputation* stage_computation = stage->to_apply();
@@ -506,6 +519,37 @@ StatusOr<std::set<int64>> GetUnusedParametersInPipelineStage(
   return unused_params;
 }
 
+namespace {
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicateOperands(
+    const HloInstruction* inst) {
+  absl::flat_hash_map<const HloInstruction*, int64> first_occurrence;
+  std::map<int64, std::set<int64>> duplicate_operands;
+  // Go through all the operands in order. First time we see it, add to
+  // first_occurrence when we first saw it, next time we see it add it to the
+  // duplicate operands.
+  for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+    const HloInstruction* operand = inst->operand(op_idx);
+    auto itr = first_occurrence.find(operand);
+    if (itr == first_occurrence.end()) {
+      first_occurrence[operand] = op_idx;
+    } else {
+      duplicate_operands[itr->second].insert(op_idx);
+    }
+  }
+  return duplicate_operands;
+}
+}  // namespace
+
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageOutputs(
+    const HloInstruction* stage) {
+  return GetDuplicateOperands(stage->to_apply()->root_instruction());
+}
+
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageInputs(
+    const HloInstruction* stage) {
+  return GetDuplicateOperands(stage);
+}
+
 StatusOr<HloInstruction*> RemoveParametersFromStage(
     HloInstruction* stage, const std::set<int64>& parameters_to_remove) {
   CHECK(IsPiplineStageOrBackwardOp(stage));
@@ -514,55 +558,67 @@ StatusOr<HloInstruction*> RemoveParametersFromStage(
     return stage;
   }
 
-  HloComputation* pipeline_computation = stage->parent();
+  HloComputation* stage_computation = stage->to_apply();
 
   VLOG(3) << "Removing the following parameters from " << stage->ToString();
   for (int64 param_number : parameters_to_remove) {
-    VLOG(3) << "\t* "
-            << pipeline_computation->parameter_instruction(param_number)
-                   ->ToString();
+    VLOG(3)
+        << "\t* " << param_number << " "
+        << stage_computation->parameter_instruction(param_number)->ToString();
   }
-  HloComputation* stage_computation = stage->to_apply();
-  auto builder = HloComputation::Builder(stage_computation->name());
-
-  std::vector<HloInstruction*> new_stage_operands(
-      stage_computation->num_parameters() - parameters_to_remove.size());
-  int64 next_parameter_number = 0;
-  auto next_to_remove_itr = parameters_to_remove.begin();
   // A mapping from instructions in the old computation to the new one which is
   // currently being built.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> old_to_new_computation;
+  auto builder = HloComputation::Builder(stage_computation->name());
+
+  // Lower/remove the parameters first.
+  const int64 old_num_parameters = stage_computation->num_parameters();
+  std::vector<HloInstruction*> new_stage_operands(old_num_parameters -
+                                                  parameters_to_remove.size());
+  int64 next_parameter_number = 0;
+  auto next_to_remove_itr = parameters_to_remove.begin();
+  for (int64 param_number = 0; param_number != old_num_parameters;
+       ++param_number) {
+    HloInstruction* old_parameter =
+        stage_computation->parameter_instruction(param_number);
+    // Skip the parameter if we are removing it.
+    if (next_to_remove_itr != parameters_to_remove.end() &&
+        *next_to_remove_itr == param_number) {
+      CHECK_EQ(old_parameter->user_count(), 0);
+      next_to_remove_itr++;
+    } else {
+      // Otherwise lower it with the right index.
+      HloInstruction* new_parameter =
+          builder.AddInstruction(HloInstruction::CreateParameter(
+              next_parameter_number, old_parameter->shape(),
+              old_parameter->name()));
+      new_stage_operands[next_parameter_number++] =
+          stage->mutable_operand(param_number);
+      old_parameter->SetupDerivedInstruction(new_parameter);
+      old_to_new_computation[old_parameter] = new_parameter;
+    }
+  }
+  CHECK_EQ(next_parameter_number, new_stage_operands.size());
+
+  // Lower all the other instructions.
   for (HloInstruction* old_inst :
        stage_computation->MakeInstructionPostOrder()) {
-    // Skip the parameter if we are removing it.
-    HloInstruction* new_inst;
     if (old_inst->opcode() == HloOpcode::kParameter) {
-      if (next_to_remove_itr != parameters_to_remove.end() &&
-          old_inst->parameter_number() == *next_to_remove_itr) {
-        next_to_remove_itr = std::next(next_to_remove_itr);
-        continue;
-      } else {
-        int64 param_number = old_inst->parameter_number();
-        new_inst = builder.AddInstruction(HloInstruction::CreateParameter(
-            next_parameter_number, old_inst->shape(), old_inst->name()));
-        new_stage_operands[next_parameter_number++] =
-            stage->mutable_operand(param_number);
-      }
-    } else {
-      // Get the operands for the instruction we are about to lower.
-      std::vector<HloInstruction*> new_operands(old_inst->operand_count());
-      absl::c_transform(old_inst->operands(), new_operands.begin(),
-                        [&old_to_new_computation](HloInstruction* old_operand) {
-                          return old_to_new_computation.at(old_operand);
-                        });
-      // Clone new instruction.
-      new_inst = builder.AddInstruction(
-          old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
+      continue;
     }
+
+    // Get the operands for the instruction we are about to lower.
+    std::vector<HloInstruction*> new_operands(old_inst->operand_count());
+    absl::c_transform(old_inst->operands(), new_operands.begin(),
+                      [&old_to_new_computation](HloInstruction* old_operand) {
+                        return old_to_new_computation.at(old_operand);
+                      });
+    // Clone new instruction.
+    HloInstruction* new_inst = builder.AddInstruction(
+        old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
     old_inst->SetupDerivedInstruction(new_inst);
     old_to_new_computation[old_inst] = new_inst;
   }
-  CHECK_EQ(next_parameter_number, new_stage_operands.size());
   // Build the new computation and the new pipeline stage with new operands.
   HloInstruction* new_root =
       old_to_new_computation.at(stage_computation->root_instruction());
@@ -572,6 +628,63 @@ StatusOr<HloInstruction*> RemoveParametersFromStage(
       ReplacePipelineStageWith(stage, std::move(new_computation),
                                new_stage_operands, true));
   return new_stage;
+}
+
+Status RemoveOutputsFromStage(HloInstruction* stage,
+                              const std::set<int64>& outputs_to_remove) {
+  CHECK(IsPiplineStageOrBackwardOp(stage));
+  // Nothing to remove.
+  if (outputs_to_remove.empty()) {
+    return Status::OK();
+  }
+
+  const int64 num_outputs_old = ShapeUtil::TupleElementCount(stage->shape());
+  HloComputation* stage_computation = stage->to_apply();
+  HloInstruction* root = stage_computation->root_instruction();
+
+  VLOG(3) << "Removing outputs " << absl::StrJoin(outputs_to_remove, ", ")
+          << " from " << stage->ToString();
+
+  // Get all the GTEs.
+  std::map<int64, absl::flat_hash_set<HloInstruction*>> tuple_index_to_gte;
+  for (HloInstruction* user : stage->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    tuple_index_to_gte[user->tuple_index()].insert(user);
+  }
+
+  // Get the new outputs, preserving the relative order.
+  std::vector<HloInstruction*> new_outputs(num_outputs_old -
+                                           outputs_to_remove.size());
+  auto next_to_remove_itr = outputs_to_remove.begin();
+  for (int64 output_idx = 0, new_output_idx = 0; output_idx != num_outputs_old;
+       ++output_idx) {
+    if (next_to_remove_itr != outputs_to_remove.end() &&
+        *next_to_remove_itr == output_idx) {
+      next_to_remove_itr++;
+      CHECK(tuple_index_to_gte[output_idx].empty());
+    } else {
+      // Change the gte tuple index.
+      for (HloInstruction* gte : tuple_index_to_gte[output_idx]) {
+        gte->set_tuple_index(new_output_idx);
+      }
+      new_outputs[new_output_idx++] = root->mutable_operand(output_idx);
+    }
+  }
+
+  // Create a new root and change the shapes.
+  HloInstruction* new_root = stage_computation->AddInstruction(
+      HloInstruction::CreateTuple(new_outputs));
+  std::vector<Shape>* mutable_stage_tuple_shapes =
+      stage->mutable_shape()->mutable_tuple_shapes();
+  *mutable_stage_tuple_shapes = new_root->shape().tuple_shapes();
+  stage_computation->set_root_instruction(new_root, true);
+
+  if (root->user_count() == 0) {
+    TF_RETURN_IF_ERROR(
+        stage_computation->RemoveInstructionAndUnusedOperands(root));
+  }
+
+  return Status::OK();
 }
 
 PipelineDataflowAnalysis::PipelineDataflowAnalysis(

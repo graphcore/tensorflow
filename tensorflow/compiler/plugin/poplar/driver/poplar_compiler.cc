@@ -54,6 +54,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
@@ -544,6 +545,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<ScatterCombiner>(resources.annotations);
       pass.AddPass<HloDCE>();
       pass.AddPass<WhileLoopConditionSimplify>();
+      pass.AddPass<PipelineOptimizer>();
       pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
     }
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);

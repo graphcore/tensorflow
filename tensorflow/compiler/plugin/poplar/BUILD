@@ -129,6 +129,7 @@ cc_library(
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
         "driver/passes/pipeline_fixer.cc",
+        "driver/passes/pipeline_optimizer.cc",
         "driver/passes/recompute_instructions.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
@@ -220,6 +221,7 @@ cc_library(
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
         "driver/passes/pipeline_fixer.h",
+        "driver/passes/pipeline_optimizer.h",
         "driver/passes/recompute_instructions.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
@@ -1430,6 +1432,20 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "pipeline_optimizer_test",
+    srcs = ["tests/pipeline_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
 
 py_library(
     name = "test_utils_py",
@@ -2560,6 +2576,7 @@ test_suite(
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
         "pipeline_fixer_test",
+        "pipeline_optimizer_test",
         "pipeline_util_test",
         "pipeline_visitor_test",
         "recomputation_test",
