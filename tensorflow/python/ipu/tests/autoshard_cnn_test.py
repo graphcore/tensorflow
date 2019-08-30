@@ -332,7 +332,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
     self.assertTrue('Conv2DBackpropFilter' in op_types)
     self.assertTrue('ResourceApplyGradientDescent' in op_types)
 
-  @test_util.deprecated_graph_mode_only
+  @test_util.run_v1_only("no v1 loops in v2")
   def testSimpleXlaCompileTrainingInLoopV1WithEarlySharding(self):
 
     dataset = tu.create_dual_increasing_dataset(3)
