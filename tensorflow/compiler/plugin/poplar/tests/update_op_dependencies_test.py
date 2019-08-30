@@ -183,7 +183,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
           return (i, x, y)
 
         i = 0
-        return control_flow_ops.while_loop(cond, body, (i, x, x))[1:]
+        return control_flow_ops.while_loop(cond, body, (i, x, x), name='')[1:]
 
       with ops.device('cpu'):
         x = array_ops.placeholder(np.float32, [4])
@@ -206,8 +206,8 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       cs_list = tu.get_compute_sets_from_report(s)
 
       ok = [
-          '__seed*', 'Copy_*_to_*', 'while/Tanh/tanh*/Op/Tanh',
-          'while/Tanh_1/tanh*/Op/Tanh'
+          '__seed*', 'Copy_*_to_*', 'Tanh/tanh*/Op/Tanh',
+          'Tanh_1/tanh*/Op/Tanh'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
