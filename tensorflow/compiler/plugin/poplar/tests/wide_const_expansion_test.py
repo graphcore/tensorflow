@@ -78,7 +78,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
 
         i = 0
         c = constant_op.constant(4, shape=shape, dtype=dtype, name="c")
-        return control_flow_ops.while_loop(cond, body, (i, c, y))[2]
+        return control_flow_ops.while_loop(cond, body, (i, c, y), name='')[2]
 
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
@@ -102,7 +102,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       ok = [
           '__seed*', 'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice',
           'Mean/reduce', 'Mean/multiply', 'add*/add*/AddTo',
-          'add_1_0/fusion/Op/Add'
+          'add_*/fusion/Op/Add'
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
