@@ -15,6 +15,8 @@ enum FrontendAttributeId {
   CALL_CONFIG_TYPE = 1;
   // Type to use to store the partials results.
   PARTIALS_TYPE = 2;
+  // Repeat count for pipelines.
+  PIPELINE_REPEAT_COUNT = 3;
 };
 
 enum StochasticRounding {
@@ -67,6 +69,7 @@ message PoplarBackendConfig {
     }
 
     message PipelineConfig {
+      int64 repeat_count = 1;
     }
 
     message CallConfig {

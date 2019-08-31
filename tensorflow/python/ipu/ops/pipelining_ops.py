@@ -33,6 +33,7 @@ from tensorflow.python.ops import control_flow_util_v2 as util
 
 
 def pipeline(computational_stages,
+             repeat_count,
              inputs=None,
              infeed_queue=None,
              outfeed_queue=None,
@@ -106,6 +107,7 @@ def pipeline(computational_stages,
       with variable_scope.variable_scope("vs", use_resource=True):
         pipeline_op = pipelining_ops.pipeline(
                           computational_stages=[stage1, stage2],
+                          repeat_count=250,
                           inputs=[],
                           infeed_queue=infeed_queue,
                           outfeed_queue=outfeed_queue,
@@ -122,8 +124,9 @@ def pipeline(computational_stages,
 
   In this set up, the model is split across two IPUs with the first two layers
   being executed on the first IPU and the third layer and the probabilities and
-  classes are executed on the second IPU. Note how the resulting probabilities
-  and classes are returned to the host by the outfeed queue.
+  classes are executed on the second IPU. This pipeline is then executed 250
+  times (specified by the `repeat_count`) and the resulting probabilities and
+  classes are returned to the host by the outfeed queue.
 
   We can also train this network by providing `optimizer_stage`:
 
@@ -159,6 +162,7 @@ def pipeline(computational_stages,
       with variable_scope.variable_scope("vs", use_resource=True):
         pipeline_op = pipelining_ops.pipeline(
                           computational_stages=[stage1, stage2],
+                          repeat_count=250,
                           inputs=[lr],
                           infeed_queue=infeed_queue,
                           outfeed_queue=outfeed_queue,
@@ -184,6 +188,7 @@ def pipeline(computational_stages,
     computational_stages: a list of python functions, where each function
       represents a computational pipeline stage. The function takes the outputs
       of the previous pipeline state as its inputs.
+    repeat_count: the number of times the pipeline will be executed.
     inputs: arguments passed to the first pipeline stage.
     infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued and passed
       as an input in the first pipeline stage.
@@ -296,7 +301,8 @@ def pipeline(computational_stages,
           captured_args,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
-          output_shapes=func_graph.output_shapes)
+          output_shapes=func_graph.output_shapes,
+          repeat_count=repeat_count)
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %

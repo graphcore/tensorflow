@@ -79,7 +79,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return loss
 
     def my_net(x):
-      return pipelining_ops.pipeline([stage1, stage2], [x])
+      return pipelining_ops.pipeline([stage1, stage2], 10, [x])
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -111,7 +111,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return loss, opt
 
     def my_net(x):
-      return pipelining_ops.pipeline([stage1, stage2], [x],
+      return pipelining_ops.pipeline([stage1, stage2],
+                                     10, [x],
                                      optimizer_stage=optimizer_stage)
 
     with ops.device('cpu'):
@@ -150,7 +151,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return math_ops.reduce_sum(x) + c
 
     def my_net(c):
-      return pipelining_ops.pipeline([stage1, stage2], [c],
+      return pipelining_ops.pipeline([stage1, stage2],
+                                     10, [c],
                                      infeed_queue=infeed_queue,
                                      outfeed_queue=outfeed_queue)
 
@@ -226,6 +228,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     def model_pipeline(x, lr):
       return pipelining_ops.pipeline([stage1, stage2, stage3],
+                                     10,
                                      inputs=[x, lr],
                                      outfeed_queue=outfeed_queue,
                                      optimizer_stage=optimizer_stage)
@@ -262,6 +265,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     def model_pipeline(x):
       return pipelining_ops.pipeline([stage1, stage2],
+                                     10,
                                      inputs=[x],
                                      outfeed_queue=outfeed_queue)
 
@@ -281,7 +285,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return x
 
     def my_net(x):
-      return pipelining_ops.pipeline([stage1], [x])
+      return pipelining_ops.pipeline([stage1], 10, [x])
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -306,6 +310,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     def model_pipeline(x, y):
       return pipelining_ops.pipeline([stage1, stage2],
+                                     10,
                                      inputs=[x, y],
                                      outfeed_queue=outfeed_queue)
 

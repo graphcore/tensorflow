@@ -119,6 +119,12 @@ class FunctionCompileOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
                             outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
                             call_config_type_));
+    // Set any extra attributes.
+    for (auto key_val_pair : GetExtraFrontendAttributes()) {
+      OP_REQUIRES_OK(ctx,
+                     builder->SetInstructionFrontendAttribute(
+                         outputs, key_val_pair.first, key_val_pair.second));
+    }
     // Sets non-variable outputs.
     for (int i = 0; i < output_types_.size(); ++i) {
       xla::XlaOp output_handle = xla::GetTupleElement(outputs, i);
@@ -145,6 +151,12 @@ class FunctionCompileOp : public XlaOpKernel {
               << " type: " << DataTypeString(update.type)
               << " shape: " << update.shape.DebugString();
     }
+  }
+
+ protected:
+  virtual absl::flat_hash_map<std::string, std::string>
+  GetExtraFrontendAttributes() {
+    return {};
   }
 
  private:
@@ -181,9 +193,20 @@ REGISTER_IPU_OP("PipelineStageBackward", PipelineStageBackwardOp);
 class PipelineOp : public FunctionCompileOp {
  public:
   explicit PipelineOp(OpKernelConstruction* ctx)
-      : FunctionCompileOp(ctx, PoplarBackendConfig::CallConfig::Pipeline) {}
+      : FunctionCompileOp(ctx, PoplarBackendConfig::CallConfig::Pipeline) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
+  }
+
+ protected:
+  absl::flat_hash_map<std::string, std::string> GetExtraFrontendAttributes()
+      override {
+    return {{FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT),
+             std::to_string(repeat_count_)}};
+  }
 
  private:
+  int64 repeat_count_;
+
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };
 REGISTER_IPU_OP("Pipeline", PipelineOp);
