@@ -291,7 +291,8 @@ class HloComputation {
   ProgramShape ComputeProgramShape(bool include_ids = true) const;
 
   // Return whether `*this` and `other` are functionally equivalent.
-  bool Equal(const HloComputation& other, bool is_layout_sensitive) const;
+  bool Equal(const HloComputation& other, bool is_layout_sensitive,
+             bool is_sharding_sensitive = false) const;
 
   // Return whether `*this` and `other` are functionally equivalent.
   bool operator==(const HloComputation& other) const {

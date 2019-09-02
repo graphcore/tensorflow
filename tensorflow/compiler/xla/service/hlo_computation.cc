@@ -768,7 +768,8 @@ ProgramShape HloComputation::ComputeProgramShape(bool include_ids) const {
 }
 
 bool HloComputation::Equal(const HloComputation& other,
-                           bool is_layout_sensitive) const {
+                           bool is_layout_sensitive,
+                           bool is_sharding_sensitive) const {
   if (this == &other) {
     return true;
   }
@@ -777,7 +778,8 @@ bool HloComputation::Equal(const HloComputation& other,
   absl::flat_hash_set<std::pair<const HloInstruction*, const HloInstruction*>>
       matched_between_comps;
 
-  auto identical_from_instr = [&matched_between_comps, is_layout_sensitive](
+  auto identical_from_instr = [&matched_between_comps, is_layout_sensitive,
+                               is_sharding_sensitive](
                                   const HloInstruction* instr_this,
                                   const HloInstruction* instr_other) {
     std::pair<const HloInstruction*, const HloInstruction*> to_match = {
@@ -814,6 +816,12 @@ bool HloComputation::Equal(const HloComputation& other,
       if (!identical_ignoring_operands) {
         return false;
       }
+
+      if (is_sharding_sensitive &&
+          !pair.first->has_compatible_sharding(pair.second)) {
+        return false;
+      }
+
       for (size_t i = 0; i < pair.first->operands().size(); ++i) {
         worklist.push_back({pair.first->operand(i), pair.second->operand(i)});
       }

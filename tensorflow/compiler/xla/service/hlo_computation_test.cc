@@ -802,5 +802,41 @@ ENTRY entry {
   EXPECT_FALSE(*comp4 == *comp3);
 }
 
+// Tests that the equals function can take sharding into account.
+TEST_F(HloComputationTest, EqualsWithShardingTest) {
+  // Using all-reduce with channel as it has side effects and supports
+  // identical.
+  const char* const hlo_string = R"(
+HloModule Module
+comp0 {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add = f32[] add(p0, p1), sharding={maximal device=0}
+}
+
+comp1 {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add = f32[] add(p0, p1), sharding={maximal device=1}
+}
+
+ENTRY entry {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  r0 = f32[] call(p0, p1), to_apply=comp0
+  r1 = f32[] call(p0, p1), to_apply=comp1
+  ROOT root = (f32[], f32[]) tuple(r0, r1)
+})";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  HloComputation* comp0 = FindComputation(module.get(), "comp0");
+  HloComputation* comp1 = FindComputation(module.get(), "comp1");
+  // Expect that the computations are equal by default as sharding is ignored.
+  EXPECT_EQ(*comp0, *comp1);
+  // Explicitly check that sharding is not ignored.
+  EXPECT_FALSE(comp0->Equal(*comp1, /*is_layout_sensitive*/ true,
+                            /*is_sharding_sensitive*/ true));
+}
+
 }  // namespace
 }  // namespace xla
