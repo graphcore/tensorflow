@@ -50,9 +50,9 @@ StatusOr<poplar::program::Program> CreateScatter(
   graph.setTileMapping(tmp, 0);
   ArgVectors args = {{tmp}, {graph.clone(tmp)}};
 
-  TF_ASSIGN_OR_RETURN(
-      auto update_comp_visitor,
-      GetOrCompileSubComputation(res, args, update_computation));
+  TF_ASSIGN_OR_RETURN(auto update_comp_visitor,
+                      res.subcomputation_cache.GetOrCompileSubcomputation(
+                          res, args, update_computation));
 
   // Fast path the gradient accumulation case
   if (root_inst->opcode() == HloOpcode::kAdd &&

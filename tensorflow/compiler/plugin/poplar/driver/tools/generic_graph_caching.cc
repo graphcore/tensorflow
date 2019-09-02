@@ -51,7 +51,7 @@ bool GenericGraphCache::HloInstructionEquals::operator()(
 
   auto compare_comps = [](const HloComputation* comp_a,
                           const HloComputation* comp_b) {
-    return *comp_a == *comp_b;
+    return comp_a->Equal(*comp_b, false, true);
   };
   auto compare_backend_configs = [](const std::string& raw_backend_config_a,
                                     const std::string& raw_backend_config_b) {

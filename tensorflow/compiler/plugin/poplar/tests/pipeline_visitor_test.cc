@@ -118,6 +118,140 @@ _stage_1 (arg_0: f32[]) -> f32[] {
 
 _stage_1_bw (arg_0: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
+  const_1 = f32[] constant(2), sharding={maximal device=1}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=1}
+  ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
+}
+
+_stage_0_bw (arg_0: f32[]) -> f32[] {
+  param_0 = f32[] parameter(0), sharding={maximal device=0}
+  const_1 = f32[] constant(1), sharding={maximal device=0}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  ROOT result = f32[] constant(4), sharding={maximal device=0}
+}
+
+ENTRY pipeline (arg: f32[]) -> f32[] {
+  arg = f32[] parameter(0), sharding={maximal device=0}
+
+  a0 = f32[] call(arg), to_apply=_stage_0, sharding={maximal device=0}
+
+  b0 = f32[] call(a0), to_apply=_stage_1, sharding={maximal device=1}
+
+  c0 = f32[] call(b0), to_apply=_stage_1_bw, sharding={maximal device=1}
+
+  ROOT d = f32[] call(c0), to_apply=_stage_0_bw, sharding={maximal device=0}
+}
+)";
+  auto device = createIpuModel(2, 4);
+
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(device, module.get(), false);
+
+  CustomOpReplacer replacer;
+  EXPECT_TRUE(replacer.Run(module.get()).ValueOrDie());
+
+  InterIpuCopyInserter inserter;
+  EXPECT_TRUE(inserter.Run(module.get()).ValueOrDie());
+
+  HloTrivialScheduler scheduler;
+  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
+
+  auto entry_computation = module->entry_computation();
+
+  // Count the number of stages
+  const auto stage_count = absl::c_count_if(
+      entry_computation->instructions(), [](const HloInstruction* hlo) {
+        return hlo->opcode() == HloOpcode::kCall;
+      });
+
+  // Assign each instruction in the pipeline to a stage
+  const std::vector<std::pair<std::string, int>> stage_assignments = {
+      {"arg", 0},           {"a0", 0}, {"b0", 1}, {"c0", 2}, {"d", 3},
+      {"custom-call.4", 0},  // Inter-IPU-copy between stage 0 and 1
+      {"custom-call.5", 2},  // Inter-IPU-copy between stage 2 and 3
+  };
+
+  for (auto stage_assignment : stage_assignments) {
+    auto instruction =
+        entry_computation->GetInstructionWithName(stage_assignment.first);
+    resources->pipeline_stage_assignment[instruction] = stage_assignment.second;
+  }
+
+  auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
+  resources->main_graph->setTileMapping(placeholder, 0);
+
+  PipelineVisitor visitor(stage_count, 5, *resources, {{placeholder}});
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  // Get the pipeline program
+  auto program = visitor.GetPipelineSequence();
+
+  // Compile the graph
+  poplar::Engine engine(*resources->main_graph, program);
+
+  // Capture the engine output into a string stream.
+  std::stringstream ss;
+  engine.setPrintTensorStream(ss);
+
+  // Run the program
+  device.attach();
+  engine.load(device);
+  engine.run(0);
+  device.detach();
+
+  const std::string expected = R"(/custom-call: 1
+/custom-call.1: 2
+/custom-call: 1
+/custom-call.2: 4
+/custom-call.1: 2
+/custom-call.3: 5
+/custom-call: 1
+/custom-call.2: 4
+/custom-call.1: 2
+/custom-call.3: 5
+/custom-call: 1
+/custom-call.2: 4
+/custom-call.1: 2
+/custom-call.3: 5
+/custom-call: 1
+/custom-call.2: 4
+/custom-call.1: 2
+/custom-call.3: 5
+/custom-call.2: 4
+/custom-call.3: 5
+)";
+
+  ASSERT_EQ(expected, ss.str());
+}
+
+// This tests that the print tensor statements get printed in the expected
+// order with the same stage being executed on the same IPU.
+TEST_F(PipelineVisitorTest, TestPipelineVisitorOrderDuplicated) {
+  const string& hlo_string = R"(
+HloModule module
+
+_stage_0 (arg_0: f32[]) -> f32[] {
+  param_0 = f32[] parameter(0), sharding={maximal device=0}
+  temp_0 = f32[] constant(0), sharding={maximal device=0}
+  const_1 = f32[] constant(1), sharding={maximal device=0}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
+}
+
+_stage_1 (arg_0: f32[]) -> f32[] {
+  param_0 = f32[] parameter(0), sharding={maximal device=1}
+  const_1 = f32[] constant(1), sharding={maximal device=1}
+  add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
+  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=1}
+  ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
+}
+
+_stage_1_bw (arg_0: f32[]) -> f32[] {
+  param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
   token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=1}
@@ -205,22 +339,22 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
   const std::string expected = R"(/custom-call: 1
 /custom-call.1: 2
 /custom-call: 1
-/custom-call.2: 3
+/custom-call.1: 3
 /custom-call.1: 2
 /custom-call.3: 4
 /custom-call: 1
-/custom-call.2: 3
+/custom-call.1: 3
 /custom-call.1: 2
 /custom-call.3: 4
 /custom-call: 1
-/custom-call.2: 3
+/custom-call.1: 3
 /custom-call.1: 2
 /custom-call.3: 4
 /custom-call: 1
-/custom-call.2: 3
+/custom-call.1: 3
 /custom-call.1: 2
 /custom-call.3: 4
-/custom-call.2: 3
+/custom-call.1: 3
 /custom-call.3: 4
 )";
 

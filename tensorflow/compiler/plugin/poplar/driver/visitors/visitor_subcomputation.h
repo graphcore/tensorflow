@@ -43,9 +43,9 @@ class SubComputationVisitor : public DeferredAllocationVisitor {
   Status HandleParameter(HloInstruction* inst) override;
   Status FinishVisit(HloInstruction* inst) override;
 
-  const ArgVectors& inputs();
+  const ArgVectors& inputs() const;
 
-  const OutVector& outputs();
+  const OutVector& outputs() const;
 
   bool InputIsAllocated(int64 param, unsigned int index) const;
 

@@ -230,9 +230,9 @@ Status SubComputationVisitor::FinishVisit(HloInstruction* inst) {
   return Status::OK();
 }
 
-const ArgVectors& SubComputationVisitor::inputs() { return inputs_; }
+const ArgVectors& SubComputationVisitor::inputs() const { return inputs_; }
 
-const OutVector& SubComputationVisitor::outputs() { return outputs_; }
+const OutVector& SubComputationVisitor::outputs() const { return outputs_; }
 
 bool SubComputationVisitor::InputIsAllocated(int64 param,
                                              unsigned int index) const {

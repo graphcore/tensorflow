@@ -66,12 +66,6 @@ using OutVector = std::vector<poplar::Tensor>;
 using ArgVector = std::vector<poplar::Tensor>;
 using ArgVectors = std::vector<ArgVector>;
 
-StatusOr<std::shared_ptr<SubComputationVisitor>> GetOrCompileSubComputation(
-    CompilerResources& res, const ArgVectors& inputs,
-    const HloComputation* comp,
-    const std::vector<const SubComputationVisitor*>& dependent_subcomputations =
-        {});
-
 Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
                       const Literal& literal);
 

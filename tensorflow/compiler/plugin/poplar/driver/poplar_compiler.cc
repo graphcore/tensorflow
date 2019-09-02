@@ -82,6 +82,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/cholesky_expander.h"
 #include "tensorflow/compiler/xla/service/computation_placer.h"
 #include "tensorflow/compiler/xla/service/dynamic_index_splitter.h"
+#include "tensorflow/compiler/xla/service/flatten_call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_constant_folding.h"
 #include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -89,7 +90,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_graph_dumper.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_pipeline.h"
-#include "tensorflow/compiler/xla/service/hlo_subcomputation_unification.h"
 #include "tensorflow/compiler/xla/service/map_inliner.h"
 #include "tensorflow/compiler/xla/service/reshape_mover.h"
 #include "tensorflow/compiler/xla/service/sort_simplifier.h"
@@ -503,6 +503,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     if (!poplarExecutor->RetainControlDependencies()) {
       pipeline.AddPass<DependencyReplacer>(false);
     }
+    pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<HloGetDimensionSizeRewriter>();
     pipeline.AddPass<CustomOpReplacer>();
     pipeline.AddPass<ParsePoplarBackendConfig>();
@@ -552,12 +553,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
-    pipeline.AddPass<HloSubcomputationUnification>();
     pipeline.AddPass<RecomputeInstructions>(
         poplarExecutor->InstructionRecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<DependencyReplacer>(true);
-    pipeline.AddPass<HloSubcomputationUnification>();
     pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<ShardingPass>();
     pipeline.AddPass<InterIpuCopyInserter>();

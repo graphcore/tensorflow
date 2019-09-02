@@ -185,29 +185,6 @@ CompileInplaceSubComputation(CompilerResources& res, const ArgVectors& inputs,
 
 }  // namespace
 
-StatusOr<std::shared_ptr<SubComputationVisitor>> GetOrCompileSubComputation(
-    CompilerResources& res, const ArgVectors& inputs,
-    const HloComputation* comp,
-    const std::vector<const SubComputationVisitor*>&
-        dependent_subcomputations) {
-  auto itr = res.computation_map.find(comp);
-  if (itr != res.computation_map.end()) {
-    return itr->second;
-  }
-
-  VLOG(2) << "Compiling sub-computation " << comp->name();
-  XLA_VLOG_LINES(2, comp->ToString());
-
-  auto visitor = std::make_shared<SubComputationVisitor>(
-      res, inputs, dependent_subcomputations);
-  auto order = comp->parent()->schedule().sequence(comp).instructions();
-  TF_RETURN_IF_ERROR(comp->AcceptOrdered(visitor.get(), order));
-
-  res.computation_map[comp] = visitor;
-
-  return visitor;
-}
-
 class ParallelMapTester : public DfsHloVisitorWithDefault {
  public:
   ParallelMapTester() : _is_ok(true) {}
@@ -299,8 +276,9 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
     TF_ASSIGN_OR_RETURN(seq, CreateRepeatOp(res, inst, output, tensor_map));
   } else {
     ArgVectors args = GetCallInputs(res, inst, tensor_map, seq);
-    TF_ASSIGN_OR_RETURN(auto subcomp_visitor,
-                        GetOrCompileSubComputation(res, args, comp));
+    TF_ASSIGN_OR_RETURN(
+        auto subcomp_visitor,
+        res.subcomputation_cache.GetOrCompileSubcomputation(res, args, comp));
 
     for (int64 o = 0; o < op_count; o++) {
       auto& inputs = subcomp_visitor->inputs()[o];
@@ -380,8 +358,9 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   CHECK_EQ(inputs.size(), 1);
 
   // Conditional should not change the inputs - therefore it's not inplace.
-  TF_ASSIGN_OR_RETURN(auto cond, GetOrCompileSubComputation(
-                                     res, inputs, inst->while_condition()));
+  TF_ASSIGN_OR_RETURN(auto cond,
+                      res.subcomputation_cache.GetOrCompileSubcomputation(
+                          res, inputs, inst->while_condition()));
 
   // Get the input layout info.
   TF_ASSIGN_OR_RETURN(auto input_has_layout,
@@ -390,7 +369,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   // Body of the while loop is inplace.
   TF_ASSIGN_OR_RETURN(
       auto body, CompileInplaceSubComputation(res, inputs, inst->while_body(),
-                                              input_has_layout, {cond.get()}));
+                                              input_has_layout, {cond}));
 
   unsigned int param_count = inputs[0].size();
   const ArgVector& inplace_inputs = inputs[0];
@@ -550,15 +529,15 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor pred = inputs[0][0];
 
-  std::vector<std::shared_ptr<SubComputationVisitor>> bodies;
+  std::vector<const SubComputationVisitor*> bodies(n_branches);
   const auto& comps = inst->called_computations();
 
   // Compile each branch into a sequence
   for (auto b = 0; b < n_branches; b++) {
     CHECK_EQ(inputs[b + 1].size(), CountShapes(inst->operand(b + 1)->shape()));
-    TF_ASSIGN_OR_RETURN(
-        auto body, GetOrCompileSubComputation(res, {inputs[b + 1]}, comps[b]));
-    bodies.push_back(body);
+    TF_ASSIGN_OR_RETURN(bodies[b],
+                        res.subcomputation_cache.GetOrCompileSubcomputation(
+                            res, {inputs[b + 1]}, comps[b]));
   }
 
   unsigned int output_count = bodies[0]->outputs().size();

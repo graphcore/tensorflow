@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
 
 #include <poplar/OptionFlags.hpp>
@@ -39,17 +40,12 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-using ComputationMap =
-    std::map<const HloComputation*, std::shared_ptr<SubComputationVisitor>>;
-
 // This structure contains additional information required to lower the graph
 // from an XLA graph to a poplar graph.
 struct CompilerResources {
   std::unique_ptr<poplar::Graph> main_graph;
 
   std::vector<poplar::Graph> shard_graphs;
-
-  ComputationMap computation_map;
 
   CompilerAnnotations annotations;
 
@@ -84,6 +80,8 @@ struct CompilerResources {
   conv_graph_caching::BwdWeightGraphCache bwd_weight_graph_cache;
 
   generic_graph_caching::GenericGraphCache graph_cache;
+
+  subcomputation_graph_caching::SubcomputationGraphCache subcomputation_cache;
 
   std::unordered_map<const HloInstruction*, int> pipeline_stage_assignment;
 
