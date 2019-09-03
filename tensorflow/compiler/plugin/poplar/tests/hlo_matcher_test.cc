@@ -402,26 +402,24 @@ ENTRY c1 {
 
 TEST_F(HloMatcherTest, LookThroughAssociativeOps) {
   const unsigned int look_through_depth = 2;
-  Shape shape = ShapeUtil::MakeShape(F32, {});
 
-  auto builder = HloComputation::Builder(TestName());
-  auto i1 =
-      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "in1"));
-  auto i2 =
-      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "in2"));
-  auto c1 = builder.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(10.f)));
-  auto sub = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kSubtract, i1, c1));
-  auto add = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, i2, sub));
-  builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, add, c1));
+  std::string hlo = R"(
+HloModule top
 
-  auto computation = builder.Build();
+ENTRY c1 {
+  i1 = f32[] parameter(0)
+  i2 = f32[] parameter(1)
+  c1 = f32[] constant(10.0)
+  sub = f32[] subtract(i1, c1)
+  add = f32[] add(i2, sub)
+  root = f32[] add(add, c1)
+ }
+)";
 
-  auto hlo_module = CreateNewVerifiedModule();
-  hlo_module->AddEntryComputation(std::move(computation));
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
 
   // clang-format off
   std::vector<HloMatcherPattern> patterns = {
@@ -440,26 +438,28 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOps) {
   };
   // clang-format on
 
-  CompilerAnnotations annotations(hlo_module.get());
+  CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_TRUE(matcher.Run(hlo_module.get()).ValueOrDie());
+  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   EXPECT_EQ(1, matcher.replace_count);
   EXPECT_EQ(5, hlo_module->entry_computation()->instruction_count());
 
   auto* comp = hlo_module->entry_computation();
   auto* root = comp->root_instruction();
   // Expect that root is add now
-  EXPECT_EQ(root, add);
+  EXPECT_EQ(root->name(), "add");
 
   // Expect that operand 1 of add has changed to a call
-  EXPECT_EQ(add->operand(1)->opcode(), HloOpcode::kFusion);
+  EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kFusion);
   auto* call_inst = comp->root_instruction()->operand(1);
   // Expect the name
   EXPECT_EQ("abc", call_inst->fused_instructions_computation()->name());
+
   // Expect the parameters
-  EXPECT_EQ(call_inst->operand(0), i1);
-  EXPECT_EQ(call_inst->operand(1), c1);
+  EXPECT_EQ(call_inst->operand(0)->name(), "i1");
+  EXPECT_EQ(call_inst->operand(1)->name(), "c1");
+
   // Expect the call body
   auto* call_root =
       call_inst->fused_instructions_computation()->root_instruction();
@@ -476,26 +476,24 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOps) {
 
 TEST_F(HloMatcherTest, LookThroughAssociativeOpsParameter) {
   const unsigned int look_through_depth = 2;
-  Shape shape = ShapeUtil::MakeShape(F32, {});
 
-  auto builder = HloComputation::Builder(TestName());
-  auto i1 =
-      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "in1"));
-  auto i2 =
-      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "in2"));
-  auto c1 = builder.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(10.f)));
-  auto sub = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kSubtract, i1, c1));
-  auto add = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, i2, sub));
-  builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, add, c1));
+  std::string hlo = R"(
+HloModule top
 
-  auto computation = builder.Build();
+ENTRY c1 {
+  i1 = f32[] parameter(0)
+  i2 = f32[] parameter(1)
+  c1 = f32[] constant(10.0)
+  sub = f32[] subtract(i1, c1)
+  add = f32[] add(i2, sub)
+  root = f32[] add(add, c1)
+ }
+)";
 
-  auto hlo_module = CreateNewVerifiedModule();
-  hlo_module->AddEntryComputation(std::move(computation));
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
 
   // clang-format off
   std::vector<HloMatcherPattern> patterns = {
@@ -513,26 +511,26 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOpsParameter) {
   };
   // clang-format on
 
-  CompilerAnnotations annotations(hlo_module.get());
+  CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_TRUE(matcher.Run(hlo_module.get()).ValueOrDie());
+  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   EXPECT_EQ(1, matcher.replace_count);
   EXPECT_EQ(6, hlo_module->entry_computation()->instruction_count());
 
   auto* comp = hlo_module->entry_computation();
   auto* root = comp->root_instruction();
   // Expect that root is add now
-  EXPECT_EQ(root, add);
+  EXPECT_EQ(root->name(), "add");
 
   // Expect that operand 1 of add has changed to a call
-  EXPECT_EQ(add->operand(1)->opcode(), HloOpcode::kFusion);
+  EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kFusion);
   auto* call_inst = comp->root_instruction()->operand(1);
   // Expect the name
   EXPECT_EQ("abc", call_inst->fused_instructions_computation()->name());
   // Expect the parameters
-  EXPECT_EQ(call_inst->operand(0), c1);
-  EXPECT_EQ(call_inst->operand(1), sub);
+  EXPECT_EQ(call_inst->operand(0)->name(), "c1");
+  EXPECT_EQ(call_inst->operand(1)->name(), "sub");
   // Expect the call body
   auto* call_root =
       call_inst->fused_instructions_computation()->root_instruction();
@@ -545,36 +543,29 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOpsParameter) {
 
 TEST_F(HloMatcherTest, LookThroughAssociativeOpsLongerChain) {
   const unsigned int look_through_depth = 6;
-  Shape shape = ShapeUtil::MakeShape(F32, {});
 
-  auto builder = HloComputation::Builder(TestName());
-  auto i1 =
-      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "in1"));
-  auto i2 =
-      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "in2"));
-  auto c1 = builder.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(10.f)));
-  auto sub = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kSubtract, i1, c1));
-  auto mul1 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, sub));
-  auto mul2 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul1));
-  auto mul3 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul2));
-  auto mul4 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul3));
-  auto mul5 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul4));
-  auto mul6 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul5));
-  builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, mul6, c1));
+  std::string hlo = R"(
+HloModule top
 
-  auto computation = builder.Build();
+ENTRY c1 {
+  i1 = f32[] parameter(0)
+  i2 = f32[] parameter(1)
+  c1 = f32[] constant(10.0)
+  sub = f32[] subtract(i1, c1)
+  mul1 = f32[] multiply(i2, sub)
+  mul2 = f32[] multiply(i2, mul1)
+  mul3 = f32[] multiply(i2, mul2)
+  mul4 = f32[] multiply(i2, mul3)
+  mul5 = f32[] multiply(i2, mul4)
+  mul6 = f32[] multiply(i2, mul5)
+  root = f32[] multiply(mul6, c1)
+ }
+)";
 
-  auto hlo_module = CreateNewVerifiedModule();
-  hlo_module->AddEntryComputation(std::move(computation));
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
 
   // clang-format off
   std::vector<HloMatcherPattern> patterns = {
@@ -593,26 +584,26 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOpsLongerChain) {
   };
   // clang-format on
 
-  CompilerAnnotations annotations(hlo_module.get());
+  CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_TRUE(matcher.Run(hlo_module.get()).ValueOrDie());
+  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   EXPECT_EQ(1, matcher.replace_count);
   EXPECT_EQ(10, hlo_module->entry_computation()->instruction_count());
 
   auto* comp = hlo_module->entry_computation();
   auto* root = comp->root_instruction();
   // Expect that root is mul1 now
-  EXPECT_EQ(root, mul1);
+  EXPECT_EQ(root->name(), "mul1");
 
   // Expect that operand 1 of mul1 has changed to a call
-  EXPECT_EQ(mul1->operand(1)->opcode(), HloOpcode::kFusion);
+  EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kFusion);
   auto* call_inst = comp->root_instruction()->operand(1);
   // Expect the name
   EXPECT_EQ("abc", call_inst->fused_instructions_computation()->name());
   // Expect the parameters
-  EXPECT_EQ(call_inst->operand(0), i1);
-  EXPECT_EQ(call_inst->operand(1), c1);
+  EXPECT_EQ(call_inst->operand(0)->name(), "i1");
+  EXPECT_EQ(call_inst->operand(1)->name(), "c1");
   // Expect the call body
   auto* call_root =
       call_inst->fused_instructions_computation()->root_instruction();
@@ -629,36 +620,29 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOpsLongerChain) {
 
 TEST_F(HloMatcherTest, LookThroughAssociativeOpsChainTooLong) {
   const unsigned int look_through_depth = 5;
-  Shape shape = ShapeUtil::MakeShape(F32, {});
 
-  auto builder = HloComputation::Builder(TestName());
-  auto i1 =
-      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "in1"));
-  auto i2 =
-      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "in2"));
-  auto c1 = builder.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(10.f)));
-  auto sub = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kSubtract, i1, c1));
-  auto mul1 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, sub));
-  auto mul2 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul1));
-  auto mul3 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul2));
-  auto mul4 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul3));
-  auto mul5 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul4));
-  auto mul6 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul5));
-  builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, mul6, c1));
+  std::string hlo = R"(
+HloModule top
 
-  auto computation = builder.Build();
+ENTRY c1 {
+  i1 = f32[] parameter(0)
+  i2 = f32[] parameter(1)
+  c1 = f32[] constant(10.0)
+  sub = f32[] subtract(i1, c1)
+  mul1 = f32[] multiply(i2, sub)
+  mul2 = f32[] multiply(i2, mul1)
+  mul3 = f32[] multiply(i2, mul2)
+  mul4 = f32[] multiply(i2, mul3)
+  mul5 = f32[] multiply(i2, mul4)
+  mul6 = f32[] multiply(i2, mul5)
+  root = f32[] multiply(mul6, c1)
+ }
+)";
 
-  auto hlo_module = CreateNewVerifiedModule();
-  hlo_module->AddEntryComputation(std::move(computation));
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
 
   // clang-format off
   std::vector<HloMatcherPattern> patterns = {
@@ -676,45 +660,38 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOpsChainTooLong) {
   };
   // clang-format on
 
-  CompilerAnnotations annotations(hlo_module.get());
+  CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_FALSE(matcher.Run(hlo_module.get()).ValueOrDie());
+  EXPECT_FALSE(matcher.Run(hlo_module).ValueOrDie());
 }
 
 TEST_F(HloMatcherTest, LookThroughAssociativeOpsPartialInChainUsed) {
   const unsigned int look_through_depth = 6;
-  Shape shape = ShapeUtil::MakeShape(F32, {});
 
-  auto builder = HloComputation::Builder(TestName());
-  auto i1 =
-      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "in1"));
-  auto i2 =
-      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "in2"));
-  auto c1 = builder.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(10.f)));
-  auto sub = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kSubtract, i1, c1));
-  auto mul1 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, sub));
-  auto mul2 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul1));
-  auto mul3 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul2));
-  auto mul4 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul3));
-  auto mul5 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul4));
-  auto mul6 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, mul5));
-  auto mul7 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, mul6, c1));
-  builder.AddInstruction(HloInstruction::CreateTuple({mul3, mul7}));
+  std::string hlo = R"(
+HloModule top
 
-  auto computation = builder.Build();
+ENTRY c1 {
+  i1 = f32[] parameter(0)
+  i2 = f32[] parameter(1)
+  c1 = f32[] constant(10.0)
+  sub = f32[] subtract(i1, c1)
+  mul1 = f32[] multiply(i2, sub)
+  mul2 = f32[] multiply(i2, mul1)
+  mul3 = f32[] multiply(i2, mul2)
+  mul4 = f32[] multiply(i2, mul3)
+  mul5 = f32[] multiply(i2, mul4)
+  mul6 = f32[] multiply(i2, mul5)
+  mul7 = f32[] multiply(mul6, c1)
+  root = (f32[], f32[]) tuple(mul3, mul7)
+ }
+)";
 
-  auto hlo_module = CreateNewVerifiedModule();
-  hlo_module->AddEntryComputation(std::move(computation));
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
 
   // clang-format off
   std::vector<HloMatcherPattern> patterns = {
@@ -732,36 +709,33 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOpsPartialInChainUsed) {
   };
   // clang-format on
 
-  CompilerAnnotations annotations(hlo_module.get());
+  CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_FALSE(matcher.Run(hlo_module.get()).ValueOrDie());
+  EXPECT_FALSE(matcher.Run(hlo_module).ValueOrDie());
 }
 
 TEST_F(HloMatcherTest, LookThroughAssociativeOpsDifferentAssociativitySets) {
   const unsigned int look_through_depth = 2;
-  Shape shape = ShapeUtil::MakeShape(F32, {});
 
-  auto builder = HloComputation::Builder(TestName());
-  auto i1 =
-      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "in1"));
-  auto i2 =
-      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "in2"));
-  auto c1 = builder.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(10.f)));
-  auto sub = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kSubtract, i1, c1));
-  auto add = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, i2, sub));
-  auto mul = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kMultiply, i2, add));
-  builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, mul, c1));
+  std::string hlo = R"(
+HloModule top
 
-  auto computation = builder.Build();
+ENTRY c1 {
+  i1 = f32[] parameter(0)
+  i2 = f32[] parameter(1)
+  c1 = f32[] constant(10.0)
+  sub = f32[] subtract(i1, c1)
+  add = f32[] add(i2, sub)
+  mul = f32[] multiply(i2, add)
+  root = f32[] add(mul, c1)
+ }
+)";
 
-  auto hlo_module = CreateNewVerifiedModule();
-  hlo_module->AddEntryComputation(std::move(computation));
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
 
   // clang-format off
   std::vector<HloMatcherPattern> patterns = {
@@ -779,34 +753,32 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOpsDifferentAssociativitySets) {
   };
   // clang-format on
 
-  CompilerAnnotations annotations(hlo_module.get());
+  CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_FALSE(matcher.Run(hlo_module.get()).ValueOrDie());
+  EXPECT_FALSE(matcher.Run(hlo_module).ValueOrDie());
 }
 
 TEST_F(HloMatcherTest, LookThroughAssociativeOpsRootNonAssociative) {
   const unsigned int look_through_depth = 5;
-  Shape shape = ShapeUtil::MakeShape(F32, {});
-  Shape shape2 = ShapeUtil::MakeShape(F32, {2});
 
-  auto builder = HloComputation::Builder(TestName());
-  auto i1 =
-      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "in1"));
-  auto i2 =
-      builder.AddInstruction(HloInstruction::CreateParameter(1, shape, "in2"));
-  auto c1 = builder.AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(10.f)));
-  auto add1 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, i1, c1));
-  auto add2 = builder.AddInstruction(
-      HloInstruction::CreateBinary(shape, HloOpcode::kAdd, add1, i2));
-  builder.AddInstruction(HloInstruction::CreateBroadcast(shape2, add2, {}));
+  std::string hlo = R"(
+HloModule top
 
-  auto computation = builder.Build();
+ENTRY c1 {
+  i1 = f32[] parameter(0)
+  i2 = f32[] parameter(1)
+  c1 = f32[] constant(10.0)
+  add1 = f32[] add(i1, c1)
+  add2 = f32[] add(add1, i2)
+  root = f32[2] broadcast(add2), dimensions={}
+ }
+)";
 
-  auto hlo_module = CreateNewVerifiedModule();
-  hlo_module->AddEntryComputation(std::move(computation));
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
 
   // clang-format off
   std::vector<HloMatcherPattern> patterns = {
@@ -825,10 +797,10 @@ TEST_F(HloMatcherTest, LookThroughAssociativeOpsRootNonAssociative) {
   };
   // clang-format on
 
-  CompilerAnnotations annotations(hlo_module.get());
+  CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_FALSE(matcher.Run(hlo_module.get()).ValueOrDie());
+  EXPECT_FALSE(matcher.Run(hlo_module).ValueOrDie());
 }
 
 TEST_F(HloMatcherTest, PatternNoOutputs) {
