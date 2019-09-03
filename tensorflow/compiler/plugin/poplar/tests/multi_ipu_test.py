@@ -83,7 +83,7 @@ class MultiIpuTest(xla_test.XLATestCase):
           '__seed*',
           'add*/add*/Add',
           'switchControlBroadcast2/*OnTileCopy',
-          'Copy_XLA_Args*/arg0.1_to_/ipu-inter-copy*/OnTileCopy',
+          'Copy_*/ipu-inter-copy*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
