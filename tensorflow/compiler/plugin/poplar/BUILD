@@ -131,6 +131,7 @@ cc_library(
         "driver/passes/pipeline_fifo_inserter.cc",
         "driver/passes/pipeline_fixer.cc",
         "driver/passes/pipeline_optimizer.cc",
+        "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/recompute_instructions.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
@@ -224,6 +225,7 @@ cc_library(
         "driver/passes/pipeline_fifo_inserter.h",
         "driver/passes/pipeline_fixer.h",
         "driver/passes/pipeline_optimizer.h",
+        "driver/passes/poplar_algebraic_simplifier.h",
         "driver/passes/recompute_instructions.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
@@ -423,7 +425,6 @@ cc_library(
         "//tensorflow/compiler/xla/service/cpu:cpu_runtime",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
-        "//tensorflow/compiler/xla/service:algebraic_simplifier",
         "//tensorflow/compiler/xla/service:cholesky_expander",
         "//tensorflow/compiler/xla/service:dynamic_index_splitter",
         "//tensorflow/compiler/xla/service:generic_transfer_manager",
@@ -741,6 +742,19 @@ cc_library(
     ],
 )
 
+xla_test(
+    name = "poplar_algebraic_simplifier_test",
+    srcs = ["tests/poplar_algebraic_simplifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
 xla_test(
     name = "graph_compile_io_map_test",
     srcs = ["tests/graph_compile_io_map_test.cc"],

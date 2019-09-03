@@ -56,6 +56,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
@@ -78,7 +79,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
-#include "tensorflow/compiler/xla/service/algebraic_simplifier.h"
 #include "tensorflow/compiler/xla/service/cholesky_expander.h"
 #include "tensorflow/compiler/xla/service/computation_placer.h"
 #include "tensorflow/compiler/xla/service/dynamic_index_splitter.h"
@@ -491,14 +491,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   }
 
   {
-    AlgebraicSimplifierOptions simplifier_opts(
-        [](const Shape&, const Shape&) { return false; });
-    simplifier_opts.set_is_layout_sensitive(false);
-    simplifier_opts.set_enable_conv_simplification(false);
-    simplifier_opts.set_enable_dot_strength_reduction(false);
-    simplifier_opts.set_enable_window_reduce_to_reduce_replacement(false);
-    simplifier_opts.set_enable_dot_to_multiply_rewrite(false);
-
     HloPassPipeline pipeline("IPU");
     if (!poplarExecutor->RetainControlDependencies()) {
       pipeline.AddPass<DependencyReplacer>(false);
@@ -519,12 +511,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<ConstantSliceFolding>>();
     pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
     pipeline.AddPass<HloCSE>(false);
-    pipeline.AddPass<HloPassFix<AlgebraicSimplifier>>(simplifier_opts);
+    pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
     pipeline.AddPass<SortSimplifier>();
     pipeline.AddPass<RootTokenReplacer>();
     pipeline.AddPass<ReshapeMover>();
     pipeline.AddPass<MapInliner>();
-    pipeline.AddPass<HloPassFix<AlgebraicSimplifier>>(simplifier_opts);
+    pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
     pipeline.AddPass<ZeroSizedHloElimination>();
     pipeline.AddPass<ComputationFlattener>();
     pipeline.AddPass<TupleSimplifier>(true);
@@ -541,7 +533,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<HloCSE>(true);
       pass.AddPass<HloDCE>();
       pass.AddPass<WhileLoopConstantSinking>();
-      pass.AddPass<HloPassFix<AlgebraicSimplifier>>(simplifier_opts);
+      pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
       pass.AddPass<ReshapeMover>();
       pass.AddPass<SortSimplifier>();
       pass.AddPass<ScatterCombiner>(resources.annotations);
