@@ -38,6 +38,7 @@ class Shape;
 
 namespace poplarplugin {
 
+class PoplarBackendConfig;
 struct CompilerResources;
 
 enum class NormType {
@@ -362,6 +363,12 @@ StatusOr<poplar::program::Sequence> CreateSort(
 StatusOr<poplar::program::Sequence> CreateSort(
     poplar::Graph& graph, poplar::Tensor key, poplar::Tensor value,
     const int64 dimension, const std::string& debug_name = "");
+
+Status SetPartialsTypeIfPresent(const HloInstruction* inst,
+                                poplar::OptionFlags& option_flags);
+Status SetPartialsTypeIfPresent(
+    const PoplarBackendConfig& poplar_backend_config,
+    poplar::OptionFlags& option_flags);
 
 }  // namespace poplarplugin
 }  // namespace xla

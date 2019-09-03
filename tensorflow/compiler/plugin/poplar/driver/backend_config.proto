@@ -35,7 +35,7 @@ enum MLType {
 };
 
 // Backend specific HloInstruction config
-// NEXT ID = 7
+// NEXT ID = 8
 message PoplarBackendConfig {
 
   // Instruction config for a fusion instruction
@@ -97,4 +97,6 @@ message PoplarBackendConfig {
   StochasticRounding stochastic_rounding = 5;
 
   MLType ml_type = 6;
+
+  PrimitiveType partials_type = 7;
 };

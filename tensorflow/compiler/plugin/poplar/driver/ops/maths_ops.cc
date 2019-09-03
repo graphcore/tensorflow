@@ -618,9 +618,12 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
   TF_ASSIGN_OR_RETURN(const MLType dot_type, GetMLType(inst));
   const std::string debug_prefix = GetDebugName(inst);
 
+  auto opts = GetMatMulOptionsForType(res, dot_type);
+  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(inst, opts));
+
   // Created a cached dot.
   using namespace poputil::graphfn;
-  auto func = [&graph, &res, &output_shape, dot_dims, dot_type_s, dot_type,
+  auto func = [&graph, &res, &output_shape, dot_dims, dot_type_s, &opts,
                debug_prefix](std::vector<poplar::Tensor>& args,
                              poplar::program::Sequence& prog) {
     poplar::Tensor lhs = args[0];
@@ -700,8 +703,6 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
         std::accumulate(rhs_shape_itr_b, rhs_shape_itr_end, std::size_t(1),
                         std::multiplies<std::size_t>());
     rhs = rhs.reshape({rhs_b, rhs_k, rhs_n});
-
-    auto opts = GetMatMulOptionsForType(res, dot_type);
 
     if (VLOG_IS_ON(2)) {
       std::stringstream stream;

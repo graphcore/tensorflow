@@ -14,14 +14,24 @@
 # =============================================================================
 
 import json
+import numpy as np
 
+from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.xla import xla_data_pb2
+from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.framework import dtypes
-from tensorflow.python import ipu
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import rnn_cell
+from tensorflow.python.ops import rnn
+from tensorflow.python.ops import variables
+from tensorflow.python.ops import variable_scope
+from tensorflow.python.ops import init_ops
 from tensorflow.python.platform import googletest
-from tensorflow.compiler.xla import xla_data_pb2
-from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 
 
 def _getFrontendAttributes(op):
@@ -34,17 +44,31 @@ def _getFrontendAttributes(op):
     return None
 
 
+def _createInputs(dimensions, dtype):
+  pa = array_ops.placeholder(dtype, dimensions)
+  pb = array_ops.placeholder(dtype, dimensions)
+  return (pa, pb, _createFeeders([pa, pb], dimensions, dtype))
+
+
+def _createFeeders(inputs, dimensions, dtype):
+  return {input: np.zeros(dimensions, dtype=dtype) for input in inputs}
+
+
 class FrontendAttributesTest(test_util.TensorFlowTestCase):
   def assertVerticesContains(self, result, expected_string):
+    vertices = []
     for line in result:
       evt = IpuTraceEvent.FromString(line)
       if evt.type == IpuTraceEvent.COMPILE_END:
-        vertices = json.loads(
-            evt.compile_end.compilation_report.decode("utf-8")).get(
-                "vertexTypes", {}).get("names", [])
-        self.assertTrue(any([expected_string in v for v in vertices]))
-        return
-    self.fail("COMPILE_END event not found: test probably didn't run")
+        if evt.compile_end.compilation_report:
+          vertices += json.loads(evt.compile_end.compilation_report,
+                                 encoding="utf-8").get("vertexTypes",
+                                                       {}).get("names", [])
+    self.assertTrue(
+        vertices, msg="COMPILE_END event not found: test probably didn't run")
+    self.assertTrue(any([expected_string in v for v in vertices]),
+                    msg="Expected '%s' in one of %s" %
+                    (expected_string, str(vertices)))
 
   def testSimpleSingleAttribute(self):
     with ops.device("/device:IPU:0"):
@@ -207,6 +231,114 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           backend_config_pb2.StochasticRounding.Name(
               backend_config_pb2.StochasticRounding.NOT_SET))
       self.assertIsNone(attributes5.map.get("attr_b"))
+
+  def testMatMulPartialsType(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+
+      outputs = {}
+      with ops.device("/device:IPU:0"):
+        with ipu.scopes.partials_type(np.float32):
+          pa, pb, fd = _createInputs([2, 2], np.float16)
+          output = math_ops.matmul(pa, pb)
+          outputs[output] = ("half,float", fd)
+        with ipu.scopes.partials_type(np.float16):
+          pa, pb, fd = _createInputs([3, 3], np.float16)
+          output = math_ops.matmul(pa, pb)
+          outputs[output] = ("half,half", fd)
+          with ipu.scopes.partials_type(np.float32):
+            pa, pb, fd = _createInputs([4, 4], np.float16)
+            output = math_ops.matmul(pa, pb)
+            outputs[output] = ("half,float", fd)
+          pa, pb, fd = _createInputs([5, 5], np.float16)
+          output = math_ops.matmul(pa, pb)
+          outputs[output] = ("half,half", fd)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True,
+                                        use_poplar_text_report=False)
+      ipu.utils.configure_ipu_system(cfg)
+
+      for output, expected_output in outputs.items():
+        sess.run(report)
+
+        sess.run(output, expected_output[1])
+
+        result = sess.run(report)
+        self.assertVerticesContains(result, expected_output[0])
+
+  def testLSTMPartialsType(self):
+    ops.reset_default_graph()
+    with self.session() as sess:
+      with ops.device('cpu'):
+        report = gen_ipu_ops.ipu_event_trace()
+      dtype = np.float16
+      batch_size = 1
+      seq_len = 3
+      input_size = 5
+      num_channels = 8
+      forget_bias = 0.
+      weights_value = 1.
+      outputs = []
+      with ops.device("/device:IPU:0"):
+
+        def createLSTM(expected_output):
+          pinputs = array_ops.placeholder(dtype,
+                                          [seq_len, batch_size, input_size],
+                                          name="inputs")
+          pinitial_h_state = array_ops.placeholder(dtype,
+                                                   [batch_size, num_channels],
+                                                   name="init_h_state")
+          pinitial_c_state = array_ops.placeholder(dtype,
+                                                   [batch_size, num_channels],
+                                                   name="init_c_state")
+
+          def createLSTMCell(pinputs, pinitial_h_state, pinitial_c_state):
+            lstm_cell = rnn_cell.LSTMCell(
+                num_channels,
+                name='basic_lstm_cell',
+                forget_bias=forget_bias,
+                initializer=init_ops.constant_initializer(weights_value,
+                                                          dtype=dtype),
+                reuse=variable_scope.AUTO_REUSE)
+            state = rnn_cell.LSTMStateTuple(pinitial_c_state, pinitial_h_state)
+            outputs, _ = rnn.dynamic_rnn(lstm_cell,
+                                         pinputs,
+                                         dtype=dtype,
+                                         initial_state=state,
+                                         time_major=True)
+            return outputs
+
+          r = ipu.ipu_compiler.compile(
+              createLSTMCell,
+              inputs=[pinputs, pinitial_h_state, pinitial_c_state])
+
+          inputs = np.zeros([seq_len, batch_size, input_size], dtype=dtype)
+          initial_h_state = np.zeros([batch_size, num_channels], dtype=dtype)
+          initial_c_state = np.zeros([batch_size, num_channels], dtype=dtype)
+          fd = {
+              pinputs: inputs,
+              pinitial_h_state: initial_h_state,
+              pinitial_c_state: initial_c_state,
+          }
+          return (r, expected_output, fd)
+
+        with ipu.scopes.partials_type(np.float16):
+          outputs.append(createLSTM("ConvPartial1x1Out<half,half"))
+          with ipu.scopes.partials_type(np.float32):
+            outputs.append(createLSTM("ConvPartialHorizontalMac<half,float"))
+          outputs.append(createLSTM("ConvPartial1x1Out<half,half"))
+
+      cfg = ipu.utils.create_ipu_config(profiling=True,
+                                        use_poplar_text_report=False)
+      ipu.utils.configure_ipu_system(cfg)
+
+      for output, expected_output, fd in outputs:
+        sess.run(report)
+        sess.run(variables.global_variables_initializer())
+        sess.run(output, fd)
+        result = sess.run(report)
+        self.assertVerticesContains(result, expected_output)
 
 
 if __name__ == "__main__":

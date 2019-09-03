@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/convolution_preplanning.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
@@ -65,6 +67,9 @@ Status ConvolutionPreplanning::StorePreplanConv(const HloInstruction* inst,
 
   poplar::OptionFlags option_flags = resources.default_conv_options;
   option_flags.set("pass", conv_type);
+
+  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(inst, option_flags));
+
   auto ins = option_flags_store.insert(std::make_pair(conv_type, option_flags));
   preplan_convs.insert(
       std::make_tuple(&target, conv_params, &(ins.first->second)));

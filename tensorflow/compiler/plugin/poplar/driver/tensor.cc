@@ -553,6 +553,7 @@ static StatusOr<poplar::Tensor> AddConvolutionInput(
 
   TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
   opts.set("pass", ml_type);
+  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(target, opts));
 
   poplar::Tensor out = poplin::createInput(graph, params, name, opts,
                                            &resources.convolution_cache);
@@ -570,6 +571,7 @@ static StatusOr<poplar::Tensor> AddConvolutionWeights(
 
   TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
   opts.set("pass", ml_type);
+  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(target, opts));
 
   poplar::Tensor out = poplin::createWeights(graph, params, name, opts,
                                              &resources.convolution_cache);
@@ -743,6 +745,7 @@ static StatusOr<poplar::Tensor> AddLeftMatMul(poplar::Graph& graph,
 
   TF_ASSIGN_OR_RETURN(const MLType ml_type, GetMLType(target));
   auto opts = GetMatMulOptionsForType(resources, ml_type);
+  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(target, opts));
 
   auto result = poplin::createMatMulGroupedInputLHS(
       graph, type, type, a_shape, b_shape, name, opts, &resources.dot_cache);
@@ -811,6 +814,7 @@ static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
 
   TF_ASSIGN_OR_RETURN(const MLType ml_type, GetMLType(target));
   auto opts = GetMatMulOptionsForType(resources, ml_type);
+  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(target, opts));
 
   auto result = poplin::createMatMulGroupedInputRHS(
       graph, type, type, a_shape, b_shape, name, opts, &resources.dot_cache);

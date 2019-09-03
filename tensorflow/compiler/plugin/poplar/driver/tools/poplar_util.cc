@@ -12,11 +12,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/xla_data.pb.h"
 
 #include "include/json/json.h"
 
@@ -248,6 +251,23 @@ poplar::OptionFlags GetMatMulOptionsForType(CompilerResources& res,
     opts.set("fullyConnectedPass", MLType_Name(mm_type));
   }
   return opts;
+}
+Status SetPartialsTypeIfPresent(
+    const PoplarBackendConfig& poplar_backend_config,
+    poplar::OptionFlags& option_flags) {
+  if (poplar_backend_config.partials_type() != PRIMITIVE_TYPE_INVALID) {
+    TF_ASSIGN_OR_RETURN(poplar::Type partials_poplar_type,
+                        PoplarDataType(poplar_backend_config.partials_type()));
+    option_flags.set("partialsType", partials_poplar_type.toString());
+  }
+  return Status::OK();
+}
+
+Status SetPartialsTypeIfPresent(const HloInstruction* inst,
+                                poplar::OptionFlags& option_flags) {
+  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  return SetPartialsTypeIfPresent(poplar_backend_config, option_flags);
 }
 
 }  // namespace poplarplugin

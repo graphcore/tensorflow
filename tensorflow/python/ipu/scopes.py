@@ -16,6 +16,7 @@
 Scoping contexts for IPUs
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+import numpy as np
 
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.core.framework import attr_value_pb2
@@ -23,6 +24,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops.variable_scope import variable_scope
 from tensorflow.python.util import tf_contextlib
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
+from tensorflow.compiler.xla.python_api import types
 
 FRONTEND_ATTRIBUTES_NAME = "_XlaFrontendAttributes"
 
@@ -159,4 +161,29 @@ def stochastic_rounding(override):
           if override else backend_config_pb2.StochasticRounding.FORCE_OFF),
       backend_config_pb2.StochasticRounding.Name(
           backend_config_pb2.StochasticRounding.NOT_SET)):
+    yield
+
+
+@tf_contextlib.contextmanager
+def partials_type(override_type):
+  """Override the default type used to store intermediate results by some operations.
+
+  Args:
+    override_type: Numpy type of the partials (float16 or float32)
+
+  Returns:
+     A context
+  """
+  xla_type = types.MAP_DTYPE_TO_RECORD[str(
+      np.dtype(override_type))].primitive_type
+  if xla_type not in [
+      xla_data_pb2.PrimitiveType.F16, xla_data_pb2.PrimitiveType.F32
+  ]:
+    raise ValueError("Only support float16, float32, provided %s" % dtype)
+  with frontend_attribute(
+      backend_config_pb2.FrontendAttributeId.Name(
+          backend_config_pb2.FrontendAttributeId.PARTIALS_TYPE),
+      xla_data_pb2.PrimitiveType.Name(xla_type),
+      xla_data_pb2.PrimitiveType.Name(
+          xla_data_pb2.PrimitiveType.PRIMITIVE_TYPE_INVALID)):
     yield

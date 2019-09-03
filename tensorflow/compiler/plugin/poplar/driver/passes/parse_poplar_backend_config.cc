@@ -26,22 +26,11 @@ namespace poplarplugin {
 
 StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
   bool changed = false;
-  StochasticRounding stochastic_rounding = NOT_SET;
 
   for (auto* comp : module->computations()) {
     for (auto instr : comp->instructions()) {
       auto attributes = instr->frontend_attributes();
       PoplarBackendConfig poplar_config;
-      auto stochastic_rounding_attribute =
-          attributes.map().find(FrontendAttributeId_Name(STOCHASTIC_ROUNDING));
-      if (stochastic_rounding_attribute != attributes.map().end()) {
-        if (!StochasticRounding_Parse(stochastic_rounding_attribute->second,
-                                      &stochastic_rounding)) {
-          return xla::FailedPrecondition(
-              "Could not parse the stochastic rounding value");
-        }
-        changed = true;
-      }
       // Check if the calls they have the type field set from tf2xla.
       if (instr->opcode() == HloOpcode::kCall) {
         auto call_config_type_attribute =
@@ -71,7 +60,6 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           changed = true;
         }
       }
-      poplar_config.set_stochastic_rounding(stochastic_rounding);
       instr->set_backend_config(poplar_config);
     }
   }

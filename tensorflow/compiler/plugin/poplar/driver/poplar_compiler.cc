@@ -50,6 +50,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
@@ -581,6 +582,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
              MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler)}));
 
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
+    pipeline.AddPass<LowerFrontendAttributes>();
 
     TF_RETURN_IF_ERROR(pipeline.Run(module.get()).status());
   }
