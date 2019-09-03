@@ -56,28 +56,6 @@ StatusOr<popops::expr::BinaryOpType> LookupBinaryFn(const HloInstruction*);
 StatusOr<popops::expr::BinaryOpType> LookupComparisonFn(
     const HloInstruction* inst);
 
-StatusOr<poplin::ConvParams> GetConvolutionParameters(
-    const HloInstruction* operand_op, int64 input_index, int64 kernel_index);
-
-poplar::Tensor ShuffleConvolutionInputToTensorflow(
-    const HloInstruction* inst, const poplar::Tensor& tensor);
-
-poplar::Tensor ShuffleConvolutionWeightsToTensorflow(
-    const HloInstruction* inst, const poplar::Tensor& tensor);
-
-poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
-                                               const poplar::Tensor& tensor);
-
-poplar::Tensor ShuffleConvolutionWeightsToPoplar(const HloInstruction* inst,
-                                                 const poplar::Tensor& tensor,
-                                                 bool swap_features);
-
-poplar::Tensor ShuffleConvolutionOutputToTensorflow(
-    const HloInstruction* inst, const poplar::Tensor& tensor);
-
-poplar::Tensor ShuffleConvolutionOutputToPoplar(const HloInstruction* inst,
-                                                const poplar::Tensor& tensor);
-
 poplar::Tensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
                                                 const poplar::Tensor& t,
                                                 bool flipped);
