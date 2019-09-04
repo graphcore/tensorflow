@@ -138,7 +138,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
 
       evts = ipu.utils.extract_all_events(out)
       size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertTrue(size < 42000000)
+      self.assertAllInRange([size], 41000000, 43000000)
 
   def testTraining(self):
     with self.session() as sess:
@@ -172,7 +172,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
 
       evts = ipu.utils.extract_all_events(out)
       size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertTrue(size < 75000000)
+      self.assertAllInRange([size], 67000000, 71000000)
 
 
 if __name__ == "__main__":
