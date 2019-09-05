@@ -179,6 +179,52 @@ def count_compute_sets_matching(cs_list, to_match):
   return len([cs for cs in cs_set if fnmatch.fnmatch(cs, to_match)])
 
 
+class ReportJSON:
+  def __init__(self, test, events):
+    self.test = test
+    self.report = {}
+    for e in events:
+      evt = IpuTraceEvent.FromString(e)
+      try:
+        if evt.type == IpuTraceEvent.COMPILE_BEGIN:
+          pass
+        if evt.type == IpuTraceEvent.COMPILE_END:
+          if evt.compile_end.compilation_report:
+            self.report[IpuTraceEvent.COMPILE_END] = js.loads(
+                evt.compile_end.compilation_report, encoding="utf-8")
+        if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
+          if evt.data_transfer.data_transfer:
+            self.report[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER] = js.loads(
+                evt.data_transfer.data_transfer, encoding="utf-8")
+        if evt.type == IpuTraceEvent.DEVICE_TO_HOST_TRANSFER:
+          if evt.data_transfer.data_transfer:
+            self.report[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER] = js.loads(
+                evt.data_transfer.data_transfer, encoding="utf-8")
+        if evt.type == IpuTraceEvent.LOAD_ENGINE:
+          pass
+        if evt.type == IpuTraceEvent.EXECUTE:
+          if evt.execute.execution_report:
+            self.report[IpuTraceEvent.EXECUTE] = js.loads(
+                evt.execute.execution_report, encoding="utf-8")
+      except UnicodeDecodeError:
+        pass
+
+  # Excluding gaps
+  def get_max_tile_size(self):
+    return max(
+        self.report[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
+
+  def get_compute_sets(self):
+    return self.report[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
+
+  def assert_max_tile_size_in_range(self, low, high):
+    self.test.assertAllInRange([self.get_max_tile_size()], low, high)
+
+  def assert_all_compute_sets_and_list(self, ok):
+    self.test.assertTrue(
+        check_all_compute_sets_and_list(self.get_compute_sets(), ok))
+
+
 def extract_all_strings_from_event_trace(events):
   result = ""
   for e in events:

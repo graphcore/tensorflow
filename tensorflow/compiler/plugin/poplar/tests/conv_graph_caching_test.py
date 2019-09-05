@@ -456,7 +456,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(True, True, True)
+      tu.configure_ipu_system(True, True, True, text_report=False)
 
       sess.run(report)
       ipu_result = model("/device:IPU:0")
@@ -464,15 +464,15 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       self.assertAllClose(cpu_result, ipu_result)
       result = sess.run(report)
 
-      s = tu.extract_all_strings_from_event_trace(result)
+      report = tu.ReportJSON(self, result)
 
-      max_tile_size = tu.get_maximum_tile_size_from_events(s)
-      self.assertAllInRange([max_tile_size], 30000, 40000)
+      report.assert_max_tile_size_in_range(10000, 20000)
 
-      cs_list = tu.get_compute_sets_from_report(s)
+      cs_list = report.get_compute_sets()
+
       # Would fail if there were two convolutions in the graph
-      ok = ['__seed*', 'host-exchange-local-copy-', 'a/convolution', 'Copy_']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      ok = ['__seed*', 'a/convolution', 'Copy_']
+      report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":
