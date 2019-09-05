@@ -34,39 +34,32 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(y)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       # Would fail if there were two convolutions in the graph as they would be
       # called conv2d and conv2d_1
       ok = [
           '__seed*', 'host-exchange-local-copy-',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'Copy_'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionsDontMatchDifferentTypes(self):
     with self.session() as sess:
@@ -74,42 +67,35 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              dtype=np.float32)(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            dtype=np.float32)(x)
           y = math_ops.cast(y, np.float16)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              dtype=np.float16)(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            dtype=np.float16)(y)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       # Matches two convolutions
       ok = [
           '__seed*', 'Copy_*weightsRearranged', 'host-exchange-local-copy-',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'vs/Cast/convert.*/Cast',
-          'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
+          'Copy_vs/*/OnTileCopy-0', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          'vs/Cast/convert.*/Cast', 'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionsDontMatchDifferentShapes(self):
     with self.session() as sess:
@@ -117,40 +103,33 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(x)
           y = array_ops.reshape(y, [1, 2, 8, 2])
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(y)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       # Matches two convolutions
       ok = [
           '__seed*', 'Copy_*weightsRearranged', 'host-exchange-local-copy-',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionsDontMatchDifferentConvParams(self):
     with self.session() as sess:
@@ -158,40 +137,33 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              strides=(2, 1),
-              kernel_initializer=init_ops.ones_initializer())(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            strides=(2, 1),
+                            kernel_initializer=init_ops.ones_initializer())(y)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       # Matches two convolutions
       ok = [
           '__seed*', 'Copy_*weightsRearranged', 'host-exchange-local-copy-',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionsMatchFwdBwdWu(self):
     with self.session() as sess:
@@ -199,44 +171,35 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv1')(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv2')(y)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv3')(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv2')(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv3')(y)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # Fwd and BackpropInput should be shared
       # Weight transpose for BackpropInput should be present
@@ -244,13 +207,11 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Copy_',
           'vs/conv1/Conv2D/convolution.*/Conv_1x1',
-          'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/fusion.*/WeightTranspose',
-          'gradients/vs/conv2/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
-          'gradients/vs/conv2/Conv2D_grad/Conv2DBackpropFilter/fusion.*/DeltasPartialTranspose',
-          'gradients/vs/conv2/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo'
+          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4/*',
+          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo'
       ]
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionsMatchFwdBwdWuVariableLR(self):
     with self.session() as sess:
@@ -259,44 +220,35 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         lr = array_ops.placeholder(np.float32, shape=[])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv1')(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv2')(y)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv3')(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv2')(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv3')(y)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2]), lr: 0.1})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # Fwd and BackpropInput should be shared
       # Weight transpose for BackpropInput should be present
@@ -310,7 +262,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
           'vs/conv*/Conv2D/convolution*/Conv_1x1',
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionApply(self):
     with self.session() as sess:
@@ -335,14 +287,11 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                   conv_scaled_inplace(input2, grads2, weights2, 0.1) +
                   conv_scaled_inplace(input3, grads3, weights3, 0.2))
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       r = sess.run(
           result, {
@@ -371,11 +320,9 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                                 [-36.2, -36.2, -36.2, -36.2, -36.2],
                                 [-36.2, -36.2, -36.2, -36.2, -36.2],]]])
       # yapf: enable
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
-      self.assertEqual(tu.count_compute_sets_matching(cs_list, '*Convolve'), 1)
+      report.assert_compute_sets_matches('*Convolve', 1)
 
   def testConvolutionEvenWhenNotInplace(self):
     with self.session() as sess:
@@ -392,21 +339,18 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
         def conv_scaled_inplace(input, grads, lr):
           return weights - nn_ops.conv2d_backprop_filter(
-              input, filter_sizes, grads, strides=[1, 1, 1, 1],
-              padding="SAME") * lr
+              input, filter_sizes, grads, strides=[1, 1, 1, 1
+                                                   ], padding="SAME") * lr
 
-        result = (conv_scaled_inplace(
-            input1, grads1, vlr) + conv_scaled_inplace(input2, grads2, 0.1) +
+        result = (conv_scaled_inplace(input1, grads1, vlr) +
+                  conv_scaled_inplace(input2, grads2, 0.1) +
                   conv_scaled_inplace(input3, grads3, 0.2))
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       r = sess.run(
           result, {
@@ -434,12 +378,10 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
                                 [-36.2, -36.2, -36.2, -36.2, -36.2],]]])
       # yapf: enable
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       # We still reuse the code even though only one conv is inplace.
-      self.assertEqual(tu.count_compute_sets_matching(cs_list, '*Convolve'), 1)
+      report.assert_compute_sets_matches('*Convolve', 1)
 
   def testConvolutionsWithBroadcast(self):
     with self.session() as sess:
@@ -453,22 +395,17 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           y = nn.conv2d(y, w_bcast, strides=1, padding="SAME", name="b")
           return sess.run(y, {x: np.ones(x.shape)})
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+      report = tu.ReportJSON(self, sess)
 
-      tu.configure_ipu_system(True, True, True, text_report=False)
+      report.reset()
 
-      sess.run(report)
       ipu_result = model("/device:IPU:0")
       cpu_result = model("cpu")
       self.assertAllClose(cpu_result, ipu_result)
-      result = sess.run(report)
 
-      report = tu.ReportJSON(self, result)
+      report.parse_log()
 
       report.assert_max_tile_size_in_range(10000, 20000)
-
-      cs_list = report.get_compute_sets()
 
       # Would fail if there were two convolutions in the graph
       ok = ['__seed*', 'a/convolution', 'Copy_']

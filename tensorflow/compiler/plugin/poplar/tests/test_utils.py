@@ -143,35 +143,27 @@ def check_compute_sets_not_in_blacklist(cs_list, bl):
   return result
 
 
-def check_whitelist_entries_in_compute_sets(cs_list, whitelist):
-  result = True
+def missing_compute_sets_in_whitelist_entries(cs_list, whitelist):
   fail_list = []
   wl = [x + '*' for x in whitelist]
   for cs in cs_list:
     if len([x for x in wl if fnmatch.fnmatch(cs, x)]) == 0:
       fail_list += [cs]
-      result = False
-  if not result:
-    print("Failed to match " + str(fail_list))
-  return result
+  return fail_list
 
 
-def check_compute_sets_in_whitelist_entries(cs_list, whitelist):
-  result = True
+def missing_whitelist_entries_in_compute_sets(cs_list, whitelist):
   fail_list = []
   wl = [x + '*' for x in whitelist]
   for x in wl:
     if len([cs for cs in cs_list if fnmatch.fnmatch(cs, x)]) == 0:
       fail_list += [x]
-      result = False
-  if not result:
-    print("Failed to match " + str(fail_list))
-  return result
+  return fail_list
 
 
 def check_all_compute_sets_and_list(cs_list, whitelist):
-  return (check_whitelist_entries_in_compute_sets(cs_list, whitelist)
-          and check_compute_sets_in_whitelist_entries(cs_list, whitelist))
+  return (not missing_compute_sets_in_whitelist_entries(cs_list, whitelist) and
+          not missing_whitelist_entries_in_compute_sets(cs_list, whitelist))
 
 
 def count_compute_sets_matching(cs_list, to_match):
@@ -180,8 +172,18 @@ def count_compute_sets_matching(cs_list, to_match):
 
 
 class ReportJSON:
-  def __init__(self, test, events):
+  def __init__(self, test, sess):
     self.test = test
+    self.sess = sess
+    with ops.device('cpu'):
+      self.report = gen_ipu_ops.ipu_event_trace()
+    configure_ipu_system(True, True, True, text_report=False)
+
+  def reset(self):
+    self.sess.run(self.report)
+
+  def parse_log(self):
+    events = self.sess.run(self.report)
     self.report = {}
     for e in events:
       evt = IpuTraceEvent.FromString(e)
@@ -221,8 +223,18 @@ class ReportJSON:
     self.test.assertAllInRange([self.get_max_tile_size()], low, high)
 
   def assert_all_compute_sets_and_list(self, ok):
-    self.test.assertTrue(
-        check_all_compute_sets_and_list(self.get_compute_sets(), ok))
+    self.test.assertFalse(
+        missing_whitelist_entries_in_compute_sets(self.get_compute_sets(), ok),
+        "Whitelist items not found in compute sets:\n\t%s" %
+        "\n\t".join(self.get_compute_sets()))
+    self.test.assertFalse(
+        missing_compute_sets_in_whitelist_entries(self.get_compute_sets(), ok),
+        "Compute sets item not found in whitelist:\n\t%s" % "\n\t".join(ok))
+
+  def assert_compute_sets_matches(self, expr, num_matches):
+    self.test.assertEqual(
+        count_compute_sets_matching(self.get_compute_sets(), expr),
+        num_matches)
 
 
 def extract_all_strings_from_event_trace(events):
@@ -315,9 +327,8 @@ def create_multi_increasing_dataset(value,
     result = []
     for i in range(len(shapes)):
       result.append(
-          math_ops.cast(
-              gen_array_ops.broadcast_to(data, shape=shapes[i]),
-              dtype=dtypes[i]))
+          math_ops.cast(gen_array_ops.broadcast_to(data, shape=shapes[i]),
+                        dtype=dtypes[i]))
     return result
 
   dataset = Dataset.range(value).map(_get_one_input)
@@ -331,19 +342,20 @@ def create_dual_increasing_dataset(value,
                                    label_shape=[1, 8],
                                    dtype=np.float32,
                                    repeat=True):
-  return create_multi_increasing_dataset(
-      value,
-      shapes=[data_shape, label_shape],
-      dtypes=[dtype, dtype],
-      repeat=repeat)
+  return create_multi_increasing_dataset(value,
+                                         shapes=[data_shape, label_shape],
+                                         dtypes=[dtype, dtype],
+                                         repeat=repeat)
 
 
 def create_single_increasing_dataset(value,
                                      shape=[1, 32, 32, 4],
                                      dtype=np.float32,
                                      repeat=True):
-  return create_multi_increasing_dataset(
-      value, shapes=[shape], dtypes=[dtype], repeat=repeat)
+  return create_multi_increasing_dataset(value,
+                                         shapes=[shape],
+                                         dtypes=[dtype],
+                                         repeat=repeat)
 
 
 def move_variable_initialization_to_cpu():
