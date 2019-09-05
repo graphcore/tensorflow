@@ -35,29 +35,31 @@ class MapGradientOptimizer(optimizer.Optimizer):
   Example
   .. code-block:: python
 
-  #Define function which should modify computed gradients. Decay gradient function.
+     # Define function which will modify computed gradients.
+     # This is a gradient decay function.
 
-  def map_fn_decay(grad, var):
-    return grad + (WEIGHT_DECAY * var)
+     def map_fn_decay(grad, var):
+       return grad + (WEIGHT_DECAY * var)
 
-  #  To run the code we need session.
-  with self.cached_session():
-  # We can employ AdamWOptimizer
-    optimizer = weight_decay_optimizers.AdamWOptimizer(WEIGHT_DECAY)
-  # We define MapGradientOptimizer
-    map_optimizer = map_gradient_optimizer.MapGradientOptimizer(
-        optimizer, map_fn_decay)
-  # Gradients are computed by compute_gradients(), where our map function
-  # modifies computed gradients. compute_gradients(loss, var_list) argument
-  # are loss and var_list. Define some and employ map_optimizer, compute_gradients().
-    values = [1.0, 2.0, 3.0]
-    vars_ = [variables.Variable([v], dtype=dtypes.float32) for v in values]
-    grads_and_vars = map_optimizer.compute_gradients(
-        vars_[0] * vars_[1] + vars_[0] * vars_[2] + vars_[1] * vars_[2],
-        vars_)
-  # The output grads_and_vars contains modified computed gradients by decay map function.
-  # grads are 5.01, 4.02 and 3.03. If we did not use MapGradientOptimizer they would
-  # be 5, 4 and 3.
+     # To run the code we need a session:
+     with self.cached_session():
+       optimizer = gradient_descent.GradientDescentOptimizer(0.000001)
+       # We define MapGradientOptimizer
+       map_optimizer = map_gradient_optimizer.MapGradientOptimizer(
+           optimizer, map_fn_decay)
+       # Gradients are computed by compute_gradients(), where our map function
+       # modifies computed gradients. compute_gradients(loss, var_list) arguments
+       # are loss and var_list so define arguments and call 
+       # map_optimizer.compute_gradients().
+       values = [1.0, 2.0, 3.0]
+       vars_ = [variables.Variable([v], dtype=dtypes.float32) for v in values]
+       grads_and_vars = map_optimizer.compute_gradients(
+           vars_[0] * vars_[1] + vars_[0] * vars_[2] + vars_[1] * vars_[2],
+           vars_)
+       # The output grads_and_vars contains computed gradients modified by
+       # the decay map function.
+       # grads are 5.01, 4.02 and 3.03. If we did not use MapGradientOptimizer
+       # they would be 5, 4 and 3.
 
   Args:
     wrapped_optimizer: tensorflow (derived) optimizer.
@@ -67,6 +69,7 @@ class MapGradientOptimizer(optimizer.Optimizer):
   Returns:
     compute_gradients() returns a list of (gradient, variable) pairs.
   """
+
   def __init__(self,
                wrapped_optimizer,
                gradient_mapping_function,
