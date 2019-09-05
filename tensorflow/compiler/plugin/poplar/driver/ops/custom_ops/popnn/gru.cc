@@ -69,10 +69,11 @@ StatusOr<popnn::gru::GruParams> GetGruParameters(const HloInstruction* inst) {
   return gru_params;
 }
 
-StatusOr<poplar::OptionFlags> GetGruOpts(const HloInstruction* inst) {
+StatusOr<poplar::OptionFlags> GetGruOpts(const HloInstruction* inst,
+                                         const CompilerResources& res) {
   auto gru_inst = Cast<HloRNNInstruction>(inst);
 
-  poplar::OptionFlags gru_opts;
+  poplar::OptionFlags gru_opts = res.default_matmul_options;
   bool is_training = gru_inst->is_training();
   if (!is_training) {
     gru_opts.set({{"inferenceOnly", "true"}});
@@ -126,7 +127,7 @@ class GRULayerFwdOp : public PoplibsOpDef {
 
     TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params,
                         GetGruParameters(inst));
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags gru_opts, GetGruOpts(inst));
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags gru_opts, GetGruOpts(inst, res));
     switch (input_index) {
       case 0: {
         // Allocate GRU input tensor.
@@ -180,7 +181,7 @@ class GRULayerFwdOp : public PoplibsOpDef {
 
     TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params,
                         GetGruParameters(inst));
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags gru_opts, GetGruOpts(inst));
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags gru_opts, GetGruOpts(inst, res));
 
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
@@ -273,7 +274,7 @@ class GRULayerBwdOp : public PoplibsOpDef {
 
     TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params,
                         GetGruParameters(inst));
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags gru_opts, GetGruOpts(inst));
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags gru_opts, GetGruOpts(inst, res));
 
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);

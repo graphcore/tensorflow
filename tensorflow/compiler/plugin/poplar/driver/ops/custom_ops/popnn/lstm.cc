@@ -71,10 +71,12 @@ StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
   return lstm_params;
 }
 
-StatusOr<poplar::OptionFlags> GetLstmOpts(const HloInstruction* inst) {
+StatusOr<poplar::OptionFlags> GetLstmOpts(const HloInstruction* inst,
+                                          const CompilerResources& res) {
   auto lstm_inst = Cast<HloRNNInstruction>(inst);
 
-  poplar::OptionFlags lstm_opts;
+  // Initialize options from matmul options
+  poplar::OptionFlags lstm_opts = res.default_matmul_options;
   bool is_training = lstm_inst->is_training();
   if (!is_training) {
     lstm_opts.set({{"inferenceOnly", "true"}});
@@ -128,7 +130,7 @@ class LstmLayerFwdOp : public PoplibsOpDef {
 
     TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
                         GetLstmParameters(inst));
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags lstm_opts, GetLstmOpts(inst));
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags lstm_opts, GetLstmOpts(inst, res));
     switch (input_index) {
       case 0: {
         // Allocate LSTM input tensor
@@ -189,7 +191,7 @@ class LstmLayerFwdOp : public PoplibsOpDef {
 
     TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
                         GetLstmParameters(inst));
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags lstm_opts, GetLstmOpts(inst));
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags lstm_opts, GetLstmOpts(inst, res));
 
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
@@ -295,7 +297,7 @@ class LstmLayerBwdOp : public PoplibsOpDef {
 
     TF_ASSIGN_OR_RETURN(popnn::lstm::LstmParams lstm_params,
                         GetLstmParameters(inst));
-    TF_ASSIGN_OR_RETURN(poplar::OptionFlags lstm_opts, GetLstmOpts(inst));
+    TF_ASSIGN_OR_RETURN(poplar::OptionFlags lstm_opts, GetLstmOpts(inst, res));
 
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
