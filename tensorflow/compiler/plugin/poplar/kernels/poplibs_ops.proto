@@ -52,6 +52,7 @@ message PoplibsOp {
     GRULayerFwd = 38;
     ReplicationIndex = 39;
     CodeletExpressionOp = 40;
+    StatefulNoop = 41;
   }
   required Op op = 2;
 }
