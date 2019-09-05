@@ -6,6 +6,7 @@ import numpy as np
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -55,8 +56,9 @@ def block(name, out_filters, first_stride, count, x):
 
       # shortcut
       if (stride != 1):
-        sc = array_ops.strided_slice(
-            sc, [0, 0, 0, 0], sc.shape, strides=[1, stride, stride, 1])
+        sc = array_ops.strided_slice(sc, [0, 0, 0, 0],
+                                     sc.shape,
+                                     strides=[1, stride, stride, 1])
       pad = int(x.shape[3] - shape_in[3])
       if (pad != 0):
         sc = array_ops.pad(sc, paddings=[[0, 0], [0, 0], [0, 0], [0, pad]])
@@ -71,14 +73,12 @@ def fc(name, x, num_units_out):
   weights_initializer = init_ops.truncated_normal_initializer(stddev=0.01)
 
   with vs.variable_scope(name):
-    weights = _get_variable(
-        'weights',
-        shape=[num_units_in, num_units_out],
-        init=weights_initializer)
-    biases = _get_variable(
-        'biases',
-        shape=[num_units_out],
-        init=init_ops.constant_initializer(0.0))
+    weights = _get_variable('weights',
+                            shape=[num_units_in, num_units_out],
+                            init=weights_initializer)
+    biases = _get_variable('biases',
+                           shape=[num_units_out],
+                           init=init_ops.constant_initializer(0.0))
 
     x = nn_ops.xw_plus_b(x, weights, biases)
 
@@ -101,11 +101,10 @@ def conv(x, ksize, stride, filters_out):
 
 
 def max_pool(x, ksize=3, stride=2):
-  return nn_ops.max_pool(
-      x,
-      ksize=[1, ksize, ksize, 1],
-      strides=[1, stride, stride, 1],
-      padding='SAME')
+  return nn_ops.max_pool(x,
+                         ksize=[1, ksize, ksize, 1],
+                         strides=[1, stride, stride, 1],
+                         padding='SAME')
 
 
 class Resnet18_No_Batchnorm(xla_test.XLATestCase):
@@ -121,24 +120,18 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
             nn_ops.softmax_cross_entropy_with_logits_v2(
                 logits=logits, labels=array_ops.stop_gradient(y_)))
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = ipu.utils.create_ipu_config(profiling=True)
-      ipu.utils.configure_ipu_system(opts)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(loss, feed_dict={x: data, y_: labels})
-      out = sess.run(report)
 
-      evts = ipu.utils.extract_all_events(out)
-      size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertAllInRange([size], 41000000, 43000000)
+      report.parse_log()
+      report.assert_total_tile_memory_in_range(34500000, 40000000)
 
   def testTraining(self):
     with self.session() as sess:
@@ -155,24 +148,18 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
 
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = ipu.utils.create_ipu_config(profiling=True)
-      ipu.utils.configure_ipu_system(opts)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       data = np.zeros([1, 224, 224, 4])
       labels = np.zeros([1, 1000])
 
       sess.run(train, feed_dict={x: data, y_: labels})
-      out = sess.run(report)
+      report.parse_log()
 
-      evts = ipu.utils.extract_all_events(out)
-      size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertAllInRange([size], 67000000, 71000000)
+      report.assert_total_tile_memory_in_range(46500000, 47000000)
 
 
 if __name__ == "__main__":

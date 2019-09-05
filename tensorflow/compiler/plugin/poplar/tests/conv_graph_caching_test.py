@@ -405,7 +405,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_max_tile_size_in_range(10000, 20000)
+      report.assert_max_tile_memory_in_range(10000, 20000)
 
       # Would fail if there were two convolutions in the graph
       ok = ['__seed*', 'a/convolution', 'Copy_']

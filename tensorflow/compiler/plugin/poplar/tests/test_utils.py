@@ -212,15 +212,22 @@ class ReportJSON:
         pass
 
   # Excluding gaps
-  def get_max_tile_size(self):
+  def get_max_tile_memory(self):
     return max(
+        self.report[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
+
+  def get_total_tile_memory(self):
+    return sum(
         self.report[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
 
   def get_compute_sets(self):
     return self.report[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
 
-  def assert_max_tile_size_in_range(self, low, high):
-    self.test.assertAllInRange([self.get_max_tile_size()], low, high)
+  def assert_total_tile_memory_in_range(self, low, high):
+    self.test.assertAllInRange([self.get_total_tile_memory()], low, high)
+
+  def assert_max_tile_memory_in_range(self, low, high):
+    self.test.assertAllInRange([self.get_max_tile_memory()], low, high)
 
   def assert_all_compute_sets_and_list(self, ok):
     self.test.assertFalse(
