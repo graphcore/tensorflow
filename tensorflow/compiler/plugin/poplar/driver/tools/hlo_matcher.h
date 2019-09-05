@@ -235,9 +235,13 @@ class HloMatcher : public HloModulePass {
   bool MatchPatternStart(HloComputation*);
   bool MatchPattern(HloInstruction* inst, const unsigned pattern_idx);
 
+  std::set<HloInstruction*> GetAssociativeSet(HloInstruction*);
+
   absl::optional<Trace> FindNextMatchingOp(HloInstruction* user,
                                            HloInstruction* inst,
-                                           const HloOpcode desiredOpcode);
+                                           const HloOpcode desiredOpcode,
+                                           const std::set<HloInstruction*>&);
+
   bool MatchPatternSingleOutput(HloInstruction* root,
                                 const HloMatcherPattern& pattern,
                                 HloMatcherMatched& match);

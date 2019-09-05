@@ -565,77 +565,117 @@ HloMatcher::HloMatcher(const std::vector<HloMatcherPattern>& patterns,
       requires_unique_sharding_(requires_unique_sharding),
       look_through_max_depth_(look_through_max_depth) {}
 
-// A set of sets of ops which are all associative together
-static std::set<std::set<HloOpcode>> associative_ops_sets = {
-    {HloOpcode::kMultiply},
-    {HloOpcode::kAdd},
+// A set of sets of ops which are associative [ (A+B)+C = A+(B+C) ]
+static std::set<HloOpcode> associative_opcodes = {
+    HloOpcode::kMultiply,
+    HloOpcode::kAdd,
 };
 
-absl::optional<Trace> HloMatcher::FindNextMatchingOp(
-    HloInstruction* user, HloInstruction* inst, const HloOpcode desiredOpcode) {
-  for (const auto ops_set : associative_ops_sets) {
-    // user needs to be an associative op
-    if (!ops_set.count(user->opcode())) {
-      continue;
-    }
+// Return a set of instructions which, given a root instruction, can be
+// rearranged and still retain their algebraic meaning. For instance:
+//
+// (A+B)+(C+sin(D)) contains three '+ operations which are part of an
+// associative set, and can be rearranged into A+(B+C)+sin(D), or
+// ((A+B)+C)+sin(D), or any other similar form.
+std::set<HloInstruction*> HloMatcher::GetAssociativeSet(HloInstruction* root) {
+  std::set<std::pair<HloInstruction*, int>> to_visit = {{root, 0}};
+  std::set<HloInstruction*> result;
 
-    // Non recursive depth first DAG traversal to try and find an inst with
-    // right opcode using associativity
-    std::stack<Trace> to_visit;
-    // The list of instructions visited while searching for each pattern
-    std::set<HloInstruction*> visited = {user};
+  if (associative_opcodes.count(root->opcode()) == 0) {
+    return result;
+  }
 
-    // If we ignored an AddDependency op, then `inst` won't be an operand of
-    // `user`, so we give up
-    if (!user->IsUserOf(inst)) {
-      continue;
-    }
+  while (to_visit.size() > 0) {
+    auto current = to_visit.begin();
+    auto current_inst = current->first;
+    auto current_depth = current->second;
 
-    // Traverse from inst
-    Trace start_trace = {{user, user->operand_index(inst)}};
-    to_visit.push(start_trace);
-    while (!to_visit.empty()) {
-      // Get value of the stack
-      auto current = to_visit.top();
-      to_visit.pop();
+    to_visit.erase(current);
 
-      HloInstruction* current_inst =
-          current.back().inst->mutable_operand(current.back().op_idx);
-      visited.insert(current_inst);
-      // Check if the current instruction matches
-      if (current_inst->opcode() == desiredOpcode) {
-        current.push_back({current_inst, -1});
-        return current;
-      }
-
-      // Check the current instruction is associative and matches the shape,
-      // if not then we can't look through it
-      if (!(ops_set.count(current_inst->opcode()) &&
-            ShapeUtil::Equal(current_inst->shape(), inst->shape()))) {
-        continue;
-      }
-
-      // Add operands to visit without going past the maximum search depth
-      if (current.size() - 1 < look_through_max_depth_) {
-        for (int64 i = 0; i < current_inst->operand_count(); i++) {
-          auto* operand = current_inst->mutable_operand(i);
-          // Only add the operand if:
-          // * we have never seen it before
-          // * it has one user
-          // * it has the same shape
-          if (visited.count(operand) == 0 && operand->user_count() == 1 &&
-              ShapeUtil::Equal(operand->shape(), inst->shape())) {
-            // We need to know which operand will be replaced at the root
-            // instruction - we only need to know this on depth 0, otherwise
-            // keep it the same
-            auto next_trace = current;
-            next_trace.push_back({current_inst, i});
-            to_visit.push(next_trace);
-          }
+    if (current_inst->opcode() == root->opcode() &&
+        ShapeUtil::Equal(current_inst->shape(), root->shape())) {
+      result.insert(current_inst);
+      for (int64 i = 0; i < current_inst->operand_count(); i++) {
+        auto* operand = current_inst->mutable_operand(i);
+        if (result.count(operand) == 0 && operand->user_count() == 1 &&
+            current_depth < look_through_max_depth_) {
+          to_visit.insert({operand, current_depth + 1});
         }
       }
     }
   }
+  return result;
+}
+
+// This function finds the mext matching operation by skipping over
+// associative operations.  It is, effectively, rearranging the graph
+// like this, if the pattern is attached to 'B' and (C+B) is a good match
+// for the pattern and (A+B) isn't.
+//
+// B-             B-
+//   +---+--   ->   +-----+-
+// A-    |        C-      |
+//       |                |
+// C-----|        A-------|
+//
+// The re-arrangement is captured in the trace, and the actual
+// re-arragement is done in the ReorderGraph function.
+absl::optional<Trace> HloMatcher::FindNextMatchingOp(
+    HloInstruction* user, HloInstruction* inst, const HloOpcode desiredOpcode,
+    const std::set<HloInstruction*>& assoc_set) {
+  // Non recursive depth first DAG traversal to try and find an inst with
+  // right opcode using associativity
+  std::stack<Trace> to_visit;
+  // The list of instructions visited while searching for each pattern
+  std::set<HloInstruction*> visited = {user};
+
+  // If we ignored an AddDependency op, then `inst` won't be an operand of
+  // `user`, so we give up
+  if (!user->IsUserOf(inst)) {
+    return absl::nullopt;
+  }
+
+  // Don't bother looking if there are no associative ops
+  if (assoc_set.size() == 0) {
+    return absl::nullopt;
+  }
+
+  // The starting ops must both be associative
+  if (assoc_set.count(user) == 0 || assoc_set.count(inst) == 0) {
+    return absl::nullopt;
+  }
+
+  // Traverse from inst
+  Trace start_trace = {{user, user->operand_index(inst)}};
+  to_visit.push(start_trace);
+  while (!to_visit.empty()) {
+    // Get value off the stack
+    auto current = to_visit.top();
+    to_visit.pop();
+
+    HloInstruction* current_inst =
+        current.back().inst->mutable_operand(current.back().op_idx);
+    visited.insert(current_inst);
+
+    for (int64 i = 0; i < current_inst->operand_count(); i++) {
+      auto* operand = current_inst->mutable_operand(i);
+
+      auto next_trace = current;
+      next_trace.push_back({current_inst, i});
+
+      // Check if this operand matches
+      if (operand->opcode() == desiredOpcode) {
+        next_trace.push_back({operand, -1});
+        return next_trace;
+      }
+
+      // Add operands if they are in the associative set
+      if (assoc_set.count(operand) > 0) {
+        to_visit.push(next_trace);
+      }
+    }
+  }
+
   return absl::nullopt;
 }
 
@@ -643,6 +683,8 @@ bool HloMatcher::MatchPatternSingleOutput(HloInstruction* root,
                                           const HloMatcherPattern& pattern,
                                           HloMatcherMatched& match) {
   match.instruction_mapping[pattern.GetOutputs()[0]] = root;
+
+  std::set<HloInstruction*> associative_set = GetAssociativeSet(root);
 
   // Construct a mapping from a pattern node to all other pattern nodes which
   // use it
@@ -686,20 +728,21 @@ bool HloMatcher::MatchPatternSingleOutput(HloInstruction* root,
       if (target_opcode != HloOpcode::kParameter) {
         if (target_opcode != inst->opcode()) {
           // Try to find an op using associativity, unless this is the first
-          // node
-          // or search depth is 0 or this inst is used more than once
-          if (node_num == 0 || look_through_max_depth_ == 0 ||
+          // node or search depth is 0 or this inst is used more than once
+          if (node_num != 1 || look_through_max_depth_ == 0 ||
               inst->user_count() != 1) {
             return false;
           }
           unsigned int user_node_num = node_mapping[node_num].begin()->first;
           auto* user = match.instruction_mapping[user_node_num];
-          auto optional_trace = FindNextMatchingOp(user, inst, target_opcode);
+          auto optional_trace =
+              FindNextMatchingOp(user, inst, target_opcode, associative_set);
           // Check whether we managed to find a match
           if (!optional_trace) {
             return false;
           }
           Trace found = *optional_trace;
+
           match.instruction_mapping[node_num] = found.back().inst;
           inst = found.back().inst;
           match.replacement_traces.push_back(found);

@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -244,7 +245,7 @@ ENTRY c1 {
   CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false);
 
-  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  ASSERT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   ASSERT_EQ(1, matcher.replace_count);
   EXPECT_EQ(8, hlo_module->entry_computation()->instruction_count());
 
@@ -298,7 +299,7 @@ ENTRY c1 {
   CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false);
 
-  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  ASSERT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   EXPECT_EQ(2, matcher.replace_count);
   EXPECT_EQ(7, hlo_module->entry_computation()->instruction_count());
 }
@@ -345,7 +346,7 @@ ENTRY c1 {
   CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false);
 
-  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  ASSERT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   ASSERT_EQ(1, matcher.replace_count);
   EXPECT_EQ(2, matcher.match_count[0]);
   EXPECT_EQ(7, hlo_module->entry_computation()->instruction_count());
@@ -391,7 +392,7 @@ ENTRY c1 {
   CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false);
 
-  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  ASSERT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   ASSERT_EQ(1, matcher.replace_count);
   EXPECT_EQ(7, hlo_module->entry_computation()->instruction_count());
 
@@ -441,7 +442,7 @@ ENTRY c1 {
   CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  ASSERT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   EXPECT_EQ(1, matcher.replace_count);
   EXPECT_EQ(5, hlo_module->entry_computation()->instruction_count());
 
@@ -514,7 +515,7 @@ ENTRY c1 {
   CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  ASSERT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   EXPECT_EQ(1, matcher.replace_count);
   EXPECT_EQ(6, hlo_module->entry_computation()->instruction_count());
 
@@ -587,7 +588,7 @@ ENTRY c1 {
   CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
-  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  ASSERT_TRUE(matcher.Run(hlo_module).ValueOrDie());
   EXPECT_EQ(1, matcher.replace_count);
   EXPECT_EQ(10, hlo_module->entry_computation()->instruction_count());
 
@@ -800,6 +801,77 @@ ENTRY c1 {
   CompilerAnnotations annotations(hlo_module);
   TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
 
+  EXPECT_FALSE(matcher.Run(hlo_module).ValueOrDie());
+}
+
+TEST_F(HloMatcherTest, PossibleAssociativityFailure) {
+  const unsigned int look_through_depth = 5;
+
+  std::string hlo = R"(
+HloModule top
+
+scatter-combiner {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT add = f32[] add(p0, p1)
+}
+
+ENTRY c1 {
+  i1 = s32[20] parameter(0)
+  i2 = f32[20,10] parameter(1)
+  i3 = f32[] parameter(2)
+  i4 = f32[10,10] parameter(3)
+
+  c1 = f32[] constant(0)
+  b1 = f32[10,10] broadcast(c1), dimensions={}
+  scatter = f32[10,10] scatter(b1, i1, i2), update_window_dims={1},
+    inserted_window_dims={0}, scatter_dims_to_operand_dims={0},
+    index_vector_dim=1, to_apply=scatter-combiner
+  c2 = f32[] constant(2)
+  b2 = f32[10,10] broadcast(c2), dimensions={}
+  mul1 = f32[10,10] multiply(scatter, b2)
+  b3 = f32[10,10] broadcast(i3), dimensions={}
+  mul2 = f32[10,10] multiply(mul1, b3)
+  rs = f32[10,10] reshape(mul2)
+  root = f32[10,10] subtract(i4, rs)
+ }
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
+
+  // clang-format off
+  std::vector<HloMatcherPattern> patterns = {
+    HloMatcherPattern(
+        PatternType("scatter_update_inplace"),
+        PatternMetaTarget(3),
+        PatternInputs({7, 8, 9, 10}),
+        PatternInplaceInputs({7}),
+        PatternOutputs({0}),
+        Pattern({
+          {HloMatcherOpcode::kAnyOpcode, NodeOperands({7, 1}), IsAddOrSubtract},
+          {HloOpcode::kReshape, NodeOperands({2})},
+          {HloOpcode::kMultiply, NodeOperands({4, 3})},
+          {HloOpcode::kBroadcast, NodeOperands({10})},
+          {HloOpcode::kScatter, NodeOperands({5, 8, 9}), IsMultiUpdateAdd},
+          {HloOpcode::kBroadcast, NodeOperands({6})},
+          {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+          {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+          {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+          {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+          {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsFloatScalar}
+        })
+      )
+  };
+  // clang-format on
+
+  CompilerAnnotations annotations(hlo_module);
+  TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
+
+  // This should fail because the associativity must be related to the root
+  // element of the pattern.
   EXPECT_FALSE(matcher.Run(hlo_module).ValueOrDie());
 }
 

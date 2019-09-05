@@ -24,6 +24,7 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.ops.losses import losses
 from tensorflow.python.training import gradient_descent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python.compiler.xla import xla
@@ -940,20 +941,20 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
   def testScatterWithReshape(self):
     with self.session() as sess:
 
-      def network(x, y1, y2, lr):
+      def network(x, y1, y2, la, lr):
         with variable_scope.variable_scope("vs", use_resource=True):
           w = variable_scope.get_variable(
               "w",
               shape=[200, 10],
               dtype=np.float32,
-              initializer=init_ops.constant_initializer(1))
-          y = w * 2
-          y = array_ops.reshape(y, [10, 200])
+              initializer=init_ops.constant_initializer(2.))
+          y = array_ops.reshape(w, [10, 200])
           g1 = nn.embedding_lookup(y, y1)
-          g2 = nn.embedding_lookup(y, y1)
+          g2 = nn.embedding_lookup(y, y2)
           g = array_ops.concat([g1, g2], axis=1)
 
-          loss = math_ops.reduce_mean(g)
+          ce = losses.absolute_difference(labels=la, predictions=g)
+          loss = math_ops.reduce_mean(ce)
 
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
@@ -963,11 +964,12 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 100, 100, 2])
         y1 = array_ops.placeholder(np.int32, shape=[10])
         y2 = array_ops.placeholder(np.int32, shape=[10])
+        la = array_ops.placeholder(np.float32, shape=[10, 400])
         lr = array_ops.placeholder(np.float32, shape=[])
         report = gen_ipu_ops.ipu_event_trace()
 
       with ops.device("/device:IPU:0"):
-        r = xla.compile(network, inputs=[x, y1, y2, lr])
+        r = xla.compile(network, inputs=[x, y1, y2, la, lr])
 
       tu.configure_ipu_system()
 
@@ -978,9 +980,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
               x: np.ones(x.shape),
               y1: np.ones(y1.shape),
               y2: np.ones(y2.shape),
+              la: np.ones(la.shape),
               lr: 0.1,
           })
-      self.assertAllClose(out, [2.0])
+      self.assertAllClose(out, [1.0])
 
       result = sess.run(report)
       s = tu.extract_all_strings_from_event_trace(result)
@@ -989,12 +992,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           '__seed*',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/multiUpdateAdd',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/negate_scale/Op/Negate',
-          'vs/mul/fusion*/Op/Multiply',
+          'gradients/vs/absolute_difference/Abs_grad/Sign',
+          'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
           'vs/embedding_lookup/gather.*/multiSlice',
-          '/reduce*/Reduce*/Reduce',
-          'vs/Mean/add/Op/Add',
-          'vs/Mean/multiply/Op/Multiply',
-          'Copy_*',
+          'vs/embedding_lookup_1/gather.*/multiSlice',
+          'vs/absolute_difference/Sub/subtract.*/AddTo',
+          'vs/absolute_difference/Abs/abs.*/Op/Absolute',
+          'vs/absolute_difference/Sum/reduce',
+          'vs/absolute_difference/value/multiply',
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
 
