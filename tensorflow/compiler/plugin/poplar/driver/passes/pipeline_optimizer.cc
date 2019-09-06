@@ -145,24 +145,13 @@ StatusOr<bool> PipelineOptimizer::OptimizePipeline(
 }
 
 StatusOr<bool> PipelineOptimizer::Run(HloModule* module) {
-  std::vector<HloInstruction*> pipeline_ops;
-  for (HloComputation* comp : module->MakeNonfusionComputations()) {
-    for (HloInstruction* inst : comp->instructions()) {
-      if (IsPipelineOp(inst)) {
-        pipeline_ops.push_back(inst);
-      }
-    }
-  }
-
+  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
+                      GetPipelines(module));
   if (pipeline_ops.empty()) {
-    // No pipeline ops found - nothing to fix.
+    // No pipeline ops found - nothing to optimize.
     return false;
-  } else if (pipeline_ops.size() > 1) {
-    return FailedPrecondition(
-        "Only a single ipu.pipeline() is allowed in a compiled program - if "
-        "multiple pipelines are required the program needs to be split into "
-        "multiple compilations.");
   }
+  CHECK_EQ(pipeline_ops.size(), 1);
   VLOG(2) << "Before PipelineOptimizer:";
   XLA_VLOG_LINES(2, module->ToString());
 

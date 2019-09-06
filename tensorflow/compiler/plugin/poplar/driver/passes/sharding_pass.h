@@ -47,10 +47,6 @@ namespace poplarplugin {
  */
 class ShardingPass : public HloModulePass {
  public:
-  ShardingPass();
-
-  ~ShardingPass() = default;
-
   absl::string_view name() const override { return "sharding-pass"; }
 
   StatusOr<bool> Run(HloModule* module) override;

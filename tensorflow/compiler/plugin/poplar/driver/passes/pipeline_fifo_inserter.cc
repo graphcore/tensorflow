@@ -46,6 +46,7 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
     for (HloInstruction* operand : stage->unique_operands()) {
       switch (operand->opcode()) {
         case HloOpcode::kGetTupleElement: {
+          CHECK(operand->has_sharding());
           const HloInstruction* source = operand->operand(0);
           TF_ASSIGN_OR_RETURN(StageID source_stage_id,
                               analysis->GetStageID(source));
@@ -78,6 +79,8 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
       VLOG(3) << "Inserting FIFO for stage " << stage_id.id;
       HloInstruction* fifo_inst = pipeline_comp->AddInstruction(
           CreateFifo(fwd_stage_input, last_stage_id - stage_id.id));
+      // Forward sharding from the stage onto the FIFO.
+      fifo_inst->set_sharding(fwd_stage_input->sharding());
       TF_RETURN_IF_ERROR(fwd_stage_input->ReplaceUseWith(stage, fifo_inst));
       changed = true;
     }
@@ -86,24 +89,13 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
 }
 
 StatusOr<bool> PipelineFIFOInserter::Run(HloModule* module) {
-  std::vector<HloInstruction*> pipeline_ops;
-  for (HloComputation* comp : module->MakeNonfusionComputations()) {
-    for (HloInstruction* inst : comp->instructions()) {
-      if (IsPipelineOp(inst)) {
-        pipeline_ops.push_back(inst);
-      }
-    }
-  }
-
+  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
+                      GetPipelines(module));
   if (pipeline_ops.empty()) {
     // No pipeline ops found - nothing to fix.
     return false;
-  } else if (pipeline_ops.size() > 1) {
-    return FailedPrecondition(
-        "Only a single ipu.pipeline() is allowed in a compiled program - if "
-        "multiple pipelines are required the program needs to be split into "
-        "multiple compilations.");
   }
+  CHECK_EQ(pipeline_ops.size(), 1);
   VLOG(2) << "Before PipelineFIFOInserter:";
   XLA_VLOG_LINES(2, module->ToString(HloPrintOptions::ShortParsable()));
 

@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/find_all_users.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -417,19 +418,122 @@ StatusOr<bool> ProcessComputation(HloComputation* comp, int attempt) {
   return true;
 }
 
+// Given a pipeline `stage` instruction, set sharding for the `inst`, handling
+// tuples.
+Status SetPipelineStageInstructionSharding(const HloInstruction* stage,
+                                           HloInstruction* inst) {
+  auto optional_sharding = stage->sharding().ExtractSingleSharding();
+  if (!optional_sharding) {
+    return FailedPrecondition("Could not extract single sharding.");
+  }
+  Shape shape = inst->shape();
+  // Outfeeds are a special case, where the sharding matches the sharding of
+  // tensors which will be outfed (i.e. operand 0).
+  if (inst->opcode() == HloOpcode::kOutfeed) {
+    shape = inst->operand(0)->shape();
+  }
+  // For non empty tuples, we set sharding for each leaf node, otherwise we
+  // create single sharding.
+  const bool tuple_sharding =
+      shape.IsTuple() && !ShapeUtil::IsEmptyTuple(shape);
+  if (tuple_sharding && !IsAllowedTupleSharding(inst)) {
+    return FailedPrecondition(
+        "Trying to create tuple sharding for an instruction %s which is not "
+        "allowed.",
+        inst->ToString());
+  }
+  HloSharding sharding =
+      tuple_sharding ? HloSharding::SingleTuple(shape, *optional_sharding)
+                     : *optional_sharding;
+
+  inst->set_sharding(sharding);
+  return Status::OK();
+}
+
+StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
+    HloInstruction* pipeline_op, CallGraph* call_graph) {
+  absl::flat_hash_set<const HloComputation*> computations_in_pipeline;
+
+  HloComputation* pipeline_comp = pipeline_op->to_apply();
+  TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
+  // Convert forward stage sharding into tuple sharding.
+  for (HloInstruction* fwd_stage : stages.forward) {
+    // PipelineFixer checks that fwd stages have sharding.
+    CHECK(fwd_stage->has_sharding());
+    const HloSharding& sharding = fwd_stage->sharding();
+    CHECK(!sharding.IsTuple());
+    // Turn it into tuple sharding.
+    TF_RETURN_IF_ERROR(
+        SetPipelineStageInstructionSharding(fwd_stage, fwd_stage));
+  }
+  // Mark backward stages with matching sharding from the forward stage.
+  for (int64 stage_id = 0; stage_id != stages.backward.size(); ++stage_id) {
+    HloInstruction* fwd_stage = stages.forward[stage_id];
+    HloInstruction* bwd_stage = stages.backward[stage_id];
+    TF_RETURN_IF_ERROR(
+        SetPipelineStageInstructionSharding(fwd_stage, bwd_stage));
+  }
+  // For each stage propagate the sharding information to:
+  // 1.  all the subcomputations called by the pipeline stage.
+  // 2.  all the user GTEs.
+  for (auto& stages : {stages.forward, stages.backward}) {
+    for (HloInstruction* stage : stages) {
+      // First propagate sharding inside.
+      // Get all the computations called.
+      TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_in_stage,
+                          GetAllComputationsCalledBy(stage, call_graph));
+      for (HloComputation* comp : called_in_stage) {
+        for (HloInstruction* inst : comp->instructions()) {
+          // Set sharding for each instruction.
+          TF_RETURN_IF_ERROR(SetPipelineStageInstructionSharding(stage, inst));
+        }
+        computations_in_pipeline.insert(comp);
+      }
+      // Then propagate sharding to users.
+      for (HloInstruction* user : stage->users()) {
+        CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+        TF_RETURN_IF_ERROR(SetPipelineStageInstructionSharding(stage, user));
+      }
+    }
+  }
+  return computations_in_pipeline;
+}
+
 }  // namespace
 
 StatusOr<bool> ShardingPass::Run(HloModule* module) {
-  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+  VLOG(2) << "Before ShardingPass:";
+  XLA_VLOG_LINES(2, module->ToString());
 
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+  if (!call_graph->IsFlattened()) {
+    return FailedPrecondition(
+        "Expected the call graph of the module to be flat.");
+  }
+  absl::flat_hash_set<const HloComputation*> completed;
+  // We first fix sharding for pipelining as it is well defined.
+  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
+                      GetPipelines(module));
+  if (pipeline_ops.size()) {
+    CHECK_EQ(pipeline_ops.size(), 1);
+    TF_ASSIGN_OR_RETURN(
+        absl::flat_hash_set<const HloComputation*> completed_in_pipeline,
+        ProcessPipeline(pipeline_ops[0], call_graph.get()));
+    completed.insert(completed_in_pipeline.begin(),
+                     completed_in_pipeline.end());
+  }
+  // We now propagate the sharding for the rest of the module.
   // Remove unsupported sharding, and sharding on Tuple shaped ops.  We remove
   // sharding from ops which are allowed tuple-type sharding because their
   // sharding should follow the ops which they are sources/sinks for. We also
   // remove sharding from all parameter ops (which probably don't have sharding
   // anyway).
   for (auto* comp : module->computations()) {
+    if (completed.contains(comp)) {
+      continue;
+    }
     for (auto* inst : comp->instructions()) {
-      if (inst->has_sharding()) {
+      if (inst->has_sharding() && !IsPipelineStageOrBackwardOp(inst)) {
         bool remove_sharding = false;
 
         auto sharding = inst->sharding();
@@ -461,14 +565,13 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
   }
 
   std::vector<HloComputation*> comps = module->MakeComputationPostOrder();
-  std::set<HloComputation*> completed;
   auto comp_count = comps.size();
 
   int attempt = 0;
   while (completed.size() != comp_count) {
     bool made_progress = false;
     for (auto* comp : comps) {
-      if (completed.count(comp) == 0) {
+      if (!completed.contains(comp)) {
         auto call_graph_node = call_graph->GetNode(comp);
 
         // Fusion computations are not considered for sharding
@@ -627,11 +730,11 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
       attempt = 0;
     }
   }
+  VLOG(2) << "After ShardingPass:";
+  XLA_VLOG_LINES(2, module->ToString());
 
   return true;
 }
-
-ShardingPass::ShardingPass() {}
 
 }  // namespace poplarplugin
 }  // namespace xla

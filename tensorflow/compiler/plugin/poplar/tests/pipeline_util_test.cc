@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -82,11 +83,11 @@ stage_0_bwd {
 
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
-  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_acts_0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_input = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=1
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_1 = (f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_reduce = f32[] get-tuple-element(pipeline_stage_1), index=0
   pipeline_acts_0_local = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
   pipeline_stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_reduce, pipeline_acts_0_local, pipeline_weights1), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -156,12 +157,12 @@ stage_0_bwd {
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_lr = f32[] parameter(2)
-  pipeline_stage_0 = (f32[], f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_lr), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[], f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_lr), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_lr = f32[] get-tuple-element(pipeline_stage_0), index=0
   pipeline_acts_0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=1
   pipeline_input = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=2
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_1 = (f32[], f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights1, pipeline_stage_0_lr), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[], f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights1, pipeline_stage_0_lr), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_stage_1_lr = f32[] get-tuple-element(pipeline_stage_1), index=0
   pipeline_reduce = f32[] get-tuple-element(pipeline_stage_1), index=1
   pipeline_acts_0_local = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=2
@@ -248,22 +249,22 @@ HloValueSet GetValueSet(PipelineDataflowAnalysis* analysis,
   return value_set;
 }
 
-TEST_F(PipelineUtilTest, IsPiplineStageOrBackwardOpTest) {
+TEST_F(PipelineUtilTest, IsPipelineStageOrBackwardOpTest) {
   std::string hlo = GetCorrectPipelineStages();
 
   auto config = GetModuleConfigForTest();
   auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
-  EXPECT_TRUE(
-      IsPiplineStageOrBackwardOp(FindInstruction(module0, "pipeline_stage_0")));
-  EXPECT_TRUE(
-      IsPiplineStageOrBackwardOp(FindInstruction(module0, "pipeline_stage_1")));
-  EXPECT_TRUE(IsPiplineStageOrBackwardOp(
+  EXPECT_TRUE(IsPipelineStageOrBackwardOp(
+      FindInstruction(module0, "pipeline_stage_0")));
+  EXPECT_TRUE(IsPipelineStageOrBackwardOp(
+      FindInstruction(module0, "pipeline_stage_1")));
+  EXPECT_TRUE(IsPipelineStageOrBackwardOp(
       FindInstruction(module0, "pipeline_stage_1_bwd")));
-  EXPECT_TRUE(IsPiplineStageOrBackwardOp(
+  EXPECT_TRUE(IsPipelineStageOrBackwardOp(
       FindInstruction(module0, "pipeline_stage_0_bwd")));
-  EXPECT_FALSE(IsPiplineStageOrBackwardOp(FindInstruction(module0, "e.call")));
+  EXPECT_FALSE(IsPipelineStageOrBackwardOp(FindInstruction(module0, "e.call")));
 }
 
 TEST_F(PipelineUtilTest, IsProducerOpTest) {
@@ -578,7 +579,7 @@ ENTRY e {
   EXPECT_NE(stage_0->to_apply(), stage_1->to_apply());
 }
 
-TEST_F(PipelineUtilTest, VerifyPipelineStagesBeforeLoweringOK) {
+TEST_F(PipelineUtilTest, VerifyPipelineStagesBeforeFixingOK) {
   std::string hlo = GetNeedToLowerPipelineStages();
   auto config = GetModuleConfigForTest();
   auto module = ParseAndReturnVerifiedModule(hlo, config);
@@ -587,11 +588,11 @@ TEST_F(PipelineUtilTest, VerifyPipelineStagesBeforeLoweringOK) {
   HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
 
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
-  auto valid_or = VerifyPipelineStagesBeforeLowering(stages);
+  auto valid_or = VerifyPipelineStagesBeforeFixing(stages);
   EXPECT_TRUE(valid_or.ok());
 }
 
-TEST_F(PipelineUtilTest, VerifyPipelineStagesBeforeLoweringNotOK) {
+TEST_F(PipelineUtilTest, VerifyPipelineStagesBeforeFixingNotOK) {
   std::string hlo_non_tuple_output = R"(
 HloModule top
 
@@ -601,7 +602,7 @@ stage_0_fwd {
 
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
-  pipeline_stage_0 = f32[1,4,4,2] call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = f32[1,4,4,2] call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(pipeline_stage_0)
 }
 
@@ -621,7 +622,7 @@ stage_0_fwd {
 
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
-  ROOT pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  ROOT pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
 }
 
 ENTRY e {
@@ -641,7 +642,7 @@ stage_0_fwd {
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   p1 = pred[] constant(1)
-  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_weights0_tuple = (f32[1,4,4,2]) tuple(pipeline_weights0)
   ROOT tuple-select = (f32[1,4,4,2]) tuple-select(p1, pipeline_stage_0, pipeline_weights0_tuple)
 }
@@ -662,7 +663,7 @@ ENTRY e {
     auto stages_or = GetPipelineStages(pipeline_computation);
     EXPECT_TRUE(stages_or.ok());
     auto stages = stages_or.ValueOrDie();
-    auto valid = VerifyPipelineStagesBeforeLowering(stages);
+    auto valid = VerifyPipelineStagesBeforeFixing(stages);
     EXPECT_FALSE(valid.ok());
   }
 }
@@ -921,17 +922,17 @@ stage_0_bwd {
 
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
-  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_acts_0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_input = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=1
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_1 = (f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_reduce = f32[] get-tuple-element(pipeline_stage_1), index=0
   pipeline_acts_0_local = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
-  pipeline_stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_reduce, pipeline_acts_0, pipeline_weights1), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_reduce, pipeline_acts_0, pipeline_weights1), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_acts_0_bwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=0
   pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=1
-  pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_new, pipeline_weights1_new)
 }
@@ -998,16 +999,16 @@ stage_0_bwd {
 
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
-  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_acts_0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_input = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=1
-  pipeline_stage_1 = (f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_reduce = f32[] get-tuple-element(pipeline_stage_1), index=0
   pipeline_acts_1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
-  pipeline_stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_reduce, pipeline_acts_1, pipeline_weights0), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_reduce, pipeline_acts_1, pipeline_weights0), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_acts_0_bwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=0
   pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=1
-  pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_weights0_new_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
   ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(pipeline_weights0_new_new)
 }
@@ -1036,18 +1037,18 @@ ENTRY e {
   }
 }
 
-TEST_F(PipelineUtilTest, VerifyPipelineStagesAfterLoweringOK) {
+TEST_F(PipelineUtilTest, VerifyPipelineAfterFixingOK) {
   std::string hlo = GetCorrectPipelineStages();
   auto config = GetModuleConfigForTest();
   auto module = ParseAndReturnVerifiedModule(hlo, config);
   EXPECT_TRUE(module.ok());
   auto* module0 = module.ValueOrDie().get();
   HloInstruction* pipeline_inst = FindInstruction(module0, "e.call");
-  auto valid = VerifyPipelineStagesAfterLowering(pipeline_inst);
+  auto valid = VerifyPipelineAfterFixing(pipeline_inst);
   EXPECT_TRUE(valid.ok());
 }
 
-TEST_F(PipelineUtilTest, VerifyPipelineStagesAfterLoweringNotOK) {
+TEST_F(PipelineUtilTest, VerifyPipelineAfterFixingNotOK) {
   for (const std::string& hlo :
        {GetInputsNeedToBeLowered(), GetNeedToLowerPipelineStages()}) {
     auto config = GetModuleConfigForTest();
@@ -1055,7 +1056,7 @@ TEST_F(PipelineUtilTest, VerifyPipelineStagesAfterLoweringNotOK) {
     EXPECT_TRUE(module.ok());
     auto* module0 = module.ValueOrDie().get();
     HloInstruction* pipeline_inst = FindInstruction(module0, "e.call");
-    auto valid = VerifyPipelineStagesAfterLowering(pipeline_inst);
+    auto valid = VerifyPipelineAfterFixing(pipeline_inst);
     EXPECT_FALSE(valid.ok());
   }
 }
@@ -1081,10 +1082,10 @@ pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
   pipeline_weights2 = f32[1,4,4,2] parameter(2)
-  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1, pipeline_weights2), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1, pipeline_weights2), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_stage_0_w2 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=1
-  pipeline_stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_w0, pipeline_stage_0_w2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_w0, pipeline_stage_0_w2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_stage_1_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
   pipeline_stage_1_w2 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_stage_1_w0, pipeline_stage_1_w2)
@@ -1140,11 +1141,11 @@ stage_1_fwd {
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_add = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_stage_0_w1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=2
   pipeline_weights2 = f32[1,4,4,2] parameter(2)
-  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_stage_0_add, pipeline_weights2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_stage_0_add, pipeline_weights2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   stage_1_fwd_out = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
   ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(stage_1_fwd_out)
 }
@@ -1199,11 +1200,11 @@ stage_1_fwd {
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_add = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_stage_0_w1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=2
   pipeline_weights2 = f32[1,4,4,2] parameter(2)
-  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_stage_0_add, pipeline_weights2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_stage_0_add, pipeline_weights2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   stage_1_fwd_out = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
   ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(stage_1_fwd_out)
 }
@@ -1260,10 +1261,10 @@ stage_1_fwd {
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1, pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1, pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_out = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_weights2 = f32[1,4,4,2] parameter(2)
-  pipeline_stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_out, pipeline_weights2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_out, pipeline_weights2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_stage_1_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
   pipeline_stage_1_w2 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_stage_1_w0, pipeline_stage_1_w2)
@@ -1320,10 +1321,10 @@ pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_const1 = f32[] constant(0.01)
   pipeline_const2 = f32[] constant(0.01)
-  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0, pipeline_const1), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0, pipeline_const1), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_const1, pipeline_weights1, pipeline_const2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_const1, pipeline_weights1, pipeline_const2), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_stage_1_w1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_stage_0_w0, pipeline_stage_1_w1)
 }
@@ -1396,10 +1397,10 @@ stage_1_fwd {
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_const = f32[] constant(0.01)
-  pipeline_stage_0 = (f32[1,4,4,2], f32[]) call(pipeline_weights0, pipeline_const), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2], f32[]) call(pipeline_weights0, pipeline_const), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_weights1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_1 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(pipeline_stage_0_w0, pipeline_weights1, pipeline_const), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(pipeline_stage_0_w0, pipeline_weights1, pipeline_const), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_stage_1_w1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_stage_0_w0, pipeline_stage_1_w1)
 }
@@ -1552,11 +1553,11 @@ stage_1_fwd {
 
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
-  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_const1 = f32[] constant(0.01)
   pipeline_bcast1 = f32[1,4,4,2] broadcast(pipeline_const1), dimensions={}
-  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_bcast1, pipeline_stage_0_w0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_bcast1, pipeline_stage_0_w0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_stage_1_add = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
   ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(pipeline_stage_1_add)
 }
@@ -1614,10 +1615,10 @@ stage_1_fwd {
 
 pipeline {
   pipeline_input0 = f32[1,4,4,2] parameter(0)
-  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_stage_0_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
   pipeline_input1 = f32[1,4,4,2] parameter(1)
-  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1 = (f32[1,4,4,2]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_stage_1_i1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_stage_0_i0, pipeline_stage_1_i1)
 }
@@ -1659,6 +1660,89 @@ ENTRY e {
   EXPECT_THAT(pipeline_stage_0->operands(),
               ::testing::ElementsAre(pipeline_input0, pipeline_input1));
   EXPECT_THAT(pipeline_stage_1->operand(0)->operand(0), pipeline_stage_0);
+}
+
+TEST_F(PipelineUtilTest, GetAllComputationsCalledByTest) {
+  // Test that we get all computations called.
+  std::string hlo = R"(
+HloModule top
+
+add_float {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT a = f32[] add(f32[] x, f32[] y)
+}
+
+stage_0_fwd {
+  stage_0_fwd_input0 = f32[1,4,4,2] parameter(0)
+  ROOT stage_0_fwd_tuple = (f32[1,4,4,2]) tuple(stage_0_fwd_input0)
+}
+
+comp0 {
+  ROOT x = f32[1,4,4,2] parameter(0)
+}
+
+comp1 {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT r = f32[1,4,4,2] call(x), to_apply=comp0
+}
+
+comp2 {
+  ROOT x = f32[1,4,4,2] parameter(0)
+}
+
+stage_1_fwd {
+  stage_1_fwd_input1 = f32[1,4,4,2] parameter(0)
+  c1_result = f32[1,4,4,2] call(stage_1_fwd_input1), to_apply=comp1
+  c2_result = f32[1,4,4,2] call(c1_result), to_apply=comp2
+  stage_1_fwd_zero = f32[] constant(0)
+  stage_1_fwd_reduce = f32[] reduce(c2_result, stage_1_fwd_zero), dimensions={0,1,2,3}, to_apply=add_float
+  ROOT stage_1_fwd_tuple = (f32[]) tuple(stage_1_fwd_reduce)
+}
+
+pipeline {
+  pipeline_input0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\"}}", sharding={maximal device=0}
+  pipeline_stage_0_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_input1 = f32[1,4,4,2] parameter(1)
+  pipeline_stage_1 = (f32[]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\"}}", sharding={maximal device=1}
+  pipeline_stage_1_i1 = f32[] get-tuple-element(pipeline_stage_1), index=0
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[]) tuple(pipeline_stage_0_i0, pipeline_stage_1_i1)
+}
+
+ENTRY e {
+  e.input0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.input1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2], f32[]) call(e.input0, e.input1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  HloInstruction* pipeline_stage_0 =
+      FindInstruction(module0, "pipeline_stage_0");
+  HloInstruction* pipeline_stage_1 =
+      FindInstruction(module0, "pipeline_stage_1");
+  HloComputation* stage_0_fwd = FindComputation(module0, "stage_0_fwd");
+  HloComputation* comp0 = FindComputation(module0, "comp0");
+  HloComputation* comp1 = FindComputation(module0, "comp1");
+  HloComputation* comp2 = FindComputation(module0, "comp2");
+  HloComputation* stage_1_fwd = FindComputation(module0, "stage_1_fwd");
+
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module0);
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto stage_0_comps,
+      GetAllComputationsCalledBy(pipeline_stage_0, call_graph.get()));
+  EXPECT_THAT(stage_0_comps, ::testing::UnorderedElementsAre(stage_0_fwd));
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto stage_1_comps,
+      GetAllComputationsCalledBy(pipeline_stage_1, call_graph.get()));
+  EXPECT_THAT(stage_1_comps, ::testing::UnorderedElementsAre(
+                                 comp0, comp1, comp2, stage_1_fwd));
 }
 
 }  // namespace

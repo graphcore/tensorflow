@@ -28,13 +28,15 @@ namespace xla {
 
 class HloInstruction;
 class HloComputation;
+class HloModule;
+class CallGraph;
 
 namespace poplarplugin {
 class PipelineDataflowAnalysis;
 
 // Returns whether the instruction is a PipelineStage or a
 // PipelineStageBackward.
-bool IsPiplineStageOrBackwardOp(const HloInstruction* inst);
+bool IsPipelineStageOrBackwardOp(const HloInstruction* inst);
 
 // Helper function for the PipelineDataflowAnalysis. Is used to identify whether
 // an instruction is allowed to produce outputs in a PipelineOp.
@@ -47,21 +49,27 @@ struct PipelineStages {
   std::vector<HloInstruction*> backward;
 };
 
+// Get all the pipelines in the module.
+StatusOr<std::vector<HloInstruction*>> GetPipelines(HloModule* module);
+
 // Get the forward and backward pipeline stages from the pipeline_computation.
 StatusOr<PipelineStages> GetPipelineStages(
     HloComputation* pipeline_computation);
 
-// Verifies that Pipeline stages are suitable for lowering.
+// Get all the computations called by the pipeline stage or which are reachable
+// from it. Ignores computations which are called in the Parallel context.
+StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
+    HloInstruction* pipeline_stage, CallGraph* call_graph);
+
+// Verifies that Pipeline stages are suitable for fixing.
 // This means that we expect the Pipeline to not have been modified and so
 // the root instruction for all the stages is a tuple and all the users of
 // stages are GTEs.
-Status VerifyPipelineStagesBeforeLowering(
-    const PipelineStages& pipeline_stages);
+Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages);
 
-// Verifies that the Pipeline is legal and is suitable for lowering to Poplar.
-// We make sure that the data flow is legal and that all instructions have been
-// lowered.
-Status VerifyPipelineStagesAfterLowering(HloInstruction* pipeline_op);
+// Verifies that the data flow in the Pipeline is legal and that all
+// instructions have been lowered. Ignores sharding.
+Status VerifyPipelineAfterFixing(HloInstruction* pipeline_op);
 
 // A function which makes sure there are unique output edges for each output of
 // a pipeline stage.
@@ -71,7 +79,7 @@ Status VerifyPipelineStagesAfterLowering(HloInstruction* pipeline_op);
 // Note that CSE will tidy this up later.
 StatusOr<bool> DuplicateGTEEdges(PipelineStages& pipeline_stages);
 
-// Make sure each PiplineStage has a unique HloComputation.
+// Make sure each PipelineStage has a unique HloComputation.
 // Returns true is a new HloComputation has been added.
 StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages);
 
@@ -130,6 +138,8 @@ struct StageID {
     return is_forward == other.is_forward && id == other.id;
   }
 
+  bool operator!=(const StageID& other) const { return !operator==(other); }
+
   std::string ToString() const;
 
   bool is_forward;
@@ -146,10 +156,12 @@ class PipelineDataflowAnalysis {
  public:
   static StatusOr<std::unique_ptr<PipelineDataflowAnalysis>> GetAnalysis(
       const PipelineStages& pipeline_stages,
-      bool allow_duplicate_gte_edges = false);
+      bool allow_duplicate_gte_edges = false,
+      bool allow_communication_ops = false);
 
   explicit PipelineDataflowAnalysis(const PipelineStages& pipeline_stages,
-                                    bool allow_duplicate_gte_edges);
+                                    bool allow_duplicate_gte_edges,
+                                    bool allow_communication_ops);
 
   // Returns whether the instruction needs to be lowered given the current
   // analysis.
@@ -213,6 +225,7 @@ class PipelineDataflowAnalysis {
   absl::flat_hash_map<HloInstruction*, int64> bwd_stages_lookup_;
 
   bool allow_duplicate_gte_edges_;
+  bool allow_communication_ops_;
 };
 }  // namespace poplarplugin
 }  // namespace xla

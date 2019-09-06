@@ -379,7 +379,7 @@ StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
         absl::c_copy_if(operand->users(),
                         std::inserter(params_users, std::begin(params_users)),
                         [](const HloInstruction* inst) {
-                          return !IsPiplineStageOrBackwardOp(inst);
+                          return !IsPipelineStageOrBackwardOp(inst);
                         });
       }
     }
@@ -452,38 +452,27 @@ StatusOr<bool> PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   // Uniquify computations called by stages.
   TF_ASSIGN_OR_RETURN(bool added_comp, UniquifyPipelineStageCallsites(stages_));
   // Verify we can actually try and lower this Pipeline.
-  TF_RETURN_IF_ERROR(VerifyPipelineStagesBeforeLowering(stages_));
+  TF_RETURN_IF_ERROR(VerifyPipelineStagesBeforeFixing(stages_));
   // Run the lowering.
   TF_ASSIGN_OR_RETURN(bool pipeline_modified, LowerOpsIntoPipelineStages());
   // Tidy again.
   TF_ASSIGN_OR_RETURN(bool dce_change_run_two,
                       dce.Run(pipeline_op->GetModule()));
   // Verify the pipeline is now ok to be lowered.
-  TF_RETURN_IF_ERROR(VerifyPipelineStagesAfterLowering(pipeline_op));
+  TF_RETURN_IF_ERROR(VerifyPipelineAfterFixing(pipeline_op));
 
   return ts_change || dce_change_run_one || added_edges || added_comp ||
          pipeline_modified || dce_change_run_two;
 }
 
 StatusOr<bool> PipelineFixer::Run(HloModule* module) {
-  std::vector<HloInstruction*> pipeline_ops;
-  for (HloComputation* comp : module->MakeNonfusionComputations()) {
-    for (HloInstruction* inst : comp->instructions()) {
-      if (IsPipelineOp(inst)) {
-        pipeline_ops.push_back(inst);
-      }
-    }
-  }
-
+  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
+                      GetPipelines(module));
   if (pipeline_ops.empty()) {
     // No pipeline ops found - nothing to fix.
     return false;
-  } else if (pipeline_ops.size() > 1) {
-    return FailedPrecondition(
-        "Only a single ipu.pipeline() is allowed in a compiled program - if "
-        "multiple pipelines are required the program needs to be split into "
-        "multiple compilations.");
   }
+  CHECK_EQ(pipeline_ops.size(), 1);
   VLOG(2) << "Before fixing the Pipeline stages.";
   XLA_VLOG_LINES(2, module->ToString());
 

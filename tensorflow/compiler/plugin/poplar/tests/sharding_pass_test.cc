@@ -12,11 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
-
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -800,8 +800,8 @@ HloModule top
 main {
   arg0 = f32[1] parameter(0)
   tok1 = token[] after-all(), sharding={maximal device=0}
-  inf1 = ((f32[1], f32[1]), token[]) infeed(tok1), sharding={maximal device=0}
-  gte1 = (f32[1], f32[1]) get-tuple-element(inf1), index=0,
+  inf1 = ((f32[1], f32[1]), token[]) infeed(tok1), sharding={maximal
+  device=0} gte1 = (f32[1], f32[1]) get-tuple-element(inf1), index=0,
       sharding={maximal device=0}
   gte2 = f32[1] get-tuple-element(gte1), index=0, sharding={maximal device=0}
   gte3 = f32[1] get-tuple-element(gte1), index=1, sharding={maximal device=0}
@@ -1070,7 +1070,6 @@ subsubcomp {
   s3 = f16[4] add(s0, s1)
   s4 = (f16[4], f16[4]) tuple(s2, s3)
 }
-
 
 subcomp {
   s0 = f16[4] parameter(0)
@@ -1415,11 +1414,11 @@ HloModule top
 main {
   a0 = f16[] parameter(0), sharding={maximal device=0}
   a1 = f16[] add(a0, a0), sharding={maximal device=0}
-  a2 = (f16[], f16[]) tuple(a0, a0), sharding={{maximal device=0}, {maximal device=0}}
-  a3 = ((f16[], f16[])) tuple(a2), sharding={{maximal device=0}, {maximal device=0}}
-  a4 = (f16[], f16[]) get-tuple-element(a3), index=0
-  a5 = f16[] get-tuple-element(a4), index=0
-  ROOT tuple = (f16[], f16[]) tuple(a1, a5)
+  a2 = (f16[], f16[]) tuple(a0, a0), sharding={{maximal device=0}, {maximal
+  device=0}} a3 = ((f16[], f16[])) tuple(a2), sharding={{maximal device=0},
+  {maximal device=0}} a4 = (f16[], f16[]) get-tuple-element(a3), index=0 a5 =
+  f16[] get-tuple-element(a4), index=0 ROOT tuple = (f16[], f16[]) tuple(a1,
+  a5)
 }
   )";
 
@@ -1472,34 +1471,39 @@ body {
   gte.68 = f16[1,5,1000] get-tuple-element(arg_tuple.1), index=0
   gte.69 = s32[1,5] get-tuple-element(arg_tuple.1), index=1
   gte.75 = f16[512,1000] get-tuple-element(arg_tuple.1), index=2
-  transpose.1 = f16[1000,512] transpose(gte.75), dimensions={1,0}, sharding={maximal device=0}
-  reshape.29 = s32[5] reshape(gte.69)
-  fusion.11 = f16[5,512] fusion(), kind=kCustom, calls=_pop_op_wide_const.2
-  reshape.30 = f16[1,5,512] reshape(fusion.11), sharding={maximal device=0}
-  transpose.2 = f16[5,1,512]{2,0,1} transpose(reshape.30), dimensions={1,0,2}, sharding={maximal device=1}
-  fusion.12 = f16[5,1,512] fusion(), kind=kCustom, calls=_pop_op_wide_const.1
-  transpose.3 = f16[1,5,512]{2,0,1} transpose(fusion.12), dimensions={1,0,2}, sharding={maximal device=1}
+  transpose.1 = f16[1000,512] transpose(gte.75), dimensions={1,0},
+  sharding={maximal device=0} reshape.29 = s32[5] reshape(gte.69) fusion.11 =
+  f16[5,512] fusion(), kind=kCustom, calls=_pop_op_wide_const.2 reshape.30 =
+  f16[1,5,512] reshape(fusion.11), sharding={maximal device=0} transpose.2 =
+  f16[5,1,512]{2,0,1} transpose(reshape.30), dimensions={1,0,2},
+  sharding={maximal device=1} fusion.12 = f16[5,1,512] fusion(),
+  kind=kCustom, calls=_pop_op_wide_const.1 transpose.3 = f16[1,5,512]{2,0,1}
+  transpose(fusion.12), dimensions={1,0,2}, sharding={maximal device=1}
   reshape.31 = f16[1,1000,512] reshape(transpose.1)
   transpose.4 = f16[1,512,1000] transpose(reshape.31), dimensions={0,2,1}
-  dot.1 = f16[1,5,1000] dot(transpose.3, transpose.4), lhs_batch_dims={0}, lhs_contracting_dims={2}, rhs_batch_dims={0}, rhs_contracting_dims={1}
+  dot.1 = f16[1,5,1000] dot(transpose.3, transpose.4), lhs_batch_dims={0},
+  lhs_contracting_dims={2}, rhs_batch_dims={0}, rhs_contracting_dims={1}
   constant.48 = f16[] constant(-inf)
-  reduce = f16[1,5] reduce(dot.1, constant.48), dimensions={2}, to_apply=max_half
-  broadcast.15 = f16[1,5,1000] broadcast(reduce), dimensions={0,1}
-  subtract = f16[1,5,1000] subtract(dot.1, broadcast.15)
+  reduce = f16[1,5] reduce(dot.1, constant.48), dimensions={2},
+  to_apply=max_half broadcast.15 = f16[1,5,1000] broadcast(reduce),
+  dimensions={0,1} subtract = f16[1,5,1000] subtract(dot.1, broadcast.15)
   exponential = f16[1,5,1000] exponential(subtract)
   constant.43 = f16[] constant(0)
-  reduce.1 = f16[1,5] reduce(exponential, constant.43), dimensions={2}, to_apply=add_float
-  broadcast.16 = f16[1,5,1000] broadcast(reduce.1), dimensions={0,1}
-  divide = f16[1,5,1000] divide(exponential, broadcast.16)
-  ROOT tuple.10 = (f16[1,5,1000], s32[1,5], f16[512,1000]) tuple(divide, gte.69, gte.75)
+  reduce.1 = f16[1,5] reduce(exponential, constant.43), dimensions={2},
+  to_apply=add_float broadcast.16 = f16[1,5,1000] broadcast(reduce.1),
+  dimensions={0,1} divide = f16[1,5,1000] divide(exponential, broadcast.16)
+  ROOT tuple.10 = (f16[1,5,1000], s32[1,5], f16[512,1000]) tuple(divide,
+  gte.69, gte.75)
 }
 
 ENTRY main {
   arg0.1 = f16[1,5,1000] parameter(0)
   arg1.2 = s32[1,5] parameter(1)
   arg2.3 = f16[512,1000] parameter(2)
-  tuple.13 = (f16[1,5,1000], s32[1,5], f16[512,1000]) tuple(arg0.1, arg1.2, arg2.3)
-  call.4 = (f16[1,5,1000], s32[1,5], f16[512,1000]) call(tuple.13), to_apply=body, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+  tuple.13 = (f16[1,5,1000], s32[1,5], f16[512,1000]) tuple(arg0.1, arg1.2,
+  arg2.3) call.4 = (f16[1,5,1000], s32[1,5], f16[512,1000]) call(tuple.13),
+  to_apply=body,
+  backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
   gte.270 = f16[1,5,1000] get-tuple-element(call.4), index=0
   ROOT tuple.284 = (f16[1,5,1000]) tuple(gte.270)
 }
@@ -1527,6 +1531,121 @@ ENTRY main {
   EXPECT_TRUE(body->root_instruction()->has_sharding());
   EXPECT_EQ(body->parameter_instruction(0)->sharding(),
             body->root_instruction()->sharding());
+}
+
+TEST_F(ShardingPassTest, TestPipeliningSharding) {
+  std::string hlo_string = R"(
+HloModule top
+
+add_float {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT a = f32[] add(f32[] x, f32[] y)
+}
+
+stage_0_fwd {
+  stage_0_fwd_input0 = f32[1,4,4,2] parameter(0)
+  ROOT stage_0_fwd_tuple = (f32[1,4,4,2]) tuple(stage_0_fwd_input0)
+}
+
+comp0 {
+  ROOT x = f32[1,4,4,2] parameter(0)
+}
+
+comp1 {
+  x = f32[1,4,4,2] parameter(0)
+  ROOT r = f32[1,4,4,2] call(x), to_apply=comp0
+}
+
+comp2 {
+  ROOT x = f32[1,4,4,2] parameter(0)
+}
+
+stage_1_fwd {
+  stage_1_fwd_input1 = f32[1,4,4,2] parameter(0)
+  c1_result = f32[1,4,4,2] call(stage_1_fwd_input1), to_apply=comp1
+  c2_result = f32[1,4,4,2] call(c1_result), to_apply=comp2
+  stage_1_fwd_zero = f32[] constant(0)
+  stage_1_fwd_reduce = f32[] reduce(c2_result, stage_1_fwd_zero), dimensions={0,1,2,3}, to_apply=add_float
+  ROOT stage_1_fwd_tuple = (f32[]) tuple(stage_1_fwd_reduce)
+  after-all = token[] after-all()
+  outfeed = token[] outfeed(stage_1_fwd_tuple, after-all), outfeed_config="\010\001\022\005feed3\"\001\001(\001"
+}
+
+pipeline {
+  pipeline_input0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_input0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  pipeline_stage_0_i0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_input1 = f32[1,4,4,2] parameter(1)
+  pipeline_stage_1 = (f32[]) call(pipeline_input1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_1_i1 = f32[] get-tuple-element(pipeline_stage_1), index=0
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[]) tuple(pipeline_stage_0_i0, pipeline_stage_1_i1)
+}
+
+ENTRY e {
+  e.input0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.input1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2], f32[]) call(e.input0, e.input1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  HloInstruction* pipeline_input0 = FindInstruction(module, "pipeline_input0");
+  EXPECT_THAT(pipeline_input0->sharding().GetUniqueDevice(), 0);
+
+  HloInstruction* pipeline_stage_0 =
+      FindInstruction(module, "pipeline_stage_0");
+  EXPECT_THAT(pipeline_stage_0->sharding().GetUniqueDevice(), 0);
+
+  HloInstruction* pipeline_stage_0_i0 =
+      FindInstruction(module, "pipeline_stage_0_i0");
+  EXPECT_THAT(pipeline_stage_0_i0->sharding().GetUniqueDevice(), 0);
+
+  HloInstruction* pipeline_input1 = FindInstruction(module, "pipeline_input1");
+  EXPECT_THAT(pipeline_input1->sharding().GetUniqueDevice(), 1);
+
+  HloInstruction* pipeline_stage_1 =
+      FindInstruction(module, "pipeline_stage_1");
+  EXPECT_THAT(pipeline_stage_1->sharding().GetUniqueDevice(), 1);
+
+  HloInstruction* pipeline_stage_1_i1 =
+      FindInstruction(module, "pipeline_stage_1_i1");
+  EXPECT_THAT(pipeline_stage_1_i1->sharding().GetUniqueDevice(), 1);
+
+  HloInstruction* pipeline_tuple = FindInstruction(module, "pipeline_tuple");
+  EXPECT_THAT(pipeline_tuple->sharding().tuple_elements(),
+              ::testing::ElementsAre(pipeline_input0->sharding(),
+                                     pipeline_input1->sharding()));
+
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto stage_0_comps,
+      GetAllComputationsCalledBy(pipeline_stage_0, call_graph.get()));
+  for (HloComputation* comp : stage_0_comps) {
+    for (auto* inst : comp->instructions()) {
+      EXPECT_THAT(inst->sharding().GetUniqueDevice(), 0);
+    }
+  }
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto stage_1_comps,
+      GetAllComputationsCalledBy(pipeline_stage_1, call_graph.get()));
+  for (HloComputation* comp : stage_1_comps) {
+    for (auto* inst : comp->instructions()) {
+      EXPECT_THAT(inst->sharding().GetUniqueDevice(), 1);
+    }
+  }
 }
 
 }  // namespace

@@ -34,6 +34,7 @@ from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import gen_control_flow_ops
 from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
@@ -150,13 +151,16 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     def stage2(x, c):
       return math_ops.reduce_sum(x) + c
 
+    def stage3(x):
+      return x
+
     def my_net(c):
-      return pipelining_ops.pipeline([stage1, stage2],
+      return pipelining_ops.pipeline([stage1, stage2, stage3],
                                      10, [c],
                                      infeed_queue=infeed_queue,
                                      outfeed_queue=outfeed_queue)
 
-    tu.configure_ipu_system()
+    tu.configure_ipu_system(pipelining=True)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -164,6 +168,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
+    tu.move_variable_initialization_to_cpu()
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -236,13 +241,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       lr = array_ops.placeholder(np.float32, shape=[])
-
-    tu.configure_ipu_system()
+    tu.configure_ipu_system(pipelining=True)
 
     with ops.device("/device:IPU:0"):
       compiled_model_pipeline = ipu_compiler.compile(
           model_pipeline, inputs=[x, lr])
 
+    tu.move_variable_initialization_to_cpu()
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
@@ -273,7 +278,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       y = array_ops.placeholder(np.float32, shape=[])
 
-    tu.configure_ipu_system()
+    tu.configure_ipu_system(pipelining=True)
 
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegexp(ValueError, 'Trying to capture the tensor'):
@@ -290,7 +295,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-    tu.configure_ipu_system()
+    tu.configure_ipu_system(pipelining=True)
 
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegexp(ValueError,
@@ -306,10 +311,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
     # The above should be optimised to a single copy for each duplicate output.
     def stage2(x1, y1, y2, x2):
+      return x1, y1, y2, x2
+
+    # Same for this stage
+    def stage3(x1, y1, y2, x2):
       return x2, y2
 
     def model_pipeline(x, y):
-      return pipelining_ops.pipeline([stage1, stage2],
+      return pipelining_ops.pipeline([stage1, stage2, stage3],
                                      10,
                                      inputs=[x, y],
                                      outfeed_queue=outfeed_queue)
@@ -318,7 +327,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       y = array_ops.placeholder(np.float32, shape=[1, 2])
 
-    tu.configure_ipu_system()
+    tu.configure_ipu_system(pipelining=True)
 
     with ops.device("/device:IPU:0"):
       compiled_model_pipeline = ipu_compiler.compile(
@@ -384,7 +393,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                      infeed_queue=infeed_queue,
                                      outfeed_queue=outfeed_queue)
 
-    tu.configure_ipu_system()
+    tu.configure_ipu_system(pipelining=True)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])

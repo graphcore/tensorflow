@@ -57,6 +57,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
@@ -550,8 +551,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         poplarExecutor->InstructionRecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<DependencyReplacer>(true);
-    pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<ShardingPass>();
+    pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<InterIpuCopyInserter>();
     pipeline.AddPass<InplaceFinder>();
     pipeline.AddPass<ExpressionOutliner>();
@@ -564,6 +565,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     //   pipeline.AddPass<ConstantNaN>();
     // }
 
+    pipeline.AddPass<PipelineVerifier>();
     pipeline.AddPass<ConvolutionClassifier>();
     pipeline.AddPass<AllocationFinder>(resources.annotations);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);

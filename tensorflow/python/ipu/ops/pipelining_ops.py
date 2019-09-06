@@ -25,6 +25,7 @@ from __future__ import print_function
 from tensorflow.compiler.plugin.poplar.ops import gen_pipelining_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu import scopes
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
@@ -240,6 +241,7 @@ def pipeline(computational_stages,
       outputs = _pipeline_stage(
           stage,
           stage_id,
+          stage_id,
           outputs,
           infeed_queue=stage_infeed_queue,
           outfeed_queue=stage_outfeed_queue,
@@ -314,6 +316,7 @@ def pipeline(computational_stages,
 
 def _pipeline_stage(func,
                     stage_id,
+                    device_id,
                     args,
                     kwargs=None,
                     infeed_queue=None,
@@ -380,12 +383,13 @@ def _pipeline_stage(func,
 
     # Create the pipeline stage and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):
-      outputs = gen_pipelining_ops.pipeline_stage(
-          captured_args,
-          to_apply=util.create_new_tf_function(func_graph),
-          Tout=func_graph.output_types,
-          output_shapes=func_graph.output_shapes,
-          stage_id=stage_id)
+      with scopes.ipu_shard(device_id):
+        outputs = gen_pipelining_ops.pipeline_stage(
+            captured_args,
+            to_apply=util.create_new_tf_function(func_graph),
+            Tout=func_graph.output_types,
+            output_shapes=func_graph.output_shapes,
+            stage_id=stage_id)
     if isinstance(outputs, ops.Operation):
       return outputs
     else:

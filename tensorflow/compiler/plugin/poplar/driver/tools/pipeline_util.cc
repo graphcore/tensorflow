@@ -13,8 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -38,19 +42,38 @@ std::ostream& operator<<(std::ostream& stream, const StageID& stage_id) {
   return stream;
 }
 
-bool IsPiplineStageOrBackwardOp(const HloInstruction* inst) {
+bool IsPipelineStageOrBackwardOp(const HloInstruction* inst) {
   return IsPipelineStage(inst) || IsPipelineStageBackward(inst);
 }
 
 bool IsProducerOp(const HloInstruction* inst) {
   switch (inst->opcode()) {
     case HloOpcode::kCall:
-      return IsPiplineStageOrBackwardOp(inst);
+      return IsPipelineStageOrBackwardOp(inst);
     case HloOpcode::kParameter:
       return true;
     default:
       return false;
   }
+}
+
+StatusOr<std::vector<HloInstruction*>> GetPipelines(HloModule* module) {
+  std::vector<HloInstruction*> pipeline_ops;
+  for (HloComputation* comp : module->MakeNonfusionComputations()) {
+    for (HloInstruction* inst : comp->instructions()) {
+      if (IsPipelineOp(inst)) {
+        pipeline_ops.push_back(inst);
+      }
+    }
+  }
+
+  if (pipeline_ops.size() > 1) {
+    return FailedPrecondition(
+        "Only a single ipu.pipeline() is allowed in a compiled program - if "
+        "multiple pipelines are required the program needs to be split into "
+        "multiple compilations.");
+  }
+  return pipeline_ops;
 }
 
 StatusOr<PipelineStages> GetPipelineStages(
@@ -94,7 +117,7 @@ StatusOr<PipelineStages> GetPipelineStages(
   if (pipeline_stages.backward.size() &&
       pipeline_stages.forward.size() != pipeline_stages.backward.size()) {
     return FailedPrecondition(
-        "Expected the number of PiplineStages (%d) and PipelineStageBackwards "
+        "Expected the number of PipelineStages (%d) and PipelineStageBackwards "
         "(%d) "
         "to match.",
         pipeline_stages.forward.size(), pipeline_stages.backward.size());
@@ -103,34 +126,96 @@ StatusOr<PipelineStages> GetPipelineStages(
   return pipeline_stages;
 }
 
-Status VerifyPipelineStagesBeforeLowering(
-    const PipelineStages& pipeline_stages) {
-  for (auto& stages : {pipeline_stages.forward, pipeline_stages.backward}) {
-    for (HloInstruction* stage : stages) {
-      HloOpcode root_opcode = stage->to_apply()->root_instruction()->opcode();
-      if (root_opcode != HloOpcode::kTuple) {
-        return UnimplementedStrCat("Expected the PipelineStage(Backward) ",
-                                   stage->ToString(),
-                                   " to have a Tuple root instruction but got ",
-                                   HloOpcodeString(root_opcode), " instead.");
-      }
-      if (!absl::c_all_of(stage->users(), [](HloInstruction* user) {
-            return user->opcode() == HloOpcode::kGetTupleElement;
-          })) {
-        return UnimplementedStrCat(
-            "Expected all the users of the PipelineStage(Backward) ",
-            stage->ToString(), " to be GetTupleElement instructions.");
-      }
-      if (stage->parent()->root_instruction() == stage) {
-        return UnimplementedStrCat(
-            "Pipeline stage cannot be the root instruction of the Pipeline.");
-      }
+StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
+    HloInstruction* pipeline_stage, CallGraph* call_graph) {
+  CHECK(IsPipelineStageOrBackwardOp(pipeline_stage));
+  absl::flat_hash_set<HloComputation*> computations_in_pipeline;
+  absl::flat_hash_set<HloComputation*> to_visit;
+  to_visit.insert(pipeline_stage->to_apply());
+  // We keep separate visited as some computations might be called but we do not
+  // want to return them.
+  absl::flat_hash_set<HloComputation*> visited;
+  while (!to_visit.empty()) {
+    HloComputation* comp = *to_visit.begin();
+    to_visit.erase(comp);
+    // Skip if already visited.
+    if (visited.contains(comp)) {
+      continue;
+    }
+    visited.insert(comp);
+    // Get the context.
+    CallGraphNode& node = call_graph->GetNode(comp);
+    // We do not consider sharding in parallel context or fusions.
+    if (node.context() == CallContext::kParallel ||
+        comp->IsFusionComputation()) {
+      continue;
+    }
+    // Both context is not allowed.
+    if (node.context() == CallContext::kBoth) {
+      return InternalErrorStrCat(
+          "Detected a computation ", comp->name(),
+          " with CallContext::kBoth inside the PipelineStage ",
+          pipeline_stage->ToString());
+    }
+    computations_in_pipeline.insert(comp);
+
+    for (HloInstruction* inst : comp->instructions()) {
+      // Visit any called computations.
+      absl::c_copy(inst->called_computations(),
+                   std::inserter(to_visit, to_visit.end()));
+    }
+  }
+  return computations_in_pipeline;
+}
+
+Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages) {
+  auto is_stage_ok = [](const HloInstruction* stage) {
+    HloOpcode root_opcode = stage->to_apply()->root_instruction()->opcode();
+    if (root_opcode != HloOpcode::kTuple) {
+      return UnimplementedStrCat("Expected the PipelineStage(Backward) ",
+                                 stage->ToString(),
+                                 " to have a Tuple root instruction but got ",
+                                 HloOpcodeString(root_opcode), " instead.");
+    }
+    if (!absl::c_all_of(stage->users(), [](HloInstruction* user) {
+          return user->opcode() == HloOpcode::kGetTupleElement;
+        })) {
+      return UnimplementedStrCat(
+          "Expected all the users of the PipelineStage(Backward) ",
+          stage->ToString(), " to be GetTupleElement instructions.");
+    }
+    if (stage->parent()->root_instruction() == stage) {
+      return UnimplementedStrCat(
+          "Pipeline stage cannot be the root instruction of the Pipeline.");
+    }
+    return Status::OK();
+  };
+  for (HloInstruction* forward_stage : pipeline_stages.forward) {
+    TF_RETURN_IF_ERROR(is_stage_ok(forward_stage));
+    // We expect forward stages to have supported sharding on them.
+    if (!forward_stage->has_sharding()) {
+      return FailedPrecondition(
+          "Expected the pipeline stage %s to have sharding.",
+          forward_stage->ToShortString().c_str());
+    }
+    if (!IsSupportedSharding(forward_stage->sharding())) {
+      return FailedPrecondition("Unsupported sharding for pipeline stage %s.",
+                                forward_stage->ToShortString().c_str());
+    }
+  }
+  for (HloInstruction* backward_stage : pipeline_stages.backward) {
+    TF_RETURN_IF_ERROR(is_stage_ok(backward_stage));
+    // We expect the backward stages to not have any sharding.
+    if (backward_stage->has_sharding()) {
+      return FailedPrecondition(
+          "Expected the pipeline stage %s to not have sharding.",
+          backward_stage->ToShortString().c_str());
     }
   }
   return Status::OK();
 }
 
-Status VerifyPipelineStagesAfterLowering(HloInstruction* pipeline_op) {
+Status VerifyPipelineAfterFixing(HloInstruction* pipeline_op) {
   HloComputation* pipeline_computation = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages pipeline_stages,
                       GetPipelineStages(pipeline_computation));
@@ -205,7 +290,7 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages) {
 namespace {
 // Tidy function to remove any dangling outputs.
 Status RemovePipelineStageDeadUsers(HloInstruction* pipeline_stage) {
-  CHECK(IsPiplineStageOrBackwardOp(pipeline_stage));
+  CHECK(IsPipelineStageOrBackwardOp(pipeline_stage));
   std::vector<HloInstruction*> users = pipeline_stage->users();
   HloComputation* comp = pipeline_stage->parent();
   for (HloInstruction* gte : users) {
@@ -245,7 +330,7 @@ StatusOr<HloInstruction*> ReplacePipelineStageWith(
           new_stage_computation));
   stage->SetupDerivedInstruction(new_stage);
   new_stage->set_raw_backend_config_string(stage->raw_backend_config_string());
-  CHECK(IsPiplineStageOrBackwardOp(new_stage));
+  CHECK(IsPipelineStageOrBackwardOp(new_stage));
 
   VLOG(3) << "Replacing " << stage->ToString() << " and computation:";
   XLA_VLOG_LINES(3, stage_computation->ToString());
@@ -269,7 +354,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage, const std::vector<HloInstruction*>& ordered_lowering,
     std::map<int64, HloInstruction*> replace_parameter_with_lowered_instruction,
     absl::flat_hash_set<HloInstruction*> forced_parameters) {
-  CHECK(IsPiplineStageOrBackwardOp(stage));
+  CHECK(IsPipelineStageOrBackwardOp(stage));
 
   HloComputation* pipeline_computation = stage->parent();
 
@@ -358,7 +443,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
             CHECK_EQ(operand->user_count(), 1);
             // In TF2XLA we expect the root to be a tuple, hence we can
             // get the relevant instruction (guaranteed by
-            // VerifyPipelineStagesBeforeLowering).
+            // VerifyPipelineStagesBeforeFixing).
             HloInstruction* root = stage_computation->root_instruction();
             CHECK_EQ(root->opcode(), HloOpcode::kTuple);
             root = old_to_new_computation.at(root);
@@ -576,7 +661,7 @@ StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageInputs(
 
 StatusOr<HloInstruction*> RemoveParametersFromStage(
     HloInstruction* stage, const std::set<int64>& parameters_to_remove) {
-  CHECK(IsPiplineStageOrBackwardOp(stage));
+  CHECK(IsPipelineStageOrBackwardOp(stage));
   // Nothing to remove.
   if (parameters_to_remove.empty()) {
     return stage;
@@ -656,7 +741,7 @@ StatusOr<HloInstruction*> RemoveParametersFromStage(
 
 Status RemoveOutputsFromStage(HloInstruction* stage,
                               const std::set<int64>& outputs_to_remove) {
-  CHECK(IsPiplineStageOrBackwardOp(stage));
+  CHECK(IsPipelineStageOrBackwardOp(stage));
   // Nothing to remove.
   if (outputs_to_remove.empty()) {
     return Status::OK();
@@ -712,9 +797,11 @@ Status RemoveOutputsFromStage(HloInstruction* stage,
 }
 
 PipelineDataflowAnalysis::PipelineDataflowAnalysis(
-    const PipelineStages& pipeline_stages, bool allow_duplicate_gte_edges)
+    const PipelineStages& pipeline_stages, bool allow_duplicate_gte_edges,
+    bool allow_communication_ops)
     : pipeline_stages_(pipeline_stages),
-      allow_duplicate_gte_edges_(allow_duplicate_gte_edges) {
+      allow_duplicate_gte_edges_(allow_duplicate_gte_edges),
+      allow_communication_ops_(allow_communication_ops) {
   // Put stages into lookup tables so that we can quickly get the stage id from
   // an instruction.
   for (int64 id = 0; id != pipeline_stages_.forward.size(); ++id) {
@@ -760,7 +847,7 @@ HloValue* PipelineDataflowAnalysis::CreateValue(HloInstruction* inst) {
 
 StatusOr<StageID> PipelineDataflowAnalysis::GetStageID(
     const HloInstruction* inst) const {
-  if (!IsPiplineStageOrBackwardOp(inst)) {
+  if (!IsPipelineStageOrBackwardOp(inst)) {
     return InternalErrorStrCat("Trying to get StageID for ", inst->ToString(),
                                " which is not a PipelineStage(Backward).");
   }
@@ -857,7 +944,8 @@ Status PipelineDataflowAnalysis::VerifyParameterUsage(
       return UnimplementedStrCat(
           "The PipelineStage", (stage_id.is_forward ? "" : "Backward"),
           " with ID ", stage_id.id,
-          " is trying to use an input to is already used by  the PipelineStage",
+          " is trying to use an input which is already used by the "
+          "PipelineStage",
           (user_stage_id.is_forward ? "" : "Backward"), " with ID ",
           user_stage_id.id,
           ". This violates the dataflow "
@@ -870,7 +958,7 @@ Status PipelineDataflowAnalysis::VerifyParameterUsage(
 
 Status PipelineDataflowAnalysis::VerifyPipelineStageOperands(
     const HloInstruction* pipeline_stage, const HloValueSet& new_inputs) {
-  CHECK(IsPiplineStageOrBackwardOp(pipeline_stage));
+  CHECK(IsPipelineStageOrBackwardOp(pipeline_stage));
   TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(pipeline_stage));
   // Get all the values used by the operands of inst.
   HloValueSet operands_set = GetOperandsValueSet(pipeline_stage);
@@ -889,7 +977,7 @@ Status PipelineDataflowAnalysis::VerifyPipelineStageOperands(
         }
       }
       case HloOpcode::kCall: {
-        if (IsPiplineStageOrBackwardOp(producer)) {
+        if (IsPipelineStageOrBackwardOp(producer)) {
           TF_RETURN_IF_ERROR(VerifyPipelineUsage(producer, pipeline_stage));
           break;
         }
@@ -910,7 +998,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
 
   switch (inst->opcode()) {
     case HloOpcode::kCall:
-      return !IsPiplineStageOrBackwardOp(inst);
+      return !IsPipelineStageOrBackwardOp(inst);
     case HloOpcode::kParameter:
       return false;
     case HloOpcode::kGetTupleElement: {
@@ -922,7 +1010,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       // used by any other pipeline stage.
       //
       // Any other GTE needs to be lowered.
-      if (IsPiplineStageOrBackwardOp(inst->operand(0))) {
+      if (IsPipelineStageOrBackwardOp(inst->operand(0))) {
         // DuplicateGTEEdges should make sure each GTE only has one user.
         const HloInstruction* gte_input = inst->operand(0);
         if (!allow_duplicate_gte_edges_ && inst->user_count() != 1) {
@@ -933,13 +1021,88 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         for (const HloInstruction* gte_user : inst->users()) {
           // Verify that the pipeline usage is legal. If the user is not a
           // PipelineStage(Backward) then the user will be lowered later.
-          if (IsPiplineStageOrBackwardOp(gte_user)) {
+          if (IsPipelineStageOrBackwardOp(gte_user)) {
             TF_RETURN_IF_ERROR(VerifyPipelineUsage(gte_input, gte_user));
           }
         }
         return false;
       } else {
         // Any other GTE has to be lowered.
+        return true;
+      }
+    }
+    case HloOpcode::kCustomCall: {
+      if (!allow_communication_ops_) {
+        return true;
+      }
+      if (IsInstructionType<HloIpuInterCopy>(inst)) {
+        // For an inter IPU copy we expect that the input is a chain like:
+        // Stage -> GTE -> InterIPUCopy -> NextStage
+        const HloInstruction* gte = inst->operand(0);
+        if (gte->opcode() != HloOpcode::kGetTupleElement) {
+          return FailedPrecondition(
+              "Expected the input of an inter IPU copy to be a GTE "
+              "instruction, but is %s instead.",
+              gte->ToString());
+        }
+        if (inst->user_count() != 1) {
+          return FailedPrecondition(
+              "Expected the output of an inter IPU copy to be used exactly "
+              "once.");
+        }
+        // Verify the stage IDs match up. We expect the stages are continuous.
+        TF_ASSIGN_OR_RETURN(StageID copy_input_stage_id,
+                            GetStageID(gte->operand(0)));
+        TF_ASSIGN_OR_RETURN(StageID copy_output_stage_id,
+                            GetStageID(inst->users()[0]));
+        TF_ASSIGN_OR_RETURN(StageID copy_output_previous_stage_id,
+                            GetPreviousStageID(inst->users()[0]));
+        if (copy_input_stage_id != copy_output_previous_stage_id) {
+          return UnimplementedStrCat(
+              "Trying to copy data between ",
+              (copy_input_stage_id.is_forward ? "" : "Backward"), " with ID ",
+              copy_input_stage_id.id, " and PipelineStage",
+              (copy_output_stage_id.is_forward ? "" : "Backward"), " with ID ",
+              copy_output_stage_id.id,
+              ". This violates the dataflow constraints because an output of "
+              "one PipelineStage can only be used by the next PipelineStage.");
+        }
+        return false;
+      } else if (IsInstructionType<HloFifoInstruction>(inst)) {
+        // For a FIFO we expect that the input is a chain:
+        // ForwardStage -> GTE -> FIFO -> BackwardStage.
+        const HloInstruction* gte = inst->operand(0);
+        if (gte->opcode() != HloOpcode::kGetTupleElement) {
+          return FailedPrecondition(
+              "Expected the input of a FIFO operation to be a GTE  "
+              "instruction, but is %s instead.",
+              gte->ToString());
+        }
+        if (inst->user_count() != 1) {
+          return FailedPrecondition(
+              "Expected the FIFO operation to be used exactly once.");
+        }
+        TF_ASSIGN_OR_RETURN(StageID fifo_input_stage_id,
+                            GetStageID(gte->operand(0)));
+        TF_ASSIGN_OR_RETURN(StageID fifo_output_stage_id,
+                            GetStageID(inst->users()[0]));
+        // Expect the input to FIFO to be a forward stage and the output of FIFO
+        // to be a backward stage. Expect their IDs to match.
+        if (!fifo_input_stage_id.is_forward ||
+            fifo_output_stage_id.is_forward ||
+            fifo_input_stage_id.id != fifo_output_stage_id.id) {
+          return UnimplementedStrCat(
+              "Trying to create a FIFO data between ",
+              (fifo_input_stage_id.is_forward ? "" : "Backward"), " with ID ",
+              fifo_input_stage_id.id, " and PipelineStage",
+              (fifo_output_stage_id.is_forward ? "" : "Backward"), " with ID ",
+              fifo_output_stage_id.id,
+              ". This violates the dataflow constraints because a FIFO "
+              "operation can only be placed between a forward PipelineStage "
+              "and a backward PipelineStage with the same stage ID.");
+        }
+        return false;
+      } else {
         return true;
       }
     }
@@ -953,7 +1116,7 @@ Status PipelineDataflowAnalysis::UpdateThroughInstruction(
   HloValueSet operands_value_set = GetOperandsValueSet(inst);
   if (IsProducerOp(inst)) {
     // Producers create their sets.
-    if (IsPiplineStageOrBackwardOp(inst)) {
+    if (IsPipelineStageOrBackwardOp(inst)) {
       // Mark values as used by the stage.
       for (const HloValue* value : operands_value_set.values()) {
         used_by_stages_[value].insert(inst);
@@ -976,9 +1139,10 @@ Status PipelineDataflowAnalysis::UpdateThroughInstruction(
 
 StatusOr<std::unique_ptr<PipelineDataflowAnalysis>>
 PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages,
-                                      bool allow_duplicate_gte_edges) {
+                                      bool allow_duplicate_gte_edges,
+                                      bool allow_communication_ops) {
   auto analysis = absl::make_unique<PipelineDataflowAnalysis>(
-      pipeline_stages, allow_duplicate_gte_edges);
+      pipeline_stages, allow_duplicate_gte_edges, allow_communication_ops);
 
   if (analysis->pipeline_stages_.forward.size()) {
     HloComputation* pipeline_computation =

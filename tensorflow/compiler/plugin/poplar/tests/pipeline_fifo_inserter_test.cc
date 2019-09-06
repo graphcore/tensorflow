@@ -35,19 +35,19 @@ TEST_F(PipelineFIFOInserterTest, TestInferenceNothingChanged) {
 HloModule main
 
 stage_1 {
-  after-all.9 = token[] after-all()
-  infeed.10 = ((f32[2,4,4,2]{3,2,1,0}, f32[2,4,4,2]{3,2,1,0}), token[]) infeed(after-all.9), infeed_config="\010\001\022\005feed2\"\002\001\001(\001"
-  get-tuple-element.11 = (f32[2,4,4,2]{3,2,1,0}, f32[2,4,4,2]{3,2,1,0}) get-tuple-element(infeed.10), index=0
-  get-tuple-element.13 = f32[2,4,4,2]{3,2,1,0} get-tuple-element(get-tuple-element.11), index=1
-  get-tuple-element.12 = f32[2,4,4,2]{3,2,1,0} get-tuple-element(get-tuple-element.11), index=0
-  arg1.7 = f32[1,1,2,2]{3,2,1,0} parameter(1)
-  convolution.14 = f32[2,4,4,2]{3,2,1,0} convolution(get-tuple-element.12, arg1.7), window={size=1x1}, dim_labels=b01f_01io->b01f
-  arg2.8 = f32[2]{0} parameter(2)
-  broadcast.15 = f32[2,4,4,2]{3,2,1,0} broadcast(arg2.8), dimensions={3}
-  add.16 = f32[2,4,4,2]{3,2,1,0} add(convolution.14, broadcast.15)
-  add.17 = f32[2,4,4,2]{3,2,1,0} add(get-tuple-element.13, add.16)
-  arg0.6 = f32[] parameter(0)
-  ROOT tuple.22 = (f32[2,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(add.17, arg0.6, arg1.7, arg2.8)
+  after-all.9 = token[] after-all(), sharding={maximal device=0}
+  infeed.10 = ((f32[2,4,4,2]{3,2,1,0}, f32[2,4,4,2]{3,2,1,0}), token[]) infeed(after-all.9), infeed_config="\010\001\022\005feed2\"\002\001\001(\001", sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  get-tuple-element.11 = (f32[2,4,4,2]{3,2,1,0}, f32[2,4,4,2]{3,2,1,0}) get-tuple-element(infeed.10), index=0, sharding={{maximal device=0}, {maximal device=0}}
+  get-tuple-element.13 = f32[2,4,4,2]{3,2,1,0} get-tuple-element(get-tuple-element.11), index=1, sharding={maximal device=0}
+  get-tuple-element.12 = f32[2,4,4,2]{3,2,1,0} get-tuple-element(get-tuple-element.11), index=0, sharding={maximal device=0}
+  arg1.7 = f32[1,1,2,2]{3,2,1,0} parameter(1), sharding={maximal device=0}
+  convolution.14 = f32[2,4,4,2]{3,2,1,0} convolution(get-tuple-element.12, arg1.7), window={size=1x1}, dim_labels=b01f_01io->b01f, sharding={maximal device=0}
+  arg2.8 = f32[2]{0} parameter(2), sharding={maximal device=0}
+  broadcast.15 = f32[2,4,4,2]{3,2,1,0} broadcast(arg2.8), dimensions={3}, sharding={maximal device=0}
+  add.16 = f32[2,4,4,2]{3,2,1,0} add(convolution.14, broadcast.15), sharding={maximal device=0}
+  add.17 = f32[2,4,4,2]{3,2,1,0} add(get-tuple-element.13, add.16), sharding={maximal device=0}
+  arg0.6 = f32[] parameter(0), sharding={maximal device=0}
+  ROOT tuple.22 = (f32[2,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(add.17, arg0.6, arg1.7, arg2.8), sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}, {maximal device=0}}
 }
 
 Sum-reduction.23 {
@@ -57,37 +57,37 @@ Sum-reduction.23 {
 }
 
 stage_2 {
-  arg0.28 = f32[2,4,4,2]{3,2,1,0} parameter(0)
-  convert.30 = f32[2,4,4,2]{3,2,1,0} convert(arg0.28)
-  constant.31 = f32[] constant(0)
-  convert.32 = f32[] convert(constant.31)
-  reduce.33 = f32[] reduce(convert.30, convert.32), dimensions={0,1,2,3}, to_apply=Sum-reduction.23
-  convert.34 = f32[] convert(reduce.33)
-  arg1.29 = f32[] parameter(1)
-  add.35 = f32[] add(convert.34, arg1.29)
-  after-all.36 = token[] after-all()
-  outfeed.37 = token[] outfeed(add.35, after-all.36), outfeed_config="\010\001\022\005feed3\"\001\001(\001"
-  ROOT tuple.38 = () tuple()
+  arg0.28 = f32[2,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=1}
+  convert.30 = f32[2,4,4,2]{3,2,1,0} convert(arg0.28), sharding={maximal device=1}
+  constant.31 = f32[] constant(0), sharding={maximal device=1}
+  convert.32 = f32[] convert(constant.31), sharding={maximal device=1}
+  reduce.33 = f32[] reduce(convert.30, convert.32), dimensions={0,1,2,3}, to_apply=Sum-reduction.23, sharding={maximal device=1}
+  convert.34 = f32[] convert(reduce.33), sharding={maximal device=1}
+  arg1.29 = f32[] parameter(1), sharding={maximal device=1}
+  add.35 = f32[] add(convert.34, arg1.29), sharding={maximal device=1}
+  after-all.36 = token[] after-all(), sharding={maximal device=1}
+  outfeed.37 = token[] outfeed(add.35, after-all.36), outfeed_config="\010\001\022\005feed3\"\001\001(\001", sharding={maximal device=1}
+  ROOT tuple.38 = () tuple(), sharding={maximal device=1}
 }
 
 pipeline {
-  arg0.40 = f32[] parameter(0)
-  arg1.41 = f32[1,1,2,2]{3,2,1,0} parameter(1)
-  arg2.42 = f32[2]{0} parameter(2)
-  call.43 = (f32[2,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.40, arg1.41, arg2.42), to_apply=stage_1, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  get-tuple-element.44 = f32[2,4,4,2]{3,2,1,0} get-tuple-element(call.43), index=0
-  get-tuple-element.45 = f32[] get-tuple-element(call.43), index=1
-  call.46 = () call(get-tuple-element.44, get-tuple-element.45), to_apply=stage_2, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  ROOT tuple.51 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg1.41, arg2.42)
+  arg0.40 = f32[] parameter(0), sharding={maximal device=0}
+  arg1.41 = f32[1,1,2,2]{3,2,1,0} parameter(1), sharding={maximal device=0}
+  arg2.42 = f32[2]{0} parameter(2), sharding={maximal device=0}
+  call.43 = (f32[2,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.40, arg1.41, arg2.42), to_apply=stage_1, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}, {maximal device=0}}
+  get-tuple-element.44 = f32[2,4,4,2]{3,2,1,0} get-tuple-element(call.43), index=0, sharding={maximal device=0}
+  get-tuple-element.45 = f32[] get-tuple-element(call.43), index=1, sharding={maximal device=0}
+  call.46 = () call(get-tuple-element.44, get-tuple-element.45), to_apply=stage_2, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  ROOT tuple.51 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg1.41, arg2.42), sharding={{maximal device=0}, {maximal device=0}}
 }
 
 ENTRY main {
-  arg0.1 = f32[] parameter(0), parameter_replication={false}
-  reshape.4 = f32[] reshape(arg0.1)
-  arg2.3 = f32[1,1,2,2]{3,2,1,0} parameter(2), parameter_replication={false}
-  arg1.2 = f32[2]{0} parameter(1), parameter_replication={false}
-  call.52 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(reshape.4, arg2.3, arg1.2), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
-  ROOT tuple.53 = () tuple()
+  arg0.1 = f32[] parameter(0), parameter_replication={false}, sharding={maximal device=0}
+  reshape.4 = f32[] reshape(arg0.1), sharding={maximal device=0}
+  arg2.3 = f32[1,1,2,2]{3,2,1,0} parameter(2), parameter_replication={false}, sharding={maximal device=0}
+  arg1.2 = f32[2]{0} parameter(1), parameter_replication={false}, sharding={maximal device=0}
+  call.52 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(reshape.4, arg2.3, arg1.2), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}", sharding={{maximal device=0}, {maximal device=0}}
+  ROOT tuple.53 = () tuple(), sharding={maximal device=0}
 }
 )";
 
@@ -112,13 +112,13 @@ _pop_op_conv_biasadd {
 }
 
 pipeline_stage_0_func_11_rewritten__.11 {
-  arg0.12 = f32[1,4,4,2]{3,2,1,0} parameter(0)
-  arg2.14 = f32[1,1,2,2]{3,2,1,0} parameter(2)
-  convolution.16 = f32[1,4,4,2]{3,2,1,0} convolution(arg0.12, arg2.14), window={size=1x1}, dim_labels=b01f_01io->b01f
-  arg3.15 = f32[2]{0} parameter(3)
-  fusion.5 = f32[1,4,4,2]{3,2,1,0} fusion(convolution.16, arg3.15), kind=kCustom, calls=_pop_op_conv_biasadd
-  arg1.13 = f32[] parameter(1)
-  ROOT tuple.50 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}) tuple(fusion.5, arg1.13, arg0.12)
+  arg0.12 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
+  arg2.14 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=0}
+  convolution.16 = f32[1,4,4,2]{3,2,1,0} convolution(arg0.12, arg2.14), window={size=1x1}, dim_labels=b01f_01io->b01f, sharding={maximal device=0}
+  arg3.15 = f32[2]{0} parameter(3), sharding={maximal device=0}
+  fusion.5 = f32[1,4,4,2]{3,2,1,0} fusion(convolution.16, arg3.15), kind=kCustom, calls=_pop_op_conv_biasadd, sharding={maximal device=0}
+  arg1.13 = f32[] parameter(1), sharding={maximal device=0}
+  ROOT tuple.50 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}) tuple(fusion.5, arg1.13, arg0.12), sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
 }
 
 _pop_op_conv_biasadd.1 {
@@ -129,13 +129,13 @@ _pop_op_conv_biasadd.1 {
 }
 
 pipeline_stage_1_func_34_rewritten__.24 {
-  arg0.25 = f32[1,4,4,2]{3,2,1,0} parameter(0)
-  arg2.27 = f32[1,1,2,2]{3,2,1,0} parameter(2)
-  convolution.29 = f32[1,4,4,2]{3,2,1,0} convolution(arg0.25, arg2.27), window={size=1x1}, dim_labels=b01f_01io->b01f
-  arg3.28 = f32[2]{0} parameter(3)
-  fusion.6 = f32[1,4,4,2]{3,2,1,0} fusion(convolution.29, arg3.28), kind=kCustom, calls=_pop_op_conv_biasadd.1
-  arg1.26 = f32[] parameter(1)
-  ROOT tuple.48 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) tuple(fusion.6, arg1.26, arg0.25, arg2.27)
+  arg0.25 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=1}
+  arg2.27 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=1}
+  convolution.29 = f32[1,4,4,2]{3,2,1,0} convolution(arg0.25, arg2.27), window={size=1x1}, dim_labels=b01f_01io->b01f, sharding={maximal device=1}
+  arg3.28 = f32[2]{0} parameter(3), sharding={maximal device=1}
+  fusion.6 = f32[1,4,4,2]{3,2,1,0} fusion(convolution.29, arg3.28), kind=kCustom, calls=_pop_op_conv_biasadd.1, sharding={maximal device=1}
+  arg1.26 = f32[] parameter(1), sharding={maximal device=1}
+  ROOT tuple.48 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) tuple(fusion.6, arg1.26, arg0.25, arg2.27), sharding={{maximal device=1}, {maximal device=1}, {maximal device=1}, {maximal device=1}}
 }
 
 Sum-reduction.37 {
@@ -152,17 +152,17 @@ _pop_op_implicit_binary_inplace {
 }
 
 pipeline_stage_2_func_57_rewritten__.0 {
-  arg0.0 = f32[1,4,4,2]{3,2,1,0} parameter(0)
-  arg2.0 = f32[1,1,2,2]{3,2,1,0} parameter(2)
-  convolution = f32[1,4,4,2]{3,2,1,0} convolution(arg0.0, arg2.0), window={size=1x1}, dim_labels=b01f_01io->b01f
-  arg3.0 = f32[2]{0} parameter(3)
-  fusion.20 = f32[1,4,4,2]{3,2,1,0} fusion(convolution, arg3.0), kind=kCustom, calls=_pop_op_implicit_binary_inplace
-  constant = f32[] constant(0)
-  reduce = f32[] reduce(fusion.20, constant), dimensions={0,1,2,3}, to_apply=Sum-reduction.37
-  after-all = token[] after-all()
-  outfeed = token[] outfeed(reduce, after-all), outfeed_config="\010\001\022\005feed0\"\001\001(\001"
-  arg1.0 = f32[] parameter(1)
-  ROOT tuple.47 = (f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) tuple(arg1.0, arg0.0, arg2.0)
+  arg0.0 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=2}
+  arg2.0 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=2}
+  convolution = f32[1,4,4,2]{3,2,1,0} convolution(arg0.0, arg2.0), window={size=1x1}, dim_labels=b01f_01io->b01f, sharding={maximal device=2}
+  arg3.0 = f32[2]{0} parameter(3), sharding={maximal device=2}
+  fusion.20 = f32[1,4,4,2]{3,2,1,0} fusion(convolution, arg3.0), kind=kCustom, calls=_pop_op_implicit_binary_inplace, sharding={maximal device=2}
+  constant = f32[] constant(0), sharding={maximal device=2}
+  reduce = f32[] reduce(fusion.20, constant), dimensions={0,1,2,3}, to_apply=Sum-reduction.37, sharding={maximal device=2}
+  after-all = token[] after-all(), sharding={maximal device=2}
+  outfeed = token[] outfeed(reduce, after-all), outfeed_config="\010\001\022\005feed0\"\001\001(\001", sharding={maximal device=2}
+  arg1.0 = f32[] parameter(1), sharding={maximal device=2}
+  ROOT tuple.47 = (f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) tuple(arg1.0, arg0.0, arg2.0), sharding={{maximal device=2}, {maximal device=2}, {maximal device=2}}
 }
 
 _pop_op_scaled_inplace {
@@ -220,21 +220,21 @@ _pop_op_implicit_ternary.4 {
 }
 
 pipeline_stage_0_func_11_grad_174__.2 {
-  arg2.15 = f32[1,1,2,2]{3,2,1,0} parameter(2)
-  arg2.13 = f32[1,4,4,2]{3,2,1,0} parameter(1)
-  arg0.11 = f32[1,4,4,2]{3,2,1,0} parameter(0)
-  convolution.22 = f32[1,1,2,2]{3,2,1,0} convolution(arg2.13, arg0.11), window={size=4x4}, dim_labels=f01b_i01o->01bf
-  fusion.8 = f32[1,1,2,2]{3,2,1,0} fusion(convolution.22, arg2.15), kind=kCustom, calls=_pop_op_scaled_inplace.1
-  fusion.18 = f32[1,1,2,2]{3,2,1,0} fusion(fusion.8), kind=kCustom, calls=_pop_op_implicit_ternary.1
-  get-tuple-element.23 = f32[] parameter(3)
-  fusion.10 = f32[1,1,2,2]{3,2,1,0} fusion(arg2.15, fusion.18, get-tuple-element.23), kind=kCustom, calls=_pop_op_scaled_inplace.3
-  arg3.13 = f32[2]{0} parameter(4)
-  constant.75 = f32[] constant(0)
-  reduce.11 = f32[2]{0} reduce(arg0.11, constant.75), dimensions={0,1,2}, to_apply=Sum-reduction.37
-  fusion.7 = f32[2]{0} fusion(reduce.11, arg3.13), kind=kCustom, calls=_pop_op_scaled_inplace
-  fusion.22 = f32[2]{0} fusion(fusion.7), kind=kCustom, calls=_pop_op_implicit_ternary.4
-  fusion.9 = f32[2]{0} fusion(arg3.13, fusion.22, get-tuple-element.23), kind=kCustom, calls=_pop_op_scaled_inplace.2
-  ROOT tuple.42 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(fusion.10, fusion.9)
+  arg2.15 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=0}
+  arg2.13 = f32[1,4,4,2]{3,2,1,0} parameter(1), sharding={maximal device=0}
+  arg0.11 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
+  convolution.22 = f32[1,1,2,2]{3,2,1,0} convolution(arg2.13, arg0.11), window={size=4x4}, dim_labels=f01b_i01o->01bf, sharding={maximal device=0}
+  fusion.8 = f32[1,1,2,2]{3,2,1,0} fusion(convolution.22, arg2.15), kind=kCustom, calls=_pop_op_scaled_inplace.1, sharding={maximal device=0}
+  fusion.18 = f32[1,1,2,2]{3,2,1,0} fusion(fusion.8), kind=kCustom, calls=_pop_op_implicit_ternary.1, sharding={maximal device=0}
+  get-tuple-element.23 = f32[] parameter(3), sharding={maximal device=0}
+  fusion.10 = f32[1,1,2,2]{3,2,1,0} fusion(arg2.15, fusion.18, get-tuple-element.23), kind=kCustom, calls=_pop_op_scaled_inplace.3, sharding={maximal device=0}
+  arg3.13 = f32[2]{0} parameter(4), sharding={maximal device=0}
+  constant.75 = f32[] constant(0), sharding={maximal device=0}
+  reduce.11 = f32[2]{0} reduce(arg0.11, constant.75), dimensions={0,1,2}, to_apply=Sum-reduction.37, sharding={maximal device=0}
+  fusion.7 = f32[2]{0} fusion(reduce.11, arg3.13), kind=kCustom, calls=_pop_op_scaled_inplace, sharding={maximal device=0}
+  fusion.22 = f32[2]{0} fusion(fusion.7), kind=kCustom, calls=_pop_op_implicit_ternary.4, sharding={maximal device=0}
+  fusion.9 = f32[2]{0} fusion(arg3.13, fusion.22, get-tuple-element.23), kind=kCustom, calls=_pop_op_scaled_inplace.2, sharding={maximal device=0}
+  ROOT tuple.42 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(fusion.10, fusion.9), sharding={{maximal device=0}, {maximal device=0}}
 }
 
 _pop_op_conv_with_reverse.clone {
@@ -281,21 +281,21 @@ _pop_op_implicit_ternary.3 {
 }
 
 pipeline_stage_1_func_34_grad_139__.3 {
-  arg0.13 = f32[1,4,4,2]{3,2,1,0} parameter(0)
-  arg3.14 = f32[1,1,2,2]{3,2,1,0} parameter(2)
-  fusion.3 = f32[1,4,4,2]{3,2,1,0} fusion(arg0.13, arg3.14), kind=kCustom, calls=_pop_op_conv_with_reverse.clone
-  arg4.9 = f32[1,1,2,2]{3,2,1,0} parameter(4)
-  arg2.16 = f32[1,4,4,2]{3,2,1,0} parameter(1)
-  convolution.24 = f32[1,1,2,2]{3,2,1,0} convolution(arg2.16, arg0.13), window={size=4x4}, dim_labels=f01b_i01o->01bf
-  fusion.19 = f32[1,1,2,2]{3,2,1,0} fusion(convolution.24), kind=kCustom, calls=_pop_op_implicit_ternary.2
-  get-tuple-element.24 = f32[] parameter(3)
-  fusion.12 = f32[1,1,2,2]{3,2,1,0} fusion(arg4.9, fusion.19, get-tuple-element.24), kind=kCustom, calls=_pop_op_scaled_inplace.5
-  arg5.2 = f32[2]{0} parameter(5)
-  constant.78 = f32[] constant(0)
-  reduce.12 = f32[2]{0} reduce(arg0.13, constant.78), dimensions={0,1,2}, to_apply=Sum-reduction.37
-  fusion.21 = f32[2]{0} fusion(reduce.12), kind=kCustom, calls=_pop_op_implicit_ternary.3
-  fusion.11 = f32[2]{0} fusion(arg5.2, fusion.21, get-tuple-element.24), kind=kCustom, calls=_pop_op_scaled_inplace.4
-  ROOT tuple.44 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) tuple(fusion.3, fusion.12, fusion.11, get-tuple-element.24)
+  arg0.13 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=1}
+  arg3.14 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=1}
+  fusion.3 = f32[1,4,4,2]{3,2,1,0} fusion(arg0.13, arg3.14), kind=kCustom, calls=_pop_op_conv_with_reverse.clone, sharding={maximal device=1}
+  arg4.9 = f32[1,1,2,2]{3,2,1,0} parameter(4), sharding={maximal device=1}
+  arg2.16 = f32[1,4,4,2]{3,2,1,0} parameter(1), sharding={maximal device=1}
+  convolution.24 = f32[1,1,2,2]{3,2,1,0} convolution(arg2.16, arg0.13), window={size=4x4}, dim_labels=f01b_i01o->01bf, sharding={maximal device=1}
+  fusion.19 = f32[1,1,2,2]{3,2,1,0} fusion(convolution.24), kind=kCustom, calls=_pop_op_implicit_ternary.2, sharding={maximal device=1}
+  get-tuple-element.24 = f32[] parameter(3), sharding={maximal device=1}
+  fusion.12 = f32[1,1,2,2]{3,2,1,0} fusion(arg4.9, fusion.19, get-tuple-element.24), kind=kCustom, calls=_pop_op_scaled_inplace.5, sharding={maximal device=1}
+  arg5.2 = f32[2]{0} parameter(5), sharding={maximal device=1}
+  constant.78 = f32[] constant(0), sharding={maximal device=1}
+  reduce.12 = f32[2]{0} reduce(arg0.13, constant.78), dimensions={0,1,2}, to_apply=Sum-reduction.37, sharding={maximal device=1}
+  fusion.21 = f32[2]{0} fusion(reduce.12), kind=kCustom, calls=_pop_op_implicit_ternary.3, sharding={maximal device=1}
+  fusion.11 = f32[2]{0} fusion(arg5.2, fusion.21, get-tuple-element.24), kind=kCustom, calls=_pop_op_scaled_inplace.4, sharding={maximal device=1}
+  ROOT tuple.44 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) tuple(fusion.3, fusion.12, fusion.11, get-tuple-element.24), sharding={{maximal device=1}, {maximal device=1}, {maximal device=1}, {maximal device=1}}
 }
 
 _pop_op_conv_with_reverse.2.clone {
@@ -360,61 +360,61 @@ _pop_op_implicit_ternary.5 {
 }
 
 pipeline_stage_2_func_57_grad_98__.5 {
-  constant.80 = f32[1]{0} constant({1})
-  broadcast.96 = f32[1,4,4,2]{3,2,1,0} broadcast(constant.80), dimensions={0}
-  arg4.10 = f32[1,1,2,2]{3,2,1,0} parameter(1)
-  fusion.4 = f32[1,4,4,2]{3,2,1,0} fusion(broadcast.96, arg4.10), kind=kCustom, calls=_pop_op_conv_with_reverse.2.clone
-  arg6.5 = f32[1,1,2,2]{3,2,1,0} parameter(2)
-  arg3.16 = f32[1,4,4,2]{3,2,1,0} parameter(0)
-  convolution.26 = f32[1,1,2,2]{3,2,1,0} convolution(arg3.16, broadcast.96), window={size=4x4}, dim_labels=f01b_i01o->01bf
-  fusion.14 = f32[1,1,2,2]{3,2,1,0} fusion(convolution.26, arg6.5), kind=kCustom, calls=_pop_op_scaled_inplace.7
-  fusion.17 = f32[1,1,2,2]{3,2,1,0} fusion(fusion.14), kind=kCustom, calls=_pop_op_implicit_ternary
-  get-tuple-element.161.clone.18 = f32[] parameter(3)
-  fusion.16 = f32[1,1,2,2]{3,2,1,0} fusion(arg6.5, fusion.17, get-tuple-element.161.clone.18), kind=kCustom, calls=_pop_op_scaled_inplace.9
-  arg7.4 = f32[2]{0} parameter(4)
-  constant.84 = f32[] constant(0)
-  reduce.13 = f32[2]{0} reduce(broadcast.96, constant.84), dimensions={0,1,2}, to_apply=Sum-reduction.37
-  fusion.13 = f32[2]{0} fusion(reduce.13, arg7.4), kind=kCustom, calls=_pop_op_scaled_inplace.6
-  fusion.23 = f32[2]{0} fusion(fusion.13), kind=kCustom, calls=_pop_op_implicit_ternary.5
-  fusion.15 = f32[2]{0} fusion(arg7.4, fusion.23, get-tuple-element.161.clone.18), kind=kCustom, calls=_pop_op_scaled_inplace.8
-  ROOT tuple.46 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) tuple(fusion.4, fusion.16, fusion.15, get-tuple-element.161.clone.18)
+  constant.80 = f32[1]{0} constant({1}), sharding={maximal device=2}
+  broadcast.96 = f32[1,4,4,2]{3,2,1,0} broadcast(constant.80), dimensions={0}, sharding={maximal device=2}
+  arg4.10 = f32[1,1,2,2]{3,2,1,0} parameter(1), sharding={maximal device=2}
+  fusion.4 = f32[1,4,4,2]{3,2,1,0} fusion(broadcast.96, arg4.10), kind=kCustom, calls=_pop_op_conv_with_reverse.2.clone, sharding={maximal device=2}
+  arg6.5 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=2}
+  arg3.16 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=2}
+  convolution.26 = f32[1,1,2,2]{3,2,1,0} convolution(arg3.16, broadcast.96), window={size=4x4}, dim_labels=f01b_i01o->01bf, sharding={maximal device=2}
+  fusion.14 = f32[1,1,2,2]{3,2,1,0} fusion(convolution.26, arg6.5), kind=kCustom, calls=_pop_op_scaled_inplace.7, sharding={maximal device=2}
+  fusion.17 = f32[1,1,2,2]{3,2,1,0} fusion(fusion.14), kind=kCustom, calls=_pop_op_implicit_ternary, sharding={maximal device=2}
+  get-tuple-element.161.clone.18 = f32[] parameter(3), sharding={maximal device=2}
+  fusion.16 = f32[1,1,2,2]{3,2,1,0} fusion(arg6.5, fusion.17, get-tuple-element.161.clone.18), kind=kCustom, calls=_pop_op_scaled_inplace.9, sharding={maximal device=2}
+  arg7.4 = f32[2]{0} parameter(4), sharding={maximal device=2}
+  constant.84 = f32[] constant(0), sharding={maximal device=2}
+  reduce.13 = f32[2]{0} reduce(broadcast.96, constant.84), dimensions={0,1,2}, to_apply=Sum-reduction.37, sharding={maximal device=2}
+  fusion.13 = f32[2]{0} fusion(reduce.13, arg7.4), kind=kCustom, calls=_pop_op_scaled_inplace.6, sharding={maximal device=2}
+  fusion.23 = f32[2]{0} fusion(fusion.13), kind=kCustom, calls=_pop_op_implicit_ternary.5, sharding={maximal device=2}
+  fusion.15 = f32[2]{0} fusion(arg7.4, fusion.23, get-tuple-element.161.clone.18), kind=kCustom, calls=_pop_op_scaled_inplace.8, sharding={maximal device=2}
+  ROOT tuple.46 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) tuple(fusion.4, fusion.16, fusion.15, get-tuple-element.161.clone.18), sharding={{maximal device=2}, {maximal device=2}, {maximal device=2}, {maximal device=2}}
 }
 
 pipeline {
-  arg0.125 = f32[1,4,4,2]{3,2,1,0} parameter(0)
-  arg1.126 = f32[] parameter(1)
-  arg2.127 = f32[1,1,2,2]{3,2,1,0} parameter(2)
-  arg3.128 = f32[2]{0} parameter(3)
-  call.145 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}) call(arg0.125, arg1.126, arg2.127, arg3.128), to_apply=pipeline_stage_0_func_11_rewritten__.11, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  get-tuple-element.146 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.145), index=0
-  get-tuple-element.147 = f32[] get-tuple-element(call.145), index=1
-  arg4.129 = f32[1,1,2,2]{3,2,1,0} parameter(4)
-  arg5.130 = f32[2]{0} parameter(5)
-  call.152 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) call(get-tuple-element.146, get-tuple-element.147, arg4.129, arg5.130), to_apply=pipeline_stage_1_func_34_rewritten__.24, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  get-tuple-element.153 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.152), index=0
-  get-tuple-element.154 = f32[] get-tuple-element(call.152), index=1
-  arg6.131 = f32[1,1,2,2]{3,2,1,0} parameter(6)
-  arg7.132 = f32[2]{0} parameter(7)
-  call = (f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) call(get-tuple-element.153, get-tuple-element.154, arg6.131, arg7.132), to_apply=pipeline_stage_2_func_57_rewritten__.0, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
-  get-tuple-element.25 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call), index=1
-  get-tuple-element.26 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call), index=2
-  get-tuple-element.161.clone = f32[] get-tuple-element(call), index=0
-  call.13 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) call(get-tuple-element.25, get-tuple-element.26, arg6.131, get-tuple-element.161.clone, arg7.132), to_apply=pipeline_stage_2_func_57_grad_98__.5, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
-  get-tuple-element.176 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.13), index=0
-  get-tuple-element.27 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.152), index=2
-  get-tuple-element.28 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.152), index=3
-  get-tuple-element.5 = f32[] get-tuple-element(call.13), index=3
-  call.12 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) call(get-tuple-element.176, get-tuple-element.27, get-tuple-element.28, get-tuple-element.5, arg4.129, arg5.130), to_apply=pipeline_stage_1_func_34_grad_139__.3, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  get-tuple-element.203 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.12), index=0
-  get-tuple-element.29 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.145), index=2
-  get-tuple-element.14 = f32[] get-tuple-element(call.12), index=3
-  call.11 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.203, get-tuple-element.29, arg2.127, get-tuple-element.14, arg3.128), to_apply=pipeline_stage_0_func_11_grad_174__.2, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  get-tuple-element.17 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.11), index=0
-  get-tuple-element.21 = f32[2]{0} get-tuple-element(call.11), index=1
-  get-tuple-element.7 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.12), index=1
-  get-tuple-element.10 = f32[2]{0} get-tuple-element(call.12), index=2
-  get-tuple-element = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.13), index=1
-  get-tuple-element.1 = f32[2]{0} get-tuple-element(call.13), index=2
+  arg0.125 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
+  arg1.126 = f32[] parameter(1), sharding={maximal device=0}
+  arg2.127 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=0}
+  arg3.128 = f32[2]{0} parameter(3), sharding={maximal device=0}
+  call.145 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}) call(arg0.125, arg1.126, arg2.127, arg3.128), to_apply=pipeline_stage_0_func_11_rewritten__.11, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  get-tuple-element.146 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.145), index=0, sharding={maximal device=0}
+  get-tuple-element.147 = f32[] get-tuple-element(call.145), index=1, sharding={maximal device=0}
+  arg4.129 = f32[1,1,2,2]{3,2,1,0} parameter(4), sharding={maximal device=1}
+  arg5.130 = f32[2]{0} parameter(5), sharding={maximal device=1}
+  call.152 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) call(get-tuple-element.146, get-tuple-element.147, arg4.129, arg5.130), to_apply=pipeline_stage_1_func_34_rewritten__.24, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={{maximal device=1}, {maximal device=1}, {maximal device=1}, {maximal device=1}}
+  get-tuple-element.153 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.152), index=0, sharding={maximal device=1}
+  get-tuple-element.154 = f32[] get-tuple-element(call.152), index=1, sharding={maximal device=1}
+  arg6.131 = f32[1,1,2,2]{3,2,1,0} parameter(6), sharding={maximal device=2}
+  arg7.132 = f32[2]{0} parameter(7), sharding={maximal device=2}
+  call = (f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) call(get-tuple-element.153, get-tuple-element.154, arg6.131, arg7.132), to_apply=pipeline_stage_2_func_57_rewritten__.0, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}", sharding={{maximal device=2}, {maximal device=2}, {maximal device=2}}
+  get-tuple-element.25 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call), index=1, sharding={maximal device=2}
+  get-tuple-element.26 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call), index=2, sharding={maximal device=2}
+  get-tuple-element.161.clone = f32[] get-tuple-element(call), index=0, sharding={maximal device=2}
+  call.13 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) call(get-tuple-element.25, get-tuple-element.26, arg6.131, get-tuple-element.161.clone, arg7.132), to_apply=pipeline_stage_2_func_57_grad_98__.5, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}", sharding={{maximal device=2}, {maximal device=2}, {maximal device=2}, {maximal device=2}}
+  get-tuple-element.27 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.152), index=2, sharding={maximal device=1}
+  get-tuple-element.28 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.152), index=3, sharding={maximal device=1}
+  get-tuple-element.5 = f32[] get-tuple-element(call.13), index=3, sharding={maximal device=1}
+  get-tuple-element.176 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.13), index=0, sharding={maximal device=2}
+  call.12 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) call(get-tuple-element.176, get-tuple-element.27, get-tuple-element.28, get-tuple-element.5, arg4.129, arg5.130), to_apply=pipeline_stage_1_func_34_grad_139__.3, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={{maximal device=1}, {maximal device=1}, {maximal device=1}, {maximal device=1}}
+  get-tuple-element.203 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.12), index=0, sharding={maximal device=1}
+  get-tuple-element.14 = f32[] get-tuple-element(call.12), index=3, sharding={maximal device=1}
+  get-tuple-element.29 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.145), index=2, sharding={maximal device=0}
+  call.11 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.203, get-tuple-element.29, arg2.127, get-tuple-element.14, arg3.128), to_apply=pipeline_stage_0_func_11_grad_174__.2, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={{maximal device=0}, {maximal device=0}}
+  get-tuple-element.17 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.11), index=0, sharding={maximal device=0}
+  get-tuple-element.21 = f32[2]{0} get-tuple-element(call.11), index=1, sharding={maximal device=0}
+  get-tuple-element.7 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.12), index=1, sharding={maximal device=1}
+  get-tuple-element.10 = f32[2]{0} get-tuple-element(call.12), index=2, sharding={maximal device=1}
+  get-tuple-element = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.13), index=1, sharding={maximal device=2}
+  get-tuple-element.1 = f32[2]{0} get-tuple-element(call.13), index=2, sharding={maximal device=2}
   ROOT tuple.266 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1)
 }
 
@@ -459,8 +459,10 @@ ENTRY cluster {
   EXPECT_THAT(stage_1_bwd->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(stage_1_bwd->operand(1)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_1_bwd->operand(1))->depth(), 1);
+  EXPECT_THAT(stage_1_bwd->operand(1)->sharding().GetUniqueDevice(), 1);
   EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(stage_1_bwd->operand(2)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_1_bwd->operand(2))->depth(), 1);
+  EXPECT_THAT(stage_1_bwd->operand(2)->sharding().GetUniqueDevice(), 1);
   EXPECT_THAT(stage_1_bwd->operand(3)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_THAT(stage_1_bwd->operand(4)->opcode(), HloOpcode::kParameter);
   EXPECT_THAT(stage_1_bwd->operand(5)->opcode(), HloOpcode::kParameter);
@@ -470,6 +472,7 @@ ENTRY cluster {
   EXPECT_THAT(stage_0_bwd->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(stage_0_bwd->operand(1)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_0_bwd->operand(1))->depth(), 2);
+  EXPECT_THAT(stage_0_bwd->operand(1)->sharding().GetUniqueDevice(), 0);
   EXPECT_THAT(stage_0_bwd->operand(2)->opcode(), HloOpcode::kParameter);
   EXPECT_THAT(stage_0_bwd->operand(3)->opcode(), HloOpcode::kGetTupleElement);
   EXPECT_THAT(stage_0_bwd->operand(4)->opcode(), HloOpcode::kParameter);

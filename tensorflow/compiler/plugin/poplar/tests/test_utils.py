@@ -33,6 +33,7 @@ def configure_ipu_system(compilation_trace=True,
                          text_report=True,
                          cbor_report=False,
                          sharded=False,
+                         pipelining=False,
                          replicated=False,
                          compile_ipu_code=False,
                          enable_ipu_events=False,
@@ -57,12 +58,13 @@ def configure_ipu_system(compilation_trace=True,
       opt.option = o[0]
       opt.value = o[1]
 
-  # When sharded we use two devices.
-  device_count = 2 if sharded else 0
-
-  if replicated:
-    # When replicating, we either double the number of IPUs, or if it was 0, we create 2 replicas.
-    device_count = device_count * 2 if device_count else 2
+  # When sharded or pipelining we use two devices.
+  if sharded:
+    device_count = 2 * (2 if replicated else 1)
+  elif pipelining:
+    device_count = 4 * (2 if replicated else 1)
+  else:
+    device_count = 2 if replicated else 0
 
   if device_count:
     dev = opts.device_config.add()
