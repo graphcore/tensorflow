@@ -37,25 +37,18 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = math_ops.sigmoid(pa)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report.reset()
 
       fd = {pa: [-6.0, 0.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.002473, 0.5, 0.997527])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'Sigmoid/custom-call/Nonlinearity']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testSigmoidNotInplace(self):
     with self.session() as sess:
@@ -63,29 +56,22 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = math_ops.sigmoid(pa) + pa
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report.reset()
 
       fd = {pa: [-6.0, 0.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [-5.997527, 0.5, 6.997527])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = [
           '__seed*',
           'Copy_XLA_Args/arg0.*_to_Sigmoid/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Sigmoid/custom-call/Nonlinearity', 'add/add.*/AddTo'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testSigmoidGrad(self):
     with self.session() as sess:
@@ -94,25 +80,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [3], name="in")
         c = gen_math_ops.sigmoid_grad(pa, pb)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [-1.0, 1.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [2.0, 0.25, 0.0])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'SigmoidGrad/custom-call/NonLinearityGrad']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testRelu(self):
     with self.session() as sess:
@@ -120,23 +98,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = nn_ops.relu(pa)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [-6.0, 0.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, 0.0, 6.0])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'Relu/custom-call/Nonlinearity']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testReluNotInPlace(self):
     with self.session() as sess:
@@ -144,27 +116,21 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = nn_ops.relu(pa) + pa
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [1, -2, 1]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [2, -2, 2])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = [
           '__seed*',
           'Copy_XLA_Args/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Relu/custom-call/Nonlinearity', 'add/add.*/AddTo'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testReluNotInPlace2(self):
     with self.session() as sess:
@@ -173,26 +139,22 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         b = array_ops.concat([pa, pa], axis=0)
         c = nn_ops.relu(b)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [-2, -1, 0, 1, 2]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0, 0, 0, 1, 2, 0, 0, 0, 1, 2])
       self.assertTrue(len(result) == 10)
 
-      result_report = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result_report)
-      cs_list = tu.get_compute_sets_from_report(s)
       ok = [
           '__seed*',
           'Copy_XLA_Args/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Relu/custom-call/Nonlinearity'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testReluGrad(self):
     with self.session() as sess:
@@ -201,44 +163,31 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [3], name="in")
         c = gen_nn_ops.relu_grad(pa, pb)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [-1.0, 1.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, 0.5, 1.0])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'ReluGrad/custom-call/NonLinearityGrad']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testMaxPool(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
-        c = nn.max_pool(
-            pa,
-            ksize=[1, 1, 5, 5],
-            strides=[1, 1, 2, 2],
-            data_format='NCHW',
-            padding='SAME',
-            name="max")
+        c = nn.max_pool(pa,
+                        ksize=[1, 1, 5, 5],
+                        strides=[1, 1, 2, 2],
+                        data_format='NCHW',
+                        padding='SAME',
+                        name="max")
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {
           pa: np.ones([1, 1, 10, 10]),
@@ -246,14 +195,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, np.ones([1, 1, 5, 5]))
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'max/custom-call*/maxPool5x5']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testFwdAndBwdMaxPool(self):
     with self.session() as sess:
@@ -263,27 +208,22 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 4, 4, 1], name="a")
         pb = array_ops.placeholder(np.float32, [1, 2, 2, 1], name="b")
-        c = nn.max_pool(
-            pa,
-            ksize=[1, 2, 2, 1],
-            strides=[1, 2, 2, 1],
-            data_format='NCHW',
-            padding='SAME')
-        d = gen_nn_ops.max_pool_grad(
-            pa,
-            c,
-            pb,
-            ksize=[1, 2, 2, 1],
-            strides=[1, 2, 2, 1],
-            data_format='NCHW',
-            padding='SAME')
+        c = nn.max_pool(pa,
+                        ksize=[1, 2, 2, 1],
+                        strides=[1, 2, 2, 1],
+                        data_format='NCHW',
+                        padding='SAME')
+        d = gen_nn_ops.max_pool_grad(pa,
+                                     c,
+                                     pb,
+                                     ksize=[1, 2, 2, 1],
+                                     strides=[1, 2, 2, 1],
+                                     data_format='NCHW',
+                                     padding='SAME')
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
-      tu.configure_ipu_system()
-
-      sess.run(report)
       fe = {
           pa: input,
           pb: output_grad,
@@ -294,17 +234,13 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           input_grad, [[[[0.], [0.], [0.], [0.]], [[0.], [0.1], [0.], [0.1]],
                         [[0.], [0.], [0.], [0.]], [[0.], [0.1], [0.], [0.1]]]])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = [
           '__seed*', 'Copy_*', 'MaxPool/custom-call*/maxPool2x2/',
           'MaxPoolGrad/custom-call*/maxPool2x2'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testScaledAddTo(self):
     with self.session() as sess:
@@ -314,25 +250,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         const = array_ops.constant(2.0, np.float16)
         c = pa + pb * const
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [4.0, 4.5, 7.0])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testScaledSubtractFrom(self):
     with self.session() as sess:
@@ -344,25 +272,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         # still should match as it will be reordered
         c = pa - const * pb
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, -3.5, -5.0])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testScaledAddToVariable(self):
     with self.session() as sess:
@@ -372,25 +292,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pc = array_ops.placeholder(np.float16, [1])
         c = pa + pb * pc
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0], pc: [2.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [4.0, 4.5, 7.0])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testScaledSubtractFromVariable(self):
     with self.session() as sess:
@@ -400,25 +312,17 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pc = array_ops.placeholder(np.float16, [1])
         c = pa - pc * pb
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0], pc: [2.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, -3.5, -5.0])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionBiasApply(self):
     with self.session() as sess:
@@ -426,44 +330,37 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer())(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer())(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer())(y)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-      self.assertEqual(len(result),
-                       6)  # 2xcompile, 1xupload, 1xload, 1xdownload, 1xexecute
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(
+          assert_len=6,
+          assert_msg=
+          "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
 
       ok = [
           '__seed*',
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.*/Reduce'
       ]
-      self.assertTrue(tu.check_compute_sets_in_whitelist_entries(cs_list, ok))
+      report.assert_compute_sets_contain_list(ok)
 
   def testConvolutionBiasApplyVariableLR(self):
     with self.session() as sess:
@@ -472,38 +369,31 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         lr = array_ops.placeholder(np.float32, shape=[])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer())(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer())(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer())(y)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2]), lr: 0.1})
 
-      result = sess.run(report)
-      self.assertEqual(len(result),
-                       6)  # 2xcompile, 1xupload, 1xload, 1xdownload, 1xexecute
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(
+          assert_len=6,
+          assert_msg=
+          "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
 
       ok = [
           '__seed*', 'Copy_', 'host-exchange-local-copy-',
@@ -521,7 +411,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'vs/conv2d/Conv2D/convolution*/Conv_1x1'
       ]
 
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testAvgPoolValid(self):
     with self.session() as sess:
@@ -533,35 +423,27 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, shape, name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 10, 10, 1],
-            strides=[1, 1, 1, 1],
-            data_format='NHWC',
-            padding='VALID',
-            name="avg")
+        output = nn.avg_pool(pa,
+                             ksize=[1, 10, 10, 1],
+                             strides=[1, 1, 1, 1],
+                             data_format='NHWC',
+                             padding='VALID',
+                             name="avg")
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       fd = {pa: data}
       result = sess.run(output, fd)
       self.assertAllClose(result, expected)
 
-      result = sess.run(report)
-      self.assertEqual(len(result), 4)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'avg/custom-call*/avgPool10x10']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testAvgPoolValidWithBroadcast(self):
     with self.session() as sess:
@@ -575,35 +457,27 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, shape, name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 5, 5, 1],
-            strides=[1, 2, 2, 1],
-            data_format='NHWC',
-            padding='VALID',
-            name="avg")
+        output = nn.avg_pool(pa,
+                             ksize=[1, 5, 5, 1],
+                             strides=[1, 2, 2, 1],
+                             data_format='NHWC',
+                             padding='VALID',
+                             name="avg")
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       fd = {pa: data}
       result = sess.run(output, fd)
       self.assertAllClose(result, expected)
 
-      result = sess.run(report)
-      self.assertEqual(len(result), 4)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'avg/custom-call*/avgPool5x5']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testAvgPoolSameWithReshape(self):
     with self.session() as sess:
@@ -624,34 +498,27 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, shape, name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 5, 5, 1],
-            strides=[1, 2, 2, 1],
-            data_format='NHWC',
-            padding='SAME',
-            name="avg")
+        output = nn.avg_pool(pa,
+                             ksize=[1, 5, 5, 1],
+                             strides=[1, 2, 2, 1],
+                             data_format='NHWC',
+                             padding='SAME',
+                             name="avg")
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       fd = {pa: data}
       result = sess.run(output, fd)
       self.assertAllClose(result, expected)
 
-      result = sess.run(report)
-      self.assertEqual(len(result), 4)
+      report.parse_log(assert_len=4)
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       ok = ['__seed*', 'avg/custom-call*/avgPool5x5']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testFullyConnectedWithBias(self):
     with self.session() as sess:
@@ -661,12 +528,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         bias = array_ops.placeholder(np.float32, shape=[2])
         x_new = nn.xw_plus_b(x, weights, bias)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess)
+      report.reset()
 
       out = sess.run(x_new, {
           x: np.full([2, 2], 3),
@@ -675,48 +538,40 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       })
       self.assertAllClose(np.full([2, 2], 25), out)
 
-      result = sess.run(report)
-      self.assertEqual(len(result),
-                       4)  # 1xcompile, 1xload, 1xdownload, 1xexecute
+      report.parse_log(
+          assert_len=4,
+          assert_msg="Expected 1x compile, 1x load, 1x download, 1x execute")
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       ok = [
           '__seed*', 'host-exchange-local-copy',
           'xw_plus_b/MatMul/dot.*/Conv_1/Convolve', 'xw_plus_b/fusion/Op/Add'
       ]
-      self.assertTrue(tu.check_compute_sets_in_whitelist_entries(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testConvWithBnAndRelu(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer())(x)
           y = layers_norm.batch_normalization(y, fused=True)
           y = nn_ops.relu(y)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-      self.assertEqual(len(result),
-                       6)  # 2xcompile, 1xupload 1xload, 1xdownload, 1xexecute
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(
+          assert_len=6,
+          assert_msg=
+          "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
 
       ok = [
           '__seed*', 'host-exchange-local-copy', 'Copy_',
@@ -724,7 +579,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
           'vs/Relu/custom-call/Nonlinearity'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testBiasApplyFixedLR(self):
     with self.session() as sess:
@@ -734,26 +589,22 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer(),
-              bias_initializer=init_ops.ones_initializer(),
-              name="a")(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            bias_initializer=init_ops.ones_initializer(),
+                            name="a")(x)
           y = nn.relu(y)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
       fe = {
           x: input,
       }
@@ -777,26 +628,22 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float16, shape=[1, 4, 4, 2])
         lr = array_ops.placeholder(np.float16, shape=[])
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer(),
-              bias_initializer=init_ops.ones_initializer(),
-              name="a")(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            bias_initializer=init_ops.ones_initializer(),
+                            name="a")(x)
           y = nn.relu(y)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
       fe = {
           x: input,
           lr: 0.1,
@@ -844,15 +691,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[10, 200])
         y1 = array_ops.placeholder(np.int32, shape=[10])
         y2 = array_ops.placeholder(np.int32, shape=[10])
-        report = gen_ipu_ops.ipu_event_trace()
+
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2])
 
-      tu.configure_ipu_system()
-
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
       out = sess.run(r, {
           x: np.ones(x.shape),
           y1: np.ones(y1.shape),
@@ -860,9 +706,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       })
       self.assertAllClose(out, [-4000.0])
 
-      result = sess.run(report)
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = [
           '__seed*',
@@ -872,7 +716,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'vs/add/add*/AddTo',
           'vs/Sum/reduce*/Reduce',
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testUnsortedSegmentSumVariableLR(self):
     with self.session() as sess:
@@ -906,15 +750,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         y1 = array_ops.placeholder(np.int32, shape=[10])
         y2 = array_ops.placeholder(np.int32, shape=[10])
         lr = array_ops.placeholder(np.float32, shape=[])
-        report = gen_ipu_ops.ipu_event_trace()
+
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2, lr])
 
-      tu.configure_ipu_system()
-
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
       out = sess.run(
           r, {
               x: np.ones(x.shape),
@@ -924,9 +767,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           })
       self.assertAllClose(out, [-4000.0])
 
-      result = sess.run(report)
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       ok = [
           '__seed*',
@@ -936,7 +777,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'vs/add/add*/AddTo',
           'vs/Sum/reduce*/Reduce',
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testScatterWithReshape(self):
     with self.session() as sess:
@@ -966,15 +807,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         y2 = array_ops.placeholder(np.int32, shape=[10])
         la = array_ops.placeholder(np.float32, shape=[10, 400])
         lr = array_ops.placeholder(np.float32, shape=[])
-        report = gen_ipu_ops.ipu_event_trace()
+
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2, la, lr])
 
-      tu.configure_ipu_system()
-
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
       out = sess.run(
           r, {
               x: np.ones(x.shape),
@@ -985,9 +825,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           })
       self.assertAllClose(out, [1.0])
 
-      result = sess.run(report)
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
       ok = [
           '__seed*',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/multiUpdateAdd',
@@ -1001,10 +839,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'vs/absolute_difference/Sum/reduce',
           'vs/absolute_difference/value/multiply',
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

@@ -143,27 +143,27 @@ def check_compute_sets_not_in_blacklist(cs_list, bl):
   return result
 
 
-def missing_compute_sets_in_whitelist_entries(cs_list, whitelist):
+def missing_names_in_whitelist_entries(names, whitelist):
   fail_list = []
   wl = [x + '*' for x in whitelist]
-  for cs in cs_list:
-    if len([x for x in wl if fnmatch.fnmatch(cs, x)]) == 0:
-      fail_list += [cs]
+  for name in names:
+    if name and len([x for x in wl if fnmatch.fnmatch(name, x)]) == 0:
+      fail_list += [name]
   return fail_list
 
 
-def missing_whitelist_entries_in_compute_sets(cs_list, whitelist):
+def missing_whitelist_entries_in_names(names, whitelist):
   fail_list = []
   wl = [x + '*' for x in whitelist]
   for x in wl:
-    if len([cs for cs in cs_list if fnmatch.fnmatch(cs, x)]) == 0:
+    if len([name for name in names if fnmatch.fnmatch(name, x)]) == 0:
       fail_list += [x]
   return fail_list
 
 
 def check_all_compute_sets_and_list(cs_list, whitelist):
-  return (not missing_compute_sets_in_whitelist_entries(cs_list, whitelist) and
-          not missing_whitelist_entries_in_compute_sets(cs_list, whitelist))
+  return (not missing_names_in_whitelist_entries(cs_list, whitelist)
+          and not missing_whitelist_entries_in_names(cs_list, whitelist))
 
 
 def count_compute_sets_matching(cs_list, to_match):
@@ -172,19 +172,21 @@ def count_compute_sets_matching(cs_list, to_match):
 
 
 class ReportJSON:
-  def __init__(self, test, sess):
+  def __init__(self, test, sess, io_trace=True):
     self.test = test
     self.sess = sess
     with ops.device('cpu'):
       self.report = gen_ipu_ops.ipu_event_trace()
-    configure_ipu_system(True, True, True, text_report=False)
+    configure_ipu_system(True, io_trace, True, text_report=False)
 
   def reset(self):
     self.sess.run(self.report)
 
-  def parse_log(self):
+  def parse_log(self, assert_len=None, assert_msg=""):
     events = self.sess.run(self.report)
-    self.report = {}
+    if assert_len:
+      self.test.assertEqual(assert_len, len(events), assert_msg)
+    self.events = {}
     for e in events:
       evt = IpuTraceEvent.FromString(e)
       try:
@@ -192,21 +194,21 @@ class ReportJSON:
           pass
         if evt.type == IpuTraceEvent.COMPILE_END:
           if evt.compile_end.compilation_report:
-            self.report[IpuTraceEvent.COMPILE_END] = js.loads(
+            self.events[IpuTraceEvent.COMPILE_END] = js.loads(
                 evt.compile_end.compilation_report, encoding="utf-8")
         if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
           if evt.data_transfer.data_transfer:
-            self.report[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER] = js.loads(
+            self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER] = js.loads(
                 evt.data_transfer.data_transfer, encoding="utf-8")
         if evt.type == IpuTraceEvent.DEVICE_TO_HOST_TRANSFER:
           if evt.data_transfer.data_transfer:
-            self.report[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER] = js.loads(
+            self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER] = js.loads(
                 evt.data_transfer.data_transfer, encoding="utf-8")
         if evt.type == IpuTraceEvent.LOAD_ENGINE:
           pass
         if evt.type == IpuTraceEvent.EXECUTE:
           if evt.execute.execution_report:
-            self.report[IpuTraceEvent.EXECUTE] = js.loads(
+            self.events[IpuTraceEvent.EXECUTE] = js.loads(
                 evt.execute.execution_report, encoding="utf-8")
       except UnicodeDecodeError:
         pass
@@ -214,14 +216,17 @@ class ReportJSON:
   # Excluding gaps
   def get_max_tile_memory(self):
     return max(
-        self.report[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
+        self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
 
   def get_total_tile_memory(self):
     return sum(
-        self.report[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
+        self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
+
+  def get_vertices(self):
+    return self.events[IpuTraceEvent.COMPILE_END]["vertexTypes"]["names"]
 
   def get_compute_sets(self):
-    return self.report[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
+    return self.events[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
 
   def assert_total_tile_memory_in_range(self, low, high):
     self.test.assertAllInRange([self.get_total_tile_memory()], low, high)
@@ -229,14 +234,29 @@ class ReportJSON:
   def assert_max_tile_memory_in_range(self, low, high):
     self.test.assertAllInRange([self.get_max_tile_memory()], low, high)
 
+  # Asserts all the compute sets match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one compute set
   def assert_all_compute_sets_and_list(self, ok):
     self.test.assertFalse(
-        missing_whitelist_entries_in_compute_sets(self.get_compute_sets(), ok),
+        missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
         "Whitelist items not found in compute sets:\n\t%s" %
         "\n\t".join(self.get_compute_sets()))
     self.test.assertFalse(
-        missing_compute_sets_in_whitelist_entries(self.get_compute_sets(), ok),
+        missing_names_in_whitelist_entries(self.get_compute_sets(), ok),
         "Compute sets item not found in whitelist:\n\t%s" % "\n\t".join(ok))
+
+  # Asserts that all the whitelist patterns match at least one compute set
+  def assert_compute_sets_contain_list(self, ok):
+    self.test.assertFalse(
+        missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
+        "Whitelist items not found in compute sets:\n\t%s" %
+        "\n\t".join(self.get_compute_sets()))
+
+  # Asserts that all the whitelist patterns match at least one vertex
+  def assert_vertices_contain_list(self, ok):
+    self.test.assertFalse(
+        missing_whitelist_entries_in_names(self.get_vertices(), ok),
+        "Whitelist items not found in vertices:\n\t%s" %
+        "\n\t".join(self.get_vertices()))
 
   def assert_compute_sets_matches(self, expr, num_matches):
     self.test.assertEqual(

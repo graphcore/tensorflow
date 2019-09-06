@@ -17,8 +17,9 @@ import json
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
@@ -55,21 +56,6 @@ def _createFeeders(inputs, dimensions, dtype):
 
 
 class FrontendAttributesTest(test_util.TensorFlowTestCase):
-  def assertVerticesContains(self, result, expected_string):
-    vertices = []
-    for line in result:
-      evt = IpuTraceEvent.FromString(line)
-      if evt.type == IpuTraceEvent.COMPILE_END:
-        if evt.compile_end.compilation_report:
-          vertices += json.loads(evt.compile_end.compilation_report,
-                                 encoding="utf-8").get("vertexTypes",
-                                                       {}).get("names", [])
-    self.assertTrue(
-        vertices, msg="COMPILE_END event not found: test probably didn't run")
-    self.assertTrue(any([expected_string in v for v in vertices]),
-                    msg="Expected '%s' in one of %s" %
-                    (expected_string, str(vertices)))
-
   def testSimpleSingleAttribute(self):
     with ops.device("/device:IPU:0"):
       op1 = ops.get_default_graph().create_op("FloatOutput", [],
@@ -234,44 +220,37 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
 
   def testMatMulPartialsType(self):
     with self.session() as sess:
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
       outputs = {}
       with ops.device("/device:IPU:0"):
         with ipu.scopes.partials_type(np.float32):
           pa, pb, fd = _createInputs([2, 2], np.float16)
           output = math_ops.matmul(pa, pb)
-          outputs[output] = ("half,float", fd)
+          outputs[output] = ("poplin::ConvPartial*<half,float", fd)
         with ipu.scopes.partials_type(np.float16):
           pa, pb, fd = _createInputs([3, 3], np.float16)
           output = math_ops.matmul(pa, pb)
-          outputs[output] = ("half,half", fd)
+          outputs[output] = ("poplin::ConvPartial*<half,half", fd)
           with ipu.scopes.partials_type(np.float32):
             pa, pb, fd = _createInputs([4, 4], np.float16)
             output = math_ops.matmul(pa, pb)
-            outputs[output] = ("half,float", fd)
+            outputs[output] = ("poplin::ConvPartial*<half,float", fd)
           pa, pb, fd = _createInputs([5, 5], np.float16)
           output = math_ops.matmul(pa, pb)
-          outputs[output] = ("half,half", fd)
+          outputs[output] = ("poplin::ConvPartial*<half,half", fd)
 
-      cfg = ipu.utils.create_ipu_config(profiling=True,
-                                        use_poplar_text_report=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = tu.ReportJSON(self, sess)
 
       for output, expected_output in outputs.items():
-        sess.run(report)
+        report.reset()
 
         sess.run(output, expected_output[1])
 
-        result = sess.run(report)
-        self.assertVerticesContains(result, expected_output[0])
+        report.parse_log()
+        report.assert_vertices_contain_list([expected_output[0]])
 
   def testLSTMPartialsType(self):
     ops.reset_default_graph()
     with self.session() as sess:
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
       dtype = np.float16
       batch_size = 1
       seq_len = 3
@@ -324,21 +303,19 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           return (r, expected_output, fd)
 
         with ipu.scopes.partials_type(np.float16):
-          outputs.append(createLSTM("ConvPartial1x1Out<half,half"))
+          outputs.append(createLSTM("poplin::ConvPartial*<half,half"))
           with ipu.scopes.partials_type(np.float32):
-            outputs.append(createLSTM("ConvPartialHorizontalMac<half,float"))
-          outputs.append(createLSTM("ConvPartial1x1Out<half,half"))
+            outputs.append(createLSTM("poplin::ConvPartial*<half,float"))
+          outputs.append(createLSTM("poplin::ConvPartial*<half,half"))
 
-      cfg = ipu.utils.create_ipu_config(profiling=True,
-                                        use_poplar_text_report=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = tu.ReportJSON(self, sess)
 
       for output, expected_output, fd in outputs:
-        sess.run(report)
+        report.reset()
         sess.run(variables.global_variables_initializer())
         sess.run(output, fd)
-        result = sess.run(report)
-        self.assertVerticesContains(result, expected_output)
+        report.parse_log()
+        report.assert_vertices_contain_list([expected_output])
 
 
 if __name__ == "__main__":

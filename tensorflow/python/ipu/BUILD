@@ -314,6 +314,7 @@ tf_py_test(
     size = "small",
     srcs = ["tests/frontend_attributes_test.py"],
     additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
         "//tensorflow/python/ipu:ipu_lib",
