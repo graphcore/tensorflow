@@ -324,6 +324,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       wl = [
           'switchControlBroadcast*/GlobalPre',
           '*_to_/custom-call/GlobalPre',
+          '__seed/set/setMasterSeed',
       ]
       self.assertTrue(tu.check_all_compute_sets_and_list(ge_list, wl))
 
