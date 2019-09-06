@@ -56,18 +56,38 @@ bool IsProducerOp(const HloInstruction* inst) {
 StatusOr<PipelineStages> GetPipelineStages(
     HloComputation* pipeline_computation) {
   PipelineStages pipeline_stages;
-  for (HloInstruction* inst :
-       pipeline_computation->MakeInstructionPostOrder()) {
+  // Find all the stages - note that they might not be in order as some stages
+  // might have no inputs/outputs.
+  for (HloInstruction* inst : pipeline_computation->instructions()) {
     if (IsPipelineStage(inst)) {
       pipeline_stages.forward.push_back(inst);
     } else if (IsPipelineStageBackward(inst)) {
       pipeline_stages.backward.push_back(inst);
     }
   }
+  // Sort the stages and make sure the stages are continuos and starting at 0.
+  auto sort_and_check_stages = [](std::vector<HloInstruction*>& stages) {
+    absl::c_sort(stages,
+                 [](const HloInstruction* lhs, const HloInstruction* rhs) {
+                   return GetPipelineStageID(lhs) < GetPipelineStageID(rhs);
+                 });
+    for (int64 i = 0; i != stages.size(); ++i) {
+      const int64 stage_id = GetPipelineStageID(stages[i]);
+      if (stage_id != i) {
+        return FailedPrecondition(
+            "Detected Pipeline Stage with id %d but expected id %s.", stage_id,
+            i);
+      }
+    }
+    return Status::OK();
+  };
+  TF_RETURN_IF_ERROR(sort_and_check_stages(pipeline_stages.forward));
+  TF_RETURN_IF_ERROR(sort_and_check_stages(pipeline_stages.backward));
 
-  // Reverse bwd stages such that for i in [0, pipeline_stages.forward.size()),
-  // pipeline_stages.backward[i] corresponds to pipeline_stages.forward[i].
-  absl::c_reverse(pipeline_stages.backward);
+  if (pipeline_stages.forward.empty()) {
+    return FailedPrecondition(
+        "Expected the pipeline to have at least one PipelineStage.");
+  }
 
   // If we have any bwd pipeline stages then we expect them to match the number
   // of fwd stages (i.e. backprop has a stage for each forward prop).
@@ -79,6 +99,7 @@ StatusOr<PipelineStages> GetPipelineStages(
         "to match.",
         pipeline_stages.forward.size(), pipeline_stages.backward.size());
   }
+
   return pipeline_stages;
 }
 

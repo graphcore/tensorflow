@@ -77,10 +77,13 @@ class _XlaFuncGradGraph(FuncGraph):
     return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
 
 
-def _compiled_function_grad(gen_op_to_call, op, *grads):
+@ops.RegisterGradient("PipelineStage")
+def _pipeline_stage_grad(op, *grads):
+  """The gradient of a PipelineStage op."""
   assert control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph())
   # Get the pipeline stage function to create a gradient for it.
   stage_op = op.outputs[0].op
+  stage_id = stage_op.get_attr('stage_id')
   inputs = stage_op.inputs
   input_shapes = [t.shape for t in inputs]
   fdef = stage_op.graph._get_function(
@@ -127,25 +130,19 @@ def _compiled_function_grad(gen_op_to_call, op, *grads):
 
   func_grad_inputs = cond_v2._resolve_grad_inputs(func_graph, func_grad_graph)
 
-  outputs = gen_op_to_call(
+  outputs = gen_pipelining_ops.pipeline_stage_backward(
       func_grad_inputs,
       to_apply=util.create_new_tf_function(func_grad_graph),
       Tout=func_grad_graph.output_types,
-      output_shapes=func_grad_graph.output_shapes)
+      output_shapes=func_grad_graph.output_shapes,
+      stage_id=stage_id)
 
   return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
                                             outputs)
 
 
-@ops.RegisterGradient("PipelineStage")
-def _pipeline_stage_grad(op, *grads):
-  """The gradient of a PipelineStage op."""
-  return _compiled_function_grad(gen_pipelining_ops.pipeline_stage_backward,
-                                 op, *grads)
-
-
 @ops.RegisterGradient("Pipeline")
-def _pipeline_stage_grad(op, *grads):
+def _pipeline_grad(op, *grads):
   """The gradient of a Pipeline op."""
   raise RuntimeError(
       "Attempting to calculate the gradient of a Pipeline which is not allowed."

@@ -334,6 +334,73 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       self.assertAllClose(output[0][0], np.ones(x.shape))
       self.assertAllClose(output[1][0], np.ones(y.shape))
 
+  @test_util.deprecated_graph_mode_only
+  def testPipelineWithStagesWithConstants(self):
+    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    def dataset_parser(value):
+      a = value
+      b = (value + 10.) / 2.0
+      return {"a": a, "b": b}
+
+    dataset = dataset.map(dataset_parser)
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    def stage1(c, name=None, **kwargs):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        y = layers.Conv2D(
+            2,
+            1,
+            use_bias=True,
+            kernel_initializer=init_ops.ones_initializer(),
+            name='conv1')(kwargs["a"])
+        return y + kwargs["b"], c
+
+    def stage2(x, c):
+      return x, c
+
+    def stage3(x, c):
+      return layers.Dense(2)(x), c
+
+    def stage4(x, c):
+      return math_ops.reduce_sum(layers.Dense(2)(x)) + c
+
+    def optimizer_stage(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+
+      grads = gradients_impl.gradients(loss, variables.trainable_variables())
+      grads = list(zip(grads, variables.trainable_variables()))
+      grads = [(clip_ops.clip_by_value(grad, -1., 1.), var)
+               for grad, var in grads]
+
+      return loss, opt.apply_gradients(grads_and_vars=grads)
+
+    def my_net(c):
+      return pipelining_ops.pipeline([stage1, stage2, stage3, stage4],
+                                     10, [c],
+                                     optimizer_stage=optimizer_stage,
+                                     infeed_queue=infeed_queue,
+                                     outfeed_queue=outfeed_queue)
+
+    tu.configure_ipu_system()
+
+    with ops.device('cpu'):
+      c = array_ops.placeholder(np.float32, shape=[])
+
+    with ops.device("/device:IPU:0"):
+      r = ipu_compiler.compile(my_net, inputs=[c])
+
+    tu.move_variable_initialization_to_cpu()
+    outfeed_op = outfeed_queue.dequeue()
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      sess.run(infeed_queue.initializer)
+      sess.run(r, {c: 10.01})
+      losses_pipeline = sess.run(outfeed_op)
+      self.assertAllClose(losses_pipeline, [[-17.136309]])
+
 
 if __name__ == "__main__":
   googletest.main()

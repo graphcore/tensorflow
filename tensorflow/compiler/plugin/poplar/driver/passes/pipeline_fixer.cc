@@ -12,8 +12,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -29,6 +30,15 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+Status PipelineFixer::InsertStatefulNoopsIntoStages() {
+  for (auto& stages : {stages_.forward, stages_.backward}) {
+    for (HloInstruction* stage : stages) {
+      HloComputation* stage_computation = stage->to_apply();
+      stage_computation->AddInstruction(CreateStatefulNoop());
+    }
+  }
+  return Status::OK();
+}
 
 Status PipelineFixer::UpdateStage(const StageID& stage_id,
                                   HloInstruction* new_stage) {
@@ -56,6 +66,76 @@ std::vector<HloInstruction*> PipelineFixer::GetOrderedStages() {
             std::next(stages.begin(), stages_.forward.size()));
   return stages;
 }
+
+namespace {
+StatusOr<std::vector<HloInstruction*>> FindClusterToLower(
+    HloInstruction* stage, const StageID& stage_id,
+    HloInstruction* lowering_root, PipelineDataflowAnalysis* analysis) {
+  // Build a cluster of instructions which are lowered and order them.
+  // Start from the root and build up the cluster by visiting both
+  // operands and users of instructions already in the cluster.
+  std::vector<HloInstruction*> ordered_lowering;
+  std::vector<const HloValueSet*> value_sets;
+  absl::flat_hash_set<HloInstruction*> to_visit;
+  absl::flat_hash_set<HloInstruction*> visited;
+  to_visit.insert(lowering_root);
+
+  while (!to_visit.empty()) {
+    HloInstruction* inst = *to_visit.begin();
+    to_visit.erase(inst);
+
+    bool ready_to_lower = true;
+    for (HloInstruction* operand : inst->operands()) {
+      TF_ASSIGN_OR_RETURN(bool operand_needs_lowering,
+                          analysis->HasToBeLowered(operand));
+      ready_to_lower &= (visited.contains(operand) || !operand_needs_lowering);
+    }
+    std::vector<HloInstruction*> candidates;
+    if (ready_to_lower) {
+      // If we are ready to lower an instruction then add its value set
+      // and visit its children.
+      ordered_lowering.push_back(inst);
+      visited.insert(inst);
+      value_sets.push_back(&analysis->GetValueSet(inst));
+      candidates = inst->users();
+    } else {
+      // We need to lower operands first.
+      candidates = {inst->operands().begin(), inst->operands().end()};
+    }
+
+    // Add any instructions which need to be considered for lowering.
+    for (HloInstruction* candidate : candidates) {
+      if (!visited.contains(candidate)) {
+        TF_ASSIGN_OR_RETURN(bool needs_lowering,
+                            analysis->HasToBeLowered(candidate));
+        if (needs_lowering) {
+          to_visit.insert(candidate);
+        }
+      }
+    }
+  }
+  HloValueSet value_set;
+  value_set.AssignUnionOf(value_sets);
+
+  // If the current stage is a forward stage and the value set contains a
+  // backward stage then we can't lower this cluster into the fwd stage
+  // without violating data flow constraints (i.e. backprop can't be used
+  // in the forward pass).
+  // We therefore skip and the bwd stage will deal with this.
+  auto value_from_bwd = [](const HloValue* value) {
+    return IsPipelineStageBackward(value->instruction());
+  };
+
+  if (stage_id.is_forward &&
+      absl::c_any_of(value_set.values(), value_from_bwd)) {
+    return std::vector<HloInstruction*>();
+  }
+
+  // Verify we can lower this.
+  TF_RETURN_IF_ERROR(analysis->VerifyPipelineStageOperands(stage, value_set));
+  return ordered_lowering;
+}
+}  // namespace
 
 // Lowers any outputs of the stage into the stage.
 // Returns true if the stage has changed.
@@ -85,77 +165,21 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
       if (!needs_lowering) {
         continue;
       }
-
-      // Build a cluster of instructions which are lowered and order them.
-      // Start from the GTE and build up the cluster by visiting both
-      // operands and users of instructions already in the cluster.
-      std::vector<HloInstruction*> ordered_lowering;
-      std::vector<const HloValueSet*> value_sets;
-      absl::flat_hash_set<HloInstruction*> to_visit;
-      absl::flat_hash_set<HloInstruction*> visited;
-      to_visit.insert(stage_user);
-
-      while (!to_visit.empty()) {
-        HloInstruction* inst = *to_visit.begin();
-        to_visit.erase(inst);
-
-        bool ready_to_lower = true;
-        for (HloInstruction* operand : inst->operands()) {
-          TF_ASSIGN_OR_RETURN(bool operand_needs_lowering,
-                              analysis->HasToBeLowered(operand));
-          ready_to_lower &=
-              (visited.contains(operand) || !operand_needs_lowering);
-        }
-        std::vector<HloInstruction*> candidates;
-        if (ready_to_lower) {
-          // If we are ready to lower an instruction then add its value set
-          // and visit its children.
-          ordered_lowering.push_back(inst);
-          visited.insert(inst);
-          value_sets.push_back(&analysis->GetValueSet(inst));
-          candidates = inst->users();
-
-          // Prevent use after free in the outter loop.
-          stage_users.erase(inst);
-        } else {
-          // We need to lower operands first.
-          candidates = {inst->operands().begin(), inst->operands().end()};
-        }
-
-        // Add any instructions which need to be considered for lowering.
-        for (HloInstruction* candidate : candidates) {
-          if (!visited.contains(candidate)) {
-            TF_ASSIGN_OR_RETURN(bool needs_lowering,
-                                analysis->HasToBeLowered(candidate));
-            if (needs_lowering) {
-              to_visit.insert(candidate);
-            }
-          }
-        }
-      }
-      HloValueSet value_set;
-      value_set.AssignUnionOf(value_sets);
-
-      // If the current stage is a forward stage and the value set contains a
-      // backward stage then we can't lower this cluster into the fwd stage
-      // without violating data flow constraints (i.e. backprop can't be used
-      // in the forward pass).
-      // We therefore skip and the bwd stage will deal with this.
-      auto value_from_bwd = [](const HloValue* value) {
-        return IsPipelineStageBackward(value->instruction());
-      };
-
-      if (stage_id.is_forward &&
-          absl::c_any_of(value_set.values(), value_from_bwd)) {
+      TF_ASSIGN_OR_RETURN(
+          std::vector<HloInstruction*> ordered_lowering,
+          FindClusterToLower(stage, stage_id, stage_user, analysis.get()));
+      // Nothing to lower.
+      if (ordered_lowering.empty()) {
         continue;
       }
-
       VLOG(3) << "Lowering outputs for stage " << stage_id;
       changed = true;
 
-      // Verify we can lower this.
-      TF_RETURN_IF_ERROR(
-          analysis->VerifyPipelineStageOperands(stage, value_set));
+      // Prevent use after free in the outter loop.
+      absl::c_for_each(ordered_lowering, [&stage_users](HloInstruction* inst) {
+        stage_users.erase(inst);
+      });
+
       // Lower the instructions into the computation.
       TF_ASSIGN_OR_RETURN(
           stage, AddInstructionsToPipelineStage(stage, ordered_lowering));
@@ -263,9 +287,8 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
     if (parameters_to_replace.empty()) {
       continue;
     }
-    changed = true;
-
     VLOG(3) << "Lowering inputs for stage " << stage_id;
+    changed = true;
     // Build a cluster of instructions which are lowered and order them.
     // Start from the operands and build the cluster by going through operands
     // only.
@@ -331,20 +354,92 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
   return changed;
 }
 
+// Lowers any usages of paramaters into stages.
+// Returns true if the stage has changed.
+StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
+  bool changed = false;
+
+  TF_ASSIGN_OR_RETURN(auto analysis,
+                      PipelineDataflowAnalysis::GetAnalysis(stages_));
+  std::vector<HloInstruction*> ordered_stages = GetOrderedStages();
+  // Iterate in reverse order so that we lower any changes affecting parameters
+  // into the backward stages first if possible.
+  for (auto itr = ordered_stages.rbegin(); itr != ordered_stages.rend();
+       ++itr) {
+    HloInstruction* stage = *itr;
+    TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));
+    // Get the corresponding forward stage.
+    HloInstruction* fwd_stage = stages_.forward[stage_id.id];
+    // Go through the operands to the forward stage.
+    absl::flat_hash_set<HloInstruction*> params_users;
+    for (HloInstruction* operand : fwd_stage->operands()) {
+      if (operand->opcode() == HloOpcode::kParameter) {
+        // For parameters, we add all their non-pipeline stage users as
+        // potential things we need to lower into the backward stage.
+        absl::c_copy_if(operand->users(),
+                        std::inserter(params_users, std::begin(params_users)),
+                        [](const HloInstruction* inst) {
+                          return !IsPiplineStageOrBackwardOp(inst);
+                        });
+      }
+    }
+    while (!params_users.empty()) {
+      HloInstruction* param_user = *params_users.begin();
+      params_users.erase(param_user);
+      TF_ASSIGN_OR_RETURN(bool needs_lowering,
+                          analysis->HasToBeLowered(param_user));
+      if (!needs_lowering) {
+        continue;
+      }
+      TF_ASSIGN_OR_RETURN(
+          std::vector<HloInstruction*> ordered_lowering,
+          FindClusterToLower(stage, stage_id, param_user, analysis.get()));
+      // Nothing to lower.
+      if (ordered_lowering.empty()) {
+        continue;
+      }
+      VLOG(3) << "Lowering parameters for stage " << stage_id;
+      changed = true;
+      // Prevent use after free in the outter loop.
+      absl::c_for_each(ordered_lowering, [&params_users](HloInstruction* inst) {
+        params_users.erase(inst);
+      });
+
+      // Lower the instructions into the computation.
+      TF_ASSIGN_OR_RETURN(
+          stage, AddInstructionsToPipelineStage(stage, ordered_lowering));
+
+      TF_RETURN_IF_ERROR(UpdateStage(stage_id, stage));
+      // Recompute the analysis.
+      TF_ASSIGN_OR_RETURN(analysis,
+                          PipelineDataflowAnalysis::GetAnalysis(stages_));
+    }
+  }
+  return changed;
+}
+
 StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages() {
   // Lower any outputs from stages into stages if possible.
   TF_ASSIGN_OR_RETURN(bool lowered_outputs, LowerPipelineStagesOutputs());
   // Lower any inputs into stages if possible.
   TF_ASSIGN_OR_RETURN(bool lowered_inputs, LowerPipelineStagesInputs());
+  // Lower any usages of parameters into stages if possible.
+  TF_ASSIGN_OR_RETURN(bool lowered_params_uses,
+                      LowerParameterUsagesIntoStages());
 
-  return lowered_inputs || lowered_outputs;
+  return lowered_inputs || lowered_outputs || lowered_params_uses;
 }
 
 StatusOr<bool> PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
 
   TF_ASSIGN_OR_RETURN(stages_, GetPipelineStages(pipeline_comp));
-
+  // Go through the stages and insert stateful no-ops to make sure DCE does not
+  // remove stages. This is usually caused by the constant propagation in TF2XLA
+  // layer.
+  // We do not want to remove the stages because later stages of this pass will
+  // lower ops/thread ops through stages.
+  TF_RETURN_IF_ERROR(InsertStatefulNoopsIntoStages());
   // Clean up the pipelines.
   TupleSimplifier ts(true);
   TF_ASSIGN_OR_RETURN(bool ts_change, ts.Run(pipeline_op->GetModule()));

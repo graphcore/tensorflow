@@ -46,6 +46,7 @@ class FunctionCompileOp : public XlaOpKernel {
     // First get all the arguments and compile the computation.
     std::vector<XlaCompiler::Argument> arguments(input_types_.size());
     int num_resource_args = 0;
+    int num_non_constant_args = 0;
     for (int i = 0; i < input_types_.size(); ++i) {
       XlaCompiler::Argument& arg = arguments[i];
       DataType type = ctx->input_type(i);
@@ -74,20 +75,39 @@ class FunctionCompileOp : public XlaOpKernel {
                 << " initialized: " << arg.initialized;
 
         num_resource_args++;
+        num_non_constant_args++;
       } else {
-        arg.kind = XlaCompiler::Argument::kParameter;
-        arg.type = input_types_[i];
-        // Use the xla::Shape for the input instead of ctx->InputShape. This is
-        // necessary for forwarding shapes of DT_VARIANTs, e.g. TensorLists.
-        auto shape_or = builder->GetShape(ctx->Input(i));
-        OP_REQUIRES_OK(ctx, shape_or.status());
-        arg.shape = shape_or.ValueOrDie();
-        VLOG(2) << "Arg type: " << DataTypeString(arg.type)
-                << " shape: " << arg.HumanString();
+        // Try and replace kParameters with compile-time kConstant.
+        const XlaExpression& expression = ctx->InputExpression(i);
+        // NOTE: We can not simply check that this is Kind::kConstant because
+        // this could be the output of a MetadataOnly op e.g. Size.
+        xla::StatusOr<absl::optional<Tensor>> maybe_constant =
+            expression.ResolveConstant(ctx->compiler()->client());
+        if (maybe_constant.ok() && maybe_constant.ValueOrDie().has_value()) {
+          arg.kind = XlaCompiler::Argument::kConstant;
+          arg.type = expression.dtype();
+          arg.constant_value = std::move(maybe_constant.ValueOrDie().value());
+          arg.shape = expression.GetShape().ValueOrDie();
+          VLOG(2) << "Constant type: " << DataTypeString(arg.type)
+                  << " shape: " << arg.HumanString();
+        } else {
+          arg.kind = XlaCompiler::Argument::kParameter;
+          arg.type = input_types_[i];
+          // Use the xla::Shape for the input instead of ctx->InputShape. This
+          // is necessary for forwarding shapes of DT_VARIANTs, e.g.
+          // TensorLists.
+          auto shape_or = builder->GetShape(ctx->Input(i));
+          OP_REQUIRES_OK(ctx, shape_or.status());
+          arg.shape = shape_or.ValueOrDie();
+          num_non_constant_args++;
+          VLOG(2) << "Parameter type: " << DataTypeString(arg.type)
+                  << " shape: " << arg.HumanString();
+        }
       }
     }
+
     VLOG(2) << "Building function: " << input_types_.size()
-            << " inputs including " << num_resource_args << "resources.";
+            << " inputs including " << num_resource_args << " resources.";
     XlaCompiler::CompileOptions compile_options;
     compile_options.use_tuple_arg = false;
     compile_options.resolve_compile_time_constants = true;
@@ -96,25 +116,37 @@ class FunctionCompileOp : public XlaOpKernel {
     compile_options.is_entry_computation = false;
     compile_options.add_token_input_output = false;
 
-    XlaCompiler::CompilationResult to_apply_func;
-    OP_REQUIRES_OK(ctx,
-                   ctx->compiler()->CompileFunction(compile_options, *to_apply,
-                                                    arguments, &to_apply_func));
+    XlaCompiler::CompilationResult result;
+    OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
+                            compile_options, *to_apply, arguments, &result));
 
-    // Get the XLA arguments.
-    int num_inputs = to_apply_func.input_mapping.size();
-    std::vector<xla::XlaOp> inputs(num_inputs);
-    for (int i = 0; i < num_inputs; ++i) {
-      if (ctx->input_type(i) == DT_RESOURCE) {
-        XlaResource* resource;
-        OP_REQUIRES_OK(ctx, ctx->GetResourceInput(i, &resource));
-        OP_REQUIRES_OK(ctx, resource->Pack(&inputs[i], builder));
-      } else {
-        inputs[i] = ctx->Input(i);
+    // Get the non constant XLA arguments.
+    std::vector<xla::XlaOp> inputs(num_non_constant_args);
+    for (int i = 0, next_param_idx = 0; i < arguments.size(); ++i) {
+      switch (arguments[i].kind) {
+        case XlaCompiler::Argument::kResource: {
+          XlaResource* resource;
+          OP_REQUIRES_OK(ctx, ctx->GetResourceInput(i, &resource));
+          OP_REQUIRES_OK(ctx,
+                         resource->Pack(&inputs[next_param_idx++], builder));
+          break;
+        }
+        case XlaCompiler::Argument::kParameter: {
+          inputs[next_param_idx++] = ctx->Input(i);
+          break;
+        }
+        case XlaCompiler::Argument::kConstant: {
+          // Do nothing - the constant has been lowered into the computation.
+          break;
+        }
+        default: {
+          OP_REQUIRES(ctx, false,
+                      errors::InvalidArgument("Invalid argument kind."));
+        }
       }
     }
 
-    auto outputs = xla::Call(builder, *to_apply_func.computation, inputs);
+    auto outputs = xla::Call(builder, *result.computation, inputs);
     // Set the config type of the call.
     OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
                             outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
@@ -126,20 +158,24 @@ class FunctionCompileOp : public XlaOpKernel {
                          outputs, key_val_pair.first, key_val_pair.second));
     }
     // Sets non-variable outputs.
+    // Make sure to set constant outputs as constant.
+    int computation_output = 0;
     for (int i = 0; i < output_types_.size(); ++i) {
-      xla::XlaOp output_handle = xla::GetTupleElement(outputs, i);
-      ctx->SetOutput(i, output_handle);
+      if (result.outputs[i].is_constant) {
+        ctx->SetConstantOutput(i, result.outputs[i].constant_value);
+      } else {
+        ctx->SetOutput(i, xla::GetTupleElement(outputs, computation_output++));
+      }
     }
 
     // Updates the values of any resource variables modified by the function
     // call.
-    for (int i = 0; i < to_apply_func.resource_updates.size(); ++i) {
-      const XlaCompiler::ResourceUpdate& update =
-          to_apply_func.resource_updates[i];
+    for (int i = 0; i < result.resource_updates.size(); ++i) {
+      const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
       XlaResource* resource;
       OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
       if (update.modified) {
-        int pos = to_apply_func.outputs.size() + i;
+        int pos = computation_output + i;
         OP_REQUIRES_OK(ctx,
                        resource->SetFromPack(
                            arguments[update.input_index].tensor_array_gradients,
@@ -170,20 +206,32 @@ class FunctionCompileOp : public XlaOpKernel {
 
 class PipelineStageOp : public FunctionCompileOp {
  public:
-  explicit PipelineStageOp(OpKernelConstruction* ctx)
-      : FunctionCompileOp(ctx, PoplarBackendConfig::CallConfig::PipelineStage) {
+  explicit PipelineStageOp(OpKernelConstruction* ctx, bool is_forward = true)
+      : FunctionCompileOp(
+            ctx, is_forward
+                     ? PoplarBackendConfig::CallConfig::PipelineStage
+                     : PoplarBackendConfig::CallConfig::PipelineStageBackward) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("stage_id", &stage_id_));
+  }
+
+ protected:
+  absl::flat_hash_map<std::string, std::string> GetExtraFrontendAttributes()
+      override {
+    return {{FrontendAttributeId_Name(PIPELINE_STAGE_ID),
+             std::to_string(stage_id_)}};
   }
 
  private:
+  int64 stage_id_;
+
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineStageOp);
 };
 REGISTER_IPU_OP("PipelineStage", PipelineStageOp);
 
-class PipelineStageBackwardOp : public FunctionCompileOp {
+class PipelineStageBackwardOp : public PipelineStageOp {
  public:
   explicit PipelineStageBackwardOp(OpKernelConstruction* ctx)
-      : FunctionCompileOp(
-            ctx, PoplarBackendConfig::CallConfig::PipelineStageBackward) {}
+      : PipelineStageOp(ctx, false) {}
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineStageBackwardOp);

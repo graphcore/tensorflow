@@ -74,10 +74,10 @@ pipeline {
   arg0.40 = f32[] parameter(0)
   arg1.41 = f32[1,1,2,2]{3,2,1,0} parameter(1)
   arg2.42 = f32[2]{0} parameter(2)
-  call.43 = (f32[2,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.40, arg1.41, arg2.42), to_apply=stage_1, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\"}}"
+  call.43 = (f32[2,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.40, arg1.41, arg2.42), to_apply=stage_1, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   get-tuple-element.44 = f32[2,4,4,2]{3,2,1,0} get-tuple-element(call.43), index=0
   get-tuple-element.45 = f32[] get-tuple-element(call.43), index=1
-  call.46 = () call(get-tuple-element.44, get-tuple-element.45), to_apply=stage_2, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\"}}"
+  call.46 = () call(get-tuple-element.44, get-tuple-element.45), to_apply=stage_2, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   ROOT tuple.51 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg1.41, arg2.42)
 }
 
@@ -385,30 +385,30 @@ pipeline {
   arg1.126 = f32[] parameter(1)
   arg2.127 = f32[1,1,2,2]{3,2,1,0} parameter(2)
   arg3.128 = f32[2]{0} parameter(3)
-  call.145 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}) call(arg0.125, arg1.126, arg2.127, arg3.128), to_apply=pipeline_stage_0_func_11_rewritten__.11, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\"}}"
+  call.145 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}) call(arg0.125, arg1.126, arg2.127, arg3.128), to_apply=pipeline_stage_0_func_11_rewritten__.11, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   get-tuple-element.146 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.145), index=0
   get-tuple-element.147 = f32[] get-tuple-element(call.145), index=1
   arg4.129 = f32[1,1,2,2]{3,2,1,0} parameter(4)
   arg5.130 = f32[2]{0} parameter(5)
-  call.152 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) call(get-tuple-element.146, get-tuple-element.147, arg4.129, arg5.130), to_apply=pipeline_stage_1_func_34_rewritten__.24, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\"}}"
+  call.152 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) call(get-tuple-element.146, get-tuple-element.147, arg4.129, arg5.130), to_apply=pipeline_stage_1_func_34_rewritten__.24, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   get-tuple-element.153 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.152), index=0
   get-tuple-element.154 = f32[] get-tuple-element(call.152), index=1
   arg6.131 = f32[1,1,2,2]{3,2,1,0} parameter(6)
   arg7.132 = f32[2]{0} parameter(7)
-  call = (f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) call(get-tuple-element.153, get-tuple-element.154, arg6.131, arg7.132), to_apply=pipeline_stage_2_func_57_rewritten__.0, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\"}}"
+  call = (f32[], f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}) call(get-tuple-element.153, get-tuple-element.154, arg6.131, arg7.132), to_apply=pipeline_stage_2_func_57_rewritten__.0, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
   get-tuple-element.25 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call), index=1
   get-tuple-element.26 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call), index=2
   get-tuple-element.161.clone = f32[] get-tuple-element(call), index=0
-  call.13 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) call(get-tuple-element.25, get-tuple-element.26, arg6.131, get-tuple-element.161.clone, arg7.132), to_apply=pipeline_stage_2_func_57_grad_98__.5, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\"}}"
+  call.13 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) call(get-tuple-element.25, get-tuple-element.26, arg6.131, get-tuple-element.161.clone, arg7.132), to_apply=pipeline_stage_2_func_57_grad_98__.5, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
   get-tuple-element.176 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.13), index=0
   get-tuple-element.27 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.152), index=2
   get-tuple-element.28 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.152), index=3
   get-tuple-element.5 = f32[] get-tuple-element(call.13), index=3
-  call.12 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) call(get-tuple-element.176, get-tuple-element.27, get-tuple-element.28, get-tuple-element.5, arg4.129, arg5.130), to_apply=pipeline_stage_1_func_34_grad_139__.3, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\"}}"
+  call.12 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) call(get-tuple-element.176, get-tuple-element.27, get-tuple-element.28, get-tuple-element.5, arg4.129, arg5.130), to_apply=pipeline_stage_1_func_34_grad_139__.3, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   get-tuple-element.203 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.12), index=0
   get-tuple-element.29 = f32[1,4,4,2]{3,2,1,0} get-tuple-element(call.145), index=2
   get-tuple-element.14 = f32[] get-tuple-element(call.12), index=3
-  call.11 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.203, get-tuple-element.29, arg2.127, get-tuple-element.14, arg3.128), to_apply=pipeline_stage_0_func_11_grad_174__.2, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\"}}"
+  call.11 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.203, get-tuple-element.29, arg2.127, get-tuple-element.14, arg3.128), to_apply=pipeline_stage_0_func_11_grad_174__.2, frontend_attributes={CALL_CONFIG_TYPE=PipelineStageBackward}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   get-tuple-element.17 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.11), index=0
   get-tuple-element.21 = f32[2]{0} get-tuple-element(call.11), index=1
   get-tuple-element.7 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.12), index=1

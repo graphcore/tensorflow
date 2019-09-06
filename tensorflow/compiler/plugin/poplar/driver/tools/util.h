@@ -125,6 +125,8 @@ bool IsPipelineStage(const HloInstruction*);
 bool IsPipelineStageBackward(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 bool CallCanBeInlined(const HloInstruction*);
+int64 GetPipelineRepeatCount(const HloInstruction*);
+int64 GetPipelineStageID(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 

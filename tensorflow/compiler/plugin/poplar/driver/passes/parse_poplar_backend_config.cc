@@ -44,18 +44,38 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           }
           auto* call_config = poplar_config.mutable_call_config();
           call_config->set_type(type);
-          // Get the repeat count.
-          if (type == PoplarBackendConfig::CallConfig::Pipeline) {
-            auto itr = attributes.map().find(
-                FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT));
-            if (itr == attributes.map().end()) {
-              return xla::FailedPrecondition(
-                  "Expected the pipeline to contain the `repeat_count` "
-                  "attribute.");
+          switch (type) {
+            case PoplarBackendConfig::CallConfig::Pipeline: {
+              // Get the repeat count.
+              auto itr = attributes.map().find(
+                  FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT));
+              if (itr == attributes.map().end()) {
+                return xla::FailedPrecondition(
+                    "Expected the pipeline to contain the `repeat_count` "
+                    "attribute.");
+              }
+              auto* pipeline_config = call_config->mutable_pipeline_config();
+              int64 repeat_count = std::stoll(itr->second);
+              pipeline_config->set_repeat_count(repeat_count);
+              break;
             }
-            auto* pipeline_config = call_config->mutable_pipeline_config();
-            int64 repeat_count = std::stoll(itr->second);
-            pipeline_config->set_repeat_count(repeat_count);
+            case PoplarBackendConfig::CallConfig::PipelineStage:
+            case PoplarBackendConfig::CallConfig::PipelineStageBackward: {
+              // Get the stage id.
+              auto itr = attributes.map().find(
+                  FrontendAttributeId_Name(PIPELINE_STAGE_ID));
+              if (itr == attributes.map().end()) {
+                return xla::FailedPrecondition(
+                    "Expected the pipeline stage to contain the `stage_id` "
+                    "attribute.");
+              }
+              auto* pipeline_stage_config =
+                  call_config->mutable_pipeline_stage_config();
+              int64 stage_id = std::stoll(itr->second);
+              pipeline_stage_config->set_stage_id(stage_id);
+              break;
+            }
+            default: { break; }
           }
           changed = true;
         }

@@ -64,6 +64,11 @@ class PipelineFixer : public HloModulePass {
   // Returns true if the stage has changed.
   StatusOr<bool> LowerPipelineStagesOutputs();
 
+  // Lowers any usages of parameters into the relevant backward stage. This
+  // function is to make sure if a parameter is being modified by a constant
+  // that the modification is lowered to the relevent backward Pipeline stage.
+  StatusOr<bool> LowerParameterUsagesIntoStages();
+
   // A PipelineStage is being replaced - update internal storage.
   Status UpdateStage(const StageID& stage_id, HloInstruction* new_stage);
 
@@ -72,6 +77,9 @@ class PipelineFixer : public HloModulePass {
 
   // Get the stages in order they are sequentially executed.
   std::vector<HloInstruction*> GetOrderedStages();
+
+  // Inserts Stateful No-ops into stages to make sure DCE does not remove them.
+  Status InsertStatefulNoopsIntoStages();
 
   PipelineStages stages_;
 };

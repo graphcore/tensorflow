@@ -299,14 +299,17 @@ bool IsArithmeticExpressionFusion(const HloInstruction* inst) {
 }
 
 namespace {
+PoplarBackendConfig ParsePoplarBackendConfig(const HloInstruction* inst) {
+  auto status_or = inst->backend_config<PoplarBackendConfig>();
+  if (!status_or.ok()) {
+    LOG(FATAL) << "Could not parse the PoplarBackendConfig";
+  }
+  return status_or.ValueOrDie();
+}
 bool CallConfigHasType(const HloInstruction* inst,
                        const PoplarBackendConfig::CallConfig::Type type) {
   if (inst->opcode() == HloOpcode::kCall) {
-    auto statusor = inst->backend_config<PoplarBackendConfig>();
-    if (!statusor.ok()) {
-      LOG(FATAL) << "Could not parse the PoplarBackendConfig";
-    }
-    PoplarBackendConfig cfg = statusor.ValueOrDie();
+    PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
     return cfg.call_config().type() == type;
   }
   return false;
@@ -334,6 +337,16 @@ bool IsPipelineOp(const HloInstruction* inst) {
 bool CallCanBeInlined(const HloInstruction* inst) {
   // Only allow inlining for actual calls.
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Call);
+}
+
+int64 GetPipelineRepeatCount(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().repeat_count();
+}
+
+int64 GetPipelineStageID(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_stage_config().stage_id();
 }
 
 bool IsInterIpuCopy(const HloInstruction* inst) {

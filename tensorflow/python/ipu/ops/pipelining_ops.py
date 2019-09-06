@@ -229,16 +229,17 @@ def pipeline(computational_stages,
 
   def _pipeline(*args):
     outputs = args
-    for i, stage in enumerate(computational_stages):
-      stage_infeed_queue = infeed_queue if i == 0 else None
-      if i == len(computational_stages) - 1 and not optimizer_stage:
+    for stage_id, stage in enumerate(computational_stages):
+      stage_infeed_queue = infeed_queue if stage_id == 0 else None
+      if stage_id == len(computational_stages) - 1 and not optimizer_stage:
         stage_outfeed_queue = outfeed_queue
       else:
         stage_outfeed_queue = None
 
-      stage_name = name + "_stage_" + str(i)
+      stage_name = name + "_stage_" + str(stage_id)
       outputs = _pipeline_stage(
           stage,
+          stage_id,
           outputs,
           infeed_queue=stage_infeed_queue,
           outfeed_queue=stage_outfeed_queue,
@@ -312,6 +313,7 @@ def pipeline(computational_stages,
 
 
 def _pipeline_stage(func,
+                    stage_id,
                     args,
                     kwargs=None,
                     infeed_queue=None,
@@ -382,7 +384,8 @@ def _pipeline_stage(func,
           captured_args,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
-          output_shapes=func_graph.output_shapes)
+          output_shapes=func_graph.output_shapes,
+          stage_id=stage_id)
     if isinstance(outputs, ops.Operation):
       return outputs
     else:

@@ -17,6 +17,8 @@ enum FrontendAttributeId {
   PARTIALS_TYPE = 2;
   // Repeat count for pipelines.
   PIPELINE_REPEAT_COUNT = 3;
+  // ID of a pipeline stage.
+  PIPELINE_STAGE_ID = 4;
 };
 
 enum StochasticRounding {
@@ -66,6 +68,7 @@ message PoplarBackendConfig {
     }
 
     message PipelineStageConfig {
+      int64 stage_id = 1;
     }
 
     message PipelineConfig {
