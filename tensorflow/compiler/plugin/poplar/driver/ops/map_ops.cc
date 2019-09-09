@@ -45,49 +45,49 @@ GetWhileAndRepeatAliasingCopies(poplar::Graph& graph,
   };
 
   poplar::program::Sequence body_seq;
-  // A body output at index `i` can:
-  // 1. contain no aliases to any of the inputs and the input `i` is not used in
+  // A body output at index `o` can:
+  // 1. contain no aliases to any of the inputs and the input `o` is not used in
   // the computation (NO_ALIAS_NOT_USED).
-  // 2. contain no aliases to any of the inputs and the input `i` is used in the
+  // 2. contain no aliases to any of the inputs and the input `o` is used in the
   // computation (NO_ALIAS_USED).
-  // 3. contain an alias to one of the inputs and the input `i` is not used in
+  // 3. contain an alias to one of the inputs and the input `o` is not used in
   // the computation (PARTIAL_ALIAS_OUTPUT_ONLY).
-  // 4. contain an alias to one of the inputs and the input `i` is used in the
+  // 4. contain an alias to one of the inputs and the input `o` is used in the
   // computation (PARTIAL_ALIAS).
-  // 5. be the exact same tensor as input `i` (IDENTICAL_ALIAS).
+  // 5. be the exact same tensor as input `o` (IDENTICAL_ALIAS).
 
-  // Find all the alias informations.
+  // Find all the alias information index by output tensor
   std::vector<AliasType> alias_type(param_count, AliasType::NO_ALIAS_USED);
-  for (unsigned int i = 0; i < param_count; i++) {
-    const bool input_i_used = visitor.InputIsAllocated(0, i);
-    if (input_i_used) {
-      if (body_inputs[i] == body_outputs[i]) {
-        alias_type[i] = AliasType::IDENTICAL_ALIAS;
+  for (unsigned int o = 0; o < param_count; o++) {
+    const bool input_used = visitor.InputIsAllocated(0, o);
+    if (input_used) {
+      if (body_inputs[o] == body_outputs[o]) {
+        alias_type[o] = AliasType::IDENTICAL_ALIAS;
       }
       // Check if we need to add a temporary copy.
-      for (unsigned int o = 0; o < param_count; o++) {
-        if ((alias_type[i] != AliasType::IDENTICAL_ALIAS || i != o) &&
-            visitor.InputIsAllocated(0, o)) {
+      for (unsigned int i = 0; i < param_count; i++) {
+        if ((alias_type[o] != AliasType::IDENTICAL_ALIAS || i != o) &&
+            visitor.InputIsAllocated(0, i)) {
           if (body_outputs[o].intersectsWith(body_inputs[i])) {
-            alias_type[i] = AliasType::PARTIAL_ALIAS;
+            alias_type[o] = AliasType::PARTIAL_ALIAS;
           }
         }
       }
     } else {
       // If the input is not used, check that the output at that index does not
       // alias any of the inputs which might have changed during computation.
-      alias_type[i] = AliasType::NO_ALIAS_NOT_USED;
-      for (unsigned int j = 0; j < param_count; j++) {
-        if (visitor.InputIsAllocated(0, j)) {
-          if (body_outputs[i].intersectsWith(body_inputs[j])) {
-            alias_type[i] = AliasType::PARTIAL_ALIAS_OUTPUT_ONLY;
+      alias_type[o] = AliasType::NO_ALIAS_NOT_USED;
+      for (unsigned int i = 0; i < param_count; i++) {
+        if (visitor.InputIsAllocated(0, i)) {
+          if (body_outputs[i].intersectsWith(body_inputs[o])) {
+            alias_type[o] = AliasType::PARTIAL_ALIAS_OUTPUT_ONLY;
           }
         }
       }
     }
   }
 
-  // For partial aliasing types, we create temporary tensors from inputs in
+  // For partial aliasing types, we create temporary tensors from outputs in
   // order to remove any aliasing.
   ArgVector unaliased_body_outputs(body_outputs);
   ArgVector while_loop_state(body_inputs);

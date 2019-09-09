@@ -298,6 +298,68 @@ class WhileLoopTest(xla_test.XLATestCase):
       x, z = sess.run(ret, feed_dict={features: np.ones([10])})
       self.assertEqual(x, 1)
 
+  def testWhileLoopAliasing1(self):
+    # Checks that the 'add' isn't in-place, that the 10 operand
+    # of the add can also be fed to the second output and the
+    # first output can be fed from the add.  Output 0 is not
+    # an alias of anything, but output 1 is an alias of input 0
+    with self.session() as sess:
+
+      def body(a, b):
+        c = a + b
+        return [c, a]
+
+      def my_net(a, b):
+        r = ipu.loops.repeat(4, body, [a, b])
+        return r
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [])
+        b = array_ops.placeholder(np.float32, [])
+
+      with ops.device("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
+
+      fd = {
+          a: 1.0,
+          b: 0.0,
+      }
+      result = sess.run(res, fd)
+
+      # While loop is generating the Fibonacci sequence
+      self.assertAllClose(result[0], 5.0)
+      self.assertAllClose(result[1], 3.0)
+
+  def testWhileLoopAliasing2(self):
+    # Checks that the 'add' is not in-place. Output 0 is an identical
+    # copy of input 1, and output 1 is not an alias of anything.
+    # Output 1 is the result of the add.
+    with self.session() as sess:
+
+      def body(a, b):
+        c = a + b
+        return [a, c]
+
+      def my_net(a, b):
+        r = ipu.loops.repeat(4, body, [a, b])
+        return r
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [])
+        b = array_ops.placeholder(np.float32, [])
+
+      with ops.device("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
+
+      fd = {
+          a: 1.0,
+          b: 0.0,
+      }
+      result = sess.run(res, fd)
+
+      self.assertAllClose(result[0], 1.0)
+      self.assertAllClose(result[1], 4.0)
+
 
 if __name__ == "__main__":
   googletest.main()
