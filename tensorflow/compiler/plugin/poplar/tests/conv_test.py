@@ -246,7 +246,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
           '__seed*',
           'Copy_',
           'Conv2DBackpropFilter/convolution.*/Conv_8x8',
-          'host-exchange-local-copy-*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
