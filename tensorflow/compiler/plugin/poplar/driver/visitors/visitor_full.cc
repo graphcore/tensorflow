@@ -51,6 +51,7 @@ limitations under the License.
 #include <poplar/exceptions.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Zero.hpp>
+#include <poputil/Util.hpp>
 
 using ::tensorflow::str_util::Join;
 
@@ -96,6 +97,16 @@ Status FullVisitor::HandleConvolution(HloInstruction* inst) {
       poplar::program::Program prog,
       CreateConv2D(resources_, inst, GetOutputShape(inst), tensor_map));
   sequence.add(prog);
+  return Status::OK();
+}
+
+Status FullVisitor::HandleCopy(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Program prog,
+      CreateCopy(resources_, inst, GetOutputShape(inst), tensor_map));
+  sequence.add(prog);
+
   return Status::OK();
 }
 
@@ -443,6 +454,10 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
   // operand 2 is the token
   if (outfeed->operand_count() != 2) {
     return InvalidArgument("Expected operand_count() == 2 for outfeed ops");
+  }
+
+  if (UseSyntheticData()) {
+    return Status::OK();
   }
 
   HloInstruction* operand = outfeed->operands()[0];

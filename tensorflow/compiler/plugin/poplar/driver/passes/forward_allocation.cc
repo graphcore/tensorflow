@@ -308,7 +308,7 @@ void ForwardAllocation::FlattenInputs(
       // We have guaranteed that we are only looking through GTEs.
       CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
       // We can only look through if it's inplace.
-      if (IsUsedInplace(user)) {
+      if (IsLoweredInplace(user)) {
         std::vector<const HloInstruction*> new_path(path);
         new_path.push_back(user);
         FlattenInputs(user, new_path, input_to_deferred_allocation_path);

@@ -73,6 +73,10 @@ class HloInstructionDescription {
 
   HloInstructionType type_;
 };
+
+// Given an instruction, check if it's output will ever be modified by an
+// Inplace Read/Write instruction.
+bool IsOutputModifiedInplace(const HloInstruction* inst);
 }  // namespace poplarplugin
 }  // namespace xla
 

@@ -94,6 +94,11 @@ class InplaceSubComputationVisitor : public SubComputationVisitor {
                               const uint64 tuple_index,
                               poplar::Tensor& tensor) override;
 
+  // Even though computation is inplace, some of the computation inputs might
+  // allocate their inputs as they have allocation targets. In these cases make
+  // sure to copy the values of the tensors.
+  poplar::program::Sequence GetPreambleCopies();
+
  private:
   // Indicates whether the input has a layout.
   TensorInputDescription input_has_layout_;

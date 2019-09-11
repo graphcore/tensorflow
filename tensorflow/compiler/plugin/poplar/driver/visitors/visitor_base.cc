@@ -124,16 +124,7 @@ Status BaseVisitor::HandleConvert(HloInstruction* inst) {
 }
 
 Status BaseVisitor::HandleCopy(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor in,
-      FindInstructionInput(tensor_map, resources_, inst, 0, sequence));
-
-  poplar::Tensor out = GetGraph(resources_, inst).clone(in);
-  sequence.add(poplar::program::Copy(in, out));
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-
-  return Status::OK();
+  return Unimplemented(inst);
 }
 
 Status BaseVisitor::HandleClamp(HloInstruction* inst) {

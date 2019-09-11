@@ -1556,7 +1556,7 @@ OutVector FindExpandedInstructionOutputs(TensorMap& map, CompilerResources& res,
 
 bool AreInplaceOutputTensorsWritable(TensorMap& map,
                                      const HloInstruction* inst) {
-  if (!IsUsedInplace(inst)) {
+  if (!IsLoweredInplace(inst)) {
     return false;
   }
 
@@ -1601,7 +1601,7 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
   const bool is_inplace_read_write =
       inplace_description.GetType() == HloInstructionType::kInplaceReadWrite;
 
-  const bool is_still_inplace = IsUsedInplace(inst);
+  const bool is_still_inplace = IsLoweredInplace(inst);
 
   // Get all the input tensors for all the inplace operands
   auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();

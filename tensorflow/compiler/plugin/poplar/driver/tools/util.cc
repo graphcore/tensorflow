@@ -407,7 +407,7 @@ void MakeUsedNotInplace(HloInstruction* inst) {
   SetInplaceBackendField(inst, false);
 }
 
-bool IsUsedInplace(const HloInstruction* inst) {
+bool IsLoweredInplace(const HloInstruction* inst) {
   auto backend_config =
       inst->backend_config<PoplarBackendConfig>().ValueOrDie();
   return backend_config.is_inplace();
@@ -418,7 +418,7 @@ absl::flat_hash_set<const HloInstruction*> GetInplaceInstructions(
   absl::flat_hash_set<const HloInstruction*> result;
   absl::c_copy_if(
       comp->instructions(), std::inserter(result, std::begin(result)),
-      [](const HloInstruction* inst) { return IsUsedInplace(inst); });
+      [](const HloInstruction* inst) { return IsLoweredInplace(inst); });
   return result;
 }
 
@@ -477,8 +477,8 @@ HloInstruction* OutlineExpressionFromComputationWithFusion(
     const string& outlined_computation_name, HloComputation* computation) {
   auto builder = HloComputation::Builder(outlined_computation_name);
 
-  // A map from original instructions to their counterparts in the new outlined
-  // function.
+  // A map from original instructions to their counterparts in the new
+  // outlined function.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> outlined_instructions;
   // A set that contains all instructions to be outlined.
   absl::flat_hash_set<HloInstruction*> instruction_set_to_outline(

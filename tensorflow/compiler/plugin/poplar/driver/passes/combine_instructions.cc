@@ -42,7 +42,7 @@ std::vector<absl::flat_hash_set<HloInstruction*>> Partition(
     auto pred = [&](const HloInstruction* inst) {
       return CanColocate(first, inst) &&
              (first->shape().element_type() == inst->shape().element_type()) &&
-             (IsUsedInplace(first) == IsUsedInplace(inst));
+             (IsLoweredInplace(first) == IsLoweredInplace(inst));
     };
 
     auto itr = std::stable_partition(begin, end, pred);

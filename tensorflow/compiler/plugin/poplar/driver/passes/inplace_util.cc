@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -24,6 +25,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 
 #include <queue>
+#include <stack>
 
 namespace xla {
 namespace poplarplugin {
@@ -283,7 +285,7 @@ bool IsInplaceReadOnly(HloInstruction* inst,
           to_visit.push(user);
         } else if (IsUsedAsInplace(user, node,
                                    HloInstructionType::kInplaceReadWrite) &&
-                   IsUsedInplace(user)) {
+                   IsLoweredInplace(user)) {
           // If a kInplaceReadWrite user is using the current node as an inplace
           // input and the user is actually inplace, then add it to
           // inplace_read_write_users.
@@ -452,6 +454,22 @@ HloInstructionDescription::HloInstructionDescription(
         CHECK_EQ(inst->operand_count(), 1);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = {0};
+      } else if (IsPipelineOp(inst) || IsPipelineStageBackward(inst)) {
+        // Pipeline and PipelineStageBackward operations are inplace on all
+        // their inputs.
+        OperandIndexes indexes(inst->operand_count());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        type_ = HloInstructionType::kInplaceReadWrite;
+        inplace_operands_ = indexes;
+      } else if (IsPipelineStage(inst)) {
+        // A forward pipeline stage is only inplace on operands which are not
+        // parameters.
+        for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+          if (inst->operand(op_idx)->opcode() != HloOpcode::kParameter) {
+            inplace_operands_.push_back(op_idx);
+          }
+        }
+        type_ = HloInstructionType::kInplaceReadWrite;
       } else {
         // Calls are not inplace.
         type_ = HloInstructionType::kNotInplace;
@@ -644,6 +662,52 @@ bool HloInstructionDescription::IsInplace(HloInstruction* inst,
     }
     default: { return false; }
   }
+}
+
+bool IsOutputModifiedInplace(const HloInstruction* hlo) {
+  // Go through all the users, looking through inplace read-only/GTEs.
+  std::stack<const HloInstruction*> to_visit;
+  to_visit.push(hlo);
+  absl::flat_hash_set<const HloInstruction*> visited;
+  while (!to_visit.empty()) {
+    const HloInstruction* inst = to_visit.top();
+    to_visit.pop();
+    if (visited.contains(inst)) {
+      continue;
+    }
+    visited.insert(inst);
+    for (const HloInstruction* user : inst->users()) {
+      auto inplace_description = HloInstructionDescription(user);
+      // Returns true if `user` uses `inst` inplace.
+      auto is_used_inplace = [inplace_description](const HloInstruction* inst,
+                                                   const HloInstruction* user) {
+        return absl::c_any_of(inplace_description.GetInplaceOperandIndexes(),
+                              [&inst, &user](int64 inplace_idx) {
+                                return user->operand(inplace_idx) == inst;
+                              });
+      };
+      switch (inplace_description.GetType()) {
+        case HloInstructionType::kInplaceReadWrite: {
+          if (IsLoweredInplace(user) && is_used_inplace(inst, user)) {
+            // We have found a user which will modify the output.
+            return true;
+          }
+          break;
+        }
+        case HloInstructionType::kInplaceReadOnly:
+        case HloInstructionType::kInplaceGetTupleElement: {
+          if (IsLoweredInplace(user) && is_used_inplace(inst, user)) {
+            // We need to check through this user.
+            to_visit.push(user);
+          }
+          break;
+        }
+        default: { break; }
+      }
+    }
+  }
+
+  return false;
 }
 }  // namespace poplarplugin
 }  // namespace xla

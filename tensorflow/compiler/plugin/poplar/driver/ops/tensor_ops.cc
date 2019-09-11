@@ -347,6 +347,25 @@ StatusOr<poplar::program::Program> CreateIota(CompilerResources& res,
   return seq;
 }
 
+StatusOr<poplar::program::Program> CreateCopy(CompilerResources& res,
+                                              const HloInstruction* inst,
+                                              const xla::Shape& output_shape,
+                                              TensorMap& tensor_map) {
+  poplar::program::Sequence seq;
+
+  poplar::Graph& graph = GetGraph(res, inst);
+  ArgVector inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq);
+
+  for (int64 tuple_idx = 0; tuple_idx != inputs.size(); ++tuple_idx) {
+    poplar::Tensor out = poputil::duplicate(
+        graph, inputs[tuple_idx], seq,
+        absl::StrCat(GetDebugName(inst), "/", tuple_idx),
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, out));
+  }
+  return seq;
+}
+
 StatusOr<poplar::program::Program> CreateZeroPadOp(CompilerResources& res,
                                                    const HloInstruction* inst,
                                                    const xla::Shape& output,

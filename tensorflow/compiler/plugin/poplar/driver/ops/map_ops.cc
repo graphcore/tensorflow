@@ -1,15 +1,28 @@
-#include <algorithm>
+/* Copyright 2017-2019 The TensorFlow Authors. All Rights Reserved.
 
-#include "absl/strings/str_cat.h"
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/custom_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_inline_call.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"
@@ -20,8 +33,12 @@
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
 
+#include "absl/strings/str_cat.h"
+
 #include <poplar/Graph.hpp>
 #include <popops/AllTrue.hpp>
+
+#include <algorithm>
 
 using ::absl::StrCat;
 using tensorflow::str_util::StartsWith;
@@ -135,12 +152,12 @@ GetWhileAndRepeatAliasingCopies(poplar::Graph& graph,
   return std::make_pair(body_seq, while_loop_state);
 }
 
-StatusOr<TensorInputDescription> GetWhileAndRepeatLayoutInfo(
+StatusOr<TensorInputDescription> GetInplaceSubcomputationLayoutInfo(
     CompilerResources& res, const HloInstruction* inst) {
   TensorInputDescription input_has_layout(inst->operand_count());
-  // For each operand to the loop, check if the tensor coming in has a layout.
-  // If the tensor does not have a layout then the while/repeat loop might
-  // create one for this tensor.
+  // For each operand to the inplace subcomputation, check if the tensor coming
+  // in has a layout. If the tensor does not have a layout then the inplace
+  // subcomputation visitor might create one for this tensor.
   for (int64 i = 0; i < inst->operand_count(); i++) {
     auto* operand = inst->operand(i);
     std::vector<xla::Shape> shapes = FlattenedXlaShape(operand->shape());
@@ -183,6 +200,61 @@ CompileInplaceSubComputation(CompilerResources& res, const ArgVectors& inputs,
   return visitor;
 }
 
+StatusOr<poplar::program::Program> CreatePipelineStageOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map) {
+  VLOG(1) << "Processing " << inst->name();
+  poplar::program::Sequence seq;
+  ArgVectors inputs(inst->operand_count());
+  // First get all the inplace inputs.
+  TF_ASSIGN_OR_RETURN(
+      ArgVectors inplace_inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+  auto inplace_inputs_itr = inplace_inputs.begin();
+  auto inst_description = HloInstructionDescription(inst);
+  // Keep track of inputs which are not inplace (i.e. parameters for forward
+  // stages).
+  absl::flat_hash_set<int64> non_inplace_operand_indices;
+  for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+    non_inplace_operand_indices.insert(op_idx);
+  }
+
+  // Populate the inputs with the inplace inputs first.
+  for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
+    inputs[inplace_idx] = *inplace_inputs_itr;
+    inplace_inputs_itr++;
+    non_inplace_operand_indices.erase(inplace_idx);
+  }
+  // Get all the non inplace inputs.
+  if (inst_description.GetInplaceOperandIndexes().size() !=
+      inst->operand_count()) {
+    CHECK(IsPipelineStage(inst));
+    for (int64 op_idx : non_inplace_operand_indices) {
+      inputs[op_idx] =
+          FindInstructionInputs(tensor_map, res, inst, op_idx, seq, false);
+    }
+  }
+
+  // Get the input layout info.
+  TF_ASSIGN_OR_RETURN(auto input_has_layout,
+                      GetInplaceSubcomputationLayoutInfo(res, inst));
+  // Compile the stage.
+  TF_ASSIGN_OR_RETURN(
+      auto visitor, CompileInplaceSubComputation(res, inputs, inst->to_apply(),
+                                                 input_has_layout));
+
+  // Get any copies.
+  seq.add(visitor->GetPreambleCopies());
+  // Get the sequence for the stage.
+  seq.add(visitor->GetSequence());
+  // Forward the outputs.
+  const OutVector& pipeline_outputs = visitor->outputs();
+  for (size_t i = 0; i < pipeline_outputs.size(); i++) {
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
+  }
+
+  return seq;
+}
 }  // namespace
 
 class ParallelMapTester : public DfsHloVisitorWithDefault {
@@ -274,6 +346,9 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
     }
   } else if (IsRepeatLoop(inst)) {
     TF_ASSIGN_OR_RETURN(seq, CreateRepeatOp(res, inst, output, tensor_map));
+  } else if (IsPipelineStageOrBackwardOp(inst)) {
+    TF_ASSIGN_OR_RETURN(seq,
+                        CreatePipelineStageOp(res, inst, output, tensor_map));
   } else {
     ArgVectors args = GetCallInputs(res, inst, tensor_map, seq);
     TF_ASSIGN_OR_RETURN(
@@ -364,7 +439,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
 
   // Get the input layout info.
   TF_ASSIGN_OR_RETURN(auto input_has_layout,
-                      GetWhileAndRepeatLayoutInfo(res, inst));
+                      GetInplaceSubcomputationLayoutInfo(res, inst));
 
   // Body of the while loop is inplace.
   TF_ASSIGN_OR_RETURN(
@@ -450,7 +525,7 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
 
   // Get the input layout info.
   TF_ASSIGN_OR_RETURN(auto input_has_layout,
-                      GetWhileAndRepeatLayoutInfo(res, inst));
+                      GetInplaceSubcomputationLayoutInfo(res, inst));
 
   TF_ASSIGN_OR_RETURN(
       auto body, CompileInplaceSubComputation(res, inputs, inst->to_apply(),
@@ -458,7 +533,6 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
 
   unsigned int param_count = inputs[0].size();
 
-  const ArgVector& inplace_inputs = inputs[0];
   const ArgVector& body_inputs = body->inputs()[0];
   const ArgVector& body_outputs = body->outputs();
 
@@ -468,18 +542,8 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   if (body_outputs.size() != param_count) {
     return xla::FailedPrecondition("Invalid number of body outputs.");
   }
-
-  // Even though repeat loop is inplace, some of the repeat loop inputs might
-  // allocate their inputs as they have allocation targets. In these cases make
-  // sure to copy the values of the tensors.
-  for (unsigned int i = 0; i < param_count; i++) {
-    if (body->InputHasAllocationTarget(0, i)) {
-      VLOG(1) << "Adding a copy for repeat loop " << inst->name()
-              << " input tensor " << i << ".";
-      main_seq.add(poplar::program::Copy(inplace_inputs[i], body_inputs[i]));
-    }
-  }
-
+  // Get any copies.
+  main_seq.add(body->GetPreambleCopies());
   // Body
   poplar::program::Sequence body_seq(body->GetSequence());
   TF_ASSIGN_OR_RETURN(auto seq_argvector_pair,

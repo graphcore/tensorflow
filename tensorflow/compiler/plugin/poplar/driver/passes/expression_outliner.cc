@@ -92,7 +92,7 @@ StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
   std::list<HloInstruction*> all_ops;
   for (auto* inst : comp->MakeInstructionPostOrder()) {
     if (IsPopopsElementwise(inst) && inst->user_count() == 1 &&
-        !IsUsedInplace(inst) && inst->control_predecessors().size() == 0 &&
+        !IsLoweredInplace(inst) && inst->control_predecessors().size() == 0 &&
         inst->control_successors().size() == 0) {
       bool add_op = true;
       if (inst->IsElementwiseBinary()) {
@@ -180,7 +180,7 @@ StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
         bool ok_to_outline =
             (std::find(all_ops.begin(), all_ops.end(), op) != all_ops.end());
 
-        if (IsUsedInplace(op)) {
+        if (IsLoweredInplace(op)) {
           ok_to_outline = false;
         }
 

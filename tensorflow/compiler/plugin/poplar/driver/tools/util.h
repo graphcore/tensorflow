@@ -162,7 +162,7 @@ void MakeUsedInplace(HloInstruction* inst);
 // is not used inplace.
 void MakeUsedNotInplace(HloInstruction* inst);
 // Check whether this instruction is configured to be used inplace.
-bool IsUsedInplace(const HloInstruction* inst);
+bool IsLoweredInplace(const HloInstruction* inst);
 
 // Get all the inplace instructions in a computation.
 absl::flat_hash_set<const HloInstruction*> GetInplaceInstructions(

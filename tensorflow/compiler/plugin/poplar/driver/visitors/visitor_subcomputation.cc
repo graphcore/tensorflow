@@ -211,6 +211,22 @@ StatusOr<bool> InplaceSubComputationVisitor::HandleTensor(
   return add_output_tensor;
 }
 
+poplar::program::Sequence InplaceSubComputationVisitor::GetPreambleCopies() {
+  poplar::program::Sequence seq;
+  for (int64 op_idx = 0; op_idx != temp_inputs_.size(); ++op_idx) {
+    for (int64 tuple_idx = 0; tuple_idx != temp_inputs_[op_idx].size();
+         ++tuple_idx) {
+      if (InputHasAllocationTarget(op_idx, tuple_idx)) {
+        VLOG(1) << "Adding a copy for input tensor (" << op_idx << ", "
+                << tuple_idx << ").";
+        seq.add(poplar::program::Copy(temp_inputs_[op_idx][tuple_idx],
+                                      inputs_[op_idx][tuple_idx]));
+      }
+    }
+  }
+  return seq;
+}
+
 StatusOr<poplar::Tensor> SubComputationVisitor::PostProcessParameterAllocation(
     const HloInstruction* inst, int64 flat_tuple_index, const Shape&,
     poplar::Tensor tensor) {
@@ -222,8 +238,6 @@ StatusOr<poplar::Tensor> SubComputationVisitor::PostProcessParameterAllocation(
 
 Status SubComputationVisitor::FinishVisit(HloInstruction* inst) {
   outputs_ = FindInstructionOutputs(tensor_map, inst);
-
-  temp_inputs_.clear();
 
   resources_.tensor_maps[inst->parent()->name()] = std::move(tensor_map);
 
