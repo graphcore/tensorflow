@@ -49,7 +49,11 @@ class PipelineFixer : public HloModulePass {
 
  private:
   // Fixes a pipeline.
-  StatusOr<bool> FixPipeline(HloInstruction* pipeline_op);
+  Status FixPipeline(HloInstruction* pipeline_op);
+
+  // The TF2XLA inserts a wrapper into the Pipeline stage. This function removes
+  // it.
+  Status RemovePipelineWrapper(HloComputation* pipeline_comp);
 
   // Performs the lowering (if possible) of any operations which need to be
   // lowered for this pipeline to be correct.

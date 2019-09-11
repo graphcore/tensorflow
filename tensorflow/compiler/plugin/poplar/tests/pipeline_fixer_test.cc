@@ -110,7 +110,7 @@ stage_2 {
   ROOT tuple.38 = () tuple()
 }
 
-pipeline {
+pipeline_wrapper {
   arg0.40 = f32[] parameter(0)
   arg1.41 = f32[1,1,2,2]{3,2,1,0} parameter(1)
   arg2.42 = f32[2]{0} parameter(2)
@@ -121,12 +121,22 @@ pipeline {
   ROOT tuple.51 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg1.41, arg2.42)
 }
 
+pipeline {
+  arg0.40 = f32[] parameter(0)
+  arg1.41 = f32[1,1,2,2]{3,2,1,0} parameter(1)
+  arg2.42 = f32[2]{0} parameter(2)
+  call = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.40, arg1.41, arg2.42), to_apply=pipeline_wrapper
+  get-tuple-element.44 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call), index=0
+  get-tuple-element.45 = f32[2]{0} get-tuple-element(call), index=1
+  ROOT tuple.51 = (f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg0.40, get-tuple-element.44, get-tuple-element.45)
+}
+
 ENTRY main {
   arg0.1 = f32[] parameter(0), parameter_replication={false}
   reshape.4 = f32[] reshape(arg0.1)
   arg2.3 = f32[1,1,2,2]{3,2,1,0} parameter(2), parameter_replication={false}
   arg1.2 = f32[2]{0} parameter(1), parameter_replication={false}
-  call.52 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(reshape.4, arg2.3, arg1.2), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  call.52 = (f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(reshape.4, arg2.3, arg1.2), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   ROOT tuple.53 = () tuple()
 }
 )";
@@ -137,7 +147,7 @@ ENTRY main {
                           ParseAndReturnVerifiedModule(hlo, config));
   PipelineFixer fixer;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, fixer.Run(module.get()));
-  EXPECT_FALSE(changed);
+  EXPECT_TRUE(changed);
 
   HloComputation* pipeline_computation =
       FindComputation(module.get(), "pipeline");
@@ -305,7 +315,7 @@ stage_2_bwd {
   ROOT tuple.53 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[]) tuple(convolution.35, constant.25, convolution.37, convert.36, subtract.24, subtract.25, get-tuple-element.184.clone.19)
 }
 
-pipeline {
+pipeline_wrapper {
   arg0.154 = f32[1,4,4,2]{3,2,1,0} parameter(0)
   arg1.155 = f32[] parameter(1)
   arg2.156 = f32[1,1,2,2]{3,2,1,0} parameter(2)
@@ -361,6 +371,29 @@ pipeline {
   ROOT tuple.265 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(get-tuple-element.35, get-tuple-element.32, get-tuple-element.21, get-tuple-element.16, get-tuple-element.9, get-tuple-element.12, get-tuple-element.1, get-tuple-element)
 }
 
+pipeline {
+  arg0.154 = f32[1,4,4,2]{3,2,1,0} parameter(0)
+  arg1.155 = f32[] parameter(1)
+  arg2.156 = f32[1,1,2,2]{3,2,1,0} parameter(2)
+  arg3.157 = f32[2]{0} parameter(3)
+  arg4.158 = f32[1,1,2,2]{3,2,1,0} parameter(4)
+  arg5.159 = f32[2]{0} parameter(5)
+  arg6.160 = f32[1,1,2,2]{3,2,1,0} parameter(6)
+  arg7.161 = f32[2]{0} parameter(7)
+  arg8.162 = f32[1,1,2,2]{3,2,1,0} parameter(8)
+  arg9.163 = f32[2]{0} parameter(9)
+  call = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.154, arg1.155, arg2.156, arg3.157, arg4.158, arg5.159, arg6.160, arg7.161, arg8.162, arg9.163), to_apply=pipeline_wrapper
+  gte0 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call), index=0
+  gte1 = f32[2]{0} get-tuple-element(call), index=1
+  gte2 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call), index=2
+  gte3 = f32[2]{0} get-tuple-element(call), index=3
+  gte4 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call), index=4
+  gte5 = f32[2]{0} get-tuple-element(call), index=5
+  gte6 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call), index=6
+  gte7 = f32[2]{0} get-tuple-element(call), index=7
+  ROOT tuple.265 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg0.154, arg1.155, gte0, gte1, gte2, gte3, gte4, gte5, gte6, gte7)
+}
+
 ENTRY Pipeline {
   arg0.1 = f32[1,4,4,2]{3,2,1,0} parameter(0), parameter_replication={false}
   reshape.11 = f32[1,4,4,2]{3,2,1,0} reshape(arg0.1)
@@ -374,29 +407,29 @@ ENTRY Pipeline {
   arg8.9 = f32[2]{0} parameter(8), parameter_replication={false}
   arg5.6 = f32[1,1,2,2]{3,2,1,0} parameter(5), parameter_replication={false}
   arg3.4 = f32[2]{0} parameter(3), parameter_replication={false}
-  call.266 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(reshape.11, reshape.12, arg4.5, arg2.3, arg7.8, arg6.7, arg9.10, arg8.9, arg5.6, arg3.4), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
-  get-tuple-element.268 = f32[2]{0} get-tuple-element(call.266), index=1
+  call.266 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(reshape.11, reshape.12, arg4.5, arg2.3, arg7.8, arg6.7, arg9.10, arg8.9, arg5.6, arg3.4), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  get-tuple-element.268 = f32[2]{0} get-tuple-element(call.266), index=3
   tuple.275 = (f32[2]{0}) tuple(get-tuple-element.268)
   get-tuple-element.276 = f32[2]{0} get-tuple-element(tuple.275), index=0
-  get-tuple-element.274 = f32[2]{0} get-tuple-element(call.266), index=7
+  get-tuple-element.274 = f32[2]{0} get-tuple-element(call.266), index=9
   tuple.277 = (f32[2]{0}) tuple(get-tuple-element.274)
   get-tuple-element.278 = f32[2]{0} get-tuple-element(tuple.277), index=0
-  get-tuple-element.267 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.266), index=0
+  get-tuple-element.267 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.266), index=2
   tuple.279 = (f32[1,1,2,2]{3,2,1,0}) tuple(get-tuple-element.267)
   get-tuple-element.280 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(tuple.279), index=0
-  get-tuple-element.273 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.266), index=6
+  get-tuple-element.273 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.266), index=8
   tuple.281 = (f32[1,1,2,2]{3,2,1,0}) tuple(get-tuple-element.273)
   get-tuple-element.282 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(tuple.281), index=0
-  get-tuple-element.270 = f32[2]{0} get-tuple-element(call.266), index=3
+  get-tuple-element.270 = f32[2]{0} get-tuple-element(call.266), index=5
   tuple.283 = (f32[2]{0}) tuple(get-tuple-element.270)
   get-tuple-element.284 = f32[2]{0} get-tuple-element(tuple.283), index=0
-  get-tuple-element.269 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.266), index=2
+  get-tuple-element.269 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.266), index=4
   tuple.285 = (f32[1,1,2,2]{3,2,1,0}) tuple(get-tuple-element.269)
   get-tuple-element.286 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(tuple.285), index=0
-  get-tuple-element.272 = f32[2]{0} get-tuple-element(call.266), index=5
+  get-tuple-element.272 = f32[2]{0} get-tuple-element(call.266), index=7
   tuple.287 = (f32[2]{0}) tuple(get-tuple-element.272)
   get-tuple-element.288 = f32[2]{0} get-tuple-element(tuple.287), index=0
-  get-tuple-element.271 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.266), index=4
+  get-tuple-element.271 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.266), index=6
   tuple.289 = (f32[1,1,2,2]{3,2,1,0}) tuple(get-tuple-element.271)
   get-tuple-element.290 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(tuple.289), index=0
   ROOT tuple.291 = (f32[2]{0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}) tuple(get-tuple-element.276, get-tuple-element.278, get-tuple-element.280, get-tuple-element.282, get-tuple-element.284, get-tuple-element.286, get-tuple-element.288, get-tuple-element.290)
@@ -409,7 +442,7 @@ ENTRY Pipeline {
                           ParseAndReturnVerifiedModule(hlo, config));
   PipelineFixer fixer;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, fixer.Run(module.get()));
-  EXPECT_FALSE(changed);
+  EXPECT_TRUE(changed);
 
   HloComputation* pipeline_computation =
       FindComputation(module.get(), "pipeline");
@@ -462,7 +495,7 @@ stage_0_bwd {
   ROOT stage_0_bwd_tuple = (f32[1,4,4,2]) tuple(stage_0_bwd_input_bwd)
 }
 
-pipeline {
+pipeline_wrapper {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_lr = f32[] parameter(2)
   pipeline_stage_0 = (f32[], f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_lr), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
@@ -487,11 +520,24 @@ pipeline {
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_apply, pipeline_weights1_apply)
 }
 
+pipeline {
+  pipeline_weights0 = f32[1,4,4,2] parameter(0)
+  pipeline_weights1 = f32[1,4,4,2] parameter(1)
+  pipeline_lr = f32[] parameter(2)
+  call = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1, pipeline_lr), to_apply=pipeline_wrapper
+  gte0 = f32[1,4,4,2] get-tuple-element(call), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(call), index=1
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[]) tuple(gte0, gte1, pipeline_lr)
+}
+
 ENTRY e {
   e.weights0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.weights1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
   e.lr = f32[] parameter(2), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.weights0, e.weights1, e.lr), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(e.weights0, e.weights1, e.lr), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
 }
 )";
 
@@ -631,7 +677,7 @@ stage_1_fwd {
   ROOT stage_1_fwd_tuple = () tuple()
 }
 
-pipeline {
+pipeline_wrapper {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_acts_0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
@@ -643,10 +689,19 @@ pipeline {
   ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(add)
 }
 
+pipeline {
+  pipeline_weights0 = f32[1,4,4,2] parameter(0)
+  pipeline_weights1 = f32[1,4,4,2] parameter(1)
+  call = (f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1), to_apply=pipeline_wrapper
+  gte = f32[1,4,4,2] get-tuple-element(call), index=0
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0, gte)
+}
+
 ENTRY e {
   e.weights0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.weights1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2]) call(e.weights0, e.weights1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.weights0, e.weights1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  ROOT gte = f32[1,4,4,2] get-tuple-element(e.call), index=1
 }
 )";
 

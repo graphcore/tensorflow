@@ -430,8 +430,51 @@ StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages() {
   return lowered_inputs || lowered_outputs || lowered_params_uses;
 }
 
-StatusOr<bool> PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
+Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
+  // We expect the pipeline computation to have a call to a wrapped computation
+  // of all the pipeline stages. Find that call.
+  std::vector<HloInstruction*> inner_calls;
+  absl::c_copy_if(
+      pipeline_comp->instructions(), std::back_inserter(inner_calls),
+      [&](HloInstruction* inst) { return inst->opcode() == HloOpcode::kCall; });
+  if (inner_calls.size() != 1) {
+    return FailedPrecondition(
+        "Expected a single wrapper call inside the Pipeline, but got %d.",
+        inner_calls.size());
+  }
+  HloInstruction* call = inner_calls[0];
+  HloComputation* comp_to_hoist = call->to_apply();
+
+  // Hoist the computation out.
+  absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisting_map;
+  for (HloInstruction* inst : comp_to_hoist->MakeInstructionPostOrder()) {
+    HloInstruction* hoisted;
+    if (inst->opcode() == HloOpcode::kParameter) {
+      hoisted = call->mutable_operand(inst->parameter_number());
+    } else {
+      std::vector<HloInstruction*> new_operands(inst->operand_count());
+      absl::c_transform(inst->operands(), new_operands.begin(),
+                        [&hoisting_map](HloInstruction* operand) {
+                          return hoisting_map.at(operand);
+                        });
+      // Clone new instruction inside the computation.
+      hoisted = pipeline_comp->AddInstruction(
+          inst->CloneWithNewOperands(inst->shape(), new_operands));
+    }
+    hoisting_map[inst] = hoisted;
+  }
+  HloInstruction* new_root = hoisting_map.at(comp_to_hoist->root_instruction());
+  // Replace all uses.
+  TF_RETURN_IF_ERROR(call->ReplaceAllUsesWith(new_root));
+  // Remove the old instruction.
+  TF_RETURN_IF_ERROR(pipeline_comp->RemoveInstruction(call));
+
+  return Status::OK();
+}
+
+Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
+  TF_RETURN_IF_ERROR(RemovePipelineWrapper(pipeline_comp));
 
   TF_ASSIGN_OR_RETURN(stages_, GetPipelineStages(pipeline_comp));
   // Go through the stages and insert stateful no-ops to make sure DCE does not
@@ -442,27 +485,24 @@ StatusOr<bool> PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_RETURN_IF_ERROR(InsertStatefulNoopsIntoStages());
   // Clean up the pipelines.
   TupleSimplifier ts(true);
-  TF_ASSIGN_OR_RETURN(bool ts_change, ts.Run(pipeline_op->GetModule()));
+  TF_RETURN_IF_ERROR(ts.Run(pipeline_op->GetModule()).status());
   HloDCE dce;
-  TF_ASSIGN_OR_RETURN(bool dce_change_run_one,
-                      dce.Run(pipeline_op->GetModule()));
+  TF_RETURN_IF_ERROR(dce.Run(pipeline_op->GetModule()).status());
 
   // Duplicate edges - this makes analysis easier.
-  TF_ASSIGN_OR_RETURN(bool added_edges, DuplicateGTEEdges(stages_));
+  TF_RETURN_IF_ERROR(DuplicateGTEEdges(stages_).status());
   // Uniquify computations called by stages.
-  TF_ASSIGN_OR_RETURN(bool added_comp, UniquifyPipelineStageCallsites(stages_));
+  TF_RETURN_IF_ERROR(UniquifyPipelineStageCallsites(stages_).status());
   // Verify we can actually try and lower this Pipeline.
   TF_RETURN_IF_ERROR(VerifyPipelineStagesBeforeFixing(stages_));
   // Run the lowering.
-  TF_ASSIGN_OR_RETURN(bool pipeline_modified, LowerOpsIntoPipelineStages());
+  TF_RETURN_IF_ERROR(LowerOpsIntoPipelineStages().status());
   // Tidy again.
-  TF_ASSIGN_OR_RETURN(bool dce_change_run_two,
-                      dce.Run(pipeline_op->GetModule()));
+  TF_RETURN_IF_ERROR(dce.Run(pipeline_op->GetModule()).status());
   // Verify the pipeline is now ok to be lowered.
   TF_RETURN_IF_ERROR(VerifyPipelineAfterFixing(pipeline_op));
 
-  return ts_change || dce_change_run_one || added_edges || added_comp ||
-         pipeline_modified || dce_change_run_two;
+  return Status::OK();
 }
 
 StatusOr<bool> PipelineFixer::Run(HloModule* module) {
@@ -476,15 +516,11 @@ StatusOr<bool> PipelineFixer::Run(HloModule* module) {
   VLOG(2) << "Before fixing the Pipeline stages.";
   XLA_VLOG_LINES(2, module->ToString());
 
-  TF_ASSIGN_OR_RETURN(bool changed, FixPipeline(pipeline_ops[0]));
+  TF_RETURN_IF_ERROR(FixPipeline(pipeline_ops[0]));
 
-  if (changed) {
-    VLOG(2) << "After fixing the Pipeline stages.";
-    XLA_VLOG_LINES(2, module->ToString());
-  } else {
-    VLOG(2) << "No changes were made to the Pipeline.";
-  }
-  return changed;
+  VLOG(2) << "After fixing the Pipeline stages.";
+  XLA_VLOG_LINES(2, module->ToString());
+  return true;
 }
 
 }  // namespace poplarplugin
