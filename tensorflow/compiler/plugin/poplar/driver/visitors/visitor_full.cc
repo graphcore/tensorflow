@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_full.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -48,10 +49,13 @@ limitations under the License.
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
+#include <popops/ElementWise.hpp>
+#include <popops/Zero.hpp>
 
 using ::tensorflow::str_util::Join;
 
 namespace se = ::stream_executor;
+namespace pe = popops::expr;
 
 namespace xla {
 namespace poplarplugin {
@@ -404,6 +408,144 @@ Status FullVisitor::HandleGather(HloInstruction* inst) {
       CreateGather(resources_, Cast<HloGatherInstruction>(inst), tensor_map));
 
   sequence.add(prog);
+
+  return Status::OK();
+}
+
+Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+  if (resources_.annotations.outfeed_infos.size()) {
+    return InvalidArgument("Only one IPUOutfeedQueue supported per graph.");
+  }
+
+  poplar::program::Sequence seq;
+  poplar::Graph& graph = GetGraph(resources_, inst);
+  poplar::Graph& master_graph = GetMasterGraph(resources_);
+
+  HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
+  xla::poplarplugin::PoplarFeedConfig outfeed_config;
+  outfeed_config.ParseFromString(outfeed->outfeed_config());
+
+  size_t io_batch_size = std::max<size_t>(1, outfeed_config.io_batch_size());
+
+  // Check that the replication factor matches.
+  if (resources_.replication_factor != outfeed_config.replication_factor()) {
+    return xla::FailedPrecondition(
+        "Current program has been created with replication_factor %d, however "
+        "the IPUOutfeedQueue has been configured with replication_factor %d. "
+        "Either reduce the number of IPUs in your TensorFlow device, or set "
+        "the `replication_factor` to %d when creating IPUOutfeedQueue.",
+        resources_.replication_factor, outfeed_config.replication_factor(),
+        resources_.replication_factor);
+  }
+
+  // operand 1 is the input
+  // operand 2 is the token
+  if (outfeed->operand_count() != 2) {
+    return InvalidArgument("Expected operand_count() == 2 for outfeed ops");
+  }
+
+  HloInstruction* operand = outfeed->operands()[0];
+  const Shape& shape = operand->shape();
+  if (ShapeUtil::IsNestedTuple(shape)) {
+    return InvalidArgument("Nested tuple shapes are not supported for outfeed");
+  }
+
+  ArgVector input_tensors;
+  const bool expand_constants = true;
+  if (shape.IsTuple()) {
+    input_tensors = FindInstructionInputs(tensor_map, resources_, inst, 0, seq,
+                                          expand_constants);
+  } else {
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor in,
+        FindInstructionInput(tensor_map, resources_, inst, 0, seq));
+    input_tensors.emplace_back(in);
+  }
+
+  for (unsigned i = 0; i < input_tensors.size(); ++i) {
+    poplar::Tensor& in = input_tensors[i];
+
+    if (io_batch_size == 1) {
+      // Simply copy to the stream
+      auto fifo =
+          graph.addDeviceToHostFIFO(GetOutfeedCopyHandle(inst->name(), i),
+                                    in.elementType(), in.numElements());
+
+      seq.add(poplar::program::Copy(in, fifo, false));
+    } else {
+      // Batch multiple writes, and then write as a block
+
+      // Extend the old shape to add a new dimension for the batches of memory
+      std::vector<size_t> new_shape = in.shape();
+      new_shape.insert(new_shape.begin(), io_batch_size);
+
+      // Clone the original tensor and concat the clones into
+      // one big tensor
+      std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
+      for (int i = 0; i < io_batch_size; ++i) {
+        cloned_tensors[i] = graph.clone(in);
+      }
+      poplar::Tensor batched =
+          poplar::concat(cloned_tensors).reshape(new_shape);
+
+      // The counter needs to be on the master graph because it is used for
+      // replicated flow control.
+      poplar::Tensor counter = master_graph.addVariable(
+          poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
+          GetDebugName(inst) + "/OutfeedCtr/" + std::to_string(i));
+      master_graph.setInitialValue(counter, 0);
+
+      // Create a big switch statement each with a static copy from one index
+      // of the block.
+      std::vector<std::pair<std::int32_t, poplar::program::Program>> cases;
+      for (std::uint32_t i = 0; i < io_batch_size; ++i) {
+        cases.push_back(std::make_pair<std::int32_t, poplar::program::Program>(
+            static_cast<int32_t>(i), poplar::program::Copy(in, batched[i])));
+      }
+      seq.add(poplar::program::Switch(counter, cases));
+
+      // Workaround for Poplar aliasing issue (T11200)
+      popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(0)), {batched}, seq,
+                         GetDebugName(inst) + "/noop/");
+
+      // Increment the counter by one.
+      popops::mapInPlace(
+          master_graph, pe::Add(pe::_1, pe::Const(1)), {counter}, seq,
+          GetDebugName(inst) + "/OutfeedCtrInc/" + std::to_string(i));
+
+      // The body for copying to host and zeroing the counter.
+      poplar::program::Sequence true_body;
+
+      // Copy the data to the host
+      if (!UseSyntheticData()) {
+        auto fifo = graph.addDeviceToHostFIFO(
+            GetOutfeedCopyHandle(outfeed->name(), i), batched.elementType(),
+            batched.numElements());
+        true_body.add(poplar::program::Copy(batched, fifo, false));
+      }
+
+      popops::zero(master_graph, counter, true_body,
+                   GetDebugName(inst) + "/OutfeedCtrZero/" + std::to_string(i));
+
+      // The NOP body.
+      poplar::program::Sequence false_body;
+
+      // Check the counter doesn't equal
+      poplar::Tensor predicate = popops::map(
+          master_graph, pe::Equal(pe::_1, pe::Const(io_batch_size)), {counter},
+          seq, GetDebugName(inst) + "/OutfeedCtrCmp/" + std::to_string(i));
+
+      // The main body which contains the control flow for copy from host and
+      // the dynamic slice.
+      seq.add(poplar::program::If(predicate, true_body, false_body));
+    }
+  }
+
+  FeedInfo info(outfeed->name(), outfeed_config,
+                outfeed->operands()[0]->shape());
+  resources_.annotations.outfeed_infos.push_back(info);
+  sequence.add(seq);
 
   return Status::OK();
 }

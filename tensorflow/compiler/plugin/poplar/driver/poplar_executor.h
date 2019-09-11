@@ -413,7 +413,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Lock the outfeed queue and dequeue all the tensors from a given feed.
   // Fails if the outfeed with the given name does not exist.
   std::vector<std::vector<tensorflow::Tensor>> GetTensorsFromOutfeed(
-      const std::string& feed_id);
+      const std::string& feed_id, const PoplarFeedConfig_Mode& mode);
 
   Status RegisterOutfeeds(const OutfeedInfos& outfeed_infos);
 
@@ -684,7 +684,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     std::vector<tensorflow::TensorShape> tf_shapes;
     std::vector<std::vector<std::unique_ptr<QueueType>>>
         callback_to_io_thread_queues;
-    std::queue<std::vector<tensorflow::Tensor>> io_thread_output_queues;
+    std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
     // executing.
     // TODO T8971 - this still doesn't help when we do sess.run([graph,

@@ -246,6 +246,7 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
     // Set up the queue per tensor per replica.
     auto num_bytes_per_replica =
         ShapeUtil::ByteSizeOf(shapes[i]) / replication_factor;
+    num_bytes_per_replica *= outfeed_info.config.io_batch_size();
     for (uint64 replica_id = 0; replica_id < replication_factor; replica_id++) {
       void* ptr = tensorflow::port::AlignedMalloc(sizeof(QueueType), 64);
       callback_to_io_thread_queues[i].emplace_back(
@@ -346,6 +347,7 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
     for (unsigned j = 0; j < tensor_count; ++j) {
       size_t length = ShapeUtil::ByteSizeOf(outfeed_context->shapes[j]);
       auto bytes_per_replica = length / current_replication_factor_;
+      bytes_per_replica *= outfeed_info.config.io_batch_size();
       for (auto replica_id = 0; replica_id < current_replication_factor_;
            ++replica_id) {
         auto& queue =
@@ -444,14 +446,17 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
 }
 
 namespace {
-inline std::vector<tensorflow::Tensor> AllocateTensors(
-    const std::vector<tensorflow::DataType>& types,
-    const std::vector<tensorflow::TensorShape>& shapes) {
-  std::vector<tensorflow::Tensor> tensors(types.size());
-  for (auto i = 0; i != types.size(); ++i) {
-    tensors[i] = tensorflow::Tensor(types[i], shapes[i]);
+inline void AllocateTensors(std::deque<std::vector<tensorflow::Tensor>>& queue,
+                            const std::vector<tensorflow::DataType>& types,
+                            const std::vector<tensorflow::TensorShape>& shapes,
+                            int count) {
+  for (int c = 0; c < count; c++) {
+    queue.emplace_front(types.size());
+    auto& tensors = queue.front();
+    for (auto i = 0; i != types.size(); ++i) {
+      tensors[i] = tensorflow::Tensor(types[i], shapes[i]);
+    }
   }
-  return tensors;
 }
 }  // namespace
 
@@ -472,17 +477,23 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
   }
 
   return [this, outfeed_infos, outfeed_contexts]() {
+    int replicas = current_replication_factor_;
+    replicas = std::max(replicas, 1);
+
     // Lock all the outfeed queues so that the CPU OP does not try to dequeue
     // the outfeed during the execution.
     for (auto& outfeed_context : outfeed_contexts) {
       outfeed_context->mutex.lock();
     }
+
     // Continue while the thread has not been cancelled, and if it has been
     // cancelled allow for up to two extra runs.
     uint32 all_queues_empty_for = 0;
     while (!outfeed_thread_cancelled_ || all_queues_empty_for != 2) {
       bool all_queues_empty = true;
       for (auto& outfeed_context : outfeed_contexts) {
+        int io_batch_size = outfeed_context->config.io_batch_size();
+
         for (auto& tensor_queues :
              outfeed_context->callback_to_io_thread_queues) {
           for (auto& replica_queue : tensor_queues) {
@@ -503,46 +514,49 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
         }
 
         if (allocate_tensors) {
-          outfeed_context->io_thread_output_queues.push(AllocateTensors(
-              outfeed_context->tf_data_types, outfeed_context->tf_shapes));
+          AllocateTensors(outfeed_context->io_thread_output_queues,
+                          outfeed_context->tf_data_types,
+                          outfeed_context->tf_shapes, io_batch_size);
         }
 
-        // Get the last element of the queue, for the all mode this means this
-        // will be the newly allocated tensors, for the get last mode this
-        // will be the same tensors as before which will be overwritten.
-        std::vector<tensorflow::Tensor>& tensors_to_write_to =
-            outfeed_context->io_thread_output_queues.back();
-        for (auto j = 0; j < outfeed_context->shapes.size(); ++j) {
-          auto& tensor = tensors_to_write_to[j];
-          std::vector<tensorflow::Tensor> tensor_slices;
-          if (current_replication_factor_ > 1) {
-            // For replicated graphs, slice the tensor which we are writing to
-            // and dequeue it separately for each replica.
-            CHECK_EQ(tensor.dim_size(0), current_replication_factor_);
-            tensor_slices.reserve(current_replication_factor_);
-            for (auto replica_id = 0; replica_id < current_replication_factor_;
-                 ++replica_id) {
-              // Note that the tensor_slice shares the date buffer with the
-              // tensor which works with ref counting.
-              tensor_slices.push_back(tensor.SubSlice(replica_id));
-            }
-          } else {
-            tensor_slices = {tensor};
-          }
-
+        // We need to copy along 3 axis.  There are multiple queues from
+        // the IPU, one  per tuple and per replica.  In each queue there
+        // is a block of data containing one or more tensors.  There is a
+        // single queue out of the executor, consisting of a vector of
+        // Tensors, one per tuple entry.  If there are multiple replicas
+        // then the outer dimension of the Tensors has the same value as the
+        // replica count, and the output from each replica is concatenated
+        // into that Tensor.
+        //
+        // We loop over each queue (by tuple  and replica), and dequeue the
+        // block of data. This is then inserted  into the output queue as
+        // appropriate.
+        for (auto tuple_idx = 0; tuple_idx < outfeed_context->shapes.size();
+             ++tuple_idx) {
           // Dequeue tensors from each replica.
-          for (int64 replica_id = 0; replica_id < tensor_slices.size();
-               replica_id++) {
-            auto& tensor = tensor_slices[replica_id];
+          for (int64 replica_id = 0; replica_id < replicas; replica_id++) {
             auto& queue =
-                outfeed_context->callback_to_io_thread_queues[j][replica_id];
-            auto* tb = tensorflow::DMAHelper::buffer(&tensor);
-            // Get the buffer which stores the tensor from the callback.
-            auto* src = queue->BlockFront();
-            // Memcpy it into the output tensor.
-            std::memcpy(tb->data(), src, tensor.AllocatedBytes());
-            // Move the position indicating we are no longer reading from
-            // here.
+                outfeed_context
+                    ->callback_to_io_thread_queues[tuple_idx][replica_id];
+
+            // Dequeue the data and insert into the correct output queue.
+            void* src = queue->BlockFront();
+            for (int b = 0; b < io_batch_size; b++) {
+              std::vector<tensorflow::Tensor>& tensors_to_write_to =
+                  outfeed_context->io_thread_output_queues.at(io_batch_size -
+                                                              b - 1);
+
+              auto& tensor = tensors_to_write_to[tuple_idx];
+
+              // When there are mutiple replicas, insert the data into a slice
+              // out of dinension 0.  Otherwise just use the whole tensor.
+              auto output_tensor =
+                  (replicas == 1 ? tensor : tensor.SubSlice(replica_id));
+              auto* tb = tensorflow::DMAHelper::buffer(&output_tensor);
+
+              std::memcpy(tb->data(), src, output_tensor.AllocatedBytes());
+              src += output_tensor.AllocatedBytes();
+            }
             queue->FinishedFront();
           }
         }
@@ -1712,7 +1726,8 @@ void PoplarExecutor::CreateInfeedDatasetIterator(
 }
 
 std::vector<std::vector<tensorflow::Tensor>>
-PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id) {
+PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
+                                      const PoplarFeedConfig_Mode& mode) {
   auto itr = outfeed_contexts_.find(feed_id);
   if (itr == outfeed_contexts_.end()) {
     LOG(FATAL) << "Trying to access the outfeed queue with id=" << feed_id
@@ -1721,16 +1736,22 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id) {
   }
   auto& outfeed_context = itr->second;
   // Lock whilst we dequeue all the tensors.
-  outfeed_context->mutex.lock();
-  // Note that when copying a Tensor object, they share the memory buffer.
-  std::vector<std::vector<tensorflow::Tensor>> output(
-      outfeed_context->io_thread_output_queues.size());
-  for (auto i = 0; i < output.size(); ++i) {
-    output[i] = outfeed_context->io_thread_output_queues.front();
-    outfeed_context->io_thread_output_queues.pop();
+  std::lock_guard<std::mutex> guard(outfeed_context->mutex);
+
+  if (mode == xla::poplarplugin::PoplarFeedConfig::GetAll) {
+    std::vector<std::vector<tensorflow::Tensor>> output(
+        outfeed_context->io_thread_output_queues.size());
+    for (auto i = 0; i < output.size(); ++i) {
+      output[i] = outfeed_context->io_thread_output_queues.back();
+      outfeed_context->io_thread_output_queues.pop_back();
+    }
+    return output;
+  } else {
+    std::vector<std::vector<tensorflow::Tensor>> output(1);
+    output[0] = outfeed_context->io_thread_output_queues.front();
+    outfeed_context->io_thread_output_queues.clear();
+    return output;
   }
-  outfeed_context->mutex.unlock();
-  return output;
 }
 
 Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {

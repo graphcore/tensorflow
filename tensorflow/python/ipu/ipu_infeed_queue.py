@@ -142,13 +142,13 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       self._flat_structure = dataset._flat_structure
 
       # We use max to clamp 0/1 to the same value.
-      self._data_to_prefetch = max(1, data_to_prefetch)
+      self._io_batch_size = max(1, data_to_prefetch)
 
       # Batch the dataset to take replication and prefetch into account.
 
-      if self._data_to_prefetch != 1:
+      if self._io_batch_size != 1:
         self._dataset = self._dataset.batch(
-            self._data_to_prefetch, drop_remainder=True)
+            self._io_batch_size, drop_remainder=True)
 
       if self._replication_factor != 1:
         self._dataset = self._dataset.batch(
@@ -188,7 +188,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     flat_ret = gen_pop_datastream_ops.pop_datastream_infeed_dequeue(
         feed_id=self._id,
         replication_factor=self._replication_factor,
-        data_to_prefetch=self._data_to_prefetch,
+        io_batch_size=self._io_batch_size,
         **self._flat_structure)
     self._dequeued = True
     return structure.from_tensor_list(self._structure, flat_ret)
@@ -229,4 +229,3 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     """Obsolete function."""
     raise ValueError("""`get_next()` is now obsolete as the IPUInfeedQueue is \
 now automatically dequeued by the loop.""")
-

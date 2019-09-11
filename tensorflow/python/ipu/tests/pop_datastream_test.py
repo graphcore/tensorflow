@@ -51,6 +51,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
           [add],
           feed_id=feed_name,
           replication_factor=1,
+          io_batch_size=1,
           output_shapes=[shape])
 
     with ops.device('cpu'):
@@ -89,6 +90,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
           [add, sub],
           feed_id=feed_name,
           replication_factor=1,
+          io_batch_size=1,
           output_shapes=[shape_1, shape_2])
 
     with ops.device('cpu'):
@@ -146,6 +148,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
           [add, sub],
           feed_id=feed_name,
           replication_factor=1,
+          io_batch_size=1,
           outfeed_mode='get_last',
           output_shapes=[shape_1, shape_2])
 
@@ -198,6 +201,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
           [add],
           feed_id=feed_name,
           replication_factor=1,
+          io_batch_size=1,
           outfeed_mode='all',
           output_shapes=[shape])
 
@@ -241,6 +245,7 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
           [add],
           feed_id=feed_name,
           replication_factor=1,
+          io_batch_size=1,
           outfeed_mode='get_last',
           output_shapes=[shape])
 

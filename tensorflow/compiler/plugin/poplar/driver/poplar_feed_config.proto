@@ -24,6 +24,6 @@ message PoplarFeedConfig {
 	// XLA PrimitveType to TF DataType.
 	repeated tensorflow.DataType tf_data_types = 4;
 
-	// The amount of data we should prefetch each time we sync with the host.
-	int64 data_to_prefetch = 5;
+	// The amount of data we should batch each time we sync with the host.
+	int64 io_batch_size = 5;
 };

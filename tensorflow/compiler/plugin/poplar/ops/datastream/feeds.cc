@@ -25,10 +25,10 @@ using shape_inference::ShapeHandle;
 REGISTER_OP("PopDatastreamInfeedDequeue")
     .Output("outputs: output_types")
     .Attr("feed_id: string")
-    .Attr("replication_factor: int")
+    .Attr("replication_factor: int = 1")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
-    .Attr("data_to_prefetch: int")
+    .Attr("io_batch_size: int = 1")
     .SetIsStateful()
     .SetShapeFn([](InferenceContext* c) {
       std::vector<PartialTensorShape> shapes;
@@ -48,13 +48,19 @@ outputs: A list of tensors that will be provided using the infeed mechanism.
 feed_id: The id of the iterator used for this dequeue.
 output_types: The element types of each element in `outputs`.
 output_shapes: The shapes of each tensor in `outputs`.
+replication_factor: the number of replica graphs that this operation will
+  feed.
+io_batch_size: the number of tensors which should be fetched from the host
+  in one go.  This reduces the host->device IO, at the cost of memory on the
+  device.
 )doc");
 
 REGISTER_OP("IPUConsumeDataset")
     .Input("input_dataset: variant")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
-    .Attr("replication_factor: int")
+    .Attr("replication_factor: int = 1")
+    .Attr("io_batch_size: int = 1")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
     .SetIsStateful()
@@ -67,6 +73,7 @@ REGISTER_OP("PopDatastreamOutfeedEnqueue")
     .Attr("outfeed_mode: string='all'")
     .Attr("feed_id: string")
     .Attr("replication_factor: int")
+    .Attr("io_batch_size: int")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs)
     .Doc(R"doc(
@@ -76,9 +83,13 @@ inputs: A list of tensors that will be inserted into the outfeed queue as an
 XLA tuple.
 output_types: The element types of each element in `outputs`.
 outfeed_mode: 'all' or 'get_last', default is 'all'. In 'all'-mode all outfed
-  values are enqueued for reading on the host. In 'get_last'-mode a single value
-  is queued to be passed to the host.
-
+  values are enqueued for reading on the host. In 'get_last'-mode a single
+  value is queued to be passed to the host.
+replication_factor: the number of replica graphs that this operation will
+  feed.
+io_batch_size: the number of tensors which should be fetched from the host
+  in one go.  This reduces the host->device IO, at the cost of memory on the
+  device.
 )doc");
 
 REGISTER_OP("PopDatastreamOutfeedDequeue")
@@ -88,7 +99,8 @@ REGISTER_OP("PopDatastreamOutfeedDequeue")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
     .Attr("outfeed_mode: string='all'")
-    .Attr("replication_factor: int")
+    .Attr("replication_factor: int = 1")
+    .Attr("io_batch_size: int = 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::UnknownShape)
     .Doc(R"doc(
@@ -99,8 +111,13 @@ Output `i` corresponds to XLA tuple element `i`.
 outputs: A list of tensors that will be read from the outfeed.
 output_types: The element types of each element in `outputs`.
 output_shapes: The output_shapes of each tensor in `outputs`. If the first
-  dimension is None, then the dequeue operation will output all outfed elements
-  available.
+  dimension is None, then the dequeue operation will output all outfed
+  elements available.
 device_ordinal: The IPU device to use.
+replication_factor: the number of replica graphs that this operation will
+  feed.
+io_batch_size: the number of tensors which should be fetched from the host
+  in one go.  This reduces the host->device IO, at the cost of memory on the
+  device.
 )doc");
 }  // namespace tensorflow

@@ -59,7 +59,8 @@ class IPUOutfeedQueue:
                outfeed_mode=None,
                outfeed_all=None,
                device_ordinal=0,
-               replication_factor=1):
+               replication_factor=1,
+               io_batch_size=1):
     """Creates an IPUOutfeedQueue object.
 
     Args:
@@ -74,6 +75,10 @@ class IPUOutfeedQueue:
         used.
         replication_factor: the number of replicated graphs this Outfeed
         will be used in.
+        io_batch_size: Output tensors will be batched into this number of samples
+        before being sent to the host.  This reduces the amount of device->host
+        communication at the expense of needing to store the tensors on the device,
+        and the extra computation required to operate the batching.
 
     Raises:
       ValueError: if the types or values are incorrect
@@ -109,6 +114,7 @@ class IPUOutfeedQueue:
     self._outfeed_all = self._outfeed_mode == IPUOutfeedMode.ALL
     self._device_ordinal = device_ordinal
     self._replication_factor = replication_factor
+    self._io_batch_size = max(1, io_batch_size)
     self._feed_name = str(feed_name)
 
     self._enqueued = False
@@ -199,7 +205,8 @@ class IPUOutfeedQueue:
           output_shapes=self._structure.flat_shapes,
           outfeed_mode=self._outfeed_mode.value,
           feed_id=self._feed_name,
-          replication_factor=self._replication_factor)
+          replication_factor=self._replication_factor,
+          io_batch_size=self._io_batch_size)
 
     self._enqueued = True
     return outfeed_op

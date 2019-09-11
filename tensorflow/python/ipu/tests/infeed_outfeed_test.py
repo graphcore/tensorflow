@@ -16,8 +16,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import json
 import numpy as np
 
+from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
@@ -475,6 +477,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       self.assertAllClose(result[0], np.broadcast_to(21, [4, 4]))
       outfed = sess.run(outfeed)
+
       for i in range(20):
         self.assertAllClose(outfed[i], np.broadcast_to(i + 1, [4, 4]))
 
@@ -1059,6 +1062,128 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       result = sess.run(res)
 
     self.assertEqual(result, [4.0])
+
+  @test_util.deprecated_graph_mode_only
+  def testSingleOutfeedWithBatchingNonTuple(self):
+
+    b_count = 4
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(), io_batch_size=b_count)
+
+    def body(a, b):
+      c = a + b
+      outfeed = outfeed_queue.enqueue(c)
+      return (c, a, outfeed)
+
+    def my_net(a, b):
+      r = ipu.loops.repeat(8, body, (a, b))
+      return r
+
+    with ops.device('cpu'):
+      a = array_ops.placeholder(np.float32, [4])
+      b = array_ops.placeholder(np.float32, [4])
+      e = gen_ipu_ops.ipu_event_trace()
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
+
+    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+
+    outfeed = outfeed_queue.dequeue()
+    with session_lib.Session() as sess:
+      evts = sess.run(e)
+
+      fd = {a: [1., 1., 1., 1.], b: [0., 0., 0., 0.]}
+      result = sess.run(res, fd)
+
+      self.assertAllClose(result[0], [34., 34., 34., 34.])
+      self.assertAllClose(result[1], [21., 21., 21., 21.])
+
+      outfed = sess.run(outfeed)
+
+      # A list of 8 fibonacci numbers
+      expected = [[1., 1., 1., 1.], [2., 2., 2., 2.], [3., 3., 3., 3.],
+                  [5., 5., 5., 5.], [8., 8., 8., 8.], [13., 13., 13., 13.],
+                  [21., 21., 21., 21.], [34., 34., 34., 34.]]
+      self.assertAllClose(outfed, expected)
+
+      evts = tu.extract_all_execute_events(sess.run(e))
+      self.assertEqual(len(evts), 1)
+
+      js = json.loads(evts[0].execute.execution_report)
+
+      total_outfeeds = 0
+      for s in js['simulation']['steps']:
+        if s['type'] == 'StreamCopy':
+          if s[
+              'totalData'] == b_count * 4 * 4 + 4:  # batch x shape=[4] floats + header
+            total_outfeeds = total_outfeeds + 1
+
+      self.assertEqual(total_outfeeds, 8 // b_count)
+
+  @test_util.deprecated_graph_mode_only
+  def testSingleOutfeedWithBatchingFinalNonTuple(self):
+
+    b_count = 4
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(),
+        io_batch_size=b_count,
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+
+    def body(a, b):
+      c = a + b
+      outfeed = outfeed_queue.enqueue(c)
+      return (c, a, outfeed)
+
+    def my_net(a, b):
+      r = ipu.loops.repeat(8, body, (a, b))
+      return r
+
+    with ops.device('cpu'):
+      a = array_ops.placeholder(np.float32, [4])
+      b = array_ops.placeholder(np.float32, [4])
+      e = gen_ipu_ops.ipu_event_trace()
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
+
+    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+
+    outfeed = outfeed_queue.dequeue()
+    with session_lib.Session() as sess:
+      evts = sess.run(e)
+
+      fd = {a: [1., 1., 1., 1.], b: [0., 0., 0., 0.]}
+      result = sess.run(res, fd)
+
+      self.assertAllClose(result[0], [34., 34., 34., 34.])
+      self.assertAllClose(result[1], [21., 21., 21., 21.])
+
+      outfed = sess.run(outfeed)
+
+      # A list of 8 fibonacci numbers
+      expected = [34., 34., 34., 34.]
+      self.assertAllClose(outfed, expected)
+
+      evts = tu.extract_all_execute_events(sess.run(e))
+      self.assertEqual(len(evts), 1)
+
+      js = json.loads(evts[0].execute.execution_report)
+
+      total_outfeeds = 0
+      for s in js['simulation']['steps']:
+        if s['type'] == 'StreamCopy':
+          if s[
+              'totalData'] == b_count * 4 * 4 + 4:  # batch x shape=[4] floats + header
+            total_outfeeds = total_outfeeds + 1
+
+      self.assertEqual(total_outfeeds, 8 // b_count)
 
 
 if __name__ == "__main__":

@@ -301,6 +301,7 @@ py_test(
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",

@@ -81,6 +81,8 @@ class FullVisitor : public BaseVisitor {
   Status Postprocess(HloInstruction* inst) override;
 
   Status HandleGather(HloInstruction* inst) override;
+
+  Status HandleOutfeed(HloInstruction* inst) override;
 };
 
 }  // namespace poplarplugin

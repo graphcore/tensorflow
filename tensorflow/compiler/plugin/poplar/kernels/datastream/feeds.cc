@@ -62,23 +62,18 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
 }
 
 void GetFeedConfig(OpKernelConstruction* ctx,
-                   xla::poplarplugin::PoplarFeedConfig& config,
-                   bool has_prefetch = false) {
+                   xla::poplarplugin::PoplarFeedConfig& config) {
   std::string feed_id;
   int64 replication_factor;
+  int64 io_batch_size;
   std::vector<tensorflow::DataType> types;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &types));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id));
   OP_REQUIRES_OK(ctx, ctx->GetAttr("replication_factor", &replication_factor));
+  OP_REQUIRES_OK(ctx, ctx->GetAttr("io_batch_size", &io_batch_size));
   config.set_feed_id(feed_id);
   config.set_replication_factor(replication_factor);
-
-  int data_to_prefetch = 1;
-  if (has_prefetch) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("data_to_prefetch", &data_to_prefetch));
-  }
-
-  config.set_data_to_prefetch(data_to_prefetch);
+  config.set_io_batch_size(io_batch_size);
 
   *(config.mutable_tf_data_types()) = {types.begin(), types.end()};
 }
@@ -104,7 +99,7 @@ class PopDatastreamInfeedDequeueOp : public XlaOpKernel {
  public:
   explicit PopDatastreamInfeedDequeueOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx) {
-    GetFeedConfig(ctx, config_, true);
+    GetFeedConfig(ctx, config_);
     XlaShapesFromAttr(ctx, xla_shapes_);
   }
 
@@ -288,8 +283,8 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
     // Get all the tensors which were stored in the outfeed.
     // Note that this call will block until we can acquire a lock on the
     // outfeed.
-    auto outfeed_tensors =
-        poplar_executor->GetTensorsFromOutfeed(config_.feed_id());
+    auto outfeed_tensors = poplar_executor->GetTensorsFromOutfeed(
+        config_.feed_id(), config_.mode());
     if (config_.mode() == xla::poplarplugin::PoplarFeedConfig::GetAll) {
       // Allocate all the output buffers with the extra dimension for the number
       // of executions.
