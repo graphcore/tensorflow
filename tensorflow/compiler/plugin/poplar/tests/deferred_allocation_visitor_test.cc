@@ -61,7 +61,7 @@ std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
   auto resources = absl::make_unique<CompilerResources>(
       poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
       false, false, merge_infeeds, 1, 0, 0, 1, 64, module,
-      IpuOptions::FloatingPointBehaviour());
+      IpuOptions::FloatingPointBehaviour(), false);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       poplar::Device::createCPUDevice(), 0, poplar::replication_factor(1));
   poplin::addCodelets(*resources->main_graph);
@@ -112,7 +112,7 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get(), false);
+  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -158,7 +158,7 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get(), false);
+  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -209,7 +209,7 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get(), false);
+  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -278,7 +278,7 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get(), false);
+  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -353,7 +353,7 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get(), false);
+  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -478,7 +478,7 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get(), false);
+  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 

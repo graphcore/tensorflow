@@ -1110,7 +1110,18 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
                   [21., 21., 21., 21.], [34., 34., 34., 34.]]
       self.assertAllClose(outfed, expected)
 
-      evts = tu.extract_all_execute_events(sess.run(e))
+      ee = sess.run(e)
+
+      evts = tu.extract_all_compile_end_events(ee)
+      self.assertEqual(len(evts), 1)
+      js = json.loads(evts[0].compile_end.compilation_report)
+
+      tile_mem = js["memory"]["byTile"]["total"]
+      total_mem = sum(tile_mem)
+      self.assertAllInRange(tile_mem, 0, 3602)
+      self.assertAllInRange([total_mem], 0, 3877474)
+
+      evts = tu.extract_all_execute_events(ee)
       self.assertEqual(len(evts), 1)
 
       js = json.loads(evts[0].execute.execution_report)
@@ -1118,8 +1129,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       total_outfeeds = 0
       for s in js['simulation']['steps']:
         if s['type'] == 'StreamCopy':
-          if s[
-              'totalData'] == b_count * 4 * 4 + 4:  # batch x shape=[4] floats + header
+          # batch x shape=[4] floats + header
+          if s['totalData'] == b_count * 4 * 4 + 4:
             total_outfeeds = total_outfeeds + 1
 
       self.assertEqual(total_outfeeds, 8 // b_count)
@@ -1171,7 +1182,18 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       expected = [34., 34., 34., 34.]
       self.assertAllClose(outfed, expected)
 
-      evts = tu.extract_all_execute_events(sess.run(e))
+      ee = sess.run(e)
+
+      evts = tu.extract_all_compile_end_events(ee)
+      self.assertEqual(len(evts), 1)
+
+      js = json.loads(evts[0].compile_end.compilation_report)
+      tile_mem = js["memory"]["byTile"]["total"]
+      total_mem = sum(tile_mem)
+      self.assertAllInRange(tile_mem, 0, 3602)
+      self.assertAllInRange([total_mem], 0, 3877474)
+
+      evts = tu.extract_all_execute_events(ee)
       self.assertEqual(len(evts), 1)
 
       js = json.loads(evts[0].execute.execution_report)
@@ -1179,8 +1201,147 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       total_outfeeds = 0
       for s in js['simulation']['steps']:
         if s['type'] == 'StreamCopy':
-          if s[
-              'totalData'] == b_count * 4 * 4 + 4:  # batch x shape=[4] floats + header
+          # batch x shape=[4] floats + header
+          if s['totalData'] == b_count * 4 * 4 + 4:
+            total_outfeeds = total_outfeeds + 1
+
+      self.assertEqual(total_outfeeds, 8 // b_count)
+
+  @test_util.deprecated_graph_mode_only
+  def testSingleOutfeedWithBatchingFinalNonTupleRearrangeDevice(self):
+
+    b_count = 4
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(),
+        io_batch_size=b_count,
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+
+    def body(a, b):
+      c = math_ops.matmul(a, b)
+      outfeed = outfeed_queue.enqueue(c)
+      return (a, b, outfeed)
+
+    def my_net(a, b):
+      r = ipu.loops.repeat(8, body, (a, b))
+      return r
+
+    with ops.device('cpu'):
+      a = array_ops.placeholder(np.float32, [1024, 256])
+      b = array_ops.placeholder(np.float32, [256, 512])
+      e = gen_ipu_ops.ipu_event_trace()
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
+
+    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+
+    outfeed = outfeed_queue.dequeue()
+    with session_lib.Session() as sess:
+      evts = sess.run(e)
+
+      fd = {a: np.ones(a.shape), b: np.zeros(b.shape)}
+      result = sess.run(res, fd)
+
+      outfed = sess.run(outfeed)
+
+      # The convolution output
+      expected = np.zeros([1024, 512])
+      self.assertAllClose(outfed, expected)
+
+      ee = sess.run(e)
+
+      evts = tu.extract_all_compile_end_events(ee)
+      self.assertEqual(len(evts), 1)
+
+      js = json.loads(evts[0].compile_end.compilation_report)
+      tile_mem = js["memory"]["byTile"]["total"]
+      self.assertAllInRange([max(tile_mem)], 0, 54337)
+      self.assertAllInRange([sum(tile_mem)], 0, 61397717)
+
+      evts = tu.extract_all_execute_events(ee)
+      self.assertEqual(len(evts), 1)
+
+      js = json.loads(evts[0].execute.execution_report)
+
+      total_outfeeds = 0
+      for s in js['simulation']['steps']:
+        if s['type'] == 'StreamCopy':
+          # batch x shape=[1024*256] floats + header
+          if s['totalData'] == b_count * 1024 * 512 * 4 + 4:
+            total_outfeeds = total_outfeeds + 1
+
+      self.assertEqual(total_outfeeds, 8 // b_count)
+
+  @test_util.deprecated_graph_mode_only
+  def testSingleOutfeedWithBatchingFinalNonTupleRearrangeHost(self):
+
+    b_count = 4
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(),
+        io_batch_size=b_count,
+        outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+
+    def body(a, b):
+      c = math_ops.matmul(a, b)
+      outfeed = outfeed_queue.enqueue(c)
+      return (a, b, outfeed)
+
+    def my_net(a, b):
+      r = ipu.loops.repeat(8, body, (a, b))
+      return r
+
+    with ops.device('cpu'):
+      a = array_ops.placeholder(np.float32, [1024, 256])
+      b = array_ops.placeholder(np.float32, [256, 512])
+      e = gen_ipu_ops.ipu_event_trace()
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
+
+    cfg = ipu.utils.create_ipu_config(
+        profiling=True,
+        profile_execution=True,
+        always_rearrange_copies_on_the_host=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+
+    outfeed = outfeed_queue.dequeue()
+    with session_lib.Session() as sess:
+      evts = sess.run(e)
+
+      fd = {a: np.ones(a.shape), b: np.zeros(b.shape)}
+      result = sess.run(res, fd)
+
+      outfed = sess.run(outfeed)
+
+      # The convolution output
+      expected = np.zeros([1024, 512])
+      self.assertAllClose(outfed, expected)
+
+      ee = sess.run(e)
+
+      evts = tu.extract_all_compile_end_events(ee)
+      self.assertEqual(len(evts), 1)
+
+      js = json.loads(evts[0].compile_end.compilation_report)
+      tile_mem = js["memory"]["byTile"]["total"]
+      self.assertAllInRange([max(tile_mem)], 0, 53802)
+      self.assertAllInRange([sum(tile_mem)], 0, 60371296)
+
+      evts = tu.extract_all_execute_events(ee)
+      self.assertEqual(len(evts), 1)
+
+      js = json.loads(evts[0].execute.execution_report)
+
+      total_outfeeds = 0
+      for s in js['simulation']['steps']:
+        if s['type'] == 'StreamCopy':
+          # batch x shape=[1024*256] floats + header
+          if s['totalData'] == b_count * 1024 * 512 * 4 + 4:
             total_outfeeds = total_outfeeds + 1
 
       self.assertEqual(total_outfeeds, 8 // b_count)

@@ -210,8 +210,6 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
   xla::poplarplugin::PoplarFeedConfig infeed_config;
   infeed_config.ParseFromString(infeed->infeed_config());
 
-  poplar::Graph& master_graph = GetMasterGraph(resources_);
-
   // The amount of data the user has specified to be prefetched on each host
   // sync.
   size_t io_batch_size = std::max<size_t>(1, infeed_config.io_batch_size());
@@ -246,24 +244,33 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
     std::vector<size_t> new_shape = tensor.shape();
     new_shape.insert(new_shape.begin(), io_batch_size);
 
-    // Clone the original tensor "io_batch_size" so we can concat them into
-    // one big tensor to be prefetched.
     std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
     for (int i = 0; i < io_batch_size; ++i) {
-      cloned_tensors[i] = graph.clone(tensor);
+      if (resources_.always_rearrange_copies_on_host) {
+        // When rearranging on the host, it is better to keep the layout of the
+        // slices in the output tensor layout, in order to minimise on-device
+        // rearrangement.
+        cloned_tensors[i] = graph.clone(tensor);
+      } else {
+        // When rearranging on the device, it is better to rearrange after the
+        // dynamic slice, so that the rearrangement only takes place on the
+        // slice, not the whole incoing pegged_memory buffer.
+        cloned_tensors[i] =
+            graph.addVariable(tensor.elementType(), tensor.shape(),
+                              poplar::VariableMappingMethod::LINEAR);
+      }
     }
-
-    // Concatenate all the cloned tensors then reshape to make sure we are in
-    // the shape [io_batch_size][original_shape].
+    // Concatenate all the cloned tensors then reshape to make sure we are
+    // in the shape [io_batch_size][original_shape].
     poplar::Tensor pegged_memory =
         poplar::concat(cloned_tensors).reshape(new_shape);
 
     // The counter is on the master graph because it needs to be used for
     // program flow of control.
-    poplar::Tensor counter = master_graph.addVariable(
+    poplar::Tensor counter = graph.addVariable(
         poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
         GetDebugName(inst) + "/InfeedCtr/" + std::to_string(tuple_index));
-    master_graph.setInitialValue(counter, io_batch_size);
+    graph.setInitialValue(counter, io_batch_size);
 
     // The body for copying from host and zeroing the counter.
     poplar::program::Sequence true_body;
@@ -271,7 +278,7 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
     // If we are using synthetic data, init pegged_memory with it otherwise host
     // copy. Either way we will have a tensor with some number of prefetched
     // batches and we will dynamic slice the actual batch from that. This is to
-    // ensure that we can benchmark synthetic vs non-synthetic without chaging
+    // ensure that we can benchmark synthetic vs non-synthetic without changing
     // the graph too much.
     TF_RETURN_IF_ERROR(init_synthetic_or_copy(
         true_body,
@@ -279,7 +286,7 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
         pegged_memory));
 
     popops::zero(
-        master_graph, counter, true_body,
+        graph, counter, true_body,
         GetDebugName(inst) + "/InfeedCtrZero/" + std::to_string(tuple_index));
 
     // The NOP body.
@@ -287,28 +294,23 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
 
     // Predicate for reaching the batch limit
     poplar::Tensor predicate = popops::map(
-        master_graph, pe::Equal(pe::_1, pe::Const(io_batch_size)), {counter},
-        seq,
+        graph, pe::Equal(pe::_1, pe::Const(io_batch_size)), {counter}, seq,
         GetDebugName(inst) + "/InfeedCtrCmp/" + std::to_string(tuple_index));
 
     // The main body which contains the control flow for copy from host and
     // the dynamic slice.
     seq.add(poplar::program::If(predicate, true_body, false_body));
 
-    // Create a big switch statement each with a static copy from one index of
-    // the prefetched block.
-    std::vector<std::pair<std::int32_t, poplar::program::Program>> cases;
-    for (std::uint32_t i = 0; i < io_batch_size; ++i) {
-      cases.push_back(std::make_pair<std::int32_t, poplar::program::Program>(
-          static_cast<int32_t>(i),
-          poplar::program::Copy(pegged_memory[i], tensor)));
-    }
-
-    seq.add(poplar::program::Switch(counter, cases));
+    // Use dynamic slice to extract the slices from the buffer
+    poplar::program::Copy(
+        popops::dynamicSlice(
+            graph, pegged_memory, counter.reshape({1}), {0}, {1}, seq,
+            GetDebugName(inst) + "/Slice/" + std::to_string(tuple_index)),
+        tensor);
 
     // Increment the counter by one.
     popops::mapInPlace(
-        master_graph, pe::Add(pe::_1, pe::Const(1)), {counter}, seq,
+        graph, pe::Add(pe::_1, pe::Const(1)), {counter}, seq,
         GetDebugName(inst) + "/InfeedCtrInc/" + std::to_string(tuple_index));
 
   } else {

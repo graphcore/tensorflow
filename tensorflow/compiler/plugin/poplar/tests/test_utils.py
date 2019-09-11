@@ -240,8 +240,8 @@ class ReportJSON:
   def assert_all_compute_sets_and_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" %
-        "\n\t".join(self.get_compute_sets()))
+        "Whitelist items not found in compute sets:\n\t%s" % "\n\t".join(
+            self.get_compute_sets()))
     self.test.assertFalse(
         missing_names_in_whitelist_entries(self.get_compute_sets(), ok),
         "Compute sets item not found in whitelist:\n\t%s" % "\n\t".join(ok))
@@ -250,15 +250,15 @@ class ReportJSON:
   def assert_compute_sets_contain_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" %
-        "\n\t".join(self.get_compute_sets()))
+        "Whitelist items not found in compute sets:\n\t%s" % "\n\t".join(
+            self.get_compute_sets()))
 
   # Asserts that all the whitelist patterns match at least one vertex
   def assert_vertices_contain_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_vertices(), ok),
-        "Whitelist items not found in vertices:\n\t%s" %
-        "\n\t".join(self.get_vertices()))
+        "Whitelist items not found in vertices:\n\t%s" % "\n\t".join(
+            self.get_vertices()))
 
   def assert_compute_sets_matches(self, expr, num_matches):
     self.test.assertEqual(
@@ -322,6 +322,16 @@ def extract_all_events(events):
   return result
 
 
+def extract_all_compile_end_events(events):
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    if evt.type == IpuTraceEvent.COMPILE_END:
+      if len(evt.compile_end.compilation_report) > 0:
+        result += [evt]
+  return result
+
+
 def extract_all_execute_events(events):
   result = []
   for e in events:
@@ -356,8 +366,9 @@ def create_multi_increasing_dataset(value,
     result = []
     for i in range(len(shapes)):
       result.append(
-          math_ops.cast(gen_array_ops.broadcast_to(data, shape=shapes[i]),
-                        dtype=dtypes[i]))
+          math_ops.cast(
+              gen_array_ops.broadcast_to(data, shape=shapes[i]),
+              dtype=dtypes[i]))
     return result
 
   dataset = Dataset.range(value).map(_get_one_input)
@@ -371,20 +382,19 @@ def create_dual_increasing_dataset(value,
                                    label_shape=[1, 8],
                                    dtype=np.float32,
                                    repeat=True):
-  return create_multi_increasing_dataset(value,
-                                         shapes=[data_shape, label_shape],
-                                         dtypes=[dtype, dtype],
-                                         repeat=repeat)
+  return create_multi_increasing_dataset(
+      value,
+      shapes=[data_shape, label_shape],
+      dtypes=[dtype, dtype],
+      repeat=repeat)
 
 
 def create_single_increasing_dataset(value,
                                      shape=[1, 32, 32, 4],
                                      dtype=np.float32,
                                      repeat=True):
-  return create_multi_increasing_dataset(value,
-                                         shapes=[shape],
-                                         dtypes=[dtype],
-                                         repeat=repeat)
+  return create_multi_increasing_dataset(
+      value, shapes=[shape], dtypes=[dtype], repeat=repeat)
 
 
 def move_variable_initialization_to_cpu():

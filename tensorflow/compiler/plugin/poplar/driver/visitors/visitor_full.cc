@@ -49,6 +49,7 @@ limitations under the License.
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
+#include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Zero.hpp>
 #include <poputil/Util.hpp>
@@ -431,7 +432,6 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
 
   poplar::program::Sequence seq;
   poplar::Graph& graph = GetGraph(resources_, inst);
-  poplar::Graph& master_graph = GetMasterGraph(resources_);
 
   HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
   xla::poplarplugin::PoplarFeedConfig outfeed_config;
@@ -495,38 +495,39 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
       std::vector<size_t> new_shape = in.shape();
       new_shape.insert(new_shape.begin(), io_batch_size);
 
-      // Clone the original tensor and concat the clones into
-      // one big tensor
       std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
       for (int i = 0; i < io_batch_size; ++i) {
-        cloned_tensors[i] = graph.clone(in);
+        if (resources_.always_rearrange_copies_on_host) {
+          // When rearranging on the host it is better to have the slices of the
+          // buffer laid out in the same form as the 'in' tensor so that there
+          // is no cost of rearrangement.
+          cloned_tensors[i] = graph.clone(in);
+        } else {
+          // When the data is rearranged on the device, it is beter to have the
+          // slices arranged in the standard order of the host buffer, and then
+          // to have the rearragement done only once, during the dynamicUpdate.
+          cloned_tensors[i] =
+              graph.addVariable(in.elementType(), in.shape(),
+                                poplar::VariableMappingMethod::LINEAR);
+        }
       }
       poplar::Tensor batched =
           poplar::concat(cloned_tensors).reshape(new_shape);
 
-      // The counter needs to be on the master graph because it is used for
-      // replicated flow control.
-      poplar::Tensor counter = master_graph.addVariable(
+      //  A counter for counting slots
+      poplar::Tensor counter = graph.addVariable(
           poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
           GetDebugName(inst) + "/OutfeedCtr/" + std::to_string(i));
-      master_graph.setInitialValue(counter, 0);
+      graph.setInitialValue(counter, 0);
 
-      // Create a big switch statement each with a static copy from one index
-      // of the block.
-      std::vector<std::pair<std::int32_t, poplar::program::Program>> cases;
-      for (std::uint32_t i = 0; i < io_batch_size; ++i) {
-        cases.push_back(std::make_pair<std::int32_t, poplar::program::Program>(
-            static_cast<int32_t>(i), poplar::program::Copy(in, batched[i])));
-      }
-      seq.add(poplar::program::Switch(counter, cases));
-
-      // Workaround for Poplar aliasing issue (T11200)
-      popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(0)), {batched}, seq,
-                         GetDebugName(inst) + "/noop/");
+      // Use dynamic slice update to put the slices into the buffer
+      popops::dynamicUpdate(graph, batched, in.expand({0}),
+                            counter.reshape({1}), {0}, {1}, seq,
+                            GetDebugName(inst) + "/Slice" + std::to_string(i));
 
       // Increment the counter by one.
       popops::mapInPlace(
-          master_graph, pe::Add(pe::_1, pe::Const(1)), {counter}, seq,
+          graph, pe::Add(pe::_1, pe::Const(1)), {counter}, seq,
           GetDebugName(inst) + "/OutfeedCtrInc/" + std::to_string(i));
 
       // The body for copying to host and zeroing the counter.
@@ -540,7 +541,7 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
         true_body.add(poplar::program::Copy(batched, fifo, false));
       }
 
-      popops::zero(master_graph, counter, true_body,
+      popops::zero(graph, counter, true_body,
                    GetDebugName(inst) + "/OutfeedCtrZero/" + std::to_string(i));
 
       // The NOP body.
@@ -548,8 +549,8 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
 
       // Check the counter doesn't equal
       poplar::Tensor predicate = popops::map(
-          master_graph, pe::Equal(pe::_1, pe::Const(io_batch_size)), {counter},
-          seq, GetDebugName(inst) + "/OutfeedCtrCmp/" + std::to_string(i));
+          graph, pe::Equal(pe::_1, pe::Const(io_batch_size)), {counter}, seq,
+          GetDebugName(inst) + "/OutfeedCtrCmp/" + std::to_string(i));
 
       // The main body which contains the control flow for copy from host and
       // the dynamic slice.

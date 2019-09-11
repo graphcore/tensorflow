@@ -73,7 +73,7 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
 
     stream_copy_seq.add(poplar::program::Copy(
         fifo, tensor,
-        !in_info.IsStreaming() || always_rearrange_copies_on_the_host));
+        !in_info.IsStreaming() || resources_.always_rearrange_copies_on_host));
 
   } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
     // Initialize the tensor to a constant value.
@@ -177,7 +177,8 @@ Status EntryVisitor::FinishVisit(HloInstruction* root) {
 
         seq.add(poplar::program::Copy(
             out, fifo,
-            !out_info.IsStreaming() || always_rearrange_copies_on_the_host));
+            !out_info.IsStreaming() ||
+                resources_.always_rearrange_copies_on_host));
       }
     }
     from_tensor_index = to_tensor_index;
