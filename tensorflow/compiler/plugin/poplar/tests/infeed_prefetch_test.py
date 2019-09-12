@@ -14,11 +14,11 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import test_util as tu
+import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.contrib import ipu
 from tensorflow.keras import layers
+from tensorflow.python import ipu
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -28,10 +28,6 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
-
-from tensorflow.contrib.ipu import ipu_compiler
-from tensorflow.contrib.ipu import ipu_infeed_queue
-from tensorflow.contrib.ipu import loops
 
 
 def next_feed_id():
@@ -48,7 +44,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
     with self.session() as sess:
       dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=4)
 
       def body(v, x):
@@ -56,14 +52,14 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
         return (v)
 
       def my_net(v):
-        r = loops.repeat(20, body, (v), infeed_queue)
+        r = ipu.loops.repeat(20, body, (v), infeed_queue)
         return r
 
       with ops.device('cpu'):
         v = array_ops.placeholder(np.float32, [4, 4])
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        res = ipu_compiler.compile(my_net, inputs=[v])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -78,7 +74,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
       dataset = tu.create_single_increasing_dataset(
           10, shape=[4, 4], repeat=False)
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=2)
 
       def body(v, x):
@@ -86,14 +82,14 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
         return (v)
 
       def my_net(v):
-        r = loops.repeat(10, body, (v), infeed_queue)
+        r = ipu.loops.repeat(10, body, (v), infeed_queue)
         return r
 
       with ops.device('cpu'):
         v = array_ops.placeholder(np.float32, [4, 4])
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        res = ipu_compiler.compile(my_net, inputs=[v])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -114,7 +110,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       dataset = dataset.map(dataset_parser)
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=3)
 
       def body(v, im1, im2):
@@ -123,11 +119,11 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-        r = loops.repeat(5, body, [v], infeed_queue)
+        r = ipu.loops.repeat(5, body, [v], infeed_queue)
         return r
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        res = ipu_compiler.compile(my_net, inputs=[])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -148,7 +144,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       dataset = dataset.map(dataset_parser)
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=2)
 
       def body(v, im1, im2):
@@ -157,11 +153,11 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-        r = loops.repeat(5, body, [v], infeed_queue)
+        r = ipu.loops.repeat(5, body, [v], infeed_queue)
         return r
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        res = ipu_compiler.compile(my_net, inputs=[])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
       cfg = ipu.utils.create_ipu_config(merge_infeed_io_copies=True)
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -182,7 +178,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       dataset = dataset.map(dataset_parser)
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=2)
 
       #Note how the parameters are swapped around.
@@ -194,11 +190,11 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
       def my_net():
         v1 = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
         v2 = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-        r = loops.repeat(5, body, [v1, v2], infeed_queue)
+        r = ipu.loops.repeat(5, body, [v1, v2], infeed_queue)
         return r
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        res = ipu_compiler.compile(my_net, inputs=[])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -213,7 +209,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
     with self.session() as sess:
       dataset = tu.create_single_increasing_dataset(2, shape=[4, 4])
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=2)
 
       def body(v, x):
@@ -224,12 +220,12 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
 
         # Iters was 5 in the original test but we must fully consume the infeed otherwise the state will be incorrect.
-        r = loops.repeat(6, body, [v], infeed_queue)
-        r = loops.repeat(6, body, [r], infeed_queue)
+        r = ipu.loops.repeat(6, body, [v], infeed_queue)
+        r = ipu.loops.repeat(6, body, [r], infeed_queue)
         return r
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        res = ipu_compiler.compile(my_net, inputs=[])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -243,7 +239,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
     with self.session() as sess:
       dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=2)
 
       def cond(i, v):
@@ -255,14 +251,14 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       def my_net(v):
         i = 0
-        r = loops.while_loop(cond, body, (i, v), infeed_queue)
+        r = ipu.loops.while_loop(cond, body, (i, v), infeed_queue)
         return r[1]
 
       with ops.device('cpu'):
         v = array_ops.placeholder(np.float32, [4, 4])
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        res = ipu_compiler.compile(my_net, inputs=[v])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -283,7 +279,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       dataset = dataset.map(dataset_parser)
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=2)
 
       def cond(i, v):
@@ -295,14 +291,14 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       def my_net(v):
         i = 0
-        r = loops.while_loop(cond, body, (i, v), infeed_queue)
+        r = ipu.loops.while_loop(cond, body, (i, v), infeed_queue)
         return r[1]
 
       with ops.device('cpu'):
         v = array_ops.placeholder(np.float32, [4, 4])
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        res = ipu_compiler.compile(my_net, inputs=[v])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -316,7 +312,8 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
     with self.session() as sess:
       dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, next_feed_id())
 
       def program(iters):
         def body(v, x):
@@ -325,11 +322,11 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
         def my_net():
           v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-          r = loops.repeat(iters, body, (v), infeed_queue)
+          r = ipu.loops.repeat(iters, body, (v), infeed_queue)
           return r
 
-        with ipu.ops.ipu_scope("/device:IPU:0"):
-          return ipu_compiler.compile(my_net)
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
+          return ipu.ipu_compiler.compile(my_net)
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -353,9 +350,9 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
       dataset1 = tu.create_single_increasing_dataset(20, shape=[4, 4])
       dataset2 = tu.create_single_increasing_dataset(3, shape=[4, 4])
 
-      infeed_queue1 = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue1 = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset1, feed_name=next_feed_id(), data_to_prefetch=2)
-      infeed_queue2 = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue2 = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset2, feed_name=next_feed_id(), data_to_prefetch=2)
 
       def program(iters, infeed_queue):
@@ -365,11 +362,11 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
         def my_net():
           v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
-          r = loops.repeat(iters, body, (v), infeed_queue)
+          r = ipu.loops.repeat(iters, body, (v), infeed_queue)
           return r
 
-        with ipu.ops.ipu_scope("/device:IPU:0"):
-          return ipu_compiler.compile(my_net)
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
+          return ipu.ipu_compiler.compile(my_net)
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
@@ -398,7 +395,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
       dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
           dataset, next_feed_id(), data_to_prefetch=5)
 
       def my_net(iters):
@@ -417,13 +414,13 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
             return array_ops.identity(loss)
 
         loss = 0.0
-        return loops.repeat(iters, body, (loss), infeed_queue)
+        return ipu.loops.repeat(iters, body, (loss), infeed_queue)
 
       with ops.device('cpu'):
         iters = array_ops.placeholder(np.int32, shape=[])
 
-      with ipu.ops.ipu_scope("/device:IPU:0"):
-        r = ipu_compiler.compile(my_net, inputs=[iters])
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(my_net, inputs=[iters])
 
       sess.run(infeed_queue.initializer)
       sess.run(variables.global_variables_initializer())

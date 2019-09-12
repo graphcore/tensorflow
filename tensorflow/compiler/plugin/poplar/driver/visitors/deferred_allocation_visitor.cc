@@ -302,11 +302,10 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
     seq.add(poplar::program::If(predicate, true_body, false_body));
 
     // Use dynamic slice to extract the slices from the buffer
-    poplar::program::Copy(
-        popops::dynamicSlice(
-            graph, pegged_memory, counter.reshape({1}), {0}, {1}, seq,
-            GetDebugName(inst) + "/Slice/" + std::to_string(tuple_index)),
-        tensor);
+    poplar::Tensor slice = popops::dynamicSlice(
+        graph, pegged_memory, counter.reshape({1}), {0}, {1}, seq,
+        GetDebugName(inst) + "/Slice/" + std::to_string(tuple_index));
+    seq.add(poplar::program::Copy(slice, tensor));
 
     // Increment the counter by one.
     popops::mapInPlace(

@@ -1610,6 +1610,7 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -2635,6 +2636,7 @@ test_suite(
         "hlo_hash_test",
         "hlo_matcher_test",
         "inplace_test",
+        "infeed_prefetch_test",
         "inter_ipu_copy_inserter_test",
         "ipu_model_device_test",
         "layout_strip_test",
