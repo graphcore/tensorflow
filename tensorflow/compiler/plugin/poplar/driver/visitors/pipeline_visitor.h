@@ -30,7 +30,14 @@ struct CompilerResources;
 
 class PipelineVisitor : public SubComputationVisitor {
  public:
-  PipelineVisitor(int64 stage_count, int64 iterations, CompilerResources& res,
+  PipelineVisitor(
+      int64 stage_count, const std::vector<int>& stage_ipu_mapping,
+      const absl::flat_hash_map<HloInstruction*, int>& inst_stage_mapping,
+      CompilerResources& res, const ArgVectors& inputs,
+      const std::vector<const SubComputationVisitor*>&
+          dependent_subcomputations = {});
+
+  PipelineVisitor(HloInstruction* pipeline, CompilerResources& res,
                   const ArgVectors& inputs,
                   const std::vector<const SubComputationVisitor*>&
                       dependent_subcomputations = {});
@@ -97,16 +104,18 @@ class PipelineVisitor : public SubComputationVisitor {
 
   Status FinishVisit(HloInstruction* hlo) override;
 
-  poplar::program::Sequence GetPipelineSequence() const;
+  StatusOr<poplar::program::Sequence> GetPipelineSequence(
+      int64 iterations) const;
 
  private:
-  int64 iterations_;
-
   std::vector<poplar::program::Sequence> copy_sequences_;
   std::vector<poplar::program::Sequence> program_sequences_;
+  std::vector<int> stage_ipu_mapping_;
+  absl::flat_hash_map<HloInstruction*, int> inst_stage_mapping_;
 
   poplar::program::Program GetPipelineRampUpSequence() const;
-  poplar::program::Program GetPipelineRampDownSequence() const;
+  poplar::program::Program GetPipelineRampDownSequence(
+      int additional_iterations = 0) const;
   poplar::program::Program GetPipelineRepeatBlockSequence() const;
 
   Status HandleNotImplemented(HloInstruction* hlo);

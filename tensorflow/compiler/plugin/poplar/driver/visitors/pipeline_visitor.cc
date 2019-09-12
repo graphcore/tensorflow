@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
@@ -51,251 +52,457 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+namespace {
+/**
+ * Construct a unary predicate which checks if a given HloInstruction has the
+ * same opcode as the one captured in the closure.
+ *
+ * @param opcode The opcode to capture and compare against.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(HloInstruction*)> HasHloOpcode(HloOpcode opcode) {
+  return [opcode](HloInstruction* inst) -> bool {
+    return inst->opcode() == opcode;
+  };
+}
+
+/**
+ * Get the number of stages in a pipeline.
+ *
+ * @param pipeline The outer pipeline instruction.
+ *
+ * @returns The number of stages inside the pipeline computation.
+ *
+ * @note Assumes the pipeline is correctly constructed.
+ */
+int64 GetPipelineStageCount(HloInstruction* pipeline) {
+  HloComputation* pipeline_computation = pipeline->to_apply();
+
+  return absl::c_count_if(pipeline_computation->instructions(),
+                          HasHloOpcode(HloOpcode::kCall));
+}
+
+/**
+ * Get the pipeline stage to device mapping.
+ *
+ * @param pipeline The outer pipeline instruction.
+ *
+ * @returns The mapping of the ith stage to a IPU device.
+ *
+ * @note Assumes the pipeline is correctly constructed.
+ */
+std::vector<int> GetPipelineStageDeviceMapping(HloInstruction* pipeline) {
+  HloComputation* pipeline_computation = pipeline->to_apply();
+  std::vector<HloInstruction*> instructions(
+      pipeline_computation->instructions().begin(),
+      pipeline_computation->instructions().end());
+
+  auto itr = std::stable_partition(instructions.begin(), instructions.end(),
+                                   HasHloOpcode(HloOpcode::kCall));
+
+  std::vector<int> result(std::distance(instructions.begin(), itr));
+
+  const auto get_stage_shard = [](HloInstruction* hlo) -> int {
+    return *hlo->sharding_unique_device();
+  };
+
+  std::transform(instructions.begin(), itr, result.begin(), get_stage_shard);
+
+  return result;
+}
+
+/**
+ * Get the pipeline instruction to stage mapping. When an instruction isn't a
+ * stage call, it must be associated with a stage.
+ *
+ * @param pipeline The outer pipeline instruction.
+ *
+ * @returns The mapping from Hlo instructions to pipeline stage index.
+ *
+ * @note Assumes the pipeline is correctly constructed.
+ */
+absl::flat_hash_map<HloInstruction*, int> GetPipelineInstStageMapping(
+    HloInstruction* pipeline) {
+  absl::flat_hash_map<HloInstruction*, int> result;
+  HloComputation* pipeline_computation = pipeline->to_apply();
+  auto instructions = pipeline_computation->MakeInstructionPostOrder();
+
+  // Cannot reasonably return StatusOr because this is called inside a
+  // constructor.
+  auto stage = GetPipelineStages(pipeline_computation).ValueOrDie();
+  stage.forward.insert(stage.forward.end(), stage.backward.rbegin(),
+                       stage.backward.rend());
+
+  // Loop through all of the pipeline stage calls.
+  // These trivially belong to the stage id that corresponds to their position.
+  for (auto itr = stage.forward.begin(); itr != stage.forward.end(); ++itr) {
+    result.insert(
+        std::make_pair(*itr, std::distance(stage.forward.begin(), itr)));
+  }
+
+  // Partition out the stage calls instructions and skip them.
+  auto p1 = std::stable_partition(instructions.begin(), instructions.end(),
+                                  HasHloOpcode(HloOpcode::kCall));
+
+  // Partition out the parameter instructions.
+  auto p2 = std::stable_partition(p1, instructions.end(),
+                                  HasHloOpcode(HloOpcode::kParameter));
+
+  // Comparison of HloInstructions with assigned stage index.
+  const auto inst_comparison = [&](HloInstruction* a,
+                                   HloInstruction* b) -> bool {
+    return result.at(a) < result.at(b);
+  };
+
+  // Loop through all of the parameters and assign them to the earliest stage of
+  // the users. The users must be pipeline stage calls which have already been
+  // visited.
+  for (auto itr = p1; itr != p2; ++itr) {
+    auto inst = *itr;
+
+    auto operands = inst->operands();
+    auto max_elem =
+        std::min_element(operands.begin(), operands.end(), inst_comparison);
+
+    result.insert(std::make_pair(inst, result.at(*max_elem)));
+  }
+
+  // Loop through the remaining instructions, assigning them to the latest stage
+  // of their operand(s). Since we are visiting in post-order, the operands
+  // must've already been visited.
+  for (auto itr = p2; itr != instructions.end(); ++itr) {
+    auto inst = *itr;
+
+    auto operands = inst->operands();
+    auto max_elem =
+        std::max_element(operands.begin(), operands.end(), inst_comparison);
+
+    result.insert(std::make_pair(inst, result.at(*max_elem)));
+  }
+
+  return result;
+}
+
+/**
+ * Find the indices of all possible non-overlapping circular unions.
+ *
+ * @param input The sequence of input elements.
+ * @param predicate The user defined predicate function which compares members
+ *                  of the input sequence for "equality".
+ *
+ * @returns a list of indices of valid rotations of the input that do not
+ *          overlap.
+ *
+ *
+ * Suppose our we have:
+ *   ElementType = int,
+ *   BinaryPredicateType = bool(int, int),
+ *   input = [0, 1, 2, 0, 0, 2, 1, 0],
+ *   predicate = [](int a, int b){ return a == b; }
+ *
+ * The result will be [0, 2].
+ * We can see this is the case by drawing the rotated input
+ *   rotate(input, 0) = [0, 1, 2, 0, 0, 2, 1, 0]
+ *   rotate(input, 2) = [2, 0, 0, 2, 1, 0, 0, 1]
+ *
+ * It can also be seen that no other rotations would work
+ *   rotate(input, 0) = [0, 1, 2, 0, 0, 2, 1, 0] Trivially a member of the set
+ *   rotate(input, 1) = [0, 0, 1, 2, 0, 0, 2, 1] Overlaps at position 0
+ *   rotate(input, 2) = [1, 0, 0, 1, 2, 0, 0, 2] Add to set
+ *   rotate(input, 3) = [2, 1, 0, 0, 1, 2, 0, 0] Overlaps at position 1
+ *   rotate(input, 4) = [0, 2, 1, 0, 0, 1, 2, 0] Overlaps at position 0
+ *   rotate(input, 5) = [0, 0, 2, 1, 0, 0, 1, 2] Overlaps at position 0
+ *   rotate(input, 6) = [2, 0, 0, 2, 1, 0, 0, 1] Overlaps at position 1
+ *   rotate(input, 7) = [1, 2, 0, 0, 2, 1, 0, 0] Overlaps at position 3
+ */
+template <typename ElementType,
+          typename BinaryPredicateType = std::equal_to<ElementType>>
+std::vector<int> CircularUnion(const std::vector<ElementType>& input,
+                               BinaryPredicateType predicate = {}) {
+  // The 0th rotation is always a valid result.
+  std::vector<int> result = {0};
+
+  // Create a temporary storage area the same size of the input.
+  std::vector<ElementType> temp_0(input.size());
+  std::vector<ElementType> temp_1(input.size());
+
+  // Invert the user predicate.
+  const auto not_predicate = [&predicate](const ElementType& a,
+                                          const ElementType& b) -> bool {
+    return !predicate(a, b);
+  };
+
+  // For each possible valid rotation, check if it is non-overlapping with the
+  // input rotations.
+  for (int i = 1; i < input.size(); ++i) {
+    // Take the ith rotated input.
+    std::rotate_copy(input.begin(), std::next(input.begin(), i), input.end(),
+                     temp_0.begin());
+
+    bool non_overlapping = true;
+
+    // Compare against all accept rotations of the input
+    for (int k = 0; k < result.size() && non_overlapping; ++k) {
+      std::rotate_copy(input.begin(), std::next(input.begin(), result[k]),
+                       input.end(), temp_1.begin());
+
+      // Map-reduce where the map is the negation of the user predicate and the
+      // reduction is logical and. This means we will accept rotations where the
+      // corresponding elements are not equal.
+      non_overlapping = std::inner_product(
+          temp_1.begin(), temp_1.end(), temp_0.begin(), non_overlapping,
+          std::logical_and<bool>{}, not_predicate);
+    }
+
+    // If the rotation is non-overlapping with all existing
+    if (non_overlapping) {
+      // Add this rotation index to the result.
+      result.push_back(i);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Construct a pipeline schedule given an offset and some schedulable
+ * components.
+ *
+ * @param offsets The offsets of each parallel sequence of inputs.
+ * @param input The input sequence to schedule.
+ *
+ * @returns A 2D array of pipeline schedule where each row represents the
+ *          parallel sequence, and each column represents a single timestep
+ *          where a single step of the input is scheduled.
+ */
+template <typename ElementType>
+std::vector<std::vector<ElementType>> ConstructSchedule(
+    const std::vector<int>& offsets, const std::vector<ElementType>& input) {
+  std::vector<std::vector<ElementType>> result(offsets.size(), input);
+
+  for (int i = 0; i < offsets.size(); ++i) {
+    std::rotate(result[i].begin(),
+                std::next(result[i].begin(), result[i].size() - offsets[i]),
+                result[i].end());
+  }
+
+  return result;
+}
+
+/**
+ * Construct a "ramp-up" pipeline schedule given an offset and some schedulable
+ * components. Additionally, blank spaces are inserted into the schedule where a
+ * stage cannot be executed.
+ *
+ * @param offsets The offsets of each parallel sequence of inputs.
+ * @param input The input sequence to schedule.
+ * @param empty_element The empty element, or identity element, on the
+ *                      ElementType. This is what is inserted into the "blank
+ *                      spaces" of the schedule.
+ *
+ * @returns A 2D array of pipeline schedule where each row represents the
+ *          parallel sequence, and each column represents a single timestep
+ *          where a single step of the input is scheduled.
+ */
+template <typename ElementType>
+std::vector<std::vector<ElementType>> ConstructRampUpSchedule(
+    const std::vector<int>& offsets, const std::vector<ElementType>& input,
+    ElementType empty_element = {}) {
+  std::vector<std::vector<ElementType>> result =
+      ConstructSchedule(offsets, input);
+
+  for (int i = 0; i < offsets.size(); ++i) {
+    std::fill(result[i].begin(), std::next(result[i].begin(), offsets[i]),
+              empty_element);
+  }
+
+  return result;
+}
+
+/**
+ * Construct a "ramp-down" pipeline schedule given an offset and some
+ * schedulable components. Additionally, blank spaces are inserted into the
+ * schedule where a stage cannot be executed.
+ *
+ * @param offsets The offsets of each parallel sequence of inputs.
+ * @param input The input sequence to schedule.
+ * @param empty_element The empty element, or identity element, on the
+ *                      ElementType. This is what is inserted into the "blank
+ *                      spaces" of the schedule.
+ * @param additional_iterations The number of additional iterations that should
+ *                              be executed to completely flush the pipeline.
+ *
+ * @returns A 2D array of pipeline schedule where each row represents the
+ *          parallel sequence, and each column represents a single timestep
+ *          where a single step of the input is scheduled.
+ */
+template <typename ElementType>
+std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
+    const std::vector<int>& offsets, const std::vector<ElementType>& input,
+    ElementType empty_element = {}, const int additional_iterations = 0) {
+  std::vector<std::vector<ElementType>> result =
+      ConstructSchedule(offsets, input);
+
+  for (int i = additional_iterations; i < offsets.size(); ++i) {
+    std::fill(std::next(result[i].begin(), offsets[i]), result[i].end(),
+              empty_element);
+  }
+
+  return result;
+}
+
+/**
+ * Given a schedule, like the ones produced by `ConstructSchedule`, flatten the
+ * time axis to produce a single sequence.
+ *
+ * @param inputs The input parallel schedule.
+ *
+ * @returns The flattened schedule.
+ */
+template <typename ElementType>
+std::vector<ElementType> FlattenSchedule(
+    const std::vector<std::vector<ElementType>>& inputs) {
+  std::vector<ElementType> result;
+
+  for (int i = 0; i < inputs[0].size(); ++i) {
+    for (const auto& input : inputs) {
+      result.push_back(input[i]);
+    }
+  }
+
+  return result;
+}
+
+// Return the pipeline stage index for the given hlo instruction
+StatusOr<int> GetPipelineStage(
+    const absl::flat_hash_map<HloInstruction*, int>& inst_stage_mapping,
+    HloInstruction* hlo) {
+  if (inst_stage_mapping.count(hlo) == 0) {
+    return FailedPrecondition(
+        "Hlo instruction \"%s\" does not have an assigned pipeline stage.",
+        hlo->ToString());
+  }
+
+  return inst_stage_mapping.at(hlo);
+}
+}  // namespace
+
 PipelineVisitor::PipelineVisitor(
-    int64 stage_count, int64 iterations, CompilerResources& res,
-    const ArgVectors& inputs,
+    int64 stage_count, const std::vector<int>& stage_ipu_mapping,
+    const absl::flat_hash_map<HloInstruction*, int>& inst_stage_mapping,
+    CompilerResources& res, const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
-    : iterations_(iterations),
-      copy_sequences_(stage_count),
+    : copy_sequences_(stage_count),
       program_sequences_(stage_count),
+      stage_ipu_mapping_(stage_ipu_mapping),
+      inst_stage_mapping_(inst_stage_mapping),
       SubComputationVisitor(res, inputs, dependent_subcomputations) {}
 
-poplar::program::Sequence PipelineVisitor::GetPipelineSequence() const {
+PipelineVisitor::PipelineVisitor(
+    HloInstruction* pipeline, CompilerResources& res, const ArgVectors& inputs,
+    const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
+    : PipelineVisitor(GetPipelineStageCount(pipeline),
+                      GetPipelineStageDeviceMapping(pipeline),
+                      GetPipelineInstStageMapping(pipeline), res, inputs,
+                      dependent_subcomputations) {}
+
+StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
+    int64 iterations) const {
   poplar::program::Program ramp_up = GetPipelineRampUpSequence();
-  poplar::program::Program ramp_down = GetPipelineRampDownSequence();
   poplar::program::Program repeat_block = GetPipelineRepeatBlockSequence();
 
   poplar::program::Sequence program;
 
   const auto half_seq_length = program_sequences_.size() / 2;
+  const auto overlap_length = CircularUnion(stage_ipu_mapping_).size();
+
+  poplar::program::Program ramp_down =
+      GetPipelineRampDownSequence(iterations % overlap_length);
 
   program.add(ramp_up);
   program.add(
-      poplar::program::Repeat(1 + iterations_ - half_seq_length, repeat_block));
+      poplar::program::Repeat((iterations / overlap_length) - 1, repeat_block));
   program.add(ramp_down);
 
   return program;
 }
 
-namespace {
-/*
- * Creating a ramp sequence is just incrementally adding the poplar programs.
- *
- * @param a The even set of "pre-programs"
- * @param b The even set of "post-programs"
- * @param c The odd set of "pre-programs"
- * @param d The odd set of "post-programs"
- *
- * @returns a vector of poplar programs in the correct order for a ramp
- *          computation.
- *
- * Worked Example:
- *
- * Suppose our set of programs are:
- *  a = [A, C, E]
- *  b = [U, V, W]
- *  c = [B, D, F]
- *  d = [X, Y, Z]
- *
- * Suppose `a` and `c` are the set of compute stages, and `b` and `d` are the
- * associated set of post-compute inter-ipu-copies.
- *
- * In this example, our sequence length is 3
- * ramp_sequences := []
- *
- * We start adding poplar programs with i = 1, because 0 would do nothing
- * anyway.
- *
- * i := 1
- * ramp_sequences += [A] // Even pre-program
- * ramp_sequences += [U] // Even post-program
- * ramp_sequences += [B] // Odd pre-program
- * ramp_sequences += [X] // Odd post-program
- *
- * ramp_sequences = [A, U, B, X]
- *
- * i := 2
- * ramp_sequences += [A, C] // Even pre-programs
- * ramp_sequences += [U, V] // Even post-programs
- * ramp_sequences += [B, D] // Odd pre-programs
- * ramp_sequences += [X, Y] // Odd post-programs
- *
- * ramp_sequences = [A, U, B, X, A, C, U, V, B, D, X, Y]
- *
- * `ramp_sequences` is now a valid ramp up sequence.
- *
- * This matches the intuitive pipeline instruction sequence
- *    i ||  1  |  2  ||  n  || n+1 | n+2 ||
- * IPU0 ||AU|--|AU|--||AU|FZ||--|FZ|--|FZ||
- * IPU1 ||--|BX|--|BX||EW|BX||EW|--|EW|--||
- * IPU2 ||--|--|CV|DY||CV|DY||CV|DY|--|--||
- *      ||  RAMP UP  ||     || RAMP DOWN ||
- *
- * Interestingly, if all the inputs are reversed, `a` swapped with `d`, and `b`
- * swapped with `c`, then we get a valid (reversed) ramp down sequence.
- */
-std::vector<poplar::program::Program> CreateRampSequences(
-    const std::vector<poplar::program::Program>& a,
-    const std::vector<poplar::program::Program>& b,
-    const std::vector<poplar::program::Program>& c,
-    const std::vector<poplar::program::Program>& d) {
-  std::vector<poplar::program::Program> ramp_sequences;
-
-  for (auto i = 1ul; i < a.size(); ++i) {
-    for (auto k = 0ul; k < i; ++k) {
-      ramp_sequences.push_back(a[k]);
-    }
-
-    for (auto k = 0ul; k < i; ++k) {
-      ramp_sequences.push_back(b[k]);
-    }
-
-    for (auto k = 0ul; k < i; ++k) {
-      ramp_sequences.push_back(c[k]);
-    }
-
-    for (auto k = 0ul; k < i; ++k) {
-      ramp_sequences.push_back(d[k]);
-    }
-  }
-
-  return ramp_sequences;
-}
-
-// Similar to the above, but with homogeneous "post-programs"
-std::vector<poplar::program::Program> CreateRampSequences(
-    const std::vector<poplar::program::Program>& a, poplar::program::Program b,
-    const std::vector<poplar::program::Program>& c,
-    poplar::program::Program d) {
-  std::vector<poplar::program::Program> b_(a.size());
-  b_.front() = b;
-
-  std::vector<poplar::program::Program> d_(c.size());
-  d_.front() = d;
-
-  return CreateRampSequences(a, b_, c, d_);
-}
-
-// Similar to the above, but with homogeneous "pre-programs"
-std::vector<poplar::program::Program> CreateRampSequences(
-    poplar::program::Program a, const std::vector<poplar::program::Program>& b,
-    poplar::program::Program c,
-    const std::vector<poplar::program::Program>& d) {
-  std::vector<poplar::program::Program> a_(b.size());
-  a_.front() = a;
-
-  std::vector<poplar::program::Program> c_(d.size());
-  c_.front() = c;
-
-  return CreateRampSequences(a_, b, c_, d);
-}
-
-// Return the pipeline stage index for the given hlo instruction
-StatusOr<int> GetPipelineStage(const CompilerResources& res,
-                               HloInstruction* hlo) {
-  if (res.pipeline_stage_assignment.count(hlo) == 0) {
-    return FailedPrecondition(
-        "Hlo instruction \"%s\" does not have an assigned pipeline stage.",
-        hlo->name());
-  }
-
-  return res.pipeline_stage_assignment.at(hlo);
-}
-
-}  // namespace
-
 // Collect the pipeline stage programs and call CreateRampSequences
 poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
-  std::vector<poplar::program::Program> program_sequences[2];
-  poplar::program::Sequence copy_sequences[2];
+  // Find the set of non-overlapping program offsets.
+  auto offsets = CircularUnion(stage_ipu_mapping_);
 
-  const auto half_seq_length = program_sequences_.size() / 2;
+  // Build schedules for the compute and copy programs.
+  // Each schedule is 2D, where each column represents a time-slice and each row
+  // represents the "mini-batch",
+  auto program_sequences = ConstructRampUpSchedule(offsets, program_sequences_);
+  auto copy_sequences = ConstructRampUpSchedule(offsets, copy_sequences_);
 
-  for (auto i = 0ul; i < half_seq_length; ++i) {
-    for (auto k = 0; k < 2; ++k) {
-      program_sequences[k].push_back(program_sequences_[2 * i + k]);
-      copy_sequences[k].add(copy_sequences_[2 * i + k]);
-    }
+  // concatenate the compute and copy programs.
+  program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
+                           copy_sequences.end());
+
+  // Flatten the schedule to a linear sequence.
+  auto repeat_block_sequences = FlattenSchedule(program_sequences);
+
+  poplar::program::Sequence repeat_block;
+  for (const auto& seq : repeat_block_sequences) {
+    repeat_block.add(seq);
   }
 
-  auto ramp_up_sequences =
-      CreateRampSequences(program_sequences[0], copy_sequences[0],
-                          program_sequences[1], copy_sequences[1]);
-
-  poplar::program::Sequence ramp_up;
-
-  for (const auto& seq : ramp_up_sequences) {
-    ramp_up.add(seq);
-  }
-
-  return ramp_up;
+  return repeat_block;
 }
 
 // Collect the pipeline stage programs and call CreateRampSequences
-poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence() const {
-  std::vector<poplar::program::Program> program_sequences[2];
-  poplar::program::Sequence copy_sequences[2];
+poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
+    int additional_iterations) const {
+  // Find the set of non-overlapping program offsets.
+  auto offsets = CircularUnion(stage_ipu_mapping_);
 
-  const auto half_seq_length = program_sequences_.size() / 2;
+  // Build schedules for the compute and copy programs.
+  // Each schedule is 2D, where each column represents a time-slice and each row
+  // represents the "mini-batch",
+  auto program_sequences = ConstructRampDownSchedule(
+      offsets, program_sequences_, {}, additional_iterations);
+  auto copy_sequences = ConstructRampDownSchedule(offsets, copy_sequences_, {},
+                                                  additional_iterations);
 
-  for (auto i = 0ul; i < half_seq_length; ++i) {
-    for (auto k = 0; k < 2; ++k) {
-      program_sequences[k].push_back(program_sequences_[2 * i + k]);
-      copy_sequences[k].add(copy_sequences_[2 * i + k]);
-    }
+  // concatenate the compute and copy programs.
+  program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
+                           copy_sequences.end());
+
+  // Flatten the schedule to a linear sequence.
+  auto repeat_block_sequences = FlattenSchedule(program_sequences);
+
+  poplar::program::Sequence repeat_block;
+  for (const auto& seq : repeat_block_sequences) {
+    repeat_block.add(seq);
   }
 
-  // A ramp down is the mirror image of a ramp up
-  absl::c_reverse(program_sequences[0]);
-  absl::c_reverse(program_sequences[1]);
-
-  auto ramp_down_sequences =
-      CreateRampSequences(copy_sequences[1], program_sequences[1],
-                          copy_sequences[0], program_sequences[0]);
-
-  // Reverse back into the correct order
-  absl::c_reverse(ramp_down_sequences);
-
-  poplar::program::Sequence ramp_down;
-
-  for (const auto& seq : ramp_down_sequences) {
-    ramp_down.add(seq);
-  }
-
-  return ramp_down;
+  return repeat_block;
 }
 
 // Collect the pipeline stage programs and build the repeat block
 poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
     const {
-  std::vector<poplar::program::Program> repeat_block_sequences;
-  std::vector<poplar::program::Program> program_sequences[2];
-  std::vector<poplar::program::Program> copy_sequences[2];
+  // Find the set of non-overlapping program offsets.
+  auto offsets = CircularUnion(stage_ipu_mapping_);
 
-  const auto half_seq_length = program_sequences_.size() / 2;
+  // Build schedules for the compute and copy programs.
+  // Each schedule is 2D, where each column represents a time-slice and each row
+  // represents the "mini-batch",
+  auto program_sequences = ConstructSchedule(offsets, program_sequences_);
+  auto copy_sequences = ConstructSchedule(offsets, copy_sequences_);
 
-  for (auto i = 0ul; i < half_seq_length; ++i) {
-    for (auto k = 0; k < 2; ++k) {
-      program_sequences[k].push_back(program_sequences_[2 * i + k]);
-      copy_sequences[k].push_back(copy_sequences_[2 * i + k]);
-    }
-  }
+  // concatenate the compute and copy programs.
+  program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
+                           copy_sequences.end());
 
-  repeat_block_sequences.insert(repeat_block_sequences.end(),
-                                program_sequences[0].begin(),
-                                program_sequences[0].end());
-  repeat_block_sequences.insert(repeat_block_sequences.end(),
-                                copy_sequences[0].begin(),
-                                copy_sequences[0].end());
-  repeat_block_sequences.insert(repeat_block_sequences.end(),
-                                program_sequences[1].begin(),
-                                program_sequences[1].end());
-  repeat_block_sequences.insert(repeat_block_sequences.end(),
-                                copy_sequences[1].begin(),
-                                copy_sequences[1].end());
+  // Flatten the schedule to a linear sequence.
+  auto repeat_block_sequences = FlattenSchedule(program_sequences);
 
   poplar::program::Sequence repeat_block;
-
   for (const auto& seq : repeat_block_sequences) {
     repeat_block.add(seq);
   }
@@ -314,7 +521,7 @@ Status PipelineVisitor::HandleCall(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->name() << " : " << comp->name()
           << " as a pipeline stage";
 
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(resources_, hlo));
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
                       CreateCallOp(resources_, hlo, hlo->shape(), tensor_map));
 
@@ -354,7 +561,7 @@ Status PipelineVisitor::HandleFifo(HloInstruction* hlo) {
     return HandleNotImplemented(hlo);
   }
 
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(resources_, hlo));
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
       CreateCustomCallOp(resources_, hlo, hlo->shape(), tensor_map));
@@ -370,7 +577,7 @@ Status PipelineVisitor::HandleInterIpuCopy(HloInstruction* hlo) {
     return HandleNotImplemented(hlo);
   }
 
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(resources_, hlo));
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
       CreateCustomCallOp(resources_, hlo, hlo->shape(), tensor_map));
@@ -383,7 +590,7 @@ Status PipelineVisitor::HandleInterIpuCopy(HloInstruction* hlo) {
 Status PipelineVisitor::HandleGetTupleElement(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->name();
 
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(resources_, hlo));
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   TF_ASSIGN_OR_RETURN(
       ArgVectors output_tensors,
       FindInplaceOutputTensors(tensor_map, resources_, hlo,
@@ -396,13 +603,7 @@ Status PipelineVisitor::HandleGetTupleElement(HloInstruction* hlo) {
   return Status::OK();
 }
 
-Status PipelineVisitor::FinishVisit(HloInstruction*) {
-  auto seq = GetSequence();
-  seq.add(program_sequences_[0]);
-  program_sequences_[0] = seq;
-
-  return Status::OK();
-}
+Status PipelineVisitor::FinishVisit(HloInstruction*) { return Status::OK(); }
 
 Status PipelineVisitor::HandleTuple(HloInstruction* hlo) {
   if (hlo->parent()->root_instruction() != hlo) {
@@ -414,7 +615,7 @@ Status PipelineVisitor::HandleTuple(HloInstruction* hlo) {
 
   VLOG(1) << "Processing " << hlo->name();
 
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(resources_, hlo));
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   TF_ASSIGN_OR_RETURN(ArgVectors inputs,
                       FindInplaceOutputTensors(tensor_map, resources_, hlo,
                                                program_sequences_[stage]));

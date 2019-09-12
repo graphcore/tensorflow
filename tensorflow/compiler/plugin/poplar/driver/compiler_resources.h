@@ -85,8 +85,6 @@ struct CompilerResources {
 
   subcomputation_graph_caching::SubcomputationGraphCache subcomputation_cache;
 
-  std::unordered_map<const HloInstruction*, int> pipeline_stage_assignment;
-
   CompilerResources(
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
