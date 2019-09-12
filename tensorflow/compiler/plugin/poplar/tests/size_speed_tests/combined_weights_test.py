@@ -3,14 +3,10 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import json
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
-from tensorflow.python.client import session as sl
-from tensorflow.python.framework import test_util
-from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -51,21 +47,19 @@ def fc(name, x, num_units_out):
   weights_initializer = init_ops.truncated_normal_initializer(stddev=0.01)
 
   with vs.variable_scope(name):
-    weights = _get_variable(
-        'weights',
-        shape=[num_units_in, num_units_out],
-        init=weights_initializer)
-    biases = _get_variable(
-        'biases',
-        shape=[num_units_out],
-        init=init_ops.constant_initializer(0.0))
+    weights = _get_variable('weights',
+                            shape=[num_units_in, num_units_out],
+                            init=weights_initializer)
+    biases = _get_variable('biases',
+                           shape=[num_units_out],
+                           init=init_ops.constant_initializer(0.0))
 
     x = nn_ops.xw_plus_b(x, weights, biases)
 
   return x
 
 
-class CombinedWightsTest(xla_test.XLATestCase):
+class CombinedWeightsTest(xla_test.XLATestCase):
   def testMergedWeightDownload(self):
     with self.session() as sess:
       x = array_ops.placeholder(datatype, shape=[16, 4])
@@ -78,46 +72,31 @@ class CombinedWightsTest(xla_test.XLATestCase):
             nn_ops.softmax_cross_entropy_with_logits_v2(
                 logits=logits, labels=array_ops.stop_gradient(y_)))
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = ipu.utils.create_ipu_config(profiling=True)
-      opts = ipu.utils.set_ipu_model_options(opts, True)
-      opts = ipu.utils.auto_select_ipus(opts, 1)
-      ipu.utils.configure_ipu_system(opts)
+      report = ReportJSON(self,
+                          sess,
+                          compile_ipu_code=True,
+                          device_count_override=1)
 
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       data = np.zeros([16, 4])
       labels = np.zeros([16, 256])
 
       sess.run(loss, feed_dict={x: data, y_: labels})
-      out = sess.run(report)
-
-      evts = ipu.utils.extract_all_events(out)
-      r = ipu.utils.extract_compile_reports(out)
-      self.assertEqual(len(r), 1)
-      j = json.loads(r[0][1])
-
-      # Find the switch
-      switch_index = 0
-      for p in j['programs']:
-        if p['type'] == 'Switch':
-          break
-        switch_index = switch_index + 1
+      report.parse_log()
 
       # Find the first case - the download weights sequence
-      download_weights_index = j['programs'][switch_index]['children'][0]
+      download_weights_index = report.get_first_program_of_type(
+          'Switch')['children'][0]
 
-      # The download weights sequence should not have lots of entries (because the
-      # copies will have been merged)
       self.assertTrue(
-          len(j['programs'][download_weights_index]['children']) < 7)
+          len(report.get_program(download_weights_index)['children']) < 7,
+          "The download weights sequence should not have lots of entries "
+          "(because the copies will have been merged)")
 
       # Also check the overall size
-      size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertTrue(size < 17600000)
+      report.assert_total_tile_memory_in_range(11000000, 11500000)
 
 
 if __name__ == "__main__":

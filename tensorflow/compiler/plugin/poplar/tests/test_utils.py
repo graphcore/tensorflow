@@ -7,23 +7,19 @@ from __future__ import print_function
 
 import contextlib
 import fnmatch
+import re
 import json as js
 import numpy as np
-import re
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.xla import xla_data_pb2
-from tensorflow.core.framework import summary_pb2
 from tensorflow.core.framework import attr_value_pb2
-from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.data.ops.dataset_ops import Dataset
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.summary.summary import tensor_summary
 
 
 def configure_ipu_system(compilation_trace=True,
@@ -37,7 +33,8 @@ def configure_ipu_system(compilation_trace=True,
                          replicated=False,
                          compile_ipu_code=False,
                          enable_ipu_events=False,
-                         engine_opts=None):
+                         engine_opts=None,
+                         device_count_override=None):
   opts = IpuOptions()
   opts.profiling.enable_ipu_trace_events = (compilation_trace or io_trace
                                             or execution_trace
@@ -59,7 +56,9 @@ def configure_ipu_system(compilation_trace=True,
       opt.value = o[1]
 
   # When sharded or pipelining we use two devices.
-  if sharded:
+  if device_count_override:
+    device_count = device_count_override
+  elif sharded:
     device_count = 2 * (2 if replicated else 1)
   elif pipelining:
     device_count = 4 * (2 if replicated else 1)
@@ -124,7 +123,6 @@ def get_maximum_tile_size_from_events(report):
 
 def get_always_live_size_from_events(report):
   lines = report.split('\n')
-  found = False
   for l in lines:
     m = re.match(r' +Always-live bytes: ([\d,]+)', l)
     if m:
@@ -137,7 +135,7 @@ def check_compute_sets_not_in_blacklist(cs_list, bl):
   fail_list = []
   for x in bl:
     matches = [cs for cs in cs_list if fnmatch.fnmatch(cs, x)]
-    if len(matches) > 0:
+    if matches:
       fail_list += matches
       result = False
   if not result:
@@ -149,7 +147,7 @@ def missing_names_in_whitelist_entries(names, whitelist):
   fail_list = []
   wl = [x + '*' for x in whitelist]
   for name in names:
-    if name and len([x for x in wl if fnmatch.fnmatch(name, x)]) == 0:
+    if name and not [x for x in wl if fnmatch.fnmatch(name, x)]:
       fail_list += [name]
   return fail_list
 
@@ -158,7 +156,7 @@ def missing_whitelist_entries_in_names(names, whitelist):
   fail_list = []
   wl = [x + '*' for x in whitelist]
   for x in wl:
-    if len([name for name in names if fnmatch.fnmatch(name, x)]) == 0:
+    if not [name for name in names if fnmatch.fnmatch(name, x)]:
       fail_list += [x]
   return fail_list
 
@@ -173,13 +171,23 @@ def count_compute_sets_matching(cs_list, to_match):
   return len([cs for cs in cs_set if fnmatch.fnmatch(cs, to_match)])
 
 
-class ReportJSON:
-  def __init__(self, test, sess, io_trace=True):
+class ReportJSON(object):
+  def __init__(self,
+               test,
+               sess,
+               io_trace=True,
+               compile_ipu_code=False,
+               device_count_override=None):
     self.test = test
     self.sess = sess
     with ops.device('cpu'):
       self.report = gen_ipu_ops.ipu_event_trace()
-    configure_ipu_system(True, io_trace, True, text_report=False)
+    configure_ipu_system(True,
+                         io_trace,
+                         True,
+                         text_report=False,
+                         compile_ipu_code=compile_ipu_code,
+                         device_count_override=device_count_override)
 
   def reset(self):
     self.sess.run(self.report)
@@ -230,6 +238,15 @@ class ReportJSON:
   def get_compute_sets(self):
     return self.events[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
 
+  def get_first_program_of_type(self, program_type):
+    for p in self.events[IpuTraceEvent.COMPILE_END]["programs"]:
+      if program_type == p['type']:
+        return p
+    return None
+
+  def get_program(self, index=0):
+    return self.events[IpuTraceEvent.COMPILE_END]["programs"][index]
+
   def assert_total_tile_memory_in_range(self, low, high):
     self.test.assertAllInRange([self.get_total_tile_memory()], low, high)
 
@@ -240,8 +257,8 @@ class ReportJSON:
   def assert_all_compute_sets_and_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" % "\n\t".join(
-            self.get_compute_sets()))
+        "Whitelist items not found in compute sets:\n\t%s" %
+        "\n\t".join(self.get_compute_sets()))
     self.test.assertFalse(
         missing_names_in_whitelist_entries(self.get_compute_sets(), ok),
         "Compute sets item not found in whitelist:\n\t%s" % "\n\t".join(ok))
@@ -250,15 +267,15 @@ class ReportJSON:
   def assert_compute_sets_contain_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" % "\n\t".join(
-            self.get_compute_sets()))
+        "Whitelist items not found in compute sets:\n\t%s" %
+        "\n\t".join(self.get_compute_sets()))
 
   # Asserts that all the whitelist patterns match at least one vertex
   def assert_vertices_contain_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_vertices(), ok),
-        "Whitelist items not found in vertices:\n\t%s" % "\n\t".join(
-            self.get_vertices()))
+        "Whitelist items not found in vertices:\n\t%s" %
+        "\n\t".join(self.get_vertices()))
 
   def assert_compute_sets_matches(self, expr, num_matches):
     self.test.assertEqual(
@@ -292,8 +309,7 @@ def get_compute_sets_from_json_report(event):
   if event.type == IpuTraceEvent.COMPILE_END:
     rep = js.loads(event.compile_end.compilation_report.decode('utf-8'))
     return rep['computeSets']['names']
-  else:
-    return []
+  return []
 
 
 def get_all_global_exchange_from_json_report(event):
@@ -302,8 +318,7 @@ def get_all_global_exchange_from_json_report(event):
     return [
         p['name'] for p in rep['programs'] if p['type'] == 'GlobalExchange'
     ]
-  else:
-    return []
+  return []
 
 
 def extract_all_types_from_event_trace(events):
@@ -327,7 +342,7 @@ def extract_all_compile_end_events(events):
   for e in events:
     evt = IpuTraceEvent.FromString(e)
     if evt.type == IpuTraceEvent.COMPILE_END:
-      if len(evt.compile_end.compilation_report) > 0:
+      if evt.compile_end.compilation_report:
         result += [evt]
   return result
 
@@ -359,16 +374,19 @@ def extract_all_io_events(events):
 
 
 def create_multi_increasing_dataset(value,
-                                    shapes=[[1, 32, 32, 4], [1, 8]],
-                                    dtypes=[np.float32, np.float32],
+                                    shapes=None,
+                                    dtypes=None,
                                     repeat=True):
+  # Default values:
+  shapes = shapes if shapes else [[1, 32, 32, 4], [1, 8]]
+  dtypes = dtypes if dtypes else [np.float32, np.float32]
+
   def _get_one_input(data):
     result = []
-    for i in range(len(shapes)):
+    for i, shape in enumerate(shapes):
       result.append(
-          math_ops.cast(
-              gen_array_ops.broadcast_to(data, shape=shapes[i]),
-              dtype=dtypes[i]))
+          math_ops.cast(gen_array_ops.broadcast_to(data, shape=shape),
+                        dtype=dtypes[i]))
     return result
 
   dataset = Dataset.range(value).map(_get_one_input)
@@ -378,40 +396,44 @@ def create_multi_increasing_dataset(value,
 
 
 def create_dual_increasing_dataset(value,
-                                   data_shape=[1, 32, 32, 4],
-                                   label_shape=[1, 8],
+                                   data_shape=None,
+                                   label_shape=None,
                                    dtype=np.float32,
                                    repeat=True):
-  return create_multi_increasing_dataset(
-      value,
-      shapes=[data_shape, label_shape],
-      dtypes=[dtype, dtype],
-      repeat=repeat)
+  data_shape = data_shape if data_shape else [1, 32, 32, 4]
+  label_shape = label_shape if label_shape else [1, 8]
+  return create_multi_increasing_dataset(value,
+                                         shapes=[data_shape, label_shape],
+                                         dtypes=[dtype, dtype],
+                                         repeat=repeat)
 
 
 def create_single_increasing_dataset(value,
-                                     shape=[1, 32, 32, 4],
+                                     shape=None,
                                      dtype=np.float32,
                                      repeat=True):
-  return create_multi_increasing_dataset(
-      value, shapes=[shape], dtypes=[dtype], repeat=repeat)
+  shape = shape if shape else [1, 32, 32, 4]
+  return create_multi_increasing_dataset(value,
+                                         shapes=[shape],
+                                         dtypes=[dtype],
+                                         repeat=repeat)
 
 
 def move_variable_initialization_to_cpu():
   graph = ops.get_default_graph()
 
   init_ops = []
-  dep_ops = list(
-      map(lambda x: x.initializer.inputs[1].op,
-          graph.get_collection('variables')))
+  dep_ops = [
+      x.initializer.inputs[1].op for x in graph.get_collection('variables')
+  ]
   visited = set()
 
-  while len(dep_ops) > 0:
+  while dep_ops:
     op = dep_ops.pop()
     if not op in visited:
       visited.add(op)
       init_ops += [op]
-      dep_ops += map(lambda x: x.op, op.inputs)
+      dep_ops += [x.op for x in op.inputs]
 
   for op in init_ops:
     op._set_device('/device:CPU:0')

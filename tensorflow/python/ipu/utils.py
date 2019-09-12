@@ -17,15 +17,15 @@ General utility functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+import json
+import time
+
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
-
-import json
-import time
 
 
 def configure_ipu_system(config, device="cpu"):
@@ -39,7 +39,7 @@ def configure_ipu_system(config, device="cpu"):
   Returns:
     None
   """
-  if not (isinstance(config, IpuOptions)):
+  if not isinstance(config, IpuOptions):
     raise Exception("`config` must be an IpuOptions instance")
 
   g = ops.Graph()
@@ -107,8 +107,8 @@ def create_ipu_config(profiling=False,
       waiting before a inter IPU copy between IPUs is scheduled.
     max_scheduler_lookahead_depth: The maximum distance to look into the future
       when considering valid schedules.
-    max_scheduler_search_space_size: The maximum number of nodes to consider when
-      building the tree of future schedules.
+    max_scheduler_search_space_size: The maximum number of nodes to consider
+      when building the tree of future schedules.
 
   Returns:
     An IpuOptions configuration protobuf, suitable for passing to
@@ -135,9 +135,11 @@ def create_ipu_config(profiling=False,
   opts.profiling.max_report_size = max_report_size
   opts.profiling.report_directory = report_directory
 
-  opts.speed_size_config.always_rearrange_copies_on_the_host = always_rearrange_copies_on_the_host
+  opts.speed_size_config.always_rearrange_copies_on_the_host = \
+      always_rearrange_copies_on_the_host
   opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
-  opts.speed_size_config.disable_graph_convolution_caching = disable_graph_convolution_caching
+  opts.speed_size_config.disable_graph_convolution_caching = \
+      disable_graph_convolution_caching
 
   opts.retain_control_dependencies = retain_control_dependencies
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
@@ -171,10 +173,10 @@ def set_compilation_options(opts, compilation_options=None):
   Returns:
     The IpuOptions configuration protobuf, with engine compilation options set.
   """
-  if not (isinstance(compilation_options, dict)):
+  if not isinstance(compilation_options, dict):
     raise Exception("`compilation_options` must be a dictionary")
 
-  if (compilation_options is not None):
+  if compilation_options is not None:
     for (option_name, value) in compilation_options.items():
       compilation_option = opts.compilation_options.add()
       compilation_option.option = option_name
@@ -204,10 +206,10 @@ def set_convolution_options(opts, convolution_options=None):
   Returns:
     The IpuOptions configuration protobuf, with convolution options set.
   """
-  if not (isinstance(convolution_options, dict)):
+  if not isinstance(convolution_options, dict):
     raise Exception("`convolution_options` must be a dictionary")
 
-  if (convolution_options is not None):
+  if convolution_options is not None:
     for (option_name, value) in convolution_options.items():
       opt = opts.convolution_options.add()
       opt.option = option_name
@@ -239,10 +241,10 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
   Returns:
     The IpuOptions configuration protobuf, with matmul options set.
   """
-  if not (isinstance(matmul_options, dict)):
+  if not isinstance(matmul_options, dict):
     raise Exception("`matmul_options` must be a dictionary")
 
-  if (matmul_options is not None):
+  if matmul_options is not None:
     for (option_name, value) in matmul_options.items():
       opt = opts.matmul_options.add()
       opt.option = option_name
@@ -274,10 +276,10 @@ def set_pooling_options(opts, pooling_options=None):
   Returns:
     The IpuOptions configuration protobuf, with pooling options set.
   """
-  if not (isinstance(pooling_options, dict)):
+  if not isinstance(pooling_options, dict):
     raise Exception("`pooling_options` must be a dictionary")
 
-  if (pooling_options is not None):
+  if pooling_options is not None:
     for (option_name, value) in pooling_options.items():
       opt = opts.pooling_options.add()
       opt.option = option_name
@@ -308,10 +310,10 @@ def set_report_options(opts, report_options=None):
   Returns:
     The IpuOptions configuration protobuf, with convolution options set.
   """
-  if not (isinstance(report_options, dict)):
+  if not isinstance(report_options, dict):
     raise Exception("`report_options` must be a dictionary")
 
-  if (report_options is not None):
+  if report_options is not None:
     for (option_name, value) in report_options.items():
       opt = opts.profiling.options.add()
       opt.option = option_name
@@ -435,7 +437,7 @@ def auto_select_ipus(opts, num_ipus):
     The IpuOptions configuration protobuf, configured for auto-selecting a set
     of IPU devices.
   """
-  if len(opts.device_config) > 0:
+  if opts.device_config:
     raise Exception("IPU devices have already been configured.")
 
   if not isinstance(num_ipus, (int, list, tuple)):
@@ -445,7 +447,7 @@ def auto_select_ipus(opts, num_ipus):
     dev = opts.device_config.add()
     dev.auto_count = num_ipus
   else:
-    for i, n in enumerate(num_ipus):
+    for n in num_ipus:
       dev = opts.device_config.add()
       dev.auto_count = n
 
@@ -627,7 +629,7 @@ def select_ipus(opts, indices):
     IPU configuration index.
   """
 
-  if len(opts.device_config) > 0:
+  if opts.device_config:
     raise Exception("IPU devices have already been configured.")
 
   if not isinstance(indices, (list, tuple)):
@@ -636,7 +638,7 @@ def select_ipus(opts, indices):
   if len(set(indices)) != len(indices):
     raise Exception("All device indeicies in `indices` must be unique.")
 
-  for n, i in enumerate(indices):
+  for i in indices:
     dev = opts.device_config.add()
     dev.cfg_index = i
 
@@ -784,7 +786,7 @@ def extract_compile_reports(events):
       try:
         module = evt.compile_end.module_name.decode('utf-8')
         rep = evt.compile_end.compilation_report.decode('utf-8')
-        if len(rep) > 0:
+        if rep:
           result += [(module, rep)]
       except UnicodeDecodeError:
         pass
@@ -806,33 +808,11 @@ def extract_execute_reports(events):
       try:
         module = evt.execute.module_name.decode('utf-8')
         rep = evt.execute.execution_report.decode('utf-8')
-        if len(rep) > 0:
+        if rep:
           result += [(module, rep)]
       except UnicodeDecodeError:
         pass
   return result
-
-
-def get_memory_size_from_events(events):
-  """Get the total memory consumption for the first compilation in the list
-  of events.
-
-  Args:
-    events: A list of IpuTraceEvent objects.
-
-  Returns:
-    The total size as an integer, or None.
-  """
-  for evt in events:
-    if evt.type == IpuTraceEvent.COMPILE_END:
-      try:
-        js = json.loads(evt.compile_end.compilation_report.decode('utf-8'))
-        return sum(js["memory"]["byTile"]["total"])
-      except UnicodeDecodeError:
-        pass
-      except ValueError:
-        pass
-  return None
 
 
 def move_variable_initialization_to_cpu(graph=None):
@@ -850,17 +830,17 @@ def move_variable_initialization_to_cpu(graph=None):
     graph = ops.get_default_graph()
 
   init_ops = []
-  dep_ops = list(
-      map(lambda x: x.initializer.inputs[1].op,
-          graph.get_collection('variables')))
+  dep_ops = [
+      x.initializer.inputs[1].op for x in graph.get_collection('variables')
+  ]
   visited = set()
 
-  while len(dep_ops) > 0:
+  while dep_ops:
     op = dep_ops.pop()
     if not op in visited:
       visited.add(op)
       init_ops += [op]
-      dep_ops += map(lambda x: x.op, op.inputs)
+      dep_ops += [x.op for x in op.inputs]
 
   for op in init_ops:
     op._set_device('/device:CPU:0')

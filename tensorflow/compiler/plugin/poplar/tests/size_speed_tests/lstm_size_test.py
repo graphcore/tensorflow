@@ -20,7 +20,7 @@ import os
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
@@ -29,7 +29,6 @@ from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
-from tensorflow.python.client import session as sl
 
 dataType = np.float16
 
@@ -56,8 +55,11 @@ def _tfLSTM(x, h, c):
       forget_bias=0.,
       initializer=init_ops.zeros_initializer(dtype=dataType))
   state = rnn_cell.LSTMStateTuple(c, h)
-  return rnn.dynamic_rnn(
-      lstm_cell, x, dtype=dataType, initial_state=state, time_major=True)
+  return rnn.dynamic_rnn(lstm_cell,
+                         x,
+                         dtype=dataType,
+                         initial_state=state,
+                         time_major=True)
 
 
 class LstmSizeTest(xla_test.XLATestCase):
@@ -67,23 +69,20 @@ class LstmSizeTest(xla_test.XLATestCase):
         px = array_ops.placeholder(dataType, shape=x.shape)
         ph = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
         pc = array_ops.placeholder(dataType, shape=[batch_size, num_hidden])
-        report = gen_ipu_ops.ipu_event_trace()
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(layer_func, inputs=[px, ph, pc])
 
-      opts = ipu.utils.create_ipu_config(profiling=True)
-      ipu.utils.configure_ipu_system(opts)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
-      out = sess.run(report)
+      report.reset()
       result = sess.run(r, {
           px: x,
           ph: np.ones(ph.shape),
           pc: np.ones(pc.shape)
       })
-      out = sess.run(report)
-      evts = ipu.utils.extract_all_events(out)
-      size = ipu.utils.get_memory_size_from_events(evts)
+      report.parse_log()
+      size = report.get_total_tile_memory()
     return (size, result)
 
   # Test which verifies that:
@@ -99,6 +98,6 @@ class LstmSizeTest(xla_test.XLATestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

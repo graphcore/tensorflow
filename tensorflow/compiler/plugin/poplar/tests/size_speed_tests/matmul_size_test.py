@@ -5,9 +5,8 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
-from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -64,24 +63,18 @@ class MatMulSizeTest(xla_test.XLATestCase):
             nn_ops.softmax_cross_entropy_with_logits_v2(
                 logits=logits, labels=array_ops.stop_gradient(y_)))
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = ipu.utils.create_ipu_config(profiling=True)
-      ipu.utils.configure_ipu_system(opts)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       data = np.zeros([2, 112 * 112 * 4])
       labels = np.zeros([2, 64])
 
       sess.run(loss, feed_dict={x: data, y_: labels})
-      out = sess.run(report)
+      report.parse_log()
 
-      evts = ipu.utils.extract_all_events(out)
-      size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertTrue(size < 18780000)
+      report.assert_total_tile_memory_in_range(15500000, 16500000)
 
   def testTrainingBs1(self):
     with self.session() as sess:
@@ -98,24 +91,17 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = ipu.utils.create_ipu_config(profiling=True)
-      ipu.utils.configure_ipu_system(opts)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       data = np.zeros([1, 112 * 112 * 4])
       labels = np.zeros([1, 64])
 
       sess.run(train, feed_dict={x: data, y_: labels})
-      out = sess.run(report)
-
-      evts = ipu.utils.extract_all_events(out)
-      size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertTrue(size < 16250000)
+      report.parse_log()
+      report.assert_total_tile_memory_in_range(10500000, 11500000)
 
   def testTrainingBs2(self):
     with self.session() as sess:
@@ -130,25 +116,17 @@ class MatMulSizeTest(xla_test.XLATestCase):
                 logits=logits, labels=array_ops.stop_gradient(y_)))
 
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
-
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      opts = ipu.utils.create_ipu_config(profiling=True)
-      ipu.utils.configure_ipu_system(opts)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       data = np.zeros([2, 112 * 112 * 4])
       labels = np.zeros([2, 64])
 
       sess.run(train, feed_dict={x: data, y_: labels})
-      out = sess.run(report)
-
-      evts = ipu.utils.extract_all_events(out)
-      size = ipu.utils.get_memory_size_from_events(evts)
-      self.assertTrue(size < 38580000)
+      report.parse_log()
+      report.assert_total_tile_memory_in_range(24000000, 24500000)
 
 
 if __name__ == "__main__":
