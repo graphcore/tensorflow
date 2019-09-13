@@ -265,12 +265,11 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
     poplar::Tensor pegged_memory =
         poplar::concat(cloned_tensors).reshape(new_shape);
 
-    // The counter is on the master graph because it needs to be used for
-    // program flow of control.
+    // A counter for tracking the number of entries in the buffer
     poplar::Tensor counter = graph.addVariable(
         poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
         GetDebugName(inst) + "/InfeedCtr/" + std::to_string(tuple_index));
-    graph.setInitialValue(counter, io_batch_size);
+    resources_.zeroed_tensors.push_back(counter);
 
     // The body for copying from host and zeroing the counter.
     poplar::program::Sequence true_body;
@@ -285,16 +284,12 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
         XlaShapeFromPoplarShape(shape.element_type(), pegged_memory.shape()),
         pegged_memory));
 
-    popops::zero(
-        graph, counter, true_body,
-        GetDebugName(inst) + "/InfeedCtrZero/" + std::to_string(tuple_index));
-
     // The NOP body.
     poplar::program::Sequence false_body;
 
-    // Predicate for reaching the batch limit
+    // Predicate for fetching the next batch
     poplar::Tensor predicate = popops::map(
-        graph, pe::Equal(pe::_1, pe::Const(io_batch_size)), {counter}, seq,
+        graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
         GetDebugName(inst) + "/InfeedCtrCmp/" + std::to_string(tuple_index));
 
     // The main body which contains the control flow for copy from host and
@@ -309,7 +304,8 @@ StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
 
     // Increment the counter by one.
     popops::mapInPlace(
-        graph, pe::Add(pe::_1, pe::Const(1)), {counter}, seq,
+        graph, pe::Rem(pe::Add(pe::_1, pe::Const(1)), pe::Const(io_batch_size)),
+        {counter}, seq,
         GetDebugName(inst) + "/InfeedCtrInc/" + std::to_string(tuple_index));
 
   } else {

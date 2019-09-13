@@ -1119,7 +1119,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       tile_mem = js["memory"]["byTile"]["total"]
       total_mem = sum(tile_mem)
       self.assertAllInRange(tile_mem, 0, 3602)
-      self.assertAllInRange([total_mem], 0, 3877474)
+      self.assertAllInRange([total_mem], 0, 3877494)
 
       evts = tu.extract_all_execute_events(ee)
       self.assertEqual(len(evts), 1)
@@ -1191,7 +1191,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       tile_mem = js["memory"]["byTile"]["total"]
       total_mem = sum(tile_mem)
       self.assertAllInRange(tile_mem, 0, 3602)
-      self.assertAllInRange([total_mem], 0, 3877474)
+      self.assertAllInRange([total_mem], 0, 3877494)
 
       evts = tu.extract_all_execute_events(ee)
       self.assertEqual(len(evts), 1)
@@ -1259,7 +1259,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       js = json.loads(evts[0].compile_end.compilation_report)
       tile_mem = js["memory"]["byTile"]["total"]
       self.assertAllInRange([max(tile_mem)], 0, 54337)
-      self.assertAllInRange([sum(tile_mem)], 0, 61397717)
+      self.assertAllInRange([sum(tile_mem)], 0, 61397813)
 
       evts = tu.extract_all_execute_events(ee)
       self.assertEqual(len(evts), 1)
@@ -1330,7 +1330,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       js = json.loads(evts[0].compile_end.compilation_report)
       tile_mem = js["memory"]["byTile"]["total"]
       self.assertAllInRange([max(tile_mem)], 0, 53802)
-      self.assertAllInRange([sum(tile_mem)], 0, 60371296)
+      self.assertAllInRange([sum(tile_mem)], 0, 60371309)
 
       evts = tu.extract_all_execute_events(ee)
       self.assertEqual(len(evts), 1)

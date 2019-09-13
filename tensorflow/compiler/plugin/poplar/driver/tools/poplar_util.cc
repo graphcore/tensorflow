@@ -31,6 +31,7 @@ limitations under the License.
 #include <fstream>
 #include <limits>
 
+#include <popops/Zero.hpp>
 #include <poputil/TileMapping.hpp>
 
 using ::absl::StrCat;
@@ -268,6 +269,14 @@ Status SetPartialsTypeIfPresent(const HloInstruction* inst,
   TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
                       inst->backend_config<PoplarBackendConfig>());
   return SetPartialsTypeIfPresent(poplar_backend_config, option_flags);
+}
+
+poplar::program::Sequence ZeroTensors(CompilerResources& res) {
+  poplar::program::Sequence zero_seq;
+  for (auto t : res.zeroed_tensors) {
+    popops::zero(GetMasterGraph(res), t, zero_seq, "ZeroVar");
+  }
+  return zero_seq;
 }
 
 }  // namespace poplarplugin

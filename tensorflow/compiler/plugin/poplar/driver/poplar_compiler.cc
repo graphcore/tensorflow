@@ -677,6 +677,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       setFpBehaviour(main_graph, fp_control, main_program);
     }
 
+    // Add zeroing for registered variables
+    main_program.add(ZeroTensors(resources));
+
     // Add the main program sequence
     main_program.add(visitor.GetSequence());
 

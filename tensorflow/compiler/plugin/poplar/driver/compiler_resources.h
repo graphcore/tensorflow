@@ -85,6 +85,8 @@ struct CompilerResources {
 
   subcomputation_graph_caching::SubcomputationGraphCache subcomputation_cache;
 
+  std::vector<poplar::Tensor> zeroed_tensors;
+
   CompilerResources(
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,

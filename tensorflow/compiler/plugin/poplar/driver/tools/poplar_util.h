@@ -113,6 +113,9 @@ poplar::OptionFlags GetConvolutionOptionsForType(CompilerResources& res,
 
 poplar::OptionFlags GetMatMulOptionsForType(CompilerResources& res,
                                             const MLType conv_type);
+
+poplar::program::Sequence ZeroTensors(CompilerResources& res);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

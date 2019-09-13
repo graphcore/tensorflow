@@ -518,7 +518,7 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
       poplar::Tensor counter = graph.addVariable(
           poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
           GetDebugName(inst) + "/OutfeedCtr/" + std::to_string(i));
-      graph.setInitialValue(counter, 0);
+      resources_.zeroed_tensors.push_back(counter);
 
       // Use dynamic slice update to put the slices into the buffer
       popops::dynamicUpdate(graph, batched, in.expand({0}),
@@ -527,7 +527,9 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
 
       // Increment the counter by one.
       popops::mapInPlace(
-          graph, pe::Add(pe::_1, pe::Const(1)), {counter}, seq,
+          graph,
+          pe::Rem(pe::Add(pe::_1, pe::Const(1)), pe::Const(io_batch_size)),
+          {counter}, seq,
           GetDebugName(inst) + "/OutfeedCtrInc/" + std::to_string(i));
 
       // The body for copying to host and zeroing the counter.
@@ -541,15 +543,12 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
         true_body.add(poplar::program::Copy(batched, fifo, false));
       }
 
-      popops::zero(graph, counter, true_body,
-                   GetDebugName(inst) + "/OutfeedCtrZero/" + std::to_string(i));
-
       // The NOP body.
       poplar::program::Sequence false_body;
 
       // Check the counter doesn't equal
       poplar::Tensor predicate = popops::map(
-          graph, pe::Equal(pe::_1, pe::Const(io_batch_size)), {counter}, seq,
+          graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
           GetDebugName(inst) + "/OutfeedCtrCmp/" + std::to_string(i));
 
       // The main body which contains the control flow for copy from host and
