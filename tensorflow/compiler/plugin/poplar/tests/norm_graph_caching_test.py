@@ -6,16 +6,14 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import test_utils as tu
 
-# pylint: disable=unused-import
+import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
-from tensorflow.python.ipu.ops import normalization_ops_grad
 from tensorflow.python.layers import convolutional
 from tensorflow.python.layers import normalization as layers_norm
 from tensorflow.python.ops import array_ops
@@ -27,8 +25,6 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
-
-# pylint: enable=unused-import
 
 
 class NormGraphCachingTest(xla_test.XLATestCase):
@@ -53,21 +49,15 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               kernel_initializer=init_ops.ones_initializer())
           y = layers_norm.batch_normalization(y, fused=True)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # Would fail if there were two batch norms in the graph
       ok = [
@@ -75,7 +65,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testBatchNormalizeInferenceDontMatchDifferentTypes(self):
     with self.session() as sess:
@@ -99,21 +89,16 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               kernel_initializer=init_ops.ones_initializer())
           y = layers_norm.batch_normalization(y, fused=True)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       # Matches two convolutions
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Copy_',
@@ -123,7 +108,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testBatchNormalizeInference(self):
     with self.session() as sess:
@@ -146,21 +131,15 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               kernel_initializer=init_ops.ones_initializer())
           y = layers_norm.batch_normalization(y, fused=True)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # Would fail if there were two batch norms in the graph
       ok = [
@@ -168,7 +147,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testBatchNormsDontMatchDifferentShapes(self):
     with self.session() as sess:
@@ -192,21 +171,15 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               kernel_initializer=init_ops.ones_initializer())
           y = layers_norm.batch_normalization(y, fused=True)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
       # Matches two convolutions
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Copy_',
@@ -215,7 +188,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testBatchNormsMatchFwdBwd(self):
     with self.session() as sess:
@@ -252,21 +225,15 @@ class NormGraphCachingTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # One BN for forwards and one BN for grad
       # (note that we don't cache gradient application)
@@ -284,7 +251,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testGroupNormalizeInference(self):
     with self.session() as sess:
@@ -302,46 +269,38 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           beta = constant_op.constant([0.5, 0.5], np.float32)
           mean = constant_op.constant([0.5, 0.5], np.float32)
           inv_std_dev = constant_op.constant([0.5, 0.5], np.float32)
-          y = gen_popnn_ops.popnn_group_norm_inference(
-              inputs=y,
-              gamma=gamma,
-              beta=beta,
-              mean=mean,
-              inv_std_dev=inv_std_dev,
-              data_format="NHWC",
-              epsilon=0.0015,
-              num_groups=2)
+          y = gen_popnn_ops.popnn_group_norm_inference(inputs=y,
+                                                       gamma=gamma,
+                                                       beta=beta,
+                                                       mean=mean,
+                                                       inv_std_dev=inv_std_dev,
+                                                       data_format="NHWC",
+                                                       epsilon=0.0015,
+                                                       num_groups=2)
           y = convolutional.conv2d(
               y,
               2,
               1,
               use_bias=False,
               kernel_initializer=init_ops.ones_initializer())
-          y = gen_popnn_ops.popnn_group_norm_inference(
-              inputs=y,
-              gamma=gamma,
-              beta=beta,
-              mean=mean,
-              inv_std_dev=inv_std_dev,
-              data_format="NHWC",
-              epsilon=0.0015,
-              num_groups=2)
+          y = gen_popnn_ops.popnn_group_norm_inference(inputs=y,
+                                                       gamma=gamma,
+                                                       beta=beta,
+                                                       mean=mean,
+                                                       inv_std_dev=inv_std_dev,
+                                                       data_format="NHWC",
+                                                       epsilon=0.0015,
+                                                       num_groups=2)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # Would fail if there were two batch norms in the graph
       ok = [
@@ -349,7 +308,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
           'vs/PopnnGroupNormInference/custom-call*/'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testGroupNormalizeInferenceAndStatistics(self):
     with self.session() as sess:
@@ -367,15 +326,14 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           beta = constant_op.constant([0.5, 0.5], np.float32)
           mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
               inputs=y, data_format="NHWC", epsilon=0.0015, num_groups=2)
-          y = gen_popnn_ops.popnn_group_norm_inference(
-              inputs=y,
-              gamma=gamma,
-              beta=beta,
-              mean=mean,
-              inv_std_dev=inv_std_dev,
-              data_format="NHWC",
-              epsilon=0.0015,
-              num_groups=2)
+          y = gen_popnn_ops.popnn_group_norm_inference(inputs=y,
+                                                       gamma=gamma,
+                                                       beta=beta,
+                                                       mean=mean,
+                                                       inv_std_dev=inv_std_dev,
+                                                       data_format="NHWC",
+                                                       epsilon=0.0015,
+                                                       num_groups=2)
           y = convolutional.conv2d(
               y,
               2,
@@ -384,31 +342,24 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               kernel_initializer=init_ops.ones_initializer())
           mean, inv_std_dev = gen_popnn_ops.popnn_group_norm_statistics(
               inputs=y, data_format="NHWC", epsilon=0.0015, num_groups=2)
-          y = gen_popnn_ops.popnn_group_norm_inference(
-              inputs=y,
-              gamma=gamma,
-              beta=beta,
-              mean=mean,
-              inv_std_dev=inv_std_dev,
-              data_format="NHWC",
-              epsilon=0.0015,
-              num_groups=2)
+          y = gen_popnn_ops.popnn_group_norm_inference(inputs=y,
+                                                       gamma=gamma,
+                                                       beta=beta,
+                                                       mean=mean,
+                                                       inv_std_dev=inv_std_dev,
+                                                       data_format="NHWC",
+                                                       epsilon=0.0015,
+                                                       num_groups=2)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # Would fail if there were two batch norms in the graph
       ok = [
@@ -417,7 +368,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/PopnnGroupNormStatistics/custom-call*/',
           'vs/PopnnGroupNormInference/custom-call*/'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testBatchNormAndGroupNormalizeMixedInference(self):
     with self.session() as sess:
@@ -435,15 +386,14 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           beta = constant_op.constant([0.5, 0.5], np.float32)
           mean = constant_op.constant([0.5, 0.5], np.float32)
           inv_std_dev = constant_op.constant([0.5, 0.5], np.float32)
-          y = gen_popnn_ops.popnn_group_norm_inference(
-              inputs=y,
-              gamma=gamma,
-              beta=beta,
-              mean=mean,
-              inv_std_dev=inv_std_dev,
-              data_format="NHWC",
-              epsilon=0.0015,
-              num_groups=2)
+          y = gen_popnn_ops.popnn_group_norm_inference(inputs=y,
+                                                       gamma=gamma,
+                                                       beta=beta,
+                                                       mean=mean,
+                                                       inv_std_dev=inv_std_dev,
+                                                       data_format="NHWC",
+                                                       epsilon=0.0015,
+                                                       num_groups=2)
           y = convolutional.conv2d(
               y,
               2,
@@ -452,21 +402,15 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               kernel_initializer=init_ops.ones_initializer())
           y = layers_norm.batch_normalization(y, fused=True)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(y, {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # Would fail if there were two batch norms in the graph
       ok = [
@@ -475,7 +419,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/PopnnGroupNormInference/custom-call*/',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testGroupNormsMatchFwdBwd(self):
     with self.session() as sess:
@@ -492,13 +436,12 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               name='conv1')
           gamma = constant_op.constant([0.5, 0.5], np.float32)
           beta = constant_op.constant([0.5, 0.5], np.float32)
-          y, _, _ = gen_popnn_ops.popnn_group_norm_training(
-              inputs=y,
-              gamma=gamma,
-              beta=beta,
-              data_format="NHWC",
-              epsilon=0.0015,
-              num_groups=2)
+          y, _, _ = gen_popnn_ops.popnn_group_norm_training(inputs=y,
+                                                            gamma=gamma,
+                                                            beta=beta,
+                                                            data_format="NHWC",
+                                                            epsilon=0.0015,
+                                                            num_groups=2)
           y = convolutional.conv2d(
               y,
               2,
@@ -506,13 +449,12 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               use_bias=False,
               kernel_initializer=init_ops.ones_initializer(),
               name='conv2')
-          y, _, _ = gen_popnn_ops.popnn_group_norm_training(
-              inputs=y,
-              gamma=gamma,
-              beta=beta,
-              data_format="NHWC",
-              epsilon=0.0015,
-              num_groups=2)
+          y, _, _ = gen_popnn_ops.popnn_group_norm_training(inputs=y,
+                                                            gamma=gamma,
+                                                            beta=beta,
+                                                            data_format="NHWC",
+                                                            epsilon=0.0015,
+                                                            num_groups=2)
           y = convolutional.conv2d(
               y,
               2,
@@ -520,33 +462,26 @@ class NormGraphCachingTest(xla_test.XLATestCase):
               use_bias=False,
               kernel_initializer=init_ops.ones_initializer(),
               name='conv3')
-          y, _, _ = gen_popnn_ops.popnn_group_norm_training(
-              inputs=y,
-              gamma=gamma,
-              beta=beta,
-              data_format="NHWC",
-              epsilon=0.0015,
-              num_groups=2)
+          y, _, _ = gen_popnn_ops.popnn_group_norm_training(inputs=y,
+                                                            gamma=gamma,
+                                                            beta=beta,
+                                                            data_format="NHWC",
+                                                            epsilon=0.0015,
+                                                            num_groups=2)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log()
 
       # One GN for forwards and one GN for grad
       ok = [
@@ -561,8 +496,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/PopnnGroupNormTraining_2_grad/PopnnGroupNormGrad/custom-call*/',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*',
       ]
-
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testNormCacheConstants(self):
     with self.session() as sess:
@@ -571,10 +505,22 @@ class NormGraphCachingTest(xla_test.XLATestCase):
         scale = gen_array_ops.broadcast_to(z, shape=[65536])
         offset = scale
         b_mean, b_var = nn.moments(x, [0, 1, 2], name='moments')
-        a = nn.fused_batch_norm(
-            x, scale, offset, b_mean, b_var, 1e-3, is_training=False, name="a")
-        b = nn.fused_batch_norm(
-            y, scale, offset, b_mean, b_var, 1e-3, is_training=False, name="b")
+        a = nn.fused_batch_norm(x,
+                                scale,
+                                offset,
+                                b_mean,
+                                b_var,
+                                1e-3,
+                                is_training=False,
+                                name="a")
+        b = nn.fused_batch_norm(y,
+                                scale,
+                                offset,
+                                b_mean,
+                                b_var,
+                                1e-3,
+                                is_training=False,
+                                name="b")
 
         return a[0] + b[0]
 
@@ -582,29 +528,23 @@ class NormGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float16, [1, 1, 1, 65536], name="x")
         y = array_ops.placeholder(np.float16, [1, 1, 1, 65536], name="y")
         z = array_ops.placeholder(np.float16, shape=[1])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ops.device("/device:IPU:0"):
         res = ipu_compiler.compile(model, inputs=[x, y, z])
 
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
       tu.move_variable_initialization_to_cpu()
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       r = sess.run(res, {x: np.ones(x.shape), y: np.ones(y.shape), z: [1.0]})
       self.assertAllClose(r[0], np.full(r[0].shape, 2))
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-
-      max_tile_size = tu.get_maximum_tile_size_from_events(s)
-      self.assertAllInRange([max_tile_size], 15000, 20000)
-
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.assert_max_tile_memory_in_range(4000, 5500)
 
       # Would fail if there were two batch norms in the graph
       ok = [
@@ -616,7 +556,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'a/batch-norm-inference',
           'add/add*/AddTo',
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":

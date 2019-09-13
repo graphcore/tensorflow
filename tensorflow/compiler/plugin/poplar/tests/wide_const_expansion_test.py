@@ -4,23 +4,19 @@ from __future__ import print_function
 
 import os
 import numpy as np
-import test_utils as tu
 
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import nn
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.framework import constant_op
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class WideConstExpansionTest(xla_test.XLATestCase):
@@ -39,25 +35,19 @@ class WideConstExpansionTest(xla_test.XLATestCase):
         c = constant_op.constant(4, shape=shape, dtype=dtype, name="c")
         output = a + pb + c
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(execution_trace=False)
+      report = ReportJSON(self, sess)
+      report.reset()
 
       sess.run(variables.global_variables_initializer())
-      result = sess.run(report)
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      max_tile_size = tu.get_maximum_tile_size_from_events(s)
-      self.assertTrue(max_tile_size < 17000)
+      report.parse_log()
+      report.assert_max_tile_memory_in_range(10000, 12000)
 
       out = sess.run(output, {pb: np.ones(shape=shape, dtype=dtype)})
       self.assertAllClose(np.full(shape, 7, dtype=dtype), out)
-      result = sess.run(report)
-      s = tu.extract_all_strings_from_event_trace(result)
-      max_tile_size = tu.get_maximum_tile_size_from_events(s)
 
-      self.assertTrue(max_tile_size < 41000)
+      report.parse_log()
+      report.assert_max_tile_memory_in_range(30000, 33000)
 
   def testWideConstantWithAllocationTarget(self):
     with self.session() as sess:
@@ -66,7 +56,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       shape = (512, 2, 2048)
 
       def my_net(y):
-        def cond(i, x, y):
+        def cond(i, _x, _y):
           return i < 2
 
         def body(i, x, y):
@@ -82,37 +72,30 @@ class WideConstExpansionTest(xla_test.XLATestCase):
 
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
 
-      sess.run(report)
+      report = ReportJSON(self, sess, io_trace=False)
+      report.reset()
+
       y = sess.run(r, {y: [10]})
       self.assertAllClose(y[0], [19])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = [
           '__seed*', 'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice',
           'Mean/reduce', 'Mean/multiply', 'add*/add*/AddTo',
           'add_*/fusion/Op/Add'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
-      max_tile_size = tu.get_maximum_tile_size_from_events(s)
-      self.assertTrue(max_tile_size < 60000)
-      always_live_size = tu.get_always_live_size_from_events(s)
-      self.assertTrue(max_tile_size < 4500000)
+      report.assert_max_tile_memory_in_range(10000, 15000)
+      report.assert_always_live_memory_in_range(10000, 15000)
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

@@ -20,21 +20,16 @@ from __future__ import print_function
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
-from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
-from tensorflow.python.training import gradient_descent
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class MatMulGraphCachingTest(xla_test.XLATestCase):
@@ -54,28 +49,22 @@ class MatMulGraphCachingTest(xla_test.XLATestCase):
 
         mm1 = math_ops.matmul(in0_bcast, weights, name="mm1")
         mm2 = math_ops.matmul(in1, mm1, name="mm2")
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(True, True, True)
+      report = ReportJSON(self, sess)
       tu.move_variable_initialization_to_cpu()
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run(mm2, {in0: np.zeros(in0.shape), in1: np.zeros(in1.shape)})
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
+      report.assert_max_tile_memory_in_range(100000, 110000)
 
-      max_tile_size = tu.get_maximum_tile_size_from_events(s)
-      self.assertAllInRange([max_tile_size], 140000, 160000)
-
-      cs_list = tu.get_compute_sets_from_report(s)
       ok = ['__seed*', 'host-exchange-local-copy-', 'mm1/dot*', 'Copy_']
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":

@@ -83,51 +83,12 @@ def ipu_session():
     yield sess
 
 
-def get_total_memory_from_report(report):
-  lines = report.split('\n')
-  found = False
-  for l in lines:
-    if not found:
-      m = re.search('Memory Usage:', l)
-      if m:
-        found = True
-    else:
-      m = re.search('Including Gaps: +([\d,]+) B', l)
-      if m:
-        return int(m.group(1).replace(',', ''))
-  return None
-
-
 def get_compute_sets_from_report(report):
   lines = report.split('\n')
   cs = [x for x in lines if re.search(' OnTileExecute .*: ', x)]
   cs = [x.split(":")[1].strip() for x in cs]
   cs = [x.split()[0] for x in cs]
   return cs
-
-
-def get_maximum_tile_size_from_events(report):
-  lines = report.split('\n')
-  found = False
-  for l in lines:
-    if not found:
-      m = re.search('Memory Usage:', l)
-      if m:
-        found = True
-    else:
-      m = re.match(r' +Maximum.*: ([\d,]+) .*on tile [\d,]+', l)
-      if m:
-        return int(m.group(1).replace(',', ''))
-  return None
-
-
-def get_always_live_size_from_events(report):
-  lines = report.split('\n')
-  for l in lines:
-    m = re.match(r' +Always-live bytes: ([\d,]+)', l)
-    if m:
-      return int(m.group(1).replace(',', ''))
-  return None
 
 
 def check_compute_sets_not_in_blacklist(cs_list, bl):
@@ -228,6 +189,10 @@ class ReportJSON(object):
     return max(
         self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
 
+  def get_always_live_memory(self):
+    return sum(self.events[IpuTraceEvent.COMPILE_END]["memory"]["liveness"]
+               ["alwaysLive"]["bytesByTile"])
+
   def get_total_tile_memory(self):
     return sum(
         self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
@@ -251,6 +216,9 @@ class ReportJSON(object):
     self.test.assertAllInRange([self.get_total_tile_memory()], low, high)
 
   def assert_max_tile_memory_in_range(self, low, high):
+    self.test.assertAllInRange([self.get_max_tile_memory()], low, high)
+
+  def assert_always_live_memory_in_range(self, low, high):
     self.test.assertAllInRange([self.get_max_tile_memory()], low, high)
 
   # Asserts all the compute sets match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one compute set
