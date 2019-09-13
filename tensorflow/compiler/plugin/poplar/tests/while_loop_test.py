@@ -26,6 +26,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import momentum
 from tensorflow.python.platform import googletest
+import tensorflow as tf
 
 
 class WhileLoopTest(xla_test.XLATestCase):
@@ -359,6 +360,42 @@ class WhileLoopTest(xla_test.XLATestCase):
 
       self.assertAllClose(result[0], 1.0)
       self.assertAllClose(result[1], 4.0)
+
+  # This test is to ensure that the issue exposed by T10605 is fixed.
+  def testWhileLoopInplaceAlias(self):
+    def my_net():
+
+      coordinates = tf.constant(0.1, shape=[5], dtype=tf.float32)
+      ta = tf.TensorArray(
+          coordinates.dtype, coordinates.get_shape()[0],
+          element_shape=[]).unstack(coordinates)
+
+      def loop_body(i, summation):
+        factor = 0.5
+        summand = ta.read(i) * factor * tf.constant(1., shape=[2])
+        # if we don't use the TensorArray but just hardcode the constant 0.01 the problem goes away
+        return tf.add(i, 1), tf.add(summation, summand)
+
+      return tf.while_loop(
+          cond=lambda i, _: i < 5,
+          body=loop_body,
+          loop_vars=(tf.constant(0, dtype=tf.int32),
+                     tf.constant(0.0, shape=[2], dtype=tf.float32)))[1]
+
+    # Checks that the 'add' is not in-place. Output 0 is an identical
+    # copy of input 1, and output 1 is not an alias of anything.
+    # Output 1 is the result of the add.
+    with self.session() as sess:
+
+      with ops.device('cpu'):
+        offset = array_ops.placeholder(np.float32, [])
+
+      with ops.device("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(my_net)
+
+      result = sess.run(res)
+      print(result)
+      self.assertAllClose(result[0], [0.25, 0.25])
 
 
 if __name__ == "__main__":

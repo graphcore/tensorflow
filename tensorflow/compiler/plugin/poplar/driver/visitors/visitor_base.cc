@@ -20,6 +20,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
@@ -49,6 +51,7 @@ limitations under the License.
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
 #include <popsys/CSRFunctions.hpp>
+#include <poputil/Util.hpp>
 
 using tensorflow::str_util::StartsWith;
 
@@ -249,12 +252,27 @@ Status BaseVisitor::HandleSort(HloInstruction* inst) {
 
 Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  poplar::Graph& graph = GetGraph(resources_, inst);
 
+  poplar::Graph& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor t,
       AddConstantTensor(graph, std::make_pair(inst, 0), GetOutputShape(inst),
                         inst->literal(), resources_, tensor_map));
+
+  // If this constant is used inplace then we need to add a copy and use that
+  // instead so the original constant value is always preserved.
+  bool is_inplace_read_write = IsOutputModifiedInplace(inst);
+  if (is_inplace_read_write && t.numElements() != 0) {
+    VLOG(1) << "Constant tensor is read/write inplace, adding copy";
+    poplar::program::Sequence prog;
+    poplar::Tensor clone = poputil::duplicate(
+        graph, t, prog, GetDebugName(inst) + ".clone",
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+
+    sequence.add(prog);
+    t = clone;
+  }
+
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, t));
   return Status::OK();
 }
