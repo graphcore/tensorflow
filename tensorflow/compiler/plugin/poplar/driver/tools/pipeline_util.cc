@@ -235,6 +235,38 @@ Status VerifyPipelineAfterFixing(HloInstruction* pipeline_op) {
   return Status::OK();
 }
 
+StatusOr<bool> InsertGTEEdges(PipelineStages& pipeline_stages) {
+  bool added_edges = false;
+  for (auto& stages : {pipeline_stages.forward, pipeline_stages.backward}) {
+    for (HloInstruction* stage : stages) {
+      HloComputation* comp = stage->parent();
+      std::vector<HloInstruction*> users = stage->users();
+      for (HloInstruction* user : users) {
+        // User is a GTE, we don't need to do anything.
+        if (user->opcode() == HloOpcode::kGetTupleElement) {
+          continue;
+        }
+        // User is not a GTE, insert a GTE for each tuple element.
+        int64 num_elements = ShapeUtil::TupleElementCount(stage->shape());
+        std::vector<HloInstruction*> gtes(num_elements);
+        for (int64 tuple_index = 0; tuple_index != num_elements;
+             ++tuple_index) {
+          TF_ASSIGN_OR_RETURN(gtes[tuple_index],
+                              MakeGetTupleElementHlo(stage, tuple_index));
+        }
+        // Create a tuple.
+        HloInstruction* tuple =
+            comp->AddInstruction(HloInstruction::CreateTuple(gtes));
+
+        // Replace the usage of stage with the new tuple.
+        TF_RETURN_IF_ERROR(stage->ReplaceUseWith(user, tuple));
+        added_edges = true;
+      }
+    }
+  }
+  return added_edges;
+}
+
 StatusOr<bool> DuplicateGTEEdges(PipelineStages& pipeline_stages) {
   bool added_edges = false;
   for (auto& stages : {pipeline_stages.forward, pipeline_stages.backward}) {
@@ -244,7 +276,9 @@ StatusOr<bool> DuplicateGTEEdges(PipelineStages& pipeline_stages) {
         // We expect GTEs because we did the TF2XLA lowering.
         if (gte->opcode() != HloOpcode::kGetTupleElement) {
           return FailedPrecondition(
-              "Expected user of a PipelineStage(Backward) to be a GTE.");
+              "Expected user of a PipelineStage(Backward) to be a GTE, but got "
+              "%s instead.",
+              gte->ToString());
         }
         if (gte->user_count() == 1) {
           continue;
@@ -288,30 +322,6 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages) {
 }
 
 namespace {
-// Tidy function to remove any dangling outputs.
-Status RemovePipelineStageDeadUsers(HloInstruction* pipeline_stage) {
-  CHECK(IsPipelineStageOrBackwardOp(pipeline_stage));
-  std::vector<HloInstruction*> users = pipeline_stage->users();
-  HloComputation* comp = pipeline_stage->parent();
-  for (HloInstruction* gte : users) {
-    CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
-    absl::optional<HloInstruction*> to_remove;
-    if (gte->user_count() == 0) {
-      to_remove = gte;
-    } else {
-      CHECK_EQ(gte->user_count(), 1);
-      HloInstruction* gte_user = gte->users()[0];
-      if (gte_user->user_count() == 0 && comp->root_instruction() != gte_user) {
-        to_remove = gte_user;
-      }
-    }
-    if (to_remove) {
-      TF_RETURN_IF_ERROR(comp->RemoveInstructionAndUnusedOperands(*to_remove));
-    }
-  }
-  return Status::OK();
-}
-
 // Replace pipeline stage with a new one with a new computation.
 StatusOr<HloInstruction*> ReplacePipelineStageWith(
     HloInstruction* stage, std::unique_ptr<HloComputation> new_computation,
@@ -595,7 +605,6 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
       TF_RETURN_IF_ERROR(pipeline_computation->ForceRemoveInstruction(*itr));
     }
   }
-  TF_RETURN_IF_ERROR(RemovePipelineStageDeadUsers(new_stage));
 
   return new_stage;
 }
@@ -969,12 +978,7 @@ Status PipelineDataflowAnalysis::VerifyPipelineStageOperands(
     switch (producer->opcode()) {
       case HloOpcode::kParameter: {
         TF_RETURN_IF_ERROR(VerifyParameterUsage(producer, pipeline_stage));
-        // A parameter can only be lowered if it was used in the fwd
-        // stage.
-        const HloInstruction* fwd_stage = pipeline_stages_.forward[stage_id.id];
-        if (fwd_stage->IsUserOf(producer)) {
-          break;
-        }
+        break;
       }
       case HloOpcode::kCall: {
         if (IsPipelineStageOrBackwardOp(producer)) {

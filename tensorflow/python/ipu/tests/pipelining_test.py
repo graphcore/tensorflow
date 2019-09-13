@@ -351,7 +351,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     def dataset_parser(value):
       a = value
       b = (value + 10.) / 2.0
-      return {"a": a, "b": b}
+      idx = value[0][0][0][0]
+      return {"a": a, "b": b, "idx": idx}
 
     dataset = dataset.map(dataset_parser)
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
@@ -365,18 +366,18 @@ class PipeliningTest(test_util.TensorFlowTestCase):
             use_bias=True,
             kernel_initializer=init_ops.ones_initializer(),
             name='conv1')(kwargs["a"])
-        return y + kwargs["b"], c
+        return y + kwargs["b"], c, kwargs["idx"]
 
-    def stage2(x, c):
-      return x, c
+    def stage2(x, c, idx):
+      return x, c, idx
 
-    def stage3(x, c):
-      return layers.Dense(2)(x), c
+    def stage3(x, c, idx):
+      return layers.Dense(2)(x), c, idx
 
-    def stage4(x, c):
-      return math_ops.reduce_sum(layers.Dense(2)(x)) + c
+    def stage4(x, c, idx):
+      return math_ops.reduce_sum(layers.Dense(2)(x)) + c, idx
 
-    def optimizer_stage(loss):
+    def optimizer_stage(loss, idx):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
 
       grads = gradients_impl.gradients(loss, variables.trainable_variables())
@@ -384,7 +385,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       grads = [(clip_ops.clip_by_value(grad, -1., 1.), var)
                for grad, var in grads]
 
-      return loss, opt.apply_gradients(grads_and_vars=grads)
+      return loss, idx, opt.apply_gradients(grads_and_vars=grads)
 
     def my_net(c):
       return pipelining_ops.pipeline([stage1, stage2, stage3, stage4],
@@ -408,7 +409,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[-17.136309]])
+      self.assertAllClose(losses_pipeline, [[-17.136309], [0]])
 
 
 if __name__ == "__main__":

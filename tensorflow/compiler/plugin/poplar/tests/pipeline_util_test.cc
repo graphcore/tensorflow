@@ -490,6 +490,44 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisNoOpsToLower) {
   }
 }
 
+TEST_F(PipelineUtilTest, InsertGTEEdgesTest) {
+  std::string hlo = R"(
+HloModule top
+
+comp_0 {
+  param = f32[1,4,4,2] parameter(0)
+  ROOT t = (f32[1,4,4,2]) tuple(param)
+}
+
+comp_1 {
+  ROOT param = (f32[1,4,4,2]) parameter(0)
+}
+
+pipeline {
+  weights0 = f32[1,4,4,2] parameter(0)
+  stage_0 = (f32[1,4,4,2]) call(weights0), to_apply=comp_0, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  stage_1 = (f32[1,4,4,2]) call(stage_0), to_apply=comp_1, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  ROOT t = () tuple()
+}
+
+ENTRY e {
+  weights = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  ROOT t = () call(weights), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+  HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
+
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+  EXPECT_EQ(stages.forward[1]->operand(0), stages.forward[0]);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, InsertGTEEdges(stages));
+  EXPECT_TRUE(changed);
+  EXPECT_EQ(stages.forward[1]->operand(0)->opcode(), HloOpcode::kTuple);
+}
+
 TEST_F(PipelineUtilTest, DuplicateGTEEdgesTestNoDuplication) {
   std::string hlo = GetCorrectPipelineStages();
   auto config = GetModuleConfigForTest();

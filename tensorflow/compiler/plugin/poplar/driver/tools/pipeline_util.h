@@ -71,6 +71,10 @@ Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages);
 // instructions have been lowered. Ignores sharding.
 Status VerifyPipelineAfterFixing(HloInstruction* pipeline_op);
 
+// A function which makes sure that every user of a pipeline stage is a GTE by
+// inserting GTEs and tuples into the graph.
+StatusOr<bool> InsertGTEEdges(PipelineStages& pipeline_stages);
+
 // A function which makes sure there are unique output edges for each output of
 // a pipeline stage.
 // This makes the analysis easier as we ever only need to consider a single use

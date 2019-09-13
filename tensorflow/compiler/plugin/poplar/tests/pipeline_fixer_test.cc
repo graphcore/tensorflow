@@ -723,6 +723,82 @@ ENTRY e {
 
   EXPECT_TRUE(IsPipelineOk(stages));
 }
+
+TEST_F(PipelineFixerTest, TestClusterWithMultipleOutputs) {
+  std::string hlo = R"(
+HloModule top
+
+add_float {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT a = f32[] add(f32[] x, f32[] y)
+}
+
+stage_0_fwd {
+  stage_0_fwd_t = token[] after-all()
+  stage_0_fwd_infeed = (f32[1,4,4,2], token[]) infeed(stage_0_fwd_t)
+  stage_0_fwd_input = f32[1,4,4,2] get-tuple-element(stage_0_fwd_infeed), index=0
+  stage_0_fwd_weights0 = f32[1,4,4,2] parameter(0)
+  stage_0_fwd_acts_0 = f32[1,4,4,2] add(stage_0_fwd_input, stage_0_fwd_weights0)
+  ROOT stage_0_fwd_tuple = (f32[1,4,4,2]) tuple(stage_0_fwd_acts_0)
+}
+
+stage_1_fwd {
+  stage_1_fwd_acts_0 = f32[1,4,4,2] parameter(0)
+  stage_1_fwd_weights1 = f32[1,4,4,2] parameter(1)
+  stage_1_fwd_acts_1 = f32[1,4,4,2] add(stage_1_fwd_acts_0, stage_1_fwd_weights1)
+  stage_1_fwd_zero = f32[] constant(0)
+  one = f32[] constant(1)
+  bcast = f32[1,4,4,2] broadcast(one), dimensions={}
+  add = f32[1,4,4,2] add(bcast, stage_1_fwd_weights1)
+  stage_1_fwd_reduce = f32[] reduce(stage_1_fwd_acts_1, stage_1_fwd_zero), dimensions={0,1,2,3}, to_apply=add_float
+  ROOT stage_1_fwd_tuple = (f32[], f32[1,4,4,2]) tuple(stage_1_fwd_reduce, add)
+}
+
+pipeline_wrapper {
+  pipeline_weights0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  pipeline_acts_0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_weights1 = f32[1,4,4,2] parameter(1)
+  pipeline_stage_1 = (f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  gte0 = f32[] get-tuple-element(pipeline_stage_1), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
+  outfeed_tuple = (f32[], f32[1,4,4,2]) tuple(gte0, gte1)
+  outfeed_token = token[] after-all()
+  outfeed = () outfeed(outfeed_tuple, outfeed_token)
+  ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(gte1)
+}
+
+pipeline {
+  pipeline_weights0 = f32[1,4,4,2] parameter(0)
+  pipeline_weights1 = f32[1,4,4,2] parameter(1)
+  call = (f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1), to_apply=pipeline_wrapper
+  gte = f32[1,4,4,2] get-tuple-element(call), index=0
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0, gte)
+}
+
+ENTRY e {
+  e.weights0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.weights1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.weights0, e.weights1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  ROOT gte = f32[1,4,4,2] get-tuple-element(e.call), index=1
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  HloComputation* pipeline_computation =
+      FindComputation(module.get(), "pipeline");
+  PipelineFixer fixer;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, fixer.Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+
+  EXPECT_TRUE(IsPipelineOk(stages));
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

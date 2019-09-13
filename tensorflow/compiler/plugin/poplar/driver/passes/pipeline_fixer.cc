@@ -135,6 +135,22 @@ StatusOr<std::vector<HloInstruction*>> FindClusterToLower(
   TF_RETURN_IF_ERROR(analysis->VerifyPipelineStageOperands(stage, value_set));
   return ordered_lowering;
 }
+
+// Tidy function to remove any dangling outputs from a stage and prevent use
+// after free.
+Status RemovePipelineStageDeadUsers(
+    HloInstruction* stage, absl::flat_hash_set<HloInstruction*>& stage_users) {
+  std::vector<HloInstruction*> users = stage->users();
+  HloComputation* comp = stage->parent();
+  for (HloInstruction* gte : users) {
+    CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
+    if (gte->user_count() == 0) {
+      stage_users.erase(gte);
+      TF_RETURN_IF_ERROR(comp->RemoveInstruction(gte));
+    }
+  }
+  return Status::OK();
+}
 }  // namespace
 
 // Lowers any outputs of the stage into the stage.
@@ -185,6 +201,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
           stage, AddInstructionsToPipelineStage(stage, ordered_lowering));
 
       TF_RETURN_IF_ERROR(UpdateStage(stage_id, stage));
+      TF_RETURN_IF_ERROR(RemovePipelineStageDeadUsers(stage, stage_users));
       // Recompute the analysis.
       TF_ASSIGN_OR_RETURN(analysis,
                           PipelineDataflowAnalysis::GetAnalysis(stages_));
@@ -410,6 +427,7 @@ StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
           stage, AddInstructionsToPipelineStage(stage, ordered_lowering));
 
       TF_RETURN_IF_ERROR(UpdateStage(stage_id, stage));
+      TF_RETURN_IF_ERROR(RemovePipelineStageDeadUsers(stage, params_users));
       // Recompute the analysis.
       TF_ASSIGN_OR_RETURN(analysis,
                           PipelineDataflowAnalysis::GetAnalysis(stages_));
@@ -489,6 +507,8 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   HloDCE dce;
   TF_RETURN_IF_ERROR(dce.Run(pipeline_op->GetModule()).status());
 
+  // Insert GTE edges such that every user of a stage is a GTE.
+  TF_RETURN_IF_ERROR(InsertGTEEdges(stages_).status());
   // Duplicate edges - this makes analysis easier.
   TF_RETURN_IF_ERROR(DuplicateGTEEdges(stages_).status());
   // Uniquify computations called by stages.
