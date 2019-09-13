@@ -30,6 +30,7 @@ limitations under the License.
 #include "absl/strings/str_split.h"
 
 #include <poputil/TileMapping.hpp>
+
 namespace xla {
 namespace poplarplugin {
 namespace {
@@ -143,6 +144,40 @@ class UserOpImpl : public PoplibsOpDef {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
     }
     return seq;
+  }
+
+  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
+                                     CompilerResources& res,
+                                     const std::string& name,
+                                     const TensorTarget& tensor_target,
+                                     const TensorMap& tensor_map) override {
+    const HloInstruction* inst = tensor_target.tgt;
+    const int64 input_index = tensor_target.input_index;
+
+    const HloUserOpInstruction* user_op =
+        dynamic_cast<const HloUserOpInstruction*>(inst);
+
+    // This should never fail.
+    assert(user_op &&
+           "Attemping to call user op allocator but op is not a user op");
+    if (!user_op) {
+      return Status{
+          tensorflow::error::Code::INTERNAL,
+          "Attemping to call user op allocator but op is not a user op"};
+    }
+
+    // It is valid to not have an allocator function.
+    void* allocator_func = user_op->GetAllocatorFunc();
+    if (!allocator_func) {
+      return Status::OK();
+    }
+
+    // Convert into a function pointer.
+    poplar::Tensor (*allocatorSig)(std::int64_t);
+    allocatorSig = reinterpret_cast<decltype(allocatorSig)>(allocator_func);
+
+    // Return the tensor via user specified function.
+    return allocatorSig(input_index);
   }
 };
 

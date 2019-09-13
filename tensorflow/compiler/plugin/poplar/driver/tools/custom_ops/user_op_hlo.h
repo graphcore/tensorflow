@@ -37,6 +37,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   void* GetPointerToFunc() const { return function_ptr_; }
 
+  void* GetAllocatorFunc() const { return allocator_function_ptr_; }
+
   const std::string& GetPath() const { return gp_path; }
 
   bool IsGradient() const { return is_gradient_; }
@@ -53,16 +55,32 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   // The pointer to the function provided by the user via the shared library.
   void* function_ptr_;
 
-  // The pointer to the function provided by the user via the shared library.
-  void* elementwise_ptr_;
+  // The pointer to the metadata, if provided by the user, via the shared
+  // library.
+  void* metadata_function_ptr_;
 
-  // The pointer to the function provided by the user via the shared library.
-  void* allocate_input_ptr_;
+  // The pointer to the allocation function, if provided by the user, via the
+  // shared library.
+  void* allocator_function_ptr_;
 
   // The number of inputs to this operation.
   size_t num_inputs_;
 
   std::string gp_path;
+
+  struct MetadataStructure {
+    MetadataStructure()
+        : allocating_indices_({}),
+          layout_dependencies_({}),
+          num_inplace_(0),
+          is_elementwise_(false) {}
+    std::unordered_set<std::int64_t> allocating_indices_;
+    std::unordered_map<std::int64_t, std::int64_t> layout_dependencies_;
+    std::uint32_t num_inplace_;
+    bool is_elementwise_;
+  };
+
+  MetadataStructure metadata_;
 
   bool is_gradient_;
 };

@@ -116,15 +116,19 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
                      errors::InvalidArgument("Couldn't read " + op_name +
                                              " symbol from library"));
     }
+
+    int64 metadata_fn_ptr =
+        GetSymbolAddressAsInt64(library, op_name + "_metadata");
+
+    int64 allocator_fn_ptr =
+        GetSymbolAddressAsInt64(library, op_name + "_allocator");
+
     attribute_map_.AddAttribute("operation_fn", fn_ptr);
 
+    attribute_map_.AddAttribute("metadata_function", metadata_fn_ptr);
+
+    attribute_map_.AddAttribute("allocator_function", allocator_fn_ptr);
     attribute_map_.AddAttribute("is_gradient", is_gradient);
-
-    attribute_map_.AddAttribute(
-        "elementwise_fn", GetSymbolAddressAsInt64(library, "IsElementWise"));
-
-    attribute_map_.AddAttribute(
-        "allocate_input_fn", GetSymbolAddressAsInt64(library, "AllocateInput"));
 
     attribute_map_.AddAttribute("gp_path", gp_path);
 

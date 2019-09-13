@@ -24,40 +24,61 @@ namespace poplarplugin {
 
 HloUserOpInstruction::HloUserOpInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
-    const std::string& path, void* fn_ptr, void* elementwise_fn_ptr,
-    void* allocate_input_fn_ptr, bool is_gradient)
+    const std::string& path, void* fn_ptr, void* metadata_fn_ptr,
+    void* allocator_function_ptr, bool is_gradient)
     : HloPoplarInstruction(
           shape, inputs,
           GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::UserOp),
-          fn_ptr, elementwise_fn_ptr, allocate_input_fn_ptr, path, is_gradient),
+          fn_ptr, metadata_fn_ptr, allocator_function_ptr, path, is_gradient),
       function_ptr_(fn_ptr),
-      elementwise_ptr_(elementwise_fn_ptr),
-      allocate_input_ptr_(allocate_input_fn_ptr),
+      metadata_function_ptr_(metadata_fn_ptr),
+      allocator_function_ptr_(allocator_function_ptr),
       gp_path(path),
       is_gradient_(is_gradient) {
   set_custom_call_has_side_effect(true);
   num_inputs_ = inputs.size();
+
+  // If there is a metadata function, call it to populate the metadata_ struct.
+  if (metadata_function_ptr_ != nullptr) {
+    void (*metadataSignature)(
+        std::unordered_set<std::int64_t> & allocating_indices,
+        std::unordered_map<std::int64_t, std::int64_t> & layout_dependencies,
+        std::uint32_t & num_inplace, bool& is_elementwise,
+        std::uint32_t num_inputs);
+
+    metadataSignature =
+        reinterpret_cast<decltype(metadataSignature)>(metadata_function_ptr_);
+
+    metadataSignature(metadata_.allocating_indices_,
+                      metadata_.layout_dependencies_, metadata_.num_inplace_,
+                      metadata_.is_elementwise_, num_inputs_);
+  }
 }
 
 absl::flat_hash_set<int64> HloUserOpInstruction::AllocatingIndices() const {
-  return {};
+  absl::flat_hash_set<int64> set;
+  for (std::int64_t i : metadata_.allocating_indices_) {
+    set.insert({i});
+  }
+  return set;
 }
 
 absl::flat_hash_map<int64, int64> HloUserOpInstruction::LayoutDependencies()
     const {
-  return {};
+  absl::flat_hash_map<int64, int64> map;
+
+  for (auto& pair : metadata_.layout_dependencies_) {
+    map[pair.first] = pair.second;
+  }
+  return map;
 }
 
-uint64 HloUserOpInstruction::NumberOfInplaceOperands() const { return 0; }
+uint64 HloUserOpInstruction::NumberOfInplaceOperands() const {
+  return metadata_.num_inplace_;
+}
 
 bool HloUserOpInstruction::IsPopOpsElementwise() const {
-  bool (*ElementwiseFn)();
-
-  if (elementwise_ptr_ != nullptr) {
-    return reinterpret_cast<decltype(ElementwiseFn)>(elementwise_ptr_)();
-  } else {
-    return false;
-  }
+  return metadata_.is_elementwise_;
 }
 
 std::vector<string> HloUserOpInstruction::ExtraPoplarAttributesToStringImpl(
@@ -67,19 +88,24 @@ std::vector<string> HloUserOpInstruction::ExtraPoplarAttributesToStringImpl(
   std::string function_ptr_address = ss.str();
   ss.clear();
 
-  ss << elementwise_ptr_;
-  std::string elementwise_ptr_address = ss.str();
+  ss << metadata_function_ptr_;
+  std::string metadata_ptr_address = ss.str();
   ss.clear();
 
-  ss << allocate_input_ptr_;
-  std::string allocate_input_ptr_address = ss.str();
+  ss << allocator_function_ptr_;
+  std::string allocator_ptr_address = ss.str();
+  ss.clear();
 
   std::vector<string> attributes;
   attributes.push_back(absl::StrCat("function_ptr=", function_ptr_address));
+  attributes.push_back(absl::StrCat("metadata_ptr=", metadata_ptr_address));
+  attributes.push_back(absl::StrCat("allocator_ptr=", allocator_ptr_address));
+
   attributes.push_back(
-      absl::StrCat("elementwise_ptr_=", elementwise_ptr_address));
+      absl::StrCat("metadata_.is_elementwise_=", metadata_.is_elementwise_));
   attributes.push_back(
-      absl::StrCat("allocate_input_ptr_=", allocate_input_ptr_address));
+      absl::StrCat("metadata_.num_inplace_=", metadata_.num_inplace_));
+
   attributes.push_back(absl::StrCat("num_inputs_=", num_inputs_));
   attributes.push_back(absl::StrCat("gp_path=", gp_path));
 
@@ -90,16 +116,17 @@ std::unique_ptr<HloInstruction> HloUserOpInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
   return CreateUserOp(new_operands, shape, GetPath(), function_ptr_,
-                      elementwise_ptr_, allocate_input_ptr_, is_gradient_);
+                      metadata_function_ptr_, allocator_function_ptr_,
+                      is_gradient_);
 }
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
-    const std::string& gp_path, void* function_ptr, void* elementwise_fn,
-    void* allocate_fn, bool is_gradient) {
-  return absl::make_unique<HloUserOpInstruction>(inputs, shape, gp_path,
-                                                 function_ptr, elementwise_fn,
-                                                 allocate_fn, is_gradient);
+    const std::string& gp_path, void* function_ptr, void* metadata_function_ptr,
+    void* allocator_function_ptr, bool is_gradient) {
+  return absl::make_unique<HloUserOpInstruction>(
+      inputs, shape, gp_path, function_ptr, metadata_function_ptr,
+      allocator_function_ptr, is_gradient);
 }
 
 namespace {
@@ -114,14 +141,16 @@ static HloPoplarInstructionFactory user_op_factory(
                           attribute_map.GetAttributeAsUInt64("operation_fn"));
       void* operation_fn_ptr = reinterpret_cast<void*>(operation_fn);
 
-      TF_ASSIGN_OR_RETURN(uint64 elementwise_fn,
-                          attribute_map.GetAttributeAsUInt64("elementwise_fn"));
-      void* elementwise_fn_ptr = reinterpret_cast<void*>(elementwise_fn);
+      TF_ASSIGN_OR_RETURN(
+          uint64 metadata_function,
+          attribute_map.GetAttributeAsUInt64("metadata_function"));
+      void* metadata_function_ptr = reinterpret_cast<void*>(metadata_function);
 
       TF_ASSIGN_OR_RETURN(
-          uint64 allocate_input_fn,
-          attribute_map.GetAttributeAsUInt64("allocate_input_fn"));
-      void* allocate_input_fn_ptr = reinterpret_cast<void*>(allocate_input_fn);
+          uint64 allocator_function,
+          attribute_map.GetAttributeAsUInt64("allocator_function"));
+      void* allocator_function_ptr =
+          reinterpret_cast<void*>(allocator_function);
 
       TF_ASSIGN_OR_RETURN(std::string gp_path,
                           attribute_map.GetAttributeAsString("gp_path"));
@@ -130,8 +159,8 @@ static HloPoplarInstructionFactory user_op_factory(
                           attribute_map.GetAttributeAsBool("is_gradient"));
 
       return CreateUserOp(call->operands(), call->shape(), gp_path,
-                          operation_fn_ptr, elementwise_fn_ptr,
-                          allocate_input_fn_ptr, is_gradient);
+                          operation_fn_ptr, metadata_function_ptr,
+                          allocator_function_ptr, is_gradient);
     });
 }  // namespace
 

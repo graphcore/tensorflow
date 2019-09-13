@@ -396,6 +396,24 @@ cc_binary(
     ],
 )
 
+cc_binary(
+	  name = "libadd_incrementing_custom_with_metadata.so",
+	  srcs = ["tests/add_incrementing_custom_with_metadata.cc"],
+ 	  copts = ["-fexceptions"],
+	  nocopts = "-fno-exceptions",
+    deps = [
+        "@local_config_poplar//poplar:poplar_headers",
+    ],
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
+    ],
+    linkshared = True,
+    data = [
+        "@local_config_poplar//poplar:poplar_lib",
+    ],
+)
 tf_py_test(
     name = "user_ops_test",
     size = "small",
@@ -413,6 +431,7 @@ tf_py_test(
     ],
     data = [
         ":libadd_incrementing_custom.so",
+        ":libadd_incrementing_custom_with_metadata.so",
     ],
 )
 

@@ -716,6 +716,25 @@ cc_library(
     alwayslink = True,
 )
 
+cc_binary(
+	  name = "libuser_op_test.so",
+	  srcs = ["tests/user_op_test_target.cc"],
+ 	  copts = ["-fexceptions"],
+	  nocopts = "-fno-exceptions",
+    deps = [
+        "@local_config_poplar//poplar:poplar_headers",
+    ],
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
+    ],
+    linkshared = True,
+    data = [
+        "@local_config_poplar//poplar:poplar_lib",
+    ],
+)
+
 cc_library(
     name = "poplar_backend",
     srcs = [
@@ -1321,6 +1340,22 @@ xla_test(
         "//tensorflow/core:lib",
         "//tensorflow/core:test",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
+    name = "user_op_internal_test",
+    srcs = ["tests/user_op_internal_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    linkopts = ["-lstdc++fs"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        ":libuser_op_test.so",
     ],
 )
 

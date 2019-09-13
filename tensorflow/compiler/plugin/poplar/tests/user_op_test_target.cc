@@ -29,36 +29,26 @@ extern "C" poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
     std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
   poplar::program::Sequence seq;
-
-  outputs.resize(inputs.size());
-
-  float i = 1.0f;
-  std::transform(inputs.begin(), inputs.end(), outputs.begin(),
-                 [&](const poplar::Tensor& input) {
-                   return popops::map(graph, pe::Add(pe::_1, pe::Const(i++)),
-                                      {input}, seq);
-                 });
-
   return seq;
 }
 
-// Custom poplar kernel.
-extern "C" poplar::program::Program Build_grad(
-    poplar::Graph& graph, const std::vector<poplar::Tensor>& gradients,
-    const std::vector<poplar::Tensor>& old_outputs,
-    const std::vector<poplar::Tensor>& old_inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
-  poplar::program::Sequence seq;
+extern "C" void Build_metadata(
+    std::unordered_set<std::int64_t>& allocating_indices,
+    std::unordered_map<std::int64_t, std::int64_t>& layout_dependencies,
+    std::uint32_t& num_inplace, bool& is_elementwise,
+    std::uint32_t num_inputs) {
+  num_inplace = 12;
+  is_elementwise = true;
 
-  outputs.resize(gradients.size());
+  allocating_indices.insert(0);
+  allocating_indices.insert(1);
+  allocating_indices.insert(2);
+  allocating_indices.insert(3);
 
-  float i = 1.0f;
-  std::transform(
-      gradients.begin(), gradients.end(), outputs.begin(),
-      [&](const poplar::Tensor& input) {
-        seq.add(poplar::program::PrintTensor(std::to_string(i), input));
-        return popops::map(graph, pe::Mul(pe::_1, pe::Const(i++)), {input},
-                           seq);
-      });
-  return seq;
+  layout_dependencies[0] = 2;
+  layout_dependencies[1] = 3;
+}
+
+extern "C" poplar::Tensor Build_allocator(std::uint32_t operand) {
+  return poplar::Tensor{};
 }
