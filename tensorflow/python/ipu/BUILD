@@ -72,6 +72,7 @@ py_library(
         "ipu_compiler.py",
         "ipu_estimator.py",
         "ipu_infeed_queue.py",
+        "ipu_multi_worker_strategy.py",
         "ipu_optimizer.py",
         "ipu_outfeed_queue.py",
         "ipu_run_config.py",
@@ -292,6 +293,15 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "ipu_multi_worker_strategy_test",
+    size = "small",
+    srcs = ["tests/ipu_multi_worker_strategy_test.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
 py_test(
     name = "pop_datastream_test",
     size = "small",
@@ -449,6 +459,7 @@ test_suite(
         "infeed_outfeed_test",
         "ipu_compiler_test",
         "ipu_estimator_test",
+        "ipu_multi_worker_strategy_test",
         "map_gradient_optimizer_test",
         "pipelining_test",
         "pop_datastream_test",

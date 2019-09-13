@@ -21,6 +21,7 @@ from tensorflow.python.ipu import autoshard_cnn
 from tensorflow.python.ipu import gradient_accumulation_optimizer
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
+from tensorflow.python.ipu import ipu_multi_worker_strategy
 from tensorflow.python.ipu import ipu_optimizer
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import ipu_run_config
