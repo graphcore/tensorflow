@@ -159,7 +159,7 @@ def set_compilation_options(opts, compilation_options=None):
       # Create a device with debug execution profile flag set to "compute_sets"
       opts = create_ipu_config()
       opts = set_compilation_options(opts,
-          compilation_options={"debug.executionProfile": "compute_sets",
+          compilation_options={"debug.instrumentCompute": "true",
                                "target.workerStackSizeInBytes": "64"})
       ipu.utils.configure_ipu_system(cfg)
       with tf.Session() as s:
