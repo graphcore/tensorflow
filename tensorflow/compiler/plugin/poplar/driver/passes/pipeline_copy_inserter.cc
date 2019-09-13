@@ -27,13 +27,30 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+StatusOr<bool> AddCopyIfParamterModifiedInplace(HloInstruction* call,
+                                                int64 parameter_index) {
+  HloComputation* comp = call->to_apply();
+  HloInstruction* parameter = comp->parameter_instruction(parameter_index);
+  if (IsOutputModifiedInplace(parameter)) {
+    // Insert a copy from the the parameter.
+    HloInstruction* copy = comp->AddInstruction(HloInstruction::CreateUnary(
+        parameter->shape(), HloOpcode::kCopy, parameter));
+    parameter->SetupDerivedInstruction(copy);
+    TF_RETURN_IF_ERROR(parameter->ReplaceAllUsesWith(copy));
+    return true;
+  }
+  return false;
+}
+}  // namespace
 
 StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
     HloInstruction* pipeline_op) {
   bool changed = false;
   HloComputation* pipeline_comp = pipeline_op->to_apply();
+  HloInstruction* root = pipeline_comp->root_instruction();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // We only do this for the forward stages.
+  // We first make sure that forward stages do not modify parameters inplace.
   for (HloInstruction* stage : stages.forward) {
     HloComputation* stage_comp = stage->to_apply();
     // Go through all the operands to the stage, and insert copies if necessary
@@ -46,15 +63,37 @@ StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
       if (stage->operand(op_idx)->opcode() != HloOpcode::kParameter) {
         continue;
       }
-      HloInstruction* parameter = stage_comp->parameter_instruction(op_idx);
-      if (IsOutputModifiedInplace(parameter)) {
-        // Insert a copy from the the parameter.
-        HloInstruction* copy =
-            stage_comp->AddInstruction(HloInstruction::CreateUnary(
-                parameter->shape(), HloOpcode::kCopy, parameter));
-        parameter->SetupDerivedInstruction(copy);
-        TF_RETURN_IF_ERROR(parameter->ReplaceAllUsesWith(copy));
-        changed = true;
+      TF_ASSIGN_OR_RETURN(bool added,
+                          AddCopyIfParamterModifiedInplace(stage, op_idx));
+      changed |= added;
+    }
+  }
+  // Secondly, we make sure that if a parameter of the pipeline is an output
+  // of the pipeline as well then it is not modified. TF2XLA lowering of
+  // pipelines expects these to not be modified.
+  if (root->operand_count() != pipeline_comp->num_parameters()) {
+    return FailedPrecondition(
+        "Expected the Pipeline to have %d outputs, but has %d",
+        root->operand_count(), pipeline_comp->num_parameters());
+  }
+  for (int64 param_idx = 0; param_idx != pipeline_comp->num_parameters();
+       ++param_idx) {
+    HloInstruction* param_inst =
+        pipeline_comp->parameter_instruction(param_idx);
+    if (root->operand(param_idx) != param_inst) {
+      // Don't need to do anything, the value is modified.
+      continue;
+    }
+    for (HloInstruction* user : param_inst->users()) {
+      if (user == root) {
+        continue;
+      }
+      CHECK(IsPipelineStageOrBackwardOp(user));
+      // Go through each use of the parameter in the user and insert kCopy
+      // instructions if necessary.
+      for (int64 index : user->OperandIndices(param_inst)) {
+        TF_ASSIGN_OR_RETURN(bool added,
+                            AddCopyIfParamterModifiedInplace(user, index));
       }
     }
   }
