@@ -46,131 +46,6 @@ using tensorflow::str_util::StartsWith;
 namespace xla {
 namespace poplarplugin {
 namespace {
-StatusOr<std::pair<poplar::program::Sequence, ArgVector>>
-GetWhileAndRepeatAliasingCopies(poplar::Graph& graph,
-                                SubComputationVisitor& visitor,
-                                const ArgVector& body_inputs,
-                                const ArgVector& body_outputs,
-                                unsigned int param_count,
-                                const std::string& debug_name) {
-  enum class AliasType {
-    NO_ALIAS_NOT_USED,
-    NO_ALIAS_USED,
-    PARTIAL_ALIAS_OUTPUT_ONLY,
-    PARTIAL_ALIAS,
-    IDENTICAL_ALIAS,
-  };
-
-  poplar::program::Sequence body_seq;
-  // A body output at index `o` can:
-  // 1. contain no aliases to any of the inputs and the input `o` is not used in
-  // the computation (NO_ALIAS_NOT_USED).
-  // 2. contain no aliases to any of the inputs and the input `o` is used in the
-  // computation (NO_ALIAS_USED).
-  // 3. contain an alias to one of the inputs and the input `o` is not used in
-  // the computation (PARTIAL_ALIAS_OUTPUT_ONLY).
-  // 4. contain an alias to one of the inputs and the input `o` is used in the
-  // computation (PARTIAL_ALIAS).
-  // 5. be the exact same tensor as input `o` (IDENTICAL_ALIAS).
-
-  // Find all the alias information index by output tensor
-  std::vector<AliasType> alias_type(param_count, AliasType::NO_ALIAS_USED);
-  for (unsigned int o = 0; o < param_count; o++) {
-    const bool input_used = visitor.InputIsAllocated(0, o);
-    if (input_used) {
-      if (body_inputs[o] == body_outputs[o]) {
-        alias_type[o] = AliasType::IDENTICAL_ALIAS;
-      }
-      // Check if we need to add a temporary copy.
-      for (unsigned int i = 0; i < param_count; i++) {
-        if ((alias_type[o] != AliasType::IDENTICAL_ALIAS || i != o) &&
-            visitor.InputIsAllocated(0, i)) {
-          if (body_outputs[o].intersectsWith(body_inputs[i])) {
-            alias_type[o] = AliasType::PARTIAL_ALIAS;
-          }
-        }
-      }
-    } else {
-      // If the input is not used, check that the output at that index does not
-      // alias any of the inputs which might have changed during computation.
-      alias_type[o] = AliasType::NO_ALIAS_NOT_USED;
-      for (unsigned int i = 0; i < param_count; i++) {
-        if (visitor.InputIsAllocated(0, i)) {
-          if (body_outputs[i].intersectsWith(body_inputs[o])) {
-            alias_type[o] = AliasType::PARTIAL_ALIAS_OUTPUT_ONLY;
-          }
-        }
-      }
-    }
-  }
-
-  // For partial aliasing types, we create temporary tensors from outputs in
-  // order to remove any aliasing.
-  ArgVector unaliased_body_outputs(body_outputs);
-  ArgVector while_loop_state(body_inputs);
-  for (unsigned int i = 0; i < param_count; i++) {
-    switch (alias_type[i]) {
-      case AliasType::PARTIAL_ALIAS_OUTPUT_ONLY:
-      case AliasType::PARTIAL_ALIAS: {
-        VLOG(1) << "Adding a partial copy in " << debug_name
-                << " for tuple index " << i;
-        auto name = StrCat(debug_name, "_bodyout_temp_", i);
-        unaliased_body_outputs[i] = graph.clone(body_outputs[i], name);
-        body_seq.add(
-            poplar::program::Copy(body_outputs[i], unaliased_body_outputs[i]));
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  for (unsigned int i = 0; i < param_count; i++) {
-    switch (alias_type[i]) {
-      case AliasType::PARTIAL_ALIAS:
-      case AliasType::NO_ALIAS_USED: {
-        VLOG(1) << "Adding a output to input copy in " << debug_name
-                << " for tuple index " << i;
-        // Get the input ready for the next iteration.
-        body_seq.add(
-            poplar::program::Copy(unaliased_body_outputs[i], body_inputs[i]));
-        break;
-      }
-      case AliasType::PARTIAL_ALIAS_OUTPUT_ONLY:
-      case AliasType::NO_ALIAS_NOT_USED: {
-        // The input is never used so we don't need a copy - just change the
-        // while loop state as by default it contains the input tensors.
-        while_loop_state[i] = unaliased_body_outputs[i];
-        break;
-      }
-      case AliasType::IDENTICAL_ALIAS:
-      default:
-        // nothing required
-        break;
-    }
-  }
-  return std::make_pair(body_seq, while_loop_state);
-}
-
-StatusOr<TensorInputDescription> GetInplaceSubcomputationLayoutInfo(
-    CompilerResources& res, const HloInstruction* inst) {
-  TensorInputDescription input_has_layout(inst->operand_count());
-  // For each operand to the inplace subcomputation, check if the tensor coming
-  // in has a layout. If the tensor does not have a layout then the inplace
-  // subcomputation visitor might create one for this tensor.
-  for (int64 i = 0; i < inst->operand_count(); i++) {
-    auto* operand = inst->operand(i);
-    std::vector<xla::Shape> shapes = FlattenedXlaShape(operand->shape());
-    input_has_layout[i].reserve(shapes.size());
-    for (int64 tuple_index = 0; tuple_index < shapes.size(); tuple_index++) {
-      auto tensor_source = std::make_pair(operand, tuple_index);
-      input_has_layout[i].push_back(
-          res.annotations.tensors_with_layout.contains(tensor_source));
-    }
-  }
-  return input_has_layout;
-}
-
 ArgVectors GetCallInputs(CompilerResources& res, const HloInstruction* inst,
                          TensorMap& tensor_map, poplar::program::Sequence& seq,
                          const bool expand_constants = true) {
@@ -234,23 +109,60 @@ StatusOr<poplar::program::Program> CreatePipelineStageOp(
           FindInstructionInputs(tensor_map, res, inst, op_idx, seq, false);
     }
   }
+  HloComputation* stage_computation = inst->to_apply();
 
-  // Get the input layout info.
-  TF_ASSIGN_OR_RETURN(auto input_has_layout,
-                      GetInplaceSubcomputationLayoutInfo(res, inst));
-  // Compile the stage.
-  TF_ASSIGN_OR_RETURN(
-      auto visitor, CompileInplaceSubComputation(res, inputs, inst->to_apply(),
-                                                 input_has_layout));
+  InplaceSubComputationVisitor visitor(res, inputs);
+  auto order = stage_computation->parent()
+                   ->schedule()
+                   .sequence(stage_computation)
+                   .instructions();
+  TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(&visitor, order));
 
-  // Get any copies.
-  seq.add(visitor->GetPreambleCopies());
   // Get the sequence for the stage.
-  seq.add(visitor->GetSequence());
+  seq.add(visitor.GetSequence());
   // Forward the outputs.
-  const OutVector& pipeline_outputs = visitor->outputs();
+  const OutVector& pipeline_outputs = visitor.outputs();
   for (size_t i = 0; i < pipeline_outputs.size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
+  }
+
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
+                                                    const HloInstruction* inst,
+                                                    const xla::Shape& output,
+                                                    TensorMap& tensor_map) {
+  VLOG(1) << "Processing " << inst->name();
+  poplar::Graph& graph = GetGraph(res, inst);
+  poplar::program::Sequence seq;
+  HloComputation* pipeline_computation = inst->to_apply();
+  TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
+                      inst->backend_config<PoplarBackendConfig>());
+  int64 repeat_count = cfg.call_config().pipeline_config().repeat_count();
+
+  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+                      FindInplaceOutputTensors(tensor_map, res, inst, seq));
+  CHECK_EQ(inputs.size(), inst->operand_count());
+
+  // Compile the pipeline.
+  PipelineVisitor visitor(inst, res, inputs);
+  auto order = pipeline_computation->parent()
+                   ->schedule()
+                   .sequence(pipeline_computation)
+                   .instructions();
+  TF_RETURN_IF_ERROR(pipeline_computation->AcceptOrdered(&visitor, order));
+
+  // Make sure that inputs/outputs alias each other.
+  TF_ASSIGN_OR_RETURN(auto pipeline_state,
+                      visitor.AddLoopInputOutputAliasingCopies(
+                          graph, pipeline_computation, GetDebugName(inst)));
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,
+                      visitor.GetPipelineSequence(repeat_count));
+  seq.add(pipeline_prog);
+
+  for (size_t i = 0; i < pipeline_state.size(); i++) {
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_state[i]));
   }
 
   return seq;
@@ -346,6 +258,8 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
     }
   } else if (IsRepeatLoop(inst)) {
     TF_ASSIGN_OR_RETURN(seq, CreateRepeatOp(res, inst, output, tensor_map));
+  } else if (IsPipelineOp(inst)) {
+    TF_ASSIGN_OR_RETURN(seq, CreatePipelineOp(res, inst, output, tensor_map));
   } else if (IsPipelineStageOrBackwardOp(inst)) {
     TF_ASSIGN_OR_RETURN(seq,
                         CreatePipelineStageOp(res, inst, output, tensor_map));
@@ -438,8 +352,10 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                           res, inputs, inst->while_condition()));
 
   // Get the input layout info.
-  TF_ASSIGN_OR_RETURN(auto input_has_layout,
-                      GetInplaceSubcomputationLayoutInfo(res, inst));
+  TF_ASSIGN_OR_RETURN(
+      auto input_has_layout,
+      InplaceSubComputationVisitor::GetInplaceSubcomputationLayoutInfo(res,
+                                                                       inst));
 
   // Body of the while loop is inplace.
   TF_ASSIGN_OR_RETURN(
@@ -447,7 +363,6 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                                               input_has_layout, {cond}));
 
   unsigned int param_count = inputs[0].size();
-  const ArgVector& inplace_inputs = inputs[0];
   const ArgVector& body_inputs = body->inputs()[0];
   const ArgVector& body_outputs = body->outputs();
   const ArgVector& cond_inputs = cond->inputs()[0];
@@ -465,17 +380,8 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   if (cond_outputs.size() != 1) {
     return xla::FailedPrecondition("Invalid number of condition outputs.");
   }
-
-  // Even though while loop is inplace, some of the while loop inputs might
-  // allocate their inputs as they have allocation targets. In these cases make
-  // sure to copy the values of the tensors.
-  for (unsigned int i = 0; i < param_count; i++) {
-    if (body->InputHasAllocationTarget(0, i)) {
-      VLOG(1) << "Adding a copy for while loop " << inst->name()
-              << " input tensor " << i << ".";
-      main_seq.add(poplar::program::Copy(inplace_inputs[i], body_inputs[i]));
-    }
-  }
+  // Get any copies.
+  main_seq.add(body->GetPreambleCopies());
 
   // Before executing the condition, copy inputs which are required by
   // the condition to cond_inputs.
@@ -489,19 +395,17 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   poplar::Tensor pred =
       popops::allTrue(graph, cond_outputs[0], cond_seq, GetDebugName(inst));
 
-  // Body
-  poplar::program::Sequence body_seq(body->GetSequence());
-  TF_ASSIGN_OR_RETURN(auto seq_argvector_pair,
-                      GetWhileAndRepeatAliasingCopies(
-                          graph, *body.get(), body_inputs, body_outputs,
-                          param_count, GetDebugName(inst)));
-  body_seq.add(seq_argvector_pair.first);
-  const ArgVector while_loop_state(seq_argvector_pair.second);
+  // Add the aliasing copies for the loop so that the outputs of one iteration
+  // are aliased to the inputs of the next one.
+  TF_ASSIGN_OR_RETURN(const ArgVector loop_state,
+                      body->AddLoopInputOutputAliasingCopies(
+                          graph, inst->while_body(), GetDebugName(inst)));
 
-  main_seq.add(poplar::program::RepeatWhileTrue(cond_seq, pred, body_seq));
+  main_seq.add(
+      poplar::program::RepeatWhileTrue(cond_seq, pred, body->GetSequence()));
 
   for (unsigned int i = 0; i < param_count; i++) {
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, while_loop_state[i]));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
   }
 
   return main_seq;
@@ -524,8 +428,10 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   CHECK_EQ(inputs.size(), 1);
 
   // Get the input layout info.
-  TF_ASSIGN_OR_RETURN(auto input_has_layout,
-                      GetInplaceSubcomputationLayoutInfo(res, inst));
+  TF_ASSIGN_OR_RETURN(
+      auto input_has_layout,
+      InplaceSubComputationVisitor::GetInplaceSubcomputationLayoutInfo(res,
+                                                                       inst));
 
   TF_ASSIGN_OR_RETURN(
       auto body, CompileInplaceSubComputation(res, inputs, inst->to_apply(),
@@ -544,19 +450,16 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   }
   // Get any copies.
   main_seq.add(body->GetPreambleCopies());
-  // Body
-  poplar::program::Sequence body_seq(body->GetSequence());
-  TF_ASSIGN_OR_RETURN(auto seq_argvector_pair,
-                      GetWhileAndRepeatAliasingCopies(
-                          graph, *body.get(), body_inputs, body_outputs,
-                          param_count, GetDebugName(inst)));
-  body_seq.add(seq_argvector_pair.first);
-  const ArgVector while_loop_state(seq_argvector_pair.second);
+  // Add the aliasing copies for the loop so that the outputs of one iteration
+  // are aliased to the inputs of the next one.
+  TF_ASSIGN_OR_RETURN(const ArgVector loop_state,
+                      body->AddLoopInputOutputAliasingCopies(
+                          graph, inst->to_apply(), GetDebugName(inst)));
 
-  main_seq.add(poplar::program::Repeat(repeat_count, body_seq));
+  main_seq.add(poplar::program::Repeat(repeat_count, body->GetSequence()));
 
   for (unsigned int i = 0; i < param_count; i++) {
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, while_loop_state[i]));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
   }
 
   return main_seq;

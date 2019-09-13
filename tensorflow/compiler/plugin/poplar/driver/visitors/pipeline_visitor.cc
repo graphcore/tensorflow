@@ -62,7 +62,7 @@ namespace {
  * @returns The unary predicate.
  */
 std::function<bool(HloInstruction*)> HasHloOpcode(HloOpcode opcode) {
-  return [opcode](HloInstruction* inst) -> bool {
+  return [opcode](const HloInstruction* inst) -> bool {
     return inst->opcode() == opcode;
   };
 }
@@ -76,7 +76,7 @@ std::function<bool(HloInstruction*)> HasHloOpcode(HloOpcode opcode) {
  *
  * @note Assumes the pipeline is correctly constructed.
  */
-int64 GetPipelineStageCount(HloInstruction* pipeline) {
+int64 GetPipelineStageCount(const HloInstruction* pipeline) {
   HloComputation* pipeline_computation = pipeline->to_apply();
 
   return absl::c_count_if(pipeline_computation->instructions(),
@@ -92,7 +92,7 @@ int64 GetPipelineStageCount(HloInstruction* pipeline) {
  *
  * @note Assumes the pipeline is correctly constructed.
  */
-std::vector<int> GetPipelineStageDeviceMapping(HloInstruction* pipeline) {
+std::vector<int> GetPipelineStageDeviceMapping(const HloInstruction* pipeline) {
   HloComputation* pipeline_computation = pipeline->to_apply();
   std::vector<HloInstruction*> instructions(
       pipeline_computation->instructions().begin(),
@@ -103,7 +103,7 @@ std::vector<int> GetPipelineStageDeviceMapping(HloInstruction* pipeline) {
 
   std::vector<int> result(std::distance(instructions.begin(), itr));
 
-  const auto get_stage_shard = [](HloInstruction* hlo) -> int {
+  const auto get_stage_shard = [](const HloInstruction* hlo) -> int {
     return *hlo->sharding_unique_device();
   };
 
@@ -122,9 +122,9 @@ std::vector<int> GetPipelineStageDeviceMapping(HloInstruction* pipeline) {
  *
  * @note Assumes the pipeline is correctly constructed.
  */
-absl::flat_hash_map<HloInstruction*, int> GetPipelineInstStageMapping(
-    HloInstruction* pipeline) {
-  absl::flat_hash_map<HloInstruction*, int> result;
+absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
+    const HloInstruction* pipeline) {
+  absl::flat_hash_map<const HloInstruction*, int> result;
   HloComputation* pipeline_computation = pipeline->to_apply();
   auto instructions = pipeline_computation->MakeInstructionPostOrder();
 
@@ -155,17 +155,23 @@ absl::flat_hash_map<HloInstruction*, int> GetPipelineInstStageMapping(
     return result.at(a) < result.at(b);
   };
 
+  // Assign the root instruction to the last stage. Note that we expect the root
+  // instruction to be a tuple which does not modify the sequences.
+  HloInstruction* root = pipeline_computation->root_instruction();
+  CHECK_EQ(root->opcode(), HloOpcode::kTuple);
+  result[root] = stage.forward.size() - 1;
+
   // Loop through all of the parameters and assign them to the earliest stage of
-  // the users. The users must be pipeline stage calls which have already been
-  // visited.
+  // the users. The users must be pipeline stage calls/root instruction which
+  // have already been visited.
   for (auto itr = p1; itr != p2; ++itr) {
     auto inst = *itr;
 
-    auto operands = inst->operands();
-    auto max_elem =
-        std::min_element(operands.begin(), operands.end(), inst_comparison);
+    auto users = inst->users();
+    auto min_elem =
+        std::min_element(users.begin(), users.end(), inst_comparison);
 
-    result.insert(std::make_pair(inst, result.at(*max_elem)));
+    result.insert(std::make_pair(inst, result.at(*min_elem)));
   }
 
   // Loop through the remaining instructions, assigning them to the latest stage
@@ -173,7 +179,6 @@ absl::flat_hash_map<HloInstruction*, int> GetPipelineInstStageMapping(
   // must've already been visited.
   for (auto itr = p2; itr != instructions.end(); ++itr) {
     auto inst = *itr;
-
     auto operands = inst->operands();
     auto max_elem =
         std::max_element(operands.begin(), operands.end(), inst_comparison);
@@ -376,8 +381,8 @@ std::vector<ElementType> FlattenSchedule(
 
 // Return the pipeline stage index for the given hlo instruction
 StatusOr<int> GetPipelineStage(
-    const absl::flat_hash_map<HloInstruction*, int>& inst_stage_mapping,
-    HloInstruction* hlo) {
+    const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
+    const HloInstruction* hlo) {
   if (inst_stage_mapping.count(hlo) == 0) {
     return FailedPrecondition(
         "Hlo instruction \"%s\" does not have an assigned pipeline stage.",
@@ -390,17 +395,18 @@ StatusOr<int> GetPipelineStage(
 
 PipelineVisitor::PipelineVisitor(
     int64 stage_count, const std::vector<int>& stage_ipu_mapping,
-    const absl::flat_hash_map<HloInstruction*, int>& inst_stage_mapping,
+    const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     CompilerResources& res, const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
-    : copy_sequences_(stage_count),
+    : InplaceSubComputationVisitor(res, inputs, dependent_subcomputations),
+      copy_sequences_(stage_count),
       program_sequences_(stage_count),
       stage_ipu_mapping_(stage_ipu_mapping),
-      inst_stage_mapping_(inst_stage_mapping),
-      SubComputationVisitor(res, inputs, dependent_subcomputations) {}
+      inst_stage_mapping_(inst_stage_mapping) {}
 
 PipelineVisitor::PipelineVisitor(
-    HloInstruction* pipeline, CompilerResources& res, const ArgVectors& inputs,
+    const HloInstruction* pipeline, CompilerResources& res,
+    const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
     : PipelineVisitor(GetPipelineStageCount(pipeline),
                       GetPipelineStageDeviceMapping(pipeline),
@@ -603,7 +609,11 @@ Status PipelineVisitor::HandleGetTupleElement(HloInstruction* hlo) {
   return Status::OK();
 }
 
-Status PipelineVisitor::FinishVisit(HloInstruction*) { return Status::OK(); }
+Status PipelineVisitor::FinishVisit(HloInstruction* inst) {
+  outputs_ = FindInstructionOutputs(tensor_map, inst);
+  resources_.tensor_maps[inst->parent()->name()] = std::move(tensor_map);
+  return Status::OK();
+}
 
 Status PipelineVisitor::HandleTuple(HloInstruction* hlo) {
   if (hlo->parent()->root_instruction() != hlo) {
@@ -615,21 +625,34 @@ Status PipelineVisitor::HandleTuple(HloInstruction* hlo) {
 
   VLOG(1) << "Processing " << hlo->name();
 
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
-                      FindInplaceOutputTensors(tensor_map, resources_, hlo,
-                                               program_sequences_[stage]));
-  CHECK_EQ(inputs.size(), hlo->operand_count());
+  // Tuple just forwards the input tensors.
   uint64 n = 0;
-  for (uint64 i = 0; i < inputs.size(); i++) {
-    CHECK_EQ(inputs[i].size(), CountShapes(hlo->operand(i)->shape()));
-    for (uint64 j = 0; j < inputs[i].size(); j++) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, hlo, n, inputs[i][j]));
-      n++;
+  for (int64 op_idx = 0; op_idx != hlo->operand_count(); ++op_idx) {
+    const HloInstruction* operand = hlo->operand(op_idx);
+    ArgVector inputs = FindInstructionOutputs(tensor_map, operand);
+    CHECK_EQ(inputs.size(), CountShapes(operand->shape()));
+
+    for (uint64 j = 0; j < inputs.size(); j++) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, hlo, n++, inputs[j]));
     }
   }
 
   return Status::OK();
+}
+
+poplar::program::Sequence& PipelineVisitor::GetSequenceForAliasingCopy(
+    int64 flat_tensor_index, const HloComputation* computation) {
+  const HloInstruction* root = computation->root_instruction();
+  CHECK_EQ(root->operand_count(), computation->num_parameters());
+  // Get the parameter for this input to the tuple.
+  auto param_num_index = GetParameterNumberAndFlatIndex(flat_tensor_index);
+  int64 param_number = param_num_index.first;
+
+  // Get the stage of the input to the tuple.
+  int64 stage =
+      GetPipelineStage(inst_stage_mapping_, root->operand(param_number))
+          .ValueOrDie();
+  return copy_sequences_[stage];
 }
 
 }  // namespace poplarplugin

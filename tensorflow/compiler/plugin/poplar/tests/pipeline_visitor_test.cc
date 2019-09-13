@@ -169,7 +169,7 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
       });
 
   // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<HloInstruction*, int> stage_assignments = {
+  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -297,7 +297,7 @@ ENTRY pipeline (arg: f32[]) -> token[] {
       });
 
   // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<HloInstruction*, int> stage_assignments = {
+  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -411,7 +411,7 @@ ENTRY pipeline (arg: f32[]) -> token[] {
       });
 
   // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<HloInstruction*, int> stage_assignments = {
+  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -526,7 +526,7 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
       });
 
   // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<HloInstruction*, int> stage_assignments = {
+  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -678,7 +678,7 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
       });
 
   // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<HloInstruction*, int> stage_assignments = {
+  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},
@@ -845,7 +845,7 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
       });
 
   // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<HloInstruction*, int> stage_assignments = {
+  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
       {entry_computation->GetInstructionWithName("arg"), 0},
       {entry_computation->GetInstructionWithName("a0"), 0},
       {entry_computation->GetInstructionWithName("b0"), 1},

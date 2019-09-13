@@ -434,14 +434,10 @@ Status SetPipelineStageInstructionSharding(const HloInstruction* stage,
   }
   // For non empty tuples, we set sharding for each leaf node, otherwise we
   // create single sharding.
-  const bool tuple_sharding =
-      shape.IsTuple() && !ShapeUtil::IsEmptyTuple(shape);
-  if (tuple_sharding && !IsAllowedTupleSharding(inst)) {
-    return FailedPrecondition(
-        "Trying to create tuple sharding for an instruction %s which is not "
-        "allowed.",
-        inst->ToString());
-  }
+  const bool tuple_sharding = shape.IsTuple() &&
+                              !ShapeUtil::IsEmptyTuple(shape) &&
+                              IsAllowedTupleSharding(inst);
+
   HloSharding sharding =
       tuple_sharding ? HloSharding::SingleTuple(shape, *optional_sharding)
                      : *optional_sharding;

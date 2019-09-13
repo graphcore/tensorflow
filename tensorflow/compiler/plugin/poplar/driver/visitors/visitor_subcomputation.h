@@ -90,14 +90,42 @@ class InplaceSubComputationVisitor : public SubComputationVisitor {
                                const std::vector<const SubComputationVisitor*>&
                                    dependent_subcomputations = {});
 
+  // Version of the visitor which assumes all inputs have a layout.
+  InplaceSubComputationVisitor(CompilerResources& res, const ArgVectors& inputs,
+                               const std::vector<const SubComputationVisitor*>&
+                                   dependent_subcomputations = {});
+
   StatusOr<bool> HandleTensor(HloParameterInstruction* inst, Shape& shape,
                               const uint64 tuple_index,
                               poplar::Tensor& tensor) override;
+
+  // For each operand to the inplace subcomputation, check if the tensor coming
+  // in has a layout. If the tensor does not have a layout then the inplace
+  // subcomputation visitor might create one for this tensor.
+  static StatusOr<TensorInputDescription> GetInplaceSubcomputationLayoutInfo(
+      CompilerResources& res, const HloInstruction* inst);
 
   // Even though computation is inplace, some of the computation inputs might
   // allocate their inputs as they have allocation targets. In these cases make
   // sure to copy the values of the tensors.
   poplar::program::Sequence GetPreambleCopies();
+
+  // If the subcomputation is used as a loop, then add input/output aliasing
+  // copies. Returns the loop state (i.e. the output of the loop).
+  StatusOr<ArgVector> AddLoopInputOutputAliasingCopies(
+      poplar::Graph& graph, const HloComputation* computation,
+      const std::string& debug_name);
+
+ protected:
+  // Given the flat tensor index, get the sequence the copy should be inserted
+  // into.
+  virtual poplar::program::Sequence& GetSequenceForAliasingCopy(
+      int64 flat_tensor_index, const HloComputation* computation);
+
+  // Given an output flat index get the corresponding paramter number and flat
+  // index.
+  std::pair<int64, int64> GetParameterNumberAndFlatIndex(
+      int64 output_flat_index);
 
  private:
   // Indicates whether the input has a layout.

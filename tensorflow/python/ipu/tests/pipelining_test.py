@@ -42,10 +42,12 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.ops import pipelining_ops_grad
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
+from tensorflow.python.ipu import gradient_accumulation_optimizer
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu import normalization_ops
 
 
 def next_feed_id():
@@ -55,16 +57,6 @@ def next_feed_id():
 
 
 next_feed_id.feed_count = 0
-
-
-def _run_no_pipeline(stages, inputs=None, optimizer_stage=None):
-  outputs = inputs if inputs else []
-  for stage in stages:
-    outputs = stage(
-        *pipelining_ops._convert_to_list(outputs), name="_no_pipeline")
-  if optimizer_stage:
-    outputs = optimizer_stage(*pipelining_ops._convert_to_list(outputs))
-  return outputs
 
 
 class PipeliningTest(test_util.TensorFlowTestCase):
@@ -175,7 +167,10 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[410.01]])
+      self.assertAllClose(losses_pipeline, [[
+          410.01, 730.01, 650.01, 570.01, 890.01, 410.01, 730.01, 650.01,
+          570.01, 890.01
+      ]])
 
   @test_util.deprecated_graph_mode_only
   def testPipelineGradIntermediates(self):
@@ -228,12 +223,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                (grad, var) for grad, var in grads]
       grads = [(clip_ops.clip_by_value(grad, -1., 1.), var)
                for grad, var in grads]
+      opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+          opt, 10)
 
       return loss, opt.apply_gradients(grads_and_vars=grads)
 
     def model_pipeline(x, lr):
       return pipelining_ops.pipeline([stage1, stage2, stage3],
-                                     10,
+                                     20,
                                      inputs=[x, lr],
                                      outfeed_queue=outfeed_queue,
                                      optimizer_stage=optimizer_stage)
@@ -253,7 +250,15 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), lr: 0.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[270.0]])
+      # Note that the pipeline always takes the same input - see how the
+      # loss is the same for first 10 executions (gradient accumulation), then
+      # there are two stages which are affected by having the weights change
+      # and then the remaining 8 always return the same loss.
+      self.assertAllClose(losses_pipeline, [[
+          270., 270., 270., 270., 270., 270., 270., 270., 270., 270.,
+          242.99998, 242.99998, 202.82397, 202.82397, 202.82397, 202.82397,
+          202.82397, 202.82397, 202.82397, 202.82397
+      ]])
 
   @test_util.deprecated_graph_mode_only
   def testIllegalCapture(self):
@@ -340,8 +345,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           y: np.ones(y.shape)
       })
       output = sess.run(outfeed_op)
-      self.assertAllClose(output[0][0], np.ones(x.shape))
-      self.assertAllClose(output[1][0], np.ones(y.shape))
+      for i in range(10):
+        self.assertAllClose(output[0][i], np.ones(x.shape))
+        self.assertAllClose(output[1][i], np.ones(y.shape))
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithStagesWithConstants(self):
@@ -358,24 +364,31 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
-    def stage1(c, name=None, **kwargs):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.ones_initializer(),
-            name='conv1')(kwargs["a"])
-        return y + kwargs["b"], c, kwargs["idx"]
+    def stage1(c, **kwargs):
+      y = layers.Conv2D(
+          2,
+          1,
+          use_bias=True,
+          kernel_initializer=init_ops.ones_initializer(),
+          name='conv1')(kwargs["a"])
+      y = normalization_ops.group_norm(y)
+      return y + kwargs["b"], c, kwargs["idx"]
 
     def stage2(x, c, idx):
       return x, c, idx
 
     def stage3(x, c, idx):
-      return layers.Dense(2)(x), c, idx
+      return layers.Dense(
+          2,
+          kernel_initializer=init_ops.ones_initializer(),
+          bias_initializer=init_ops.ones_initializer())(x), c, idx
 
     def stage4(x, c, idx):
-      return math_ops.reduce_sum(layers.Dense(2)(x)) + c, idx
+      return math_ops.reduce_sum(
+          layers.Dense(
+              2,
+              kernel_initializer=init_ops.ones_initializer(),
+              bias_initializer=init_ops.ones_initializer())(x)) + c, idx
 
     def optimizer_stage(loss, idx):
       opt = gradient_descent.GradientDescentOptimizer(0.01)
@@ -384,9 +397,11 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       grads = list(zip(grads, variables.trainable_variables()))
       grads = [(clip_ops.clip_by_value(grad, -1., 1.), var)
                for grad, var in grads]
-
+      opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+          opt, 10)
       return loss, idx, opt.apply_gradients(grads_and_vars=grads)
 
+    # Run the pipeline twice.
     def my_net(c):
       return pipelining_ops.pipeline([stage1, stage2, stage3, stage4],
                                      10, [c],
@@ -408,8 +423,19 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
+      sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
-      self.assertAllClose(losses_pipeline, [[-17.136309], [0]])
+      # The values have been verified and compared against running the same
+      # graph but sharded with gradient accumulation for 10 mini batches.
+      self.assertAllClose(losses_pipeline[0], [
+          1546.01, 1802.01, 1738.01, 1674.01, 1930.01, 1546.01, 1802.01,
+          1738.01, 1674.01, 1930.01, 1239.1937, 1446.5532, 1394.7135,
+          1342.8734, 1550.233, 1239.1937, 1446.5532, 1394.7135, 1342.8734,
+          1550.233
+      ])
+      self.assertAllClose(
+          losses_pipeline[1],
+          [0, 2, 4, 1, 3, 0, 2, 4, 1, 3, 0, 2, 4, 1, 3, 0, 2, 4, 1, 3])
 
 
 if __name__ == "__main__":

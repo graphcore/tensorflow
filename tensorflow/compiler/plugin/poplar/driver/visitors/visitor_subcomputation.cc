@@ -15,15 +15,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
-#include "absl/strings/str_cat.h"
-
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
+
+#include "absl/strings/str_cat.h"
 
 #include <poplar/Tensor.hpp>
 
@@ -56,6 +55,16 @@ InplaceSubComputationVisitor::InplaceSubComputationVisitor(
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
     : SubComputationVisitor(res, inputs, dependent_subcomputations),
       input_has_layout_(input_has_layout) {}
+
+InplaceSubComputationVisitor::InplaceSubComputationVisitor(
+    CompilerResources& res, const ArgVectors& inputs,
+    const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
+    : SubComputationVisitor(res, inputs, dependent_subcomputations),
+      input_has_layout_(inputs.size()) {
+  for (int64 i = 0; i != inputs.size(); ++i) {
+    input_has_layout_[i].resize(inputs[i].size(), true);
+  }
+}
 
 bool SubComputationVisitor::InputIsUsedInThisSubComputation(
     HloParameterInstruction* inst, const std::vector<xla::Shape>& shapes,
@@ -260,6 +269,173 @@ bool SubComputationVisitor::InputIsUsed(int64 param, unsigned int index) const {
 bool SubComputationVisitor::InputHasAllocationTarget(int64 param,
                                                      unsigned int index) const {
   return has_allocation_target_[param][index];
+}
+
+StatusOr<TensorInputDescription>
+InplaceSubComputationVisitor::GetInplaceSubcomputationLayoutInfo(
+    CompilerResources& res, const HloInstruction* inst) {
+  TensorInputDescription input_has_layout(inst->operand_count());
+  // For each operand to the inplace subcomputation, check if the tensor coming
+  // in has a layout. If the tensor does not have a layout then the inplace
+  // subcomputation visitor might create one for this tensor.
+  for (int64 i = 0; i < inst->operand_count(); i++) {
+    auto* operand = inst->operand(i);
+    std::vector<xla::Shape> shapes = FlattenedXlaShape(operand->shape());
+    input_has_layout[i].reserve(shapes.size());
+    for (int64 tuple_index = 0; tuple_index < shapes.size(); tuple_index++) {
+      auto tensor_source = std::make_pair(operand, tuple_index);
+      input_has_layout[i].push_back(
+          res.annotations.tensors_with_layout.contains(tensor_source));
+    }
+  }
+  return input_has_layout;
+}
+
+std::pair<int64, int64>
+InplaceSubComputationVisitor::GetParameterNumberAndFlatIndex(
+    int64 output_flat_index) {
+  int64 paramter_number = 0;
+  int64 flat_index = output_flat_index;
+  while (flat_index > inputs_[paramter_number].size()) {
+    flat_index -= inputs_[paramter_number].size();
+    paramter_number++;
+  }
+  return {paramter_number, flat_index};
+}
+
+poplar::program::Sequence&
+InplaceSubComputationVisitor::GetSequenceForAliasingCopy(
+    int64, const HloComputation*) {
+  // Be default just add the copies to the main sequence.
+  return sequence;
+}
+
+StatusOr<ArgVector>
+InplaceSubComputationVisitor::AddLoopInputOutputAliasingCopies(
+    poplar::Graph& graph, const HloComputation* computation,
+    const std::string& debug_name) {
+  enum class AliasType {
+    NO_ALIAS_NOT_USED,
+    NO_ALIAS_USED,
+    PARTIAL_ALIAS_OUTPUT_ONLY,
+    PARTIAL_ALIAS,
+    IDENTICAL_ALIAS,
+  };
+  // A loop output at shape-index `o` can:
+  // 1. contain no aliases to any of the inputs and the input `o` is not used in
+  // the computation (NO_ALIAS_NOT_USED).
+  // 2. contain no aliases to any of the inputs and the input `o` is used in the
+  // computation (NO_ALIAS_USED).
+  // 3. contain an alias to one of the inputs and the input `o` is not used in
+  // the computation (PARTIAL_ALIAS_OUTPUT_ONLY).
+  // 4. contain an alias to one of the inputs and the input `o` is used in the
+  // computation (PARTIAL_ALIAS).
+  // 5. be the exact same tensor as input `o` (IDENTICAL_ALIAS).
+
+  int64 num_tensors = outputs_.size();
+  std::vector<AliasType> alias_type(num_tensors, AliasType::NO_ALIAS_USED);
+
+  // Create a flat version of the loop inputs.
+  ArgVector loop_inputs(num_tensors);
+  auto input_itr = loop_inputs.begin();
+  for (int64 input_idx = 0; input_idx != inputs_.size(); ++input_idx) {
+    absl::c_copy(inputs_[input_idx], input_itr);
+    input_itr = std::next(input_itr, inputs_[input_idx].size());
+  }
+  // Outputs are already flat.
+  ArgVector loop_outputs = outputs_;
+
+  // Find all the alias information index by output tensor.
+  for (unsigned int o = 0; o < num_tensors; o++) {
+    int64 param_number, param_index;
+    std::tie(param_number, param_index) = GetParameterNumberAndFlatIndex(o);
+    const bool input_used = InputIsAllocated(param_number, param_index);
+
+    if (input_used) {
+      if (loop_inputs[o] == loop_outputs[o]) {
+        alias_type[o] = AliasType::IDENTICAL_ALIAS;
+      }
+      // Check if we need to add a temporary copy.
+      for (unsigned int i = 0; i < num_tensors; i++) {
+        int64 input_param_number, input_param_index;
+        std::tie(input_param_number, input_param_index) =
+            GetParameterNumberAndFlatIndex(i);
+
+        if ((alias_type[o] != AliasType::IDENTICAL_ALIAS || i != o) &&
+            InputIsAllocated(input_param_number, input_param_index)) {
+          if (loop_outputs[o].intersectsWith(loop_inputs[i])) {
+            alias_type[o] = AliasType::PARTIAL_ALIAS;
+          }
+        }
+      }
+    } else {
+      // If the input is not used, check that the output at that index does not
+      // alias any of the inputs which might have changed during
+      // computation.
+      alias_type[o] = AliasType::NO_ALIAS_NOT_USED;
+      for (unsigned int i = 0; i < num_tensors; i++) {
+        int64 input_param_number, input_param_index;
+        std::tie(input_param_number, input_param_index) =
+            GetParameterNumberAndFlatIndex(i);
+        if (InputIsAllocated(input_param_number, input_param_index)) {
+          if (loop_outputs[i].intersectsWith(loop_inputs[o])) {
+            alias_type[o] = AliasType::PARTIAL_ALIAS_OUTPUT_ONLY;
+          }
+        }
+      }
+    }
+  }
+
+  // For partial aliasing types, we create temporary tensors from outputs in
+  // order to remove any aliasing.
+  ArgVector unaliased_loop_outputs(loop_outputs);
+  for (int64 i = 0; i < num_tensors; i++) {
+    switch (alias_type[i]) {
+      case AliasType::PARTIAL_ALIAS_OUTPUT_ONLY:
+      case AliasType::PARTIAL_ALIAS: {
+        VLOG(1) << "Adding a partial copy in " << debug_name
+                << " for tuple index " << i;
+        auto name = StrCat(debug_name, "_bodyout_temp_", i);
+        unaliased_loop_outputs[i] = graph.clone(loop_outputs[i], name);
+        poplar::program::Sequence& seq =
+            GetSequenceForAliasingCopy(i, computation);
+        seq.add(
+            poplar::program::Copy(loop_outputs[i], unaliased_loop_outputs[i]));
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  ArgVector loop_state(loop_inputs);
+  for (int64 i = 0; i < num_tensors; i++) {
+    switch (alias_type[i]) {
+      case AliasType::PARTIAL_ALIAS:
+      case AliasType::NO_ALIAS_USED: {
+        VLOG(1) << "Adding a output to input copy in " << debug_name
+                << " for tuple index " << i;
+        // Get the input ready for the next iteration.
+        poplar::program::Sequence& seq =
+            GetSequenceForAliasingCopy(i, computation);
+        seq.add(
+            poplar::program::Copy(unaliased_loop_outputs[i], loop_inputs[i]));
+        break;
+      }
+      case AliasType::PARTIAL_ALIAS_OUTPUT_ONLY:
+      case AliasType::NO_ALIAS_NOT_USED: {
+        // The input is never used so we don't need a copy - just change the
+        // while loop state as by default it contains the input tensors.
+        loop_state[i] = unaliased_loop_outputs[i];
+        break;
+      }
+      case AliasType::IDENTICAL_ALIAS:
+      default:
+        // nothing required
+        break;
+    }
+  }
+  return loop_state;
 }
 
 }  // namespace poplarplugin
