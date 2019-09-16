@@ -331,6 +331,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return y
 
       dataset = dataset_ops.Dataset.range(10)
+      dataset = dataset.map(lambda x: math_ops.cast(x, np.float32))
       dataset = dataset.batch(1, drop_remainder=True)
       dist_dataset = strategy.experimental_distribute_dataset(dataset)
       inputs = dist_dataset.make_initializable_iterator()
