@@ -12,8 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_LOOK_AHEAD_SCHEDULER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_LOOK_AHEAD_SCHEDULER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_CLUSTERING_SCHEDULER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_CLUSTERING_SCHEDULER_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 
@@ -24,10 +24,10 @@ struct CompilerInformation;
 
 // Scheduler which will look ahead and queue large chunks of the graph at a
 // time.
-IpuSchedulerAlgorithm CreateLookAheadMemoryScheduler(
+IpuSchedulerAlgorithm CreateClusteringMemoryScheduler(
     const CompilerInformation& information);
 
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_LOOK_AHEAD_SCHEDULER_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_SCHEDULERS_CLUSTERING_SCHEDULER_H_

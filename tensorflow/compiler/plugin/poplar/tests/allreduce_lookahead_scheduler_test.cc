@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/schedulers/look_ahead_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 
@@ -29,7 +29,7 @@ namespace {
 
 using SchedulerTest = HloTestBase;
 
-TEST_F(SchedulerTest, TestLookAheadScheduler) {
+TEST_F(SchedulerTest, TestClusteringScheduler) {
   std::string hlo_string = R"(
 HloModule top
 
@@ -65,7 +65,7 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      CreateLookAheadMemoryScheduler(64 * 1024));
+      CreateClusteringMemoryScheduler(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());
@@ -87,7 +87,7 @@ add {
   EXPECT_EQ(all_reduce.size(), 0);
 }
 
-TEST_F(SchedulerTest, TestLookAheadSchedulerBig) {
+TEST_F(SchedulerTest, TestClusteringSchedulerBig) {
   std::string hlo_string = R"(
 HloModule top
 
@@ -123,7 +123,7 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      CreateLookAheadMemoryScheduler(64 * 1024));
+      CreateClusteringMemoryScheduler(64 * 1024));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
   auto s = module->schedule().sequence(module->entry_computation());

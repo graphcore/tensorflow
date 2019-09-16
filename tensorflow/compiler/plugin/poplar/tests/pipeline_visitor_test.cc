@@ -68,7 +68,7 @@ std::unique_ptr<CompilerResources> GetMockResources(poplar::Device& device,
   auto resources = absl::make_unique<CompilerResources>(
       poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
       false, false, merge_infeeds, 1, 0, 0, 1, 64, module,
-      IpuOptions::FloatingPointBehaviour(), false);
+      IpuOptions::FloatingPointBehaviour(), false, "");
   resources->main_graph = absl::make_unique<poplar::Graph>(
       device, 0, poplar::replication_factor(1));
 

@@ -84,6 +84,9 @@ message IpuOptions {
     // count.  This may decrease the device->host read latency at the expense of
     // having more live tensors in memory on the device.
     bool merge_infeed_io_copies = 5;
+
+    // When not an empty string, specifies the scheduler to use
+    string scheduler_selection = 6;
   }
   SpeedSizeConfig speed_size_config = 5;
 

@@ -105,6 +105,22 @@ time for large ``max_scheduler_lookahead_depth``.
 the schedule search space to guarantee that it will terminate in a reasonable
 amount of time.
 
+* ``scheduler_selection`` controls the particular scheduler that is selected
+to perform the scheduling of instructions in the compilation stage.  By
+default, several schedules will be created and the one with the lowest
+predicted liveness chosen.  This can sometimes produce incorrect results
+because the overall peak liveness isn't always a good measure for the maximum
+liveness on one tile of the processor.  The available schedulers are:
+
+  * ``Clustering``, which groups clusters of operations together in order to
+    look through stretches of instructions with potentially high liveness.
+  * ``PostOrder``, which schedules the instructions in the order which is
+    obtained by walking the graph in 'post order'.
+  * ``LookAhead``, which looks ahead a number of operations from any
+    schedulable one, as given by the `max_scheduler_lookahead_depth` and
+    `max_scheduler_search_space_size` options described above.  It attempts
+    to look through areas of high liveness.
+
 See the documentation in :ref:`api-section` for more details.
 
 .. _env-var-section:

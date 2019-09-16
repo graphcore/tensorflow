@@ -71,9 +71,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/liveness_look_ahead_scheduler.h"
-#include "tensorflow/compiler/plugin/poplar/driver/schedulers/look_ahead_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/convolution_preplanning.h"
@@ -306,12 +306,6 @@ bool AreAllOutputsParameters(const HloModule* module,
       root->GetModule()->entry_computation_layout().result_shape());
 }
 
-StatusOr<std::string> SerializeComputationToGraphDef(
-    const HloComputation& comp) {
-  return RenderGraph(comp, comp.name(), {}, RenderedGraphFormat::kDot, nullptr,
-                     true);
-}
-
 HloPrintOptions GetPrintOptions() {
   HloPrintOptions opts;
   opts.set_print_operand_shape(false)
@@ -385,6 +379,31 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   poprand::addCodelets(main_graph);
   popsys::addCodelets(main_graph);
 }
+
+StatusOr<std::vector<IpuSchedulerAlgorithm>> GetSchedulerList(
+    CompilerResources& res) {
+  std::vector<IpuSchedulerAlgorithm> schedulers;
+  bool all = res.scheduler_selection.empty();
+  if (all || res.scheduler_selection == "Clustering") {
+    schedulers.push_back(CreateClusteringMemoryScheduler(res.information));
+  }
+  if (all || res.scheduler_selection == "PostOrder") {
+    schedulers.push_back(
+        MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler));
+  }
+  if (res.scheduler_selection == "LookAhead") {
+    schedulers.push_back(
+        CreateLivenessLookAheadMemoryScheduler(res.information));
+  }
+
+  if (schedulers.size() == 0) {
+    return xla::InvalidArgument(
+        "Invalid scheduler specified. Options are 'LookAhead', "
+        "'PostOrder' and 'Clustering'");
+  }
+  return schedulers;
+}
+
 }  // namespace
 
 StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
@@ -488,7 +507,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplarExecutor->GetMaxSchedulerLookaheadDepth(),
       poplarExecutor->GetMaxSchedulerSearchSpaceSize(), module.get(),
       poplarExecutor->FloatingPointBehaviour(),
-      poplarExecutor->AlwaysRearrangeCopiesOnTheHost());
+      poplarExecutor->AlwaysRearrangeCopiesOnTheHost(),
+      poplarExecutor->GetSchedulerSelection());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -575,16 +595,14 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     if (resources.information.max_all_reduce_buffer_size > 0 ||
         resources.information.max_inter_ipu_copies_buffer_size > 0) {
       pipeline.AddPass<IpuScheduler>(
-          SizeFunction, CreateLookAheadMemoryScheduler(resources.information));
+          SizeFunction, CreateClusteringMemoryScheduler(resources.information));
       pipeline.AddPass<CombineInstructions>();
       pipeline.AddPass<HloDescheduler>();
     }
 
-    TF_ASSIGN_OR_RETURN(
-        auto scheduler,
-        BestIpuSchedule(
-            {CreateLookAheadMemoryScheduler(resources.information),
-             MemorySchedulerAlgorithmToIPU(PostOrderMemoryScheduler)}));
+    TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
+
+    TF_ASSIGN_OR_RETURN(auto scheduler, BestIpuSchedule(schedulers));
 
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
     pipeline.AddPass<LowerFrontendAttributes>();

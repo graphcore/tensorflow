@@ -193,9 +193,9 @@ cc_library(
         "driver/tools/single_hlo_matcher.cc",
         "driver/tools/util.cc",
         "driver/tools/while_loop_util.cc",
+        "driver/schedulers/clustering_scheduler.cc",
         "driver/schedulers/ipu_scheduler.cc",
         "driver/schedulers/liveness_look_ahead_scheduler.cc",
-        "driver/schedulers/look_ahead_scheduler.cc",
         "driver/schedulers/sync_list_scheduler.cc"
     ],
     hdrs = [
@@ -284,9 +284,9 @@ cc_library(
         "driver/tools/single_hlo_matcher.h",
         "driver/tools/util.h",
         "driver/tools/while_loop_util.h",
+        "driver/schedulers/clustering_scheduler.h",
         "driver/schedulers/ipu_scheduler.h",
         "driver/schedulers/liveness_look_ahead_scheduler.h",
-        "driver/schedulers/look_ahead_scheduler.h",
         "driver/schedulers/schedule_tree.h",
         "driver/schedulers/schedule_utils.h",
         "driver/schedulers/sync_list_scheduler.h"
@@ -1668,6 +1668,24 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "invalid_scheduler_selection",
+    size = "small",
+    srcs = ["tests/invalid_scheduler_selection.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:nn",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_xla_py_test(
     name = "matmul_test",
     size = "small",
     srcs = ["tests/matmul_test.py"],
@@ -2673,6 +2691,7 @@ test_suite(
         "inplace_test",
         "infeed_prefetch_test",
         "inter_ipu_copy_inserter_test",
+        "invalid_scheduler_selection",
         "ipu_model_device_test",
         "layout_strip_test",
         "lstm_test",

@@ -87,6 +87,8 @@ struct CompilerResources {
 
   std::vector<poplar::Tensor> zeroed_tensors;
 
+  std::string scheduler_selection;
+
   CompilerResources(
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
@@ -97,7 +99,8 @@ struct CompilerResources {
       int64 max_scheduler_lookahead_depth,
       int64 max_scheduler_search_space_size, HloModule* module,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
-      bool always_rearrange_copies_on_host)
+      bool always_rearrange_copies_on_host,
+      const std::string& scheduler_selection)
       : annotations(module),
         information(
             max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
@@ -110,7 +113,8 @@ struct CompilerResources {
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         replication_factor(replication_factor),
         merge_infeed_io_copies(merge_infeed_io_copies),
-        always_rearrange_copies_on_host(always_rearrange_copies_on_host) {}
+        always_rearrange_copies_on_host(always_rearrange_copies_on_host),
+        scheduler_selection(scheduler_selection) {}
 };
 
 }  // namespace poplarplugin

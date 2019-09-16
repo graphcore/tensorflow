@@ -317,6 +317,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         .always_rearrange_copies_on_the_host();
   }
 
+  std::string GetSchedulerSelection() const {
+    return current_config_.speed_size_config().scheduler_selection();
+  }
+
   bool MergeInfeedCopies() const {
     return current_config_.speed_size_config().merge_infeed_io_copies();
   }

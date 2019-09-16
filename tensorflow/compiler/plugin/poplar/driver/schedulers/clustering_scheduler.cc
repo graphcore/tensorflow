@@ -1,4 +1,4 @@
-#include "tensorflow/compiler/plugin/poplar/driver/schedulers/look_ahead_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 
 #include <map>
 #include <queue>
@@ -58,7 +58,7 @@ using ::tensorflow::strings::HumanReadableNumBytes;
 
 */
 
-class LookAheadScheduler {
+class ClusteringScheduler {
  public:
   // Construct and return a memory-minimizing sequence of HLO instructions
   // containing the given HLO computation.
@@ -69,8 +69,9 @@ class LookAheadScheduler {
       const absl::flat_hash_map<const HloComputation*, int64>&
           memory_by_computation,
       const CompilerInformation& information) {
-    LookAheadScheduler scheduler(computation, points_to_analysis, size_function,
-                                 memory_by_computation, information);
+    ClusteringScheduler scheduler(computation, points_to_analysis,
+                                  size_function, memory_by_computation,
+                                  information);
     return scheduler.CreateSchedule();
   }
 
@@ -140,7 +141,7 @@ class LookAheadScheduler {
   // algorithms.
   class ClusterHelper {
    public:
-    ClusterHelper(LookAheadScheduler* parent_scheduler)
+    ClusterHelper(ClusteringScheduler* parent_scheduler)
         : parent(parent_scheduler) {}
 
     // Compute the full cluster graph and store it in parent.
@@ -159,7 +160,7 @@ class LookAheadScheduler {
     // to add the dependency information.
     void BuildDependencyGraph();
 
-    LookAheadScheduler* parent;
+    ClusteringScheduler* parent;
 
     // Roots of the cluster graph. These are nodes which have no strict
     // dependencies (a dependency that isn't itself) so can be scheduled
@@ -170,12 +171,12 @@ class LookAheadScheduler {
         previously_clustered_node;
   };
 
-  LookAheadScheduler(HloComputation* computation,
-                     const TuplePointsToAnalysis& points_to_analysis,
-                     const LogicalBuffer::SizeFunction& size_function,
-                     const absl::flat_hash_map<const HloComputation*, int64>&
-                         memory_by_computation,
-                     const CompilerInformation& information)
+  ClusteringScheduler(HloComputation* computation,
+                      const TuplePointsToAnalysis& points_to_analysis,
+                      const LogicalBuffer::SizeFunction& size_function,
+                      const absl::flat_hash_map<const HloComputation*, int64>&
+                          memory_by_computation,
+                      const CompilerInformation& information)
       : computation_(computation),
         points_to_analysis_(points_to_analysis),
         size_function_(size_function),
@@ -268,8 +269,8 @@ class LookAheadScheduler {
       wait_queue;
 };
 
-int64 LookAheadScheduler::GetBufferMemoryFreed(const HloInstruction* parent,
-                                               const HloInstruction* operand) {
+int64 ClusteringScheduler::GetBufferMemoryFreed(const HloInstruction* parent,
+                                                const HloInstruction* operand) {
   int64 size = 0;
   // Calculate the total memory used by this operands output.
   points_to_analysis_.GetPointsToSet(operand).ForEachElement(
@@ -283,7 +284,7 @@ int64 LookAheadScheduler::GetBufferMemoryFreed(const HloInstruction* parent,
   return size;
 }
 
-int64 LookAheadScheduler::BytesFreedIfScheduled(
+int64 ClusteringScheduler::BytesFreedIfScheduled(
     const HloInstruction* instruction) {
   auto opcode = instruction->opcode();
 
@@ -327,7 +328,7 @@ int64 LookAheadScheduler::BytesFreedIfScheduled(
 // Dump the cluster as a dot file. Each cluster is a node with the
 // dependencies between clusters being the edges. If the graph is large it may
 // be advisable to use "dot -gslimit=1" to improve processing time.
-void LookAheadScheduler::DumpClusterAsDot(
+void ClusteringScheduler::DumpClusterAsDot(
     const absl::flat_hash_map<Cluster::Ref, uint32_t>& order) const {
   std::stringstream dot;
   dot << "digraph clusters { ";
@@ -355,7 +356,7 @@ void LookAheadScheduler::DumpClusterAsDot(
   VLOG(0) << dot.str() << "\n\n";
 }
 
-void LookAheadScheduler::ClusterHelper::GroupChainsOfInstructions() {
+void ClusteringScheduler::ClusterHelper::GroupChainsOfInstructions() {
   // For each instruction in the graph group it into a cluster with its
   // neighbours if possible.
   for (HloInstruction* instruction : parent->computation_->instructions()) {
@@ -398,7 +399,7 @@ void LookAheadScheduler::ClusterHelper::GroupChainsOfInstructions() {
   }
 }
 
-void LookAheadScheduler::ClusterHelper::BuildDependencyGraph() {
+void ClusteringScheduler::ClusterHelper::BuildDependencyGraph() {
   // Sort using the O(1) container then the very few that are left go into the
   // deterministically sorted O(log(N)) container after.
   std::unordered_set<Cluster::Ref> root_nodes_temp{};
@@ -453,7 +454,7 @@ void LookAheadScheduler::ClusterHelper::BuildDependencyGraph() {
   }
 }
 
-void LookAheadScheduler::ClusterHelper::ClusterNodes() {
+void ClusteringScheduler::ClusterHelper::ClusterNodes() {
   GroupChainsOfInstructions();
   BuildDependencyGraph();
 }
@@ -474,7 +475,7 @@ int64 ByteSizeOfIncludingTuple(const Shape& shape) {
 }
 }  // namespace
 
-void LookAheadScheduler::AddToReady(Cluster::Ref node_to_add) {
+void ClusteringScheduler::AddToReady(Cluster::Ref node_to_add) {
   if (node_to_add->colocator) {
     auto colocator = *node_to_add->colocator;
     int64 size =
@@ -490,8 +491,8 @@ void LookAheadScheduler::AddToReady(Cluster::Ref node_to_add) {
     ready_queue.push(node_to_add);
   }
 }
-std::vector<LookAheadScheduler::Cluster::Ref>
-LookAheadScheduler::PopFromColocatorQueue(
+std::vector<ClusteringScheduler::Cluster::Ref>
+ClusteringScheduler::PopFromColocatorQueue(
     const InstructionColocatorHelper* colocator) {
   // Once we get all the instruction, this queue is no longer ready to be
   // scheduled/has any nodes.
@@ -500,8 +501,8 @@ LookAheadScheduler::PopFromColocatorQueue(
   return colocator_queues.at(colocator).GetAll();
 }
 
-std::vector<LookAheadScheduler::Cluster::Ref>
-LookAheadScheduler::PopFromQueue() {
+std::vector<ClusteringScheduler::Cluster::Ref>
+ClusteringScheduler::PopFromQueue() {
   // First try and schedule instructions from a ready colocator.
   if (colocators_ready_to_schedule.size()) {
     return PopFromColocatorQueue(*std::begin(colocators_ready_to_schedule));
@@ -519,7 +520,7 @@ LookAheadScheduler::PopFromQueue() {
 
 // Add a cluster node to the wait queue or if it has no dependencies, straight
 // to the ready queue.
-void LookAheadScheduler::AddClusterWaitOrReadyQueue(Cluster::Ref node_to_add) {
+void ClusteringScheduler::AddClusterWaitOrReadyQueue(Cluster::Ref node_to_add) {
   // If all the parents of this node have already been scheduled we can
   // just schedule this node directly.
   bool canJustSchedule = true;
@@ -543,7 +544,7 @@ void LookAheadScheduler::AddClusterWaitOrReadyQueue(Cluster::Ref node_to_add) {
 // Add all of the dependencies of the node_just_added to the wait queue if
 // they have other unscheduled parents or add them to the ready queue if this
 // is the last parent to be scheduled.
-void LookAheadScheduler::AddDepsToWaitOrReadyQueue(
+void ClusteringScheduler::AddDepsToWaitOrReadyQueue(
     Cluster::Ref node_just_added) {
   // Add all of the next nodes into either the wait queue or the ready queue.
   for (Cluster::Ref child_dependency : node_just_added->reverse_dependencies) {
@@ -561,7 +562,7 @@ void LookAheadScheduler::AddDepsToWaitOrReadyQueue(
   }
 }
 
-HloInstructionSequence LookAheadScheduler::CreateSchedule() {
+HloInstructionSequence ClusteringScheduler::CreateSchedule() {
   HloInstructionSequence schedule;
 
   bool should_dump_dot = PoplarXlaFlags::Get().dump_schedule_as_dot;
@@ -619,29 +620,30 @@ HloInstructionSequence LookAheadScheduler::CreateSchedule() {
   return schedule;
 }
 
-StatusOr<HloInstructionSequence> LookAheadScheduler(
+StatusOr<HloInstructionSequence> ClusteringScheduler(
     HloComputation* computation,
     const TuplePointsToAnalysis& points_to_analysis,
     const LogicalBuffer::SizeFunction& size_function,
     const absl::flat_hash_map<const HloComputation*, int64>&
         memory_by_computation,
     const CompilerInformation& information) {
-  VLOG(1) << "LookAheadScheduler";
-  return LookAheadScheduler::Run(computation, points_to_analysis, size_function,
-                                 memory_by_computation, information);
+  VLOG(1) << "ClusteringScheduler";
+  return ClusteringScheduler::Run(computation, points_to_analysis,
+                                  size_function, memory_by_computation,
+                                  information);
 }
 }  // namespace
 
 // Create a functor which performs the look-ahead scheduling.
-IpuSchedulerAlgorithm CreateLookAheadMemoryScheduler(
+IpuSchedulerAlgorithm CreateClusteringMemoryScheduler(
     const CompilerInformation& information) {
   return [=](HloComputation* computation,
              const TuplePointsToAnalysis& points_to_analysis,
              const LogicalBuffer::SizeFunction& size_function,
              const absl::flat_hash_map<const HloComputation*, int64>&
                  memory_by_computation) {
-    return LookAheadScheduler(computation, points_to_analysis, size_function,
-                              memory_by_computation, information);
+    return ClusteringScheduler(computation, points_to_analysis, size_function,
+                               memory_by_computation, information);
   };
 }
 

@@ -59,6 +59,7 @@ def create_ipu_config(profiling=False,
                       report_every_nth_execution=0,
                       max_report_size=0x10000000,
                       report_directory="",
+                      scheduler_selection="",
                       always_rearrange_copies_on_the_host=False,
                       merge_infeed_io_copies=False,
                       disable_graph_convolution_caching=False,
@@ -83,6 +84,9 @@ def create_ipu_config(profiling=False,
     report_directory: When set, reports will be written to files in this
       directory, instead of being written into the events.  The events will
       contain the full paths of the report files.
+    scheduler_selection: When set, this forces the compiler to use a specific
+      scheduler when ordering the instructions.  See the documentation for a
+      list of valid schedulers.
     always_rearrange_copies_on_the_host: *** Experimental Flag ***
       The data which is streamed to/from the device might be stored in different
       layouts on the device and on the host. If that is the case the
@@ -140,6 +144,7 @@ def create_ipu_config(profiling=False,
   opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
   opts.speed_size_config.disable_graph_convolution_caching = \
       disable_graph_convolution_caching
+  opts.speed_size_config.scheduler_selection = scheduler_selection
 
   opts.retain_control_dependencies = retain_control_dependencies
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
