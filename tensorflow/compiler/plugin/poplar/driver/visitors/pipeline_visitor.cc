@@ -618,8 +618,8 @@ Status PipelineVisitor::FinishVisit(HloInstruction* inst) {
 Status PipelineVisitor::HandleTuple(HloInstruction* hlo) {
   if (hlo->parent()->root_instruction() != hlo) {
     return FailedPrecondition(
-        "Hlo tuple instructions are only allow in a pipeline when they are the "
-        "root instruction. Hlo instruction \"%s\" is not.",
+        "Hlo tuple instructions are only allowed in a pipeline when they are "
+        "the root instruction. Hlo instruction \"%s\" is not.",
         hlo->name());
   }
 
