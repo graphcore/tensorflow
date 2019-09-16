@@ -84,13 +84,26 @@ class RunConfig(run_config_lib.RunConfig):
 
   Args:
     ipu_run_config: :class:`.IPURunConfig` object for IPU-specific configuration.
+    master: a string. The address of the distributed master to use for training.
     **kwargs: keyword config parameters.
   """
 
-  def __init__(self, ipu_run_config=None, **kwargs):
+  def __init__(self,
+               ipu_run_config=None,
+               master=None,
+               **kwargs):
     super(RunConfig, self).__init__(**kwargs)
     self._ipu_run_config = ipu_run_config or IPURunConfig()
+
+    # master is set by the parent class based on TF_CONFIG,
+    # only override here if the user gave it explicitly.
+    if master is not None:
+      self._master = master
 
   @property
   def ipu_run_config(self):
     return self._ipu_run_config
+
+  @property
+  def master(self):
+    return self._master

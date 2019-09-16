@@ -21,6 +21,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.distribute import collective_all_reduce_strategy
 from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
 from tensorflow.python.distribute import distribute_lib
@@ -89,15 +90,24 @@ class IPUMultiWorkerExtended(
     # variable might be moved to the host to be colocated with it.
     kwargs["caching_device"] = current_device()
 
-    # The chief worker will initialize and broadcast the value to
-    # the other workers.
-    kwargs["initial_value"] = self._get_variable_creator_initial_value(
-        replica_id=0,  # First replica on each worker.
-        device=self._variable_device,
-        primary_var=None,
-        **kwargs)
+    # In case we are inside an ipu_jit_scope, we need to override it
+    # to disable XLA for variable initialization on the host.
+    disable_xla = {
+      "_XlaCompile": attr_value_pb2.AttrValue(b=False)
+    }
 
-    with ops.device(self._variable_device):
+    graph = ops.get_default_graph()
+    with ops.device(self._variable_device), \
+        graph._attr_scope(disable_xla):  # pylint: disable=protected-access
+
+      # The chief worker will initialize and broadcast the value to
+      # the other workers.
+      kwargs["initial_value"] = self._get_variable_creator_initial_value(
+          replica_id=0,  # First replica on each worker.
+          device=self._variable_device,
+          primary_var=None,
+          **kwargs)
+
       # Don't record operations (e.g. other variable reads) during
       # variable creation.
       with tape.stop_recording():
@@ -116,6 +126,9 @@ class IPUMultiWorkerExtended(
         return result
       else:
         return nest.map_structure(self._local_results, result)
+
+  def read_var(self, var):
+    return var.read_value()
 
   def _reduce_to(self, reduce_op, value, destinations):
     # Make sure the reduction is done on the variable device

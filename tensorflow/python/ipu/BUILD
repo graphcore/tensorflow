@@ -295,7 +295,7 @@ tf_py_test(
 
 tf_py_test(
     name = "ipu_multi_worker_strategy_test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/ipu_multi_worker_strategy_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",

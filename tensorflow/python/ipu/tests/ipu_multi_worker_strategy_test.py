@@ -26,23 +26,29 @@ from tensorflow.python.distribute import multi_worker_test_base
 from tensorflow.python.distribute import multi_worker_util
 from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
 from tensorflow.python.distribute.reduce_util import ReduceOp
+from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu import ipu_estimator
+from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategy
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
 from tensorflow.python.training.momentum import MomentumOptimizer
+from tensorflow.python.training.monitored_session import MonitoredTrainingSession
 
 
 class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
   @classmethod
   def setUpClass(cls):
+    cls._num_workers = 2
     cls._cluster_spec = multi_worker_test_base.create_in_process_cluster(
-        num_workers=2, num_ps=0, has_chief=False)
+        num_workers=cls._num_workers, num_ps=0, has_chief=False)
 
   collective_key_base = 0
 
@@ -333,12 +339,67 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(inputs.initializer)
-        self.assertEqual([1.0], sess.run(sum_y))  # 0*0 + 1*1
-        self.assertEqual([13.0], sess.run(sum_y))  # 2*2 + 3*3
-        self.assertEqual([41.0], sess.run(sum_y))  # 4*4 + 5*5
+        self.assertEqual(1.0, sess.run(sum_y))  # 0*0 + 1*1
+        self.assertEqual(13.0, sess.run(sum_y))  # 2*2 + 3*3
+        self.assertEqual(41.0, sess.run(sum_y))  # 4*4 + 5*5
 
   def test_distribute_dataset(self):
     self._run_between_graph_clients(self._test_distribute_dataset,
+                                    self._cluster_spec, num_gpus=0)
+
+  def _test_monitored_training_session(self, task_type, task_id, _num_gpus):
+    strategy, target, sess_config = self._create_test_objects(
+        task_type=task_type, task_id=task_id)
+
+    with strategy.scope():
+      def step_fn(x):
+        with ipu_scope("/device:IPU:0"):
+          w = variable_scope.get_variable("w", initializer=2.0)
+          y = w * x
+          return y
+
+      inputs = array_ops.placeholder(dtype=np.float32, shape=())
+      per_replica_y = strategy.experimental_run_v2(step_fn, args=[inputs])
+      sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
+
+      with MonitoredTrainingSession(master=target, config=sess_config) as sess:
+        out = sess.run(sum_y, feed_dict={inputs: task_id + 1})
+        self.assertEqual(6.0, out)  # 2*1 + 2*2
+
+  def test_monitored_training_session(self):
+    self._run_between_graph_clients(self._test_monitored_training_session,
+                                    self._cluster_spec, num_gpus=0)
+
+  def _test_ipu_estimator_train(self, task_type, task_id, _num_gpus):
+    strategy, target, _ = self._create_test_objects(
+        task_type=task_type, task_id=task_id)
+
+    def my_model_fn(features, labels, mode):
+      loss = math_ops.reduce_sum(features + labels, name="loss")
+      train_op = array_ops.identity(loss)
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        train_op=train_op)
+
+    def my_input_fn():
+      features = np.array([[1.0], [2.0]], dtype=np.float32)
+      labels = np.array([[3.0], [4.0]], dtype=np.float32)
+      dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+      dataset = dataset.batch(1, drop_remainder=True)
+      dataset = dataset.shard(self._num_workers, task_id)
+      return dataset
+
+    config = ipu_run_config.RunConfig(
+      master=target,
+      train_distribute=strategy,
+    )
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    estimator.train(my_input_fn, steps=1)
+    self.assertEquals(1, estimator.get_variable_value("global_step"))
+
+  def test_ipu_estimator_train(self):
+    self._run_between_graph_clients(self._test_ipu_estimator_train,
                                     self._cluster_spec, num_gpus=0)
 
 
