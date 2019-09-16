@@ -37,24 +37,9 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-std::string TempFilename(const std::string& extension = ".cpp") {
-  std::string filename = tmpnam(nullptr);
-
-  return filename + extension;
-}
-
-template <typename Body>
-void WithTempFile(const std::string& filename, Body body) {
-  std::ofstream file(filename);
-
-  body(file);
-
-  std::remove(filename.c_str());
-}
-
-std::string GenerateVertexSource(const std::string& name,
-                                 std::vector<poplar::Tensor> input_tensors,
-                                 const std::string& body) {
+std::stringstream GenerateVertexSource(
+    const std::string& name, std::vector<poplar::Tensor> input_tensors,
+    const std::string& body) {
   std::stringstream result;
   result << "#include <poplar/HalfFloat.hpp>" << std::endl
          << "#include <poplar/Vertex.hpp>" << std::endl
@@ -83,7 +68,7 @@ std::string GenerateVertexSource(const std::string& name,
          << "};" << std::endl
          << "}" << std::endl;
 
-  return result.str();
+  return result;
 }
 
 class CodeletExpressionOpOp : public PoplibsOpDef {
@@ -111,17 +96,11 @@ class CodeletExpressionOpOp : public PoplibsOpDef {
 
     static int static_count = 0;
     const std::string vertex_name = "UserVertex" + std::to_string(static_count);
-    const auto vertex_source =
+    std::stringstream vertex_source =
         GenerateVertexSource(vertex_name, input_tensors, op_inst->source());
     static_count++;
 
-    const auto filename = TempFilename();
-    WithTempFile(filename, [&](std::ofstream& file) mutable {
-      file << vertex_source << std::endl;
-      file.close();
-
-      graph.addCodelets(filename);
-    });
+    graph.addCodelets(vertex_source);
 
     poplar::Tensor output = graph.clone(input_tensors[0]);
 
