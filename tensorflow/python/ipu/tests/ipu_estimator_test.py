@@ -495,6 +495,19 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     self.assertEqual(2., scores["label_mean"])
     self.assertEqual(3., scores[model_fn_lib.LOSS_METRIC_KEY])
 
+  def testEvaluateMissingEvalMetrics(self):
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensors(([], []))
+
+    def my_model_fn(features, labels, mode):
+      loss = math_ops.reduce_mean(features + labels)
+      return model_fn_lib.EstimatorSpec(mode, loss=loss)
+
+    config = ipu_run_config.RunConfig()
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    with self.assertRaisesRegexp(ValueError, "must contain eval_metric_ops"):
+      estimator.evaluate(my_input_fn, steps=1)
+
   def testPredictTensorTwoPerIteration(self):
     def my_input_fn():
       features = [[2.0], [3.0]]

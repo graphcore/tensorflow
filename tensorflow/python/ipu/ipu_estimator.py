@@ -213,7 +213,7 @@ class _ModelFnWrapper(object):
         raise ValueError("EstimatorSpec must contain loss when evaluating")
 
       eval_metric_ops = estimator_spec.eval_metric_ops
-      if eval_metric_ops is None:
+      if not eval_metric_ops:
         raise ValueError(
             "EstimatorSpec must contain eval_metric_ops when evaluating")
 
