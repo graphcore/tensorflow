@@ -195,10 +195,15 @@ class _ModelFnWrapper(object):
       return total_loss
 
     def training_loop():
-      total_loss = loops.repeat(self._iterations_per_loop,
-                                training_step,
-                                inputs=[_INITIAL_LOSS],
-                                infeed_queue=self._infeed_queue)
+      if self._iterations_per_loop == 1:
+        # Simplify the graph by avoiding the loop.
+        args = self._infeed_queue._dequeue()  # pylint: disable=protected-access
+        total_loss = training_step(_INITIAL_LOSS, *args)
+      else:
+        total_loss = loops.repeat(self._iterations_per_loop,
+                                  training_step,
+                                  inputs=[_INITIAL_LOSS],
+                                  infeed_queue=self._infeed_queue)
       return self._loop_replica_mean(total_loss)
 
     return training_loop
@@ -332,7 +337,10 @@ def _augment_model_fn(model_fn):
       raise ValueError("Unknown mode: {}".format(mode))
 
     with ipu_scope("/device:IPU:0"):
-      compiled_loop = ipu_compiler.compile(loop)
+      if config.use_xla_auto_clustering:
+        compiled_loop = [loop()]
+      else:
+        compiled_loop = ipu_compiler.compile(loop)
 
     if config.ipu_run_config.compile_summary:
       ipu_ops.summary_ops.ipu_compile_summary("compile_summary", compiled_loop)

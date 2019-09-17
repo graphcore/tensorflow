@@ -37,6 +37,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import googletest
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
 from tensorflow.python.training.momentum import MomentumOptimizer
@@ -375,16 +376,26 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     strategy, target, _ = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
+    learning_rate = 0.5
+    initial_w = 2.0
+
     def my_model_fn(features, labels, mode):
-      loss = math_ops.reduce_sum(features + labels, name="loss")
-      train_op = array_ops.identity(loss)
+      optimizer = GradientDescentOptimizer(learning_rate)
+      w = variable_scope.get_variable(name="w", initializer=initial_w)
+      predictions = features * w
+      loss = losses.mean_squared_error(labels=labels, predictions=predictions)
+      with ops.name_scope("compute_gradients"):
+        grads_and_vars = optimizer.compute_gradients(loss)
+      with ops.name_scope("apply_gradients"):
+        train_op = optimizer.apply_gradients(grads_and_vars)
       return model_fn_lib.EstimatorSpec(mode=mode,
                                         loss=loss,
                                         train_op=train_op)
 
+    features = np.array([[1.0], [2.0]], dtype=np.float32)
+    labels = np.array([[1.0], [2.0]], dtype=np.float32)
+
     def my_input_fn():
-      features = np.array([[1.0], [2.0]], dtype=np.float32)
-      labels = np.array([[3.0], [4.0]], dtype=np.float32)
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
       dataset = dataset.batch(1, drop_remainder=True)
       dataset = dataset.shard(self._num_workers, task_id)
@@ -393,11 +404,18 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     config = ipu_run_config.RunConfig(
       master=target,
       train_distribute=strategy,
+      use_xla_auto_clustering=True,
     )
 
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
     estimator.train(my_input_fn, steps=1)
     self.assertEquals(1, estimator.get_variable_value("global_step"))
+
+    # L(x, y) = 0.5 * ((w * x_0 - y_0)^2 + (w * x_1 - y_1)^2)
+    # dL(x, y)/dw = (w * x_0 - y_0) * x_0 + (w * x_1 - y_1) * x_1
+    reference_gradient = np.sum((initial_w * features - labels) * features)
+    reference_w = initial_w - learning_rate * reference_gradient
+    self.assertEqual(reference_w, estimator.get_variable_value("w"))
 
   def test_ipu_estimator_train(self):
     self._run_between_graph_clients(self._test_ipu_estimator_train,
