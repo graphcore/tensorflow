@@ -92,17 +92,13 @@ def get_compute_sets_from_report(report):
   return cs
 
 
-def check_compute_sets_not_in_blacklist(cs_list, bl):
-  result = True
+def names_in_blacklist(names, blacklist):
   fail_list = []
-  for x in bl:
-    matches = [cs for cs in cs_list if fnmatch.fnmatch(cs, x)]
-    if matches:
-      fail_list += matches
-      result = False
-  if not result:
-    print("Compute sets present: " + str(fail_list))
-  return result
+  bl = [x + '*' for x in blacklist]
+  for name in names:
+    if [b for b in bl if fnmatch.fnmatch(name, b)]:
+      fail_list += name
+  return fail_list
 
 
 def missing_names_in_whitelist_entries(names, whitelist):
@@ -140,7 +136,8 @@ class ReportJSON(object):
                io_trace=True,
                compile_ipu_code=False,
                device_count_override=None,
-               execution_trace=True):
+               execution_trace=True,
+               sharded=False):
     self.test = test
     self.sess = sess
     with ops.device('cpu'):
@@ -150,7 +147,8 @@ class ReportJSON(object):
                          execution_trace=execution_trace,
                          text_report=False,
                          compile_ipu_code=compile_ipu_code,
-                         device_count_override=device_count_override)
+                         device_count_override=device_count_override,
+                         sharded=sharded)
 
   def reset(self):
     self.sess.run(self.report)
@@ -172,7 +170,7 @@ class ReportJSON(object):
           if evt.compile_end.compilation_report:
             self.events[IpuTraceEvent.COMPILE_END] = js.loads(
                 evt.compile_end.compilation_report, encoding="utf-8")
-            # Note: if there is more than one COMPILE_END even then the tensor
+            # Note: if there is more than one COMPILE_END event then the tensor
             # mappings will be overwritten.
             self.last_tensor_mappings = js.loads(evt.compile_end.tensor_map,
                                                  encoding="utf-8")
@@ -212,6 +210,11 @@ class ReportJSON(object):
 
   def get_compute_sets(self):
     return self.events[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
+
+  def assert_no_compute_set(self):
+    self.test.assertFalse(
+        self.events.get(IpuTraceEvent.COMPILE_END,
+                        {}).get("computeSets", {}).get("names", {}))
 
   def get_last_tensor_mappings(self):
     return self.last_tensor_mappings
@@ -269,6 +272,13 @@ class ReportJSON(object):
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
         "Whitelist items not found in compute sets:\n\t%s" %
         "\n\t".join(self.get_compute_sets()))
+
+  # Asserts that none of the compute sets match any of the blacklist items
+  def assert_compute_sets_not_in_blacklist(self, blacklist):
+    self.test.assertFalse(
+        names_in_blacklist(self.get_compute_sets(), blacklist),
+        "Compute sets items found in blacklist:\n\t%s" %
+        "\n\t".join(blacklist))
 
   # Asserts that all the whitelist patterns match at least one vertex
   def assert_vertices_contain_list(self, ok):
