@@ -89,6 +89,11 @@ class FifoOp : public PoplibsOpDef {
       }
     }
 
+    // If the FIFO can only store a single buffer then skip the counter creation
+    if (fifo_inst->depth() == 1) {
+      return sw_cases[0];
+    }
+
     // Keep track of where in the buffer we are.
     auto counter = graph.addVariable(poplar::UNSIGNED_INT, {},
                                      GetDebugName(inst) + "/counter");
