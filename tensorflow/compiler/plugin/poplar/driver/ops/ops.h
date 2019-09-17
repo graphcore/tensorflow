@@ -15,6 +15,7 @@
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
 
+#include <experimental/popfloat/CastToGfloat.hpp>
 #include <poplar/Program.hpp>
 #include <poplin/Convolution.hpp>
 #include <popnn/Pooling.hpp>
@@ -133,6 +134,21 @@ StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
 StatusOr<poplar::program::Program> CreatePoplibsWindowReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreatePoplibsGfloatParams(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map,
+    poplar::Type gf_calc_type, const unsigned gf_packed_cfg);
+
+StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map,
+    experimental::popfloat::GfloatCast::CastConfig& cast_op_cfg);
+
+StatusOr<poplar::program::Program> CreatePoplibsCastGfloatToNative(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map,
+    experimental::popfloat::GfloatCast::CastConfig& cast_op_cfg);
 
 StatusOr<poplar::program::Program> CreatePoplibsPooling(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,

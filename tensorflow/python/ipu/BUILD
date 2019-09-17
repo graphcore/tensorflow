@@ -32,6 +32,7 @@ py_library(
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
+        "//tensorflow/compiler/plugin/poplar:popfloat_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
         "//tensorflow/compiler/plugin/poplar:popops_ops_py",
         "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
@@ -45,6 +46,7 @@ py_library(
     name = "ipu_grad_ops_lib",
     srcs_version = "PY2AND3",
     srcs = [
+        "ops/experimental/popfloat_ops_grad.py",
         "ops/internal_ops_grad.py",
         "ops/pipelining_ops_grad.py",
         "ops/normalization_ops_grad.py",
@@ -80,6 +82,7 @@ py_library(
         "ops/cross_replica_ops.py",
         "ops/custom_ops.py",
         "ops/embedding_ops.py",
+        "ops/experimental/popfloat_cast_to_gfloat.py",
         "ops/internal_ops.py",
         "ops/normalization_ops.py",
         "ops/pipelining_ops.py",

@@ -81,6 +81,9 @@ class PoplarXlaFlags {
   // Allow/disallow nans during graph construction.
   bool allow_nans = false;
 
+  // Enable the GFloat format.
+  bool enable_gfloat = false;
+
   // Stores all the values as a string.
   std::string as_string = "";
 

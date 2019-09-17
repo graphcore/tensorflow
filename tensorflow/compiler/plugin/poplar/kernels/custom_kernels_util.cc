@@ -104,7 +104,10 @@ Json::Value GetAsJsonValue(const uint64& val) {
 void AttributeMap::AddAttribute(const std::string& field_name,
                                 const absl::any& attr) {
   const std::type_info& tinfo = attr.type();
-  if (tinfo == typeid(float)) {
+  if (tinfo == typeid(std::string)) {
+    auto casted_val = absl::any_cast<std::string>(attr);
+    attributes_[field_name] = GetAsJsonValue(casted_val);
+  } else if (tinfo == typeid(float)) {
     auto casted_val = absl::any_cast<float>(attr);
     attributes_[field_name] = GetAsJsonValue(casted_val);
 

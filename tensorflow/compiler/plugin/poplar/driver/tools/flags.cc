@@ -68,7 +68,8 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"tensor_map_file_path", "Directory for tensor map dump files."},
       {"fallback_scheduler",
        "Use the sync list scheduler rather than the default one."},
-      {"allow_nans", "will allow NaNs."}};
+      {"allow_nans", "will allow NaNs."},
+      {"enable_gfloat", "Enables the GFloat format."}};
   return flag_usage;
 }
 }  // namespace
@@ -103,6 +104,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(tensor_map_file_path)
     ADD_FLAG(fallback_scheduler)
     ADD_FLAG(allow_nans)
+    ADD_FLAG(enable_gfloat)
 
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(add_all_reduce_copies)

@@ -16,6 +16,7 @@ filegroup(
     "poplibs/lib/libpopops.*",
     "poplibs/lib/libpoprand.*",
     "poplibs/lib/libpopsys.*",
+    "poplibs/lib/libpopfloat.*",
     "poplibs/lib/libpoputil.*",
     "poplibs/lib/libpoplibs_support.*",
   ]),

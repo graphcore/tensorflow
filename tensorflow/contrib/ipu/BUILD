@@ -33,6 +33,7 @@ py_library(
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
+        "//tensorflow/compiler/plugin/poplar:popfloat_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
         "//tensorflow/compiler/plugin/poplar:popops_ops_py",
         "//tensorflow/compiler/plugin/poplar:poprand_ops_py",

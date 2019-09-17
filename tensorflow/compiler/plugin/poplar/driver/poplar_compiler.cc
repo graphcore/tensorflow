@@ -111,6 +111,7 @@ limitations under the License.
 #include <poplar/exceptions.hpp>
 #include <poputil/exceptions.hpp>
 
+#include <experimental/popfloat/codelets.hpp>
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
 #include <popops/codelets.hpp>
@@ -378,6 +379,7 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   popops::addCodelets(main_graph);
   poprand::addCodelets(main_graph);
   popsys::addCodelets(main_graph);
+  experimental::popfloat::addCodelets(main_graph);
 }
 
 StatusOr<std::vector<IpuSchedulerAlgorithm>> GetSchedulerList(

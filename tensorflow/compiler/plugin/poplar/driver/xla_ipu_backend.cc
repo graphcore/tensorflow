@@ -57,6 +57,6 @@ static bool OpFilter(KernelDef* kdef) {
   return true;
 }
 
-REGISTER_XLA_BACKEND(DEVICE_IPU_XLA_JIT, kIpuAllTypes, OpFilter);
+REGISTER_XLA_BACKEND(DEVICE_IPU_XLA_JIT, GetIPUSupportedTypes(), OpFilter);
 
 }  // namespace tensorflow

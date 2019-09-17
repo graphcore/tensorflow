@@ -81,6 +81,14 @@ tf_proto_library(
     j2objc_api_version = 1,
 )
 
+tf_proto_library(
+    name = "popfloat_config_protos",
+    srcs = ["kernels/popfloat/gfloat_config_utils.proto"],
+    cc_api_version = 2,
+    make_default_target_header_only = True,
+    j2objc_api_version = 1,
+)
+
 cc_library(
     name = "custom_kernels_util",
     srcs = [
@@ -91,6 +99,7 @@ cc_library(
     ],
     deps = [
         ":poplibs_ops_cc_impl",
+        ":popfloat_config_protos_cc_impl",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:hlo",
         "@jsoncpp_git//:jsoncpp",
@@ -155,6 +164,7 @@ cc_library(
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
         "driver/tools/custom_ops/arg_min_max.cc",
+        "driver/tools/custom_ops/cast_to_gfloat_hlo.cc",
         "driver/tools/custom_ops/group_norm_infer.cc",
         "driver/tools/custom_ops/group_norm_train.cc",
         "driver/tools/custom_ops/group_norm_grad.cc",
@@ -182,7 +192,6 @@ cc_library(
         "driver/tools/custom_ops/truncated_normal.cc",
         "driver/tools/custom_ops/user_op_hlo.cc",
         "driver/tools/find_all_users.cc",
-        "driver/tools/flags.cc",
         "driver/tools/hlo_hash.cc",
         "driver/tools/hlo_matcher.cc",
         "driver/tools/input_output_aliasing_map.cc",
@@ -245,6 +254,7 @@ cc_library(
         "driver/tools/conv_util.h",
         "driver/tools/custom_ops/arg_min_max.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
+        "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
         "driver/tools/custom_ops/dropout_hlo.h",
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
@@ -271,8 +281,6 @@ cc_library(
         "driver/tools/custom_ops/truncated_normal.h",
         "driver/tools/custom_ops/user_op_hlo.h",
         "driver/tools/find_all_users.h",
-        "driver/tools/flags.h",
-        "driver/tools/hash.h",
         "driver/tools/hlo_hash.h",
         "driver/tools/hlo_matcher.h",
         "driver/tools/input_output_aliasing_map.h",
@@ -293,6 +301,8 @@ cc_library(
     ],
     deps = [
         ":common",
+        ":flags",
+        ":hash",
         ":backend_protos",
         ":custom_kernels_util",
         ":config_protos_cc_impl",
@@ -314,10 +324,40 @@ cc_library(
 )
 
 cc_library(
+    name = "hash",
+    srcs = [],
+    hdrs = [
+      "driver/tools/hash.h",
+    ],
+    deps = [
+      "//tensorflow/core:framework_headers_lib",
+    ],
+)
+
+cc_library(
+    name = "flags",
+    srcs = [
+      "driver/tools/flags.cc",
+    ],
+    hdrs = [
+      "driver/tools/flags.h",
+    ],
+    deps = [
+      ":hash",
+      "//tensorflow/compiler/xla:xla_headers_lib",
+      "//tensorflow/core:framework_headers_lib",
+      "//third_party/eigen3",
+    ],
+)
+
+cc_library(
     name = "common",
     srcs = [],
     hdrs = [
       "driver/xla_ipu_common.h",
+    ],
+    deps = [
+      ":flags",
     ],
 )
 
@@ -330,6 +370,8 @@ cc_library(
         "driver/ops/custom_ops/poplibs_ops.cc",
         "driver/ops/custom_ops/popnn/arg_min_max.cc",
         "driver/ops/custom_ops/popnn/gru.cc",
+        "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
+        "driver/ops/custom_ops/popfloat/gfloat_ops_utils.cc",
         "driver/ops/custom_ops/popnn/lstm.cc",
         "driver/ops/custom_ops/popnn/norm.cc",
         "driver/ops/custom_ops/popnn/onehot.cc",
@@ -352,6 +394,7 @@ cc_library(
         "driver/ops/custom_ops/poputil/stateful_gradient_accumulate.cc",
         "driver/ops/custom_ops/poputil/stateful_noop.cc",
         "driver/ops/custom_ops/poputil/user_op.cc",
+        "driver/ops/cast_to_gfloat_ops.cc",
         "driver/ops/graph_caching_util.cc",
         "driver/ops/gather_ops.cc",
         "driver/ops/map_ops.cc",
@@ -392,6 +435,7 @@ cc_library(
         "driver/compiler_resources.h",
         "driver/ops/conv_graph_caching.h",
         "driver/ops/custom_ops/custom_ops.h",
+        "driver/ops/custom_ops/popfloat/gfloat_ops_utils.h",
         "driver/ops/custom_ops/poplibs_ops.h",
         "driver/ops/graph_caching_util.h",
         "driver/ops/ops.h",
@@ -470,6 +514,7 @@ cc_library(
         "kernels/datastream/feeds.cc",
         "kernels/ipu_kernels.cc",
         "kernels/pipelining/pipelining.cc",
+        "kernels/popfloat/cast_to_gfloat.cc",
         "kernels/popnn/arg_min_max.cc",
         "kernels/popnn/gru.cc",
         "kernels/popnn/lstm.cc",
@@ -578,6 +623,29 @@ tf_custom_op_py_library(
     name = "popops_ops_py",
     kernels = [":popops_ops"],
     deps = [":popops_ops_wrapper_py"],
+    srcs_version = "PY2AND3",
+)
+
+cc_library(
+    name = "popfloat_ops",
+    srcs = [
+        "ops/popfloat/cast_to_gfloat.cc"
+    ],
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "popfloat_ops_wrapper_py",
+    out = "ops/gen_popfloat_ops.py",
+    deps = [":popfloat_ops"],
+    visibility = ["//tensorflow:internal"],
+)
+
+tf_custom_op_py_library(
+    name = "popfloat_ops_py",
+    kernels = [":popfloat_ops"],
+    deps = [":popfloat_ops_wrapper_py"],
     srcs_version = "PY2AND3",
 )
 
@@ -691,6 +759,7 @@ cc_library(
         ":pipelining_ops",
         ":popnn_ops",
         ":popops_ops",
+        ":popfloat_ops",
         ":poprand_ops",
         ":poputil_ops",
         ":pop_datastream_ops",

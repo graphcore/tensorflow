@@ -7,6 +7,7 @@ message PoplibsOp {
     Popops = 2;
     Poprand = 3;
     Poputil = 4;
+    Popfloat = 5;
   }
   required Lib lib = 1;
 
@@ -53,6 +54,9 @@ message PoplibsOp {
     ReplicationIndex = 39;
     CodeletExpressionOp = 40;
     StatefulNoop = 41;
+    CalcGfloatParams = 42;
+    CastNativeToGfloat = 43;
+    CastGfloatToNative = 44;
   }
   required Op op = 2;
 }

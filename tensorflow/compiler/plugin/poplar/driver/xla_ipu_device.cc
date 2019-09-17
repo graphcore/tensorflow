@@ -103,11 +103,13 @@ Status XlaIpuDeviceFactory::CreateDevices(
 
 REGISTER_LOCAL_DEVICE_FACTORY(DEVICE_XLA_IPU, XlaIpuDeviceFactory);
 
-REGISTER_XLA_LAUNCH_KERNEL(DEVICE_XLA_IPU, XlaLocalLaunchOp, kIpuAllTypes);
-REGISTER_XLA_COMPILE_KERNEL(DEVICE_XLA_IPU, XlaCompileOp, kIpuAllTypes);
-REGISTER_XLA_RUN_KERNEL(DEVICE_XLA_IPU, XlaRunOp, kIpuAllTypes);
+REGISTER_XLA_LAUNCH_KERNEL(DEVICE_XLA_IPU, XlaLocalLaunchOp,
+                           GetIPUSupportedTypes());
+REGISTER_XLA_COMPILE_KERNEL(DEVICE_XLA_IPU, XlaCompileOp,
+                            GetIPUSupportedTypes());
+REGISTER_XLA_RUN_KERNEL(DEVICE_XLA_IPU, XlaRunOp, GetIPUSupportedTypes());
 
-REGISTER_XLA_DEVICE_KERNELS(DEVICE_XLA_IPU, kIpuAllTypes);
+REGISTER_XLA_DEVICE_KERNELS(DEVICE_XLA_IPU, GetIPUSupportedTypes());
 
 // Additional ops not explicitly defined by standard JIT
 

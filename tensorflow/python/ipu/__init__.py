@@ -46,4 +46,7 @@ from tensorflow.python.ipu.ops import replication_ops
 from tensorflow.python.ipu.ops import rnn_ops
 from tensorflow.python.ipu.ops import rnn_ops_grad
 from tensorflow.python.ipu.ops import summary_ops
+
+from tensorflow.python.ipu.ops.experimental import popfloat_cast_to_gfloat
+
 # pylint: enable=wildcard-import,unused-import
