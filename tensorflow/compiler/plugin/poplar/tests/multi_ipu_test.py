@@ -3,13 +3,12 @@ from __future__ import division
 from __future__ import print_function
 
 import fnmatch
-import json
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON, configure_ipu_system
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.keras import layers
@@ -44,40 +43,28 @@ class MultiIpuTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [2], name="a")
         pb = array_ops.placeholder(np.float32, [2], name="b")
         pc = array_ops.placeholder(np.float32, [2], name="c")
-        report = gen_ipu_ops.ipu_event_trace()
 
+      report = ReportJSON(self, sess, device_count_override=2)
       out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
-
-      sess.run(report)
+      report.reset()
 
       fd = {pa: [1., 1.], pb: [0., 1.], pc: [1., 5.]}
       result = sess.run(out, fd)
       self.assertAllClose(result[0], [3., 8.])
 
-      rep = sess.run(report)
+      report.parse_log()
+      mappings = report.get_last_tensor_mappings()["mappings"]
+      mods = list(mappings.keys())
+      self.assertEqual(len(mods), 1)
 
-      cs_list = []
-      evts = ipu.utils.extract_all_events(rep)
-      for evt in evts:
-        if evt.type == IpuTraceEvent.COMPILE_END:
-          cs_list = tu.get_compute_sets_from_json_report(evt)
-          js = json.loads(evt.compile_end.tensor_map.decode('utf-8'))
+      tiles = set()
+      for tensor in mappings[mods[0]]:
+        for tile in tensor[7]:
+          tiles.add(tile[0])
 
-          mods = list(js['mappings'].keys())
-          self.assertEqual(len(mods), 1)
-
-          tiles = set()
-          for tensor in js['mappings'][mods[0]]:
-            for tile in tensor[7]:
-              tiles.add(tile[0])
-
-          self.assertEqual(len(tiles), 3)
-          self.assertEqual(tiles, set((0, 1, 1216)))
+      self.assertEqual(len(tiles), 3)
+      self.assertEqual(tiles, set((0, 1, 1216)))
 
       ok = [
           '__seed*',
@@ -86,8 +73,7 @@ class MultiIpuTest(xla_test.XLATestCase):
           'switchControlBroadcast2/GlobalPre/Copy/OnTileCopy',
           'Copy_XLA_Args/arg0.1_to_/custom-call*/GlobalPre/Copy/OnTileCopy',
       ]
-
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testMultipleConfigureIpuShouldFail(self):
     with self.session() as sess:
@@ -105,17 +91,13 @@ class MultiIpuTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [2], name="b")
         pc = array_ops.placeholder(np.float32, [2], name="c")
 
-      out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
+      ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      ReportJSON(self, sess, device_count_override=2)
 
+      # Make sure changing the configuration of an already initialized IPU raises an exception.
       with self.assertRaises(Exception):
-        cfg = ipu.utils.create_ipu_config(profiling=True)
-        cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=True)
-        ipu.utils.configure_ipu_system(cfg)
+        configure_ipu_system(compile_ipu_code=True, io_trace=True)
 
   def testNotEnoughIpus(self):
     with self.session() as sess:
@@ -137,10 +119,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      ReportJSON(self, sess, device_count_override=2)
 
       with self.assertRaisesRegexp(errors.ResourceExhaustedError,
                                    'Trying to compile a graph for'):
@@ -154,14 +133,18 @@ class MultiIpuTest(xla_test.XLATestCase):
           with ipu.scopes.ipu_scope("/device:IPU:0"):
             with ipu.scopes.ipu_shard(0):
               init1 = init_ops.constant_initializer([1.0, 3.0])
-              v1 = variable_scope.get_variable(
-                  "v1", dtype=np.float32, shape=[2], initializer=init1)
+              v1 = variable_scope.get_variable("v1",
+                                               dtype=np.float32,
+                                               shape=[2],
+                                               initializer=init1)
               o1 = pa + pb + v1
 
             with ipu.scopes.ipu_shard(1):
               init2 = init_ops.constant_initializer([1.0, 2.0])
-              v2 = variable_scope.get_variable(
-                  "v2", dtype=np.float32, shape=[2], initializer=init2)
+              v2 = variable_scope.get_variable("v2",
+                                               dtype=np.float32,
+                                               shape=[2],
+                                               initializer=init2)
               o2 = pa + pc + v2
               out = o1 + o2
 
@@ -171,41 +154,31 @@ class MultiIpuTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [2], name="a")
         pb = array_ops.placeholder(np.float32, [2], name="b")
         pc = array_ops.placeholder(np.float32, [2], name="c")
-        report = gen_ipu_ops.ipu_event_trace()
 
       out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess, device_count_override=2)
       tu.move_variable_initialization_to_cpu()
 
-      sess.run(report)
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       fd = {pa: [1., 1.], pb: [0., 1.], pc: [1., 5.]}
       result = sess.run(out, fd)
       self.assertAllClose(result[0], [5., 13.])
 
-      rep = sess.run(report)
+      report.parse_log()
+      mappings = report.get_last_tensor_mappings()["mappings"]
+      mods = list(mappings.keys())
+      self.assertEqual(len(mods), 1)
 
-      evts = ipu.utils.extract_all_events(rep)
-      for evt in evts:
-        if evt.type == IpuTraceEvent.COMPILE_END:
-          js = json.loads(evt.compile_end.tensor_map.decode('utf-8'))
+      tiles = set()
+      for tensor in mappings[mods[0]]:
+        for tile in tensor[7]:
+          tiles.add(tile[0])
 
-          mods = list(js['mappings'].keys())
-          self.assertEqual(len(mods), 1)
-
-          tiles = set()
-          for tensor in js['mappings'][mods[0]]:
-            for tile in tensor[7]:
-              tiles.add(tile[0])
-
-          self.assertEqual(len(tiles), 5)
-          self.assertEqual(tiles, set((0, 1, 2, 1216, 1217)))
+      self.assertEqual(len(tiles), 5)
+      self.assertEqual(tiles, set((0, 1, 2, 1216, 1217)))
 
   def testMultiIpuTraining(self):
     with self.session() as sess:
@@ -232,40 +205,22 @@ class MultiIpuTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         inp = array_ops.placeholder(np.float32, [1, 32, 32, 4], name="data")
         lab = array_ops.placeholder(np.float32, [1, 8], name="labels")
-        report = gen_ipu_ops.ipu_event_trace()
 
       out = ipu.ipu_compiler.compile(my_graph, [inp, lab])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess, device_count_override=2)
       tu.move_variable_initialization_to_cpu()
 
-      sess.run(report)
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       fd = {inp: np.ones([1, 32, 32, 4]), lab: np.ones([1, 8])}
       sess.run(out, fd)
 
-      rep = sess.run(report)
+      events_types = report.parse_log()
+      self.assertEqual(events_types[IpuTraceEvent.COMPILE_END], 1)
 
-      num_compiles = 0
-
-      evts = ipu.utils.extract_all_events(rep)
-      for evt in evts:
-        if evt.type == IpuTraceEvent.COMPILE_END:
-          num_compiles = num_compiles + 1
-
-      self.assertEqual(num_compiles, 1)
-
-      compile_report = ipu.utils.extract_compile_reports(rep)
-      self.assertEqual(len(compile_report), 1)
-
-      js = json.loads(compile_report[0][1])
-      cs_list = js['computeSets']['names']
-
+      cs_list = report.get_compute_sets()
       # There are 2 inter-ipu copies
       n_inter_ipu_copies = 0
       for n in cs_list:
@@ -280,8 +235,11 @@ class MultiIpuTest(xla_test.XLATestCase):
       def my_graph(inp, bias):
         with ops.device("/device:IPU:0"):
           with ipu.scopes.ipu_shard(0):
-            x = layers.Conv2D(
-                8, 3, padding='same', name="conv", use_bias=False)(inp)
+            x = layers.Conv2D(8,
+                              3,
+                              padding='same',
+                              name="conv",
+                              use_bias=False)(inp)
 
           with ipu.scopes.ipu_shard(1):
             x = nn_ops.bias_add(x, bias, name='biasAdd')
@@ -291,34 +249,20 @@ class MultiIpuTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         inp = array_ops.placeholder(np.float32, [1, 32, 32, 4], name="data")
         bias = array_ops.placeholder(np.float32, [8], name="bias")
-        report = gen_ipu_ops.ipu_event_trace()
 
       out = ipu.ipu_compiler.compile(my_graph, [inp, bias])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess, device_count_override=2)
       tu.move_variable_initialization_to_cpu()
 
-      sess.run(report)
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       fd = {inp: np.ones([1, 32, 32, 4]), bias: np.ones([8])}
       sess.run(out, fd)
 
-      rep = sess.run(report)
-
-      num_compiles = 0
-      ge_list = []
-      evts = ipu.utils.extract_all_events(rep)
-      for evt in evts:
-        if evt.type == IpuTraceEvent.COMPILE_END:
-          num_compiles = num_compiles + 1
-          ge_list = tu.get_all_global_exchange_from_json_report(evt)
-
-      self.assertEqual(num_compiles, 1)
+      events_types = report.parse_log()
+      self.assertEqual(events_types[IpuTraceEvent.COMPILE_END], 1)
 
       # There is 1 piece of global exchange (apart from progId)
       wl = [
@@ -326,7 +270,7 @@ class MultiIpuTest(xla_test.XLATestCase):
           '*_to_/custom-call/GlobalPre',
           '__seed/set/setMasterSeed',
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(ge_list, wl))
+      report.assert_all_global_exchanges_and_list(wl)
 
 
 if __name__ == "__main__":

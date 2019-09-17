@@ -5,6 +5,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import contextlib
 import fnmatch
 import re
@@ -138,14 +139,15 @@ class ReportJSON(object):
                sess,
                io_trace=True,
                compile_ipu_code=False,
-               device_count_override=None):
+               device_count_override=None,
+               execution_trace=True):
     self.test = test
     self.sess = sess
     with ops.device('cpu'):
       self.report = gen_ipu_ops.ipu_event_trace()
     configure_ipu_system(True,
                          io_trace,
-                         True,
+                         execution_trace=execution_trace,
                          text_report=False,
                          compile_ipu_code=compile_ipu_code,
                          device_count_override=device_count_override)
@@ -158,8 +160,11 @@ class ReportJSON(object):
     if assert_len:
       self.test.assertEqual(assert_len, len(events), assert_msg)
     self.events = {}
+    self.last_tensor_mappings = {}
+    events_types = collections.defaultdict(int)
     for e in events:
       evt = IpuTraceEvent.FromString(e)
+      events_types[evt.type] += 1
       try:
         if evt.type == IpuTraceEvent.COMPILE_BEGIN:
           pass
@@ -167,6 +172,10 @@ class ReportJSON(object):
           if evt.compile_end.compilation_report:
             self.events[IpuTraceEvent.COMPILE_END] = js.loads(
                 evt.compile_end.compilation_report, encoding="utf-8")
+            # Note: if there is more than one COMPILE_END even then the tensor
+            # mappings will be overwritten.
+            self.last_tensor_mappings = js.loads(evt.compile_end.tensor_map,
+                                                 encoding="utf-8")
         if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
           if evt.data_transfer.data_transfer:
             self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER] = js.loads(
@@ -183,6 +192,7 @@ class ReportJSON(object):
                 evt.execute.execution_report, encoding="utf-8")
       except UnicodeDecodeError:
         pass
+    return events_types
 
   # Excluding gaps
   def get_max_tile_memory(self):
@@ -203,11 +213,20 @@ class ReportJSON(object):
   def get_compute_sets(self):
     return self.events[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
 
+  def get_last_tensor_mappings(self):
+    return self.last_tensor_mappings
+
   def get_first_program_of_type(self, program_type):
     for p in self.events[IpuTraceEvent.COMPILE_END]["programs"]:
       if program_type == p['type']:
         return p
     return None
+
+  def get_program_names_of_type(self, program_type):
+    return [
+        p['name'] for p in self.events[IpuTraceEvent.COMPILE_END]["programs"]
+        if p['type'] == program_type
+    ]
 
   def get_program(self, index=0):
     return self.events[IpuTraceEvent.COMPILE_END]["programs"][index]
@@ -230,6 +249,19 @@ class ReportJSON(object):
     self.test.assertFalse(
         missing_names_in_whitelist_entries(self.get_compute_sets(), ok),
         "Compute sets item not found in whitelist:\n\t%s" % "\n\t".join(ok))
+
+  # Asserts all the global exchanges match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one global exchange
+  def assert_all_global_exchanges_and_list(self, ok):
+    self.test.assertFalse(
+        missing_whitelist_entries_in_names(
+            self.get_program_names_of_type('GlobalExchange'),
+            ok), "Whitelist items not found in global exchanges:\n\t%s" %
+        "\n\t".join(self.get_compute_sets()))
+    self.test.assertFalse(
+        missing_names_in_whitelist_entries(
+            self.get_program_names_of_type('GlobalExchange'),
+            ok), "Global exchanges item not found in whitelist:\n\t%s" %
+        "\n\t".join(ok))
 
   # Asserts that all the whitelist patterns match at least one compute set
   def assert_compute_sets_contain_list(self, ok):
@@ -271,22 +303,6 @@ def extract_all_strings_from_event_trace(events):
     except UnicodeDecodeError:
       pass
   return result
-
-
-def get_compute_sets_from_json_report(event):
-  if event.type == IpuTraceEvent.COMPILE_END:
-    rep = js.loads(event.compile_end.compilation_report.decode('utf-8'))
-    return rep['computeSets']['names']
-  return []
-
-
-def get_all_global_exchange_from_json_report(event):
-  if event.type == IpuTraceEvent.COMPILE_END:
-    rep = js.loads(event.compile_end.compilation_report.decode('utf-8'))
-    return [
-        p['name'] for p in rep['programs'] if p['type'] == 'GlobalExchange'
-    ]
-  return []
 
 
 def extract_all_types_from_event_trace(events):
