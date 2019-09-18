@@ -59,10 +59,11 @@ class FifoOp : public PoplibsOpDef {
     // A degenerate case where the fifo is just an identity op.
     if (fifo_inst->depth() < 1) {
       for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
-        poputil::duplicate(
+        poplar::Tensor output = poputil::duplicate(
             graph, inputs[tuple_idx], seq,
             absl::StrCat(GetDebugName(inst), "/out/", tuple_idx),
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
       }
       return seq;
     }
@@ -76,10 +77,14 @@ class FifoOp : public PoplibsOpDef {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
 
       // Create a buffer of the given depth and the same mapping as the input.
-      poplar::Tensor buffer = graph.clone(
-          inputs[tuple_idx].expand({0}).broadcast(fifo_inst->depth(), 0),
-          absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx),
-          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+      std::vector<poplar::Tensor> cloned_tensors(fifo_inst->depth());
+      for (int64 i = 0; i != fifo_inst->depth(); ++i) {
+        cloned_tensors[i] =
+            graph.clone(inputs[tuple_idx].expand({0}),
+                        absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx),
+                        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+      }
+      poplar::Tensor buffer = poplar::concat(cloned_tensors);
       for (auto i = 0; i < fifo_inst->depth(); ++i) {
         // Copy the content of the buffer to the output.
         sw_cases[i].add(poplar::program::Copy(buffer[i], output));
@@ -99,7 +104,7 @@ class FifoOp : public PoplibsOpDef {
                                      GetDebugName(inst) + "/counter");
     graph.setTileMapping(counter, 0);
     graph.setInitialValue(counter, 0);
-
+    res.zeroed_tensors.push_back(counter);
     // A small bounded dynamic slice can be a switch statement.
     poplar::program::Switch sw(counter);
     for (auto i = 0; i < fifo_inst->depth(); ++i) {
@@ -124,7 +129,6 @@ class FifoOp : public PoplibsOpDef {
               popops::expr::Const(fifo_inst->depth())),
           {counter}, seq, GetDebugName(inst) + "/counter_inc_mod");
     }
-
     return seq;
   }
 };

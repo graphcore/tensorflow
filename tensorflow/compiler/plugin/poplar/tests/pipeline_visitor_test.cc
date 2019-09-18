@@ -105,7 +105,8 @@ _stage_0 (arg_0: f32[]) -> f32[] {
   temp_0 = f32[] constant(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=0}
   ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
 }
 
@@ -113,7 +114,8 @@ _stage_1 (arg_0: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=1}
+  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=1}
   ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
 }
 
@@ -121,7 +123,8 @@ _stage_1_bw (arg_0: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(2), sharding={maximal device=1}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=1}
+  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=1}
   ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
 }
 
@@ -129,7 +132,8 @@ _stage_0_bw (arg_0: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=0}
   ROOT result = f32[] constant(4), sharding={maximal device=0}
 }
 
@@ -189,7 +193,7 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(5).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(4).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -218,10 +222,6 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
 /custom-call: 1
 /custom-call.3: 5
 /custom-call.1: 2
-/custom-call: 1
-/custom-call.2: 4
-/custom-call.1: 2
-/custom-call.3: 5
 /custom-call.2: 4
 /custom-call.3: 5
 )";
@@ -258,7 +258,8 @@ _stage_0_bw (arg_0: f32[]) -> token[] {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  ROOT token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  ROOT token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=0}
 }
 
 ENTRY pipeline (arg: f32[]) -> token[] {
@@ -317,7 +318,7 @@ ENTRY pipeline (arg: f32[]) -> token[] {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(5).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(6).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -333,6 +334,7 @@ ENTRY pipeline (arg: f32[]) -> token[] {
   device.detach();
 
   const std::string expected = R"(/custom-call: 4
+/custom-call: 4
 /custom-call: 4
 /custom-call: 4
 /custom-call: 4
@@ -371,14 +373,16 @@ _stage_0_bw (arg_0: f32[], arg_1: f32[]) -> token[] {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   param_1 = f32[] parameter(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, param_1), sharding={maximal device=0}
-  ROOT token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  ROOT token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=0}
 }
 
 ENTRY pipeline (arg: f32[]) -> token[] {
   arg = f32[] parameter(0), sharding={maximal device=0}
 
   a0 = f32[] call(arg), to_apply=_stage_0, sharding={maximal device=0}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  a1 = f32[] custom-call(a0), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}\n", sharding={maximal device=0}
+  a1 = f32[] custom-call(a0), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}
+  ", sharding={maximal device=0}
 
   b0 = f32[] call(a0), to_apply=_stage_1, sharding={maximal device=1}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
 
@@ -433,7 +437,7 @@ ENTRY pipeline (arg: f32[]) -> token[] {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(5).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(4).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -449,7 +453,6 @@ ENTRY pipeline (arg: f32[]) -> token[] {
   device.detach();
 
   const std::string expected = R"(/custom-call: 4
-/custom-call: 4
 /custom-call: 4
 /custom-call: 4
 /custom-call: 4
@@ -492,13 +495,15 @@ _stage_0_bw (arg_0: f32[2], arg_1: (f32[2], f32[4], f32[2], f32[2])) -> token[] 
   add_1 = f32[2] get-tuple-element(fifo_tuple), index=2, sharding={maximal device=0}
 
   add_0 = f32[2] add(param, add_1), sharding={maximal device=0}
-  ROOT token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  ROOT token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=0}
 }
 
 ENTRY pipeline (arg: f32[2]) -> token[] {
   arg = f32[2] parameter(0), sharding={maximal device=0}
   a0 = (f32[2], f32[4], f32[2], f32[2]) call(arg), to_apply=_stage_0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(a0), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}\n", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
+  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(a0), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}
+  ", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
 
   b0 = f32[2] call(a0), to_apply=_stage_1, sharding={maximal device=1}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
 
@@ -553,7 +558,7 @@ ENTRY pipeline (arg: f32[2]) -> token[] {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(5).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
 
   // Compile the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -569,6 +574,9 @@ ENTRY pipeline (arg: f32[2]) -> token[] {
   device.detach();
 
   const std::string expected = R"(/custom-call: {306,6012}
+/custom-call: {306,6012}
+/custom-call: {306,6012}
+/custom-call: {306,6012}
 /custom-call: {306,6012}
 /custom-call: {306,6012}
 /custom-call: {306,6012}
@@ -613,7 +621,8 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
   arg = f32[] parameter(0), sharding={maximal device=0}
 
   a0 = f32[] call(arg), to_apply=_stage_0, sharding={maximal device=0}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  a1 = f32[] custom-call(a0), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}\n", sharding={maximal device=0}
+  a1 = f32[] custom-call(a0), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}
+  ", sharding={maximal device=0}
 
   b0 = f32[] call(a0), to_apply=_stage_1, sharding={maximal device=1}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
 
@@ -668,7 +677,7 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(5).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(6).ValueOrDie();
 
   // Build and run the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -760,11 +769,13 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
 
   a0 = f32[] call(arg), to_apply=_stage_0, sharding={maximal device=0}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   a1 = f32[] custom-call(a0), custom_call_target="Poputil::Fifo",
-  backend_config="{\"depth\":2}\n", sharding={maximal device=0}
+  backend_config="{\"depth\":2}
+  ", sharding={maximal device=0}
 
   b0 = f32[] call(a0), to_apply=_stage_1, sharding={maximal device=1}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   b1 = f32[] custom-call(b0), custom_call_target="Poputil::Fifo",
-  backend_config="{\"depth\":2}\n", sharding={maximal device=1}
+  backend_config="{\"depth\":2}
+  ", sharding={maximal device=1}
 
   c0 = f32[] call(b0), to_apply=_stage_2, sharding={maximal device=2}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
   d0 = f32[] call(c0), to_apply=_stage_2_bw, sharding={maximal device=1}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
@@ -834,7 +845,7 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(5).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(6).ValueOrDie();
 
   // Build and run the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -891,42 +902,48 @@ _stage_0 (arg_0: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   temp_0 = f32[] constant(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=0}
   ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
 }
 
 _stage_1 (arg_0: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=1}
+  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=1}
   ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
 }
 
 _stage_2 (arg_0: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=2}
   const_1 = f32[] constant(1), sharding={maximal device=2}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=2}
+  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=2}
   ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=2}
 }
 
 _stage_2_bw (arg_0: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=1}
+  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=1}
   ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
 }
 
 _stage_1_bw (arg_0: f32[], arg_1: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=0}
+  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=0}
   ROOT add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
 }
 
 _stage_0_bw (arg_0: f32[], arg_1: f32[]) -> f32[] {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}\n", sharding={maximal device=1}
+  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  ", sharding={maximal device=1}
   ROOT add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
 }
 
@@ -993,7 +1010,7 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(5).ValueOrDie();
+  auto program = visitor.GetPipelineSequence(8).ValueOrDie();
 
   // Build and run the graph
   poplar::Engine engine(*resources->main_graph, program);
@@ -1033,8 +1050,26 @@ ENTRY pipeline (arg: f32[]) -> f32[] {
 /custom-call: 0
 /custom-call.5: 5
 /custom-call.1: 1
+/custom-call: 0
 /custom-call.2: 2
+/custom-call.1: 1
 /custom-call.3: 3
+/custom-call.2: 2
+/custom-call.4: 4
+/custom-call.3: 3
+/custom-call.5: 5
+/custom-call.4: 4
+/custom-call: 0
+/custom-call.5: 5
+/custom-call.1: 1
+/custom-call: 0
+/custom-call.2: 2
+/custom-call.1: 1
+/custom-call.3: 3
+/custom-call.2: 2
+/custom-call.4: 4
+/custom-call.3: 3
+/custom-call.5: 5
 /custom-call.4: 4
 /custom-call.5: 5
 )";

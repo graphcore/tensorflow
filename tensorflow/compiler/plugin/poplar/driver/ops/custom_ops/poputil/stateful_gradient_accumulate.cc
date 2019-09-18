@@ -79,10 +79,12 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
     poplar::Tensor input = FlattenAndConcatenteTensors(input_tensors);
     poplar::Tensor counter = master_graph.addVariable(
         poplar::UNSIGNED_INT, {}, GetDebugName(inst) + "/Counter");
+    res.zeroed_tensors.push_back(counter);
     graph.setTileMapping(counter, 0);
 
     poplar::Tensor accumulator =
         graph.clone(input, GetDebugName(inst) + "/Accumulator");
+    res.zeroed_tensors.push_back(accumulator);
     // Accumulate the input into the buffer.
     popops::addInPlace(graph, accumulator, input, seq,
                        GetDebugName(inst) + "/Accumulate");
@@ -122,7 +124,6 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
                          if_false, GetDebugName(inst) + "/IncreaseCounter");
     }
     seq.add(poplar::program::If(output_grads, if_true, if_false));
-
     // Unconcat the result and unflatten.
     auto output_tensors = SliceTensorIntoTensorsLike(output, input_tensors);
     for (int64 i = 0; i != output_tensors.size(); ++i) {

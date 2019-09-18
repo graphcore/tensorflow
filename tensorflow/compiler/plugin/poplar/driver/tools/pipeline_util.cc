@@ -33,8 +33,8 @@ namespace xla {
 namespace poplarplugin {
 
 std::string StageID::ToString() const {
-  return absl::StrCat("PipelineStage (", (is_forward ? "Forward" : "Backward"),
-                      ") with ID ", id, ".");
+  return absl::StrCat("PipelineStage", (is_forward ? "" : "Backward"),
+                      " with ID ", id);
 }
 
 std::ostream& operator<<(std::ostream& stream, const StageID& stage_id) {

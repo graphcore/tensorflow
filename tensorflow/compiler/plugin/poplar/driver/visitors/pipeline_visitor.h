@@ -113,6 +113,7 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
 
  private:
   std::vector<poplar::program::Sequence> copy_sequences_;
+  std::vector<poplar::program::Sequence> fifo_sequences_;
   std::vector<poplar::program::Sequence> program_sequences_;
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;

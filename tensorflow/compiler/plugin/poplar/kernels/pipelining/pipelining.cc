@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
 
+#include "tensorflow/compiler/tf2xla/kernels/tensor_list_utils.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/xla_compiler.h"
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
@@ -65,6 +66,10 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
       }
       arg.kind = XlaCompiler::Argument::kResource;
       arg.resource_kind = resource->kind();
+      if (arg.resource_kind == XlaResource::kTensorArray) {
+        return errors::Unimplemented(
+            "Tensor arrays are currently not supported: ", arg.name);
+      }
 
       arg.type = resource->type();
       arg.shape = resource->shape();
@@ -103,6 +108,18 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
         TF_ASSIGN_OR_RETURN(xla::Shape shape, builder->GetShape(ctx->Input(i)));
         arg.shape = shape;
         (*num_non_constant_args)++;
+        if (IsTensorListInput(ctx, i)) {
+          // arg.initialized == false means that the element_shape of the list
+          // was not available at the time of building the list so an empty list
+          // was created instead.
+          TF_RETURN_IF_ERROR(
+              IsTensorListInitialized(ctx->Input(i), &arg.initialized));
+          if (!arg.initialized) {
+            return errors::Unimplemented(
+                "Uninitialized TensorLists are currently not supported: ",
+                arg.name);
+          }
+        }
         VLOG(2) << "Parameter type: " << DataTypeString(arg.type)
                 << " shape: " << arg.HumanString();
       }

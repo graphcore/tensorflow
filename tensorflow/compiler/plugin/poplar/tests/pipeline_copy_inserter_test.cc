@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
@@ -71,8 +73,16 @@ ENTRY e {
   auto config = GetModuleConfigForTest();
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
+  ShardingPass sharding;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  InterIpuCopyInserter inter_inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
+  EXPECT_TRUE(changed);
+
   PipelineCopyInserter inserter;
-  TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
   HloInstruction* pipeline_stage_0 =
       FindInstruction(module.get(), "pipeline_stage_0");
@@ -123,8 +133,16 @@ ENTRY e {
   auto config = GetModuleConfigForTest();
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
+  ShardingPass sharding;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  InterIpuCopyInserter inter_inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
+  EXPECT_TRUE(changed);
+
   PipelineCopyInserter inserter;
-  TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
@@ -171,8 +189,16 @@ ENTRY e {
   auto config = GetModuleConfigForTest();
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
+  ShardingPass sharding;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  InterIpuCopyInserter inter_inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
+  EXPECT_TRUE(changed);
+
   PipelineCopyInserter inserter;
-  TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
   HloInstruction* pipeline_stage_0 =
       FindInstruction(module.get(), "pipeline_stage_0");
@@ -216,8 +242,16 @@ ENTRY e {
   auto config = GetModuleConfigForTest();
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
+  ShardingPass sharding;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  InterIpuCopyInserter inter_inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
+  EXPECT_TRUE(changed);
+
   PipelineCopyInserter inserter;
-  TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
+  TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
   HloInstruction* pipeline_stage_0 =
       FindInstruction(module.get(), "pipeline_stage_0");
@@ -226,6 +260,59 @@ ENTRY e {
   EXPECT_TRUE(Match(pipeline_stage_0->to_apply()->root_instruction(),
                     m::Tuple(m::Add(m::Copy(m::Parameter(0)),
                                     m::Log(m::Copy(m::Parameter(1)))))));
+}
+
+TEST_F(PipelineCopyInserterTest, TestConsecutiveDevices) {
+  std::string hlo = R"(
+HloModule top
+
+stage_0_fwd {
+  p0 = f32[1,4,4,2] parameter(0)
+  p1 = f32[1,4,4,2] parameter(1)
+  add = f32[1,4,4,2] add(p0, p1)
+  ROOT stage_0_fwd_tuple = (f32[1,4,4,2]) tuple(add)
+}
+
+stage_1_fwd {
+  p0 = f32[1,4,4,2] parameter(0)
+  log = f32[1,4,4,2] log(p0), backend_config="{\"isInplace\":true}"
+  ROOT tuple = (f32[1,4,4,2]) tuple(log)
+}
+
+pipeline {
+  pipeline_weights0 = f32[1,4,4,2] parameter(0)
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  gte0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_stage_1 = (f32[1,4,4,2]) call(gte0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  gte1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
+  ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(gte1)
+}
+
+ENTRY e {
+  e.weights0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2]) call(e.weights0), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+  auto config = GetModuleConfigForTest();
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  ShardingPass sharding;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  InterIpuCopyInserter inter_inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
+  EXPECT_FALSE(changed);
+
+  PipelineCopyInserter inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  HloInstruction* pipeline_stage_1 =
+      FindInstruction(module.get(), "pipeline_stage_1");
+  // Copy inserted because value is used with no intermediate IPU copy.
+  EXPECT_TRUE(Match(pipeline_stage_1->to_apply()->root_instruction(),
+                    m::Tuple(m::Log(m::Copy(m::Parameter(0))))));
 }
 
 }  // namespace

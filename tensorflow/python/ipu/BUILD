@@ -454,8 +454,9 @@ tf_py_test(
 
 tf_py_test(
     name = "pipelining_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/pipelining_test.py"],
+    shard_count = 10,
     additional_deps = [
         ":ipu_lib",
         "//tensorflow:tensorflow_py",

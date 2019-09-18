@@ -98,16 +98,18 @@ std::vector<int> GetPipelineStageDeviceMapping(const HloInstruction* pipeline) {
       pipeline_computation->instructions().begin(),
       pipeline_computation->instructions().end());
 
-  auto itr = std::stable_partition(instructions.begin(), instructions.end(),
-                                   HasHloOpcode(HloOpcode::kCall));
+  // Cannot reasonably return StatusOr because this is called inside a
+  // constructor.
+  auto stage = GetPipelineStages(pipeline_computation).ValueOrDie();
+  stage.forward.insert(stage.forward.end(), stage.backward.rbegin(),
+                       stage.backward.rend());
 
-  std::vector<int> result(std::distance(instructions.begin(), itr));
+  std::vector<int> result(stage.forward.size());
 
   const auto get_stage_shard = [](const HloInstruction* hlo) -> int {
     return *hlo->sharding_unique_device();
   };
-
-  std::transform(instructions.begin(), itr, result.begin(), get_stage_shard);
+  absl::c_transform(stage.forward, result.begin(), get_stage_shard);
 
   return result;
 }
@@ -353,7 +355,6 @@ std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
     std::fill(std::next(result[i].begin(), offsets[i]), result[i].end(),
               empty_element);
   }
-
   return result;
 }
 
@@ -400,6 +401,7 @@ PipelineVisitor::PipelineVisitor(
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
     : InplaceSubComputationVisitor(res, inputs, dependent_subcomputations),
       copy_sequences_(stage_count),
+      fifo_sequences_(stage_count),
       program_sequences_(stage_count),
       stage_ipu_mapping_(stage_ipu_mapping),
       inst_stage_mapping_(inst_stage_mapping) {}
@@ -415,13 +417,24 @@ PipelineVisitor::PipelineVisitor(
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
+  const auto overlap_length = CircularUnion(stage_ipu_mapping_).size();
+  if (iterations % overlap_length) {
+    // TODO(T11404)
+    return FailedPrecondition(
+        "The number of iterations of the pipeline must be a multiple of %d.",
+        overlap_length);
+  }
+  // To account for ramp up and ramp down we need at least overlap_length * 2
+  // iterations.
+  if (iterations < overlap_length * 2) {
+    return FailedPrecondition(
+        "The number of iterations of the pipeline must be at least %d.",
+        overlap_length * 2);
+  }
   poplar::program::Program ramp_up = GetPipelineRampUpSequence();
   poplar::program::Program repeat_block = GetPipelineRepeatBlockSequence();
 
   poplar::program::Sequence program;
-
-  const auto half_seq_length = program_sequences_.size() / 2;
-  const auto overlap_length = CircularUnion(stage_ipu_mapping_).size();
 
   poplar::program::Program ramp_down =
       GetPipelineRampDownSequence(iterations % overlap_length);
@@ -444,10 +457,13 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
   // represents the "mini-batch",
   auto program_sequences = ConstructRampUpSchedule(offsets, program_sequences_);
   auto copy_sequences = ConstructRampUpSchedule(offsets, copy_sequences_);
+  auto fifo_sequences = ConstructRampUpSchedule(offsets, fifo_sequences_);
 
-  // concatenate the compute and copy programs.
+  // Concatenate the compute, copy and fifo programs.
   program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
                            copy_sequences.end());
+  program_sequences.insert(program_sequences.end(), fifo_sequences.begin(),
+                           fifo_sequences.end());
 
   // Flatten the schedule to a linear sequence.
   auto repeat_block_sequences = FlattenSchedule(program_sequences);
@@ -465,7 +481,6 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
     int additional_iterations) const {
   // Find the set of non-overlapping program offsets.
   auto offsets = CircularUnion(stage_ipu_mapping_);
-
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
@@ -473,10 +488,13 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
       offsets, program_sequences_, {}, additional_iterations);
   auto copy_sequences = ConstructRampDownSchedule(offsets, copy_sequences_, {},
                                                   additional_iterations);
+  auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
 
-  // concatenate the compute and copy programs.
+  // Concatenate the compute, copy and fifo programs.
   program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
                            copy_sequences.end());
+  program_sequences.insert(program_sequences.end(), fifo_sequences.begin(),
+                           fifo_sequences.end());
 
   // Flatten the schedule to a linear sequence.
   auto repeat_block_sequences = FlattenSchedule(program_sequences);
@@ -494,16 +512,18 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
     const {
   // Find the set of non-overlapping program offsets.
   auto offsets = CircularUnion(stage_ipu_mapping_);
-
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
   auto program_sequences = ConstructSchedule(offsets, program_sequences_);
   auto copy_sequences = ConstructSchedule(offsets, copy_sequences_);
+  auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
 
-  // concatenate the compute and copy programs.
+  // Concatenate the compute, copy and fifo programs.
   program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
                            copy_sequences.end());
+  program_sequences.insert(program_sequences.end(), fifo_sequences.begin(),
+                           fifo_sequences.end());
 
   // Flatten the schedule to a linear sequence.
   auto repeat_block_sequences = FlattenSchedule(program_sequences);
@@ -572,7 +592,7 @@ Status PipelineVisitor::HandleFifo(HloInstruction* hlo) {
       poplar::program::Program prog,
       CreateCustomCallOp(resources_, hlo, hlo->shape(), tensor_map));
 
-  copy_sequences_[stage].add(prog);
+  fifo_sequences_[stage].add(prog);
 
   return Status::OK();
 }
