@@ -302,6 +302,7 @@ tf_py_test(
     srcs = ["tests/ipu_multi_worker_strategy_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -498,5 +499,13 @@ test_suite(
     tests = [
         "replication_normalise_test",
         "ipu_estimator_replicated_test"
+    ],
+)
+
+test_suite(
+    name = "poplar_ci_test_suite",
+    tests = [
+      "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
+      "//tensorflow/python/ipu:all_tests",
     ],
 )
