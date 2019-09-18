@@ -319,7 +319,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.initializer)
       with self.assertRaisesRegexp(
           errors.FailedPreconditionError,
-          'The number of iterations of the pipeline must be a multiple of 3'):
+          'The pipeline depth of the pipeline must be a multiple of 3'):
         sess.run(r, {c: 10.01})
 
   @test_util.deprecated_graph_mode_only
@@ -372,7 +372,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(infeed_queue.initializer)
       with self.assertRaisesRegexp(
           errors.FailedPreconditionError,
-          'The number of iterations of the pipeline must be at least 6'):
+          'The pipeline depth of the pipeline must be at least 6'):
         sess.run(r, {c: 10.01})
 
   @test_util.deprecated_graph_mode_only

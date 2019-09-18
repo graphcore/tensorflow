@@ -268,7 +268,7 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES(ctx, output_types.size() == 0,
                 errors::InvalidArgument(
                     "Expected PipelineStage to have no explicit outputs."));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -339,11 +339,10 @@ class PipelineOp : public XlaOpKernel {
                             outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
                             PoplarBackendConfig_CallConfig_Type_Name(
                                 PoplarBackendConfig::CallConfig::Pipeline)));
-    // Set the repeat count.
-    OP_REQUIRES_OK(ctx,
-                   builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT),
-                       std::to_string(repeat_count_)));
+    // Set the pipeline depth.
+    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
+                            outputs, FrontendAttributeId_Name(PIPELINE_DEPTH),
+                            std::to_string(pipeline_depth_)));
     // A pipeline has no explicit outputs, only updates of resource variables.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
       XlaResource* resource;
@@ -367,7 +366,7 @@ class PipelineOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
-  int64 repeat_count_;
+  int64 pipeline_depth_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

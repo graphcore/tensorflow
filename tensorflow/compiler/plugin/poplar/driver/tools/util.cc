@@ -341,7 +341,7 @@ bool CallCanBeInlined(const HloInstruction* inst) {
 
 int64 GetPipelineRepeatCount(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
-  return cfg.call_config().pipeline_config().repeat_count();
+  return cfg.call_config().pipeline_config().pipeline_depth();
 }
 
 int64 GetPipelineStageID(const HloInstruction* inst) {

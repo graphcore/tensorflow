@@ -15,8 +15,8 @@ enum FrontendAttributeId {
   CALL_CONFIG_TYPE = 1;
   // Type to use to store the partials results.
   PARTIALS_TYPE = 2;
-  // Repeat count for pipelines.
-  PIPELINE_REPEAT_COUNT = 3;
+  // Used in pipelining to indicate how many times each stage is executed.
+  PIPELINE_DEPTH = 3;
   // ID of a pipeline stage.
   PIPELINE_STAGE_ID = 4;
 };
@@ -72,7 +72,7 @@ message PoplarBackendConfig {
     }
 
     message PipelineConfig {
-      int64 repeat_count = 1;
+      int64 pipeline_depth = 1;
     }
 
     message CallConfig {

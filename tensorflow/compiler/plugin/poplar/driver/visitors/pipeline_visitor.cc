@@ -421,14 +421,14 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
   if (iterations % overlap_length) {
     // TODO(T11404)
     return FailedPrecondition(
-        "The number of iterations of the pipeline must be a multiple of %d.",
+        "The pipeline depth of the pipeline must be a multiple of %d.",
         overlap_length);
   }
   // To account for ramp up and ramp down we need at least overlap_length * 2
   // iterations.
   if (iterations < overlap_length * 2) {
     return FailedPrecondition(
-        "The number of iterations of the pipeline must be at least %d.",
+        "The pipeline depth of the pipeline must be at least %d.",
         overlap_length * 2);
   }
   poplar::program::Program ramp_up = GetPipelineRampUpSequence();

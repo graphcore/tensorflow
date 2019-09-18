@@ -48,15 +48,15 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
             case PoplarBackendConfig::CallConfig::Pipeline: {
               // Get the repeat count.
               auto itr = attributes.map().find(
-                  FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT));
+                  FrontendAttributeId_Name(PIPELINE_DEPTH));
               if (itr == attributes.map().end()) {
                 return xla::FailedPrecondition(
-                    "Expected the pipeline to contain the `repeat_count` "
+                    "Expected the pipeline to contain the `pipeline_depth` "
                     "attribute.");
               }
               auto* pipeline_config = call_config->mutable_pipeline_config();
-              int64 repeat_count = std::stoll(itr->second);
-              pipeline_config->set_repeat_count(repeat_count);
+              int64 pipeline_depth = std::stoll(itr->second);
+              pipeline_config->set_pipeline_depth(pipeline_depth);
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:
