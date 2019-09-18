@@ -43,6 +43,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
+from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import gradient_accumulation_optimizer
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -50,6 +51,7 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import normalization_ops
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu import rnn_ops
 from tensorflow.python.ipu import scopes
 
 
@@ -845,6 +847,55 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       _PipelineTester.compare_pipeline_to_sharding(
           sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
           dataset_fn, optimizer, self)
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompare3(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(10, shape=[4])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return math_ops.cast(value, np.int32), math_ops.cast(
+            label / 10, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    pipeline_depth = 20
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(idx, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        embedding = variable_scope.get_variable(
+            "c",
+            shape=[10, 1216],
+            dtype=np.float32,
+            initializer=init_ops.constant_initializer(10.01),
+            trainable=True)
+        x = embedding_ops.embedding_lookup(embedding, idx)
+        return x, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("stage2", use_resource=True):
+        return x, label
+
+    def stage3(x, label):
+      with variable_scope.variable_scope("stage3", use_resource=True):
+        return x, label
+
+    def stage4(x, label):
+      with variable_scope.variable_scope("stage4", use_resource=True):
+        logits = math_ops.reduce_sum(x, axis=[-1])
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(
+                logits=logits, labels=label))
+        return loss
+
+    with self.test_session() as sess:
+      _PipelineTester.compare_pipeline_to_cpu(
+          sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
+          pipeline_depth, dataset_fn, optimizer, self)
 
 
 if __name__ == "__main__":

@@ -86,6 +86,8 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
       (*num_resource_args)++;
       (*num_non_constant_args)++;
     } else {
+      arg.type = input_types[i];
+      arg.shape = ctx->InputShape(i);
       // Try and replace kParameters with compile-time kConstant.
       const XlaExpression& expression = ctx->InputExpression(i);
       // NOTE: We can not simply check that this is Kind::kConstant because
@@ -94,14 +96,11 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
           expression.ResolveConstant(ctx->compiler()->client());
       if (maybe_constant.ok() && maybe_constant.ValueOrDie().has_value()) {
         arg.kind = XlaCompiler::Argument::kConstant;
-        arg.type = expression.dtype();
         arg.constant_value = std::move(maybe_constant.ValueOrDie().value());
-        arg.shape = expression.GetShape().ValueOrDie();
         VLOG(2) << "Constant type: " << DataTypeString(arg.type)
                 << " shape: " << arg.HumanString();
       } else {
         arg.kind = XlaCompiler::Argument::kParameter;
-        arg.type = input_types[i];
         // Use the xla::Shape for the input instead of ctx->InputShape. This
         // is necessary for forwarding shapes of DT_VARIANTs, e.g.
         // TensorLists.
@@ -182,6 +181,7 @@ class PipelineStageOp : public XlaOpKernel {
 
     VLOG(2) << "Building PipelineStage function with " << input_types_.size()
             << " inputs including " << num_resource_args << " resources.";
+
     // Compile the computation.
     XlaCompiler::CompilationResult result;
     OP_REQUIRES_OK(
@@ -205,32 +205,53 @@ class PipelineStageOp : public XlaOpKernel {
                    builder->SetInstructionFrontendAttribute(
                        outputs, FrontendAttributeId_Name(PIPELINE_STAGE_ID),
                        std::to_string(stage_id_)));
-    // Sets non-variable outputs.
+
+    // The order in which outputs are returned from the XLA computation differ
+    // from the OutputDescriptions in that the XLA computation returns all the
+    // non resource variables first.
+    // We therefore store the mapping of resource input index to the index it is
+    // returned at.
+    absl::flat_hash_map<int64, int64> resource_input_index_to_output_index;
+
+    // Set non resource variable outputs and the resource variables map.
     // Make sure to set constant outputs as constant.
-    int computation_output = 0;
-    for (int i = 0; i < output_types_.size(); ++i) {
-      if (result.outputs[i].is_constant) {
+    int next_computation_output = 0;
+    for (int i = 0; i != output_types_.size(); ++i) {
+      const XlaCompiler::OutputDescription& output = result.outputs[i];
+
+      if (output.is_constant) {
         ctx->SetConstantOutput(i, result.outputs[i].constant_value);
       } else {
-        ctx->SetOutput(i, xla::GetTupleElement(outputs, computation_output++));
+        if (output.type == DT_RESOURCE) {
+          resource_input_index_to_output_index[output.input_index] = i;
+        } else {
+          ctx->SetOutput(
+              i, xla::GetTupleElement(outputs, next_computation_output++));
+        }
       }
     }
 
-    // Updates the values of any resource variables modified by the function
-    // call.
-    for (int i = 0; i < result.resource_updates.size(); ++i) {
-      const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
+    // Set up the resources.
+    for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
       XlaResource* resource;
-      OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
+      const int pos = update.input_index;
+      OP_REQUIRES_OK(ctx, ctx->GetResourceInput(pos, &resource));
+
       if (update.modified) {
-        int pos = computation_output + i;
-        OP_REQUIRES_OK(ctx,
-                       resource->SetFromPack(
-                           arguments[update.input_index].tensor_array_gradients,
-                           xla::GetTupleElement(outputs, pos), builder));
+        // Add a GTE for the resource.
+        OP_REQUIRES_OK(
+            ctx, resource->SetFromPack(
+                     arguments[pos].tensor_array_gradients,
+                     xla::GetTupleElement(outputs, next_computation_output++),
+                     builder));
       }
-      VLOG(2) << "Variable: pos: " << update.input_index
-              << " name: " << resource->name()
+      // Set up the resource output if required.
+      auto itr = resource_input_index_to_output_index.find(pos);
+      if (itr != resource_input_index_to_output_index.end()) {
+        ctx->SetResourceOutput(itr->second, resource);
+      }
+
+      VLOG(2) << "Variable: pos: " << pos << " name: " << resource->name()
               << " modified: " << update.modified
               << " type: " << DataTypeString(update.type)
               << " shape: " << update.shape.DebugString();
@@ -283,6 +304,7 @@ class PipelineOp : public XlaOpKernel {
 
     VLOG(2) << "Building PipelineStage function with " << input_types_.size()
             << " inputs including " << num_resource_args << " resources.";
+
     // Compile the computation.
     XlaCompiler::CompilationResult result;
     OP_REQUIRES_OK(
