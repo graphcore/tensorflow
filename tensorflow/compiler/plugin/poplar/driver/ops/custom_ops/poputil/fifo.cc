@@ -29,6 +29,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 
+#include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
 #include <poputil/Util.hpp>
 
@@ -61,21 +62,45 @@ class FifoOp : public PoplibsOpDef {
       for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
         poplar::Tensor output = poputil::duplicate(
             graph, inputs[tuple_idx], seq,
-            absl::StrCat(GetDebugName(inst), "/out/", tuple_idx),
+            absl::StrCat(GetDebugName(inst), "/copy/", tuple_idx),
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
       }
       return seq;
     }
-    std::vector<poplar::program::Sequence> sw_cases(fifo_inst->depth());
-    for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
-      // Create the output with the same mapping as the input.
-      poplar::Tensor output =
-          graph.clone(inputs[tuple_idx],
-                      absl::StrCat(GetDebugName(inst), "/out/", tuple_idx),
-                      poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
+    // If the FIFO can only store a single buffer then skip the counter creation
+    // and use copies.
+    if (fifo_inst->depth() == 1) {
+      for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
+        // Create the output with the same mapping as the input.
+        poplar::Tensor output =
+            graph.clone(inputs[tuple_idx],
+                        absl::StrCat(GetDebugName(inst), "/out/", tuple_idx),
+                        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
 
+        // Create a buffer of the given depth and the same mapping as the input.
+        poplar::Tensor buffer =
+            graph.clone(inputs[tuple_idx].expand({0}),
+                        absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx),
+                        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        // Copy the content of the buffer to the output.
+        seq.add(poplar::program::Copy(buffer, output));
+
+        // Copy the input into the buffer.
+        seq.add(poplar::program::Copy(inputs[tuple_idx], buffer));
+      }
+      return seq;
+    }
+
+    // Keep track of where in the buffer we are.
+    auto counter = graph.addVariable(poplar::UNSIGNED_INT, {},
+                                     GetDebugName(inst) + "/counter");
+    graph.setTileMapping(counter, 0);
+    graph.setInitialValue(counter, 0);
+    res.zeroed_tensors.push_back(counter);
+
+    for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
       // Create a buffer of the given depth and the same mapping as the input.
       std::vector<poplar::Tensor> cloned_tensors(fifo_inst->depth());
       for (int64 i = 0; i != fifo_inst->depth(); ++i) {
@@ -85,32 +110,17 @@ class FifoOp : public PoplibsOpDef {
                         poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
       }
       poplar::Tensor buffer = poplar::concat(cloned_tensors);
-      for (auto i = 0; i < fifo_inst->depth(); ++i) {
-        // Copy the content of the buffer to the output.
-        sw_cases[i].add(poplar::program::Copy(buffer[i], output));
+      // Create the output with the same mapping as the input.
+      poplar::Tensor output = popops::dynamicSlice(
+          graph, buffer, counter.reshape({1}), {0}, {1}, seq,
+          absl::StrCat(GetDebugName(inst), "/pop/", tuple_idx));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, tuple_idx, output.squeeze({0})));
 
-        // Copy the input into the buffer.
-        sw_cases[i].add(poplar::program::Copy(inputs[tuple_idx], buffer[i]));
-      }
+      popops::dynamicUpdate(
+          graph, buffer, inputs[tuple_idx].expand({0}), counter.reshape({1}),
+          {0}, {1}, seq, absl::StrCat(GetDebugName(inst), "/push/", tuple_idx));
     }
-
-    // If the FIFO can only store a single buffer then skip the counter creation
-    if (fifo_inst->depth() == 1) {
-      return sw_cases[0];
-    }
-
-    // Keep track of where in the buffer we are.
-    auto counter = graph.addVariable(poplar::UNSIGNED_INT, {},
-                                     GetDebugName(inst) + "/counter");
-    graph.setTileMapping(counter, 0);
-    graph.setInitialValue(counter, 0);
-    res.zeroed_tensors.push_back(counter);
-    // A small bounded dynamic slice can be a switch statement.
-    poplar::program::Switch sw(counter);
-    for (auto i = 0; i < fifo_inst->depth(); ++i) {
-      sw.add(i, sw_cases[i]);
-    }
-    seq.add(sw);
 
     // A slightly faster path if the depth is a power of two
     // counter = (counter + 1) % depth
