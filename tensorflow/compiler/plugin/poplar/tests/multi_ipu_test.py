@@ -54,7 +54,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       self.assertAllClose(result[0], [3., 8.])
 
       report.parse_log()
-      mappings = report.get_last_tensor_mappings()["mappings"]
+      mappings = report.get_tensor_map()["mappings"]
       mods = list(mappings.keys())
       self.assertEqual(len(mods), 1)
 
@@ -168,7 +168,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       self.assertAllClose(result[0], [5., 13.])
 
       report.parse_log()
-      mappings = report.get_last_tensor_mappings()["mappings"]
+      mappings = report.get_tensor_map()["mappings"]
       mods = list(mappings.keys())
       self.assertEqual(len(mods), 1)
 

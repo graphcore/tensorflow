@@ -46,9 +46,9 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
           normed = nn.batch_normalization(x, b_mean, b_var, beta, gamma, 1e-3)
 
       report = ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
+
+      report.reset()
       result = sess.run(normed, {x: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
@@ -80,9 +80,8 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
           normed = nn.batch_normalization(x, b_mean, b_var, beta, gamma, 1e-3)
 
       report = ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
+      report.reset()
       result = sess.run(normed, {x: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
@@ -119,9 +118,9 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                        is_training=False)
 
       report = ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
+
+      report.reset()
       result, _, _ = sess.run(normed, {x: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
@@ -157,9 +156,9 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
                                        is_training=False)
 
       report = ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
+
+      report.reset()
       result, _, _ = sess.run(normed, {x: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
@@ -177,9 +176,9 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
           normed = layers_norm.batch_normalization(x, fused=False)
 
       report = ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
+
+      report.reset()
       result = sess.run(normed, {x: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
@@ -197,9 +196,9 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
           normed = layers_norm.batch_normalization(x, fused=True)
 
       report = ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
+
+      report.reset()
       result = sess.run(normed, {x: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
@@ -217,9 +216,9 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
           normed = layers_norm.batch_normalization(x, fused=False)
 
       report = ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
+
+      report.reset()
       result = sess.run(normed, {x: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 
@@ -237,9 +236,9 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
           normed = layers_norm.batch_normalization(x, fused=True)
 
       report = ReportJSON(self, sess)
-      report.reset()
-
       sess.run(variables.global_variables_initializer())
+
+      report.reset()
       result = sess.run(normed, {x: np.zeros([4, 64, 64, 4])})
       self.assertAllClose(result, np.zeros([4, 64, 64, 4]))
 

@@ -132,33 +132,44 @@ def count_compute_sets_matching(cs_list, to_match):
 class ReportJSON(object):
   def __init__(self,
                test,
-               sess,
+               sess=None,
                io_trace=True,
                compile_ipu_code=False,
                device_count_override=None,
                execution_trace=True,
-               sharded=False):
+               sharded=False,
+               compilation_trace=True):
     self.test = test
     self.sess = sess
-    with ops.device('cpu'):
-      self.report = gen_ipu_ops.ipu_event_trace()
-    configure_ipu_system(True,
-                         io_trace,
-                         execution_trace=execution_trace,
-                         text_report=False,
-                         compile_ipu_code=compile_ipu_code,
-                         device_count_override=device_count_override,
-                         sharded=sharded)
+    # If no session is passed to the constructor then assume
+    # the events will be provided by the user.
+    if sess:
+      with ops.device('cpu'):
+        self.report = gen_ipu_ops.ipu_event_trace()
+      configure_ipu_system(compilation_trace,
+                           io_trace,
+                           execution_trace=execution_trace,
+                           text_report=False,
+                           compile_ipu_code=compile_ipu_code,
+                           device_count_override=device_count_override,
+                           sharded=sharded)
 
   def reset(self):
+    assert self.sess, "A valid session must be passed to the constructor" \
+    " to use this method"
     self.sess.run(self.report)
 
   def parse_log(self, assert_len=None, assert_msg=""):
+    assert self.sess, "A valid session must be passed to the constructor" \
+    " to use this method"
     events = self.sess.run(self.report)
+    return self.parse_events(events, assert_len, assert_msg)
+
+  def parse_events(self, events, assert_len=None, assert_msg=""):
     if assert_len:
       self.test.assertEqual(assert_len, len(events), assert_msg)
     self.events = {}
-    self.last_tensor_mappings = {}
+    self.tensor_mappings = {}
     events_types = collections.defaultdict(int)
     for e in events:
       evt = IpuTraceEvent.FromString(e)
@@ -168,26 +179,29 @@ class ReportJSON(object):
           pass
         if evt.type == IpuTraceEvent.COMPILE_END:
           if evt.compile_end.compilation_report:
+            assert IpuTraceEvent.COMPILE_END not in self.events
             self.events[IpuTraceEvent.COMPILE_END] = js.loads(
                 evt.compile_end.compilation_report, encoding="utf-8")
-            # Note: if there is more than one COMPILE_END event then the tensor
-            # mappings will be overwritten.
-            self.last_tensor_mappings = js.loads(evt.compile_end.tensor_map,
-                                                 encoding="utf-8")
+            self.tensor_map = js.loads(evt.compile_end.tensor_map,
+                                       encoding="utf-8")
         if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
           if evt.data_transfer.data_transfer:
+            assert IpuTraceEvent.HOST_TO_DEVICE_TRANSFER not in self.events
             self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER] = js.loads(
                 evt.data_transfer.data_transfer, encoding="utf-8")
         if evt.type == IpuTraceEvent.DEVICE_TO_HOST_TRANSFER:
           if evt.data_transfer.data_transfer:
+            assert IpuTraceEvent.DEVICE_TO_HOST_TRANSFER not in self.events
             self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER] = js.loads(
                 evt.data_transfer.data_transfer, encoding="utf-8")
         if evt.type == IpuTraceEvent.LOAD_ENGINE:
           pass
         if evt.type == IpuTraceEvent.EXECUTE:
           if evt.execute.execution_report:
-            self.events[IpuTraceEvent.EXECUTE] = js.loads(
-                evt.execute.execution_report, encoding="utf-8")
+            self.events[IpuTraceEvent.EXECUTE] = self.events.get(
+                IpuTraceEvent.EXECUTE, []) + [
+                    js.loads(evt.execute.execution_report, encoding="utf-8")
+                ]
       except UnicodeDecodeError:
         pass
     return events_types
@@ -211,13 +225,16 @@ class ReportJSON(object):
   def get_compute_sets(self):
     return self.events[IpuTraceEvent.COMPILE_END]["computeSets"]["names"]
 
+  def get_execution_reports(self):
+    return self.events[IpuTraceEvent.EXECUTE]
+
   def assert_no_compute_set(self):
     self.test.assertFalse(
         self.events.get(IpuTraceEvent.COMPILE_END,
                         {}).get("computeSets", {}).get("names", {}))
 
-  def get_last_tensor_mappings(self):
-    return self.last_tensor_mappings
+  def get_tensor_map(self):
+    return self.tensor_map
 
   def get_first_program_of_type(self, program_type):
     for p in self.events[IpuTraceEvent.COMPILE_END]["programs"]:
@@ -287,10 +304,10 @@ class ReportJSON(object):
         "Whitelist items not found in vertices:\n\t%s" %
         "\n\t".join(self.get_vertices()))
 
-  def assert_compute_sets_matches(self, expr, num_matches):
+  def assert_compute_sets_matches(self, expr, num_matches, msg=None):
     self.test.assertEqual(
         count_compute_sets_matching(self.get_compute_sets(), expr),
-        num_matches)
+        num_matches, msg)
 
 
 def extract_all_strings_from_event_trace(events):
@@ -429,8 +446,10 @@ def move_variable_initialization_to_cpu():
       init_ops += [op]
       dep_ops += [x.op for x in op.inputs]
 
+  # pylint: disable=protected-access
   for op in init_ops:
     op._set_device('/device:CPU:0')
     op._set_attr('_class', attr_value_pb2.AttrValue(s=b'loc:@cpu'))
     op._set_attr('_XlaCompile', attr_value_pb2.AttrValue(b=False))
     op._set_attr('_XlaScope', attr_value_pb2.AttrValue(s=b''))
+  # pylint: enable=protected-access

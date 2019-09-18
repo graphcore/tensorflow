@@ -13,12 +13,9 @@
 # limitations under the License.
 # =============================================================================
 
-import json
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.python import ipu
@@ -311,8 +308,8 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       report = tu.ReportJSON(self, sess)
 
       for output, expected_output, fd in outputs:
-        report.reset()
         sess.run(variables.global_variables_initializer())
+        report.reset()
         sess.run(output, fd)
         report.parse_log()
         report.assert_vertices_contain_list([expected_output])

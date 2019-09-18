@@ -64,18 +64,19 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([output]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system()
+      tu.configure_ipu_system(text_report=False)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
 
       result, rep = sess.run([output, report], fd)
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
-      self.assertEqual(len(rep), 3)
-      evts = tu.extract_all_events(rep)
-      self.assertEqual(evts[0].type, IpuTraceEvent.COMPILE_BEGIN)
-      self.assertEqual(evts[1].type, IpuTraceEvent.COMPILE_END)
-      self.assertEqual(evts[2].type, IpuTraceEvent.EXECUTE)
+
+      r = tu.ReportJSON(self)
+      types = r.parse_events(rep, assert_len=3)
+      self.assertEqual(1, types[IpuTraceEvent.COMPILE_BEGIN])
+      self.assertEqual(1, types[IpuTraceEvent.COMPILE_END])
+      self.assertEqual(1, types[IpuTraceEvent.EXECUTE])
 
   def testIpuModelDeviceWithMultipleReport(self):
     with self.session() as sess:
@@ -111,8 +112,10 @@ class IpuIpuModelTest(xla_test.XLATestCase):
           pb = array_ops.placeholder(np.float32, [480], name="b")
           output = pa + pb
 
-        tu.configure_ipu_system(
-            True, True, True, engine_opts={"some_option": "some_value"})
+        tu.configure_ipu_system(True,
+                                True,
+                                True,
+                                engine_opts={"some_option": "some_value"})
 
         fd = {pa: np.zeros([480]), pb: np.zeros([480])}
         sess.run(output, fd)
@@ -132,7 +135,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system()
+      tu.configure_ipu_system(text_report=False)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -141,12 +144,11 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
 
       rep = sess.run(report, fd)
-      s = tu.extract_all_strings_from_event_trace(rep)
-      cs_list = tu.get_compute_sets_from_report(s)
+      r = tu.ReportJSON(self)
+      r.parse_events(rep)
 
       ok = ['__seed*', 'my_ops/my_add_op/add']
-
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      r.assert_all_compute_sets_and_list(ok)
 
   def testReportEveryNthExecution_FirstOnly(self):
     with self.session() as sess:
@@ -158,7 +160,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(compilation_trace=False)
+      tu.configure_ipu_system(compilation_trace=False, text_report=False)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -170,12 +172,12 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
 
       rep = sess.run(report, fd)
-      evts = tu.extract_all_execute_events(rep)
-      self.assertEqual(len(evts), 5)  # execute x 5
-
-      for i, e in enumerate(evts):
-        if i > 0:
-          self.assertTrue(len(e.execute.execution_report) == 0)
+      r = tu.ReportJSON(self)
+      types = r.parse_events(rep)
+      self.assertEqual(types[IpuTraceEvent.EXECUTE], 5)
+      self.assertEqual(
+          len(r.get_execution_reports()), 1,
+          "Only the first execution should have generated a report")
 
   def testReportEveryNthExecution_Every2(self):
     with self.session() as sess:
@@ -187,8 +189,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(
-          compilation_trace=False, report_every_nth_execution=2)
+      tu.configure_ipu_system(compilation_trace=False,
+                              report_every_nth_execution=2,
+                              text_report=False)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -200,12 +203,12 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
 
       rep = sess.run(report, fd)
-      evts = tu.extract_all_execute_events(rep)
-      self.assertEqual(len(evts), 5)  # execute x 5
-
-      for i, e in enumerate(evts):
-        if i % 2 != 0:
-          self.assertTrue(len(e.execute.execution_report) == 0)
+      r = tu.ReportJSON(self)
+      types = r.parse_events(rep)
+      self.assertEqual(types[IpuTraceEvent.EXECUTE], 5)
+      self.assertEqual(
+          len(r.get_execution_reports()), 3,
+          "The 1st, 3rd and 5th execution should have generated a report")
 
   def testReportEveryNthExecution_Every1(self):
     with self.session() as sess:
@@ -217,8 +220,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(
-          compilation_trace=False, report_every_nth_execution=1)
+      tu.configure_ipu_system(compilation_trace=False,
+                              report_every_nth_execution=1,
+                              text_report=False)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -230,11 +234,11 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
 
       rep = sess.run(report, fd)
-      evts = tu.extract_all_execute_events(rep)
-      self.assertEqual(len(evts), 5)  # execute x 5
-
-      for e in evts:
-        self.assertTrue(len(e.execute.execution_report) > 0)
+      r = tu.ReportJSON(self)
+      types = r.parse_events(rep)
+      self.assertEqual(types[IpuTraceEvent.EXECUTE], 5)
+      self.assertEqual(len(r.get_execution_reports()), 5,
+                       "Every execution should have generated a report")
 
   def testJsonReport(self):
     with self.session() as sess:
@@ -254,13 +258,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
 
       rep = sess.run(report, fd)
-      evts = tu.extract_all_events(rep)
-      self.assertEqual(len(evts), 3)  # begin, end, execute
-
-      self.assertEqual(
-          evts[1].compile_end.compilation_report.decode('utf-8')[0], '{')
-      self.assertEqual(evts[2].execute.execution_report.decode('utf-8')[0],
-                       '{')
+      r = tu.ReportJSON(self)
+      r.parse_events(rep, assert_len=3, assert_msg="begin, end, execute")
 
   def testCborReport(self):
     with self.session() as sess:
@@ -298,11 +297,10 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(
-          enable_ipu_events=True,
-          compilation_trace=False,
-          io_trace=False,
-          execution_trace=False)
+      tu.configure_ipu_system(enable_ipu_events=True,
+                              compilation_trace=False,
+                              io_trace=False,
+                              execution_trace=False)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -315,9 +313,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
 
       for e in evts:
         if e.type == IpuTraceEvent.COMPILE_END:
-          self.assertTrue(len(e.compile_end.compilation_report) == 0)
+          self.assertFalse(e.compile_end.compilation_report)
         if e.type == IpuTraceEvent.EXECUTE:
-          self.assertTrue(len(e.execute.execution_report) == 0)
+          self.assertFalse(e.execute.execution_report)
 
       sess.close()
 
