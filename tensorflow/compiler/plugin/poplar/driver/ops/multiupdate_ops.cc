@@ -181,12 +181,13 @@ void MultiUpdateInternal(poplar::Graph& graph, poplar::Tensor operand,
     popops::multiUpdate(
         graph, operand, adjusted_canonical_updates,
         canonical_scatter_iIndices.reinterpret(poplar::UNSIGNED_INT), {0}, {1},
-        prog, debug_prefix);
+        prog, popops::SlicePlan(), poplar::OptionFlags(), debug_prefix);
   } else {
     popops::multiUpdateAdd(
         graph, operand, adjusted_canonical_updates,
         canonical_scatter_iIndices.reinterpret(poplar::UNSIGNED_INT), *scale,
-        {0}, {1}, prog, debug_prefix);
+        {0}, {1}, prog, popops::SlicePlan(), poplar::OptionFlags(),
+        debug_prefix);
   }
 }
 }  // namespace
