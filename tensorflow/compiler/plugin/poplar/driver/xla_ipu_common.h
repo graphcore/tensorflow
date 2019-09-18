@@ -35,7 +35,7 @@ static std::vector<DataType> GetIPUSupportedTypes() {
   auto get_types = [] {
     std::vector<DataType> supported = {DT_INT32, DT_INT64, DT_FLOAT, DT_HALF,
                                        DT_BOOL};
-    if (xla::poplarplugin::PoplarXlaFlags::Get().enable_gfloat) {
+    if (getenv("TF_POPLAR_GFLOAT") != nullptr) {
       supported.push_back(DT_INT8);
       supported.push_back(DT_INT16);
     }

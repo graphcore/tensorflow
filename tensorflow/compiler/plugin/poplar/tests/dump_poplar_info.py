@@ -10,11 +10,6 @@ import numpy as np
 import os
 import tempfile
 
-tempdir = tempfile.mkdtemp('report_dir')
-os.environ['TF_POPLAR_FLAGS'] = (
-    '--save_vertex_graph=' + tempdir + " " + '--save_interval_report=' +
-    tempdir + " " + os.environ.get('TF_POPLAR_FLAGS', ''))
-
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
@@ -28,6 +23,11 @@ from tensorflow.python.platform import test
 class DumpPoplarInfo(xla_test.XLATestCase):
   def testVertexGraphAndIntervalReport(self):
     with self.session() as sess:
+
+      tempdir = tempfile.mkdtemp('report_dir')
+      os.environ['TF_POPLAR_FLAGS'] = (
+          '--save_vertex_graph=' + tempdir + " " + '--save_interval_report=' +
+          tempdir + " " + os.environ.get('TF_POPLAR_FLAGS', ''))
 
       def my_model(pa, pb, pc):
         output = pa + pb + pc
