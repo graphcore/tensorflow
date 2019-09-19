@@ -92,8 +92,8 @@ def ipu_shard(index):
   else:
     ipus = [index]
 
-  proto = xla_data_pb2.OpSharding(type=xla_data_pb2.OpSharding.MAXIMAL,
-                                  tile_assignment_devices=ipus)
+  proto = xla_data_pb2.OpSharding(
+      type=xla_data_pb2.OpSharding.MAXIMAL, tile_assignment_devices=ipus)
 
   attr_value = attr_value_pb2.AttrValue(s=proto.SerializeToString())
   attrs = {"_XlaSharding": attr_value}
@@ -155,12 +155,11 @@ def stochastic_rounding(override):
   """
   with frontend_attribute(
       backend_config_pb2.FrontendAttributeId.Name(
-          backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING),
+          backend_config_pb2.STOCHASTIC_ROUNDING),
       backend_config_pb2.StochasticRounding.Name(
-          backend_config_pb2.StochasticRounding.FORCE_ON
-          if override else backend_config_pb2.StochasticRounding.FORCE_OFF),
-      backend_config_pb2.StochasticRounding.Name(
-          backend_config_pb2.StochasticRounding.NOT_SET)):
+          backend_config_pb2.FORCE_ON if override else backend_config_pb2.
+          FORCE_OFF),
+      backend_config_pb2.StochasticRounding.Name(backend_config_pb2.NOT_SET)):
     yield
 
 
@@ -176,14 +175,11 @@ def partials_type(override_type):
   """
   xla_type = types.MAP_DTYPE_TO_RECORD[str(
       np.dtype(override_type))].primitive_type
-  if xla_type not in [
-      xla_data_pb2.PrimitiveType.F16, xla_data_pb2.PrimitiveType.F32
-  ]:
+  if xla_type not in [xla_data_pb2.F16, xla_data_pb2.F32]:
     raise ValueError("Only support float16, float32, provided %s" % dtype)
   with frontend_attribute(
       backend_config_pb2.FrontendAttributeId.Name(
-          backend_config_pb2.FrontendAttributeId.PARTIALS_TYPE),
+          backend_config_pb2.PARTIALS_TYPE),
       xla_data_pb2.PrimitiveType.Name(xla_type),
-      xla_data_pb2.PrimitiveType.Name(
-          xla_data_pb2.PrimitiveType.PRIMITIVE_TYPE_INVALID)):
+      xla_data_pb2.PrimitiveType.Name(xla_data_pb2.PRIMITIVE_TYPE_INVALID)):
     yield

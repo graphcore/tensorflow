@@ -35,8 +35,8 @@ from tensorflow.python.platform import googletest
 def _getFrontendAttributes(op):
   try:
     attributes = xla_data_pb2.FrontendAttributes()
-    attributes.ParseFromString(op.get_attr(
-        ipu.scopes.FRONTEND_ATTRIBUTES_NAME))
+    attributes.ParseFromString(
+        op.get_attr(ipu.scopes.FRONTEND_ATTRIBUTES_NAME))
     return attributes
   except ValueError:
     return None
@@ -55,30 +55,25 @@ def _createFeeders(inputs, dimensions, dtype):
 class FrontendAttributesTest(test_util.TensorFlowTestCase):
   def testSimpleSingleAttribute(self):
     with ops.device("/device:IPU:0"):
-      op1 = ops.get_default_graph().create_op("FloatOutput", [],
-                                              [dtypes.float32],
-                                              name="myop1")
+      op1 = ops.get_default_graph().create_op(
+          "FloatOutput", [], [dtypes.float32], name="myop1")
       with ipu.scopes.frontend_attribute("attr_a", "a"):
-        op2 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                [dtypes.float32],
-                                                name="myop2")
+        op2 = ops.get_default_graph().create_op(
+            "FloatOutput", [], [dtypes.float32], name="myop2")
         attributes2 = _getFrontendAttributes(op2)
         self.assertIsNone(_getFrontendAttributes(op1))
         self.assertEqual(attributes2.map.get("attr_a"), "a")
 
   def testSimpleMultipleAttributes(self):
     with ops.device("/device:IPU:0"):
-      op1 = ops.get_default_graph().create_op("FloatOutput", [],
-                                              [dtypes.float32],
-                                              name="myop1")
+      op1 = ops.get_default_graph().create_op(
+          "FloatOutput", [], [dtypes.float32], name="myop1")
       with ipu.scopes.frontend_attribute("attr_a", "a"):
-        op2 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                [dtypes.float32],
-                                                name="myop2")
+        op2 = ops.get_default_graph().create_op(
+            "FloatOutput", [], [dtypes.float32], name="myop2")
         with ipu.scopes.frontend_attribute("attr_b", "b"):
-          op3 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                  [dtypes.float32],
-                                                  name="myop3")
+          op3 = ops.get_default_graph().create_op(
+              "FloatOutput", [], [dtypes.float32], name="myop3")
           attributes2 = _getFrontendAttributes(op2)
           attributes3 = _getFrontendAttributes(op3)
           self.assertIsNone(_getFrontendAttributes(op1))
@@ -94,19 +89,15 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
     op4 = None
     with ops.device("/device:IPU:0"):
       with ipu.scopes.frontend_attribute("attr_a", "a"):
-        op1 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                [dtypes.float32],
-                                                name="myop1")
+        op1 = ops.get_default_graph().create_op(
+            "FloatOutput", [], [dtypes.float32], name="myop1")
         with ipu.scopes.frontend_attribute("attr_a", "c"):
-          op2 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                  [dtypes.float32],
-                                                  name="myop2")
-        op3 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                [dtypes.float32],
-                                                name="myop3")
-      op4 = ops.get_default_graph().create_op("FloatOutput", [],
-                                              [dtypes.float32],
-                                              name="myop4")
+          op2 = ops.get_default_graph().create_op(
+              "FloatOutput", [], [dtypes.float32], name="myop2")
+        op3 = ops.get_default_graph().create_op(
+            "FloatOutput", [], [dtypes.float32], name="myop3")
+      op4 = ops.get_default_graph().create_op(
+          "FloatOutput", [], [dtypes.float32], name="myop4")
       attributes1 = _getFrontendAttributes(op1)
       attributes2 = _getFrontendAttributes(op2)
       attributes3 = _getFrontendAttributes(op3)
@@ -122,20 +113,16 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
     op4 = None
     with ops.device("/device:IPU:0"):
       with ipu.scopes.frontend_attribute("attr_a", "a"):
-        op1 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                [dtypes.float32],
-                                                name="myop1")
+        op1 = ops.get_default_graph().create_op(
+            "FloatOutput", [], [dtypes.float32], name="myop1")
         with ipu.scopes.frontend_attribute("attr_a", "c"):
           with ipu.scopes.frontend_attribute("attr_b", "b"):
-            op2 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                    [dtypes.float32],
-                                                    name="myop2")
-        op3 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                [dtypes.float32],
-                                                name="myop3")
-      op4 = ops.get_default_graph().create_op("FloatOutput", [],
-                                              [dtypes.float32],
-                                              name="myop4")
+            op2 = ops.get_default_graph().create_op(
+                "FloatOutput", [], [dtypes.float32], name="myop2")
+        op3 = ops.get_default_graph().create_op(
+            "FloatOutput", [], [dtypes.float32], name="myop3")
+      op4 = ops.get_default_graph().create_op(
+          "FloatOutput", [], [dtypes.float32], name="myop4")
       attributes1 = _getFrontendAttributes(op1)
       attributes2 = _getFrontendAttributes(op2)
       attributes3 = _getFrontendAttributes(op3)
@@ -156,23 +143,18 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       with ipu.scopes.stochastic_rounding(False):
         with ipu.scopes.stochastic_rounding(True):
-          op1 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                  [dtypes.float32],
-                                                  name="myop1")
+          op1 = ops.get_default_graph().create_op(
+              "FloatOutput", [], [dtypes.float32], name="myop1")
           with ipu.scopes.stochastic_rounding(False):
             with ipu.scopes.frontend_attribute("attr_b", "b"):
-              op2 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                      [dtypes.float32],
-                                                      name="myop2")
-          op3 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                  [dtypes.float32],
-                                                  name="myop3")
-        op4 = ops.get_default_graph().create_op("FloatOutput", [],
-                                                [dtypes.float32],
-                                                name="myop4")
-      op5 = ops.get_default_graph().create_op("FloatOutput", [],
-                                              [dtypes.float32],
-                                              name="myop5")
+              op2 = ops.get_default_graph().create_op(
+                  "FloatOutput", [], [dtypes.float32], name="myop2")
+          op3 = ops.get_default_graph().create_op(
+              "FloatOutput", [], [dtypes.float32], name="myop3")
+        op4 = ops.get_default_graph().create_op(
+            "FloatOutput", [], [dtypes.float32], name="myop4")
+      op5 = ops.get_default_graph().create_op(
+          "FloatOutput", [], [dtypes.float32], name="myop5")
       attributes1 = _getFrontendAttributes(op1)
       attributes2 = _getFrontendAttributes(op2)
       attributes3 = _getFrontendAttributes(op3)
@@ -183,28 +165,28 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
           backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.StochasticRounding.FORCE_ON))
+              backend_config_pb2.FORCE_ON))
       self.assertIsNone(attributes1.map.get("attr_b"))
       self.assertEqual(
           attributes2.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
           backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.StochasticRounding.FORCE_OFF))
+              backend_config_pb2.FORCE_OFF))
       self.assertEqual(attributes2.map.get("attr_b"), "b")
       self.assertEqual(
           attributes3.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
           backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.StochasticRounding.FORCE_ON))
+              backend_config_pb2.FORCE_ON))
       self.assertIsNone(attributes3.map.get("attr_b"))
       self.assertEqual(
           attributes4.map.get(
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
           backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.StochasticRounding.FORCE_OFF))
+              backend_config_pb2.FORCE_OFF))
 
       self.assertIsNone(attributes4.map.get("attr_b"))
       self.assertEqual(
@@ -212,7 +194,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
               backend_config_pb2.FrontendAttributeId.Name(
                   backend_config_pb2.FrontendAttributeId.STOCHASTIC_ROUNDING)),
           backend_config_pb2.StochasticRounding.Name(
-              backend_config_pb2.StochasticRounding.NOT_SET))
+              backend_config_pb2.NOT_SET))
       self.assertIsNone(attributes5.map.get("attr_b"))
 
   def testMatMulPartialsType(self):
@@ -259,30 +241,28 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
 
         def createLSTM(expected_output):
-          pinputs = array_ops.placeholder(dtype,
-                                          [seq_len, batch_size, input_size],
-                                          name="inputs")
-          pinitial_h_state = array_ops.placeholder(dtype,
-                                                   [batch_size, num_channels],
-                                                   name="init_h_state")
-          pinitial_c_state = array_ops.placeholder(dtype,
-                                                   [batch_size, num_channels],
-                                                   name="init_c_state")
+          pinputs = array_ops.placeholder(
+              dtype, [seq_len, batch_size, input_size], name="inputs")
+          pinitial_h_state = array_ops.placeholder(
+              dtype, [batch_size, num_channels], name="init_h_state")
+          pinitial_c_state = array_ops.placeholder(
+              dtype, [batch_size, num_channels], name="init_c_state")
 
           def createLSTMCell(pinputs, pinitial_h_state, pinitial_c_state):
             lstm_cell = rnn_cell.LSTMCell(
                 num_channels,
                 name='basic_lstm_cell',
                 forget_bias=forget_bias,
-                initializer=init_ops.constant_initializer(weights_value,
-                                                          dtype=dtype),
+                initializer=init_ops.constant_initializer(
+                    weights_value, dtype=dtype),
                 reuse=variable_scope.AUTO_REUSE)
             state = rnn_cell.LSTMStateTuple(pinitial_c_state, pinitial_h_state)
-            outputs, _ = rnn.dynamic_rnn(lstm_cell,
-                                         pinputs,
-                                         dtype=dtype,
-                                         initial_state=state,
-                                         time_major=True)
+            outputs, _ = rnn.dynamic_rnn(
+                lstm_cell,
+                pinputs,
+                dtype=dtype,
+                initial_state=state,
+                time_major=True)
             return outputs
 
           r = ipu.ipu_compiler.compile(
