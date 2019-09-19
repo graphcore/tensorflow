@@ -57,8 +57,8 @@ bool IsTrainingWU(const HloInstruction* inst) {
   return GetMLType(inst).ValueOrDie() == MLType::TRAINING_WU;
 }
 
-StatusOr<absl::flat_hash_map<const HloInstruction*, MLType>> GetAllNotNoneTypes(
-    const HloModule* module) {
+StatusOr<absl::flat_hash_map<const HloInstruction*, MLType>>
+GetAllNotNoneMlTypes(const HloModule* module) {
   absl::flat_hash_map<const HloInstruction*, MLType> result;
   for (HloComputation* comp : module->computations()) {
     if (IsPopOpsFusion(comp)) {

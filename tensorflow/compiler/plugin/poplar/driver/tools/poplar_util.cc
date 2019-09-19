@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 
@@ -277,6 +278,95 @@ poplar::program::Sequence ZeroTensors(CompilerResources& res) {
     popops::zero(GetMasterGraph(res), t, zero_seq, "ZeroVar");
   }
   return zero_seq;
+}
+
+StatusOr<std::string> GetInstructionCompilationInfo(
+    const std::unique_ptr<xla::HloModule>& module, CompilerResources& res) {
+  TF_ASSIGN_OR_RETURN(auto ml_type_map, GetAllNotNoneMlTypes(module.get()));
+  Json::Value ml_types;
+
+  for (auto t : ml_type_map) {
+    ml_types[GetDebugName(t.first)] = Json::Value::UInt64(t.second);
+  }
+
+  Json::Value root;
+  root["ml_types"] = ml_types;
+
+  Json::StreamWriterBuilder json_builder;
+  json_builder["indentation"] = "";
+  json_builder["commentStyle"] = "None";
+  return Json::writeString(json_builder, root);
+}
+
+std::string GetTensorMappingJson(const std::string& module_name,
+                                 const poplar::Graph& graph,
+                                 const TensorMaps& tensor_maps) {
+  Json::Value mappings;
+
+  for (auto tm : tensor_maps) {
+    mappings[tm.first] = Json::Value(Json::arrayValue);
+
+    for (auto pair : tm.second) {
+      const auto& pop_tensor = pair.second;
+      const auto& mapping = graph.getTileMapping(pop_tensor);
+      Json::Value tiles = Json::Value(Json::arrayValue);
+
+      size_t total_elements = 0;
+      for (size_t tile_idx = 0; tile_idx < mapping.size(); tile_idx++) {
+        const auto& tile = mapping[tile_idx];
+        if (tile.size() > 0) {
+          size_t element_count = 0;
+          for (const auto& interval : tile) {
+            element_count += interval.size();
+          }
+          Json::Value tile_info(Json::arrayValue);
+          tile_info.append(Json::Value::UInt64(tile_idx));
+          tile_info.append(Json::Value::UInt64(element_count));
+          tiles.append(tile_info);
+
+          total_elements += element_count;
+        }
+      }
+
+      Json::Value tensor_shape(Json::arrayValue);
+      for (auto d : pop_tensor.shape()) {
+        tensor_shape.append(Json::Value::UInt64(d));
+      }
+
+      Json::Value tensor(Json::arrayValue);
+      tensor.append(Json::Value(pair.first.first));
+      tensor.append(Json::Value::UInt64(pair.first.second));
+      tensor.append(tensor_shape);
+      tensor.append(Json::Value(pop_tensor.elementType().toString()));
+      tensor.append(Json::Value::UInt64(pop_tensor.containsConstant()));
+      tensor.append(Json::Value::UInt64(pop_tensor.containsAliases()));
+      tensor.append(Json::Value::UInt64(total_elements));
+      tensor.append(tiles);
+
+      mappings[tm.first].append(tensor);
+    }
+  }
+
+  Json::Value root;
+  root["mappings"] = mappings;
+
+  Json::StreamWriterBuilder json_builder;
+  json_builder["indentation"] = "";
+  json_builder["commentStyle"] = "None";
+  std::string json_msg = Json::writeString(json_builder, root);
+
+  if (PoplarXlaFlags::Get().tensor_map_file_path.size() > 0) {
+    VLOG(2) << "[Poplar] Dumping tensor mapping";
+    auto path = PoplarXlaFlags::Get().tensor_map_file_path;
+    auto filename =
+        tensorflow::io::JoinPath(path, module_name + ".tensor_map.json");
+    std::unique_ptr<tensorflow::WritableFile> file;
+    TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
+    TF_CHECK_OK(file->Append(json_msg));
+    TF_CHECK_OK(file->Close());
+  }
+
+  return json_msg;
 }
 
 }  // namespace poplarplugin

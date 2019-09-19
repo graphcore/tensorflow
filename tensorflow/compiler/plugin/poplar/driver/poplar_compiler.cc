@@ -783,8 +783,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       report_stream.str(std::string());
     }
 
+    TF_ASSIGN_OR_RETURN(auto inst_info,
+                        GetInstructionCompilationInfo(module, resources));
+
     poplarExecutor->AddCompileEndEventRecord(
-        module->name(), report_stream.str(), map_json, duration);
+        module->name(), report_stream.str(), map_json, inst_info, duration);
   }
 
   std::unique_ptr<Executable> executable;

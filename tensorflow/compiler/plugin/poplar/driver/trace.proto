@@ -21,6 +21,10 @@ message IpuTraceCompileEndEvent {
 
   // A JSON structure describing the tensor mappings
   bytes tensor_map = 4;
+
+  // A JSON structure describing the allocation targets
+  // and convolution/matmul classifications
+  bytes instruction_info = 5;
 };
 
 message IpuTraceDataTransferEvent {

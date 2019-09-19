@@ -192,7 +192,7 @@ _cluster_1  {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 5);
@@ -398,7 +398,7 @@ ENTRY in {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 5);
@@ -605,7 +605,7 @@ ENTRY in {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 5);
@@ -722,7 +722,7 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 2);
@@ -832,7 +832,7 @@ ENTRY cluster_1 {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 5);
@@ -965,7 +965,7 @@ ENTRY in {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 5);
@@ -1099,7 +1099,7 @@ ENTRY in {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 5);
@@ -1176,7 +1176,7 @@ ENTRY cluster_9 {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 2);
@@ -1418,7 +1418,7 @@ ENTRY cluster {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 7);
@@ -1594,7 +1594,7 @@ ENTRY cluster {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 8);
@@ -1750,7 +1750,7 @@ ENTRY cluster {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 8);
@@ -1921,7 +1921,7 @@ ENTRY cluster {
   EXPECT_TRUE(res.ok());
   EXPECT_TRUE(res.ValueOrDie());
 
-  auto all_classifications_or_status = GetAllNotNoneTypes(module);
+  auto all_classifications_or_status = GetAllNotNoneMlTypes(module);
   EXPECT_TRUE(all_classifications_or_status.ok());
   auto all_classifications = all_classifications_or_status.ValueOrDie();
   EXPECT_EQ(all_classifications.size(), 6);

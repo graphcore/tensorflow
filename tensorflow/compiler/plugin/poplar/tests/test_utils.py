@@ -146,13 +146,14 @@ class ReportJSON(object):
     if sess:
       with ops.device('cpu'):
         self.report = gen_ipu_ops.ipu_event_trace()
-      configure_ipu_system(compilation_trace,
-                           io_trace,
-                           execution_trace=execution_trace,
-                           text_report=False,
-                           compile_ipu_code=compile_ipu_code,
-                           device_count_override=device_count_override,
-                           sharded=sharded)
+      configure_ipu_system(
+          compilation_trace,
+          io_trace,
+          execution_trace=execution_trace,
+          text_report=False,
+          compile_ipu_code=compile_ipu_code,
+          device_count_override=device_count_override,
+          sharded=sharded)
 
   def reset(self):
     assert self.sess, "A valid session must be passed to the constructor" \
@@ -169,7 +170,8 @@ class ReportJSON(object):
     if assert_len:
       self.test.assertEqual(assert_len, len(events), assert_msg)
     self.events = {}
-    self.tensor_mappings = {}
+    self.tensor_map = {}
+    self.instruction_info = {}
     events_types = collections.defaultdict(int)
     for e in events:
       evt = IpuTraceEvent.FromString(e)
@@ -182,8 +184,10 @@ class ReportJSON(object):
             assert IpuTraceEvent.COMPILE_END not in self.events
             self.events[IpuTraceEvent.COMPILE_END] = js.loads(
                 evt.compile_end.compilation_report, encoding="utf-8")
-            self.tensor_map = js.loads(evt.compile_end.tensor_map,
-                                       encoding="utf-8")
+            self.tensor_map = js.loads(
+                evt.compile_end.tensor_map, encoding="utf-8")
+            self.instruction_info = js.loads(
+                evt.compile_end.instruction_info, encoding="utf-8")
         if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
           if evt.data_transfer.data_transfer:
             assert IpuTraceEvent.HOST_TO_DEVICE_TRANSFER not in self.events
@@ -228,6 +232,16 @@ class ReportJSON(object):
   def get_execution_reports(self):
     return self.events[IpuTraceEvent.EXECUTE]
 
+  def get_instruction_info(self):
+    return self.instruction_info
+
+  def get_ml_type_counts(self):
+    res = [0, 0, 0, 0]
+    for i in self.instruction_info['ml_types'].values():
+      ml_type = i - 1
+      res[ml_type] = res[ml_type] + 1
+    return res
+
   def assert_no_compute_set(self):
     self.test.assertFalse(
         self.events.get(IpuTraceEvent.COMPILE_END,
@@ -264,8 +278,8 @@ class ReportJSON(object):
   def assert_all_compute_sets_and_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" %
-        "\n\t".join(self.get_compute_sets()))
+        "Whitelist items not found in compute sets:\n\t%s" % "\n\t".join(
+            self.get_compute_sets()))
     self.test.assertFalse(
         missing_names_in_whitelist_entries(self.get_compute_sets(), ok),
         "Compute sets item not found in whitelist:\n\t%s" % "\n\t".join(ok))
@@ -274,9 +288,9 @@ class ReportJSON(object):
   def assert_all_global_exchanges_and_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(
-            self.get_program_names_of_type('GlobalExchange'),
-            ok), "Whitelist items not found in global exchanges:\n\t%s" %
-        "\n\t".join(self.get_compute_sets()))
+            self.get_program_names_of_type('GlobalExchange'), ok),
+        "Whitelist items not found in global exchanges:\n\t%s" % "\n\t".join(
+            self.get_compute_sets()))
     self.test.assertFalse(
         missing_names_in_whitelist_entries(
             self.get_program_names_of_type('GlobalExchange'),
@@ -287,8 +301,8 @@ class ReportJSON(object):
   def assert_compute_sets_contain_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" %
-        "\n\t".join(self.get_compute_sets()))
+        "Whitelist items not found in compute sets:\n\t%s" % "\n\t".join(
+            self.get_compute_sets()))
 
   # Asserts that none of the compute sets match any of the blacklist items
   def assert_compute_sets_not_in_blacklist(self, blacklist):
@@ -301,8 +315,8 @@ class ReportJSON(object):
   def assert_vertices_contain_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_vertices(), ok),
-        "Whitelist items not found in vertices:\n\t%s" %
-        "\n\t".join(self.get_vertices()))
+        "Whitelist items not found in vertices:\n\t%s" % "\n\t".join(
+            self.get_vertices()))
 
   def assert_compute_sets_matches(self, expr, num_matches, msg=None):
     self.test.assertEqual(
@@ -396,8 +410,8 @@ def create_multi_increasing_dataset(value,
     result = []
     for i, shape in enumerate(shapes):
       result.append(
-          math_ops.cast(gen_array_ops.broadcast_to(data, shape=shape),
-                        dtype=dtypes[i]))
+          math_ops.cast(
+              gen_array_ops.broadcast_to(data, shape=shape), dtype=dtypes[i]))
     return result
 
   dataset = Dataset.range(value).map(_get_one_input)
@@ -413,10 +427,11 @@ def create_dual_increasing_dataset(value,
                                    repeat=True):
   data_shape = data_shape if data_shape else [1, 32, 32, 4]
   label_shape = label_shape if label_shape else [1, 8]
-  return create_multi_increasing_dataset(value,
-                                         shapes=[data_shape, label_shape],
-                                         dtypes=[dtype, dtype],
-                                         repeat=repeat)
+  return create_multi_increasing_dataset(
+      value,
+      shapes=[data_shape, label_shape],
+      dtypes=[dtype, dtype],
+      repeat=repeat)
 
 
 def create_single_increasing_dataset(value,
@@ -424,10 +439,8 @@ def create_single_increasing_dataset(value,
                                      dtype=np.float32,
                                      repeat=True):
   shape = shape if shape else [1, 32, 32, 4]
-  return create_multi_increasing_dataset(value,
-                                         shapes=[shape],
-                                         dtypes=[dtype],
-                                         repeat=repeat)
+  return create_multi_increasing_dataset(
+      value, shapes=[shape], dtypes=[dtype], repeat=repeat)
 
 
 def move_variable_initialization_to_cpu():

@@ -40,9 +40,8 @@ bool IsTrainingWU(const HloInstruction* inst);
 
 // A function which returns all the instructions which have a MLType which is
 // not NONE (default).
-// Used for testing.
-StatusOr<absl::flat_hash_map<const HloInstruction*, MLType>> GetAllNotNoneTypes(
-    const HloModule* module);
+StatusOr<absl::flat_hash_map<const HloInstruction*, MLType>>
+GetAllNotNoneMlTypes(const HloModule* module);
 
 }  // namespace poplarplugin
 }  // namespace xla

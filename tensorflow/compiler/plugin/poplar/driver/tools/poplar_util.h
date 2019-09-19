@@ -46,6 +46,7 @@ class Tensor;
 }  // namespace poplar
 
 namespace xla {
+class HloModule;
 class HloInstruction;
 class HloComputation;
 class Literal;
@@ -116,6 +117,8 @@ poplar::OptionFlags GetMatMulOptionsForType(CompilerResources& res,
 
 poplar::program::Sequence ZeroTensors(CompilerResources& res);
 
+StatusOr<std::string> GetInstructionCompilationInfo(
+    const std::unique_ptr<xla::HloModule>& module, CompilerResources& res);
 }  // namespace poplarplugin
 }  // namespace xla
 

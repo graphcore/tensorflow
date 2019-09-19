@@ -232,6 +232,26 @@ items.
   - the tile index number.
   - the total number of elements on that tile.
 
+The ``instruction_info`` field contains information about how the specific
+HLO instructions were mapped to Poplar API calls.  Its format is as follows.
+
+::
+
+  { 'ml_types': {'instruction': <ml_type>, ... } }
+
+The instruction is the name of the instruction at the HLO level, which
+is similar to the name in the main compilation report.  The `ml_type` field
+takes one of the following values, for instructions which are convolution or
+matmul.
+
+::
+
+  0 - Unclassified
+  1 - Standalone
+  2 - The forward pass of training
+  3 - The input gradient of training
+  4 - The filter gradient of training
+
 
 EXECUTE
 _______

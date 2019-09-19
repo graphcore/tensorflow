@@ -1046,10 +1046,10 @@ std::string PoplarExecutor::ReportFileExtension() const {
   return report_file_extension;
 }
 
-void PoplarExecutor::AddCompileEndEventRecord(const std::string& module_name,
-                                              const std::string& report,
-                                              const std::string& tensor_map,
-                                              int64 duration) {
+void PoplarExecutor::AddCompileEndEventRecord(
+    const std::string& module_name, const std::string& report,
+    const std::string& tensor_map, const std::string& instruction_info,
+    int64 duration) {
   std::string rep = std::move(report);
   std::string map = std::move(tensor_map);
 
@@ -1078,10 +1078,13 @@ void PoplarExecutor::AddCompileEndEventRecord(const std::string& module_name,
 
   auto evt = NewTraceEvent();
   evt.set_type(tensorflow::IpuTraceEvent::COMPILE_END);
-  evt.mutable_compile_end()->set_module_name(std::move(module_name));
-  evt.mutable_compile_end()->set_compilation_report(std::move(rep));
-  evt.mutable_compile_end()->set_duration(duration);
-  evt.mutable_compile_end()->set_tensor_map(std::move(map));
+
+  auto* compile_end = evt.mutable_compile_end();
+  compile_end->set_module_name(std::move(module_name));
+  compile_end->set_compilation_report(std::move(rep));
+  compile_end->set_duration(duration);
+  compile_end->set_tensor_map(std::move(map));
+  compile_end->set_instruction_info(std::move(instruction_info));
 
   reports_.push_back(evt);
 }
