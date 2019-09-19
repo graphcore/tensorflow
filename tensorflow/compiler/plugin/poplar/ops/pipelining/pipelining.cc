@@ -46,6 +46,7 @@ REGISTER_OP("Pipeline")
     .Attr("Tin: list(type) >= 0")
     .Attr("Tout: list(type) >= 0")
     .Attr("pipeline_depth: int >= 1")
+    .Attr("repeat_count: int >= 1")
     .Attr("output_shapes: list(shape) >= 0")
     .SetIsStateful()
     .SetShapeFn([](shape_inference::InferenceContext* c) {

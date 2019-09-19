@@ -290,6 +290,7 @@ class PipelineOp : public XlaOpKernel {
                 errors::InvalidArgument(
                     "Expected PipelineStage to have no explicit outputs."));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -365,6 +366,11 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
                             outputs, FrontendAttributeId_Name(PIPELINE_DEPTH),
                             std::to_string(pipeline_depth_)));
+    // Set the repeat count.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT),
+                       std::to_string(repeat_count_)));
     // A pipeline has no explicit outputs, only updates of resource variables.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
       XlaResource* resource;
@@ -389,6 +395,7 @@ class PipelineOp : public XlaOpKernel {
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
   int64 pipeline_depth_;
+  int64 repeat_count_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

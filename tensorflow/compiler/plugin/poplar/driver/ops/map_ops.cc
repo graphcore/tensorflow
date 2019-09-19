@@ -140,6 +140,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
                       inst->backend_config<PoplarBackendConfig>());
   int64 pipeline_depth = cfg.call_config().pipeline_config().pipeline_depth();
+  int64 repeat_count = cfg.call_config().pipeline_config().repeat_count();
 
   TF_ASSIGN_OR_RETURN(ArgVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
@@ -159,7 +160,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
                           graph, pipeline_computation, GetDebugName(inst)));
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,
                       visitor.GetPipelineSequence(pipeline_depth));
-  seq.add(pipeline_prog);
+  seq.add(poplar::program::Repeat(repeat_count, pipeline_prog));
 
   for (size_t i = 0; i < pipeline_state.size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_state[i]));

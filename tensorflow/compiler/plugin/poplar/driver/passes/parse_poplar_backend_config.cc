@@ -23,6 +23,17 @@ limitations under the License.
 namespace xla {
 
 namespace poplarplugin {
+namespace {
+StatusOr<std::string> GetAttribute(const FrontendAttributes& attributes,
+                                   const FrontendAttributeId id) {
+  std::string id_string = FrontendAttributeId_Name(id);
+  auto itr = attributes.map().find(id_string);
+  if (itr == attributes.map().end()) {
+    return xla::FailedPrecondition("Expected an attribute %s.", id_string);
+  }
+  return itr->second;
+}
+}  // namespace
 
 StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
   bool changed = false;
@@ -46,32 +57,29 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
           call_config->set_type(type);
           switch (type) {
             case PoplarBackendConfig::CallConfig::Pipeline: {
-              // Get the repeat count.
-              auto itr = attributes.map().find(
-                  FrontendAttributeId_Name(PIPELINE_DEPTH));
-              if (itr == attributes.map().end()) {
-                return xla::FailedPrecondition(
-                    "Expected the pipeline to contain the `pipeline_depth` "
-                    "attribute.");
-              }
               auto* pipeline_config = call_config->mutable_pipeline_config();
-              int64 pipeline_depth = std::stoll(itr->second);
+              // Get the pipeline depth.
+              TF_ASSIGN_OR_RETURN(std::string pipeline_depth_str,
+                                  GetAttribute(attributes, PIPELINE_DEPTH));
+              int64 pipeline_depth = std::stoll(pipeline_depth_str);
               pipeline_config->set_pipeline_depth(pipeline_depth);
+
+              // Get the repeat count.
+              TF_ASSIGN_OR_RETURN(
+                  std::string repeat_count_str,
+                  GetAttribute(attributes, PIPELINE_REPEAT_COUNT));
+              int64 repeat_count = std::stoll(repeat_count_str);
+              pipeline_config->set_repeat_count(repeat_count);
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:
             case PoplarBackendConfig::CallConfig::PipelineStageBackward: {
-              // Get the stage id.
-              auto itr = attributes.map().find(
-                  FrontendAttributeId_Name(PIPELINE_STAGE_ID));
-              if (itr == attributes.map().end()) {
-                return xla::FailedPrecondition(
-                    "Expected the pipeline stage to contain the `stage_id` "
-                    "attribute.");
-              }
               auto* pipeline_stage_config =
                   call_config->mutable_pipeline_stage_config();
-              int64 stage_id = std::stoll(itr->second);
+              // Get the stage id.
+              TF_ASSIGN_OR_RETURN(std::string stage_id_str,
+                                  GetAttribute(attributes, PIPELINE_STAGE_ID));
+              int64 stage_id = std::stoll(stage_id_str);
               pipeline_stage_config->set_stage_id(stage_id);
               break;
             }

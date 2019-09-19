@@ -35,6 +35,7 @@ from tensorflow.python.ops import control_flow_util_v2 as util
 
 def pipeline(computational_stages,
              pipeline_depth,
+             repeat_count=1,
              inputs=None,
              infeed_queue=None,
              outfeed_queue=None,
@@ -109,6 +110,7 @@ def pipeline(computational_stages,
         pipeline_op = pipelining_ops.pipeline(
                           computational_stages=[stage1, stage2],
                           pipeline_depth=250,
+                          repeat_count=2,
                           inputs=[],
                           infeed_queue=infeed_queue,
                           outfeed_queue=outfeed_queue,
@@ -125,9 +127,12 @@ def pipeline(computational_stages,
 
   In this set up, the model is split across two IPUs with the first two layers
   being executed on the first IPU and the third layer and the probabilities and
-  classes are executed on the second IPU. This pipeline is then executed 250
-  times (specified by the `pipeline_depth`) and the resulting probabilities and
-  classes are returned to the host by the outfeed queue.
+  classes are executed on the second IPU.
+  This creates a pipeline of depth 250 (specified by the `pipeline_depth`),
+  which means each pipeline stage is executed 250 times.
+  This pipeline is then executed 2 times (specified by the `repeat_count`)
+  The results of the pipeline (probabilities and classes) are returned to the
+  host by the outfeed queue.
 
   We can also train this network by providing `optimizer_stage`:
 
@@ -163,7 +168,8 @@ def pipeline(computational_stages,
       with variable_scope.variable_scope("vs", use_resource=True):
         pipeline_op = pipelining_ops.pipeline(
                           computational_stages=[stage1, stage2],
-                          pipeline_depth=250,
+                          pipeline_depth=128,
+                          repeat_count=10,
                           inputs=[lr],
                           infeed_queue=infeed_queue,
                           outfeed_queue=outfeed_queue,
@@ -190,6 +196,7 @@ def pipeline(computational_stages,
       represents a computational pipeline stage. The function takes the outputs
       of the previous pipeline state as its inputs.
     pipeline_depth: the number of times each pipeline stage will be executed.
+    repeat_count: the number of times the pipeline will be executed.
     inputs: arguments passed to the first pipeline stage.
     infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued and passed
       as an input in the first pipeline stage.
@@ -305,7 +312,8 @@ def pipeline(computational_stages,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes,
-          pipeline_depth=pipeline_depth)
+          pipeline_depth=pipeline_depth,
+          repeat_count=repeat_count)
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %

@@ -19,6 +19,9 @@ enum FrontendAttributeId {
   PIPELINE_DEPTH = 3;
   // ID of a pipeline stage.
   PIPELINE_STAGE_ID = 4;
+  // Used in pipelining to indicate how many times the pipeline should be
+  // executed.
+  PIPELINE_REPEAT_COUNT = 5;
 };
 
 enum StochasticRounding {
@@ -73,6 +76,7 @@ message PoplarBackendConfig {
 
     message PipelineConfig {
       int64 pipeline_depth = 1;
+      int64 repeat_count = 2;
     }
 
     message CallConfig {
