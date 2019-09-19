@@ -33,6 +33,7 @@ from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import metrics_impl
 from tensorflow.python.ops import variable_scope
@@ -151,6 +152,133 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     estimator.train(input_fn=my_input_fn, steps=1)
     self.assertTrue("my_param" in estimator.params)
     self.assertTrue(estimator.params["my_param"] == 42)
+
+  def testHostCallOneArgument(self):
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([1., 1.], [0., 1.]))
+
+    def my_host_fn(loss):
+      loss_sum = variable_scope.get_variable(name="loss_sum", initializer=0.0)
+      self.assertEqual("/device:CPU:*", loss_sum.device)
+      return loss_sum.assign_add(loss)
+
+    def my_model_fn(features, labels, mode):
+      loss = features + labels
+      self.assertEqual("/device:IPU:0", loss.device)
+      train_op = array_ops.identity(loss)
+      host_call = (my_host_fn, [loss])
+      return ipu_estimator.IPUEstimatorSpec(mode=mode,
+                                            loss=loss,
+                                            train_op=train_op,
+                                            host_call=host_call)
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                           config=ipu_run_config.RunConfig())
+
+    estimator.train(input_fn=my_input_fn, steps=2)
+    self.assertEqual(3., estimator.get_variable_value("loss_sum"))
+
+  def testHostCallZeroArguments(self):
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([1., 1.], [0., 1.]))
+
+    def my_host_fn():
+      counter = variable_scope.get_variable(name="host_counter", initializer=0.0)
+      return counter.assign_add(1.0)
+
+    def my_model_fn(features, labels, mode):
+      loss = features + labels
+      counter = variable_scope.get_variable(name="ipu_counter", initializer=0.0)
+      train_op = counter.assign_add(1.0)
+      host_call = (my_host_fn, [])
+      return ipu_estimator.IPUEstimatorSpec(mode=mode,
+                                            loss=loss,
+                                            train_op=train_op,
+                                            host_call=host_call)
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                           config=ipu_run_config.RunConfig())
+
+    estimator.train(input_fn=my_input_fn, steps=2)
+    self.assertEqual(2.0, estimator.get_variable_value("host_counter"))
+    self.assertEqual(2.0, estimator.get_variable_value("ipu_counter"))
+
+  def testHostCallNotReturningAnything(self):
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([1., 1.], [0., 1.]))
+
+    def my_host_fn():
+      pass
+
+    def my_model_fn(features, labels, mode):
+      loss = features + labels
+      train_op = array_ops.identity(loss)
+      host_call = (my_host_fn, [])
+      return ipu_estimator.IPUEstimatorSpec(mode=mode,
+                                            loss=loss,
+                                            train_op=train_op,
+                                            host_call=host_call)
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                           config=ipu_run_config.RunConfig())
+
+    with self.assertRaisesRegexp(
+        TypeError, "`host_call` return value must be Operation or Tensor"):
+      estimator.train(input_fn=my_input_fn, steps=1)
+
+  def testHostCallMultipleIterationsPerLoopNotAllowed(self):
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([], []))
+
+    def my_host_fn():
+      pass
+
+    def my_model_fn(features, labels, mode):
+      loss = features + labels
+      train_op = array_ops.identity(loss)
+      host_call = (my_host_fn, [])
+      return ipu_estimator.IPUEstimatorSpec(mode=mode,
+                                            loss=loss,
+                                            train_op=train_op,
+                                            host_call=host_call)
+
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2))
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    with self.assertRaisesRegexp(
+        ValueError, "host_call is not allowed for iterations_per_loop > 1"):
+      estimator.train(input_fn=my_input_fn, steps=2)
+
+  def testHostCallTwoArguments(self):
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([1., 1.], [0., 1.]))
+
+    def my_host_fn(features, labels):
+      feature_sum = variable_scope.get_variable(name="feature_sum",
+                                                initializer=0.0)
+      label_sum = variable_scope.get_variable(name="label_sum",
+                                              initializer=0.0)
+      return control_flow_ops.group(
+          [feature_sum.assign_add(features),
+           label_sum.assign_add(labels)])
+
+    def my_model_fn(features, labels, mode):
+      loss = features + labels
+      self.assertEqual("/device:IPU:0", loss.device)
+      train_op = array_ops.identity(loss)
+      host_call = (my_host_fn, [features, labels])
+      return ipu_estimator.IPUEstimatorSpec(mode=mode,
+                                            loss=loss,
+                                            train_op=train_op,
+                                            host_call=host_call)
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                           config=ipu_run_config.RunConfig())
+
+    estimator.train(input_fn=my_input_fn, steps=2)
+    self.assertEqual(2., estimator.get_variable_value("feature_sum"))
+    self.assertEqual(1., estimator.get_variable_value("label_sum"))
 
   def testModelFnDoesNotTakeLabels(self):
     def my_input_fn():
@@ -780,10 +908,11 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     def my_model_fn(features, labels, mode):
       loss = math_ops.reduce_sum(features["x0"] + features["x1"] +
-                                 labels["y0"] + labels["y1"], axis=-1)
+                                 labels["y0"] + labels["y1"],
+                                 axis=-1)
       train_op = array_ops.identity(loss)
       predictions = loss
-      eval_metric_ops = { "mean_loss": metrics_impl.mean(loss) }
+      eval_metric_ops = {"mean_loss": metrics_impl.mean(loss)}
       return model_fn_lib.EstimatorSpec(mode=mode,
                                         loss=loss,
                                         train_op=train_op,
@@ -819,7 +948,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
       loss = features + labels
       train_op = array_ops.identity(loss)
       predictions = loss
-      eval_metric_ops = { "mean_loss": metrics_impl.mean(loss) }
+      eval_metric_ops = {"mean_loss": metrics_impl.mean(loss)}
       return model_fn_lib.EstimatorSpec(mode=mode,
                                         loss=loss,
                                         train_op=train_op,

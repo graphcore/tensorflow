@@ -16,11 +16,11 @@
 IPUEstimator
 ~~~~~~~~~~~~
 """
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import six
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
@@ -49,6 +49,7 @@ from tensorflow.python.util import function_utils
 _INITIAL_LOSS = 0.0
 _INPUT_FN_KEY = "input_fn"
 _CROSS_REPLICA_SUM_OP = "IpuCrossReplicaSum"
+_HOST_DEVICE = "cpu"
 
 # Keys that cannot be used in the `params` dictionary passed to the
 # IPUEstimator
@@ -64,8 +65,57 @@ def _next_feed_id():
 _next_feed_id.feed_count = 0
 
 
+class IPUEstimatorSpec(
+    collections.namedtuple('IPUEstimatorSpec', [
+        'mode', 'predictions', 'loss', 'train_op', 'eval_metrics', 'host_call',
+        'training_hooks', 'evaluation_hooks', 'prediction_hooks'
+    ])):
+  """Ops and objects returned from a `model_fn` and passed to `IPUEstimator`."""
+
+  def __new__(cls,
+              mode,
+              predictions=None,
+              loss=None,
+              train_op=None,
+              eval_metrics=None,
+              host_call=None,
+              training_hooks=None,
+              evaluation_hooks=None,
+              prediction_hooks=None):
+    train_op = model_fn_lib._validate_estimator_spec_train_op(train_op, mode)
+    loss = model_fn_lib._validate_estimator_spec_loss(loss, mode)
+    predictions = model_fn_lib._validate_estimator_spec_predictions(
+        predictions, mode)
+    training_hooks = model_fn_lib._validate_estimator_spec_hooks(
+        training_hooks)
+    evaluation_hooks = model_fn_lib._validate_estimator_spec_hooks(
+        evaluation_hooks)
+    prediction_hooks = model_fn_lib._validate_estimator_spec_hooks(
+        prediction_hooks)
+
+    if host_call is not None:
+      if not isinstance(host_call, tuple):
+        raise ValueError("`host_call` must ba a tuple")
+      if len(host_call) != 2:
+        raise ValueError("`host_call` must have two elements")
+      if not isinstance(host_call[1], list):
+        raise ValueError("second element in `host_call` must be a list")
+
+    return super(IPUEstimatorSpec,
+                 cls).__new__(cls,
+                              mode=mode,
+                              predictions=predictions,
+                              loss=loss,
+                              train_op=train_op,
+                              eval_metrics=eval_metrics,
+                              host_call=host_call,
+                              training_hooks=training_hooks,
+                              evaluation_hooks=evaluation_hooks,
+                              prediction_hooks=prediction_hooks)
+
+
 class _IPUConfigureIPUSystemHook(session_run_hook.SessionRunHook):
-  def __init__(self, config, host_device="cpu"):
+  def __init__(self, config, host_device=_HOST_DEVICE):
     if not isinstance(config, IpuOptions):
       raise Exception("`config` must be an IpuOptions instance")
     self._config = config
@@ -102,7 +152,7 @@ class _IPUGlobalStepCounterAndStopHook(session_run_hook.SessionRunHook):
 
   def begin(self):
     self._global_step_tensor = training_util.get_global_step()
-    with ops.device("cpu"):
+    with ops.device(_HOST_DEVICE):
       self._increment_op = self._global_step_tensor.assign_add(
           self._iterations_per_loop)
 
@@ -145,6 +195,8 @@ class _ModelFnWrapper(object):
     self._num_shards = config.ipu_run_config.num_shards
     self._autosharding = config.ipu_run_config.autosharding
     self._captured_hooks = []
+    self._captured_host_call_fn = None
+    self._captured_host_call_args = None
 
   def _loop_replica_mean(self, loop_sum):
     if self._replication_factor == 1:
@@ -163,6 +215,15 @@ class _ModelFnWrapper(object):
   def captured_hooks(self):
     return self._captured_hooks
 
+  def _capture_host_call(self, host_call):
+    if host_call:
+      assert self._captured_host_call_fn is None, "Can only capture host_call once"
+      self._captured_host_call_fn, self._captured_host_call_args = host_call
+
+  @property
+  def captured_host_call_fn(self):
+    return self._captured_host_call_fn
+
   def create_training_loop(self):
     def training_step(total_loss, features, labels=None):
       estimator_spec = self._call_model_fn(features, labels,
@@ -177,6 +238,9 @@ class _ModelFnWrapper(object):
         raise ValueError("EstimatorSpec must contain train_op when training")
 
       self._capture_hooks(estimator_spec.training_hooks)
+
+      if isinstance(estimator_spec, IPUEstimatorSpec):
+        self._capture_host_call(estimator_spec.host_call)
 
       if self._autosharding:
         autoshard.automatic_sharding(self._num_shards, features, loss)
@@ -199,11 +263,20 @@ class _ModelFnWrapper(object):
         # Simplify the graph by avoiding the loop.
         args = self._infeed_queue._dequeue()  # pylint: disable=protected-access
         total_loss = training_step(_INITIAL_LOSS, *args)
-      else:
-        total_loss = loops.repeat(self._iterations_per_loop,
-                                  training_step,
-                                  inputs=[_INITIAL_LOSS],
-                                  infeed_queue=self._infeed_queue)
+        if self._captured_host_call_args is not None:
+          return total_loss, self._captured_host_call_args
+        return total_loss
+
+      total_loss = loops.repeat(self._iterations_per_loop,
+                                training_step,
+                                inputs=[_INITIAL_LOSS],
+                                infeed_queue=self._infeed_queue)
+
+      if self._captured_host_call_fn is not None:
+        # TODO(hakons): Could use outfeed queue to implement this.
+        raise ValueError(
+            "host_call is not allowed for iterations_per_loop > 1")
+
       return self._loop_replica_mean(total_loss)
 
     return training_loop
@@ -284,10 +357,24 @@ class _ModelFnWrapper(object):
 
     estimator_spec = self._model_fn(features=features, **kwargs)
 
-    if not isinstance(estimator_spec, model_fn_lib.EstimatorSpec):
-      raise ValueError("`model_fn` must return `tf.estimator.EstimatorSpec`")
+    valid_classes = (IPUEstimatorSpec, model_fn_lib.EstimatorSpec)
+    if not isinstance(estimator_spec, valid_classes):
+      raise ValueError("`model_fn` must return {}".format(" or ".join(
+          [cls.__name__ for cls in valid_classes])))
 
     return estimator_spec
+
+
+def _call_host_fn(host_call_fn, host_call_args):
+  assert host_call_fn is not None
+  assert host_call_args is not None
+
+  with ops.device(_HOST_DEVICE):
+    ret = host_call_fn(*host_call_args)
+
+  model_fn_lib._check_is_tensor_or_operation(  # pylint: disable=protected-access
+      ret, "`host_call` return value")
+  return ret
 
 
 def _augment_model_fn(model_fn):
@@ -315,7 +402,7 @@ def _augment_model_fn(model_fn):
 
     if config.ipu_run_config.ipu_options is not None:
       ipu_options = config.ipu_run_config.ipu_options
-      hooks.append(_IPUConfigureIPUSystemHook(ipu_options, host_device="cpu"))
+      hooks.append(_IPUConfigureIPUSystemHook(ipu_options, host_device=_HOST_DEVICE))
 
     model_fn_wrapper = _ModelFnWrapper(model_fn, config, params, infeed_queue)
 
@@ -337,10 +424,7 @@ def _augment_model_fn(model_fn):
       raise ValueError("Unknown mode: {}".format(mode))
 
     with ipu_scope("/device:IPU:0"):
-      if config.use_xla_auto_clustering:
-        compiled_loop = [loop()]
-      else:
-        compiled_loop = ipu_compiler.compile(loop)
+      compiled_loop = ipu_compiler.compile(loop)
 
     if config.ipu_run_config.compile_summary:
       ipu_ops.summary_ops.ipu_compile_summary("compile_summary", compiled_loop)
@@ -355,7 +439,18 @@ def _augment_model_fn(model_fn):
     eval_metric_ops = {}
 
     if mode == model_fn_lib.ModeKeys.TRAIN:
-      train_op = loss = compiled_loop[0]
+      if len(compiled_loop) == 1:
+        train_op = loss = compiled_loop[0]
+      else:
+        loss, host_call_args = compiled_loop
+        # The base class will run both `train_op` and `loss`.
+        # Let `train_op` be the return value from the host call.
+        # If there is a dependency on the `loss` calculated on
+        # the IPU, they will be sequenced. Otherwise they might
+        # run in parallel on the IPU and CPU.
+        train_op = _call_host_fn(
+            model_fn_wrapper.captured_host_call_fn,
+            host_call_args)
     elif mode == model_fn_lib.ModeKeys.PREDICT:
       with ops.control_dependencies([compiled_loop]):
         predictions = outfeed_queue.dequeue()

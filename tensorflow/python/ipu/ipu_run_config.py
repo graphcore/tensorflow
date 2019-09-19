@@ -85,16 +85,12 @@ class RunConfig(run_config_lib.RunConfig):
   Args:
     ipu_run_config: :class:`.IPURunConfig` object for IPU-specific configuration.
     master: a string. The address of the distributed master to use for training.
-    use_xla_auto_clustering: a bool. Whether to use the XLA auto-clustering
-      instead of explicitly compiling the whole training loop as one XLA cluster.
-      This might be necessary if the training loop cannot fully run on the IPU.
     **kwargs: keyword config parameters.
   """
 
   def __init__(self,
                ipu_run_config=None,
                master=None,
-               use_xla_auto_clustering=False,
                **kwargs):
     super(RunConfig, self).__init__(**kwargs)
     self._ipu_run_config = ipu_run_config or IPURunConfig()
@@ -104,8 +100,6 @@ class RunConfig(run_config_lib.RunConfig):
     if master is not None:
       self._master = master
 
-    self._use_xla_auto_clustering = use_xla_auto_clustering
-
   @property
   def ipu_run_config(self):
     return self._ipu_run_config
@@ -113,7 +107,3 @@ class RunConfig(run_config_lib.RunConfig):
   @property
   def master(self):
     return self._master
-
-  @property
-  def use_xla_auto_clustering(self):
-    return self._use_xla_auto_clustering

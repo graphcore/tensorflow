@@ -26,7 +26,6 @@ from tensorflow.python.distribute import multi_worker_test_base
 from tensorflow.python.distribute import multi_worker_util
 from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
 from tensorflow.python.distribute.reduce_util import ReduceOp
-from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_estimator
@@ -378,44 +377,57 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
     learning_rate = 0.5
     initial_w = 2.0
+    optimizer = GradientDescentOptimizer(learning_rate)
+
+    def host_model_fn(grads):
+      grads_and_vars = zip(grads, variables.trainable_variables())
+      with ops.name_scope("apply_gradients"):
+        train_op = optimizer.apply_gradients(grads_and_vars)
+        return train_op
 
     def my_model_fn(features, labels, mode):
-      optimizer = GradientDescentOptimizer(learning_rate)
       w = variable_scope.get_variable(name="w", initializer=initial_w)
       predictions = features * w
       loss = losses.mean_squared_error(labels=labels, predictions=predictions)
+
       with ops.name_scope("compute_gradients"):
         grads_and_vars = optimizer.compute_gradients(loss)
-      with ops.name_scope("apply_gradients"):
-        train_op = optimizer.apply_gradients(grads_and_vars)
-      return model_fn_lib.EstimatorSpec(mode=mode,
-                                        loss=loss,
-                                        train_op=train_op)
+      grads = [g for (g, _) in grads_and_vars]
+      train_op = array_ops.identity(loss)
+      host_call = (host_model_fn, [grads])
+
+      return ipu_estimator.IPUEstimatorSpec(mode=mode,
+                                            loss=loss,
+                                            train_op=train_op,
+                                            host_call=host_call)
 
     features = np.array([[1.0], [2.0]], dtype=np.float32)
     labels = np.array([[1.0], [2.0]], dtype=np.float32)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
-      dataset = dataset.batch(1, drop_remainder=True)
+      dataset = dataset.batch(1, drop_remainder=True).repeat()
       dataset = dataset.shard(self._num_workers, task_id)
       return dataset
 
     config = ipu_run_config.RunConfig(
       master=target,
       train_distribute=strategy,
-      use_xla_auto_clustering=True,
     )
 
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
-    estimator.train(my_input_fn, steps=1)
-    self.assertEquals(1, estimator.get_variable_value("global_step"))
 
-    # L(x, y) = 0.5 * ((w * x_0 - y_0)^2 + (w * x_1 - y_1)^2)
-    # dL(x, y)/dw = (w * x_0 - y_0) * x_0 + (w * x_1 - y_1) * x_1
-    reference_gradient = np.sum((initial_w * features - labels) * features)
-    reference_w = initial_w - learning_rate * reference_gradient
-    self.assertEqual(reference_w, estimator.get_variable_value("w"))
+    reference_w = initial_w
+
+    for i in range(3):
+      estimator.train(my_input_fn, steps=1)
+      self.assertEquals(i + 1, estimator.get_variable_value("global_step"))
+
+      # L(x, y) = 0.5 * ((w * x_0 - y_0)^2 + (w * x_1 - y_1)^2)
+      # dL(x, y)/dw = (w * x_0 - y_0) * x_0 + (w * x_1 - y_1) * x_1
+      reference_gradient = np.sum((reference_w * features - labels) * features)
+      reference_w -= learning_rate * reference_gradient
+      self.assertEqual(reference_w, estimator.get_variable_value("w"))
 
   def test_ipu_estimator_train(self):
     self._run_between_graph_clients(self._test_ipu_estimator_train,
