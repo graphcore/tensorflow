@@ -50,6 +50,11 @@ def configure_ipu_system(compilation_trace=True,
   opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = compile_ipu_code
 
+  assert not (pipelining and device_count_override
+              ), "Can't have both pipelining enabled and device_count_override"
+  assert not (sharded and device_count_override
+              ), "Can't have both sharded enabled and device_count_override"
+
   if engine_opts:
     for o in engine_opts.items():
       opt = opts.compilation_options.add()
@@ -92,13 +97,17 @@ def get_compute_sets_from_report(report):
   return cs
 
 
+def items_matching_at_least_one_pattern(items, patterns):
+  matches = []
+  patterns = [x + '*' for x in patterns]
+  for item in items:
+    if [p for p in patterns if fnmatch.fnmatch(item, p)]:
+      matches.append(item)
+  return matches
+
+
 def names_in_blacklist(names, blacklist):
-  fail_list = []
-  bl = [x + '*' for x in blacklist]
-  for name in names:
-    if [b for b in bl if fnmatch.fnmatch(name, b)]:
-      fail_list += name
-  return fail_list
+  return items_matching_at_least_one_pattern(names, blacklist)
 
 
 def missing_names_in_whitelist_entries(names, whitelist):
@@ -129,6 +138,67 @@ def count_compute_sets_matching(cs_list, to_match):
   return len([cs for cs in cs_set if fnmatch.fnmatch(cs, to_match)])
 
 
+class TensorMap(object):
+  class Tile(object):
+    def __init__(self, tile, num_elements):
+      self.tile = tile
+      self.num_elements = num_elements
+
+  class Tensor(object):
+    def __init__(self, inst, index, shape, dtype, has_constant, has_aliases,
+                 num_elements, tiles):
+      self.inst = inst
+      self.index = index
+      self.shape = shape
+      self.dtype = dtype
+      self.has_constant = has_constant
+      self.has_aliases = has_aliases
+      self.num_elements = num_elements
+      self.tiles = tiles
+
+    def tile_ids(self):
+      return list(set([t.tile for t in self.tiles]))
+
+  def __init__(self, tensor_map, num_tiles_per_ipu):
+    self.num_tiles_per_ipu = num_tiles_per_ipu
+    self.mappings = {}
+    for comp, js_tensors in tensor_map["mappings"].items():
+      tensors = []
+      for js_tensor in js_tensors:
+        tiles = []
+        for tile in js_tensor[7]:
+          assert len(tile) == 2
+          tiles.append(TensorMap.Tile(tile[0], tile[1]))
+        tensors.append(
+            TensorMap.Tensor(inst=js_tensor[0],
+                             index=js_tensor[1],
+                             shape=js_tensor[2],
+                             dtype=js_tensor[3],
+                             has_constant=bool(js_tensor[4]),
+                             has_aliases=bool(js_tensor[5]),
+                             num_elements=js_tensor[6],
+                             tiles=tiles))
+      self.mappings[comp] = tensors
+
+  def tile_ids(self, computation=None):
+    if isinstance(computation, list):
+      computations = computation
+    else:
+      computations = [computation] if computation else self.mappings.keys()
+    ids = set()
+    for c in computations:
+      for tensor in self.mappings[c]:
+        ids.update(tensor.tile_ids())
+    return ids
+
+  def ipu_ids(self, computation=None):
+    tile_ids = self.tile_ids(computation)
+    return set([int(tile_id / self.num_tiles_per_ipu) for tile_id in tile_ids])
+
+  def computation_names(self):
+    return list(self.mappings.keys())
+
+
 class ReportJSON(object):
   def __init__(self,
                test,
@@ -138,7 +208,8 @@ class ReportJSON(object):
                device_count_override=None,
                execution_trace=True,
                sharded=False,
-               compilation_trace=True):
+               compilation_trace=True,
+               pipelining=False):
     self.test = test
     self.sess = sess
     # If no session is passed to the constructor then assume
@@ -146,14 +217,14 @@ class ReportJSON(object):
     if sess:
       with ops.device('cpu'):
         self.report = gen_ipu_ops.ipu_event_trace()
-      configure_ipu_system(
-          compilation_trace,
-          io_trace,
-          execution_trace=execution_trace,
-          text_report=False,
-          compile_ipu_code=compile_ipu_code,
-          device_count_override=device_count_override,
-          sharded=sharded)
+      configure_ipu_system(compilation_trace,
+                           io_trace,
+                           execution_trace=execution_trace,
+                           text_report=False,
+                           compile_ipu_code=compile_ipu_code,
+                           device_count_override=device_count_override,
+                           sharded=sharded,
+                           pipelining=pipelining)
 
   def reset(self):
     assert self.sess, "A valid session must be passed to the constructor" \
@@ -170,7 +241,7 @@ class ReportJSON(object):
     if assert_len:
       self.test.assertEqual(assert_len, len(events), assert_msg)
     self.events = {}
-    self.tensor_map = {}
+    self.tensor_map = None
     self.instruction_info = {}
     events_types = collections.defaultdict(int)
     for e in events:
@@ -184,10 +255,11 @@ class ReportJSON(object):
             assert IpuTraceEvent.COMPILE_END not in self.events
             self.events[IpuTraceEvent.COMPILE_END] = js.loads(
                 evt.compile_end.compilation_report, encoding="utf-8")
-            self.tensor_map = js.loads(
-                evt.compile_end.tensor_map, encoding="utf-8")
-            self.instruction_info = js.loads(
-                evt.compile_end.instruction_info, encoding="utf-8")
+            self.tensor_map = TensorMap(
+                js.loads(evt.compile_end.tensor_map, encoding="utf-8"),
+                self.get_num_tiles_per_ipu())
+            self.instruction_info = js.loads(evt.compile_end.instruction_info,
+                                             encoding="utf-8")
         if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
           if evt.data_transfer.data_transfer:
             assert IpuTraceEvent.HOST_TO_DEVICE_TRANSFER not in self.events
@@ -250,6 +322,15 @@ class ReportJSON(object):
   def get_tensor_map(self):
     return self.tensor_map
 
+  def get_num_ipus(self):
+    return self.events[IpuTraceEvent.COMPILE_END]["target"]["numIPUs"]
+
+  def get_num_tiles(self):
+    return self.events[IpuTraceEvent.COMPILE_END]["target"]["numTiles"]
+
+  def get_num_tiles_per_ipu(self):
+    return self.get_num_tiles() / self.get_num_ipus()
+
   def get_first_program_of_type(self, program_type):
     for p in self.events[IpuTraceEvent.COMPILE_END]["programs"]:
       if program_type == p['type']:
@@ -265,6 +346,24 @@ class ReportJSON(object):
   def get_program(self, index=0):
     return self.events[IpuTraceEvent.COMPILE_END]["programs"][index]
 
+  def assert_pipeline_stages_on_expected_ipu(self, expected_ipus):
+    self.test.assertFalse(
+        items_matching_at_least_one_pattern(
+            self.tensor_map.computation_names(),
+            ["*_stage_%d_" % (len(expected_ipus) + 1)]),
+        "The number of expected_ipus does not match the number of stages")
+    for i, expected_ipu in enumerate(expected_ipus):
+      stage = items_matching_at_least_one_pattern(
+          self.tensor_map.computation_names(), ["*_stage_%d_" % i])
+      self.test.assertTrue(stage, "No stage %d found" % i)
+      ipus = self.tensor_map.ipu_ids(stage)
+      self.test.assertEqual(
+          len(ipus), 1,
+          "Stage %d was mapped to more than one ipu: %s" % (i + 1, ipus))
+      self.test.assertEqual(
+          ipus.pop(), expected_ipu,
+          "Stage %d did not run on the expected IPU" % (i + 1))
+
   def assert_total_tile_memory_in_range(self, low, high):
     self.test.assertAllInRange([self.get_total_tile_memory()], low, high)
 
@@ -278,8 +377,8 @@ class ReportJSON(object):
   def assert_all_compute_sets_and_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" % "\n\t".join(
-            self.get_compute_sets()))
+        "Whitelist items not found in compute sets:\n\t%s" %
+        "\n\t".join(self.get_compute_sets()))
     self.test.assertFalse(
         missing_names_in_whitelist_entries(self.get_compute_sets(), ok),
         "Compute sets item not found in whitelist:\n\t%s" % "\n\t".join(ok))
@@ -288,9 +387,9 @@ class ReportJSON(object):
   def assert_all_global_exchanges_and_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(
-            self.get_program_names_of_type('GlobalExchange'), ok),
-        "Whitelist items not found in global exchanges:\n\t%s" % "\n\t".join(
-            self.get_compute_sets()))
+            self.get_program_names_of_type('GlobalExchange'),
+            ok), "Whitelist items not found in global exchanges:\n\t%s" %
+        "\n\t".join(self.get_compute_sets()))
     self.test.assertFalse(
         missing_names_in_whitelist_entries(
             self.get_program_names_of_type('GlobalExchange'),
@@ -301,8 +400,8 @@ class ReportJSON(object):
   def assert_compute_sets_contain_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" % "\n\t".join(
-            self.get_compute_sets()))
+        "Whitelist items not found in compute sets:\n\t%s" %
+        "\n\t".join(self.get_compute_sets()))
 
   # Asserts that none of the compute sets match any of the blacklist items
   def assert_compute_sets_not_in_blacklist(self, blacklist):
@@ -315,8 +414,8 @@ class ReportJSON(object):
   def assert_vertices_contain_list(self, ok):
     self.test.assertFalse(
         missing_whitelist_entries_in_names(self.get_vertices(), ok),
-        "Whitelist items not found in vertices:\n\t%s" % "\n\t".join(
-            self.get_vertices()))
+        "Whitelist items not found in vertices:\n\t%s" %
+        "\n\t".join(self.get_vertices()))
 
   def assert_compute_sets_matches(self, expr, num_matches, msg=None):
     self.test.assertEqual(
@@ -410,8 +509,8 @@ def create_multi_increasing_dataset(value,
     result = []
     for i, shape in enumerate(shapes):
       result.append(
-          math_ops.cast(
-              gen_array_ops.broadcast_to(data, shape=shape), dtype=dtypes[i]))
+          math_ops.cast(gen_array_ops.broadcast_to(data, shape=shape),
+                        dtype=dtypes[i]))
     return result
 
   dataset = Dataset.range(value).map(_get_one_input)
@@ -427,11 +526,10 @@ def create_dual_increasing_dataset(value,
                                    repeat=True):
   data_shape = data_shape if data_shape else [1, 32, 32, 4]
   label_shape = label_shape if label_shape else [1, 8]
-  return create_multi_increasing_dataset(
-      value,
-      shapes=[data_shape, label_shape],
-      dtypes=[dtype, dtype],
-      repeat=repeat)
+  return create_multi_increasing_dataset(value,
+                                         shapes=[data_shape, label_shape],
+                                         dtypes=[dtype, dtype],
+                                         repeat=repeat)
 
 
 def create_single_increasing_dataset(value,
@@ -439,8 +537,10 @@ def create_single_increasing_dataset(value,
                                      dtype=np.float32,
                                      repeat=True):
   shape = shape if shape else [1, 32, 32, 4]
-  return create_multi_increasing_dataset(
-      value, shapes=[shape], dtypes=[dtype], repeat=repeat)
+  return create_multi_increasing_dataset(value,
+                                         shapes=[shape],
+                                         dtypes=[dtype],
+                                         repeat=repeat)
 
 
 def move_variable_initialization_to_cpu():

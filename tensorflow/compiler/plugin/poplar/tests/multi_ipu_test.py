@@ -54,14 +54,11 @@ class MultiIpuTest(xla_test.XLATestCase):
       self.assertAllClose(result[0], [3., 8.])
 
       report.parse_log()
-      mappings = report.get_tensor_map()["mappings"]
-      mods = list(mappings.keys())
+      tm = report.get_tensor_map()
+      mods = tm.computation_names()
       self.assertEqual(len(mods), 1)
 
-      tiles = set()
-      for tensor in mappings[mods[0]]:
-        for tile in tensor[7]:
-          tiles.add(tile[0])
+      tiles = tm.tile_ids(mods[0])
 
       self.assertEqual(len(tiles), 3)
       self.assertEqual(tiles, set((0, 1, 1216)))
@@ -168,14 +165,11 @@ class MultiIpuTest(xla_test.XLATestCase):
       self.assertAllClose(result[0], [5., 13.])
 
       report.parse_log()
-      mappings = report.get_tensor_map()["mappings"]
-      mods = list(mappings.keys())
+      tm = report.get_tensor_map()
+      mods = tm.computation_names()
       self.assertEqual(len(mods), 1)
 
-      tiles = set()
-      for tensor in mappings[mods[0]]:
-        for tile in tensor[7]:
-          tiles.add(tile[0])
+      tiles = tm.tile_ids(mods[0])
 
       self.assertEqual(len(tiles), 5)
       self.assertEqual(tiles, set((0, 1, 2, 1216, 1217)))

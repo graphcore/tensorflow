@@ -40,6 +40,7 @@ def pipeline(computational_stages,
              infeed_queue=None,
              outfeed_queue=None,
              optimizer_stage=None,
+             device_mapping=None,
              name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
@@ -114,6 +115,7 @@ def pipeline(computational_stages,
                           inputs=[],
                           infeed_queue=infeed_queue,
                           outfeed_queue=outfeed_queue,
+                          device_mapping=[3,1],
                           name="Pipeline")
       return pipeline_op
 
@@ -125,9 +127,12 @@ def pipeline(computational_stages,
       result = sess.run(compiled_model)
       probabilities, classes = sess.run(outfeed_op)
 
-  In this set up, the model is split across two IPUs with the first two layers
-  being executed on the first IPU and the third layer and the probabilities and
-  classes are executed on the second IPU.
+  In this set up, the model is split across two IPUs. By default the first two
+  layers would be executed on the first IPU and the third layer and the
+  probabilities and classes on the second IPU but here `device_mapping` is used
+  to override the default IPU allocation and instead the first two layers will
+  be executed on the fourth IPU and the third layer and the probabilities and
+  classed on the second IPU.
   This creates a pipeline of depth 250 (specified by the `pipeline_depth`),
   which means each pipeline stage is executed 250 times.
   This pipeline is then executed 2 times (specified by the `repeat_count`)
@@ -206,7 +211,8 @@ def pipeline(computational_stages,
     optimizer_stage: optional Python function which takes the output of the last
       computational stage and uses that to call a TensorFlow Optimizer in order
       to generate the backward pass for the model.
-    name: name of this pipeline sage.
+    device_mapping: optional stage to ipu mapping override.
+    name: name of this pipeline.
 
   Returns:
     An `Operation` that executes the pipeline.
@@ -214,6 +220,8 @@ def pipeline(computational_stages,
   """
   name = name if name else "pipeline"
   inputs = inputs if inputs else []
+  device_mapping = device_mapping if device_mapping else list(
+      range(0, len(computational_stages)))
 
   if not isinstance(computational_stages, (list, tuple)):
     raise ValueError(
@@ -233,6 +241,14 @@ def pipeline(computational_stages,
   if len(computational_stages) < 2:
     raise ValueError("Pipeline requires at least two computational stages.")
 
+  if not isinstance(device_mapping, (list, tuple)):
+    raise ValueError("device_mapping argument needs to be a list or a tuple.")
+
+  if len(device_mapping) != len(computational_stages):
+    raise ValueError(
+        "Each stage must be mapped to an IPU: %d mappings != %d stages" %
+        (len(device_mapping), len(computational_stages)))
+
   control_outputs = []
 
   def _pipeline(*args):
@@ -245,14 +261,13 @@ def pipeline(computational_stages,
         stage_outfeed_queue = None
 
       stage_name = name + "_stage_" + str(stage_id)
-      outputs = _pipeline_stage(
-          stage,
-          stage_id,
-          stage_id,
-          outputs,
-          infeed_queue=stage_infeed_queue,
-          outfeed_queue=stage_outfeed_queue,
-          name=stage_name)
+      outputs = _pipeline_stage(stage,
+                                stage_id,
+                                device_mapping[stage_id],
+                                outputs,
+                                infeed_queue=stage_infeed_queue,
+                                outfeed_queue=stage_outfeed_queue,
+                                name=stage_name)
     if optimizer_stage:
       # Apply the optimizer stage
       outputs = optimizer_stage(*_convert_to_list(outputs))
@@ -283,8 +298,8 @@ def pipeline(computational_stages,
         if not outfeed_queue:
           raise ValueError(
               "The optimizer_stage has tensor outputs: %s, but no outfeed_queue"
-              " has been provided." % (', '.join(
-                  str(t) for t in output_tensors)))
+              " has been provided." %
+              (', '.join(str(t) for t in output_tensors)))
         output_operations.append(outfeed_queue.enqueue(output_tensors))
       with ops.control_dependencies(output_operations):
         outputs = control_flow_ops.no_op()
@@ -292,8 +307,8 @@ def pipeline(computational_stages,
       if not isinstance(outputs, ops.Operation) and not outfeed_queue:
         raise ValueError(
             "The last computational stage has tensor outputs: %s, but no"
-            " outfeed_queue has been provided." % (', '.join(
-                str(t) for t in _convert_to_list(outputs))))
+            " outfeed_queue has been provided." %
+            (', '.join(str(t) for t in _convert_to_list(outputs))))
 
     if not isinstance(outputs, ops.Operation):
       raise ValueError(
@@ -303,7 +318,7 @@ def pipeline(computational_stages,
 
   with ops.name_scope(name) as scope:
     func_graph, captured_args = _compile_function(_pipeline, inputs, scope,
-                                                  control_outputs, name)
+                                                  control_outputs)
 
     # Create the pipeline and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):
@@ -326,7 +341,6 @@ def _pipeline_stage(func,
                     stage_id,
                     device_id,
                     args,
-                    kwargs=None,
                     infeed_queue=None,
                     outfeed_queue=None,
                     name=None):
@@ -337,8 +351,9 @@ def _pipeline_stage(func,
 
   Args:
     func: function which will be executed as a stage.
+    stage_id: Stage number.
+    device_id: IPU the stage will be mapped to.
     args: arguments to the function.
-    kwargs: key-word arguments to the function.
     infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued as part of
       this function.
     outfeed_queue: optional IPUOutfeedQueue, if passed, it is enqueued as part
@@ -366,8 +381,7 @@ def _pipeline_stage(func,
       if len(dequeue_ops) == 1 and isinstance(dequeue_ops[0], dict):
         kwargs = dequeue_ops[0]
         return func(*(args), **kwargs)
-      else:
-        return func(*(args + dequeue_ops))
+      return func(*(args + dequeue_ops))
 
     func_to_compile = infeed_func_wrapper
   # If we have an outfeed, then we wrap the function in another function which
@@ -387,7 +401,7 @@ def _pipeline_stage(func,
 
   with ops.name_scope(name) as scope:
     func_graph, captured_args = _compile_function(func_to_compile, args, scope,
-                                                  control_outputs, name)
+                                                  control_outputs)
 
     # Create the pipeline stage and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):
@@ -400,12 +414,11 @@ def _pipeline_stage(func,
             stage_id=stage_id)
     if isinstance(outputs, ops.Operation):
       return outputs
-    else:
-      return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
-                                                outputs)
+    return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
+                                              outputs)
 
 
-def _compile_function(func, args, scope, control_outputs, name):
+def _compile_function(func, args, scope, control_outputs):
   # Automatic control dependencies are added in defuns, but not in v1
   # graphs. Propagate that behavior here.
   add_control_dependencies = ops.get_default_graph()._add_control_dependencies
@@ -424,9 +437,9 @@ def _compile_function(func, args, scope, control_outputs, name):
   for t in func_graph.external_captures:
     if t.dtype != dtypes.resource:
       raise ValueError(
-          "Trying to capture the tensor %s which is not a resource. This tensor "
-          "needs to be passed as either part of the `input` or `infeed_queue` of "
-          "the pipeline." % (t.name))
+          "Trying to capture the tensor %s which is not a resource. This tensor"
+          " needs to be passed as either part of the `input` or `infeed_queue`"
+          " of the pipeline." % (t.name))
   captured_args += func_graph.external_captures
 
   # Add any control outputs.
@@ -438,5 +451,4 @@ def _compile_function(func, args, scope, control_outputs, name):
 def _convert_to_list(xs):
   if not isinstance(xs, (list, tuple)):
     return [xs]
-  else:
-    return list(xs)
+  return list(xs)
