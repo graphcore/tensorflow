@@ -184,37 +184,44 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
         }
       }
     }
+
+    auto AddToQueue = [&](HloInstruction* inst, InplacePriority priorty) {
+      auto inst_description = HloInstructionDescription(inst);
+      switch (inst_description.GetType()) {
+        case HloInstructionType::kInplaceGetTupleElement: {
+          inplace_gte_candidates[InplacePriority::kLow].push_back(inst);
+          break;
+        }
+        case HloInstructionType::kInplaceReadWrite: {
+          inplace_read_write_candidates[InplacePriority::kLow].push_back(inst);
+          break;
+        }
+        case HloInstructionType::kInplaceReadOnly: {
+          inplace_read_only_candidates[InplacePriority::kLow].push_back(inst);
+          break;
+        }
+        default:
+          break;
+      }
+    };
+
     // Get all possible remaining inplace instructions.
     // Give medium priority to outlined poplibs calls.
     for (auto* inst : comp->MakeInstructionPostOrder()) {
-      switch (inst->opcode()) {
-        case HloOpcode::kCustomCall:
-        case HloOpcode::kFusion: {
-          inplace_read_write_candidates[InplacePriority::kMedium].push_back(
-              inst);
-          break;
-        }
-        default: {
-          auto inst_description = HloInstructionDescription(inst);
-          switch (inst_description.GetType()) {
-            case HloInstructionType::kInplaceGetTupleElement: {
-              inplace_gte_candidates[InplacePriority::kLow].push_back(inst);
-              break;
-            }
-            case HloInstructionType::kInplaceReadWrite: {
-              inplace_read_write_candidates[InplacePriority::kLow].push_back(
-                  inst);
-              break;
-            }
-            case HloInstructionType::kInplaceReadOnly: {
-              inplace_read_only_candidates[InplacePriority::kLow].push_back(
-                  inst);
-              break;
-            }
-            default:
-              break;
+      if (inst->parent()->root_instruction() == inst) {
+        AddToQueue(inst, InplacePriority::kHigh);
+      } else {
+        switch (inst->opcode()) {
+          case HloOpcode::kCustomCall:
+          case HloOpcode::kFusion: {
+            inplace_read_write_candidates[InplacePriority::kMedium].push_back(
+                inst);
+            break;
           }
-          break;
+          default: {
+            AddToQueue(inst, InplacePriority::kLow);
+            break;
+          }
         }
       }
     }

@@ -757,8 +757,7 @@ ENTRY c1 {
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
   auto inplace_instructions = GetInplaceInstructions(module0);
   EXPECT_THAT(inplace_instructions.size(), 8);
-  std::set<std::string> in_place_ops =
-      {"c", "d", "e", "f", "g", "k", "l", "t"};
+  std::set<std::string> in_place_ops = {"c", "d", "e", "f", "g", "k", "l", "t"};
   for (auto i : inplace_instructions) {
     EXPECT_TRUE(in_place_ops.count(i->name()));
   }
@@ -798,6 +797,45 @@ ENTRY c1 {
   auto inplace_instructions = GetInplaceInstructions(module0);
   EXPECT_THAT(inplace_instructions.size(), 1);
   std::set<std::string> in_place_ops = {"c"};
+  for (auto i : inplace_instructions) {
+    EXPECT_TRUE(in_place_ops.count(i->name()));
+  }
+}
+
+TEST_F(HloInplaceDependencyTest, TestRootIsAlwaysChosen) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f32[] parameter(0)
+
+  l = f32[] add(p0, p0)
+
+  aa = token[] after-all()
+  outfeed1 = token[] outfeed(l, aa), outfeed_config="1"
+
+  ROOT t = (f32[20], f32[10,2]) tuple(l, l)
+
+  bb = token[] after-all()
+  outfeed2 = token[] outfeed(l, bb), outfeed_config="2"
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module0);
+
+  InplaceFinder inplaceFinder;
+  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
+
+  auto inplace_instructions = GetInplaceInstructions(module0);
+  EXPECT_THAT(inplace_instructions.size(), 1);
+  std::set<std::string> in_place_ops = {"t"};
   for (auto i : inplace_instructions) {
     EXPECT_TRUE(in_place_ops.count(i->name()));
   }
