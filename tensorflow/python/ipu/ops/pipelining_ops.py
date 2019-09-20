@@ -31,6 +31,7 @@ from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import control_flow_util_v2 as util
+from tensorflow.python.platform import tf_logging as logging
 
 
 def pipeline(computational_stages,
@@ -220,6 +221,14 @@ def pipeline(computational_stages,
   """
   name = name if name else "pipeline"
   inputs = inputs if inputs else []
+  inputs = _convert_to_list(inputs)
+  inputs = ops.convert_n_to_tensor(inputs)
+
+  for i, input in enumerate(inputs):
+    if input.dtype == dtypes.resource:
+      logging.warn("Passing tensor {} by value.".format(str(input)))
+      inputs[i] = input.value()
+
   device_mapping = device_mapping if device_mapping else list(
       range(0, len(computational_stages)))
 

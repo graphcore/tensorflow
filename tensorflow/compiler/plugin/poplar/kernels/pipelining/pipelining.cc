@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/pipelining/rearrange_pipeline_stage_arguments.h"
 
 #include "tensorflow/compiler/tf2xla/kernels/tensor_list_utils.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
@@ -46,12 +47,11 @@ XlaCompiler::CompileOptions GetDefaultCompileOptions() {
 // any constant inputs to a value so that they can be propagated.
 xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
     XlaOpKernelContext* ctx, const DataTypeVector& input_types,
-    int* num_resource_args, int* num_non_constant_args) {
+    int* num_resource_args) {
   auto builder = ctx->builder();
 
   std::vector<XlaCompiler::Argument> arguments(input_types.size());
   (*num_resource_args) = 0;
-  (*num_non_constant_args) = 0;
   for (int i = 0; i < input_types.size(); ++i) {
     XlaCompiler::Argument& arg = arguments[i];
     DataType type = ctx->input_type(i);
@@ -84,7 +84,6 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
               << " initialized: " << arg.initialized;
 
       (*num_resource_args)++;
-      (*num_non_constant_args)++;
     } else {
       arg.type = input_types[i];
       arg.shape = ctx->InputShape(i);
@@ -106,7 +105,6 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
         // TensorLists.
         TF_ASSIGN_OR_RETURN(xla::Shape shape, builder->GetShape(ctx->Input(i)));
         arg.shape = shape;
-        (*num_non_constant_args)++;
         if (IsTensorListInput(ctx, i)) {
           // arg.initialized == false means that the element_shape of the list
           // was not available at the time of building the list so an empty list
@@ -130,24 +128,21 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
 xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(
     XlaOpKernelContext* ctx,
     const std::vector<XlaCompiler::Argument>& arguments,
-    const int num_non_constant_args) {
+    const std::vector<int>& input_mapping) {
   auto builder = ctx->builder();
 
-  std::vector<xla::XlaOp> inputs(num_non_constant_args);
-  for (int i = 0, next_param_idx = 0; i < arguments.size(); ++i) {
-    switch (arguments[i].kind) {
+  std::vector<xla::XlaOp> inputs(input_mapping.size());
+  for (int i = 0; i < input_mapping.size(); ++i) {
+    const int arg_pos = input_mapping[i];
+    switch (arguments[arg_pos].kind) {
       case XlaCompiler::Argument::kResource: {
         XlaResource* resource;
-        TF_RETURN_IF_ERROR(ctx->GetResourceInput(i, &resource));
-        TF_RETURN_IF_ERROR(resource->Pack(&inputs[next_param_idx++], builder));
+        TF_RETURN_IF_ERROR(ctx->GetResourceInput(arg_pos, &resource));
+        TF_RETURN_IF_ERROR(resource->Pack(&inputs[i], builder));
         break;
       }
       case XlaCompiler::Argument::kParameter: {
-        inputs[next_param_idx++] = ctx->Input(i);
-        break;
-      }
-      case XlaCompiler::Argument::kConstant: {
-        // Do nothing - the constant has been lowered into the computation.
+        inputs[i] = ctx->Input(arg_pos);
         break;
       }
       default: { return errors::InvalidArgument("Invalid argument kind."); }
@@ -173,23 +168,22 @@ class PipelineStageOp : public XlaOpKernel {
     auto builder = ctx->builder();
     // First get all the arguments.
     int num_resource_args = 0;
-    int num_non_constant_args = 0;
-    auto arguments_or = GetXlaArguments(ctx, input_types_, &num_resource_args,
-                                        &num_non_constant_args);
+    auto arguments_or = GetXlaArguments(ctx, input_types_, &num_resource_args);
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
     VLOG(2) << "Building PipelineStage function with " << input_types_.size()
             << " inputs including " << num_resource_args << " resources.";
+    XlaCompiler::CompileOptions compile_options = GetDefaultCompileOptions();
+    compile_options.return_updated_values_for_all_resources = false;
 
     // Compile the computation.
     XlaCompiler::CompilationResult result;
-    OP_REQUIRES_OK(
-        ctx, ctx->compiler()->CompileFunction(GetDefaultCompileOptions(),
-                                              *to_apply_, arguments, &result));
+    OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
+                            compile_options, *to_apply_, arguments, &result));
 
     // Get the non constant XLA arguments.
-    auto inputs_or = GetXlaInputs(ctx, arguments, num_non_constant_args);
+    auto inputs_or = GetXlaInputs(ctx, arguments, result.input_mapping);
     OP_REQUIRES_OK(ctx, inputs_or.status());
     std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
 
@@ -206,50 +200,32 @@ class PipelineStageOp : public XlaOpKernel {
                        outputs, FrontendAttributeId_Name(PIPELINE_STAGE_ID),
                        std::to_string(stage_id_)));
 
-    // The order in which outputs are returned from the XLA computation differ
-    // from the OutputDescriptions in that the XLA computation returns all the
-    // non resource variables first.
-    // We therefore store the mapping of resource input index to the index it is
-    // returned at.
-    absl::flat_hash_map<int64, int64> resource_input_index_to_output_index;
-
-    // Set non resource variable outputs and the resource variables map.
-    // Make sure to set constant outputs as constant.
-    int next_computation_output = 0;
+    // Set non resource variable outputs and make sure to set constant outputs
+    // as constant.
+    int non_const_outputs = 0;
     for (int i = 0; i != output_types_.size(); ++i) {
       const XlaCompiler::OutputDescription& output = result.outputs[i];
 
       if (output.is_constant) {
         ctx->SetConstantOutput(i, result.outputs[i].constant_value);
       } else {
-        if (output.type == DT_RESOURCE) {
-          resource_input_index_to_output_index[output.input_index] = i;
-        } else {
-          ctx->SetOutput(
-              i, xla::GetTupleElement(outputs, next_computation_output++));
-        }
+        ctx->SetOutput(i, xla::GetTupleElement(outputs, non_const_outputs++));
       }
     }
 
-    // Set up the resources.
-    for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
+    // Set up the modified resources.
+    for (int i = 0; i < result.resource_updates.size(); ++i) {
+      const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
       XlaResource* resource;
-      const int pos = update.input_index;
-      OP_REQUIRES_OK(ctx, ctx->GetResourceInput(pos, &resource));
-
-      if (update.modified) {
-        // Add a GTE for the resource.
-        OP_REQUIRES_OK(
-            ctx, resource->SetFromPack(
-                     arguments[pos].tensor_array_gradients,
-                     xla::GetTupleElement(outputs, next_computation_output++),
-                     builder));
-      }
-      // Set up the resource output if required.
-      auto itr = resource_input_index_to_output_index.find(pos);
-      if (itr != resource_input_index_to_output_index.end()) {
-        ctx->SetResourceOutput(itr->second, resource);
-      }
+      OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
+      int pos = non_const_outputs + i;
+      OP_REQUIRES(
+          ctx, update.modified,
+          errors::Internal("Expected the resource output to be modified."));
+      OP_REQUIRES_OK(ctx,
+                     resource->SetFromPack(
+                         arguments[update.input_index].tensor_array_gradients,
+                         xla::GetTupleElement(outputs, pos), builder));
 
       VLOG(2) << "Variable: pos: " << pos << " name: " << resource->name()
               << " modified: " << update.modified
@@ -297,23 +273,34 @@ class PipelineOp : public XlaOpKernel {
     auto builder = ctx->builder();
     // First get all the arguments and compile the computation.
     int num_resource_args = 0;
-    int num_non_constant_args = 0;
-    auto arguments_or = GetXlaArguments(ctx, input_types_, &num_resource_args,
-                                        &num_non_constant_args);
+    auto arguments_or = GetXlaArguments(ctx, input_types_, &num_resource_args);
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
     VLOG(2) << "Building PipelineStage function with " << input_types_.size()
             << " inputs including " << num_resource_args << " resources.";
 
+    // Rewrite the Pipeline function such that arguments to PipelineStage ops
+    // are rearranged and resource variables moved to the back.
+    NameAttrList new_to_apply;
+    OP_REQUIRES_OK(
+        ctx,
+        RearrangePipelineStageArguments(
+            [&ctx](const NameAttrList& function, const FunctionBody** fbody) {
+              return ctx->compiler()->FindFunctionBody(function, fbody);
+            },
+            new_to_apply, *to_apply_, ctx->compiler()->local_flib_def()));
+
+    XlaCompiler::CompileOptions compile_options = GetDefaultCompileOptions();
+    compile_options.return_updated_values_for_all_resources = true;
+
     // Compile the computation.
     XlaCompiler::CompilationResult result;
-    OP_REQUIRES_OK(
-        ctx, ctx->compiler()->CompileFunction(GetDefaultCompileOptions(),
-                                              *to_apply_, arguments, &result));
+    OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
+                            compile_options, new_to_apply, arguments, &result));
 
     // Get the non constant XLA arguments.
-    auto inputs_or = GetXlaInputs(ctx, arguments, num_non_constant_args);
+    auto inputs_or = GetXlaInputs(ctx, arguments, result.input_mapping);
     OP_REQUIRES_OK(ctx, inputs_or.status());
     std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
 

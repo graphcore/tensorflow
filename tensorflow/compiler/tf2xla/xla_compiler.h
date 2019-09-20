@@ -427,6 +427,7 @@ class XlaCompiler {
   const Options& options() const { return options_; }
   xla::Client* client() const { return options_.client; }
   FunctionLibraryRuntime* flib_runtime() const { return flib_runtime_; }
+  FunctionLibraryDefinition* local_flib_def() const { return local_flib_def_.get(); }
 
   void PushNodeTokenMapping();
   Status PopNodeTokenMapping();

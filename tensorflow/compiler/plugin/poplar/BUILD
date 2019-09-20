@@ -509,6 +509,30 @@ cc_library(
 )
 
 cc_library(
+    name = "rearrange_pipeline_stage_arguments",
+    srcs = [
+        "kernels/pipelining/rearrange_pipeline_stage_arguments.cc",
+    ],
+    hdrs = [
+        "kernels/pipelining/rearrange_pipeline_stage_arguments.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/tf2xla:tf2xla_util",
+        "//tensorflow/compiler/tf2xla/ops:xla_ops",
+        "//tensorflow/compiler/xla:status_macros",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:core_cpu_internal",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:graph",
+        "//tensorflow/core:lib",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/types:optional",
+    ],
+    linkstatic=1,
+    alwayslink = True,
+)
+
+cc_library(
     name = "kernels",
     srcs = [
         "kernels/datastream/feeds.cc",
@@ -546,6 +570,7 @@ cc_library(
         ":common",
         ":custom_kernels_util",
         ":driver",
+        ":rearrange_pipeline_stage_arguments",
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/compiler/tf2xla:xla_compiler",
         "//tensorflow/compiler/tf2xla/kernels:tensor_list_utils",
