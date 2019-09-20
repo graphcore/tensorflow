@@ -470,6 +470,24 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "pipelining_conv_classify_test",
+    size = "large",
+    srcs = ["tests/pipelining_conv_classify_test.py"],
+    shard_count = 4,
+    additional_deps = [
+        ":ipu_lib",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
