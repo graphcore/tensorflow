@@ -44,3 +44,4 @@ gradleBuild
 Podfile.lock
 Pods
 xcuserdata
+.linters
