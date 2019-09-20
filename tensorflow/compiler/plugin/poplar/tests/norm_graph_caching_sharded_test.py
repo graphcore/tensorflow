@@ -9,11 +9,9 @@ import numpy as np
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.layers import convolutional
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -63,22 +61,17 @@ class NormGraphCachingTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True, sharded=True)
+      report = tu.ReportJSON(self, sess, sharded=True)
       tu.move_variable_initialization_to_cpu()
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run([train, loss], {x: np.zeros([1, 4, 4, 2])})
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
       # Two BN for forwards (on shards 0 and 1) and two BN for grad
       # (note that we don't cache gradient application)
       ok = [
@@ -100,8 +93,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
       ]
-
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":

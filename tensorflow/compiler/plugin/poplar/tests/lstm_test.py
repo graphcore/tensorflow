@@ -48,44 +48,43 @@ num_channels = 8
 
 
 def _get_variable(name, shape, initializer):
-  return variable_scope.get_variable(
-      name, shape=shape, initializer=initializer, dtype=dataType)
+  return variable_scope.get_variable(name,
+                                     shape=shape,
+                                     initializer=initializer,
+                                     dtype=dataType)
 
 
 def _createLSTMInput(value, batch_size, seq_len, input_size):
-  return np.full(
-      fill_value=value,
-      shape=[seq_len, batch_size, input_size],
-      dtype=dataType)
+  return np.full(fill_value=value,
+                 shape=[seq_len, batch_size, input_size],
+                 dtype=dataType)
 
 
 def _createLSTMInitialState(h_value, c_value, batch_size, num_channels):
-  return (np.full(
-      fill_value=h_value, shape=[batch_size, num_channels], dtype=dataType),
-          np.full(
-              fill_value=c_value,
-              shape=[batch_size, num_channels],
-              dtype=dataType))
+  return (np.full(fill_value=h_value,
+                  shape=[batch_size, num_channels],
+                  dtype=dataType),
+          np.full(fill_value=c_value,
+                  shape=[batch_size, num_channels],
+                  dtype=dataType))
 
 
 class LSTMTest(xla_test.XLATestCase):
   def _LSTMLayerCPU(self, inputs, weights_value, initial_state, forget_bias,
                     training, name):
     with ops.device("/device:CPU:0"):
-      lstm_cell = rnn_cell.LSTMCell(
-          num_channels,
-          name='basic_lstm_cell',
-          forget_bias=forget_bias,
-          initializer=init_ops.constant_initializer(
-              weights_value, dtype=dataType),
-          reuse=variable_scope.AUTO_REUSE)
+      lstm_cell = rnn_cell.LSTMCell(num_channels,
+                                    name='basic_lstm_cell',
+                                    forget_bias=forget_bias,
+                                    initializer=init_ops.constant_initializer(
+                                        weights_value, dtype=dataType),
+                                    reuse=variable_scope.AUTO_REUSE)
       state = rnn_cell.LSTMStateTuple(initial_state[1], initial_state[0])
-      outputs, states = rnn.dynamic_rnn(
-          lstm_cell,
-          inputs,
-          dtype=dataType,
-          initial_state=state,
-          time_major=True)
+      outputs, states = rnn.dynamic_rnn(lstm_cell,
+                                        inputs,
+                                        dtype=dataType,
+                                        initial_state=state,
+                                        time_major=True)
       return outputs
 
   def _LSTMLayer(self, inputs, weights_value, initial_state, forget_bias,
@@ -96,10 +95,10 @@ class LSTMTest(xla_test.XLATestCase):
             "kernel",
             shape=[input_size + num_channels, 4 * num_channels],
             initializer=init_ops.constant_initializer(weights_value, dataType))
-        biases = _get_variable(
-            "biases",
-            shape=[4, num_channels],
-            initializer=init_ops.constant_initializer(0.0, dataType))
+        biases = _get_variable("biases",
+                               shape=[4, num_channels],
+                               initializer=init_ops.constant_initializer(
+                                   0.0, dataType))
       outputs, _, _, _ = gen_popnn_ops.popnn_lstm_layer(
           inputs=inputs,
           num_channels=num_channels,
@@ -115,19 +114,22 @@ class LSTMTest(xla_test.XLATestCase):
                              weights_value, h_value, c_value,
                              lstm_layer_function):
     with self.session() as sess:
-      pinputs = array_ops.placeholder(
-          dataType, [seq_len, batch_size, input_size], name="inputs")
-      pinitial_h_state = array_ops.placeholder(
-          dataType, [batch_size, num_channels], name="init_h_state")
-      pinitial_c_state = array_ops.placeholder(
-          dataType, [batch_size, num_channels], name="init_c_state")
-      lstm_output_seq = lstm_layer_function(
-          inputs=pinputs,
-          weights_value=weights_value,
-          initial_state=(pinitial_h_state, pinitial_c_state),
-          forget_bias=forget_bias,
-          training=False,
-          name=name)
+      pinputs = array_ops.placeholder(dataType,
+                                      [seq_len, batch_size, input_size],
+                                      name="inputs")
+      pinitial_h_state = array_ops.placeholder(dataType,
+                                               [batch_size, num_channels],
+                                               name="init_h_state")
+      pinitial_c_state = array_ops.placeholder(dataType,
+                                               [batch_size, num_channels],
+                                               name="init_c_state")
+      lstm_output_seq = lstm_layer_function(inputs=pinputs,
+                                            weights_value=weights_value,
+                                            initial_state=(pinitial_h_state,
+                                                           pinitial_c_state),
+                                            forget_bias=forget_bias,
+                                            training=False,
+                                            name=name)
 
       inputs = _createLSTMInput(input_value, batch_size, seq_len, input_size)
       initial_state = _createLSTMInitialState(h_value, c_value, batch_size,
@@ -169,44 +171,42 @@ class LSTMTest(xla_test.XLATestCase):
     weight0 = 1.
     for h_init in [0., 1.]:
       for c_init in [0., 1.]:
-        self._RunInferenceComparison(
-            'ones',
-            input_value=0.,
-            forget_bias=0.,
-            weights_value=weight0,
-            h_value=h_init,
-            c_value=c_init)
+        self._RunInferenceComparison('ones',
+                                     input_value=0.,
+                                     forget_bias=0.,
+                                     weights_value=weight0,
+                                     h_value=h_init,
+                                     c_value=c_init)
 
     # Run with all-1 weights
     weight1 = 1.
     for h_init in [0., 1.]:
       for c_init in [0., 1.]:
-        self._RunInferenceComparison(
-            'ones',
-            input_value=0.,
-            forget_bias=0.,
-            weights_value=weight1,
-            h_value=h_init,
-            c_value=c_init)
+        self._RunInferenceComparison('ones',
+                                     input_value=0.,
+                                     forget_bias=0.,
+                                     weights_value=weight1,
+                                     h_value=h_init,
+                                     c_value=c_init)
 
     # Run with random weights
     for weight in np.random.rand(3):
       for h_init in [0., 1.]:
         for c_init in [0., 1.]:
-          self._RunInferenceComparison(
-              'rand',
-              input_value=0.,
-              forget_bias=0.,
-              weights_value=weight,
-              h_value=h_init,
-              c_value=c_init)
+          self._RunInferenceComparison('rand',
+                                       input_value=0.,
+                                       forget_bias=0.,
+                                       weights_value=weight,
+                                       h_value=h_init,
+                                       c_value=c_init)
 
   def _RunLSTMLayerTraining(self, name, input_value, forget_bias,
                             weights_value, h_value, c_value, training_steps,
                             labels_array, lstm_layer_function, device_string):
     with self.session() as sess:
-      pinputs = array_ops.placeholder(
-          dataType, [seq_len, batch_size, input_size], name="inputs")
+      pinputs = array_ops.placeholder(dataType,
+                                      [seq_len, batch_size, input_size],
+                                      name="inputs")
       plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
 
       with ops.device(device_string):
@@ -219,13 +219,13 @@ class LSTMTest(xla_test.XLATestCase):
               "initial_c_state",
               shape=[batch_size, num_channels],
               initializer=init_ops.constant_initializer(c_value, dataType))
-        logits = lstm_layer_function(
-            inputs=pinputs,
-            weights_value=weights_value,
-            initial_state=(initial_h_state, initial_c_state),
-            forget_bias=forget_bias,
-            training=True,
-            name=name)
+        logits = lstm_layer_function(inputs=pinputs,
+                                     weights_value=weights_value,
+                                     initial_state=(initial_h_state,
+                                                    initial_c_state),
+                                     forget_bias=forget_bias,
+                                     training=True,
+                                     name=name)
         logits = math_ops.reduce_mean(logits, axis=0)
         softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
             logits=logits, labels=array_ops.stop_gradient(plabels))
@@ -281,21 +281,22 @@ class LSTMTest(xla_test.XLATestCase):
     for weight in np.random.rand(3):
       for h_init in [0., 1.]:
         for c_init in [0., 1.]:
-          self._RunTrainingComparison(
-              'rand',
-              input_value=0.,
-              forget_bias=0.,
-              weights_value=weight,
-              h_value=h_init,
-              c_value=c_init,
-              training_steps=3)
+          self._RunTrainingComparison('rand',
+                                      input_value=0.,
+                                      forget_bias=0.,
+                                      weights_value=weight,
+                                      h_value=h_init,
+                                      c_value=c_init,
+                                      training_steps=3)
 
   def testLSTMCached(self):
     with self.session() as sess:
-      pinputs1 = array_ops.placeholder(
-          dataType, [seq_len, batch_size, input_size], name="inputs1")
-      pinputs2 = array_ops.placeholder(
-          dataType, [seq_len, batch_size, input_size], name="inputs2")
+      pinputs1 = array_ops.placeholder(dataType,
+                                       [seq_len, batch_size, input_size],
+                                       name="inputs1")
+      pinputs2 = array_ops.placeholder(dataType,
+                                       [seq_len, batch_size, input_size],
+                                       name="inputs2")
       plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
 
       with ops.device("/device:IPU:0"):
@@ -309,34 +310,31 @@ class LSTMTest(xla_test.XLATestCase):
               "initial_c_state",
               shape=[batch_size, num_channels],
               initializer=init_ops.constant_initializer(0.2, dataType))
-          return self._LSTMLayer(
-              inputs=inputs,
-              weights_value=1.,
-              initial_state=(initial_h_state, initial_c_state),
-              forget_bias=0.,
-              training=True,
-              name=name)
+          return self._LSTMLayer(inputs=inputs,
+                                 weights_value=1.,
+                                 initial_state=(initial_h_state,
+                                                initial_c_state),
+                                 forget_bias=0.,
+                                 training=True,
+                                 name=name)
 
         with variable_scope.variable_scope("lstm_layer1", use_resource=True):
           logits1 = lstm_layer(pinputs1, "layer1")
         with variable_scope.variable_scope("lstm_layer2", use_resource=True):
           logits2 = lstm_layer(pinputs2, "layer2")
 
-        logits = (math_ops.reduce_mean(logits1, axis=0) + math_ops.reduce_mean(
-            logits2, axis=0))
+        logits = (math_ops.reduce_mean(logits1, axis=0) +
+                  math_ops.reduce_mean(logits2, axis=0))
         softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
             logits=logits, labels=array_ops.stop_gradient(plabels))
         loss = math_ops.reduce_mean(softmax)
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
       sess.run(
           [loss, train], {
               pinputs1: _createLSTMInput(0.5, batch_size, seq_len, input_size),
@@ -344,25 +342,21 @@ class LSTMTest(xla_test.XLATestCase):
               plabels: np.ones(shape=[batch_size], dtype=np.int32),
           })
 
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
-      # Check there is one fwd LSTM
-      self.assertEqual(
-          tu.count_compute_sets_matching(cs_list, '*/OutputGate/Op/Multiply'),
-          1)
-      # Check there is one bwd LSTM
-      self.assertEqual(
-          tu.count_compute_sets_matching(cs_list, '*/MulOGate/Op/Multiply'), 1)
+      report.parse_log()
+      report.assert_compute_sets_matches('*/OutputGate/Op/Multiply', 1,
+                                         'One fwd LSTM')
+      report.assert_compute_sets_matches('*/MulOGate/Op/Multiply', 1,
+                                         'One bwd LSTM')
 
   def testLSTMNotCached(self):
     with self.session() as sess:
       # Note here the second LSTM is larger.
-      pinputs1 = array_ops.placeholder(
-          dataType, [seq_len, batch_size, input_size], name="inputs1")
-      pinputs2 = array_ops.placeholder(
-          dataType, [seq_len * 2, batch_size, input_size], name="inputs2")
+      pinputs1 = array_ops.placeholder(dataType,
+                                       [seq_len, batch_size, input_size],
+                                       name="inputs1")
+      pinputs2 = array_ops.placeholder(dataType,
+                                       [seq_len * 2, batch_size, input_size],
+                                       name="inputs2")
       plabels = array_ops.placeholder(np.int32, [batch_size], name="labels")
 
       with ops.device("/device:IPU:0"):
@@ -376,34 +370,31 @@ class LSTMTest(xla_test.XLATestCase):
               "initial_c_state",
               shape=[batch_size, num_channels],
               initializer=init_ops.constant_initializer(0.2, dataType))
-          return self._LSTMLayer(
-              inputs=inputs,
-              weights_value=1.,
-              initial_state=(initial_h_state, initial_c_state),
-              forget_bias=0.,
-              training=True,
-              name=name)
+          return self._LSTMLayer(inputs=inputs,
+                                 weights_value=1.,
+                                 initial_state=(initial_h_state,
+                                                initial_c_state),
+                                 forget_bias=0.,
+                                 training=True,
+                                 name=name)
 
         with variable_scope.variable_scope("lstm_layer1", use_resource=True):
           logits1 = lstm_layer(pinputs1, "layer1")
         with variable_scope.variable_scope("lstm_layer2", use_resource=True):
           logits2 = lstm_layer(pinputs2, "layer2")
 
-        logits = (math_ops.reduce_mean(logits1, axis=0) + math_ops.reduce_mean(
-            logits2, axis=0))
+        logits = (math_ops.reduce_mean(logits1, axis=0) +
+                  math_ops.reduce_mean(logits2, axis=0))
         softmax = nn.sparse_softmax_cross_entropy_with_logits_v2(
             logits=logits, labels=array_ops.stop_gradient(plabels))
         loss = math_ops.reduce_mean(softmax)
         train = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
       sess.run(
           [loss, train], {
               pinputs1: _createLSTMInput(0.5, batch_size, seq_len, input_size),
@@ -412,20 +403,15 @@ class LSTMTest(xla_test.XLATestCase):
               plabels: np.ones(shape=[batch_size], dtype=np.int32),
           })
 
-      result = sess.run(report)
+      report.parse_log()
 
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
-      # Check there are two fwd LSTMs.
-      self.assertEqual(
-          tu.count_compute_sets_matching(cs_list, '*/OutputGate/Op/Multiply'),
-          2)
-      # Check there are two bwd LSTMs.
-      self.assertEqual(
-          tu.count_compute_sets_matching(cs_list, '*/MulOGate/Op/Multiply'), 2)
+      report.assert_compute_sets_matches('*/OutputGate/Op/Multiply', 2,
+                                         "Two fwd LSTMs")
+      report.assert_compute_sets_matches('*/MulOGate/Op/Multiply', 2,
+                                         "Two bwd LSTMs")
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

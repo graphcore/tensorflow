@@ -133,9 +133,9 @@ def check_all_compute_sets_and_list(cs_list, whitelist):
           and not missing_whitelist_entries_in_names(cs_list, whitelist))
 
 
-def count_compute_sets_matching(cs_list, to_match):
-  cs_set = set(cs_list)
-  return len([cs for cs in cs_set if fnmatch.fnmatch(cs, to_match)])
+def count_matches_in_list(input_list, to_match):
+  input_set = set(input_list)
+  return len([s for s in input_set if fnmatch.fnmatch(s, to_match)])
 
 
 class TensorMap(object):
@@ -282,6 +282,40 @@ class ReportJSON(object):
         pass
     return events_types
 
+  def get_host_to_device_event_names(self):
+    return [
+        t["name"]
+        for t in self.events[IpuTraceEvent.HOST_TO_DEVICE_TRANSFER]["tensors"]
+    ]
+
+  def get_device_to_host_event_names(self):
+    return [
+        t["name"]
+        for t in self.events[IpuTraceEvent.DEVICE_TO_HOST_TRANSFER]["tensors"]
+    ]
+
+  def assert_host_to_device_event_names(self, names, msg=None):
+    self.test.assertEqual(
+        len(names),
+        len(
+            self.events.get(IpuTraceEvent.HOST_TO_DEVICE_TRANSFER,
+                            {}).get("tensors", [])), msg)
+    for name in names:
+      self.test.assertEqual(
+          count_matches_in_list(self.get_host_to_device_event_names(), name),
+          1, msg)
+
+  def assert_device_to_host_event_names(self, names, msg=None):
+    self.test.assertEqual(
+        len(names),
+        len(
+            self.events.get(IpuTraceEvent.DEVICE_TO_HOST_TRANSFER,
+                            {}).get("tensors", [])), msg)
+    for name in names:
+      self.test.assertEqual(
+          count_matches_in_list(self.get_device_to_host_event_names(), name),
+          1, msg)
+
   # Excluding gaps
   def get_max_tile_memory(self):
     return max(
@@ -418,9 +452,8 @@ class ReportJSON(object):
         "\n\t".join(self.get_vertices()))
 
   def assert_compute_sets_matches(self, expr, num_matches, msg=None):
-    self.test.assertEqual(
-        count_compute_sets_matching(self.get_compute_sets(), expr),
-        num_matches, msg)
+    self.test.assertEqual(count_matches_in_list(self.get_compute_sets(), expr),
+                          num_matches, msg)
 
 
 def extract_all_strings_from_event_trace(events):

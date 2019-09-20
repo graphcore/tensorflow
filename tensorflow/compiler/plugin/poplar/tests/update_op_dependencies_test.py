@@ -13,7 +13,6 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import nn
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class UpdateOpDependenciesTest(xla_test.XLATestCase):
@@ -26,27 +25,20 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         pd = array_ops.placeholder(np.float32, [])
         e = pa + pb - pc + pd
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report.reset()
       fd = {pa: 1, pb: 2, pc: 3, pd: 4}
       result = sess.run(e, fd)
       self.assertAllClose(result, 4)
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = [
           '__seed*', 'add/add.*/AddTo', 'sub/subtract.*/AddTo',
           'add_1/add.*/AddTo'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def tesInplaceAddCopyWithInplacePeer(self):
     with self.session() as sess:
@@ -59,12 +51,9 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         d = pa + pb
         e = c / d
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
-      tu.configure_ipu_system()
-
-      sess.run(report)
       fd = {
           pa: data_a,
           pb: data_b,
@@ -73,18 +62,15 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       np_result = np.transpose(data_a) / (data_a + data_b)
       self.assertAllClose(result, np_result)
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)  #compile_begin, compile_end, execute
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3,
+                       assert_msg="compile_begin, compile_end, execute")
 
       ok = [
           '__seed*', 'host-exchange-local-copy-',
           'Copy_XLA_Args/arg0.*_to_transpose/transpose', 'add/add.*/AddTo',
           'truediv/divide.*/Op/Divide'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def tesInplaceAddCopyWithInplacePeer2(self):
     with self.session() as sess:
@@ -100,27 +86,20 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         c = a * pb + pc
         d = b / c
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
       fd = {
           pa: data_a,
           pb: data_b,
           pc: data_c,
       }
-      np_result = (data_a + data_b * data_c) / (
-          np.transpose(data_a) * data_b + data_c)
+      np_result = (data_a + data_b * data_c) / (np.transpose(data_a) * data_b +
+                                                data_c)
       result = sess.run(d, fd)
       self.assertAllClose(result, np_result)
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)  #compile_begin, compile_end, execute
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3,
+                       assert_msg="compile_begin, compile_end, execute")
 
       ok = [
           '__seed*', 'Copy_XLA_Args/arg0.*_to_transpose/transpose'
@@ -128,7 +107,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
           'mul_1/multiply.*/Op/Multiply', 'add_1/add.*/AddTo',
           'truediv/divide.*/Op/Divide'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testInplaceOpAddCopyWithInplaceParent(self):
     with self.session() as sess:
@@ -143,12 +122,8 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         g = array_ops.slice(pa, [1], [2])
         h = f + g
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
       fd = {
           pa: [1, 2, 3],
           pb: [5, 6, 7],
@@ -157,23 +132,20 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       result = sess.run(h, fd)
       self.assertAllClose(result, [5, 7])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3,
+                       assert_msg="compile_begin, compile_end, execute")
 
       ok = [
           '__seed*', 'Copy_XLA_Args/arg*_to_Slice*/slice*.clone',
           'add/add.*/AddTo', 'truediv/fusion*/Op/Divide', 'add_1/add.*/AddTo'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
   def testInplaceTuple(self):
     with self.session() as sess:
 
       def my_net(x):
-        def cond(i, x, y):
+        def cond(i, _x, _y):
           return i < 1
 
         def body(i, x, y):
@@ -187,32 +159,27 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
       with ops.device('cpu'):
         x = array_ops.placeholder(np.float32, [4])
-        report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system()
+      report = tu.ReportJSON(self, sess, io_trace=False)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[x])
 
-      sess.run(report)
+      report.reset()
       x, y = sess.run(r, {x: np.full([4], 2)})
       self.assertAllClose(x, np.full([4], np.tanh(2)))
       self.assertAllClose(y, np.full([4], np.tanh(2)))
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
+      report.parse_log(assert_len=3)
 
       ok = [
           '__seed*', 'Copy_*_to_*', 'Tanh/tanh*/Op/Tanh',
           'Tanh_1/tanh*/Op/Tanh'
       ]
-      self.assertTrue(tu.check_all_compute_sets_and_list(cs_list, ok))
+      report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()
