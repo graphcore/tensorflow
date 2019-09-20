@@ -14,6 +14,18 @@
                 "(^tensorflow/contrib/ipu/.*\\.py$)",
                 "(^tensorflow/python/ops/poplar/.*\\.py$)"
             ]
+        },
+        "pylint": {
+            "type": "pylint",
+            "pylint.config": "tensorflow/tools/ci_build/pylintrc",
+            "flags": ["--disable=missing-docstring,invalid-name"],
+            "bin": ["./.linters/pylint"],
+            "include": [
+                "(^tensorflow/compiler/plugin/poplar/.*\\.py$)",
+                "(^tensorflow/python/ipu/.*\\.py$)",
+                "(^tensorflow/contrib/ipu/.*\\.py$)",
+                "(^tensorflow/python/ops/poplar/.*\\.py$)"
+            ]
         }
     }
 }
