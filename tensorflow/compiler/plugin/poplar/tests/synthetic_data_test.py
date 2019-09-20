@@ -60,14 +60,11 @@ class IpuXlaVariableTestSyntheticData(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       sess.run([train, loss], {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
       sess.run([train, loss], {x: np.array([[1, 2, 3, 4]], dtype=np.float32)})
@@ -75,22 +72,22 @@ class IpuXlaVariableTestSyntheticData(xla_test.XLATestCase):
       sess.run([train, loss], {x: np.array([[1, 2, 3, 4]], dtype=np.float32)})
       sess.run([train, loss], {x: np.array([[7, 3, 5, 9]], dtype=np.float32)})
 
-      rep = sess.run(report)
-      io_evts = tu.extract_all_io_events(rep)
-      self.assertEqual(len(list(io_evts)), 0)
+      report.parse_log()
+      report.assert_host_to_device_event_names([])
+      report.assert_device_to_host_event_names([])
 
       # Explicitly fetch the first set of weights and biases
       sess.run([w1, b1])
 
-      rep = sess.run(report)
-      io_evts = tu.extract_all_io_events(rep)
-      self.assertEqual(len(list(io_evts)), 0)
+      report.parse_log()
+      report.assert_host_to_device_event_names([])
+      report.assert_device_to_host_event_names([])
 
 
 if __name__ == "__main__":
   os.environ["TF_POPLAR_FLAGS"] = (
       "--use_synthetic_data --use_ipu_model --synthetic_data_initializer=random"
   )
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

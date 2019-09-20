@@ -17,7 +17,6 @@ General utility functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-import json
 import time
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -748,31 +747,6 @@ def extract_all_events(events):
   for e in events:
     evt = IpuTraceEvent.FromString(e)
     result += [evt]
-  return result
-
-
-def extract_all_io_events(events):
-  """Extract a list of all of the IO events from an IPU event trace tensor
-
-  Args:
-    events: A tensor containing a list of IPU events as protobuf strings
-
-  Returns:
-    A list containing only IO events as IpuTraceEvent objects
-  """
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    if evt.type in [
-        IpuTraceEvent.HOST_TO_DEVICE_TRANSFER,
-        IpuTraceEvent.DEVICE_TO_HOST_TRANSFER
-    ]:
-      try:
-        payload = json.loads(evt.data_transfer.data_transfer.decode('utf-8'))
-        for t in payload["tensors"]:
-          result += [(evt.type, t["name"])]
-      except UnicodeDecodeError:
-        pass
   return result
 
 

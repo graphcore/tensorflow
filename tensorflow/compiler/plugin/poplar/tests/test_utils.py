@@ -513,23 +513,6 @@ def extract_all_execute_events(events):
   return result
 
 
-def extract_all_io_events(events):
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    if evt.type in [
-        IpuTraceEvent.HOST_TO_DEVICE_TRANSFER,
-        IpuTraceEvent.DEVICE_TO_HOST_TRANSFER
-    ]:
-      try:
-        payload = js.loads(evt.data_transfer.data_transfer.decode('utf-8'))
-        for t in payload["tensors"]:
-          result += [(evt.type, t["name"])]
-      except UnicodeDecodeError:
-        pass
-  return result
-
-
 def create_multi_increasing_dataset(value,
                                     shapes=None,
                                     dtypes=None,
