@@ -90,90 +90,6 @@ Status ReplaceDuplicateInputs(
   }
   return Status::OK();
 }
-
-StatusOr<bool> MoveParameterInputsToBackwardStages(
-    HloComputation* pipeline_comp) {
-  bool changed = false;
-  TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // Skip this optimisation if we do not have the backward stages.
-  if (stages.backward.empty()) {
-    return changed;
-  }
-  // Go through forward stages, if any stage has a Pipeline parameter as an
-  // input, which is passed straight through to the root tuple and then passed
-  // as an input to the bwd pass, then make the bwd stage use the parameter
-  // instead.
-  // For example, replaces:
-  // p = parameter(10)
-  //        ||
-  //        \/
-  // c = forward_pipeline_stage(p)
-  //  ________________________________       __________________________________
-  // | p_in_comp = parameter(0)       |     | p = parameter(0)                 |
-  // | log = log(p_in_comp)           |     | ...                              |
-  // | ROOT t = tuple(p_in_comp, log) |     |__________________________________|
-  // |________________________________|     c_bwd = forward_pipeline_stage(gte)
-  //        ||                                            /\
-  //        \/                                            ||
-  //    gte = gte(c), index=0 =============================
-  //
-  // with:
-  // p = parameter(10)====================
-  //        ||                           ||
-  //        \/                           ||
-  // c = forward_pipeline_stage(p)       ||
-  //  ________________________________   ||  __________________________________
-  // | p_in_comp = parameter(0)       |  || | p = parameter(0)                 |
-  // | log = log(p_in_comp)           |  || | ...                              |
-  // | ROOT t = tuple(p_in_comp, log) |  || |__________________________________|
-  // |________________________________|   => c_bwd = forward_pipeline_stage(gte)
-  // This will avoid having FIFOs for variables.
-
-  for (int64 stage_id = 0; stage_id != stages.forward.size(); ++stage_id) {
-    HloInstruction* fwd_stage = stages.forward[stage_id];
-    HloInstruction* bwd_stage = stages.backward[stage_id];
-    // Go through the inputs to the fwd stage and identify operand indices
-    // which are parameters.
-    std::set<int64> parameter_input_indices;
-    for (int64 op_idx = 0; op_idx != fwd_stage->operand_count(); ++op_idx) {
-      if (fwd_stage->operand(op_idx)->opcode() == HloOpcode::kParameter) {
-        parameter_input_indices.insert(op_idx);
-      }
-    }
-    if (parameter_input_indices.empty()) {
-      continue;
-    }
-    // Map all the output GTEs from their tuple_index to the instruction.
-    absl::flat_hash_map<int64, HloInstruction*> gtes;
-    for (HloInstruction* user : fwd_stage->users()) {
-      gtes[user->tuple_index()] = user;
-    }
-
-    // Given those indices, check which of them are used in the root tuple and
-    // then used by the bwd stage.
-    HloComputation* fwd_stage_comp = fwd_stage->to_apply();
-    HloInstruction* fwd_stage_root = fwd_stage_comp->root_instruction();
-    CHECK_EQ(fwd_stage_root->opcode(), HloOpcode::kTuple);
-    for (int64 param_idx : parameter_input_indices) {
-      HloInstruction* parameter =
-          fwd_stage_comp->parameter_instruction(param_idx);
-      // Given the parameter, go through all the uses in the root.
-      for (int64 output_idx : fwd_stage_root->OperandIndices(parameter)) {
-        if (!gtes.contains(output_idx)) {
-          continue;
-        }
-        // Get all the indices the bwd stages uses this GTE.
-        std::vector<int64> uses = bwd_stage->OperandIndices(gtes[output_idx]);
-        for (int64 use_idx : uses) {
-          TF_RETURN_IF_ERROR(bwd_stage->ReplaceOperandWith(
-              use_idx, fwd_stage->mutable_operand(param_idx)));
-          changed = true;
-        }
-      }
-    }
-  }
-  return changed;
-}
 }  // namespace
 
 StatusOr<bool> PipelineOptimizer::OptimizePipeline(
@@ -225,10 +141,6 @@ StatusOr<bool> PipelineOptimizer::OptimizePipeline(
     changed |= (duplicate_outputs.size() || unused_outputs.size() ||
                 duplicate_inputs.size() || unused_parameters.size());
   }
-  TF_ASSIGN_OR_RETURN(bool moved_parameters,
-                      MoveParameterInputsToBackwardStages(pipeline_comp));
-  changed |= moved_parameters;
-
   return changed;
 }
 
