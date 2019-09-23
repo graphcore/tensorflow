@@ -44,7 +44,6 @@ __all__ = ["PopnnLSTM", "PopnnGRU"]
 class _PopnnRNN(base_layer.Layer):
   """Base class for implementing XLA and Popnn compatible RNN layers.
   """
-
   def __init__(self,
                num_units,
                dtype=dtypes.float32,
@@ -143,8 +142,8 @@ class _PopnnRNN(base_layer.Layer):
 
     input_shape = tensor_shape.TensorShape(input_shape)
     if input_shape.ndims != 3:
-      raise ValueError(
-          "Expecting input_shape with 3 dims, got %d" % input_shape.ndims)
+      raise ValueError("Expecting input_shape with 3 dims, got %d" %
+                       input_shape.ndims)
     input_shape = input_shape.as_list()
     if input_shape[-1] is None:
       raise ValueError("The last dimension of the inputs to `_PopnnRNN` "
@@ -160,16 +159,14 @@ class _PopnnRNN(base_layer.Layer):
       if self._bias_initializer is None:
         self._bias_initializer = init_ops.constant_initializer(
             0.0, dtype=self._plain_dtype)
-      self.kernel = vs.get_variable(
-          "kernel",
-          dtype=self._plain_dtype,
-          initializer=self._weights_initializer,
-          shape=self.canonical_weight_shape)
-      self.biases = vs.get_variable(
-          "biases",
-          dtype=self._plain_dtype,
-          initializer=self._bias_initializer,
-          shape=self.canonical_bias_shapes)
+      self.kernel = vs.get_variable("kernel",
+                                    dtype=self._plain_dtype,
+                                    initializer=self._weights_initializer,
+                                    shape=self.canonical_weight_shape)
+      self.biases = vs.get_variable("biases",
+                                    dtype=self._plain_dtype,
+                                    initializer=self._bias_initializer,
+                                    shape=self.canonical_bias_shapes)
 
     self.built = True
 
@@ -252,14 +249,13 @@ class PopnnLSTM(_PopnnRNN):
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
     """
-    super(PopnnLSTM, self).__init__(
-        num_units=num_units,
-        dtype=dtype,
-        partials_dtype=partials_dtype,
-        seed=seed,
-        weights_initializer=weights_initializer,
-        bias_initializer=bias_initializer,
-        name=name)
+    super(PopnnLSTM, self).__init__(num_units=num_units,
+                                    dtype=dtype,
+                                    partials_dtype=partials_dtype,
+                                    seed=seed,
+                                    weights_initializer=weights_initializer,
+                                    bias_initializer=bias_initializer,
+                                    name=name)
 
   def build(self, input_shape):
     """Create variables of the PopnnLSTM.
@@ -317,9 +313,8 @@ class PopnnLSTM(_PopnnRNN):
                                                 initial_state[0])
         uses_old_api = True
       else:
-        raise ValueError(
-            "Invalid initial_state type: `%s`, expecting "
-            "`LSTMStateTuple`.", type(initial_state))
+        raise ValueError("Invalid initial_state type: `%s`, expecting "
+                         "`LSTMStateTuple`." % type(initial_state))
 
     if initial_state is None:
       # Create a zero state.
@@ -410,14 +405,13 @@ class PopnnGRU(_PopnnRNN):
         This only serves the default scope if later no scope is specified when
         invoking ``__call__()``.
     """
-    super(PopnnGRU, self).__init__(
-        num_units=num_units,
-        dtype=dtype,
-        partials_dtype=partials_dtype,
-        seed=seed,
-        weights_initializer=weights_initializer,
-        bias_initializer=bias_initializer,
-        name=name)
+    super(PopnnGRU, self).__init__(num_units=num_units,
+                                   dtype=dtype,
+                                   partials_dtype=partials_dtype,
+                                   seed=seed,
+                                   weights_initializer=weights_initializer,
+                                   bias_initializer=bias_initializer,
+                                   name=name)
 
   def build(self, input_shape):
     """Create variables of the PopnnGRU.

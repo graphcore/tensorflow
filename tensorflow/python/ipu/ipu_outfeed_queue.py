@@ -53,7 +53,6 @@ class IPUOutfeedQueue:
   In outfeed last mode only the last enqueued element is stored. The dequeue
   operation will in this case return a single element.
   """
-
   def __init__(self,
                feed_name,
                outfeed_mode=None,
@@ -89,7 +88,7 @@ class IPUOutfeedQueue:
       logging.warning("`outfeed_all` has been deprecated and will be removed "
                       "in the future version. Use `outfeed_mode` instead.")
 
-      if type(outfeed_all) is not bool:
+      if not isinstance(outfeed_all, bool):
         raise ValueError("Expcted value True or False for outfeed_all")
 
       outfeed_mode = IPUOutfeedMode.ALL if outfeed_all else IPUOutfeedMode.LAST
@@ -97,12 +96,12 @@ class IPUOutfeedQueue:
     # Default to all.
     self._outfeed_mode = outfeed_mode or IPUOutfeedMode.ALL
 
-    if type(self._outfeed_mode) is not IPUOutfeedMode:
+    if not isinstance(self._outfeed_mode, IPUOutfeedMode):
       raise ValueError("Expcted `outfeed_mode` value to be of "
                        "`ipu_outfeed_queue.IPUOutfeedMode` type, but is %s." %
                        (str(type(outfeed_mode))))
 
-    if type(device_ordinal) is not int:
+    if not isinstance(device_ordinal, int):
       raise ValueError('Device ordinal must be an integer')
 
     if device_ordinal < 0:
@@ -367,7 +366,6 @@ class IPUOutfeedQueue:
 class _OutfeedStructure:
   """ An internal class used for storing the structure of the IPUOutfeedQueue.
   """
-
   def __init__(self, tensors, replication_factor):
     self._singular = False
     self._tuple = False
@@ -448,10 +446,11 @@ IPUOutfeedQueue Enqueue input needs to be either:
   def to_tensor_list(self, tensors):
     if self._singular:
       return [tensors]
-    elif self._tuple or self._list:
+    if self._tuple or self._list:
       return list(tensors)
-    elif self._dict:
+    if self._dict:
       return list(tensors.values())
+    raise ValueError("Can't be reached")
 
   def from_tensor_list(self, flat_tensors):
     # We require the input to be a list of flat_tensors.
@@ -462,9 +461,10 @@ Expected flat_tensors to be a list of TensorFlow tensors.""")
 
     if self._singular:
       return flat_tensors[0]
-    elif self._tuple:
+    if self._tuple:
       return tuple(flat_tensors)
-    elif self._list:
+    if self._list:
       return flat_tensors
-    elif self._dict:
+    if self._dict:
       return dict(zip(self._dict_keys, flat_tensors))
+    raise ValueError("Can't be reached")

@@ -22,8 +22,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
 """
     These gradient function should *never* be called directly.
 """
-
-
 @ops.RegisterGradient("IpuDropout")
 def _poputil_dropout_layer_backward(op, grads, seed_grads):
   """Gradients for the IpuDropout op."""
@@ -33,15 +31,14 @@ def _poputil_dropout_layer_backward(op, grads, seed_grads):
   seed_modifier = op.get_attr("seed_modifier")
 
   return [
-      gen_poprand_ops.ipu_dropout(
-          grads,
-          seed=seed,
-          user_seed=1,
-          rate=rate,
-          scale=scale,
-          name=op.name + "_grad",
-          is_using_user_seed=True,
-          seed_modifier=seed_modifier)[0],
+      gen_poprand_ops.ipu_dropout(grads,
+                                  seed=seed,
+                                  user_seed=1,
+                                  rate=rate,
+                                  scale=scale,
+                                  name=op.name + "_grad",
+                                  is_using_user_seed=True,
+                                  seed_modifier=seed_modifier)[0],
 
       # The seed is an input so needs a gradient as well
       None

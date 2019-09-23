@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
-from tensorflow.python.framework import dtypes
 from tensorflow.python.ipu.vertex_edsl import PlaceholderVertexExpr
 from tensorflow.python.ipu.vertex_edsl import DefaultNameSource
 
@@ -34,8 +33,9 @@ def codelet_expression_op(vertex_expression, *args):
                      range(0, len(args)))
   concrete_expression = vertex_expression(*placeholders)
   expr = concrete_expression.lower(DefaultNameSource())
-  return gen_poputil_ops.codelet_expression_op(
-      input=args, dtype=dtype, source=expr)
+  return gen_poputil_ops.codelet_expression_op(input=args,
+                                               dtype=dtype,
+                                               source=expr)
 
 
 def precompiled_user_op(inputs,
@@ -65,11 +65,10 @@ def precompiled_user_op(inputs,
   gp_path = gp_path if gp_path else ""
   name = name if name else "UserOp"
   op_name = op_name if op_name else "Build"
-  return gen_poputil_ops.ipu_user_op(
-      inputs,
-      library_path=library_path,
-      gp_path=gp_path,
-      op_name=op_name,
-      name=name,
-      is_gradient=False,
-      **outs)
+  return gen_poputil_ops.ipu_user_op(inputs,
+                                     library_path=library_path,
+                                     gp_path=gp_path,
+                                     op_name=op_name,
+                                     name=name,
+                                     is_gradient=False,
+                                     **outs)

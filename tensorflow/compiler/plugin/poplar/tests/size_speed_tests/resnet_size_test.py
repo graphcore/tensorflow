@@ -5,10 +5,8 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 from tensorflow.python import ipu
-from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
@@ -55,11 +53,12 @@ def block(name, out_filters, first_stride, count, x):
       x = conv(x, 3, 1, out_filters)
 
       # shortcut
-      if (stride != 1):
-        sc = array_ops.strided_slice(
-            sc, [0, 0, 0, 0], sc.shape, strides=[1, stride, stride, 1])
+      if stride != 1:
+        sc = array_ops.strided_slice(sc, [0, 0, 0, 0],
+                                     sc.shape,
+                                     strides=[1, stride, stride, 1])
       pad = int(x.shape[3] - shape_in[3])
-      if (pad != 0):
+      if pad != 0:
         sc = array_ops.pad(sc, paddings=[[0, 0], [0, 0], [0, 0], [0, pad]])
 
       x = nn_ops.relu(x + sc)
@@ -72,14 +71,12 @@ def fc(name, x, num_units_out):
   weights_initializer = init_ops.truncated_normal_initializer(stddev=0.01)
 
   with vs.variable_scope(name):
-    weights = _get_variable(
-        'weights',
-        shape=[num_units_in, num_units_out],
-        init=weights_initializer)
-    biases = _get_variable(
-        'biases',
-        shape=[num_units_out],
-        init=init_ops.constant_initializer(0.0))
+    weights = _get_variable('weights',
+                            shape=[num_units_in, num_units_out],
+                            init=weights_initializer)
+    biases = _get_variable('biases',
+                           shape=[num_units_out],
+                           init=init_ops.constant_initializer(0.0))
 
     x = nn_ops.xw_plus_b(x, weights, biases)
 
@@ -102,11 +99,10 @@ def conv(x, ksize, stride, filters_out):
 
 
 def max_pool(x, ksize=3, stride=2):
-  return nn_ops.max_pool(
-      x,
-      ksize=[1, ksize, ksize, 1],
-      strides=[1, stride, stride, 1],
-      padding='SAME')
+  return nn_ops.max_pool(x,
+                         ksize=[1, ksize, ksize, 1],
+                         strides=[1, stride, stride, 1],
+                         padding='SAME')
 
 
 class Resnet18_No_Batchnorm(xla_test.XLATestCase):

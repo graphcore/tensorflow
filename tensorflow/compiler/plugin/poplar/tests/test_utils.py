@@ -50,10 +50,12 @@ def configure_ipu_system(compilation_trace=True,
   opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = compile_ipu_code
 
+  # yapf: disable
   assert not (pipelining and device_count_override
-              ), "Can't have both pipelining enabled and device_count_override"
+             ), "Can't have both pipelining enabled and device_count_override"
   assert not (sharded and device_count_override
-              ), "Can't have both sharded enabled and device_count_override"
+             ), "Can't have both sharded enabled and device_count_override"
+  # yapf: enable
 
   if engine_opts:
     for o in engine_opts.items():
@@ -157,7 +159,7 @@ class TensorMap(object):
       self.tiles = tiles
 
     def tile_ids(self):
-      return list(set([t.tile for t in self.tiles]))
+      return list({t.tile for t in self.tiles})
 
   def __init__(self, tensor_map, num_tiles_per_ipu):
     self.num_tiles_per_ipu = num_tiles_per_ipu
@@ -193,7 +195,7 @@ class TensorMap(object):
 
   def ipu_ids(self, computation=None):
     tile_ids = self.tile_ids(computation)
-    return set([int(tile_id / self.num_tiles_per_ipu) for tile_id in tile_ids])
+    return {int(tile_id / self.num_tiles_per_ipu) for tile_id in tile_ids}
 
   def computation_names(self):
     return list(self.mappings.keys())

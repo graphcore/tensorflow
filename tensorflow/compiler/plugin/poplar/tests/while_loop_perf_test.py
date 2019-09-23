@@ -11,18 +11,16 @@ import numpy as np
 from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python import ipu
-from tensorflow.python.client import session as sl
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 
 
-def count_event_type(events, type):
-  return sum(map((lambda x: 1 if x.type == type else 0), events))
+def count_event_type(events, event_type):
+  return sum([1 if x.type == event_type else 0 for x in events])
 
 
 class WhileLoopPerfTest(xla_test.XLATestCase):
@@ -30,6 +28,7 @@ class WhileLoopPerfTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       def cond(i, v):
+        del v
         return math_ops.less(i, 15)
 
       def body(i, v):
@@ -39,8 +38,9 @@ class WhileLoopPerfTest(xla_test.XLATestCase):
 
       def my_net(v):
         i = constant_op.constant(0)
-        r = control_flow_ops.while_loop(
-            cond, body, (i, v), maximum_iterations=10)
+        r = control_flow_ops.while_loop(cond,
+                                        body, (i, v),
+                                        maximum_iterations=10)
         return [r[1]]
 
       with ops.device('cpu'):
@@ -69,6 +69,6 @@ class WhileLoopPerfTest(xla_test.XLATestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

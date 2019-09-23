@@ -11,12 +11,10 @@ import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class IpuXlaConvTest(xla_test.XLATestCase):

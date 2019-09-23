@@ -53,12 +53,11 @@ def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
   # We transfrom rate to be the change an individual node will dropout as
   # ipu_dropout is using the old tensorflow method that rate is the probability
   # that value is kept rather than disgarded.
-  return gen_poprand_ops.ipu_dropout(
-      x,
-      seed=seed,
-      user_seed=1,
-      rate=(1 - rate),
-      scale=scale,
-      name=name,
-      is_using_user_seed=is_using_user_seed,
-      seed_modifier=seed_modifier)[0]
+  return gen_poprand_ops.ipu_dropout(x,
+                                     seed=seed,
+                                     user_seed=1,
+                                     rate=(1 - rate),
+                                     scale=scale,
+                                     name=name,
+                                     is_using_user_seed=is_using_user_seed,
+                                     seed_modifier=seed_modifier)[0]

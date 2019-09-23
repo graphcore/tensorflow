@@ -145,7 +145,9 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       def my_net(x):
-        def cond(i, _x, _y):
+        def cond(i, x, y):
+          del x
+          del y
           return i < 1
 
         def body(i, x, y):

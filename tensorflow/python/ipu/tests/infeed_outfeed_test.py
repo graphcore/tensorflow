@@ -56,7 +56,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def body(v, x):
       v = v + x
-      return (v)
+      return v
 
     def my_net(v):
       r = ipu.loops.repeat(20, body, (v), infeed_queue)
@@ -79,14 +79,15 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedRepeatNonTupleFiniteDataset(self):
-    dataset = tu.create_single_increasing_dataset(
-        10, shape=[4, 4], repeat=False)
+    dataset = tu.create_single_increasing_dataset(10,
+                                                  shape=[4, 4],
+                                                  repeat=False)
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
     def body(v, x):
       v = v + x
-      return (v)
+      return v
 
     def my_net(v):
       r = ipu.loops.repeat(10, body, (v), infeed_queue)
@@ -122,7 +123,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def body(v, im1, im2):
       v = v + im1 + im2
-      return (v)
+      return v
 
     def my_net():
       v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -156,7 +157,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def body(v, im1, im2):
       v = v + im1 + im2
-      return (v)
+      return v
 
     def my_net():
       v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -221,7 +222,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
     def body(v, x):
       v = v + x
-      return (v)
+      return v
 
     def my_net():
       v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -323,7 +324,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     def program(iters):
       def body(v, x):
         v = v + x
-        return (v)
+        return v
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -364,7 +365,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     def program(iters, infeed_queue):
       def body(v, x):
         v = v + x
-        return (v)
+        return v
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -395,8 +396,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     dataset = dataset.batch(10, drop_remainder=False)
     with self.assertRaisesRegexp(ValueError, 'Output shape \((\?|None),'):
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id())
+      ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
   @test_util.deprecated_graph_mode_only
   def testMultipleInitializations(self):
@@ -419,12 +419,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     def my_net(iters):
       def body(loss, x):
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv1')(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(x)
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
@@ -507,13 +506,13 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     ipu.utils.configure_ipu_system(cfg)
 
-    outfeed1 = outfeed_queue1.dequeue()
-    outfeed2 = outfeed_queue2.dequeue()
+    outfeed_queue1.dequeue()
+    outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           'Only one IPUOutfeedQueue supported per graph'):
-        result = sess.run(res, {v: np.ones([4, 4], np.float32)})
+        sess.run(res, {v: np.ones([4, 4], np.float32)})
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNonTuple(self):
@@ -697,25 +696,25 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed_result["v"][3], np.broadcast_to(24.5, shape))
       self.assertAllClose(outfed_result["v"][4], np.broadcast_to(31, shape))
 
-      self.assertAllClose(outfed_result["image1"][0], np.broadcast_to(
-          0, shape))
-      self.assertAllClose(outfed_result["image1"][1], np.broadcast_to(
-          1, shape))
-      self.assertAllClose(outfed_result["image1"][2], np.broadcast_to(
-          2, shape))
-      self.assertAllClose(outfed_result["image1"][3], np.broadcast_to(
-          0, shape))
-      self.assertAllClose(outfed_result["image1"][4], np.broadcast_to(
-          1, shape))
+      self.assertAllClose(outfed_result["image1"][0],
+                          np.broadcast_to(0, shape))
+      self.assertAllClose(outfed_result["image1"][1],
+                          np.broadcast_to(1, shape))
+      self.assertAllClose(outfed_result["image1"][2],
+                          np.broadcast_to(2, shape))
+      self.assertAllClose(outfed_result["image1"][3],
+                          np.broadcast_to(0, shape))
+      self.assertAllClose(outfed_result["image1"][4],
+                          np.broadcast_to(1, shape))
 
-      self.assertAllClose(outfed_result["image2"][0], np.broadcast_to(
-          5, shape))
+      self.assertAllClose(outfed_result["image2"][0],
+                          np.broadcast_to(5, shape))
       self.assertAllClose(outfed_result["image2"][1],
                           np.broadcast_to(5.5, shape))
-      self.assertAllClose(outfed_result["image2"][2], np.broadcast_to(
-          6, shape))
-      self.assertAllClose(outfed_result["image2"][3], np.broadcast_to(
-          5, shape))
+      self.assertAllClose(outfed_result["image2"][2],
+                          np.broadcast_to(6, shape))
+      self.assertAllClose(outfed_result["image2"][3],
+                          np.broadcast_to(5, shape))
       self.assertAllClose(outfed_result["image2"][4],
                           np.broadcast_to(5.5, shape))
 
@@ -775,12 +774,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     def my_net(iters):
       def body(loss, x):
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv1')(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(x)
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
@@ -807,7 +805,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       self.assertTrue(initial_loss > final_loss)
       self.assertTrue(outfed.shape[0], 1001)
-      self.assertTrue(type(outfed) == np.ndarray)
+      self.assertTrue(isinstance(outfed, np.ndarray))
 
   @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeedAndOutfeedGetLast(self):
@@ -821,12 +819,11 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     def my_net(iters):
       def body(loss, x):
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv1')(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(x)
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
@@ -856,7 +853,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertTrue(outfed == final_loss)
 
       # Check that a scalar is returned instead of a numpy array
-      self.assertTrue(type(outfed) == np.float32)
+      self.assertTrue(isinstance(outfed, np.float32))
 
   @test_util.deprecated_graph_mode_only
   def testTwoOutfeedsDifferentPrograms(self):
@@ -1000,13 +997,13 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     ipu.utils.configure_ipu_system(cfg)
 
-    outfeed1 = outfeed_queue1.dequeue()
-    outfeed2 = outfeed_queue2.dequeue()
+    outfeed_queue1.dequeue()
+    outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
-      result1 = sess.run(res1, {v1: np.ones([4, 4], np.float32)})
+      sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       with self.assertRaisesRegexp(errors.FailedPreconditionError,
                                    'Outfeed with id=\'a\' already exists'):
-        result2 = sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
+        sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
 
   @test_util.deprecated_graph_mode_only
   def testInfeedUsingDatasetWithNestedDictNotUnpacked(self):
@@ -1243,7 +1240,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       evts = sess.run(e)
 
       fd = {a: np.ones(a.shape), b: np.zeros(b.shape)}
-      result = sess.run(res, fd)
+      sess.run(res, fd)
 
       outfed = sess.run(outfeed)
 
@@ -1302,10 +1299,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
 
-    cfg = ipu.utils.create_ipu_config(
-        profiling=True,
-        profile_execution=True,
-        always_rearrange_copies_on_the_host=True)
+    cfg = ipu.utils.create_ipu_config(profiling=True,
+                                      profile_execution=True,
+                                      always_rearrange_copies_on_the_host=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     ipu.utils.configure_ipu_system(cfg)
 
@@ -1314,7 +1310,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       evts = sess.run(e)
 
       fd = {a: np.ones(a.shape), b: np.zeros(b.shape)}
-      result = sess.run(res, fd)
+      sess.run(res, fd)
 
       outfed = sess.run(outfeed)
 

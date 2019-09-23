@@ -22,6 +22,7 @@ from tensorflow.core.framework import summary_pb2
 from tensorflow.python.framework import ops
 from tensorflow.python.summary.summary import tensor_summary
 
+
 def ipu_compile_summary(name, op_list, collections=None):
   """Create an IPU compiler summary operation.
 
@@ -30,13 +31,13 @@ def ipu_compile_summary(name, op_list, collections=None):
     op_list: An operation or list of operations to make this summary dependent
              upon.
     collections: Optional collections to add the summary into.
-    
+
   Returns:
     The new summary operation
 
   """
 
-  if type(op_list) is not list:
+  if not isinstance(op_list, list):
     op_list = [op_list]
 
   with ops.device("cpu"):
@@ -48,11 +49,10 @@ def ipu_compile_summary(name, op_list, collections=None):
           plugin_data=summary_pb2.SummaryMetadata.PluginData(
               plugin_name="ipu"))
 
-      t_summary = tensor_summary(
-          name='ipu_trace',
-          tensor=reports,
-          summary_metadata=summary_metadata,
-          collections=collections,
-          display_name=name)
+      t_summary = tensor_summary(name='ipu_trace',
+                                 tensor=reports,
+                                 summary_metadata=summary_metadata,
+                                 collections=collections,
+                                 display_name=name)
 
   return t_summary

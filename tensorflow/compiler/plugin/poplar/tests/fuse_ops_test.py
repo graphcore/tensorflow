@@ -26,7 +26,6 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
 from tensorflow.python.training import gradient_descent
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python.compiler.xla import xla
 
 
@@ -66,11 +65,13 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=3)
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'Copy_XLA_Args/arg0.*_to_Sigmoid/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Sigmoid/custom-call/Nonlinearity', 'add/add.*/AddTo'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testSigmoidGrad(self):
@@ -125,11 +126,13 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=3)
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'Copy_XLA_Args/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Relu/custom-call/Nonlinearity', 'add/add.*/AddTo'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testReluNotInPlace2(self):
@@ -149,11 +152,13 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log()
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'Copy_XLA_Args/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Relu/custom-call/Nonlinearity'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testReluGrad(self):
@@ -202,7 +207,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
   def testFwdAndBwdMaxPool(self):
     with self.session() as sess:
-      input = np.arange(16).reshape(1, 4, 4, 1)
+      input_values = np.arange(16).reshape(1, 4, 4, 1)
       output_grad = np.full((1, 2, 2, 1), 0.1)
 
       with ops.device("/device:IPU:0"):
@@ -225,7 +230,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.reset()
 
       fe = {
-          pa: input,
+          pa: input_values,
           pb: output_grad,
       }
       output, input_grad = sess.run((c, d), fe)
@@ -356,10 +361,12 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           assert_msg=
           "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.*/Reduce'
       ]
+      # pylint: enable=line-too-long
       report.assert_compute_sets_contain_list(ok)
 
   def testConvolutionBiasApplyVariableLR(self):
@@ -395,6 +402,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           assert_msg=
           "Expected 2x compile, 1x upload, 1x load, 1x download, 1x execute")
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*', 'Copy_', 'host-exchange-local-copy-',
           'vs/conv2d/BiasAdd/fusion*/Op/Add',
@@ -410,6 +418,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo*',
           'vs/conv2d/Conv2D/convolution*/Conv_1x1'
       ]
+      # pylint: enable=line-too-long
 
       report.assert_all_compute_sets_and_list(ok)
 
@@ -583,7 +592,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
   def testBiasApplyFixedLR(self):
     with self.session() as sess:
-      input = np.ones((1, 4, 4, 2))
+      input_values = np.ones((1, 4, 4, 2))
 
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -606,9 +615,9 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       sess.run(variables.global_variables_initializer())
       report.reset()
       fe = {
-          x: input,
+          x: input_values,
       }
-      l, _ = sess.run((loss, train), fe)
+      sess.run((loss, train), fe)
       tvars = variables.global_variables()
       tvars_vals = sess.run(tvars)
 
@@ -622,7 +631,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
   def testBiasApplyVariableLR(self):
     with self.session() as sess:
-      input = np.ones((1, 4, 4, 2))
+      input_values = np.ones((1, 4, 4, 2))
 
       with ops.device("/device:IPU:0"):
         x = array_ops.placeholder(np.float16, shape=[1, 4, 4, 2])
@@ -645,10 +654,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       sess.run(variables.global_variables_initializer())
       report.reset()
       fe = {
-          x: input,
+          x: input_values,
           lr: 0.1,
       }
-      l, _ = sess.run((loss, train), fe)
+      sess.run((loss, train), fe)
       tvars = variables.global_variables()
       tvars_vals = sess.run(tvars)
 
@@ -664,6 +673,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       def network(x, y1, y2):
+        del x
         with variable_scope.variable_scope("vs", use_resource=True):
           w1 = variable_scope.get_variable(
               "w1",
@@ -722,6 +732,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       def network(x, y1, y2, lr):
+        del x
         with variable_scope.variable_scope("vs", use_resource=True):
           w1 = variable_scope.get_variable(
               "w1",
@@ -783,6 +794,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       def network(x, y1, y2, la, lr):
+        del x
         with variable_scope.variable_scope("vs", use_resource=True):
           w = variable_scope.get_variable(
               "w",
@@ -826,6 +838,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(out, [1.0])
 
       report.parse_log()
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/multiUpdateAdd',
@@ -839,6 +852,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'vs/absolute_difference/Sum/reduce',
           'vs/absolute_difference/value/multiply',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
 

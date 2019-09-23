@@ -9,9 +9,7 @@ import numpy as np
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
@@ -108,7 +106,7 @@ class IpuXlaSimpleNetworkTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [2, 2], name="a")
         output = nn.dropout(pa, 0.5)
 
-        result = sess.run(output, {pa: [[1., 1.], [2., 3.]]})
+        sess.run(output, {pa: [[1., 1.], [2., 3.]]})
 
   def testControlDependencies(self):
     with ops.device("/device:IPU:0"):
@@ -126,7 +124,7 @@ class IpuXlaSimpleNetworkTest(xla_test.XLATestCase):
           h = e + f
           i = h + g
 
-        result = sess.run(i, {a: [1], b: [2], c: [3], d: [4]})
+        sess.run(i, {a: [1], b: [2], c: [3], d: [4]})
 
   def testSigmoid(self):
     with ops.device("/device:IPU:0"):

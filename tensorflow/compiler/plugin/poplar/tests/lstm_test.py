@@ -72,6 +72,8 @@ def _createLSTMInitialState(h_value, c_value, batch_size, num_channels):
 class LSTMTest(xla_test.XLATestCase):
   def _LSTMLayerCPU(self, inputs, weights_value, initial_state, forget_bias,
                     training, name):
+    del training
+    del name
     with ops.device("/device:CPU:0"):
       lstm_cell = rnn_cell.LSTMCell(num_channels,
                                     name='basic_lstm_cell',
@@ -80,15 +82,16 @@ class LSTMTest(xla_test.XLATestCase):
                                         weights_value, dtype=dataType),
                                     reuse=variable_scope.AUTO_REUSE)
       state = rnn_cell.LSTMStateTuple(initial_state[1], initial_state[0])
-      outputs, states = rnn.dynamic_rnn(lstm_cell,
-                                        inputs,
-                                        dtype=dataType,
-                                        initial_state=state,
-                                        time_major=True)
+      outputs, _ = rnn.dynamic_rnn(lstm_cell,
+                                   inputs,
+                                   dtype=dataType,
+                                   initial_state=state,
+                                   time_major=True)
       return outputs
 
   def _LSTMLayer(self, inputs, weights_value, initial_state, forget_bias,
                  training, name):
+    del forget_bias
     with ops.device("/device:IPU:0"):
       with variable_scope.variable_scope("lstm_layer", use_resource=True):
         kernel = _get_variable(

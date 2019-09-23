@@ -74,6 +74,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       # Two BN for forwards (on shards 0 and 1) and two BN for grad
       # (note that we don't cache gradient application)
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           '*OnTileCopy*',
@@ -93,6 +94,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
 

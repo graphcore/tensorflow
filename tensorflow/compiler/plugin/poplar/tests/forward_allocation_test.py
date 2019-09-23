@@ -40,11 +40,10 @@ class ForwardAllocationTest(xla_test.XLATestCase):
         z = array_ops.placeholder(np.float32, shape=[32])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer())(x)
         res = gen_array_ops.reshape(y, [32]) + z
 
       tu.configure_ipu_system(True, True, True)
@@ -69,11 +68,10 @@ class ForwardAllocationTest(xla_test.XLATestCase):
         z = array_ops.placeholder(np.float32, shape=[4, 4, 2, 1])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer())(x)
         res = array_ops.transpose(y, [1, 2, 3, 0]) + z
 
       tu.configure_ipu_system(True, True, True)
@@ -99,11 +97,10 @@ class ForwardAllocationTest(xla_test.XLATestCase):
         s = array_ops.placeholder(np.float32, shape=[])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=True,
-              kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer())(x)
         res = y + z * s
 
       tu.configure_ipu_system(True, True, True)

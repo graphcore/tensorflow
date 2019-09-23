@@ -30,8 +30,8 @@ class InvalidSchedulerSelectionTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=True, scheduler_selection="invalid")
+      cfg = ipu.utils.create_ipu_config(profiling=True,
+                                        scheduler_selection="invalid")
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
       ipu.utils.configure_ipu_system(cfg)
 

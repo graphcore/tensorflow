@@ -30,7 +30,6 @@ from tensorflow.python.ops import nn
 from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
-from tensorflow.python.client import session as sl
 from tensorflow.python.training import gradient_descent
 
 dataType = np.float32
@@ -63,12 +62,11 @@ def _tfGRU(x, initial_state, y):
       name='gru_cell',
       kernel_initializer=init_ops.zeros_initializer(dtype=dataType),
       bias_initializer=init_ops.zeros_initializer(dtype=dataType))
-  outputs, _ = rnn.dynamic_rnn(
-      gru_cell,
-      x,
-      dtype=dataType,
-      initial_state=initial_state,
-      time_major=True)
+  outputs, _ = rnn.dynamic_rnn(gru_cell,
+                               x,
+                               dtype=dataType,
+                               initial_state=initial_state,
+                               time_major=True)
   softmax = nn.softmax_cross_entropy_with_logits_v2(
       logits=outputs[-1], labels=array_ops.stop_gradient(y))
   loss = math_ops.reduce_mean(softmax)
@@ -85,15 +83,15 @@ class GRUTrainingTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device('cpu'):
         px = array_ops.placeholder(dataType, shape=x.shape)
-        pinitial_state = array_ops.placeholder(
-            dataType, shape=[batch_size, num_hidden])
+        pinitial_state = array_ops.placeholder(dataType,
+                                               shape=[batch_size, num_hidden])
         py = array_ops.placeholder(dataType, shape=y.shape)
       with ipu.scopes.ipu_scope("/device:IPU:0"):
-        r = ipu.ipu_compiler.compile(
-            layer_func, inputs=[px, pinitial_state, py])
+        r = ipu.ipu_compiler.compile(layer_func,
+                                     inputs=[px, pinitial_state, py])
 
-      opts = ipu.utils.create_ipu_config(
-          profiling=True, use_poplar_text_report=True)
+      opts = ipu.utils.create_ipu_config(profiling=True,
+                                         use_poplar_text_report=True)
       opts = ipu.utils.set_ipu_model_options(opts, compile_ipu_code=False)
       ipu.utils.configure_ipu_system(opts)
 

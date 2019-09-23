@@ -22,7 +22,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 """
     These gradient function should *never* be called directly.
 """
-
 @ops.RegisterGradient("PopnnGroupNormTraining")
 def _popnn_group_norm_backward(op, *grads):
   """Gradients for the PopnnGroupNormTraining op."""

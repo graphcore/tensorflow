@@ -11,10 +11,8 @@ import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
@@ -29,13 +27,12 @@ class OneHotTopK(xla_test.XLATestCase):
 
         # The actual model function which perfoms the one-hot operation based on the inputs given to executeModel.
         def model(a):
-          return array_ops.one_hot(
-              a,
-              inputs["n_classes"],
-              dtype=data_type,
-              on_value=inputs["on"],
-              off_value=inputs["off"],
-              axis=inputs["axis"])
+          return array_ops.one_hot(a,
+                                   inputs["n_classes"],
+                                   dtype=data_type,
+                                   on_value=inputs["on"],
+                                   off_value=inputs["off"],
+                                   axis=inputs["axis"])
 
         # We run once on the CPU to get the expected result, then on the IPU to compare the two.
         cpuRun = expected is None
@@ -61,8 +58,7 @@ class OneHotTopK(xla_test.XLATestCase):
 
         if cpuRun:
           return result
-        else:
-          self.assertAllClose(result, expected)
+        self.assertAllClose(result, expected)
 
     # Generate a multi dimensional matrix.
     largish_matrix_size = [4, 3, 4, 2, 2]
@@ -263,8 +259,6 @@ class OneHotTopK(xla_test.XLATestCase):
       ref = (-input).argsort(axis=1)[:, :1]
       ref = ref.reshape([batchsize])
 
-      expected = [True] * batchsize
-
       fd = {pa: input, pb: ref}
       result = sess.run(out, fd)
       self.assertAllClose(result, [True, True, True, True])
@@ -274,6 +268,6 @@ class OneHotTopK(xla_test.XLATestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

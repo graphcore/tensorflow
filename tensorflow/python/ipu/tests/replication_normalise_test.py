@@ -17,8 +17,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import numpy as np
 import os
+import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
@@ -98,6 +98,6 @@ class ReplicationNormaliseTest(test_util.TensorFlowTestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

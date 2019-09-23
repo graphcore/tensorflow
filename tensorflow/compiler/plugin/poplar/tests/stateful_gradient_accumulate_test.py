@@ -23,6 +23,8 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
 
       def my_net(y):
         def cond(i, x, y):
+          del x
+          del y
           return i < 10
 
         def body(i, x, y):
@@ -56,6 +58,8 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
 
       def my_net(y):
         def cond(i, x, y):
+          del x
+          del y
           return i < 10
 
         def body(i, x, y):
@@ -86,6 +90,6 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

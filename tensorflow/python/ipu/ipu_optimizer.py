@@ -28,7 +28,6 @@ from tensorflow.python.training import optimizer
 
 class CrossReplicaOptimizer(optimizer.Optimizer):
   """An optimizer that averages gradients across IPU replicas."""
-
   def __init__(self, opt, name="CrossReplicaOptimizer"):
     """Construct a new cross-replica optimizer.
 
@@ -92,7 +91,7 @@ class CrossReplicaOptimizer(optimizer.Optimizer):
         with ops.colocate_with(grad):
           summed_grads_and_vars.append(
               (gen_poputil_ops.ipu_replication_normalise(
-                cross_replica_ops.cross_replica_sum(grad)), var))
+                  cross_replica_ops.cross_replica_sum(grad)), var))
     return self._opt.apply_gradients(summed_grads_and_vars, global_step, name)
 
   def get_slot(self, *args, **kwargs):

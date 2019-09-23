@@ -21,8 +21,6 @@ from tensorflow.python.framework import ops
 """
     These gradient function should *never* be called directly.
 """
-
-
 @ops.RegisterGradient("CalcGfloatParams")
 def _calc_gfloat_params_backward(op, *grads):
   """Gradients for the CalcGfloatParams op."""

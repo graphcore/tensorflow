@@ -63,12 +63,11 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: np.ones(shape, np.float32),
-              b: np.ones(shape, np.float32)
-          })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: np.ones(shape, np.float32),
+                   b: np.ones(shape, np.float32)
+               })
       outfed = sess.run(outfeed)
       self.assertEqual(len(outfed[0]), 1)
       self.assertAllClose(outfed[0][0], 2 * np.ones(shape, np.float32))
@@ -100,28 +99,22 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
           output_types=[np.float32, np.float32],
           output_shapes=[shape_1, shape_2])
 
-    def get_result(sess, result):
-      result.append(sess.run(outfeed))
-
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
-      result = []
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: np.ones(shape_1, np.float32),
-              b: np.ones(shape_1, np.float32),
-              c: np.ones(shape_2, np.float32),
-              d: np.ones(shape_2, np.float32)
-          })
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: 2 * np.ones(shape_1, np.float32),
-              b: np.ones(shape_1, np.float32),
-              c: 2 * np.ones(shape_2, np.float32),
-              d: np.ones(shape_2, np.float32)
-          })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: np.ones(shape_1, np.float32),
+                   b: np.ones(shape_1, np.float32),
+                   c: np.ones(shape_2, np.float32),
+                   d: np.ones(shape_2, np.float32)
+               })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: 2 * np.ones(shape_1, np.float32),
+                   b: np.ones(shape_1, np.float32),
+                   c: 2 * np.ones(shape_2, np.float32),
+                   d: np.ones(shape_2, np.float32)
+               })
       outfed = sess.run(outfeed)
       self.assertTrue(len(outfed) == 2)
       self.assertEqual(outfed[0].shape, (2, 10, 10))
@@ -160,28 +153,22 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
           output_types=[np.float32, np.float32],
           output_shapes=[shape_1, shape_2])
 
-    def get_result(sess, result):
-      result.append(sess.run(outfeed))
-
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
-      result = []
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: np.ones(shape_1, np.float32),
-              b: np.ones(shape_1, np.float32),
-              c: np.ones(shape_2, np.float32),
-              d: np.ones(shape_2, np.float32)
-          })
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: 2 * np.ones(shape_1, np.float32),
-              b: np.ones(shape_1, np.float32),
-              c: 2 * np.ones(shape_2, np.float32),
-              d: np.ones(shape_2, np.float32)
-          })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: np.ones(shape_1, np.float32),
+                   b: np.ones(shape_1, np.float32),
+                   c: np.ones(shape_2, np.float32),
+                   d: np.ones(shape_2, np.float32)
+               })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: 2 * np.ones(shape_1, np.float32),
+                   b: np.ones(shape_1, np.float32),
+                   c: 2 * np.ones(shape_2, np.float32),
+                   d: np.ones(shape_2, np.float32)
+               })
       outfed = sess.run(outfeed)
       self.assertTrue(len(outfed) == 2)
       self.assertEqual(outfed[0].shape, (10, 10))
@@ -214,18 +201,16 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: np.ones(shape, np.float32),
-              b: np.ones(shape, np.float32)
-          })
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: 3.1 * np.ones(shape, np.float32),
-              b: 2 * np.ones(shape, np.float32)
-          })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: np.ones(shape, np.float32),
+                   b: np.ones(shape, np.float32)
+               })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: 3.1 * np.ones(shape, np.float32),
+                   b: 2 * np.ones(shape, np.float32)
+               })
 
       outfed = sess.run(outfeed_all)
       self.assertTrue(len(outfed) == 1)
@@ -259,18 +244,16 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
 
     with session_lib.Session() as sess:
       sess.run(variables.global_variables_initializer())
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: np.ones(shape, np.float32),
-              b: np.ones(shape, np.float32)
-          })
-      sess.run(
-          outfeed_op,
-          feed_dict={
-              a: 3.1 * np.ones(shape, np.float32),
-              b: 2 * np.ones(shape, np.float32)
-          })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: np.ones(shape, np.float32),
+                   b: np.ones(shape, np.float32)
+               })
+      sess.run(outfeed_op,
+               feed_dict={
+                   a: 3.1 * np.ones(shape, np.float32),
+                   b: 2 * np.ones(shape, np.float32)
+               })
 
       outfed = sess.run(outfeed_last)
       self.assertTrue(len(outfed) == 1)
@@ -279,6 +262,6 @@ class PopDatastreamTest(test_util.TensorFlowTestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

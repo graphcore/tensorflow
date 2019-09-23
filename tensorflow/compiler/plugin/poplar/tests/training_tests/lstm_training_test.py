@@ -30,7 +30,6 @@ from tensorflow.python.ops import nn
 from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import variables
-from tensorflow.python.client import session as sl
 from tensorflow.python.training import gradient_descent
 
 dataType = np.float32
@@ -65,8 +64,11 @@ def _tfLSTM(x, h, c, y):
       forget_bias=0.,
       initializer=init_ops.zeros_initializer(dtype=dataType))
   state = rnn_cell.LSTMStateTuple(c, h)
-  outputs, _ = rnn.dynamic_rnn(
-      lstm_cell, x, dtype=dataType, initial_state=state, time_major=True)
+  outputs, _ = rnn.dynamic_rnn(lstm_cell,
+                               x,
+                               dtype=dataType,
+                               initial_state=state,
+                               time_major=True)
   softmax = nn.softmax_cross_entropy_with_logits_v2(
       logits=outputs[-1], labels=array_ops.stop_gradient(y))
   loss = math_ops.reduce_mean(softmax)
@@ -89,8 +91,8 @@ class LstmTrainingTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(layer_func, inputs=[px, ph, pc, py])
 
-      opts = ipu.utils.create_ipu_config(
-          profiling=True, use_poplar_text_report=True)
+      opts = ipu.utils.create_ipu_config(profiling=True,
+                                         use_poplar_text_report=True)
       opts = ipu.utils.set_ipu_model_options(opts, compile_ipu_code=False)
       ipu.utils.configure_ipu_system(opts)
 

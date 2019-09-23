@@ -36,7 +36,6 @@ class GradientAccumulationOptimizer(optimizer.Optimizer):
   example if we have a model of batch size 16 and we accumulate the gradients
   of 4 batches, this simulates an input batch of size 64.
   """
-
   def __init__(self,
                opt,
                num_mini_batches,
@@ -156,7 +155,6 @@ class CrossReplicaGradientAccumulationOptimizer(optimizer.Optimizer):
   between IPUs when the accumulated gradients are back-propagated through the
   network.
   """
-
   def __init__(self,
                opt,
                num_mini_batches,
@@ -171,8 +169,8 @@ class CrossReplicaGradientAccumulationOptimizer(optimizer.Optimizer):
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizer".
     """
 
-    super(CrossReplicaGradientAccumulationOptimizer, self).__init__(
-        False, name)
+    super(CrossReplicaGradientAccumulationOptimizer,
+          self).__init__(False, name)
 
     if num_mini_batches < 1:
       raise ValueError("num_mini_batches must be a positive number.")

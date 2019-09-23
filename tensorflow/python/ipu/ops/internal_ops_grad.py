@@ -22,8 +22,6 @@ from tensorflow.python.framework import ops
 """
     These gradient function should *never* be called directly.
 """
-
-
 @ops.RegisterGradient("IpuRemap")
 def _poputil_remap_layer_backward(op, grads):
   """Gradients for the IpuRemap op."""
@@ -59,11 +57,11 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
       "output_shapes": [t.shape for t in op.inputs],
   }
 
-  return gen_poputil_ops.ipu_user_op(
-      list(grads) + list(op.outputs) + list(op.inputs),
-      library_path=library_path,
-      op_name=op_name + "_grad",
-      gp_path=gp_path,
-      name=op.name + "_grad",
-      is_gradient=True,
-      **outs)
+  return gen_poputil_ops.ipu_user_op(list(grads) + list(op.outputs) +
+                                     list(op.inputs),
+                                     library_path=library_path,
+                                     op_name=op_name + "_grad",
+                                     gp_path=gp_path,
+                                     name=op.name + "_grad",
+                                     is_gradient=True,
+                                     **outs)

@@ -62,7 +62,7 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
         self.assertTrue(is_roughly_close < 0.03)
 
     # We want to test the internal seed is working.
-    for i in range(0, 6):
+    for _ in range(0, 6):
       testDropoutImpl(np.random.uniform())
 
   # Check user provided seed works
@@ -137,11 +137,11 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
         gradients = out[1][0][0]
 
         # Check we have the same number of zeros.
-        self.assertAllEqual(
-            np.count_nonzero(dropout_out), np.count_nonzero(gradients))
+        self.assertAllEqual(np.count_nonzero(dropout_out),
+                            np.count_nonzero(gradients))
 
     # Run with the same seed multiple times then check they are the same.
-    for i in range(0, 6):
+    for _ in range(0, 6):
       testDropoutImpl()
 
 if __name__ == "__main__":

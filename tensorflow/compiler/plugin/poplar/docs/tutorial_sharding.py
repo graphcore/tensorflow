@@ -1,11 +1,10 @@
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
-
 import numpy as np
 
 from tensorflow.python import ipu
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 NUM_IPUS = 4
 
@@ -45,11 +44,11 @@ with ipu_scope("/device:IPU:0"):
 
 with tf.Session() as sess:
   # sharded run
-  result = sess.run(
-      result, feed_dict={
-          pa: [1., 1.],
-          pb: [0., 1.],
-          pc: [1., 5.]
-      })
+  result = sess.run(result,
+                    feed_dict={
+                        pa: [1., 1.],
+                        pb: [0., 1.],
+                        pc: [1., 5.]
+                    })
 
   print(result)

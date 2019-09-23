@@ -1,10 +1,8 @@
 import numpy as np
-import os
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -39,14 +37,15 @@ EXECS = 2
 class TestDropout(xla_test.XLATestCase):
   def testResetSeed(self):
     # The dataset for feeding the graphs
-    ds = dataset_ops.Dataset.from_tensors(
-        array_ops.constant(1.0, shape=[SIZE]))
+    ds = dataset_ops.Dataset.from_tensors(array_ops.constant(1.0,
+                                                             shape=[SIZE]))
     ds = ds.map(lambda x: [x, x])
     ds = ds.repeat()
 
     # The host side queues
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
-        ds, feed_name="infeed", replication_factor=REPLICAS)
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds,
+                                                   feed_name="infeed",
+                                                   replication_factor=REPLICAS)
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
         feed_name="outfeed", replication_factor=REPLICAS)
 
@@ -80,7 +79,7 @@ class TestDropout(xla_test.XLATestCase):
       sess.run(infeed_queue.initializer)
 
       for _ in range(EXECS):
-        result = sess.run(res)
+        sess.run(res)
         outfed_result = sess.run(dequeue_outfeed)
         for r in np.array(list(outfed_result.values())).reshape([-1, SIZE]):
           total += 1

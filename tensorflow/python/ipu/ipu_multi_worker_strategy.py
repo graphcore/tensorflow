@@ -60,10 +60,9 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   strategy will split out the `optimizer.apply_gradients()` part and
   place it on the host.
   """
-
   def __init__(self, cluster_resolver):
-    super(IPUMultiWorkerStrategy, self).__init__(
-        IPUMultiWorkerExtended(self, cluster_resolver))
+    super(IPUMultiWorkerStrategy,
+          self).__init__(IPUMultiWorkerExtended(self, cluster_resolver))
 
 
 def current_device():
@@ -72,7 +71,6 @@ def current_device():
 
 class IPUMultiWorkerExtended(
     collective_all_reduce_strategy.CollectiveAllReduceExtended):
-
   def __init__(self, container_strategy, cluster_resolver):
     super(IPUMultiWorkerExtended, self).__init__(
         container_strategy,
@@ -92,9 +90,7 @@ class IPUMultiWorkerExtended(
 
     # In case we are inside an ipu_jit_scope, we need to override it
     # to disable XLA for variable initialization on the host.
-    disable_xla = {
-      "_XlaCompile": attr_value_pb2.AttrValue(b=False)
-    }
+    disable_xla = {"_XlaCompile": attr_value_pb2.AttrValue(b=False)}
 
     graph = ops.get_default_graph()
     with ops.device(self._variable_device), \
@@ -116,7 +112,7 @@ class IPUMultiWorkerExtended(
   def _update(self, var, fn, args, kwargs, group):
     # The implementations of _update() and _update_non_slot() are identical
     # except _update() passes `var` as the first argument to `fn()`.
-    return self._update_non_slot(var, fn, (var,) + tuple(args), kwargs, group)
+    return self._update_non_slot(var, fn, (var, ) + tuple(args), kwargs, group)
 
   def _update_non_slot(self, colocate_with, fn, args, kwargs, should_group):
     with ops.device(self._variable_device), \
@@ -124,8 +120,7 @@ class IPUMultiWorkerExtended(
       result = fn(*args, **kwargs)
       if should_group:
         return result
-      else:
-        return nest.map_structure(self._local_results, result)
+      return nest.map_structure(self._local_results, result)
 
   def read_var(self, var):
     return var.read_value()
@@ -135,17 +130,17 @@ class IPUMultiWorkerExtended(
     # by wrapping the inputs in an identity op on that device.
     with ops.device(self._variable_device):
       value = array_ops.identity(value)
-    return super(IPUMultiWorkerExtended, self)._reduce_to(
-        reduce_op, value, destinations)
+    return super(IPUMultiWorkerExtended,
+                 self)._reduce_to(reduce_op, value, destinations)
 
   def _batch_reduce_to(self, reduce_op, value_destination_pairs):
     # Make sure the reduction is done on the variable device
     # by wrapping the inputs in an identity op on that device.
     with ops.device(self._variable_device):
-      value_destination_pairs = [
-          (array_ops.identity(v), d) for (v, d) in value_destination_pairs]
-    return super(IPUMultiWorkerExtended, self)._batch_reduce_to(
-        reduce_op, value_destination_pairs)
+      value_destination_pairs = [(array_ops.identity(v), d)
+                                 for (v, d) in value_destination_pairs]
+    return super(IPUMultiWorkerExtended,
+                 self)._batch_reduce_to(reduce_op, value_destination_pairs)
 
   def _call_for_each_replica(self, fn, args, kwargs):
     with distribute_lib.ReplicaContext(

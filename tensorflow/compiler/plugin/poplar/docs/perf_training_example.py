@@ -1,12 +1,11 @@
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
-
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 # The dataset for feeding the graphs
 ds = tf.data.Dataset.from_tensors(tf.constant(1.0, shape=[800]))

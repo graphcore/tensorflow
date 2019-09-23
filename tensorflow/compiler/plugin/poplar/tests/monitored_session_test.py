@@ -68,14 +68,13 @@ class IpuMonitoredSessionTest(xla_test.XLATestCase):
     label_data = [[[1]], [[2]], [[3]], [[4]]]
 
     # Run training.
-    with ms.MonitoredTrainingSession(
-        is_chief=True,
-        chief_only_hooks=None,
-        save_summaries_steps=None,
-        save_summaries_secs=None) as sess:
+    with ms.MonitoredTrainingSession(is_chief=True,
+                                     chief_only_hooks=None,
+                                     save_summaries_steps=None,
+                                     save_summaries_secs=None) as sess:
       sess.run(init)
       previous_loss = float("inf")
-      for i in range(5):
+      for _ in range(5):
         measured_loss, _ = sess.run([loss, train_op],
                                     feed_dict={
                                         x: image_data,
@@ -98,8 +97,8 @@ class IpuMonitoredSessionTest(xla_test.XLATestCase):
 
     hook = basic_session_run_hooks.StopAtStepHook(num_steps=2)
 
-    with ms.MonitoredSession(
-        session_creator=ms.ChiefSessionCreator(), hooks=[hook]) as sess:
+    with ms.MonitoredSession(session_creator=ms.ChiefSessionCreator(),
+                             hooks=[hook]) as sess:
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       result = sess.run(output, fd)

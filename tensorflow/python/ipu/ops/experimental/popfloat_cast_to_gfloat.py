@@ -102,8 +102,9 @@ class GenericFloat:
                                         (self._en_inf and
                                          (self._exp > 0)) else 0) - self._bias
     max_float = ((max_exp + 127) << 23) | ((1 << 23) - (1 << (23 - self._man)))
-    in_scale = (self._bias - 16) if (
-        (self._exp == 5) and not self._en_inf) else (self._bias - 15)
+    in_scale = (self._bias - 16) if ((self._exp == 5)
+                                     and not self._en_inf) else (self._bias -
+                                                                 15)
     in_scale_recip = -in_scale
     if in_scale >= -14:
       in_scale_hlf = ((in_scale + 15) << 10) | (((in_scale + 15) << 10) << 16)
@@ -126,8 +127,8 @@ class GenericFloat:
 
     max_exp_out = max_exp + in_scale
     if max_exp_out >= -14:
-      max_half_out = ((max_exp_out + 15) << 10) | (
-          (1 << 10) - (1 << (10 - self._man)))
+      max_half_out = ((max_exp_out + 15) << 10) | ((1 << 10) -
+                                                   (1 << (10 - self._man)))
     else:
       max_half_out = ((1 << 11) - (1 <<
                                    (10 - self._man))) >> (-14 - max_exp_out)
@@ -228,8 +229,8 @@ class GenericFloat:
     self._cast_to_gfloat_params[21] = exp_mask  # EXP MASK
     self._cast_to_gfloat_params[22] = min_value << 23  # MIN VALUE
     self._cast_to_gfloat_params[23] = 1 if self._en_denorm else 0  # EN DENORM
-    self._cast_to_gfloat_params[24] = (
-        128 + self._bias) << 23  # Pack exponent align
+    self._cast_to_gfloat_params[24] = (128 +
+                                       self._bias) << 23  # Pack exponent align
     self._cast_to_gfloat_params[25] = self._exp + 8  # Pack rsh align
     self._cast_to_gfloat_params[26] = exp_align  # Unpack exponent align
     self._cast_to_gfloat_params[27] = 8 + self._exp  # EXP ALIGN 0
@@ -320,21 +321,20 @@ class GenericFloat:
 
     if self._gfloat_as_int is None or not self._gfloat_as_int:
       return inputs
-    else:
-      if storage_type == 'auto':
-        out_type = self._gfloat_native_dtype
-      elif storage_type == 'fp32':
-        out_type = dtypes.float32
-      elif storage_type == 'fp16':
-        out_type = dtypes.float16
+    if storage_type == 'auto':
+      out_type = self._gfloat_native_dtype
+    elif storage_type == 'fp32':
+      out_type = dtypes.float32
+    elif storage_type == 'fp16':
+      out_type = dtypes.float16
 
-      outputs = gen_popfloat_ops.cast_gfloat_to_native(
-          input=inputs,
-          params=ops.convert_to_tensor(self._cast_to_gfloat_params),
-          gfloat_format=self._format,
-          calc_type=self._gfloat_calc_dtype,
-          out_type=out_type)
-      return outputs
+    outputs = gen_popfloat_ops.cast_gfloat_to_native(
+        input=inputs,
+        params=ops.convert_to_tensor(self._cast_to_gfloat_params),
+        gfloat_format=self._format,
+        calc_type=self._gfloat_calc_dtype,
+        out_type=out_type)
+    return outputs
 
   # Define quantize function
   def get_cast_native_to_gfloat_fun(self,
@@ -348,18 +348,17 @@ class GenericFloat:
                                     sr_norm_max=0.5,
                                     sr_prob=1.0,
                                     storage_type='auto'):
-    return lambda x: self.cast_native_to_gfloat(
-        x,
-        en_nanoo=en_nanoo,
-        round_mode=round_mode,
-        sr_bits=sr_bits,
-        sr_density=sr_density,
-        sr_norm_offset=sr_norm_offset,
-        sr_norm_scale=sr_norm_scale,
-        sr_norm_min=sr_norm_min,
-        sr_norm_max=sr_norm_max,
-        sr_prob=sr_prob,
-        storage_type=storage_type)
+    return lambda x: self.cast_native_to_gfloat(x,
+                                                en_nanoo=en_nanoo,
+                                                round_mode=round_mode,
+                                                sr_bits=sr_bits,
+                                                sr_density=sr_density,
+                                                sr_norm_offset=sr_norm_offset,
+                                                sr_norm_scale=sr_norm_scale,
+                                                sr_norm_min=sr_norm_min,
+                                                sr_norm_max=sr_norm_max,
+                                                sr_prob=sr_prob,
+                                                storage_type=storage_type)
 
   # Define cast from gfloat function
   def get_cast_gfloat_to_native_fun(self, storage_type='auto'):
@@ -506,21 +505,20 @@ def cast_native_to_gfloat(inputs,
   Raises:
   """
 
-  return gen_popfloat_ops.cast_native_to_gfloat(
-      input=inputs,
-      params=params,
-      en_nanoo=en_nanoo,
-      round_mode=round_mode,
-      sr_density=sr_density,
-      sr_bits=sr_bits,
-      sr_norm_offset=sr_norm_offset,
-      sr_norm_scale=sr_norm_scale,
-      sr_norm_min=sr_norm_min,
-      sr_norm_max=sr_norm_max,
-      sr_prob=sr_prob,
-      gfloat_format=gfloat_format,
-      calc_type=calc_type,
-      out_type=out_type)
+  return gen_popfloat_ops.cast_native_to_gfloat(input=inputs,
+                                                params=params,
+                                                en_nanoo=en_nanoo,
+                                                round_mode=round_mode,
+                                                sr_density=sr_density,
+                                                sr_bits=sr_bits,
+                                                sr_norm_offset=sr_norm_offset,
+                                                sr_norm_scale=sr_norm_scale,
+                                                sr_norm_min=sr_norm_min,
+                                                sr_norm_max=sr_norm_max,
+                                                sr_prob=sr_prob,
+                                                gfloat_format=gfloat_format,
+                                                calc_type=calc_type,
+                                                out_type=out_type)
 
 
 def cast_gfloat_to_native(inputs,
@@ -538,12 +536,11 @@ def cast_gfloat_to_native(inputs,
   :return: a tensor of the same shape as the input
   """
 
-  outputs = gen_popfloat_ops.cast_gfloat_to_native(
-      input=inputs,
-      params=params,
-      gfloat_format=gfloat_format,
-      out_type=out_type,
-      calc_type=calc_type)
+  outputs = gen_popfloat_ops.cast_gfloat_to_native(input=inputs,
+                                                   params=params,
+                                                   gfloat_format=gfloat_format,
+                                                   out_type=out_type,
+                                                   calc_type=calc_type)
   return outputs
 
 
@@ -553,11 +550,11 @@ def calc_gfloat_params(man=10,
                        en_denorm=True,
                        en_inf=True,
                        calc_type=dtypes.float32):
-  return gen_popfloat_ops.calc_gfloat_params(
-      ops.convert_to_tensor([GenericFloat.get_gfloat_param_size(calc_type)]),
-      mantissa=man,
-      exponent=exp,
-      bias=bias,
-      en_denorm=en_denorm,
-      en_inf=en_inf,
-      calc_type=calc_type)
+  return gen_popfloat_ops.calc_gfloat_params(ops.convert_to_tensor(
+      [GenericFloat.get_gfloat_param_size(calc_type)]),
+                                             mantissa=man,
+                                             exponent=exp,
+                                             bias=bias,
+                                             en_denorm=en_denorm,
+                                             en_inf=en_inf,
+                                             calc_type=calc_type)

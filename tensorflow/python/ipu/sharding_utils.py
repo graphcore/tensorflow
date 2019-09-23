@@ -211,7 +211,8 @@ def calculate_memory(graph, parameter=True, saved=True, peak_activation=False):
     return total_mem - parameter_mem
 
 
-def find_all_subgraphs(graph, splitting_edges, input_node, output_node, fwd_nodes):
+def find_all_subgraphs(graph, splitting_edges, input_node, output_node,
+                       fwd_nodes):
   """Split graph into subgraphs based on splitting edges.
 
   Args:
@@ -227,7 +228,10 @@ def find_all_subgraphs(graph, splitting_edges, input_node, output_node, fwd_node
   graph = nx.DiGraph(graph)
   for edges in splitting_edges:
     graph.remove_edges_from(edges)
-  subgraphs = [graph.subgraph(c) for c in ordered_weakly_connected_components(graph, fwd_nodes)]
+  subgraphs = [
+      graph.subgraph(c)
+      for c in ordered_weakly_connected_components(graph, fwd_nodes)
+  ]
   if input_node not in subgraphs[0]:
     raise RuntimeError("input node must be in first sub-graph")
 

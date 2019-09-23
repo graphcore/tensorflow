@@ -1,10 +1,9 @@
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
-
 import numpy as np
 
 from tensorflow.python import ipu
 from tensorflow.python.ipu.scopes import ipu_scope
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 # Configure arguments for targeting the IPU
 cfg = ipu.utils.create_ipu_config(profiling=True, use_poplar_text_report=True)
@@ -31,10 +30,10 @@ with ipu_scope("/device:IPU:0"):
 
 with tf.Session() as sess:
   # Run the graph through the session feeding it an arbitrary dictionary
-  result = sess.run(
-      result, feed_dict={
-          pa: [1., 1.],
-          pb: [0., 1.],
-          pc: [1., 5.]
-      })
+  result = sess.run(result,
+                    feed_dict={
+                        pa: [1., 1.],
+                        pb: [0., 1.],
+                        pc: [1., 5.]
+                    })
   print(result)

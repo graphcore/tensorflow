@@ -41,7 +41,8 @@ def automatic_sharding(num_shards,
     frozen_inference: Flag set to True if running inference on a frozen graph.
 
   """
-  autoshard_cnn.automatic_sharding(num_shards, input_ts, loss_ts, edge_filter, frozen_inference)
+  autoshard_cnn.automatic_sharding(num_shards, input_ts, loss_ts, edge_filter,
+                                   frozen_inference)
 
 
 @tf_contextlib.contextmanager

@@ -11,7 +11,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
-from tensorflow.python.client import session as sl
 from tensorflow.python.eager import function as eager_function
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -42,13 +41,15 @@ class CaseTest(xla_test.XLATestCase):
             return x * y
 
           branches = [
-              f.get_concrete_function(
-                  array_ops.zeros_like(pb), array_ops.zeros_like(pc))
+              f.get_concrete_function(array_ops.zeros_like(pb),
+                                      array_ops.zeros_like(pc))
               for f in [b0, b1, b2]
           ]
 
-          c_out = gen_functional_ops.case(
-              pa, input=[pb, pc], Tout=[dtypes.float32], branches=branches)
+          c_out = gen_functional_ops.case(pa,
+                                          input=[pb, pc],
+                                          Tout=[dtypes.float32],
+                                          branches=branches)
 
           return [c_out[0]]
 
@@ -106,17 +107,20 @@ class CaseTest(xla_test.XLATestCase):
           def b2(x, y):
             return x * y
 
-          v = variable_scope.get_variable(
-              'b0', dtype=dtypes.float32, initializer=[1., 5.])
+          v = variable_scope.get_variable('b0',
+                                          dtype=dtypes.float32,
+                                          initializer=[1., 5.])
 
           branches = [
-              f.get_concrete_function(
-                  array_ops.zeros_like(pb), array_ops.zeros_like(v))
+              f.get_concrete_function(array_ops.zeros_like(pb),
+                                      array_ops.zeros_like(v))
               for f in [b0, b1, b2]
           ]
 
-          c_out = gen_functional_ops.case(
-              pa, input=[pb, v], Tout=[dtypes.float32], branches=branches)
+          c_out = gen_functional_ops.case(pa,
+                                          input=[pb, v],
+                                          Tout=[dtypes.float32],
+                                          branches=branches)
 
           return [c_out[0]]
 

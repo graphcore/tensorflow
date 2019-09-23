@@ -92,8 +92,8 @@ def ipu_shard(index):
   else:
     ipus = [index]
 
-  proto = xla_data_pb2.OpSharding(
-      type=xla_data_pb2.OpSharding.MAXIMAL, tile_assignment_devices=ipus)
+  proto = xla_data_pb2.OpSharding(type=xla_data_pb2.OpSharding.MAXIMAL,
+                                  tile_assignment_devices=ipus)
 
   attr_value = attr_value_pb2.AttrValue(s=proto.SerializeToString())
   attrs = {"_XlaSharding": attr_value}
@@ -137,7 +137,7 @@ def frontend_attribute(attribute_name, attribute_value, restore_to=None):
   with graph._attr_scope(attrs):
     yield
 
-  if restore_to != None and attribute_name not in saved.map:
+  if restore_to is not None and attribute_name not in saved.map:
     saved.map[attribute_name] = restore_to
     graph._attr_scope_map[FRONTEND_ATTRIBUTES_NAME] = attr_value_pb2.AttrValue(
         s=saved.SerializeToString())

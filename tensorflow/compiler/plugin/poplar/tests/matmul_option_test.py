@@ -36,9 +36,8 @@ class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
               shape=[4, 3],
               dtype=np.float32,
               initializer=init_ops.constant_initializer(
-                  np.array(
-                      [[1, 2, 1], [1, 3, 4], [1, 5, 6], [1, 7, 8]],
-                      dtype=np.float32)))
+                  np.array([[1, 2, 1], [1, 3, 4], [1, 5, 6], [1, 7, 8]],
+                           dtype=np.float32)))
           b1 = variable_scope.get_variable(
               "b1",
               shape=[3],
@@ -71,8 +70,8 @@ class IpuXlaMatMulOptionTest(xla_test.XLATestCase):
 
         fd = {
             x:
-            np.array(
-                [[7, 3, 5, 9], [1, 2, 3, 4], [5, 6, 7, 8]], dtype=np.float32),
+            np.array([[7, 3, 5, 9], [1, 2, 3, 4], [5, 6, 7, 8]],
+                     dtype=np.float32),
             expected: [[1, 2], [3, 4], [5, 6]]
         }
 

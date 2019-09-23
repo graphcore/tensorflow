@@ -18,21 +18,10 @@ Graphcore utility operations
 """
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.platform import tf_logging as logging
-import errno
-import hashlib
-import imp
-import os
-import platform
-import sys
 import threading  # pylint: disable=unused-import
 
-from tensorflow.core.framework import op_def_pb2
 from tensorflow.core.lib.core import error_codes_pb2  # pylint: disable=unused-import
-from tensorflow.python import pywrap_tensorflow as py_tf
-from tensorflow.python.lib.io import file_io
-from tensorflow.python.util import compat
 from tensorflow.python.util import deprecation
-from tensorflow.python.util.tf_export import tf_export
 
 from tensorflow.python.ipu import custom_ops
 
@@ -74,7 +63,8 @@ def remap_deduce(x, name=None):
     name: Optional op name.
 
   Returns:
-    A `Tensor` which is has been mapped across the IPU by deducing the tile layout from the input parameter.
+    A `Tensor` which is has been mapped across the IPU by deducing the tile
+    layout from the input parameter.
   """
   return gen_poputil_ops.ipu_remap_deduce(x, name=name)
 
@@ -88,10 +78,11 @@ def fifo(x, depth, name=None):
     name: Optional op name.
 
   Returns:
-    A `Tensor` which was dequeued from the fifo. This will be `x` at `t - depth`.
+    A `Tensor` which was dequeued from the fifo.
+    This will be `x` at `t - depth`.
     The first `depth` iterations will have unspecified values.
   """
-  if (depth < 1):
+  if depth < 1:
     return x
 
   return gen_poputil_ops.ipu_fifo(x, depth=depth, name=name)

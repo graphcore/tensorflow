@@ -56,7 +56,9 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       shape = (512, 2, 2048)
 
       def my_net(y):
-        def cond(i, _x, _y):
+        def cond(i, x, y):
+          del x
+          del y
           return i < 2
 
         def body(i, x, y):

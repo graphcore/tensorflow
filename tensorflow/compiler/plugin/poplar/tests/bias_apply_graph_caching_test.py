@@ -19,14 +19,9 @@ import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
-from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
-from tensorflow.python.training import gradient_descent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 

@@ -110,45 +110,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
 
-  def testBatchNormalizeInference(self):
-    with self.session() as sess:
-      with ops.device("/device:IPU:0"):
-        x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
-
-        with variable_scope.variable_scope("vs", use_resource=True):
-          y = convolutional.conv2d(
-              x,
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())
-          y = layers_norm.batch_normalization(y, fused=True)
-          y = convolutional.conv2d(
-              y,
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())
-          y = layers_norm.batch_normalization(y, fused=True)
-
-      report = ReportJSON(self, sess)
-
-      sess.run(variables.global_variables_initializer())
-
-      report.reset()
-
-      sess.run(y, {x: np.zeros([1, 4, 4, 2])})
-
-      report.parse_log()
-
-      # Would fail if there were two batch norms in the graph
-      ok = [
-          '__seed*', 'host-exchange-local-copy', 'Copy_',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
-          'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
-
   def testBatchNormsDontMatchDifferentShapes(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
@@ -237,6 +198,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       # One BN for forwards and one BN for grad
       # (note that we don't cache gradient application)
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'host-exchange-local-copy-',
@@ -251,6 +213,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testGroupNormalizeInference(self):
@@ -484,6 +447,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       report.parse_log()
 
       # One GN for forwards and one GN for grad
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'host-exchange-local-copy-',
@@ -496,6 +460,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/PopnnGroupNormTraining_2_grad/PopnnGroupNormGrad/custom-call*/',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testNormCacheConstants(self):

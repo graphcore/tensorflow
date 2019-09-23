@@ -21,7 +21,6 @@ import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
-from tensorflow.python.client import session as sl
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
@@ -45,6 +44,7 @@ next_feed_id.feed_count = 0
 class ReplicatedGraphTest(xla_test.XLATestCase):
   def testCreateSimpleReplicatedGraph(self):
     with self.session() as sess:
+
       def my_graph(inp):
         with ops.device("/device:IPU:0"):
           x = inp + inp
@@ -74,6 +74,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
   def testCrossReplicaSumDifferentTypes(self):
     with self.session() as sess:
+
       def my_graph(x, y):
         with ops.device("/device:IPU:0"):
           x = x + x
@@ -108,6 +109,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
   def testCreateSimpleReplicatedGraphVariable(self):
     with self.session() as sess:
+
       def my_graph():
         with ops.device("/device:IPU:0"):
           with variable_scope.variable_scope("", use_resource=True):
@@ -289,26 +291,26 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       self.assertTrue(outfed_result["this"].shape[0], 2)
       self.assertAllClose(outfed_result["last"][0][0],
                           outfed_result["last"][0][1])
-      self.assertAllClose(outfed_result["last"][0][0], np.broadcast_to(
-          0, shape))
+      self.assertAllClose(outfed_result["last"][0][0],
+                          np.broadcast_to(0, shape))
       self.assertAllClose(outfed_result["this"][0][0],
                           outfed_result["this"][0][1])
-      self.assertAllClose(outfed_result["this"][0][0], np.broadcast_to(
-          1, shape))
+      self.assertAllClose(outfed_result["this"][0][0],
+                          np.broadcast_to(1, shape))
 
       self.assertAllClose(outfed_result["last"][1][0],
                           outfed_result["last"][1][1])
-      self.assertAllClose(outfed_result["last"][1][0], np.broadcast_to(
-          1, shape))
+      self.assertAllClose(outfed_result["last"][1][0],
+                          np.broadcast_to(1, shape))
       self.assertAllClose(outfed_result["this"][1][0],
                           outfed_result["this"][1][1])
-      self.assertAllClose(outfed_result["this"][1][0], np.broadcast_to(
-          4, shape))
+      self.assertAllClose(outfed_result["this"][1][0],
+                          np.broadcast_to(4, shape))
 
       self.assertAllClose(outfed_result["last"][2][0],
                           outfed_result["last"][2][1])
-      self.assertAllClose(outfed_result["last"][2][0], np.broadcast_to(
-          4, shape))
+      self.assertAllClose(outfed_result["last"][2][0],
+                          np.broadcast_to(4, shape))
       self.assertAllClose(outfed_result["this"][2][0],
                           outfed_result["this"][2][1])
       self.assertAllClose(outfed_result["this"][2][0],
@@ -334,6 +336,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
   def testCreateCombinedReplicatedSumGraph(self):
     with self.session() as sess:
+
       def my_graph():
         with ops.device("/device:IPU:0"):
           with variable_scope.variable_scope("", use_resource=True):
@@ -436,7 +439,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       with self.assertRaisesRegexp(
           errors.FailedPreconditionError,
           'Current program has been created with replication_factor 2'):
-        result = sess.run(res)
+        sess.run(res)
 
   def testCreateSimpleReplicatedOutfeedWrongReplicationFactor(self):
     with self.session() as sess:
@@ -467,7 +470,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       with self.assertRaisesRegexp(
           errors.FailedPreconditionError,
           'Current program has been created with replication_factor 2'):
-        result = sess.run(res)
+        sess.run(res)
 
 
 if __name__ == "__main__":

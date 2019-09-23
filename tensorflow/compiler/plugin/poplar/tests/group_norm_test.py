@@ -148,11 +148,10 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
 
     if mean is None and inv_std_dev is None:
       mean = np.mean(inputs, moments_axes, dtype=np.float32, keepdims=True)
-      variance = np.mean(
-          np.power(inputs - mean, 2),
-          moments_axes,
-          dtype=np.float32,
-          keepdims=True)
+      variance = np.mean(np.power(inputs - mean, 2),
+                         moments_axes,
+                         dtype=np.float32,
+                         keepdims=True)
     else:
       variance = np.power(inv_std_dev, -2) - epsilon
 
@@ -186,7 +185,6 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
 
     num_channels = inputs.shape[feature_index]
     group_size = num_channels // groups
-    original_shape = inputs.shape
 
     # Implementation detail - in Poplibs group norm, the groups are not
     # contiguous, but strided - we replicate that here
@@ -211,11 +209,10 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
       moments_axes = (1, 2, feature_index + 1)
 
     mean = np.mean(inputs, moments_axes, dtype=np.float32, keepdims=True)
-    variance = np.mean(
-        np.power(inputs - mean, 2),
-        moments_axes,
-        dtype=np.float32,
-        keepdims=True)
+    variance = np.mean(np.power(inputs - mean, 2),
+                       moments_axes,
+                       dtype=np.float32,
+                       keepdims=True)
     inv_std_dev = np.power(variance + epsilon, -0.5)
 
     return (np.reshape(np.squeeze(mean), (mean.size)),
@@ -230,7 +227,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                         inv_std_dev,
                         epsilon=0.0015,
                         data_format="NHWC"):
-    if data_format != "NHWC" and data_format != "NCHW":
+    if data_format not in ["NHWC", "NCHW"]:
       raise Exception("Unsupported data format " + data_format)
 
     with self.session() as sess:
@@ -239,8 +236,9 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
         pgamma = array_ops.placeholder(dataType, gamma.shape, name="gamma")
         pbeta = array_ops.placeholder(dataType, beta.shape, name="beta")
         pmean = array_ops.placeholder(dataType, mean.shape, name="mean")
-        pinv_std_dev = array_ops.placeholder(
-            dataType, inv_std_dev.shape, name="inv_std_dev")
+        pinv_std_dev = array_ops.placeholder(dataType,
+                                             inv_std_dev.shape,
+                                             name="inv_std_dev")
         output = gen_popnn_ops.popnn_group_norm_inference(
             inputs=pinputs,
             gamma=pgamma,
@@ -267,7 +265,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                              groups,
                              epsilon=0.0015,
                              data_format="NHWC"):
-    if data_format != "NHWC" and data_format != "NCHW":
+    if data_format not in ["NHWC", "NCHW"]:
       raise Exception("Unsupported data format " + data_format)
 
     with self.session() as sess:
@@ -295,7 +293,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                                groups,
                                epsilon=0.0015,
                                data_format="NHWC"):
-    if data_format != "NHWC" and data_format != "NCHW":
+    if data_format not in ["NHWC", "NCHW"]:
       raise Exception("Unsupported data format " + data_format)
 
     with self.session() as sess:
@@ -332,25 +330,23 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
       beta = np.random.rand(*gamma_beta_shape).astype(dataType)
       mean = np.random.rand(*mean_inv_std_dev_shape).astype(dataType)
       inv_std_dev = np.random.rand(*mean_inv_std_dev_shape).astype(dataType)
-      result = self._implGroupNormInf(
-          activations,
-          gamma,
-          beta,
-          num_groups,
-          mean,
-          inv_std_dev,
-          epsilon=epsilon,
-          data_format=data_format)
+      result = self._implGroupNormInf(activations,
+                                      gamma,
+                                      beta,
+                                      num_groups,
+                                      mean,
+                                      inv_std_dev,
+                                      epsilon=epsilon,
+                                      data_format=data_format)
 
-      expected, _, _ = self._refGroupNormFwd(
-          activations,
-          gamma,
-          beta,
-          num_groups,
-          mean=mean,
-          inv_std_dev=inv_std_dev,
-          epsilon=epsilon,
-          data_format=data_format)
+      expected, _, _ = self._refGroupNormFwd(activations,
+                                             gamma,
+                                             beta,
+                                             num_groups,
+                                             mean=mean,
+                                             inv_std_dev=inv_std_dev,
+                                             epsilon=epsilon,
+                                             data_format=data_format)
 
       self.assertAllClose(expected, result)
 
@@ -386,21 +382,18 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           num_groups,
           epsilon=epsilon,
           data_format=data_format)
-      self.assertAllClose(
-          expected_mean,
-          mean,
-          rtol=training_rel_tolerance,
-          atol=training_abs_tolerance)
-      self.assertAllClose(
-          expected_inv_std_dev,
-          inv_std_dev,
-          rtol=training_rel_tolerance,
-          atol=training_abs_tolerance)
-      self.assertAllClose(
-          expected_norm,
-          norm,
-          rtol=training_rel_tolerance,
-          atol=training_abs_tolerance)
+      self.assertAllClose(expected_mean,
+                          mean,
+                          rtol=training_rel_tolerance,
+                          atol=training_abs_tolerance)
+      self.assertAllClose(expected_inv_std_dev,
+                          inv_std_dev,
+                          rtol=training_rel_tolerance,
+                          atol=training_abs_tolerance)
+      self.assertAllClose(expected_norm,
+                          norm,
+                          rtol=training_rel_tolerance,
+                          atol=training_abs_tolerance)
 
   @parameterized.named_parameters(*NAMED_GROUP_NORM_TESTCASES)
   def testGroupNormStatistics(self, batch_size, num_channels, num_groups, dims,
@@ -421,16 +414,14 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
 
       expected_mean, expected_inv_std_dev = self._refGroupNormStatistics(
           activations, num_groups, epsilon=epsilon, data_format=data_format)
-      self.assertAllClose(
-          expected_mean,
-          mean,
-          rtol=training_rel_tolerance,
-          atol=training_abs_tolerance)
-      self.assertAllClose(
-          expected_inv_std_dev,
-          inv_std_dev,
-          rtol=training_rel_tolerance,
-          atol=training_abs_tolerance)
+      self.assertAllClose(expected_mean,
+                          mean,
+                          rtol=training_rel_tolerance,
+                          atol=training_abs_tolerance)
+      self.assertAllClose(expected_inv_std_dev,
+                          inv_std_dev,
+                          rtol=training_rel_tolerance,
+                          atol=training_abs_tolerance)
 
 
 if __name__ == "__main__":

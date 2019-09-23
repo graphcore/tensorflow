@@ -6,13 +6,14 @@ import argparse
 import time
 
 import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
 
 from tensorflow.keras import Sequential
 from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.layers import Conv2D, MaxPooling2D
 from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten
 from tensorflow.python import ipu
+
+tf.disable_v2_behavior()
 
 NUM_CLASSES = 10
 
@@ -48,17 +49,17 @@ def model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.EVAL:
     predictions = tf.argmax(input=logits, axis=-1)
     eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(
-            labels=labels, predictions=predictions),
+        "accuracy": tf.metrics.accuracy(labels=labels,
+                                        predictions=predictions),
     }
-    return tf.estimator.EstimatorSpec(
-        mode, loss=loss, eval_metric_ops=eval_metric_ops)
-  elif mode == tf.estimator.ModeKeys.TRAIN:
+    return tf.estimator.EstimatorSpec(mode,
+                                      loss=loss,
+                                      eval_metric_ops=eval_metric_ops)
+  if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.GradientDescentOptimizer(params["learning_rate"])
     train_op = optimizer.minimize(loss=loss)
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
-  else:
-    raise NotImplementedError(mode)
+  raise NotImplementedError(mode)
 
 
 def parse_args():
@@ -69,8 +70,10 @@ def parse_args():
       action="store_true",
       help="Skip training and test using latest checkpoint from model_dir.")
 
-  parser.add_argument(
-      "--batch-size", type=int, default=32, help="The batch size.")
+  parser.add_argument("--batch-size",
+                      type=int,
+                      default=32,
+                      help="The batch size.")
 
   parser.add_argument(
       "--iterations-per-loop",
@@ -78,23 +81,20 @@ def parse_args():
       default=100,
       help="The number of iterations (batches) per loop on IPU.")
 
-  parser.add_argument(
-      "--log-interval",
-      type=int,
-      default=10,
-      help="Interval at which to log progress.")
+  parser.add_argument("--log-interval",
+                      type=int,
+                      default=10,
+                      help="Interval at which to log progress.")
 
-  parser.add_argument(
-      "--summary-interval",
-      type=int,
-      default=1,
-      help="Interval at which to write summaries.")
+  parser.add_argument("--summary-interval",
+                      type=int,
+                      default=1,
+                      help="Interval at which to write summaries.")
 
-  parser.add_argument(
-      "--training-steps",
-      type=int,
-      default=200000,
-      help="Total number of training steps.")
+  parser.add_argument("--training-steps",
+                      type=int,
+                      default=200000,
+                      help="Total number of training steps.")
 
   parser.add_argument(
       "--learning-rate",
@@ -138,7 +138,6 @@ def create_ipu_estimator(args):
 
 def train(ipu_estimator, args, x_train, y_train):
   """Train a model on IPU and save checkpoints to the given `args.model_dir`."""
-
   def input_fn():
     # If using Dataset.from_tensor_slices, the data will be embedded
     # into the graph as constants, which makes the training graph very

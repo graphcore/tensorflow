@@ -32,14 +32,14 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testGather(self):
     def my_net(w, i):
-      out = ipu.ops.embedding_ops.embedding_lookup(
-          w, i, min_encoding_size=1200)
+      out = ipu.ops.embedding_ops.embedding_lookup(w,
+                                                   i,
+                                                   min_encoding_size=1200)
       return [out]
 
     with ops.device('cpu'):
       i = array_ops.placeholder(np.int32, [8])
       w = array_ops.placeholder(np.float32, [12000, 200])
-      report = gen_ipu_ops.ipu_event_trace()
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])

@@ -71,7 +71,6 @@ class IPUEstimatorSpec(
         'training_hooks', 'evaluation_hooks', 'prediction_hooks'
     ])):
   """Ops and objects returned from a `model_fn` and passed to `IPUEstimator`."""
-
   def __new__(cls,
               mode,
               predictions=None,
@@ -379,7 +378,6 @@ def _call_host_fn(host_call_fn, host_call_args):
 
 def _augment_model_fn(model_fn):
   """Returns a new model_fn, which wraps the IPU support."""
-
   def _model_fn(features, labels, mode, config, params):  # pylint: disable=unused-argument
     input_fn = params[_INPUT_FN_KEY]
     dataset = _call_input_fn(input_fn, mode, params, config)
@@ -402,7 +400,8 @@ def _augment_model_fn(model_fn):
 
     if config.ipu_run_config.ipu_options is not None:
       ipu_options = config.ipu_run_config.ipu_options
-      hooks.append(_IPUConfigureIPUSystemHook(ipu_options, host_device=_HOST_DEVICE))
+      hooks.append(
+          _IPUConfigureIPUSystemHook(ipu_options, host_device=_HOST_DEVICE))
 
     model_fn_wrapper = _ModelFnWrapper(model_fn, config, params, infeed_queue)
 
@@ -448,9 +447,8 @@ def _augment_model_fn(model_fn):
         # If there is a dependency on the `loss` calculated on
         # the IPU, they will be sequenced. Otherwise they might
         # run in parallel on the IPU and CPU.
-        train_op = _call_host_fn(
-            model_fn_wrapper.captured_host_call_fn,
-            host_call_args)
+        train_op = _call_host_fn(model_fn_wrapper.captured_host_call_fn,
+                                 host_call_args)
     elif mode == model_fn_lib.ModeKeys.PREDICT:
       with ops.control_dependencies([compiled_loop]):
         predictions = outfeed_queue.dequeue()
@@ -513,7 +511,6 @@ class IPUEstimator(estimator_lib.Estimator):
                      warm-started, and it is assumed that vocabularies
                      and `tf.Tensor` names are unchanged.
   """
-
   def __init__(self,
                model_fn,
                model_dir=None,

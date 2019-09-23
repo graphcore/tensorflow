@@ -44,12 +44,13 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
     with self.session() as sess:
       dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=4)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=4)
 
       def body(v, x):
         v = v + x
-        return (v)
+        return v
 
       def my_net(v):
         r = ipu.loops.repeat(20, body, (v), infeed_queue)
@@ -71,15 +72,17 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
   def testSingleInfeedRepeatNonTupleFiniteDataset(self):
     with self.session() as sess:
-      dataset = tu.create_single_increasing_dataset(
-          10, shape=[4, 4], repeat=False)
+      dataset = tu.create_single_increasing_dataset(10,
+                                                    shape=[4, 4],
+                                                    repeat=False)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=2)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=2)
 
       def body(v, x):
         v = v + x
-        return (v)
+        return v
 
       def my_net(v):
         r = ipu.loops.repeat(10, body, (v), infeed_queue)
@@ -110,12 +113,13 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       dataset = dataset.map(dataset_parser)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=3)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=3)
 
       def body(v, im1, im2):
         v = v + im1 + im2
-        return (v)
+        return v
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -144,12 +148,13 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       dataset = dataset.map(dataset_parser)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=2)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=2)
 
       def body(v, im1, im2):
         v = v + im1 + im2
-        return (v)
+        return v
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -178,8 +183,9 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       dataset = dataset.map(dataset_parser)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=2)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=2)
 
       #Note how the parameters are swapped around.
       def body(v1, v2, b, a):
@@ -209,12 +215,13 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
     with self.session() as sess:
       dataset = tu.create_single_increasing_dataset(2, shape=[4, 4])
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=2)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=2)
 
       def body(v, x):
         v = v + x
-        return (v)
+        return v
 
       def my_net():
         v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -239,10 +246,12 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
     with self.session() as sess:
       dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=2)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=2)
 
       def cond(i, v):
+        del v
         return i < 20
 
       def body(i, v, x):
@@ -279,10 +288,12 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
 
       dataset = dataset.map(dataset_parser)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=2)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=2)
 
       def cond(i, v):
+        del v
         return i < 20
 
       def body(i, v, im1, im2):
@@ -318,7 +329,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
       def program(iters):
         def body(v, x):
           v = v + x
-          return (v)
+          return v
 
         def my_net():
           v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -358,7 +369,7 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
       def program(iters, infeed_queue):
         def body(v, x):
           v = v + x
-          return (v)
+          return v
 
         def my_net():
           v = constant_op.constant(0.0, shape=[4, 4], dtype=np.float32)
@@ -395,18 +406,18 @@ class InfeedPrefetchTest(xla_test.XLATestCase):
       dataset = tu.create_single_increasing_dataset(10, shape=[4, 4, 2])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
-          dataset, next_feed_id(), data_to_prefetch=5)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset,
+                                                         next_feed_id(),
+                                                         data_to_prefetch=5)
 
       def my_net(iters):
         def body(loss, x):
           with variable_scope.variable_scope("vs", use_resource=True):
-            y = layers.Conv2D(
-                2,
-                1,
-                use_bias=True,
-                kernel_initializer=init_ops.ones_initializer(),
-                name='conv1')(x)
+            y = layers.Conv2D(2,
+                              1,
+                              use_bias=True,
+                              kernel_initializer=init_ops.ones_initializer(),
+                              name='conv1')(x)
           loss = math_ops.reduce_sum(y)
           optimizer = gradient_descent.GradientDescentOptimizer(0.1)
           train = optimizer.minimize(loss)

@@ -22,8 +22,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 """
     These gradient function should *never* be called directly.
 """
-
-
 @ops.RegisterGradient("PopnnLstmLayer")
 def _popnn_lstm_layer_backward(op, *grads):
   """Gradients for the PopnnLstmLayer op."""

@@ -31,7 +31,7 @@ allowed_op_types = [
 def get_single_while_op_body(g):
   outer_ops = g.get_operations()
   while_ops = list(filter(lambda x: x.type == 'While', outer_ops))
-  assert (len(while_ops) == 1)
+  assert len(while_ops) == 1
   body = g._get_function(while_ops[0].get_attr('body').name)
   return body.graph
 
@@ -40,11 +40,13 @@ class AutoshardTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testFrozenInference(self):
     def my_model(inp):
-      weight_ih = array_ops.constant(
-          np.random.rand(1024, 512), dtype=np.float32, name="W_ih")
+      weight_ih = array_ops.constant(np.random.rand(1024, 512),
+                                     dtype=np.float32,
+                                     name="W_ih")
       hidden = math_ops.matmul(weight_ih, inp)
-      weight_ho = array_ops.constant(
-          np.random.rand(1000, 1024), dtype=np.float32, name="W_ho")
+      weight_ho = array_ops.constant(np.random.rand(1000, 1024),
+                                     dtype=np.float32,
+                                     name="W_ho")
       output = math_ops.matmul(weight_ho, hidden)
       return [output]
 
@@ -191,12 +193,12 @@ class AutoshardTest(test_util.TensorFlowTestCase):
         with ipu.scopes.ipu_scope("/device:IPU:0"):
           inp = x
 
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv1", use_bias=False)(x)
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv2", use_bias=False)(x)
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv3", use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv1",
+                            use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv2",
+                            use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv3",
+                            use_bias=False)(x)
           x = math_ops.reduce_max(x, axis=[1, 2])
 
           cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
@@ -212,8 +214,10 @@ class AutoshardTest(test_util.TensorFlowTestCase):
           return [loss, train]
 
       loss = 0.0
-      return ipu.loops.repeat(
-          10, my_model, [loss], infeed_queue, use_while_v1=False)
+      return ipu.loops.repeat(10,
+                              my_model, [loss],
+                              infeed_queue,
+                              use_while_v1=False)
 
     ipu.ipu_compiler.compile(my_net, inputs=[])
 
@@ -233,8 +237,9 @@ class AutoshardTest(test_util.TensorFlowTestCase):
 
   @test_util.run_v1_only("while_v2 still experimental")
   def testPopnnLstmXlaCompileTrainingInLoop(self):
-    dataset = tu.create_dual_increasing_dataset(
-        3, data_shape=[16, 2, 8], label_shape=[16, 2, 256])
+    dataset = tu.create_dual_increasing_dataset(3,
+                                                data_shape=[16, 2, 8],
+                                                label_shape=[16, 2, 256])
 
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed1")
 
@@ -259,8 +264,10 @@ class AutoshardTest(test_util.TensorFlowTestCase):
           return [loss, train]
 
       loss = 0.0
-      return ipu.loops.repeat(
-          10, my_model, [loss], infeed_queue, use_while_v1=False)
+      return ipu.loops.repeat(10,
+                              my_model, [loss],
+                              infeed_queue,
+                              use_while_v1=False)
 
     ipu.ipu_compiler.compile(my_net, inputs=[])
 
@@ -291,12 +298,12 @@ class AutoshardTest(test_util.TensorFlowTestCase):
         with ipu.scopes.ipu_scope("/device:IPU:0"):
           inp = x
 
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv1", use_bias=False)(x)
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv2", use_bias=False)(x)
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv3", use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv1",
+                            use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv2",
+                            use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv3",
+                            use_bias=False)(x)
           x = math_ops.reduce_max(x, axis=[1, 2])
 
           cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
@@ -312,8 +319,10 @@ class AutoshardTest(test_util.TensorFlowTestCase):
           return [loss, train]
 
       loss = 0.0
-      return ipu.loops.repeat(
-          10, my_model, [loss], infeed_queue, use_while_v1=False)
+      return ipu.loops.repeat(10,
+                              my_model, [loss],
+                              infeed_queue,
+                              use_while_v1=False)
 
     lr = array_ops.placeholder(dtypes.float32, [])
     ipu.ipu_compiler.compile(my_net, inputs=[lr])
@@ -344,12 +353,12 @@ class AutoshardTest(test_util.TensorFlowTestCase):
         with ipu.scopes.ipu_scope("/device:IPU:0"):
           inp = x
 
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv1", use_bias=False)(x)
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv2", use_bias=False)(x)
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv3", use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv1",
+                            use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv2",
+                            use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv3",
+                            use_bias=False)(x)
           x = math_ops.reduce_max(x, axis=[1, 2])
 
           cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
@@ -365,8 +374,10 @@ class AutoshardTest(test_util.TensorFlowTestCase):
           return [loss, train]
 
       loss = 0.0
-      return ipu.loops.repeat(
-          10, my_model, [loss], infeed_queue, use_while_v1=True)
+      return ipu.loops.repeat(10,
+                              my_model, [loss],
+                              infeed_queue,
+                              use_while_v1=True)
 
     ipu.ipu_compiler.compile(my_net, inputs=[])
 
@@ -397,12 +408,12 @@ class AutoshardTest(test_util.TensorFlowTestCase):
 
         with ops.name_scope('gradients'):
 
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv1", use_bias=False)(x)
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv2", use_bias=False)(x)
-          x = layers.Conv2D(
-              8, 3, padding='same', name="conv3", use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv1",
+                            use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv2",
+                            use_bias=False)(x)
+          x = layers.Conv2D(8, 3, padding='same', name="conv3",
+                            use_bias=False)(x)
           x = math_ops.reduce_max(x, axis=[1, 2])
 
         cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
@@ -431,7 +442,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
     self.assertTrue(len(fwd_ops) > 10)
     self.assertTrue(len(bwd_ops) > 10)
 
-    self.assertEqual(len([o for o in fwd_ops if 'Conv2D' == o.type]), 3)
+    self.assertEqual(len([o for o in fwd_ops if o.type == 'Conv2D']), 3)
 
 
 if __name__ == "__main__":

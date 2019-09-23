@@ -90,7 +90,6 @@ class IPUInfeedQueue:
       result = sess.run(res)
 
   """
-
   def __init__(self,
                dataset,
                feed_name,
@@ -147,12 +146,12 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       # Batch the dataset to take replication and prefetch into account.
 
       if self._io_batch_size != 1:
-        self._dataset = self._dataset.batch(
-            self._io_batch_size, drop_remainder=True)
+        self._dataset = self._dataset.batch(self._io_batch_size,
+                                            drop_remainder=True)
 
       if self._replication_factor != 1:
-        self._dataset = self._dataset.batch(
-            self._replication_factor, drop_remainder=True)
+        self._dataset = self._dataset.batch(self._replication_factor,
+                                            drop_remainder=True)
 
       # Apply the dataset and take ownership.
       self._dataset = self._dataset._apply_options()

@@ -17,9 +17,10 @@ import networkx as nx
 import numpy as np
 
 from tensorflow.python.ipu import sharding
-from tensorflow.python.ipu.sharding_utils import assign_shard, convert_inference_ops_to_nx, \
-  calculate_memory, tensor_memory_use, children, find_all_subgraphs, group_subgraphs, is_splitting_edge, \
-  is_splitting_node, logging_helper
+from tensorflow.python.ipu.sharding_utils import assign_shard, \
+    convert_inference_ops_to_nx, calculate_memory, tensor_memory_use, \
+    children, find_all_subgraphs, group_subgraphs, is_splitting_edge, \
+    is_splitting_node, logging_helper
 from tensorflow.python.ops.variables import trainable_variables
 from tensorflow.python.platform import tf_logging as logging
 
@@ -154,8 +155,8 @@ def automatic_sharding(num_shards,
 
   if nx.number_weakly_connected_components(graph_fwd) != 1:
     raise RuntimeError(
-        "Error: number of disconnected subgraphs in auto-sharder is {}",
-        nx.number_weakly_connected_components(graph))
+        "Error: number of disconnected subgraphs in auto-sharder is {}".format(
+            nx.number_weakly_connected_components(graph)))
   splitting_edges = []
   if frozen_inference:
     # Find all graph ops that when split at their output can create two sub-graphs

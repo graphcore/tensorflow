@@ -49,7 +49,7 @@ class MapGradientOptimizer(optimizer.Optimizer):
            optimizer, map_fn_decay)
        # Gradients are computed by compute_gradients(), where our map function
        # modifies computed gradients. compute_gradients(loss, var_list) arguments
-       # are loss and var_list so define arguments and call 
+       # are loss and var_list so define arguments and call
        # map_optimizer.compute_gradients().
        values = [1.0, 2.0, 3.0]
        vars_ = [variables.Variable([v], dtype=dtypes.float32) for v in values]
@@ -69,7 +69,6 @@ class MapGradientOptimizer(optimizer.Optimizer):
   Returns:
     compute_gradients() returns a list of (gradient, variable) pairs.
   """
-
   def __init__(self,
                wrapped_optimizer,
                gradient_mapping_function,

@@ -9,11 +9,9 @@ import numpy as np
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
@@ -24,7 +22,6 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.training import gradient_descent
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class ConvGraphCachingTest(xla_test.XLATestCase):
@@ -34,16 +31,14 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(y)
 
       report = tu.ReportJSON(self, sess)
 
@@ -71,19 +66,17 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              dtype=np.float32)(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            dtype=np.float32)(x)
           y = math_ops.cast(y, np.float16)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              dtype=np.float16)(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            dtype=np.float16)(y)
 
       report = tu.ReportJSON(self, sess)
 
@@ -111,17 +104,15 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(x)
           y = array_ops.reshape(y, [1, 2, 8, 2])
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(y)
 
       report = tu.ReportJSON(self, sess)
 
@@ -149,17 +140,15 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer())(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              strides=(2, 1),
-              kernel_initializer=init_ops.ones_initializer())(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer())(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            strides=(2, 1),
+                            kernel_initializer=init_ops.ones_initializer())(y)
 
       report = tu.ReportJSON(self, sess)
 
@@ -187,24 +176,21 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv1')(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv2')(y)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv3')(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv2')(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv3')(y)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
@@ -223,6 +209,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # Fwd and BackpropInput should be shared
       # Weight transpose for BackpropInput should be present
       # Both BackpropFilter should be shared
+      # pylint: disable=line-too-long
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Copy_',
           'vs/conv1/Conv2D/convolution.*/Conv_1x1',
@@ -230,6 +217,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4/*',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
       self.assertAllEqual(report.get_ml_type_counts(), [0, 3, 2, 3])
@@ -241,24 +229,21 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         lr = array_ops.placeholder(np.float32, shape=[])
 
         with variable_scope.variable_scope("vs", use_resource=True):
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv1')(x)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv2')(y)
-          y = layers.Conv2D(
-              2,
-              1,
-              use_bias=False,
-              kernel_initializer=init_ops.ones_initializer(),
-              name='conv3')(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(x)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv2')(y)
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=False,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv3')(y)
 
         loss = math_ops.reduce_sum(y)
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
@@ -277,6 +262,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # Fwd and BackpropInput should be shared
       # Weight transpose for BackpropInput should be present
       # Both BackpropFilter should be shared
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'host-exchange-local-copy-',
@@ -286,6 +272,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
           'vs/conv*/Conv2D/convolution*/Conv_1x1',
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
       self.assertAllEqual(report.get_ml_type_counts(), [0, 3, 2, 3])
@@ -305,9 +292,13 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         weights3 = array_ops.placeholder(np.float32, [2, 2, 3, 5])
         vlr = array_ops.placeholder(np.float32, [])
 
-        def conv_scaled_inplace(input, grads, weights, lr):
+        def conv_scaled_inplace(input_values, grads, weights, lr):
           return weights - lr * nn_ops.conv2d_backprop_filter(
-              input, filter_sizes, grads, strides=[1, 1, 1, 1], padding="SAME")
+              input_values,
+              filter_sizes,
+              grads,
+              strides=[1, 1, 1, 1],
+              padding="SAME")
 
         result = (conv_scaled_inplace(input1, grads1, weights1, vlr) +
                   conv_scaled_inplace(input2, grads2, weights2, 0.1) +
@@ -363,13 +354,15 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
         weights = array_ops.placeholder(np.float32, [2, 2, 3, 5])
         vlr = array_ops.placeholder(np.float32, [])
 
-        def conv_scaled_inplace(input, grads, lr):
+        def conv_scaled_inplace(input_values, grads, lr):
+          # yapf: disable
           return weights - nn_ops.conv2d_backprop_filter(
-              input, filter_sizes, grads, strides=[1, 1, 1, 1],
-              padding="SAME") * lr
+              input_values, filter_sizes, grads, strides=[1, 1, 1, 1
+                                                  ], padding="SAME") * lr
+          # yapf: enable
 
-        result = (conv_scaled_inplace(
-            input1, grads1, vlr) + conv_scaled_inplace(input2, grads2, 0.1) +
+        result = (conv_scaled_inplace(input1, grads1, vlr) +
+                  conv_scaled_inplace(input2, grads2, 0.1) +
                   conv_scaled_inplace(input3, grads3, 0.2))
 
       report = tu.ReportJSON(self, sess)

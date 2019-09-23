@@ -28,6 +28,7 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.summary import summary_iterator
 from tensorflow.python.training import training_util
 
+
 def model_fn(features, labels, mode):
   with ops.device("/device:IPU:0"):
     with variable_scope.variable_scope("ascope", use_resource=True):
@@ -35,8 +36,7 @@ def model_fn(features, labels, mode):
       x = layers.dense(inputs=x, units=10)
       x = layers.dense(inputs=x, units=3)
 
-      if (mode == model_fn_lib.ModeKeys.TRAIN
-          or mode == model_fn_lib.ModeKeys.EVAL):
+      if mode in [model_fn_lib.ModeKeys.TRAIN, model_fn_lib.ModeKeys.EVAL]:
         labels = array_ops.stop_gradient(labels)
         loss = math_ops.reduce_mean(
             nn.softmax_cross_entropy_with_logits_v2(logits=x, labels=labels))
@@ -51,8 +51,10 @@ def model_fn(features, labels, mode):
 
   ipu.summary_ops.ipu_compile_summary("compile_summary", [train, loss])
 
-  return model_fn_lib.EstimatorSpec(
-      mode=mode, predictions=x, loss=loss, train_op=train)
+  return model_fn_lib.EstimatorSpec(mode=mode,
+                                    predictions=x,
+                                    loss=loss,
+                                    train_op=train)
 
 
 def input_fn():
@@ -82,8 +84,9 @@ class IpuEstimatorTest(test_util.TensorFlowTestCase):
 
     run_cfg = run_config.RunConfig()
 
-    classifier = estimator.Estimator(
-        model_fn=model_fn, config=run_cfg, model_dir="testlogs")
+    classifier = estimator.Estimator(model_fn=model_fn,
+                                     config=run_cfg,
+                                     model_dir="testlogs")
 
     classifier.train(input_fn=input_fn, steps=16)
 

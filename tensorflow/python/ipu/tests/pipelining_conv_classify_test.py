@@ -16,7 +16,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 import numpy as np
 
 from tensorflow.keras import layers
@@ -49,8 +48,10 @@ next_feed_id.feed_count = 0
 
 
 def _get_variable(name, shape, init):
-  return variable_scope.get_variable(
-      name, shape, initializer=init, dtype=np.float16)
+  return variable_scope.get_variable(name,
+                                     shape,
+                                     initializer=init,
+                                     dtype=np.float16)
 
 
 def block(name, first_stride, out_filters, count, x):
@@ -68,11 +69,12 @@ def block(name, first_stride, out_filters, count, x):
       x = conv(x, 3, 1, out_filters)
 
       # shortcut
-      if (stride != 1):
-        sc = array_ops.strided_slice(
-            sc, [0, 0, 0, 0], sc.shape, strides=[1, stride, stride, 1])
+      if stride != 1:
+        sc = array_ops.strided_slice(sc, [0, 0, 0, 0],
+                                     sc.shape,
+                                     strides=[1, stride, stride, 1])
       pad = int(x.shape[3] - shape_in[3])
-      if (pad != 0):
+      if pad != 0:
         sc = array_ops.pad(sc, paddings=[[0, 0], [0, 0], [0, 0], [0, pad]])
 
       x = nn.relu(x + sc)
@@ -81,10 +83,9 @@ def block(name, first_stride, out_filters, count, x):
 
 
 def fc(x, num_units_out):
-  return layers.Dense(
-      num_units_out,
-      kernel_initializer=init_ops.constant_initializer(0.1),
-      bias_initializer=init_ops.constant_initializer(0.0))(x)
+  return layers.Dense(num_units_out,
+                      kernel_initializer=init_ops.constant_initializer(0.1),
+                      bias_initializer=init_ops.constant_initializer(0.0))(x)
 
 
 def max_pool(x, ksize=3, stride=2):
@@ -92,13 +93,12 @@ def max_pool(x, ksize=3, stride=2):
 
 
 def conv(x, ksize, stride, filters_out):
-  return layers.Conv2D(
-      filters_out,
-      ksize,
-      stride,
-      'SAME',
-      kernel_initializer=init_ops.constant_initializer(0.1),
-      bias_initializer=init_ops.constant_initializer(0.0))(x)
+  return layers.Conv2D(filters_out,
+                       ksize,
+                       stride,
+                       'SAME',
+                       kernel_initializer=init_ops.constant_initializer(0.1),
+                       bias_initializer=init_ops.constant_initializer(0.0))(x)
 
 
 class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
@@ -122,8 +122,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       with variable_scope.variable_scope("stage3", use_resource=True):
         x = math_ops.reduce_mean(x, axis=[1, 2])
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(
-                logits=x, labels=label))
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=label))
         return loss
 
     def optimizer_stage(loss):
@@ -146,11 +146,11 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(
-          model_pipeline, inputs=[x, l])
+      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                     inputs=[x, l])
 
     tu.move_variable_initialization_to_cpu()
-    outfeed_op = outfeed_queue.dequeue()
+    outfeed_queue.dequeue()
     tu.configure_ipu_system(pipelining=True, text_report=False)
 
     with tu.ipu_session() as sess:
@@ -186,8 +186,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
         x = math_ops.reduce_mean(x, axis=[1, 2])
         x = fc(x, 100)
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(
-                logits=x, labels=label))
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=label))
         return loss
 
     def optimizer_stage(loss):
@@ -210,11 +210,11 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(
-          model_pipeline, inputs=[x, l])
+      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                     inputs=[x, l])
 
     tu.move_variable_initialization_to_cpu()
-    outfeed_op = outfeed_queue.dequeue()
+    outfeed_queue.dequeue()
     tu.configure_ipu_system(pipelining=True, text_report=False)
 
     with tu.ipu_session() as sess:
@@ -252,8 +252,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     def stage3(x, label):
       with variable_scope.variable_scope("stage3", use_resource=True):
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(
-                logits=x, labels=label))
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=label))
         return loss
 
     def optimizer_stage(loss):
@@ -276,11 +276,11 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(
-          model_pipeline, inputs=[x, l])
+      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                     inputs=[x, l])
 
     tu.move_variable_initialization_to_cpu()
-    outfeed_op = outfeed_queue.dequeue()
+    outfeed_queue.dequeue()
     tu.configure_ipu_system(pipelining=True, text_report=False)
 
     with tu.ipu_session() as sess:
@@ -318,8 +318,8 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     def stage3(x, label):
       with variable_scope.variable_scope("stage3", use_resource=True):
         loss = math_ops.reduce_mean(
-            nn.sparse_softmax_cross_entropy_with_logits(
-                logits=x, labels=label))
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=label))
         return loss
 
     def optimizer_stage(loss):
@@ -342,11 +342,11 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(
-          model_pipeline, inputs=[x, l])
+      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                     inputs=[x, l])
 
     tu.move_variable_initialization_to_cpu()
-    outfeed_op = outfeed_queue.dequeue()
+    outfeed_queue.dequeue()
     tu.configure_ipu_system(pipelining=True, text_report=False)
 
     with tu.ipu_session() as sess:

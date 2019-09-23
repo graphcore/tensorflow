@@ -2,8 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import numpy as np
 import tempfile
+import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -98,8 +98,8 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       cfg = ipu.utils.create_ipu_config(profiling=True, enable_ipu_events=True)
 
     with self.assertRaises(Exception):
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, profile_execution=True)
+      cfg = ipu.utils.create_ipu_config(profiling=False,
+                                        profile_execution=True)
 
   @test_util.deprecated_graph_mode_only
   def testEventFetchAndStringDecode(self):
@@ -141,8 +141,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     events = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(
-        profiling=True, profile_execution=True, max_report_size=10)
+    cfg = ipu.utils.create_ipu_config(profiling=True,
+                                      profile_execution=True,
+                                      max_report_size=10)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     ipu.utils.configure_ipu_system(cfg)
 
@@ -174,8 +175,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     events = gen_ipu_ops.ipu_event_trace()
 
-    cfg = ipu.utils.create_ipu_config(
-        profiling=True, profile_execution=True, report_directory=tmpdir)
+    cfg = ipu.utils.create_ipu_config(profiling=True,
+                                      profile_execution=True,
+                                      report_directory=tmpdir)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     ipu.utils.configure_ipu_system(cfg)
 
@@ -266,7 +268,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue("ResourceVariable" in str(type(c)))
 
       lstm_cell = rnn_cell.LSTMCell(1, forget_bias=1.0)
-      outputs, states = rnn.dynamic_rnn(lstm_cell, a, dtype=np.float32)
+      outputs, _ = rnn.dynamic_rnn(lstm_cell, a, dtype=np.float32)
 
       logits = outputs[-1] * c
       self.assertEqual(logits.device, "/device:IPU:0")
@@ -315,7 +317,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     inp = array_ops.placeholder(np.float32, [1, 8, 8, 4])
     with ipu.scopes.ipu_scope("/device:IPU:0"):
-      out = layers.Conv2D(8, 1)(inp)
+      layers.Conv2D(8, 1)(inp)
 
     events = gen_ipu_ops.ipu_event_trace()
 
@@ -350,20 +352,20 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
             "w1",
             shape=[4],
             dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                w_val1, dtype=np.float32))
+            initializer=init_ops.constant_initializer(w_val1,
+                                                      dtype=np.float32))
         w2 = variable_scope.get_variable(
             "w2",
             shape=[4],
             dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                w_val2, dtype=np.float32))
+            initializer=init_ops.constant_initializer(w_val2,
+                                                      dtype=np.float32))
         w3 = variable_scope.get_variable(
             "w3",
             shape=[4],
             dtype=np.float32,
-            initializer=init_ops.constant_initializer(
-                w_val3, dtype=np.float32))
+            initializer=init_ops.constant_initializer(w_val3,
+                                                      dtype=np.float32))
 
       y = w1 + w2 + w3
 
@@ -382,7 +384,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
           np.array([1, 8, 3, 4], dtype=np.float32),
           np.array([9, 2, 2, 6], dtype=np.float32)
       ]
-      for x in xs:
+      for _ in xs:
         out = sess.run(y)
         self.assertAllClose(out, w_val1 + w_val2 + w_val3)
 

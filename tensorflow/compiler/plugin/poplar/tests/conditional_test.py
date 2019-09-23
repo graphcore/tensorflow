@@ -9,7 +9,6 @@ import numpy as np
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -26,8 +25,9 @@ class ConditionalTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       def my_model(pcond, pa, pb, pc):
-        output = control_flow_ops.cond(
-            pcond, true_fn=lambda: pa + pb + pc, false_fn=lambda: pa - pb - pc)
+        output = control_flow_ops.cond(pcond,
+                                       true_fn=lambda: pa + pb + pc,
+                                       false_fn=lambda: pa - pb - pc)
         return [output]
 
       with ops.device("cpu"):
@@ -51,8 +51,9 @@ class ConditionalTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       def my_model(pcond, pa, pb, pc):
-        output = control_flow_ops.cond(
-            pcond, true_fn=lambda: pa + pb, false_fn=lambda: pb - pc)
+        output = control_flow_ops.cond(pcond,
+                                       true_fn=lambda: pa + pb,
+                                       false_fn=lambda: pb - pc)
         return [output]
 
       with ops.device("cpu"):
@@ -82,10 +83,9 @@ class ConditionalTest(xla_test.XLATestCase):
             dtype=np.float32,
             initializer=init_ops.constant_initializer(1))
 
-        o = control_flow_ops.cond(
-            pcond,
-            true_fn=lambda: va.read_value(),
-            false_fn=lambda: constant_op.constant(0.))
+        o = control_flow_ops.cond(pcond,
+                                  true_fn=va.read_value,
+                                  false_fn=lambda: constant_op.constant(0.))
         return [o]
 
       with ops.device("cpu"):
@@ -114,10 +114,9 @@ class ConditionalTest(xla_test.XLATestCase):
             dtype=np.float32,
             initializer=init_ops.constant_initializer(1))
 
-        o = control_flow_ops.cond(
-            pcond,
-            true_fn=lambda: state_ops.assign(va, 1.),
-            false_fn=lambda: state_ops.assign(va, 2.))
+        o = control_flow_ops.cond(pcond,
+                                  true_fn=lambda: state_ops.assign(va, 1.),
+                                  false_fn=lambda: state_ops.assign(va, 2.))
 
         return [o, va.read_value()]
 

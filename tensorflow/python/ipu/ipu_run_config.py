@@ -41,7 +41,6 @@ class IPURunConfig(
     autosharding: Use the IPU `automatic_sharding` to automatically shard the graph
       across `num_shards` devices
   """
-
   def __new__(cls,
               iterations_per_loop=1,
               ipu_options=None,
@@ -87,11 +86,7 @@ class RunConfig(run_config_lib.RunConfig):
     master: a string. The address of the distributed master to use for training.
     **kwargs: keyword config parameters.
   """
-
-  def __init__(self,
-               ipu_run_config=None,
-               master=None,
-               **kwargs):
+  def __init__(self, ipu_run_config=None, master=None, **kwargs):
     super(RunConfig, self).__init__(**kwargs)
     self._ipu_run_config = ipu_run_config or IPURunConfig()
 

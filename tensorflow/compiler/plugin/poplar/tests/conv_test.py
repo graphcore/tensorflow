@@ -11,14 +11,11 @@ import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import nn_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class IpuXlaConvTest(xla_test.XLATestCase):
@@ -28,8 +25,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
   def _ip_shp(self, nhwc, fmt):
     if fmt == 'NHWC':
       return nhwc
-    else:
-      return [nhwc[0], nhwc[3], nhwc[1], nhwc[2]]
+    return [nhwc[0], nhwc[3], nhwc[1], nhwc[2]]
 
   def testConv1x1_Stride2x1_In1x5(self):
     for fmt in self.data_formats:
@@ -302,12 +298,14 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
       report.parse_log()
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Copy_',
           'depthwise/convolution.*/Conv_1x1',
           'Copy_depthwise/convolution.*/Conv_1x1/partials_to_depthwise/convolution.*/Conv_1x1/partials[[]cloned[]]',
           'add/fusion*/Add'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testDepthwiseConvBackpropInput(self):

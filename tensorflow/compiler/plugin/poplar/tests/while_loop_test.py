@@ -43,7 +43,7 @@ class WhileLoopTest(xla_test.XLATestCase):
         # Define a GRU cell with tensorflow
         gru_cell = nn.rnn_cell.GRUCell(num_units, name="GRU")
         # Get gru cell output
-        outputs, states = nn.dynamic_rnn(gru_cell, x, dtype=dataType)
+        outputs, _ = nn.dynamic_rnn(gru_cell, x, dtype=dataType)
         return outputs[-1]
 
       def my_net(X, Y):
@@ -115,6 +115,7 @@ class WhileLoopTest(xla_test.XLATestCase):
 
       def my_net(x):
         def cond(i, x):
+          del x
           return i < 3
 
         def body(i, x):
@@ -141,9 +142,11 @@ class WhileLoopTest(xla_test.XLATestCase):
 
       def my_net(x):
         def cond(i, x):
+          del x
           return i < 3
 
         def cond1(j, x):
+          del x
           return j < 2
 
         def body1(j, x):
@@ -154,13 +157,15 @@ class WhileLoopTest(xla_test.XLATestCase):
         def body(i, x):
           i = i + 1
           j = 0
-          _, x = control_flow_ops.while_loop(
-              cond1, body1, (j, x), maximum_iterations=10)
+          _, x = control_flow_ops.while_loop(cond1,
+                                             body1, (j, x),
+                                             maximum_iterations=10)
           return (i, x)
 
         i = 0
-        a, b = control_flow_ops.while_loop(
-            cond, body, (i, x), maximum_iterations=10)
+        a, b = control_flow_ops.while_loop(cond,
+                                           body, (i, x),
+                                           maximum_iterations=10)
         return (a, b)
 
       with ops.device('cpu'):
@@ -179,33 +184,35 @@ class WhileLoopTest(xla_test.XLATestCase):
 
       def my_net():
         def cond(i, x):
+          del x
           return i < 3
 
         def body(i, loss):
           i = i + 1
-          init = init_ops.random_normal_initializer(
-              0.0, 1.0, seed=1, dtype=np.float32)
-          x = variable_scope.get_variable(
-              "v2", dtype=np.float32, shape=[1, 4, 4, 2], initializer=init)
+          init = init_ops.random_normal_initializer(0.0,
+                                                    1.0,
+                                                    seed=1,
+                                                    dtype=np.float32)
+          x = variable_scope.get_variable("v2",
+                                          dtype=np.float32,
+                                          shape=[1, 4, 4, 2],
+                                          initializer=init)
           with variable_scope.variable_scope("vs", use_resource=True):
-            y = layers.Conv2D(
-                2,
-                1,
-                use_bias=True,
-                kernel_initializer=init_ops.ones_initializer(),
-                name='conv1')(x)
-            y = layers.Conv2D(
-                2,
-                1,
-                use_bias=True,
-                kernel_initializer=init_ops.ones_initializer(),
-                name='conv2')(y)
-            y = layers.Conv2D(
-                2,
-                1,
-                use_bias=True,
-                kernel_initializer=init_ops.ones_initializer(),
-                name='conv3')(y)
+            y = layers.Conv2D(2,
+                              1,
+                              use_bias=True,
+                              kernel_initializer=init_ops.ones_initializer(),
+                              name='conv1')(x)
+            y = layers.Conv2D(2,
+                              1,
+                              use_bias=True,
+                              kernel_initializer=init_ops.ones_initializer(),
+                              name='conv2')(y)
+            y = layers.Conv2D(2,
+                              1,
+                              use_bias=True,
+                              kernel_initializer=init_ops.ones_initializer(),
+                              name='conv3')(y)
           loss = math_ops.reduce_sum(y)
           optimizer = gradient_descent.GradientDescentOptimizer(0.1)
           train = optimizer.minimize(loss)
@@ -216,20 +223,22 @@ class WhileLoopTest(xla_test.XLATestCase):
 
         i = 0
         loss = 0.0
-        return control_flow_ops.while_loop(
-            cond, body, (i, loss), maximum_iterations=10)
+        return control_flow_ops.while_loop(cond,
+                                           body, (i, loss),
+                                           maximum_iterations=10)
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[])
 
       sess.run(variables.global_variables_initializer())
-      c, val = sess.run(r, {})
+      c, _ = sess.run(r, {})
       self.assertEqual(c, 3)
 
   def testTfLstmInWhileV1(self):
     with self.session() as sess:
-      dataset = tu.create_dual_increasing_dataset(
-          3, data_shape=[4, 1, 8], label_shape=[4, 1, 128])
+      dataset = tu.create_dual_increasing_dataset(3,
+                                                  data_shape=[4, 1, 8],
+                                                  label_shape=[4, 1, 128])
 
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "feed")
 
@@ -237,11 +246,10 @@ class WhileLoopTest(xla_test.XLATestCase):
         def my_model(loss, x, y):
           with ipu.scopes.ipu_scope("/device:IPU:0"):
             lstm_cell = rnn_cell.LSTMCell(128)
-            x, _ = rnn.dynamic_rnn(
-                cell=lstm_cell,
-                inputs=x,
-                dtype=dtypes.float32,
-                time_major=True)
+            x, _ = rnn.dynamic_rnn(cell=lstm_cell,
+                                   inputs=x,
+                                   dtype=dtypes.float32,
+                                   time_major=True)
 
             cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
                 logits=x, labels=array_ops.stop_gradient(y))
@@ -253,8 +261,10 @@ class WhileLoopTest(xla_test.XLATestCase):
             return [loss, train]
 
         loss = 0.0
-        return ipu.loops.repeat(
-            10, my_model, [loss], infeed_queue, use_while_v1=True)
+        return ipu.loops.repeat(10,
+                                my_model, [loss],
+                                infeed_queue,
+                                use_while_v1=True)
 
       out = ipu.ipu_compiler.compile(my_net, inputs=[])
 
@@ -278,8 +288,8 @@ class WhileLoopTest(xla_test.XLATestCase):
 
         logits = ipu.loops.repeat(5, body, [features])
         loss = math_ops.reduce_sum(logits)
-        optimizer = momentum.MomentumOptimizer(
-            learning_rate=.001, momentum=0.9)
+        optimizer = momentum.MomentumOptimizer(learning_rate=.001,
+                                               momentum=0.9)
         grads_and_vars = optimizer.compute_gradients(loss)
         train_op = optimizer.apply_gradients(grads_and_vars)
         return a, loss, train_op
@@ -296,7 +306,7 @@ class WhileLoopTest(xla_test.XLATestCase):
       ipu.utils.configure_ipu_system(cfg)
 
       sess.run(variables.global_variables_initializer())
-      x, z = sess.run(ret, feed_dict={features: np.ones([10])})
+      x, _ = sess.run(ret, feed_dict={features: np.ones([10])})
       self.assertEqual(x, 1)
 
   def testWhileLoopAliasing1(self):
@@ -366,9 +376,9 @@ class WhileLoopTest(xla_test.XLATestCase):
     def my_net():
 
       coordinates = tf.constant(0.1, shape=[5], dtype=tf.float32)
-      ta = tf.TensorArray(
-          coordinates.dtype, coordinates.get_shape()[0],
-          element_shape=[]).unstack(coordinates)
+      ta = tf.TensorArray(coordinates.dtype,
+                          coordinates.get_shape()[0],
+                          element_shape=[]).unstack(coordinates)
 
       def loop_body(i, summation):
         factor = 0.5
@@ -376,11 +386,12 @@ class WhileLoopTest(xla_test.XLATestCase):
         # if we don't use the TensorArray but just hardcode the constant 0.01 the problem goes away
         return tf.add(i, 1), tf.add(summation, summand)
 
-      return tf.while_loop(
-          cond=lambda i, _: i < 5,
-          body=loop_body,
-          loop_vars=(tf.constant(0, dtype=tf.int32),
-                     tf.constant(0.0, shape=[2], dtype=tf.float32)))[1]
+      return tf.while_loop(cond=lambda i, _: i < 5,
+                           body=loop_body,
+                           loop_vars=(tf.constant(0, dtype=tf.int32),
+                                      tf.constant(0.0,
+                                                  shape=[2],
+                                                  dtype=tf.float32)))[1]
 
     # Checks that the 'add' is not in-place. Output 0 is an identical
     # copy of input 1, and output 1 is not an alias of anything.
@@ -388,7 +399,7 @@ class WhileLoopTest(xla_test.XLATestCase):
     with self.session() as sess:
 
       with ops.device('cpu'):
-        offset = array_ops.placeholder(np.float32, [])
+        array_ops.placeholder(np.float32, [])
 
       with ops.device("/device:IPU:0"):
         res = ipu.ipu_compiler.compile(my_net)

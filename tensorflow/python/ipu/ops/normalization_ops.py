@@ -89,7 +89,7 @@ def _group_norm_impl(inputs,
 
   # Standardize the reduction_axes to be positive.
   reduction_axes = list(reduction_axes)
-  for i in range(len(reduction_axes)):
+  for i, _ in enumerate(reduction_axes):
     if reduction_axes[i] < 0:
       reduction_axes[i] += inputs.shape.ndims
 
@@ -97,19 +97,18 @@ def _group_norm_impl(inputs,
     if a > inputs.shape.ndims:
       raise ValueError('Axis is out of bounds.')
     if inputs.shape.as_list()[a] is None:
-      raise ValueError(
-          'Inputs %s has undefined dimensions %d.' % (inputs.name, a))
+      raise ValueError('Inputs %s has undefined dimensions %d.' %
+                       (inputs.name, a))
     if channels_axis == a:
       raise ValueError('reduction_axis must be mutually exclusive '
                        'with channels_axis')
   if groups > channels:
     raise ValueError('Invalid groups %d for %d channels.' % (groups, channels))
   if channels % groups != 0:
-    raise ValueError(
-        '%d channels is not commensurate with %d groups.' % (channels, groups))
+    raise ValueError('%d channels is not commensurate with %d groups.' %
+                     (channels, groups))
 
-  with variable_scope.variable_scope(
-      scope, norm_type, [inputs], reuse=reuse) as sc:
+  with variable_scope.variable_scope(scope, norm_type, [inputs], reuse=reuse):
     # Note that the params_shape is the number of channels always.
     params_shape = [channels]
 
@@ -123,13 +122,12 @@ def _group_norm_impl(inputs,
                                                    'beta')
       beta_initializer = param_initializers.get('beta',
                                                 init_ops.zeros_initializer())
-      beta = variable_scope.get_variable(
-          'beta',
-          shape=params_shape,
-          dtype=dtype,
-          initializer=beta_initializer,
-          collections=beta_collections,
-          trainable=trainable)
+      beta = variable_scope.get_variable('beta',
+                                         shape=params_shape,
+                                         dtype=dtype,
+                                         initializer=beta_initializer,
+                                         collections=beta_collections,
+                                         trainable=trainable)
     else:
       beta = array_ops.constant(0.0, dtype=dtype, shape=params_shape)
 
@@ -138,13 +136,12 @@ def _group_norm_impl(inputs,
                                                     'gamma')
       gamma_initializer = param_initializers.get('gamma',
                                                  init_ops.ones_initializer())
-      gamma = variable_scope.get_variable(
-          'gamma',
-          shape=params_shape,
-          dtype=dtype,
-          initializer=gamma_initializer,
-          collections=gamma_collections,
-          trainable=trainable)
+      gamma = variable_scope.get_variable('gamma',
+                                          shape=params_shape,
+                                          dtype=dtype,
+                                          initializer=gamma_initializer,
+                                          collections=gamma_collections,
+                                          trainable=trainable)
     else:
       gamma = array_ops.constant(1.0, dtype=dtype, shape=params_shape)
 

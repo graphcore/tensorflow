@@ -9,7 +9,6 @@ import numpy as np
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import tensor_array_ops
@@ -24,8 +23,9 @@ class IpuXlaTensorArrayTest(xla_test.XLATestCase):
         in2 = array_ops.placeholder(np.float32, [1, 2])
         in3 = array_ops.placeholder(np.float32, [1, 2])
 
-        ta = tensor_array_ops.TensorArray(
-            dtype=np.float32, tensor_array_name="foo", size=3)
+        ta = tensor_array_ops.TensorArray(dtype=np.float32,
+                                          tensor_array_name="foo",
+                                          size=3)
 
         w0 = ta.write(0, in1)
         w1 = w0.write(1, in2)
@@ -52,11 +52,13 @@ class IpuXlaTensorArrayTest(xla_test.XLATestCase):
         in1 = array_ops.placeholder(np.float32, [5, 2])
         in2 = array_ops.placeholder(np.float32, [2])
 
-        ta = tensor_array_ops.TensorArray(
-            dtype=np.float32, tensor_array_name="ta", size=5)
+        ta = tensor_array_ops.TensorArray(dtype=np.float32,
+                                          tensor_array_name="ta",
+                                          size=5)
 
-        tb = tensor_array_ops.TensorArray(
-            dtype=np.float32, tensor_array_name="tb", size=5)
+        tb = tensor_array_ops.TensorArray(dtype=np.float32,
+                                          tensor_array_name="tb",
+                                          size=5)
 
         ta = ta.unstack(in1)
         tb = tb.write(0, ta.read(0) + in2)
@@ -66,12 +68,11 @@ class IpuXlaTensorArrayTest(xla_test.XLATestCase):
         tb = tb.write(4, ta.read(4) + in2)
         out = tb.gather(list(range(4)))
 
-        v = session.run(
-            out,
-            feed_dict={
-                in1: [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5]],
-                in2: [1, 1]
-            })
+        v = session.run(out,
+                        feed_dict={
+                            in1: [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5]],
+                            in2: [1, 1]
+                        })
 
         self.assertAllEqual([[2, 2], [3, 3], [4, 4], [5, 5]], v)
 

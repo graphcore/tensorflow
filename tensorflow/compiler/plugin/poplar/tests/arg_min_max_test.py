@@ -5,8 +5,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from absl.testing import parameterized
 import os
+from absl.testing import parameterized
 import numpy as np
 import test_utils as tu
 
@@ -29,16 +29,13 @@ def _get_random_input(dtype, shape):
   else:
     info_fn = np.finfo
     random_fn = np.random.uniform
-  return random_fn(
-      info_fn(dtype).min, info_fn(dtype).max, size=shape).astype(dtype)
+  return random_fn(info_fn(dtype).min, info_fn(dtype).max,
+                   size=shape).astype(dtype)
 
 
 class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxBasic(self, dtype):
-    batchsize = 4
-    n_categories = 1200
-
     def model(a):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
@@ -65,9 +62,6 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxHalf(self, dtype):
-    batchsize = 4
-    n_categories = 1200
-
     def model(a):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
@@ -88,9 +82,6 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxMultiDimensional(self, dtype):
-    batchsize = 4
-    n_categories = 1200
-
     def model(a, axis):
       return math_ops.argmax(a, axis=axis, output_type=dtypes.int32)
 
@@ -113,9 +104,6 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinBasic(self, dtype):
-    batchsize = 4
-    n_categories = 1200
-
     def model(a):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
@@ -142,9 +130,6 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinHalf(self, dtype):
-    batchsize = 4
-    n_categories = 1200
-
     def model(a):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
@@ -165,9 +150,6 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinMultiDimensional(self, dtype):
-    batchsize = 4
-    n_categories = 1200
-
     def model(a, axis):
       return math_ops.argmin(a, axis=axis, output_type=dtypes.int32)
 
@@ -190,9 +172,6 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxNegativeDim(self, dtype):
-    batchsize = 4
-    n_categories = 1200
-
     def model(a):
       return math_ops.argmax(a, axis=-1, output_type=dtypes.int32)
 
@@ -219,9 +198,6 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxVector(self, dtype):
-    batchsize = 4
-    n_categories = 1200
-
     def model(a):
       return math_ops.argmax(a, axis=0, output_type=dtypes.int32)
 
@@ -248,6 +224,6 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

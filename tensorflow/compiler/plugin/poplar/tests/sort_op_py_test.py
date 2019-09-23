@@ -2,7 +2,6 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python.client import session
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import sort_ops
 from tensorflow.python.platform import googletest

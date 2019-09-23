@@ -183,12 +183,14 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
       return dataset_ops.Dataset.from_tensor_slices(([1., 1.], [0., 1.]))
 
     def my_host_fn():
-      counter = variable_scope.get_variable(name="host_counter", initializer=0.0)
+      counter = variable_scope.get_variable(name="host_counter",
+                                            initializer=0.0)
       return counter.assign_add(1.0)
 
     def my_model_fn(features, labels, mode):
       loss = features + labels
-      counter = variable_scope.get_variable(name="ipu_counter", initializer=0.0)
+      counter = variable_scope.get_variable(name="ipu_counter",
+                                            initializer=0.0)
       train_op = counter.assign_add(1.0)
       host_call = (my_host_fn, [])
       return ipu_estimator.IPUEstimatorSpec(mode=mode,

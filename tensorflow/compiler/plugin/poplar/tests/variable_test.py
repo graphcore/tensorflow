@@ -300,12 +300,14 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       # Find of the names of compute sets
       report.parse_log()
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'z1/Initializer/truncated_normal/TruncatedNormal/custom-call*/truncatedNormal',
           'z1/Initializer/truncated_normal/mul/multiply.*/Op/Multiply',
           'z1/Initializer/truncated_normal/add*/AddTo'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testTruncatedNormalInitalizer(self):
@@ -330,12 +332,14 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       # Find of the names of compute sets
       report.parse_log()
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'z1/Initializer/truncated_normal/TruncatedNormal/custom-call*/truncatedNormal',
           'z1/Initializer/truncated_normal/mul/fusion*/Op/Multiply',
           'z1/Initializer/truncated_normal/fusion*/Add'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testDefaultTruncatedNormalScalarInitalizer(self):
@@ -384,10 +388,12 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       # Find of the names of compute sets
       report.parse_log()
 
+      # pylint: disable=line-too-long
       ok = [
           '__seed*',
           'z1/Initializer/truncated_normal/TruncatedNormal/custom-call*/truncatedNormal'
       ]
+      # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
   def testUniformRandomInitalizer(self):
@@ -504,10 +510,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       # The initialization is constant, so there are no events generated on the
       # IPU.
 
-      report.assert_host_to_device_event_names([
-          w_dl, b_dl
-      ], "Weights/biases should be downloaded once, and the input no times because it is streamed"
-                                               )
+      report.assert_host_to_device_event_names(
+          [w_dl, b_dl],
+          "Weights/biases should be downloaded once, and the input no times "
+          "because it is streamed")
 
       report.assert_device_to_host_event_names(
           [],
@@ -601,10 +607,10 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       # The initialization is constant, so there are no events generated on the
       # IPU.
 
-      report.assert_host_to_device_event_names([
-          w1_dl, b1_dl, w2_dl, b2_dl
-      ], "Weights/biases should be downloaded once, and the input no times because it is streamed"
-                                               )
+      report.assert_host_to_device_event_names(
+          [w1_dl, b1_dl, w2_dl, b2_dl],
+          "Weights/biases should be downloaded once, and the input no times "
+          "because it is streamed")
 
       # Weights should not be uploaded, and the loss is streamed
       report.assert_device_to_host_event_names(
@@ -698,14 +704,12 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       report.parse_log()
 
       w_dl = "1.0"
-      report.assert_host_to_device_event_names([
-          w_dl
-      ], "w should be copied to device once and that should be the only io event"
-                                               )
+      report.assert_host_to_device_event_names(
+          [w_dl], "w should be copied to device once and "
+          "that should be the only io event")
       report.assert_device_to_host_event_names(
-          [],
-          "w should be copied to device once and that should be the only io event"
-      )
+          [], "w should be copied to device once and "
+          "that should be the only io event")
 
 
 if __name__ == "__main__":

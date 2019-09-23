@@ -17,19 +17,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import numpy as np
 import os
+import numpy as np
 
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.platform import googletest
-from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
-from tensorflow.python.framework import constant_op
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import variables
-from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python import ipu
@@ -54,6 +49,6 @@ class RandomConstantTest(test_util.TensorFlowTestCase):
 
 
 if __name__ == "__main__":
-  os.environ['TF_XLA_FLAGS'] = (
-      '--tf_xla_min_cluster_size=1 ' + os.environ.get('TF_XLA_FLAGS', ''))
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

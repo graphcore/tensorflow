@@ -26,7 +26,6 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
 from tensorflow.python.framework import constant_op
-from tensorflow.python.framework import test_util
 from tensorflow.python.framework import ops
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
@@ -99,6 +98,7 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
 
   def testShardedAndReplicatedTraining(self):
     with self.session() as sess:
+
       def my_graph(inp, lab):
         with ops.device("/device:IPU:0"):
           with ipu.scopes.ipu_shard(0):
@@ -133,7 +133,6 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
       cfg = ipu.utils.auto_select_ipus(cfg, 4)
       ipu.utils.configure_ipu_system(cfg)
-
 
       sess.run(report)
       sess.run(variables.global_variables_initializer())

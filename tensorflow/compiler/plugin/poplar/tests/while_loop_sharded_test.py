@@ -9,9 +9,7 @@ import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -33,8 +31,11 @@ class WhileLoopShardedTest(xla_test.XLATestCase):
           with ipu.scopes.ipu_scope("/device:IPU:0"):
             inp = x
 
-            x = layers.Conv2D(
-                8, 3, padding='same', name="conv1", use_bias=False)(x)
+            x = layers.Conv2D(8,
+                              3,
+                              padding='same',
+                              name="conv1",
+                              use_bias=False)(x)
             x = math_ops.reduce_max(x, axis=[1, 2])
 
             cross_entropy = nn.softmax_cross_entropy_with_logits_v2(

@@ -9,9 +9,7 @@ import numpy as np
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
-from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
@@ -62,13 +60,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 1, 5, 5],
-            strides=[1, 1, 2, 2],
-            data_format='NCHW',
-            padding='SAME',
-            name="avg")
+        output = nn.avg_pool(pa,
+                             ksize=[1, 1, 5, 5],
+                             strides=[1, 1, 2, 2],
+                             data_format='NCHW',
+                             padding='SAME',
+                             name="avg")
 
         fd = {pa: np.ones([1, 1, 10, 10])}
         result = sess.run(output, fd)
@@ -78,12 +75,11 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [1, 1, 10, 10], name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 1, 5, 5],
-            strides=[1, 1, 2, 2],
-            data_format='NCHW',
-            padding='SAME')
+        output = nn.avg_pool(pa,
+                             ksize=[1, 1, 5, 5],
+                             strides=[1, 1, 2, 2],
+                             data_format='NCHW',
+                             padding='SAME')
 
         fd = {pa: np.ones([1, 1, 10, 10])}
         result = sess.run(output, fd)
@@ -93,12 +89,11 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 1, 5, 5],
-            strides=[1, 1, 2, 2],
-            data_format='NCHW',
-            padding='VALID')
+        output = nn.avg_pool(pa,
+                             ksize=[1, 1, 5, 5],
+                             strides=[1, 1, 2, 2],
+                             data_format='NCHW',
+                             padding='VALID')
 
         fd = {pa: np.ones([1, 1, 10, 10])}
         result = sess.run(output, fd)
@@ -108,12 +103,11 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [1, 1, 10, 10], name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 1, 5, 5],
-            strides=[1, 1, 2, 2],
-            data_format='NCHW',
-            padding='VALID')
+        output = nn.avg_pool(pa,
+                             ksize=[1, 1, 5, 5],
+                             strides=[1, 1, 2, 2],
+                             data_format='NCHW',
+                             padding='VALID')
 
         fd = {pa: np.ones([1, 1, 10, 10])}
         result = sess.run(output, fd)
@@ -123,13 +117,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
-        output = nn.max_pool(
-            pa,
-            ksize=[1, 1, 5, 5],
-            strides=[1, 1, 2, 2],
-            data_format='NCHW',
-            padding='SAME',
-            name="max")
+        output = nn.max_pool(pa,
+                             ksize=[1, 1, 5, 5],
+                             strides=[1, 1, 2, 2],
+                             data_format='NCHW',
+                             padding='SAME',
+                             name="max")
 
         fd = {pa: np.ones([1, 1, 10, 10])}
         result = sess.run(output, fd)
@@ -139,13 +132,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10], name="a")
-        output = nn.max_pool(
-            pa,
-            ksize=[1, 1, 5, 5],
-            strides=[1, 1, 2, 2],
-            data_format='NCHW',
-            padding='VALID',
-            name="max")
+        output = nn.max_pool(pa,
+                             ksize=[1, 1, 5, 5],
+                             strides=[1, 1, 2, 2],
+                             data_format='NCHW',
+                             padding='VALID',
+                             name="max")
 
         fd = {pa: np.ones([1, 1, 10, 10])}
         result = sess.run(output, fd)
@@ -155,13 +147,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 10, 10, 1], name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 5, 5, 1],
-            strides=[1, 2, 2, 1],
-            data_format='NHWC',
-            padding='SAME',
-            name="avg")
+        output = nn.avg_pool(pa,
+                             ksize=[1, 5, 5, 1],
+                             strides=[1, 2, 2, 1],
+                             data_format='NHWC',
+                             padding='SAME',
+                             name="avg")
 
         fd = {pa: np.ones([1, 10, 10, 1])}
         result = sess.run(output, fd)
@@ -171,13 +162,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 10, 10, 1], name="a")
-        output = nn.avg_pool(
-            pa,
-            ksize=[1, 5, 5, 1],
-            strides=[1, 2, 2, 1],
-            data_format='NHWC',
-            padding='VALID',
-            name="avg")
+        output = nn.avg_pool(pa,
+                             ksize=[1, 5, 5, 1],
+                             strides=[1, 2, 2, 1],
+                             data_format='NHWC',
+                             padding='VALID',
+                             name="avg")
 
         fd = {pa: np.ones([1, 10, 10, 1])}
         result = sess.run(output, fd)
@@ -187,13 +177,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
-        output = nn.avg_pool3d(
-            pa,
-            ksize=[1, 1, 5, 5, 5],
-            strides=[1, 1, 2, 2, 2],
-            data_format='NCDHW',
-            padding='SAME',
-            name="avg")
+        output = nn.avg_pool3d(pa,
+                               ksize=[1, 1, 5, 5, 5],
+                               strides=[1, 1, 2, 2, 2],
+                               data_format='NCDHW',
+                               padding='SAME',
+                               name="avg")
 
         fd = {pa: np.ones([1, 1, 10, 10, 10])}
         result = sess.run(output, fd)
@@ -203,12 +192,11 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [1, 1, 10, 10, 10], name="a")
-        output = nn.avg_pool3d(
-            pa,
-            ksize=[1, 1, 5, 5, 5],
-            strides=[1, 1, 2, 2, 2],
-            data_format='NCDHW',
-            padding='SAME')
+        output = nn.avg_pool3d(pa,
+                               ksize=[1, 1, 5, 5, 5],
+                               strides=[1, 1, 2, 2, 2],
+                               data_format='NCDHW',
+                               padding='SAME')
 
         fd = {pa: np.ones([1, 1, 10, 10, 10])}
         result = sess.run(output, fd)
@@ -218,12 +206,11 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
-        output = nn.avg_pool3d(
-            pa,
-            ksize=[1, 1, 5, 5, 5],
-            strides=[1, 1, 2, 2, 2],
-            data_format='NCDHW',
-            padding='VALID')
+        output = nn.avg_pool3d(pa,
+                               ksize=[1, 1, 5, 5, 5],
+                               strides=[1, 1, 2, 2, 2],
+                               data_format='NCDHW',
+                               padding='VALID')
 
         fd = {pa: np.ones([1, 1, 10, 10, 10])}
         result = sess.run(output, fd)
@@ -233,12 +220,11 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float16, [1, 1, 10, 10, 10], name="a")
-        output = nn.avg_pool3d(
-            pa,
-            ksize=[1, 1, 5, 5, 5],
-            strides=[1, 1, 2, 2, 2],
-            data_format='NCDHW',
-            padding='VALID')
+        output = nn.avg_pool3d(pa,
+                               ksize=[1, 1, 5, 5, 5],
+                               strides=[1, 1, 2, 2, 2],
+                               data_format='NCDHW',
+                               padding='VALID')
 
         fd = {pa: np.ones([1, 1, 10, 10, 10])}
         result = sess.run(output, fd)
@@ -248,13 +234,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
-        output = nn.max_pool3d(
-            pa,
-            ksize=[1, 1, 5, 5, 5],
-            strides=[1, 1, 2, 2, 2],
-            data_format='NCDHW',
-            padding='SAME',
-            name="max")
+        output = nn.max_pool3d(pa,
+                               ksize=[1, 1, 5, 5, 5],
+                               strides=[1, 1, 2, 2, 2],
+                               data_format='NCDHW',
+                               padding='SAME',
+                               name="max")
 
         fd = {pa: np.ones([1, 1, 10, 10, 10])}
         result = sess.run(output, fd)
@@ -264,13 +249,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 1, 10, 10, 10], name="a")
-        output = nn.max_pool3d(
-            pa,
-            ksize=[1, 1, 5, 5, 5],
-            strides=[1, 1, 2, 2, 2],
-            data_format='NCDHW',
-            padding='VALID',
-            name="max")
+        output = nn.max_pool3d(pa,
+                               ksize=[1, 1, 5, 5, 5],
+                               strides=[1, 1, 2, 2, 2],
+                               data_format='NCDHW',
+                               padding='VALID',
+                               name="max")
 
         fd = {pa: np.ones([1, 1, 10, 10, 10])}
         result = sess.run(output, fd)
@@ -280,13 +264,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 10, 10, 12, 1], name="a")
-        output = nn.avg_pool3d(
-            pa,
-            ksize=[1, 5, 5, 7, 1],
-            strides=[1, 2, 2, 2, 1],
-            data_format='NDHWC',
-            padding='SAME',
-            name="avg")
+        output = nn.avg_pool3d(pa,
+                               ksize=[1, 5, 5, 7, 1],
+                               strides=[1, 2, 2, 2, 1],
+                               data_format='NDHWC',
+                               padding='SAME',
+                               name="avg")
 
         fd = {pa: np.ones([1, 10, 10, 12, 1])}
         result = sess.run(output, fd)
@@ -296,13 +279,12 @@ class IpuXlaConvTest(xla_test.XLATestCase):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):
         pa = array_ops.placeholder(np.float32, [1, 10, 12, 10, 1], name="a")
-        output = nn.avg_pool3d(
-            pa,
-            ksize=[1, 5, 5, 5, 1],
-            strides=[1, 2, 2, 2, 1],
-            data_format='NDHWC',
-            padding='VALID',
-            name="avg")
+        output = nn.avg_pool3d(pa,
+                               ksize=[1, 5, 5, 5, 1],
+                               strides=[1, 2, 2, 2, 1],
+                               data_format='NDHWC',
+                               padding='VALID',
+                               name="avg")
 
         fd = {pa: np.ones([1, 10, 12, 10, 1])}
         result = sess.run(output, fd)

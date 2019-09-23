@@ -1,11 +1,10 @@
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
-
-import numpy as np
 import os
+import numpy as np
 
 from tensorflow.python import ipu
 from tensorflow.python.ipu.scopes import ipu_scope
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 # Configure argument for targeting the IPU
 cfg = ipu.utils.create_ipu_config(profiling=True, use_poplar_text_report=True)
@@ -46,12 +45,11 @@ with ipu_scope("/device:IPU:0"):
 
 with tf.Session() as sess:
   # Base run
-  result = sess.run(
-      xla_result,
-      feed_dict={
-          x_data: [2., 4., 6., -1.],
-          y_data: [2., 3., 8., -1.],
-          p_angle: [np.pi, np.pi / 2., 3. * np.pi / 2., 0]
-      })
+  result = sess.run(xla_result,
+                    feed_dict={
+                        x_data: [2., 4., 6., -1.],
+                        y_data: [2., 3., 8., -1.],
+                        p_angle: [np.pi, np.pi / 2., 3. * np.pi / 2., 0]
+                    })
 
   print(result)

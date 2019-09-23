@@ -64,18 +64,21 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     sess_config.log_device_placement = False
 
     cluster_spec = multi_worker_util.normalize_cluster_spec(self._cluster_spec)
-    cluster_resolver = SimpleClusterResolver(
-        cluster_spec=cluster_spec,
-        task_type=task_type,
-        task_id=task_id)
-    target = cluster_resolver.master(task_id=task_id, task_type=task_type, rpc_layer="grpc")
+    cluster_resolver = SimpleClusterResolver(cluster_spec=cluster_spec,
+                                             task_type=task_type,
+                                             task_id=task_id)
+    target = cluster_resolver.master(task_id=task_id,
+                                     task_type=task_type,
+                                     rpc_layer="grpc")
     strategy = IPUMultiWorkerStrategy(cluster_resolver)
     sess_config = strategy.update_config_proto(sess_config)
 
     collective_keys = cross_device_utils.CollectiveKeys(
         group_key_start=10 + IPUMultiWorkerStrategyTest.collective_key_base,
-        op_instance_key_start=100 + IPUMultiWorkerStrategyTest.collective_key_base,
-        variable_instance_key_start=10000 + IPUMultiWorkerStrategyTest.collective_key_base)
+        op_instance_key_start=100 +
+        IPUMultiWorkerStrategyTest.collective_key_base,
+        variable_instance_key_start=10000 +
+        IPUMultiWorkerStrategyTest.collective_key_base)
     strategy.extended._collective_keys = collective_keys
     strategy.extended._cross_device_ops._collective_keys = collective_keys
 
@@ -107,6 +110,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         task_type, task_id)
 
     with strategy.scope():
+
       def per_replica_fn(x):
         with ops.device("/device:IPU:0"):
           y = x * x
@@ -114,7 +118,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return y
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      per_replica_y = strategy.experimental_run_v2(per_replica_fn, args=[inputs])
+      per_replica_y = strategy.experimental_run_v2(per_replica_fn,
+                                                   args=[inputs])
       self.assertEqual(compute_device, per_replica_y.device)
       sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
       self.assertEqual(variable_device, sum_y.device)
@@ -125,9 +130,11 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def test_all_reduce(self):
     self._run_between_graph_clients(self._test_all_reduce,
-                                    self._cluster_spec, num_gpus=0)
+                                    self._cluster_spec,
+                                    num_gpus=0)
 
-  def _test_variable_placement_and_initialization(self, task_type, task_id, _num_gpus):
+  def _test_variable_placement_and_initialization(self, task_type, task_id,
+                                                  _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
@@ -137,6 +144,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         task_type, task_id)
 
     with strategy.scope():
+
       def per_replica_fn():
         with ops.device("/device:IPU:0"):
           w0 = variable_scope.get_variable(name="w0", initializer=task_id + 1)
@@ -159,8 +167,10 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         self.assertEqual(2.0, sess.run(sum_ret))  # 1*1 + 1*1
 
   def test_variable_placement_and_initialization(self):
-    self._run_between_graph_clients(self._test_variable_placement_and_initialization,
-                                    self._cluster_spec, num_gpus=0)
+    self._run_between_graph_clients(
+        self._test_variable_placement_and_initialization,
+        self._cluster_spec,
+        num_gpus=0)
 
   def _test_train_split_device_host_fn(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
@@ -207,7 +217,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         return train_op, loss
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn, args=[inputs])
+      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn,
+                                                                args=[inputs])
       self.assertEqual(compute_device, per_replica_loss.device)
       total_loss = strategy.reduce(ReduceOp.SUM, per_replica_loss, axis=None)
       self.assertEqual(variable_device, total_loss.device)
@@ -230,7 +241,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def test_train_split_device_host_fn(self):
     self._run_between_graph_clients(self._test_train_split_device_host_fn,
-                                    self._cluster_spec, num_gpus=0)
+                                    self._cluster_spec,
+                                    num_gpus=0)
 
   def _test_train_combined_device_host_fn(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
@@ -261,7 +273,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return train_op, loss
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn, args=[inputs])
+      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn,
+                                                                args=[inputs])
       self.assertEqual(compute_device, per_replica_loss.device)
       total_loss = strategy.reduce(ReduceOp.SUM, per_replica_loss, axis=None)
       self.assertEqual(variable_device, total_loss.device)
@@ -284,7 +297,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def test_train_combined_device_host_fn(self):
     self._run_between_graph_clients(self._test_train_combined_device_host_fn,
-                                    self._cluster_spec, num_gpus=0)
+                                    self._cluster_spec,
+                                    num_gpus=0)
 
   def _test_slot_variable_placement(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
@@ -304,7 +318,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
           return train_op, loss
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
-      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn, args=[inputs])
+      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn,
+                                                                args=[inputs])
       total_loss = strategy.reduce(ReduceOp.SUM, per_replica_loss, axis=None)
 
       # Verify device placement of momentum accumulator variable.
@@ -318,13 +333,15 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def test_slot_variable_placement(self):
     self._run_between_graph_clients(self._test_slot_variable_placement,
-                                    self._cluster_spec, num_gpus=0)
+                                    self._cluster_spec,
+                                    num_gpus=0)
 
   def _test_distribute_dataset(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
     with strategy.scope():
+
       def step_fn(x):
         with ipu_scope("/device:IPU:0"):
           y = x * x
@@ -335,7 +352,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       dataset = dataset.batch(2, drop_remainder=True)  # global batch size
       dist_dataset = strategy.experimental_distribute_dataset(dataset)
       inputs = dist_dataset.make_initializable_iterator()
-      per_replica_y = strategy.experimental_run_v2(step_fn, args=[next(inputs)])
+      per_replica_y = strategy.experimental_run_v2(step_fn,
+                                                   args=[next(inputs)])
       sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
 
       with session_lib.Session(target=target, config=sess_config) as sess:
@@ -346,13 +364,15 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def test_distribute_dataset(self):
     self._run_between_graph_clients(self._test_distribute_dataset,
-                                    self._cluster_spec, num_gpus=0)
+                                    self._cluster_spec,
+                                    num_gpus=0)
 
   def _test_monitored_training_session(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
     with strategy.scope():
+
       def step_fn(x):
         with ipu_scope("/device:IPU:0"):
           w = variable_scope.get_variable("w", initializer=2.0)
@@ -369,11 +389,12 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def test_monitored_training_session(self):
     self._run_between_graph_clients(self._test_monitored_training_session,
-                                    self._cluster_spec, num_gpus=0)
+                                    self._cluster_spec,
+                                    num_gpus=0)
 
   def _test_ipu_estimator_train(self, task_type, task_id, _num_gpus):
-    strategy, target, _ = self._create_test_objects(
-        task_type=task_type, task_id=task_id)
+    strategy, target, _ = self._create_test_objects(task_type=task_type,
+                                                    task_id=task_id)
 
     learning_rate = 0.5
     initial_w = 2.0
@@ -411,8 +432,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       return dataset
 
     config = ipu_run_config.RunConfig(
-      master=target,
-      train_distribute=strategy,
+        master=target,
+        train_distribute=strategy,
     )
 
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
@@ -431,7 +452,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def test_ipu_estimator_train(self):
     self._run_between_graph_clients(self._test_ipu_estimator_train,
-                                    self._cluster_spec, num_gpus=0)
+                                    self._cluster_spec,
+                                    num_gpus=0)
 
 
 if __name__ == "__main__":

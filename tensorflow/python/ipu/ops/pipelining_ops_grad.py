@@ -17,19 +17,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import collections
-
 from tensorflow.compiler.plugin.poplar.ops import gen_pipelining_ops
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import function_def_to_graph
 from tensorflow.python.framework import ops
 from tensorflow.python.framework.func_graph import FuncGraph
-from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import cond_v2
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.ops import custom_gradient
-from tensorflow.python.ops import gen_dataset_ops
 """
     These gradient function should *never* be called directly.
 """
@@ -48,10 +44,10 @@ class _XlaFuncGradGraph(FuncGraph):
     op_needs_rewrite: True if any intermediates were captured, meaning the
       forward op needs to be written to output the wrapped intermediates.
   """
-
   def __init__(self, name, forward_graph):
-    super(_XlaFuncGradGraph, self).__init__(
-        name, collections=ops.get_default_graph()._collections)  # pylint: disable=protected-access
+    super(_XlaFuncGradGraph,
+          self).__init__(name,
+                         collections=ops.get_default_graph()._collections)  # pylint: disable=protected-access
     self.op_needs_rewrite = False
     self._forward_graph = forward_graph
     # Raw intermediates captured from the forward graph. Populated iff we're in
