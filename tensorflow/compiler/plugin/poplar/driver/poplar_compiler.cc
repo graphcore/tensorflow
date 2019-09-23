@@ -116,11 +116,10 @@ limitations under the License.
 #include <popnn/codelets.hpp>
 #include <popops/codelets.hpp>
 #include <poprand/codelets.hpp>
-#include <popsys/codelets.hpp>
 
+#include <poplar/CSRFunctions.hpp>
 #include <poplar/replication_factor.hpp>
 #include <poprand/RandomGen.hpp>
-#include <popsys/CSRFunctions.hpp>
 
 namespace se = ::stream_executor;
 
@@ -345,10 +344,10 @@ void setFpBehaviour(poplar::Graph& graph,
                     const IpuOptions::FloatingPointBehaviour& fp_control,
                     poplar::program::Sequence& seq) {
   if (graph.getTarget().getTargetType() == poplar::TargetType::IPU) {
-    popsys::FloatingPointBehaviour fp_behaviour(
+    poplar::FloatingPointBehaviour fp_behaviour(
         fp_control.inv(), fp_control.div0(), fp_control.oflo(),
         fp_control.esr(), fp_control.nanoo());
-    popsys::setFloatingPointBehaviour(graph, seq, fp_behaviour,
+    poplar::setFloatingPointBehaviour(graph, seq, fp_behaviour,
                                       "setFpBehaviour");
   } else {
     LOG(WARNING) << "Setting IPU floating point behaviour is not supported "
@@ -378,7 +377,6 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   popnn::addCodelets(main_graph);
   popops::addCodelets(main_graph);
   poprand::addCodelets(main_graph);
-  popsys::addCodelets(main_graph);
   experimental::popfloat::addCodelets(main_graph);
 }
 

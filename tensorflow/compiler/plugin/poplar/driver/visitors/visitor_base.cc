@@ -46,11 +46,11 @@ limitations under the License.
 
 #include "tensorflow/stream_executor/lib/initialize.h"
 
+#include <poplar/CSRFunctions.hpp>
 #include <poplar/Engine.hpp>
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
-#include <popsys/CSRFunctions.hpp>
 #include <poputil/Util.hpp>
 
 using tensorflow::str_util::StartsWith;
@@ -604,7 +604,7 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
           "Invalid value for PoplarBackendConfig.stochastic_rounding()");
   }
   if (new_stochastic_rounding_enabled != stochastic_rounding_enabled_) {
-    popsys::setStochasticRounding(GetGraph(resources_, inst), sequence,
+    poplar::setStochasticRounding(GetGraph(resources_, inst), sequence,
                                   new_stochastic_rounding_enabled,
                                   "Preprocess");
     stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;

@@ -15,10 +15,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_allocation_visitor.h"
 
+#include <poplar/CycleCount.hpp>
 #include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Zero.hpp>
-#include <popsys/CycleCount.hpp>
 
 #include "google/protobuf/util/message_differencer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
