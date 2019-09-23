@@ -45,6 +45,20 @@ uint32 find_powerof2_mask(uint32 v) {
   return 0xFFFFFFFF % v;
 }
 
+std::map<std::size_t, poplar::Interval> GetInverseIntervalsMap(
+    const std::vector<poplar::Interval>& intervals) {
+  std::map<std::size_t, poplar::Interval> result;
+
+  std::size_t offset = 0;
+  for (int64 i = 0; i != intervals.size(); ++i) {
+    const poplar::Interval& interval = intervals[i];
+    result[interval.begin()] =
+        poplar::Interval(offset, offset + interval.size());
+    offset += interval.size();
+  }
+  return result;
+}
+
 class FifoOp : public PoplibsOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
@@ -72,23 +86,35 @@ class FifoOp : public PoplibsOpDef {
     // and use copies.
     if (fifo_inst->depth() == 1) {
       for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
+        poplar::Tensor input = inputs[tuple_idx];
         // Create the output with the same mapping as the input.
-        poplar::Tensor output =
-            graph.clone(inputs[tuple_idx],
-                        absl::StrCat(GetDebugName(inst), "/out/", tuple_idx),
-                        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        poplar::Tensor output = graph.clone(
+            input, absl::StrCat(GetDebugName(inst), "/out/", tuple_idx),
+            poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
+        // Flatten inputs and outputs.
+        poplar::Tensor input_flat = input.flatten();
+        poplar::Tensor output_flat = output.flatten();
+        // Get the aliasing information.
+        std::vector<std::vector<poplar::Interval>> flat_dealiased_intervals =
+            graph.getSortedContiguousRegions(
+                input_flat, {{0, input_flat.numElements()}}, true);
+        // Dealias inputs and outputs.
+        input_flat =
+            poplar::concat(input_flat.slices(flat_dealiased_intervals));
+        output_flat =
+            poplar::concat(output_flat.slices(flat_dealiased_intervals));
 
-        // Create a buffer of the given depth and the same mapping as the input.
-        poplar::Tensor buffer =
-            graph.clone(inputs[tuple_idx].expand({0}),
-                        absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx),
-                        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        // Create a buffer of the given depth and the same mapping as the
+        // input.
+        poplar::Tensor buffer = graph.clone(
+            input_flat, absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx),
+            poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         // Copy the content of the buffer to the output.
-        seq.add(poplar::program::Copy(buffer, output));
+        seq.add(poplar::program::Copy(buffer, output_flat));
 
         // Copy the input into the buffer.
-        seq.add(poplar::program::Copy(inputs[tuple_idx], buffer));
+        seq.add(poplar::program::Copy(input_flat, buffer));
       }
       return seq;
     }
@@ -101,25 +127,95 @@ class FifoOp : public PoplibsOpDef {
     res.zeroed_tensors.push_back(counter);
 
     for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
+      poplar::Tensor input = inputs[tuple_idx];
+      // Flatten the input.
+      poplar::Tensor input_flat = input.flatten();
+
+      // Get the aliasing information.
+      std::vector<std::size_t> interval_aliases;
+      std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
+          graph.getSortedContiguousRegions(input_flat,
+                                           {{0, input_flat.numElements()}},
+                                           false, &interval_aliases);
+      // Get the intervals for the flat input.
+      std::vector<poplar::Interval> contiguous_intervals =
+          input_flat.getContiguousRegions();
+
+      // Flatten the sorted contiguous intervals so that we can easily map it
+      // to the aliasing information.
+      std::vector<poplar::Interval> flat_intervals;
+      // The interval map will store the interval begining to the interval it
+      // aliases.
+      std::map<std::size_t, poplar::Interval> interval_map;
+      for (auto& intervals : sorted_contiguous_intervals) {
+        flat_intervals.insert(flat_intervals.end(), intervals.begin(),
+                              intervals.end());
+        absl::c_transform(intervals,
+                          std::inserter(interval_map, std::begin(interval_map)),
+                          [](const poplar::Interval& interval) {
+                            return std::make_pair(interval.begin(), interval);
+                          });
+      }
+      CHECK_EQ(interval_aliases.size(), flat_intervals.size());
+      CHECK_EQ(contiguous_intervals.size(), flat_intervals.size());
+
+      // Update the aliasing map and get all the intervals with no aliasing.
+      std::vector<poplar::Interval> flat_dealiased_intervals;
+      for (int64 i = 0; i != flat_intervals.size(); ++i) {
+        poplar::Interval& interval = flat_intervals[i];
+        if (interval.begin() == interval_aliases[i]) {
+          flat_dealiased_intervals.push_back(interval);
+        } else {
+          interval_map[interval.begin()] = interval_map.at(interval_aliases[i]);
+        }
+      }
+
+      // Dealias the input given the intervals.
+      input_flat = poplar::concat(input_flat.slices(flat_dealiased_intervals));
+
       // Create a buffer of the given depth and the same mapping as the input.
       std::vector<poplar::Tensor> cloned_tensors(fifo_inst->depth());
       for (int64 i = 0; i != fifo_inst->depth(); ++i) {
-        cloned_tensors[i] =
-            graph.clone(inputs[tuple_idx].expand({0}),
-                        absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx),
-                        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        cloned_tensors[i] = graph.clone(
+            input_flat.expand({0}),
+            absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx));
       }
       poplar::Tensor buffer = poplar::concat(cloned_tensors);
-      // Create the output with the same mapping as the input.
-      poplar::Tensor output = popops::dynamicSlice(
-          graph, buffer, counter.reshape({1}), {0}, {1}, seq,
-          absl::StrCat(GetDebugName(inst), "/pop/", tuple_idx));
-      TF_CHECK_OK(
-          AddOutputTensor(tensor_map, inst, tuple_idx, output.squeeze({0})));
 
+      // Create the output with the same mapping as the input.
+      poplar::Tensor output_flat =
+          popops::dynamicSlice(
+              graph, buffer, counter.reshape({1}), {0}, {1}, seq,
+              absl::StrCat(GetDebugName(inst), "/pop/", tuple_idx))
+              .squeeze({0});
+
+      // Reconstruct the output tensor from the intervals.
+      // Create an inverse map - note that we only map the intervals with no
+      // aliasing.
+      std::map<std::size_t, poplar::Interval> inverse_map =
+          GetInverseIntervalsMap(flat_dealiased_intervals);
+
+      std::vector<poplar::Tensor> output_regions(contiguous_intervals.size());
+      for (int64 i = 0; i != contiguous_intervals.size(); ++i) {
+        poplar::Interval& interval = contiguous_intervals[i];
+        // First lookup the interval map to look through any aliasing.
+        poplar::Interval& aliased_interval = interval_map.at(interval.begin());
+        // Get the output interval for that unaliased interval.
+        poplar::Interval& output_interval =
+            inverse_map.at(aliased_interval.begin());
+        output_regions[i] = output_flat.slice(output_interval);
+      }
+
+      // Concatenate the regions and reshape accordingly.
+      poplar::Tensor output =
+          poplar::concat(output_regions).reshape(input.shape());
+
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
+
+      // Update the buffer with the new value.
       popops::dynamicUpdate(
-          graph, buffer, inputs[tuple_idx].expand({0}), counter.reshape({1}),
-          {0}, {1}, seq, absl::StrCat(GetDebugName(inst), "/push/", tuple_idx));
+          graph, buffer, input_flat.expand({0}), counter.reshape({1}), {0}, {1},
+          seq, absl::StrCat(GetDebugName(inst), "/push/", tuple_idx));
     }
 
     // A slightly faster path if the depth is a power of two

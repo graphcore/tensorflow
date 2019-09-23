@@ -185,19 +185,19 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
       }
     }
 
-    auto AddToQueue = [&](HloInstruction* inst, InplacePriority priorty) {
+    auto AddToQueue = [&](HloInstruction* inst, InplacePriority priority) {
       auto inst_description = HloInstructionDescription(inst);
       switch (inst_description.GetType()) {
         case HloInstructionType::kInplaceGetTupleElement: {
-          inplace_gte_candidates[InplacePriority::kLow].push_back(inst);
+          inplace_gte_candidates[priority].push_back(inst);
           break;
         }
         case HloInstructionType::kInplaceReadWrite: {
-          inplace_read_write_candidates[InplacePriority::kLow].push_back(inst);
+          inplace_read_write_candidates[priority].push_back(inst);
           break;
         }
         case HloInstructionType::kInplaceReadOnly: {
-          inplace_read_only_candidates[InplacePriority::kLow].push_back(inst);
+          inplace_read_only_candidates[priority].push_back(inst);
           break;
         }
         default:

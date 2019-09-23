@@ -220,7 +220,7 @@ StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
                    instructions_to_outline.end());
 
       auto* fusion = OutlineExpressionFromComputationWithFusion(
-          instructions_to_outline, "__arithmetic_expression", comp);
+          instructions_to_outline, "_arithmetic_expression", comp);
 
       was_outlined = true;
 

@@ -68,6 +68,14 @@ namespace poplarplugin {
 namespace {
 using TensorVector = std::vector<std::pair<TensorKey, poplar::Tensor>>;
 
+int64 GetNumberOfUsedTiles(poplar::Graph& graph, const poplar::Tensor& tensor) {
+  const auto& mapping = graph.getTileMapping(tensor);
+  uint64 tiles_used = 0;
+  return absl::c_count_if(
+      mapping,
+      [](const std::vector<poplar::Interval>& tile) { return tile.size(); });
+}
+
 // Adds a tensor which is linearly mapped across the tiles.
 poplar::Tensor AddLinearlyMappedTensor(poplar::Graph& graph,
                                        const poplar::Type poplar_type,
@@ -112,7 +120,7 @@ TensorVector GetTensorsInMap(
 
 ArgVector GetTensorsMaybeExpand(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    poplar::program::Sequence& seq, const bool expand_constants,
+    poplar::program::Sequence& seq, bool expand_constants,
     absl::optional<int64> opt_tensors_start = absl::nullopt,
     absl::optional<int64> opt_tensors_end = absl::nullopt) {
   TensorVector tensor_vector =
@@ -125,14 +133,9 @@ ArgVector GetTensorsMaybeExpand(
     if (tensor.containsConstant() && expand_constants) {
       auto& graph = GetGraphWithOutputIndex(res, inst, key.second);
 
-      const auto& mapping = graph.getTileMapping(tensor);
       // We only expand the constant tensor if it's mapped to 1 tile and it is
       // not a tensor of scalar shape.
-      uint64 tiles_used = 0;
-      for (size_t tile_idx = 0; tile_idx < mapping.size(); tile_idx++) {
-        const auto& tile = mapping[tile_idx];
-        tiles_used += tile.size() > 0 ? 1 : 0;
-      }
+      const uint64 tiles_used = GetNumberOfUsedTiles(graph, tensor);
       const auto& tensor_shape = tensor.shape();
       const auto num_elements =
           std::accumulate(tensor_shape.begin(), tensor_shape.end(), 1,
@@ -1508,7 +1511,7 @@ ArgVector FindInstructionInputsInRange(TensorMap& map, CompilerResources& res,
                                        const HloInstruction* inst, int64 input,
                                        std::pair<int64, int64> range,
                                        poplar::program::Sequence& seq,
-                                       const bool expand_constants) {
+                                       bool expand_constants) {
   const HloInstruction* operand = inst->operand(input);
   return GetTensorsMaybeExpand(map, res, operand, seq, expand_constants,
                                range.first, range.second);
@@ -1516,7 +1519,7 @@ ArgVector FindInstructionInputsInRange(TensorMap& map, CompilerResources& res,
 
 StatusOr<poplar::Tensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq, const bool expand_constants) {
+    int64 input, poplar::program::Sequence& seq, bool expand_constants) {
   const HloInstruction* operand = inst->operand(input);
   ArgVector inputs =
       GetTensorsMaybeExpand(map, res, operand, seq, expand_constants, 0, 1);
@@ -1532,7 +1535,7 @@ StatusOr<poplar::Tensor> FindInstructionInput(
 ArgVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
                                 const HloInstruction* inst, int64 input,
                                 poplar::program::Sequence& seq,
-                                const bool expand_constants) {
+                                bool expand_constants) {
   const HloInstruction* operand = inst->operand(input);
   return GetTensorsMaybeExpand(map, res, operand, seq, expand_constants);
 }
@@ -1593,7 +1596,8 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
                                               CompilerResources& res,
                                               const HloInstruction* inst,
                                               poplar::program::Sequence& seq,
-                                              const bool expand_constants) {
+                                              bool expand_constants,
+                                              bool always_preserve_aliases) {
   // Check that the instruction description is for an inplace operation.
   auto inplace_description = HloInstructionDescription(inst);
   if (!inplace_description.IsInplaceType()) {
@@ -1659,26 +1663,29 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
                    std::inserter(visited_indices, visited_indices.end()));
     }
   }
+  // True if the tensors returned by this function need to be parallel
+  // writeable.
+  const bool parallel_writeable_output =
+      is_inplace_read_write && !always_preserve_aliases;
 
   // Go through all the inplace tensors and check if we need to add copies.
   for (uint64 i = 0; i < inplace_indexes.size(); i++) {
     for (uint64 tuple_idx = 0; tuple_idx < tensors[i].size(); tuple_idx++) {
       poplar::Tensor t = tensors[i][tuple_idx];
-
       // We need to add a copy before an inplace op if:
       // 1. inst is not marked as inplace, or
       // 2. this is a repeated use of the same operand, or
-      // 3. inst is inplace read/write type, but t is not ParallelWriteable.
+      // 3. the output has to be parallel Writeable, but t is not.
       bool requires_copy_of_inplace_operand =
           !is_still_inplace || tuple_repeated_use[i];
-      if (is_inplace_read_write) {
+      if (parallel_writeable_output) {
         requires_copy_of_inplace_operand |= !t.isParallelWriteable();
       }
 
       if (requires_copy_of_inplace_operand) {
         // Preserve aliases for inplace read only ops.
         auto clone_method =
-            is_inplace_read_write
+            parallel_writeable_output
                 ? poplar::TensorCloneMethod::PRESERVE_ORDER_UNLESS_ALIASES
                 : poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES;
 
@@ -1689,11 +1696,11 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
         const auto* operand = inst->operand(inplace_indexes[i]);
         auto& graph = GetGraphWithOutputIndex(res, operand, tuple_idx);
 
-        if (is_inplace_read_write) {
+        if (parallel_writeable_output) {
           poplar::Tensor t_clone =
               graph.clone(t, GetDebugName(inst) + ".clone", clone_method);
-          auto tile_tensor_mapping = graph.getTileMapping(t_clone);
-          if (tile_tensor_mapping.size() == 1 && !t.isParallelWriteable()) {
+          const uint64 tiles_used = GetNumberOfUsedTiles(graph, t);
+          if (tiles_used == 1 && !t.isParallelWriteable()) {
             poputil::mapTensorLinearly(graph, t_clone);
           }
           seq.add(poplar::program::Copy(t, t_clone));

@@ -551,8 +551,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           '__seed*',
           'host-exchange-local-copy',
           'Copy_',
-          'moments/SquaredDifference/',
-          'moments/SquaredDifference/',
           'a/batch-norm-inference',
           'add/add*/AddTo',
       ]

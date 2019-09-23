@@ -71,7 +71,7 @@ class SubComputationVisitor : public DeferredAllocationVisitor {
   ArgVectors inputs_;
   OutVector outputs_;
 
-  const std::vector<const SubComputationVisitor*>& dependent_subcomputations_;
+  const std::vector<const SubComputationVisitor*> dependent_subcomputations_;
 
   // Allocated tensors for inputs which are used by this subcomputation only.
   TensorInputDescription used_tensors_;

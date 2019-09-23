@@ -152,15 +152,14 @@ ArgVector FindInstructionInputsInRange(TensorMap& map, CompilerResources& res,
                                        const HloInstruction* inst, int64 input,
                                        std::pair<int64, int64> range,
                                        poplar::program::Sequence& seq,
-                                       const bool expand_constants = true);
+                                       bool expand_constants = true);
 
 /* This returns the single poplar tensor which is the non-tuple input to the
  * input to the instruction
  */
 StatusOr<poplar::Tensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq,
-    const bool expand_constants = true);
+    int64 input, poplar::program::Sequence& seq, bool expand_constants = true);
 
 /* This returns a vector of all poplar tensors which are part of the tuple
  * or non-tuple on the input to the instruction
@@ -168,7 +167,7 @@ StatusOr<poplar::Tensor> FindInstructionInput(
 ArgVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
                                 const HloInstruction* inst, int64 input,
                                 poplar::program::Sequence& seq,
-                                const bool expand_constants = true);
+                                bool expand_constants = true);
 
 bool AreInplaceOutputTensorsWritable(TensorMap& map,
                                      const HloInstruction* inst);
@@ -183,7 +182,8 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map,
  */
 StatusOr<ArgVectors> FindInplaceOutputTensors(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    poplar::program::Sequence& seq, const bool expand_constants = true);
+    poplar::program::Sequence& seq, bool expand_constants = true,
+    bool always_preserve_aliases = false);
 
 /* This returns a vector of poplar tensors which are all of the outputs from
  * the given instruction

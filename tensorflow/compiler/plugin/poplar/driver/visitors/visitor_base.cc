@@ -397,18 +397,9 @@ Status BaseVisitor::HandleDynamicUpdateSlice(HloInstruction* inst) {
 
 Status BaseVisitor::HandleTuple(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, sequence));
-  CHECK_EQ(inputs.size(), inst->operand_count());
-  uint64 n = 0;
-  for (uint64 i = 0; i < inputs.size(); i++) {
-    CHECK_EQ(inputs[i].size(), CountShapes(inst->operand(i)->shape()));
-    for (uint64 j = 0; j < inputs[i].size(); j++) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, n, inputs[i][j]));
-      n++;
-    }
-  }
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateTuple(resources_, inst, tensor_map));
+  sequence.add(prog);
   return Status::OK();
 }
 

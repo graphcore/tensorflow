@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_inline_call.h"
@@ -81,10 +82,11 @@ StatusOr<poplar::program::Program> CreatePipelineStageOp(
   VLOG(1) << "Processing " << inst->name();
   poplar::program::Sequence seq;
   ArgVectors inputs(inst->operand_count());
-  // First get all the inplace inputs.
+  // First get all the inplace inputs - we do not expand constants and we
+  // preserve all the aliasing.
   TF_ASSIGN_OR_RETURN(
       ArgVectors inplace_inputs,
-      FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, false, true));
   auto inplace_inputs_itr = inplace_inputs.begin();
   auto inst_description = HloInstructionDescription(inst);
   // Keep track of inputs which are not inplace (i.e. parameters for forward
@@ -111,7 +113,7 @@ StatusOr<poplar::program::Program> CreatePipelineStageOp(
   }
   HloComputation* stage_computation = inst->to_apply();
 
-  InplaceSubComputationVisitor visitor(res, inputs);
+  PipelineStageVisitor visitor(res, inputs);
   auto order = stage_computation->parent()
                    ->schedule()
                    .sequence(stage_computation)

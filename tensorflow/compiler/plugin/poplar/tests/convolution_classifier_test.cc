@@ -116,7 +116,7 @@ pop_convolution.3 {
   ROOT convolution.19.86.clone = f16[7,7,4,64] convolution(arg_0.7, arg_1.7), window={size=16x16 pad=3_3x3_3}, dim_labels=f01b_i01o->01bf
 }
 
-__arithmetic_expression {
+_arithmetic_expression {
   arg_1.8 = f32[1,1024] parameter(1)
   arg_2 = f32[1,1024] parameter(2)
   divide.19.48.clone = f32[1,1024] divide(arg_1.8, arg_2)
@@ -147,7 +147,7 @@ _cluster_1  {
   constant.19.35 = f32[] constant(0)
   reduce.19.36 = f32[1] reduce(exponential.19.33, constant.19.35), dimensions={1}, to_apply=add14
   broadcast.19.47 = f32[1,1024] broadcast(reduce.19.36), dimensions={0}
-  call.12 = f32[1,1024] fusion(convert.19.11, exponential.19.33, broadcast.19.47), kind=kCustom, calls=__arithmetic_expression
+  call.12 = f32[1,1024] fusion(convert.19.11, exponential.19.33, broadcast.19.47), kind=kCustom, calls=_arithmetic_expression
   convert.19.50 = f16[1,1024] convert(call.12)
   convert.1 = f32[1,1024] convert(convert.19.50)
   reshape.1 = f32[1,16,16,4] reshape(convert.1)
@@ -302,7 +302,7 @@ pop_convolution.3 {
   ROOT convolution.19.86.clone = f16[7,7,4,64] convolution(arg_0.7, arg_1.7), window={size=16x16 pad=3_3x3_3}, dim_labels=f01b_i01o->01bf
 }
 
-__arithmetic_expression {
+_arithmetic_expression {
   arg_1.8 = f32[1,1024] parameter(1)
   arg_2 = f32[1,1024] parameter(2)
   divide.19.48.clone = f32[1,1024] divide(arg_1.8, arg_2)
@@ -335,7 +335,7 @@ _loop_body {
   constant.19.35 = f32[] constant(0)
   reduce.19.36 = f32[1] reduce(exponential.19.33, constant.19.35), dimensions={1}, to_apply=add14
   broadcast.19.47 = f32[1,1024] broadcast(reduce.19.36), dimensions={0}
-  call.12 = f32[1,1024] fusion(convert.19.11, exponential.19.33, broadcast.19.47), kind=kCustom, calls=__arithmetic_expression
+  call.12 = f32[1,1024] fusion(convert.19.11, exponential.19.33, broadcast.19.47), kind=kCustom, calls=_arithmetic_expression
   convert.19.50 = f16[1,1024] convert(call.12)
   convert.1 = f32[1,1024] convert(convert.19.50)
   reshape.1 = f32[1,16,16,4] reshape(convert.1)
@@ -508,7 +508,7 @@ pop_convolution.3 {
   ROOT convolution.19.86.clone = f16[7,7,4,64] convolution(arg_0.7, arg_1.7), window={size=16x16 pad=3_3x3_3}, dim_labels=f01b_i01o->01bf
 }
 
-__arithmetic_expression {
+_arithmetic_expression {
   arg_1.8 = f32[1,1024] parameter(1)
   arg_2 = f32[1,1024] parameter(2)
   divide.19.48.clone = f32[1,1024] divide(arg_1.8, arg_2)
@@ -544,7 +544,7 @@ _loop_body {
   constant.19.35 = f32[] constant(0)
   reduce.19.36 = f32[1] reduce(exponential.19.33, constant.19.35), dimensions={1}, to_apply=add14
   broadcast.19.47 = f32[1,1024] broadcast(reduce.19.36), dimensions={0}
-  call.12 = f32[1,1024] fusion(convert.19.11, exponential.19.33, broadcast.19.47), kind=kCustom, calls=__arithmetic_expression
+  call.12 = f32[1,1024] fusion(convert.19.11, exponential.19.33, broadcast.19.47), kind=kCustom, calls=_arithmetic_expression
   convert.19.50 = f16[1,1024] convert(call.12)
   convert.1 = f32[1,1024] convert(convert.19.50)
   reshape.1 = f32[1,16,16,4] reshape(convert.1)
@@ -671,7 +671,7 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
     ROOT convolution.7.13.clone = f32[1,24,24,12] convolution(arg_0.1, arg_1.1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
   }
 
-  __arithmetic_expression {
+  _arithmetic_expression {
     arg_1.2 = f32[1,12] parameter(1)
     arg_0.2 = f32[1,12] parameter(0)
     divide.7.41.clone = f32[1,12] divide(arg_1.2, arg_0.2)
@@ -696,7 +696,7 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
     reduce.7.29 = f32[1] reduce(exponential.7.26, constant.7.15), dimensions={1}, to_apply=Mean-reduction4
     broadcast.7.40 = f32[1,12] broadcast(reduce.7.29), dimensions={0}
     arg1.7.1 = f32[1,12] parameter(1)
-    call.5 = f32[1,12] fusion(broadcast.7.40, exponential.7.26, arg1.7.1), kind=kCustom, calls=__arithmetic_expression
+    call.5 = f32[1,12] fusion(broadcast.7.40, exponential.7.26, arg1.7.1), kind=kCustom, calls=_arithmetic_expression
     broadcast = f32[1,24,24,12] broadcast(call.5), dimensions={0,3}
     call.2 = f32[1,24,24,12] fusion(), kind=kCustom, calls=_pop_op_wide_const.2
     multiply.7.50 = f32[1,24,24,12] multiply(broadcast, call.2)

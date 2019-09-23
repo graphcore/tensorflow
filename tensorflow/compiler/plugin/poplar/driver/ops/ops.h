@@ -375,6 +375,12 @@ StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map);
 
+StatusOr<poplar::program::Program> CreateTuple(CompilerResources& res,
+                                               const HloInstruction* inst,
+                                               TensorMap& tensor_map,
+                                               bool expand_constants = true,
+                                               bool preserve_aliases = false);
+
 /* Op Creation Helpers */
 
 StatusOr<poplar::program::Sequence> CreateSort(

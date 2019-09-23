@@ -435,5 +435,27 @@ StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
   return seq;
 }
 
+StatusOr<poplar::program::Program> CreateTuple(CompilerResources& res,
+                                               const HloInstruction* inst,
+                                               TensorMap& tensor_map,
+                                               bool expand_constants,
+                                               bool preserve_aliases) {
+  poplar::program::Sequence seq;
+  TF_ASSIGN_OR_RETURN(
+      ArgVectors inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, expand_constants,
+                               preserve_aliases));
+  CHECK_EQ(inputs.size(), inst->operand_count());
+  uint64 n = 0;
+  for (uint64 i = 0; i < inputs.size(); i++) {
+    CHECK_EQ(inputs[i].size(), CountShapes(inst->operand(i)->shape()));
+    for (uint64 j = 0; j < inputs[i].size(); j++) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, n, inputs[i][j]));
+      n++;
+    }
+  }
+  return seq;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

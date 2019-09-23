@@ -290,7 +290,7 @@ bool IsPopOpsFusion(const HloInstruction* inst, const std::string& postfix) {
 }
 
 bool IsArithmeticExpressionFusion(const HloComputation* comp) {
-  return IsFusionComputationWithPrefix(comp, "__arithmetic_expression");
+  return IsFusionComputationWithPrefix(comp, "_arithmetic_expression");
 }
 
 bool IsArithmeticExpressionFusion(const HloInstruction* inst) {
