@@ -145,7 +145,8 @@ class _PipelineTester(object):
 
   @staticmethod
   def _pipeline_on_ipu(session, stages, inputs, input_values, repeat_count,
-                       pipeline_depth, dataset, optimizer, test_wrapper):
+                       pipeline_depth, dataset, optimizer, test_wrapper,
+                       expected_max_tile_memory):
 
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
@@ -183,12 +184,15 @@ class _PipelineTester(object):
     out = session.run(outfeed_op)[0]
     report.parse_log()
     report.assert_pipeline_stages_on_expected_ipu(range(len(stages)))
+    report.assert_max_tile_memory_in_range(expected_max_tile_memory * 0.8,
+                                           expected_max_tile_memory * 1.2)
     return out
 
   @staticmethod
   def compare_pipeline_to_cpu(session, stages, inputs, input_values,
                               repeat_count, pipeline_depth, dataset_fn,
-                              optimizer, test_wrapper):
+                              optimizer, test_wrapper,
+                              expected_max_tile_memory):
     cpu_losses = _PipelineTester._cpu_with_grad_accum(session, stages, inputs,
                                                       input_values,
                                                       repeat_count,
@@ -199,19 +203,22 @@ class _PipelineTester(object):
                                                        repeat_count,
                                                        pipeline_depth,
                                                        dataset_fn(), optimizer,
-                                                       test_wrapper)
+                                                       test_wrapper,
+                                                       expected_max_tile_memory)
     test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
 
   @staticmethod
   def compare_pipeline_to_sharding(session, stages, inputs, input_values,
                                    repeat_count, pipeline_depth, dataset_fn,
-                                   optimizer, test_wrapper):
+                                   optimizer, test_wrapper,
+                                   expected_max_tile_memory):
     pipeline_losses = _PipelineTester._pipeline_on_ipu(session, stages, inputs,
                                                        input_values,
                                                        repeat_count,
                                                        pipeline_depth,
                                                        dataset_fn(), optimizer,
-                                                       test_wrapper)
+                                                       test_wrapper,
+                                                       expected_max_tile_memory)
     sharded_losses = _PipelineTester._sharded_on_ipu(session, stages, inputs,
                                                      input_values,
                                                      repeat_count,
@@ -940,7 +947,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                               [stage1, stage2, stage3, stage4],
                                               [c], [10.01], repeat_count,
                                               pipeline_depth, dataset_fn,
-                                              optimizer, self)
+                                              optimizer, self, 5280)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -962,12 +969,22 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
+    def fixed_padding(inputs, kernel_size):
+      pad_total = kernel_size - 1
+      pad_beg = pad_total // 2
+      pad_end = pad_total - pad_beg
+      padded_inputs = array_ops.pad(
+          inputs, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
+      return padded_inputs
+
     def block(name, first_stride, out_filters, count, x):
 
       for i in range(count):
-        sc = x
         shape_in = x.shape
         stride = first_stride if (i == 0) else 1
+        if stride > 1:
+          x = fixed_padding(x, 3)
+        sc = x
 
         with variable_scope.variable_scope(name + "/" + str(i) + "/1"):
           x = conv(x, 3, stride, out_filters)
@@ -1033,7 +1050,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                                    [stage1, stage2, stage3],
                                                    [], [], repeat_count,
                                                    pipeline_depth, dataset_fn,
-                                                   optimizer, self)
+                                                   optimizer, self, 9300)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -1084,7 +1101,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                               [stage1, stage2, stage3, stage4],
                                               [], [], repeat_count,
                                               pipeline_depth, dataset_fn,
-                                              optimizer, self)
+                                              optimizer, self, 5220)
 
 
 if __name__ == "__main__":

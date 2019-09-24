@@ -98,6 +98,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("zero_pad"),
     PatternMetaTarget(0),
     PatternInputs({2}),
+    PatternInplaceInputs({2}),
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kPad, NodeOperands({2, 1}), IsExternalPadding},
@@ -342,6 +343,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternType("padding_reduce_window"),
     PatternMetaTarget(0),
     PatternInputs({1, 2}),
+    PatternInplaceInputs({1, 2}),
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kReduceWindow, NodeOperands({1, 2}), IsPaddingReduceWindow},

@@ -875,8 +875,15 @@ StatusOr<poplar::program::Program> CreatePaddingReduceWindow(
   const HloInstruction* root =
       inst->fused_instructions_computation()->root_instruction();
   const Window& window(root->window());
-  TF_ASSIGN_OR_RETURN(poplar::Tensor out,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+
+  TF_ASSIGN_OR_RETURN(
+      ArgVectors inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+  CHECK_EQ(inputs.size(), 2);
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor in = inputs[0][0];
+  CHECK_EQ(inputs[1].size(), 1);
+  poplar::Tensor init_val = inputs[1][0];
 
   std::vector<std::ptrdiff_t> paddingLower;
   std::vector<std::ptrdiff_t> paddingUpper;
@@ -885,10 +892,8 @@ StatusOr<poplar::program::Program> CreatePaddingReduceWindow(
     paddingUpper.push_back(d.padding_high());
   }
 
-  TF_ASSIGN_OR_RETURN(poplar::Tensor init_val,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq));
-
-  out = popops::pad(graph, out, paddingLower, paddingUpper, init_val);
+  poplar::Tensor out =
+      popops::pad(graph, in, paddingLower, paddingUpper, init_val);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   return seq;

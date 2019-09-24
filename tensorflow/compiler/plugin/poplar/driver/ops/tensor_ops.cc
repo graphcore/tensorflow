@@ -377,8 +377,13 @@ StatusOr<poplar::program::Program> CreateZeroPadOp(CompilerResources& res,
   const HloInstruction* root =
       inst->fused_instructions_computation()->root_instruction();
   const PaddingConfig& cfg(root->padding_config());
-  TF_ASSIGN_OR_RETURN(poplar::Tensor out,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+
+  TF_ASSIGN_OR_RETURN(
+      ArgVectors inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor in = inputs[0][0];
 
   std::vector<std::ptrdiff_t> paddingLower;
   std::vector<std::ptrdiff_t> paddingUpper;
@@ -386,7 +391,10 @@ StatusOr<poplar::program::Program> CreateZeroPadOp(CompilerResources& res,
     paddingLower.push_back(d.edge_padding_low());
     paddingUpper.push_back(d.edge_padding_high());
   }
-  out = popops::pad(graph, out, paddingLower, paddingUpper);
+  poplar::Tensor zero = graph.addConstant(in.elementType(), {}, 0,
+                                          GetDebugName(inst) + "/ZeroPad");
+  graph.setTileMapping(zero, 0);
+  poplar::Tensor out = popops::pad(graph, in, paddingLower, paddingUpper, zero);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   return seq;
