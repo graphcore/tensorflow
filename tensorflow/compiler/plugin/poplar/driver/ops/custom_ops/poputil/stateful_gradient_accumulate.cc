@@ -32,6 +32,7 @@ limitations under the License.
 #include <popops/Collectives.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Expr.hpp>
+#include <popops/Zero.hpp>
 #include <poputil/Broadcast.hpp>
 #include <poputil/Util.hpp>
 
@@ -40,15 +41,6 @@ namespace pe = popops::expr;
 namespace xla {
 namespace poplarplugin {
 namespace {
-
-void ZeroTensor(poplar::Graph& graph, poplar::Tensor& tensor,
-                poplar::program::Sequence& seq) {
-  auto zero =
-      graph.addConstant(tensor.elementType(), tensor.shape(), 0, "Zero");
-  graph.setTileMapping(zero, 0);
-  poputil::broadcastToMatch(tensor, zero);
-  seq.add(poplar::program::Copy(zero, tensor));
-}
 
 class StatefulGradientAccumulateOp : public PoplibsOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
@@ -111,14 +103,16 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
       if_true.add(poplar::program::Copy(result, output));
 
       // Zero the accumulator.
-      ZeroTensor(graph, accumulator, if_true);
+      popops::zero(graph, accumulator, if_true,
+                   GetDebugName(inst) + "/ZeroAccumulator");
       // Zero the counter.
-      ZeroTensor(master_graph, counter, if_true);
+      popops::zero(master_graph, counter, if_true,
+                   GetDebugName(inst) + "/ZeroCounter");
     }
     poplar::program::Sequence if_false;
     {
       // Set output to all zeros.
-      ZeroTensor(graph, output, if_false);
+      popops::zero(graph, output, if_false, GetDebugName(inst) + "/ZeroOutput");
       // Increase counter.
       popops::mapInPlace(master_graph, pe::Add(pe::_1, pe::Const(1)), {counter},
                          if_false, GetDebugName(inst) + "/IncreaseCounter");
