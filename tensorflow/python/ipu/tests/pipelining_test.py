@@ -698,11 +698,11 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       losses_pipeline = sess.run(outfeed_op)
       # Note that the pipeline always takes the same input - see how the
       # loss is the same for first 6 executions (gradient accumulation), then
-      # there are two stages which are affected by having the weights change
-      # and then the remaining 4 always return the same loss.
+      # there is one stage which uses stale weights, and the remaining stages
+      # return the same value.
       self.assertAllClose(losses_pipeline, [[
-          270., 270., 270., 270., 270., 270., 253.79999, 239.5872, 228.13576,
-          228.13576, 228.13576, 228.13576
+          270., 270., 270., 270., 270., 270., 253.79999, 239.5872, 239.5872,
+          239.5872, 239.5872, 239.5872
       ]])
       report.parse_log()
       report.assert_pipeline_stages_on_expected_ipu(range(3))

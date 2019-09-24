@@ -179,6 +179,7 @@ def pipeline(computational_stages,
                           inputs=[lr],
                           infeed_queue=infeed_queue,
                           outfeed_queue=outfeed_queue,
+                          optimizer_stage=optimizer_stage,
                           name="Pipeline")
       return pipeline_op
 
@@ -196,6 +197,10 @@ def pipeline(computational_stages,
   Here the `tf.train.GradientDescentOptimizer` generates the pipeline stages
   which calculate the gradients and apply them to the weights. Note how the loss
   is returned to the host by the outfeed queue.
+
+  Note that modifying tf.Variable values in a pipeline stage will result in
+  undefined behavior. These variables can only be modified by the automatically
+  generated backward pass when using the `optimizer_stage`.
 
   Args:
     computational_stages: a list of python functions, where each function
