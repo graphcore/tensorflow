@@ -28,7 +28,10 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 
 namespace xla {
+using FlattenedInstMap = absl::flat_hash_map<HloInstruction*, HloInstruction*>;
+
 class HloInfeedInstruction;
+
 namespace poplarplugin {
 
 struct FeedInfo {
@@ -62,6 +65,11 @@ struct CompilerAnnotations {
   OutfeedInfos outfeed_infos;
 
   TensorsWithLayouts tensors_with_layout;
+
+  std::unique_ptr<HloModule> flattened_module;
+
+  FlattenedInstMap flattened_inst_map_fwd;
+  FlattenedInstMap flattened_inst_map_bwd;
 };
 
 }  // namespace poplarplugin

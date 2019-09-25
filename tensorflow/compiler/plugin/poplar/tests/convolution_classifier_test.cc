@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
@@ -131,11 +133,11 @@ _cluster_1  {
   convert.19.11 = f32[1,1024] convert(arg1.19.1)
   arg0.19.0 = f16[1,16,16,4] parameter(0)
   arg5.19.5 = f16[7,7,4,64] parameter(5)
-  call.9 = f16[1,16,16,64] fusion(arg0.19.0, arg5.19.5), kind=kCustom, calls=pop_convolution.1
+  call.9 = f16[1,16,16,64] call(arg0.19.0, arg5.19.5), to_apply=pop_convolution.1
   arg4.19.4 = f16[64] parameter(4)
   call.1 = f16[1,16,16,64] fusion(call.9, arg4.19.4), kind=kCustom, calls=_pop_op_biasadd.1
   arg3.19.3 = f16[5,5,64,4] parameter(3)
-  call.8 = f16[1,16,16,4] fusion(call.1, arg3.19.3), kind=kCustom, calls=pop_convolution
+  call.8 = f16[1,16,16,4] call(call.1, arg3.19.3), to_apply=pop_convolution
   call = f16[1,16,16,4] fusion(call.8, arg2.19.2), kind=kCustom, calls=_pop_op_biasadd
   convert = f32[1,16,16,4] convert(call)
   reshape = f32[1,1024] reshape(convert)
@@ -158,11 +160,11 @@ _cluster_1  {
   call.4 = f16[5,5,64,4] fusion(), kind=kCustom, calls=_pop_op_wide_const.1
   convert.3 = f16[1,1024] convert(convert.1)
   reshape.10 = f16[1,16,16,4] reshape(convert.3)
-  call.10 = f16[5,5,64,4] fusion(call.1, reshape.10), kind=kCustom, calls=pop_convolution.2
+  call.10 = f16[5,5,64,4] call(call.1, reshape.10), to_apply=pop_convolution.2
   multiply.19.70 = f16[5,5,64,4] multiply(call.4, call.10)
   subtract.19.71 = f16[5,5,64,4] subtract(arg3.19.3, multiply.19.70)
   call.5 = f16[64] fusion(), kind=kCustom, calls=_pop_op_wide_const.2
-  call.7 = f16[1,16,16,64] fusion(reshape.10, arg3.19.3), kind=kCustom, calls=pop_backprop_conv
+  call.7 = f16[1,16,16,64] call(reshape.10, arg3.19.3), to_apply=pop_backprop_conv
   convert.19.78 = f32[1,16,16,64] convert(call.7)
   reduce.19.81 = f32[64] reduce(convert.19.78, constant.19.35), dimensions={0,1,2}, to_apply=add14
   convert.19.82 = f16[64] convert(reduce.19.81)
@@ -170,7 +172,7 @@ _cluster_1  {
   subtract.19.85 = f16[64] subtract(arg4.19.4, multiply.19.84)
   call.6 = f16[7,7,4,64] fusion(), kind=kCustom, calls=_pop_op_wide_const.3
   convert.2 = f16[1,16,16,64] convert(convert.19.78)
-  call.11 = f16[7,7,4,64] fusion(arg0.19.0, convert.2), kind=kCustom, calls=pop_convolution.3
+  call.11 = f16[7,7,4,64] call(arg0.19.0, convert.2), to_apply=pop_convolution.3
   multiply.19.88 = f16[7,7,4,64] multiply(call.6, call.11)
   subtract.19.89 = f16[7,7,4,64] subtract(arg5.19.5, multiply.19.88)
   ROOT tuple.19.98 = (f16[4], f16[5,5,64,4], f16[64], f16[7,7,4,64]) tuple(subtract.19.65, subtract.19.71, subtract.19.85, subtract.19.89)
@@ -185,8 +187,11 @@ _cluster_1  {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -321,9 +326,9 @@ _loop_body {
   arg5.19.5 = f16[7,7,4,64] get-tuple-element(p), index=6
   call.3 = f16[4] fusion(), kind=kCustom, calls=_pop_op_wide_const
   convert.19.11 = f32[1,1024] convert(arg1.19.1)
-  call.9 = f16[1,16,16,64] fusion(arg0.19.0, arg5.19.5), kind=kCustom, calls=pop_convolution.1
+  call.9 = f16[1,16,16,64] call(arg0.19.0, arg5.19.5), to_apply=pop_convolution.1
   call.1 = f16[1,16,16,64] fusion(call.9, arg4.19.4), kind=kCustom, calls=_pop_op_biasadd.1
-  call.8 = f16[1,16,16,4] fusion(call.1, arg3.19.3), kind=kCustom, calls=pop_convolution
+  call.8 = f16[1,16,16,4] call(call.1, arg3.19.3), to_apply=pop_convolution
   call = f16[1,16,16,4] fusion(call.8, arg2.19.2), kind=kCustom, calls=_pop_op_biasadd
   convert = f32[1,16,16,4] convert(call)
   reshape = f32[1,1024] reshape(convert)
@@ -346,11 +351,11 @@ _loop_body {
   call.4 = f16[5,5,64,4] fusion(), kind=kCustom, calls=_pop_op_wide_const.1
   convert.3 = f16[1,1024] convert(convert.1)
   reshape.10 = f16[1,16,16,4] reshape(convert.3)
-  call.10 = f16[5,5,64,4] fusion(call.1, reshape.10), kind=kCustom, calls=pop_convolution.2
+  call.10 = f16[5,5,64,4] call(call.1, reshape.10), to_apply=pop_convolution.2
   multiply.19.70 = f16[5,5,64,4] multiply(call.4, call.10)
   subtract.19.71 = f16[5,5,64,4] subtract(arg3.19.3, multiply.19.70)
   call.5 = f16[64] fusion(), kind=kCustom, calls=_pop_op_wide_const.2
-  call.7 = f16[1,16,16,64] fusion(reshape.10, arg3.19.3), kind=kCustom, calls=pop_backprop_conv
+  call.7 = f16[1,16,16,64] call(reshape.10, arg3.19.3), to_apply=pop_backprop_conv
   convert.19.78 = f32[1,16,16,64] convert(call.7)
   reduce.19.81 = f32[64] reduce(convert.19.78, constant.19.35), dimensions={0,1,2}, to_apply=add14
   convert.19.82 = f16[64] convert(reduce.19.81)
@@ -358,7 +363,7 @@ _loop_body {
   subtract.19.85 = f16[64] subtract(arg4.19.4, multiply.19.84)
   call.6 = f16[7,7,4,64] fusion(), kind=kCustom, calls=_pop_op_wide_const.3
   convert.2 = f16[1,16,16,64] convert(convert.19.78)
-  call.11 = f16[7,7,4,64] fusion(arg0.19.0, convert.2), kind=kCustom, calls=pop_convolution.3
+  call.11 = f16[7,7,4,64] call(arg0.19.0, convert.2), to_apply=pop_convolution.3
   multiply.19.88 = f16[7,7,4,64] multiply(call.6, call.11)
   subtract.19.89 = f16[7,7,4,64] subtract(arg5.19.5, multiply.19.88)
   ROOT tuple.19.98 = (s32[], f16[1,16,16,4], f16[1,1024], f16[4], f16[5,5,64,4], f16[64], f16[7,7,4,64]) tuple(counter, arg0.19.0, arg1.19.1, subtract.19.65, subtract.19.71, subtract.19.85, subtract.19.89)
@@ -391,8 +396,10 @@ ENTRY in {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
-
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -530,9 +537,9 @@ _loop_body {
   arg1.19.1 = f16[1,1024] get-tuple-element(infeed_tuple), index=1
   call.3 = f16[4] fusion(), kind=kCustom, calls=_pop_op_wide_const
   convert.19.11 = f32[1,1024] convert(arg1.19.1)
-  call.9 = f16[1,16,16,64] fusion(arg0.19.0, arg5.19.5), kind=kCustom, calls=pop_convolution.1
+  call.9 = f16[1,16,16,64] call(arg0.19.0, arg5.19.5), to_apply=pop_convolution.1
   call.1 = f16[1,16,16,64] fusion(call.9, arg4.19.4), kind=kCustom, calls=_pop_op_biasadd.1
-  call.8 = f16[1,16,16,4] fusion(call.1, arg3.19.3), kind=kCustom, calls=pop_convolution
+  call.8 = f16[1,16,16,4] call(call.1, arg3.19.3), to_apply=pop_convolution
   call = f16[1,16,16,4] fusion(call.8, arg2.19.2), kind=kCustom, calls=_pop_op_biasadd
   convert = f32[1,16,16,4] convert(call)
   reshape = f32[1,1024] reshape(convert)
@@ -555,11 +562,11 @@ _loop_body {
   call.4 = f16[5,5,64,4] fusion(), kind=kCustom, calls=_pop_op_wide_const.1
   convert.3 = f16[1,1024] convert(convert.1)
   reshape.10 = f16[1,16,16,4] reshape(convert.3)
-  call.10 = f16[5,5,64,4] fusion(call.1, reshape.10), kind=kCustom, calls=pop_convolution.2
+  call.10 = f16[5,5,64,4] call(call.1, reshape.10), to_apply=pop_convolution.2
   multiply.19.70 = f16[5,5,64,4] multiply(call.4, call.10)
   subtract.19.71 = f16[5,5,64,4] subtract(arg3.19.3, multiply.19.70)
   call.5 = f16[64] fusion(), kind=kCustom, calls=_pop_op_wide_const.2
-  call.7 = f16[1,16,16,64] fusion(reshape.10, arg3.19.3), kind=kCustom, calls=pop_backprop_conv
+  call.7 = f16[1,16,16,64] call(reshape.10, arg3.19.3), to_apply=pop_backprop_conv
   convert.19.78 = f32[1,16,16,64] convert(call.7)
   reduce.19.81 = f32[64] reduce(convert.19.78, constant.19.35), dimensions={0,1,2}, to_apply=add14
   convert.19.82 = f16[64] convert(reduce.19.81)
@@ -567,7 +574,7 @@ _loop_body {
   subtract.19.85 = f16[64] subtract(arg4.19.4, multiply.19.84)
   call.6 = f16[7,7,4,64] fusion(), kind=kCustom, calls=_pop_op_wide_const.3
   convert.2 = f16[1,16,16,64] convert(convert.19.78)
-  call.11 = f16[7,7,4,64] fusion(arg0.19.0, convert.2), kind=kCustom, calls=pop_convolution.3
+  call.11 = f16[7,7,4,64] call(arg0.19.0, convert.2), to_apply=pop_convolution.3
   multiply.19.88 = f16[7,7,4,64] multiply(call.6, call.11)
   subtract.19.89 = f16[7,7,4,64] subtract(arg5.19.5, multiply.19.88)
   ROOT tuple.19.98 = (s32[], f16[4], f16[5,5,64,4], f16[64], f16[7,7,4,64]) tuple(counter, subtract.19.65, subtract.19.71, subtract.19.85, subtract.19.89)
@@ -598,8 +605,11 @@ ENTRY in {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -683,7 +693,7 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
     arg2.7.2 = f32[3,3,4,12] parameter(2)
     call = f32[3,3,4,12] fusion(), kind=kCustom, calls=_pop_op_wide_const
     arg0.7.0 = f32[1,24,24,4] parameter(0)
-    call.4 = f32[1,24,24,12] fusion(arg0.7.0, arg2.7.2), kind=kCustom, calls=pop_convolution.1
+    call.4 = f32[1,24,24,12] call(arg0.7.0, arg2.7.2), to_apply=pop_convolution.1
     constant.7.15 = f32[] constant(0)
     reduce.7.17 = f32[1,12] reduce(call.4, constant.7.15), dimensions={1,2}, to_apply=Mean-reduction4
     call.1 = f32[1,12] fusion(), kind=kCustom, calls=_pop_op_wide_const.1
@@ -700,7 +710,7 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
     broadcast = f32[1,24,24,12] broadcast(call.5), dimensions={0,3}
     call.2 = f32[1,24,24,12] fusion(), kind=kCustom, calls=_pop_op_wide_const.2
     multiply.7.50 = f32[1,24,24,12] multiply(broadcast, call.2)
-    call.3 = f32[3,3,4,12] fusion(arg0.7.0, multiply.7.50), kind=kCustom, calls=pop_convolution
+    call.3 = f32[3,3,4,12] call(arg0.7.0, multiply.7.50), to_apply=pop_convolution
     multiply.7.53 = f32[3,3,4,12] multiply(call, call.3)
     subtract.7.54 = f32[3,3,4,12] subtract(arg2.7.2, multiply.7.53)
     ROOT tuple.7.57 = (f32[3,3,4,12]) tuple(subtract.7.54)
@@ -715,8 +725,11 @@ TEST_F(ConvolutionClassifierTest, SingleConvTraining) {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -825,8 +838,11 @@ ENTRY cluster_1 {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -958,8 +974,11 @@ ENTRY in {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -1092,8 +1111,11 @@ ENTRY in {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -1169,8 +1191,11 @@ ENTRY cluster_9 {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -1411,8 +1436,11 @@ ENTRY cluster {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -1587,8 +1615,11 @@ ENTRY cluster {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -1743,8 +1774,11 @@ ENTRY cluster {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());
@@ -1914,8 +1948,11 @@ ENTRY cluster {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
-  ConvolutionClassifier classifier;
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
 
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
 
   EXPECT_TRUE(res.ok());

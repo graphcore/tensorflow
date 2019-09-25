@@ -16,6 +16,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -65,6 +67,17 @@ bool IsTransposeLike(const HloInstruction* inst) {
   }
 }
 
+bool IsAcceptableReshape(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kReshape) {
+    Shape output_shape = inst->shape();
+    Shape input_shape = inst->operand(0)->shape();
+    output_shape = ShapeUtil::DropDegenerateDimensions(output_shape);
+    input_shape = ShapeUtil::DropDegenerateDimensions(input_shape);
+    return ShapeUtil::Compatible(input_shape, output_shape);
+  }
+  return false;
+}
+
 bool IsOuterProductOfVectors(const HloInstruction* inst) {
   if (inst->operand(0)->shape().rank() != 1 ||
       inst->operand(1)->shape().rank() != 1) {
@@ -105,6 +118,15 @@ HloInstruction* FindOperand(HloInstruction* inst,
     } else if (IsTransposeLike(source)) {
       // We look through transpose ops
       source = source->mutable_operand(0);
+    } else if (IsAcceptableReshape(source)) {
+      // We look through transpose ops
+      source = source->mutable_operand(0);
+    } else if (IsInstructionType<HloFifoInstruction>(source)) {
+      // We look through FIFO ops
+      source = source->mutable_operand(0);
+    } else if (IsInstructionType<HloIpuInterCopy>(source)) {
+      // We look through inter-ipu copy ops
+      source = source->mutable_operand(0);
     } else {
       done = true;
     }
@@ -139,9 +161,15 @@ bool IsArg1Gradient(const HloInstruction* inst, const HloInstruction* arg0) {
 StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
   ConvClassification classifications;
 
+  auto* flattened = annotations_.flattened_module.get();
+  if (flattened == nullptr) {
+    return FailedPrecondition("Null flattened module found for %s",
+                              module->name());
+  }
+
   std::map<HloInstruction*, std::pair<int, int>> operands;
 
-  for (HloComputation* comp : module->computations()) {
+  for (HloComputation* comp : flattened->computations()) {
     if (!IsPopOpsFusion(comp)) {
       for (HloInstruction* inst : comp->instructions()) {
         switch (inst->opcode()) {
@@ -172,7 +200,7 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
     }
   }
 
-  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(flattened);
 
   ArgMap arg0_fwd_map;
   ArgMap arg1_fwd_map;
@@ -232,10 +260,12 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
       }
     }
   }
+
   for (auto& it : classifications) {
     TF_RETURN_IF_ERROR(SetInstructionMLType(it.first, it.second));
+    HloInstruction* mapped = annotations_.flattened_inst_map_bwd.at(it.first);
+    TF_RETURN_IF_ERROR(SetInstructionMLType(mapped, it.second));
   }
-
   if (VLOG_IS_ON(2)) {
     for (const auto& it : classifications) {
       VLOG(2) << it.first->name() << " : " << MLType_Name(it.second);
@@ -244,6 +274,9 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
 
   return true;
 }
+
+ConvolutionClassifier::ConvolutionClassifier(CompilerAnnotations& annotations)
+    : annotations_(annotations) {}
 
 }  // namespace poplarplugin
 }  // namespace xla

@@ -503,6 +503,7 @@ test_suite(
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",
         "map_gradient_optimizer_test",
+        "pipelining_conv_classify_test",
         "pipelining_test",
         "pop_datastream_test",
         "popnn_normalization_test",

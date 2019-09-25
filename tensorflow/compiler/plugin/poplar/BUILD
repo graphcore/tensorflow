@@ -135,6 +135,7 @@ cc_library(
         "driver/passes/inplace_util.cc",
         "driver/passes/inter_ipu_copy_inserter.cc",
         "driver/passes/lower_frontend_attributes.cc",
+        "driver/passes/module_flatten.cc",
         "driver/passes/not_supported_gather_expander.cc",
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
@@ -233,6 +234,7 @@ cc_library(
         "driver/passes/inplace_util.h",
         "driver/passes/inter_ipu_copy_inserter.h",
         "driver/passes/lower_frontend_attributes.h",
+        "driver/passes/module_flatten.h",
         "driver/passes/not_supported_gather_expander.h",
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
@@ -880,6 +882,21 @@ xla_test(
         "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
+
+xla_test(
+    name = "module_flatten_test",
+    srcs = ["tests/module_flatten_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_parser",
+        "//tensorflow/compiler/xla/service:pattern_matcher_gmock",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 xla_test(
     name = "graph_compile_io_map_test",
     srcs = ["tests/graph_compile_io_map_test.cc"],
@@ -2795,6 +2812,7 @@ test_suite(
         "matmul_graph_caching_test",
         "matmul_test",
         "matmul_option_test",
+        "module_flatten_test",
         "monitored_session_test",
         "multi_ipu_test",
         "multi_run_test",

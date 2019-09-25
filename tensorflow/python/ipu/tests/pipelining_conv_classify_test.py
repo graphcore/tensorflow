@@ -108,13 +108,13 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
     def stage1(x, label):
       with variable_scope.variable_scope("stage1", use_resource=True):
-        x = conv(x, 16)
+        x = conv(x, 3, 1, 16)
         x = nn.relu(x)
         return x, label
 
     def stage2(x, label):
       with variable_scope.variable_scope("stage2", use_resource=True):
-        x = conv(x, 100)
+        x = conv(x, 3, 1, 100)
         x = nn.relu(x)
         return x, label
 

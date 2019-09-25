@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,39 +13,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_CONVOLUTION_CLASSIFIER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_CONVOLUTION_CLASSIFIER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_MODULE_FLATTEN_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_MODULE_FLATTEN_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
-
-#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
-
-#include "absl/container/flat_hash_map.h"
 
 namespace xla {
 
 class HloModule;
-class HloInstruction;
 
 namespace poplarplugin {
 
 struct CompilerAnnotations;
 
 /**
- * This class marks each convolution as either a forward pass, a backprop input
- * (gradient), a backprop filter (weight update), or a standalone inference only
- * convolution.
+ * Produce a flattened deep copy of the module, and generate a bi-directional
+ * map between instructions in the original module and instructions in the
+ * flattened module.
+ *
+ * The flattened module does not contain all of the control dependencies that
+ * were present in the original module.
  */
-class ConvolutionClassifier : public HloModulePass {
+class ModuleFlatten : public HloModulePass {
  public:
-  ConvolutionClassifier(CompilerAnnotations& annotations);
+  ModuleFlatten(CompilerAnnotations& annotations);
 
-  absl::string_view name() const override { return "convolution-classifier"; }
+  absl::string_view name() const override { return "module-flatten"; }
 
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
+  void RemoveMapEntry(HloInstruction* inst);
+
   CompilerAnnotations& annotations_;
 };
 
