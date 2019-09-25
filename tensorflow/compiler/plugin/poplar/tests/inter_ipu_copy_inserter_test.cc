@@ -299,8 +299,9 @@ cluster_1  {
   InterIpuCopyInserter inserterPass;
   EXPECT_TRUE(inserterPass.Run(module).ValueOrDie());
 
-  EXPECT_EQ(module->entry_computation()->instruction_count(), 10);
-  EXPECT_EQ(whl->operand(0)->opcode(), HloOpcode::kCustomCall);
+  EXPECT_EQ(module->entry_computation()->instruction_count(), 14);
+  EXPECT_EQ(whl->operand(0)->opcode(), HloOpcode::kTuple);
+  EXPECT_EQ(whl->operand(0)->operand(0)->opcode(), HloOpcode::kCustomCall);
 }
 
 TEST_F(InterIpuCopyInserterTest, TestAddInterIpuCopyInsideCall) {
@@ -576,12 +577,12 @@ cluster_1  {
   InterIpuCopyInserter inserterPass;
   EXPECT_TRUE(inserterPass.Run(module).ValueOrDie());
 
-  // cluster_1 has 1 copy inserted between the tuple and the 'false' input of
-  // the conditional, and one after the conditioanl
+  // cluster_1 has 1 tuple copy inserted between the tuple and the 'false'
+  // input of the conditional, and one after the conditional
   ASSERT_EQ(comp->instruction_count(), 8);
-  ASSERT_EQ(comp->GetInstructionWithName("tuple")->operand(0)->opcode(),
-            HloOpcode::kCustomCall);
   ASSERT_EQ(comp->GetInstructionWithName("c0")->operand(2)->opcode(),
+            HloOpcode::kCustomCall);
+  ASSERT_EQ(comp->GetInstructionWithName("tuple")->operand(0)->opcode(),
             HloOpcode::kCustomCall);
 
   // comp1 will be unchanged
@@ -595,6 +596,167 @@ cluster_1  {
   ASSERT_EQ(comp2->GetInstructionWithName("j5")->operand(1)->opcode(),
             HloOpcode::kCustomCall);
   ASSERT_EQ(comp2->instruction_count(), 8);
+}
+
+TEST_F(InterIpuCopyInserterTest, TestHandleNestedTupleSameDevice) {
+  std::string hlo_string = R"(
+HloModule top
+
+sub1 {
+  s1_arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  s1_gte0 = f16[] get-tuple-element(s1_arg0), index=0, sharding={maximal device=0}
+  s1_gte1 = (f16[], f16[]) get-tuple-element(s1_arg0), index=1,
+      sharding={{maximal device=0}, {maximal device=0}}
+  s1_sin0 = f16[] sine(s1_gte0), sharding={maximal device=0}
+  ROOT s1_tup = (f16[], (f16[], f16[])) tuple(s1_sin0, s1_gte1),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+}
+
+sub2 {
+  s2_arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=1}, {maximal device=1}, {maximal device=1}}
+  s2_gte0 = f16[] get-tuple-element(s2_arg0), index=0, sharding={maximal device=1}
+  s2_gte1 = (f16[], f16[]) get-tuple-element(s2_arg0), index=1,
+      sharding={{maximal device=1}, {maximal device=1}}
+  s2_sin0 = f16[] sine(s2_gte0), sharding={maximal device=1}
+  ROOT s2_tup = (f16[], (f16[], f16[])) tuple(s2_sin0, s2_gte1),
+      sharding={{maximal device=1}, {maximal device=1}, {maximal device=1}}
+}
+
+cluster_1  {
+  arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  cal1 = (f16[], (f16[], f16[])) call(arg0), to_apply=sub1,
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  cal2 = (f16[], (f16[], f16[])) call(cal1), to_apply=sub2,
+      sharding={{maximal device=1}, {maximal device=1}, {maximal device=1}}
+  ROOT sin0 = f16[] get-tuple-element(cal2), index=0, sharding={maximal device=1}
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  InterIpuCopyInserter inserterPass;
+  EXPECT_TRUE(inserterPass.Run(module).ValueOrDie());
+
+  // Because the sharded tuple is all on one device, only an inter-ipu copy
+  // is required
+  ASSERT_EQ(comp->instruction_count(), 5);
+}
+
+TEST_F(InterIpuCopyInserterTest, TestHandleNestedTupleMultipleDevices) {
+  std::string hlo_string = R"(
+HloModule top
+
+sub1 {
+  s1_arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  s1_gte0 = f16[] get-tuple-element(s1_arg0), index=0, sharding={maximal device=0}
+  s1_gte1 = (f16[], f16[]) get-tuple-element(s1_arg0), index=1,
+      sharding={{maximal device=0}, {maximal device=0}}
+  s1_sin0 = f16[] sine(s1_gte0), sharding={maximal device=0}
+  ROOT s1_tup = (f16[], (f16[], f16[])) tuple(s1_sin0, s1_gte1),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+}
+
+sub2 {
+  s2_arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=1}, {maximal device=2}, {maximal device=3}}
+  s2_gte0 = f16[] get-tuple-element(s2_arg0), index=0, sharding={maximal device=1}
+  s2_gte1 = (f16[], f16[]) get-tuple-element(s2_arg0), index=1,
+      sharding={{maximal device=2}, {maximal device=3}}
+  s2_sin0 = f16[] sine(s2_gte0), sharding={maximal device=1}
+  ROOT s2_tup = (f16[], (f16[], f16[])) tuple(s2_sin0, s2_gte1),
+      sharding={{maximal device=1}, {maximal device=2}, {maximal device=3}}
+}
+
+cluster_1  {
+  arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  cal1 = (f16[], (f16[], f16[])) call(arg0), to_apply=sub1,
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  cal2 = (f16[], (f16[], f16[])) call(cal1), to_apply=sub2,
+      sharding={{maximal device=1}, {maximal device=2}, {maximal device=3}}
+  ROOT sin0 = f16[] get-tuple-element(cal2), index=0, sharding={maximal device=1}
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  InterIpuCopyInserter inserterPass;
+  EXPECT_TRUE(inserterPass.Run(module).ValueOrDie());
+
+  // A tree of 4 GTEs, 3 inter IPU copies, and 2 tuples will be added
+  ASSERT_EQ(comp->instruction_count(), 13);
+}
+
+TEST_F(InterIpuCopyInserterTest, TestHandleSplitTuple) {
+  std::string hlo_string = R"(
+HloModule top
+
+sub1 {
+  s1_arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  s1_gte0 = f16[] get-tuple-element(s1_arg0), index=0, sharding={maximal device=0}
+  s1_gte1 = (f16[], f16[]) get-tuple-element(s1_arg0), index=1,
+      sharding={{maximal device=0}, {maximal device=0}}
+  s1_sin0 = f16[] sine(s1_gte0), sharding={maximal device=0}
+  ROOT s1_tup = (f16[], (f16[], f16[])) tuple(s1_sin0, s1_gte1),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+}
+
+sub2 {
+  s2_arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=0}, {maximal device=1}, {maximal device=1}}
+  s2_gte0 = f16[] get-tuple-element(s2_arg0), index=0, sharding={maximal device=0}
+  s2_gte1 = (f16[], f16[]) get-tuple-element(s2_arg0), index=1,
+      sharding={{maximal device=1}, {maximal device=1}}
+  s2_sin0 = f16[] sine(s2_gte0), sharding={maximal device=1}
+  ROOT s2_tup = (f16[], (f16[], f16[])) tuple(s2_sin0, s2_gte1),
+      sharding={{maximal device=0}, {maximal device=1}, {maximal device=1}}
+}
+
+cluster_1  {
+  arg0 = (f16[], (f16[], f16[])) parameter(0),
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  cal1 = (f16[], (f16[], f16[])) call(arg0), to_apply=sub1,
+      sharding={{maximal device=0}, {maximal device=0}, {maximal device=0}}
+  cal2 = (f16[], (f16[], f16[])) call(cal1), to_apply=sub2,
+      sharding={{maximal device=0}, {maximal device=1}, {maximal device=1}}
+  ROOT sin0 = f16[] get-tuple-element(cal2), index=0, sharding={maximal device=0}
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  InterIpuCopyInserter inserterPass;
+  EXPECT_TRUE(inserterPass.Run(module).ValueOrDie());
+
+  // A tree of 4 GTEs, 2 inter IPU copies, and 2 tuples will be added
+  VLOG(0) << comp->ToString();
+  ASSERT_EQ(comp->instruction_count(), 8);
 }
 
 }  // namespace

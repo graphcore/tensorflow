@@ -27,6 +27,62 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+
+StatusOr<HloInstruction*> InsertInterIpuCopy(
+    HloInstruction* inst, const HloSharding& output_sharding) {
+  HloComputation* comp = inst->parent();
+
+  std::vector<int64> vec;
+
+  vec = GetShardingDeviceIdVector(output_sharding);
+  std::set<int64> output_devices(vec.begin(), vec.end());
+
+  vec = GetShardingDeviceIdVector(inst->sharding());
+  std::set<int64> input_devices(vec.begin(), vec.end());
+
+  if (input_devices.size() > 1 || output_devices.size() > 1) {
+    std::vector<HloInstruction*> instructions;
+    int64 tuple_count = ShapeUtil::TupleElementCount(inst->shape());
+    auto& input_sharding = inst->sharding();
+    for (int64 i = 0; i < tuple_count; i++) {
+      auto output_sub_sharding =
+          output_sharding.GetSubSharding(inst->shape(), ShapeIndex({i}));
+      auto input_sub_sharding =
+          input_sharding.GetSubSharding(inst->shape(), ShapeIndex({i}));
+      const auto& element_shape =
+          ShapeUtil::GetTupleElementShape(inst->shape(), i);
+      // Add GTE, set its sharding
+      auto* gte = comp->AddInstruction(
+          HloInstruction::CreateGetTupleElement(element_shape, inst, i));
+      gte->set_sharding(input_sub_sharding);
+      if (input_sub_sharding != output_sub_sharding) {
+        TF_ASSIGN_OR_RETURN(HloInstruction * copy,
+                            InsertInterIpuCopy(gte, output_sub_sharding));
+        instructions.push_back(copy);
+      } else {
+        instructions.push_back(gte);
+      }
+    }
+    auto* tuple =
+        comp->AddInstruction(HloInstruction::CreateTuple(instructions));
+    tuple->set_sharding(output_sharding);
+    return tuple;
+  }
+
+  HloInstruction* new_inst;
+  if (inst->opcode() == HloOpcode::kConstant ||
+      IsPopOpsFusion(inst, "wide_const")) {
+    new_inst = comp->AddInstruction(inst->Clone());
+  } else {
+    new_inst = comp->AddInstruction(CreateIpuInterCopy({inst}));
+  }
+
+  new_inst->set_sharding(output_sharding);
+  return new_inst;
+}
+
+}  // namespace
 
 using UserAndParam = std::pair<HloInstruction*, int>;
 
@@ -105,17 +161,13 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
       // the tensors to the other devices.
       for (auto s : dst_shardings) {
         added = true;
+
+        auto sharding = sharding_map.at(s);
+
+        TF_ASSIGN_OR_RETURN(HloInstruction * new_inst,
+                            InsertInterIpuCopy(inst, sharding));
+
         auto range = dst_sharding_map.equal_range(s);
-        HloInstruction* new_inst;
-        if (inst->opcode() == HloOpcode::kConstant ||
-            IsPopOpsFusion(inst, "wide_const")) {
-          new_inst = comp->AddInstruction(inst->Clone());
-        } else {
-          new_inst = comp->AddInstruction(CreateIpuInterCopy({inst}));
-        }
-
-        new_inst->set_sharding(sharding_map.at(s));
-
         for (auto user = range.first; user != range.second; ++user) {
           auto* u = user->second.first;
           auto o = user->second.second;
