@@ -46,6 +46,10 @@ class PoplarXlaFlags {
   // If enabled, this computation will be executed on the IPU model.
   bool use_ipu_model = false;
 
+  // If set to non-negative, the cycle count for the execution of the main graph
+  // will be logged (on the specified tile).
+  int log_cycle_count = -1;
+
   // When trying to convert a while loop to a repeat loop, we can try and use a
   // brute force method to simulate the conditional part of the while and find
   // the number of iterations. This flag sets how many iterations of the while

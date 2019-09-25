@@ -169,6 +169,10 @@ the GraphCore specific one.
 
 ``--allow_nans`` will allow NaNs.
 
+``--log_cycle_count`` will log the number of cycles used in evaluating the main graph.
+The numeric argument indicates on which tile the cycle count operation will be created.
+This may be used as an alternative to profiling for graphs with dynamic control flow.
+
 The options can be used at the same time by treating them as command line
 switches, eg. ``--executable_cache_path=/tmp/cache --allow_nans``
 

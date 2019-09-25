@@ -120,6 +120,7 @@ limitations under the License.
 #include <poprand/codelets.hpp>
 
 #include <poplar/CSRFunctions.hpp>
+#include <poplar/CycleCount.hpp>
 #include <poplar/replication_factor.hpp>
 #include <poprand/RandomGen.hpp>
 
@@ -340,6 +341,23 @@ StatusOr<poplar::program::Program> InitializeSeed(poplar::Graph& graph,
   poprand::setSeed(graph, seed, 0, seq, seed_prefix + "/set");
 
   return seq;
+}
+
+bool InitializeCycleCounter(poplar::Graph& graph,
+                            poplar::program::Sequence& seq) {
+  int tile = PoplarXlaFlags::Get().log_cycle_count;
+  if (tile < 0 ||
+      graph.getTarget().getTargetType() != poplar::TargetType::IPU) {
+    return false;
+  } else {
+    std::string cycleCounterId = PoplarExecutor::GetCycleCounterStream();
+    poplar::Tensor cycleCounter =
+        poplar::cycleCount(graph, seq, tile, cycleCounterId + "/tensor");
+    poplar::DataStream fifo = graph.addDeviceToHostFIFO(
+        cycleCounterId, cycleCounter.elementType(), cycleCounter.numElements());
+    seq.add(poplar::program::Copy(cycleCounter, fifo));
+    return true;
+  }
 }
 
 void setFpBehaviour(poplar::Graph& graph,
@@ -706,6 +724,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     // Add the main program sequence
     main_program.add(visitor.GetSequence());
+
+    if (InitializeCycleCounter(main_graph, main_program)) {
+      poplarExecutor->SetHasCycleCounter();
+    }
 
     // =======================================================================
     // DO NOT CHANGE THE ORDER OF THESE WITHOUT UPDATING PoplarProgramType IN

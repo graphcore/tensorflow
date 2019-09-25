@@ -45,6 +45,12 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"use_ipu_model",
        "If enabled, this computation will be executed on the IPU model. "
        "(bool)"},
+      {"log_cycle_count",
+       "The tile to log number of cycles for main graph. "
+       "No logging will be done if negative. "
+       "This may be used as an alternative to profiling for graphs with "
+       "dynamic control flow. "
+       "(int=-1)"},
       {"while_loop_brute_force_max_trip_count",
        "When trying to convert a while loop to a repeat loop, we can try and "
        "use a brute force method to simulate the conditional part of the while "
@@ -93,6 +99,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(use_synthetic_data)
     ADD_FLAG(synthetic_data_initializer)
     ADD_FLAG(use_ipu_model)
+    ADD_FLAG(log_cycle_count)
     ADD_FLAG(while_loop_brute_force_max_trip_count)
     ADD_FLAG(max_compilation_threads)
     ADD_FLAG(save_oom_profiler)
@@ -138,10 +145,10 @@ PoplarXlaFlags::PoplarXlaFlags() {
   }
 
   // Hash all the flags which affect the graph generation and compilation only.
-  hlo_hash =
-      hash_util::hash(use_synthetic_data, synthetic_data_initializer,
-                      use_ipu_model, while_loop_brute_force_max_trip_count,
-                      executable_cache_path, fallback_scheduler, allow_nans);
+  hlo_hash = hash_util::hash(
+      use_synthetic_data, synthetic_data_initializer, use_ipu_model,
+      while_loop_brute_force_max_trip_count, executable_cache_path,
+      fallback_scheduler, allow_nans, log_cycle_count);
 }
 
 const PoplarXlaFlags& PoplarXlaFlags::Get() {

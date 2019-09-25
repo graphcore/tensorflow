@@ -266,7 +266,8 @@ PoplarExecutor::PoplarExecutor()
                           PoplarExecutor::NUM_THREADS),
       outfeed_thread_pool_(tensorflow::Env::Default(),
                            "poplar_outfeed_thread_pool_",
-                           PoplarExecutor::NUM_THREADS) {
+                           PoplarExecutor::NUM_THREADS),
+      has_cycle_counter_(false) {
   // TODO should this use the time/ms?
   static std::random_device rd;
   seed_gen.seed(rd());
@@ -1796,6 +1797,26 @@ void PoplarExecutor::ConnectSeedCallback() {
 
 void PoplarExecutor::ResetSeed(int seed) { seed_gen.seed(seed); }
 
+std::string PoplarExecutor::GetCycleCounterStream() {
+  return "__cycle_count_stream";
+}
+
+void PoplarExecutor::ConnectCycleCounterCallback() {
+  if (has_cycle_counter_) {
+    for (int i = 0; i < current_replication_factor_; i++) {
+      current_engine_->connectStreamToCallback(
+          PoplarExecutor::GetCycleCounterStream(), i, [=](void* p) {
+            // Just log cyclecount for replica 0
+            if (i == 0) {
+              uint64_t count;
+              std::memcpy(&count, p, sizeof(count));
+              LOG(INFO) << "Cycle count: " << count;
+            }
+          });
+    }
+  }
+}
+
 StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     perftools::gputools::StreamExecutor* executor,
     xla::poplarplugin::PoplarExecutable& executable,
@@ -1849,6 +1870,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         current_replication_factor_ = executable.GetReplicationFactor();
 
         ConnectSeedCallback();
+        ConnectCycleCounterCallback();
 
         if (current_config_.profiling().enable_ipu_trace_events() &&
             current_config_.profiling().enable_io_trace()) {

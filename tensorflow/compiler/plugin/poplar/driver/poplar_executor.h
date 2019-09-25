@@ -424,6 +424,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void ResetSeed(int seed);
 
+  void SetHasCycleCounter() { has_cycle_counter_ = true; }
+  static std::string GetCycleCounterStream();
+
  private:
   struct TensorControl {
     size_t size = 0;
@@ -605,6 +608,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void ConnectSeedCallback();
 
+  void ConnectCycleCounterCallback();
+
   int ordinal_;
 
   std::recursive_mutex mutex_;
@@ -706,6 +711,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   std::mt19937_64 seed_gen;
 
   std::string ReportFileExtension() const;
+
+  bool has_cycle_counter_;
 };
 
 }  // namespace poplarplugin
