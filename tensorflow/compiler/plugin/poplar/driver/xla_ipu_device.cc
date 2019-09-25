@@ -111,20 +111,4 @@ REGISTER_XLA_RUN_KERNEL(DEVICE_XLA_IPU, XlaRunOp, GetIPUSupportedTypes());
 
 REGISTER_XLA_DEVICE_KERNELS(DEVICE_XLA_IPU, GetIPUSupportedTypes());
 
-// Additional ops not explicitly defined by standard JIT
-
-REGISTER_KERNEL_BUILDER(Name("RefEnter").Device(DEVICE_IPU_XLA_JIT), NoOp);
-REGISTER_KERNEL_BUILDER(Name("RefExit").Device(DEVICE_IPU_XLA_JIT), NoOp);
-REGISTER_KERNEL_BUILDER(Name("RefMerge").Device(DEVICE_IPU_XLA_JIT), NoOp);
-REGISTER_KERNEL_BUILDER(Name("RefNextIteration").Device(DEVICE_IPU_XLA_JIT),
-                        NoOp);
-REGISTER_KERNEL_BUILDER(Name("RefSwitch").Device(DEVICE_IPU_XLA_JIT), NoOp);
-
-REGISTER_KERNEL_BUILDER(Name("Enter").Device(DEVICE_IPU_XLA_JIT), NoOp);
-REGISTER_KERNEL_BUILDER(Name("Exit").Device(DEVICE_IPU_XLA_JIT), NoOp);
-REGISTER_KERNEL_BUILDER(Name("LoopCond").Device(DEVICE_IPU_XLA_JIT), NoOp);
-REGISTER_KERNEL_BUILDER(Name("Merge").Device(DEVICE_IPU_XLA_JIT), NoOp);
-REGISTER_KERNEL_BUILDER(Name("NextIteration").Device(DEVICE_IPU_XLA_JIT), NoOp);
-REGISTER_KERNEL_BUILDER(Name("Switch").Device(DEVICE_IPU_XLA_JIT), NoOp);
-
 }  // namespace tensorflow
