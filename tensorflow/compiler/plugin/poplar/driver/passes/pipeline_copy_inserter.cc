@@ -105,19 +105,22 @@ StatusOr<bool> InsertReadOnlyVariableCopies(HloInstruction* pipeline_op) {
 
 StatusOr<bool> InsertIntraIPUCopies(PipelineStages& stages) {
   bool changed = false;
-  // Go through all the inputs to stages, if they are GTEs (which must be from
-  // the previous stage, otherwise the input would have been an inter IPU copy
-  // or a FIFO), then insert a copy to make sure stages are not modifying the
-  // same tensor.
+  // Go through all the inputs to stages, if they are GTEs from the previous
+  // stage, then insert a copy to make sure stages are not modifying the same
+  // tensor.
   for (auto& stages : {stages.forward, stages.backward}) {
     for (HloInstruction* stage : stages) {
       for (int64 op_idx = 0; op_idx != stage->operand_count(); ++op_idx) {
         const HloInstruction* operand = stage->operand(op_idx);
         if (operand->opcode() == HloOpcode::kGetTupleElement) {
-          CHECK(IsPipelineStageOrBackwardOp(operand->operand(0)));
-          TF_ASSIGN_OR_RETURN(bool added,
-                              AddCopyIfParamterModifiedInplace(stage, op_idx));
-          changed |= added;
+          if (IsPipelineStageOrBackwardOp(operand->operand(0))) {
+            TF_ASSIGN_OR_RETURN(
+                bool added, AddCopyIfParamterModifiedInplace(stage, op_idx));
+            changed |= added;
+          } else {
+            // Any other GTE input can only be an infeed.
+            CHECK_EQ(operand->operand(0)->opcode(), HloOpcode::kInfeed);
+          }
         }
       }
     }

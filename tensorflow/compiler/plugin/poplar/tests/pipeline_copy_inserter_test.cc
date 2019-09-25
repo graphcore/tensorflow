@@ -315,6 +315,61 @@ ENTRY e {
                     m::Tuple(m::Log(m::Copy(m::Parameter(0))))));
 }
 
+TEST_F(PipelineCopyInserterTest, TestInfeed) {
+  std::string hlo = R"(
+HloModule top
+
+stage_0_fwd {
+  stage_0_fwd_weights0 = f32[1,4,4,2] parameter(0)
+  stage_0_fwd_weights1 = f32[1,4,4,2] parameter(1)
+  add = f32[1,4,4,2] add(stage_0_fwd_weights0, stage_0_fwd_weights1)
+  stage_0_fwd_weights2 = f32[1,4,4,2] parameter(2)
+  ROOT stage_0_fwd_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(add, stage_0_fwd_weights2)
+}
+
+stage_1_fwd {
+  stage_1_fwd_weights0 = f32[1,4,4,2] parameter(0)
+  stage_1_fwd_weights2 = f32[1,4,4,2] parameter(1)
+  ROOT stage_1_fwd_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_1_fwd_weights0, stage_1_fwd_weights2)
+}
+
+pipeline {
+  pipeline_weights0 = f32[1,4,4,2] parameter(0)
+  pipeline_weights1 = f32[1,4,4,2] parameter(1)
+  after-all = token[] after-all()
+  infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="01234567"
+  input = f32[1,4,4,2] get-tuple-element(infeed), index=0
+  pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0, pipeline_weights1, input), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  pipeline_stage_0_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0
+  pipeline_stage_0_w1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=1
+  pipeline_stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_w0, pipeline_stage_0_w1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_1_w0 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0
+  pipeline_stage_1_w1 = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_stage_0_w0, pipeline_stage_0_w1)
+}
+
+ENTRY e {
+  e.weights0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.weights1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.weights0, e.weights1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+  auto config = GetModuleConfigForTest();
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  ShardingPass sharding;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  InterIpuCopyInserter inter_inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  PipelineCopyInserter inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
+  EXPECT_FALSE(changed);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

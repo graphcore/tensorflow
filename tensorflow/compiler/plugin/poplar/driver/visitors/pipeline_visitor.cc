@@ -144,12 +144,8 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   }
 
   // Partition out the stage calls instructions and skip them.
-  auto p1 = std::stable_partition(instructions.begin(), instructions.end(),
-                                  HasHloOpcode(HloOpcode::kCall));
-
-  // Partition out the parameter instructions.
-  auto p2 = std::stable_partition(p1, instructions.end(),
-                                  HasHloOpcode(HloOpcode::kParameter));
+  auto stages_end = std::stable_partition(
+      instructions.begin(), instructions.end(), HasHloOpcode(HloOpcode::kCall));
 
   // Comparison of HloInstructions with assigned stage index.
   const auto inst_comparison = [&](HloInstruction* a,
@@ -163,31 +159,71 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   CHECK_EQ(root->opcode(), HloOpcode::kTuple);
   result[root] = stage.forward.size() - 1;
 
-  // Loop through all of the parameters and assign them to the earliest stage of
-  // the users. The users must be pipeline stage calls/root instruction which
-  // have already been visited.
-  for (auto itr = p1; itr != p2; ++itr) {
-    auto inst = *itr;
-
+  // Get the stage given the users. Requires all the users to already have a
+  // stage.
+  auto get_stage_from_users = [&](const HloInstruction* inst) {
     auto users = inst->users();
-    auto min_elem =
-        std::min_element(users.begin(), users.end(), inst_comparison);
+    return result.at(
+        *std::min_element(users.begin(), users.end(), inst_comparison));
+  };
 
-    result.insert(std::make_pair(inst, result.at(*min_elem)));
-  }
-
-  // Loop through the remaining instructions, assigning them to the latest stage
-  // of their operand(s). Since we are visiting in post-order, the operands
-  // must've already been visited.
-  for (auto itr = p2; itr != instructions.end(); ++itr) {
-    auto inst = *itr;
+  // Get the stage given the operands. Requires all the operands to already have
+  // a stage.
+  auto get_stage_from_operands = [&](const HloInstruction* inst) {
     auto operands = inst->operands();
-    auto max_elem =
-        std::max_element(operands.begin(), operands.end(), inst_comparison);
+    return result.at(
+        *std::max_element(operands.begin(), operands.end(), inst_comparison));
+  };
 
-    result.insert(std::make_pair(inst, result.at(*max_elem)));
+  // Go through all the remaining instructions and assign the stages. Note that
+  // we are visiting in post-order.
+  for (auto itr = stages_end; itr != instructions.end(); ++itr) {
+    HloInstruction* inst = *itr;
+    switch (inst->opcode()) {
+      case HloOpcode::kParameter: {
+        result[inst] = get_stage_from_users(inst);
+        break;
+      }
+      case HloOpcode::kInfeed: {
+        // For the Infeed, assign the stages for the infeed, its gte user, and
+        // the input token.
+        const HloInstruction* token = inst->operand(0);
+        CHECK_EQ(inst->user_count(), 1);
+        const HloInstruction* gte = inst->users()[0];
+        CHECK_EQ(gte->user_count(), 1);
+        const HloInstruction* pipeline_stage = gte->users()[0];
+        int64 stage = result.at(pipeline_stage);
+        result[inst] = stage;
+        result[gte] = stage;
+        result[token] = stage;
+        break;
+      }
+      case HloOpcode::kOutfeed: {
+        // Outfeed takes the stage from the operand 0.
+        int64 stage = result.at(inst->operand(0));
+        result[inst] = stage;
+        // Set the stage for the input token too.
+        const HloInstruction* token = inst->operand(1);
+        result[token] = stage;
+        break;
+      }
+      case HloOpcode::kAfterAll: {
+        // Don't assign a stage for after-all instructions, they will get their
+        // stage from the infeed or outfeed.
+        break;
+      }
+      default: {
+        // Only assign the stage if no other instruction assigned it for us.
+        if (!result.contains(inst)) {
+          result[inst] = get_stage_from_operands(inst);
+        }
+        break;
+      }
+    }
   }
-
+  if (result.size() != pipeline_computation->instruction_count()) {
+    LOG(FATAL) << "Could not assign all the instructions to Pipeline Stages.";
+  }
   return result;
 }
 
@@ -402,6 +438,8 @@ PipelineVisitor::PipelineVisitor(
     : InplaceSubComputationVisitor(res, inputs, dependent_subcomputations),
       copy_sequences_(stage_count),
       fifo_sequences_(stage_count),
+      infeed_sequences_(stage_count),
+      outfeed_sequences_(stage_count),
       program_sequences_(stage_count),
       stage_ipu_mapping_(stage_ipu_mapping),
       inst_stage_mapping_(inst_stage_mapping) {}
@@ -455,18 +493,24 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
+  auto infeed_sequences = ConstructRampUpSchedule(offsets, infeed_sequences_);
   auto program_sequences = ConstructRampUpSchedule(offsets, program_sequences_);
-  auto copy_sequences = ConstructRampUpSchedule(offsets, copy_sequences_);
   auto fifo_sequences = ConstructRampUpSchedule(offsets, fifo_sequences_);
+  auto outfeed_sequences = ConstructRampUpSchedule(offsets, outfeed_sequences_);
+  auto copy_sequences = ConstructRampUpSchedule(offsets, copy_sequences_);
 
-  // Concatenate the compute, copy and fifo programs.
-  program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
-                           copy_sequences.end());
-  program_sequences.insert(program_sequences.end(), fifo_sequences.begin(),
-                           fifo_sequences.end());
+  // Concatenate the infeed, compute, fifo, outfeed and copy programs.
+  infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
+                          program_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
+                          fifo_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
+                          outfeed_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
+                          copy_sequences.end());
 
   // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = FlattenSchedule(program_sequences);
+  auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
 
   poplar::program::Sequence repeat_block;
   for (const auto& seq : repeat_block_sequences) {
@@ -484,20 +528,28 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
+  auto infeed_sequences = ConstructRampDownSchedule(offsets, infeed_sequences_,
+                                                    {}, additional_iterations);
   auto program_sequences = ConstructRampDownSchedule(
       offsets, program_sequences_, {}, additional_iterations);
+  auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
+  auto outfeed_sequences = ConstructRampDownSchedule(
+      offsets, outfeed_sequences_, {}, additional_iterations);
   auto copy_sequences = ConstructRampDownSchedule(offsets, copy_sequences_, {},
                                                   additional_iterations);
-  auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
 
-  // Concatenate the compute, copy and fifo programs.
-  program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
-                           copy_sequences.end());
-  program_sequences.insert(program_sequences.end(), fifo_sequences.begin(),
-                           fifo_sequences.end());
+  // Concatenate the infeed, compute, fifo, outfeed and copy programs.
+  infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
+                          program_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
+                          fifo_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
+                          outfeed_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
+                          copy_sequences.end());
 
   // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = FlattenSchedule(program_sequences);
+  auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
 
   poplar::program::Sequence repeat_block;
   for (const auto& seq : repeat_block_sequences) {
@@ -515,18 +567,24 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
+  auto infeed_sequences = ConstructSchedule(offsets, infeed_sequences_);
   auto program_sequences = ConstructSchedule(offsets, program_sequences_);
-  auto copy_sequences = ConstructSchedule(offsets, copy_sequences_);
   auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
+  auto outfeed_sequences = ConstructSchedule(offsets, outfeed_sequences_);
+  auto copy_sequences = ConstructSchedule(offsets, copy_sequences_);
 
-  // Concatenate the compute, copy and fifo programs.
-  program_sequences.insert(program_sequences.end(), copy_sequences.begin(),
-                           copy_sequences.end());
-  program_sequences.insert(program_sequences.end(), fifo_sequences.begin(),
-                           fifo_sequences.end());
+  // Concatenate the infeed, compute, fifo, outfeed and copy programs.
+  infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
+                          program_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
+                          fifo_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
+                          outfeed_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
+                          copy_sequences.end());
 
   // Flatten the schedule to a linear sequence.
-  auto repeat_block_sequences = FlattenSchedule(program_sequences);
+  auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
 
   poplar::program::Sequence repeat_block;
   for (const auto& seq : repeat_block_sequences) {
@@ -626,6 +684,67 @@ Status PipelineVisitor::HandleGetTupleElement(HloInstruction* hlo) {
   for (int64 i = 0; i < output_tensors[0].size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, hlo, i, output_tensors[0][i]));
   }
+  return Status::OK();
+}
+
+Status PipelineVisitor::HandleInfeed(HloInstruction* hlo) {
+  VLOG(1) << "Processing " << hlo->ToString();
+  if (resources_.annotations.infeed_infos.size()) {
+    return xla::FailedPrecondition(
+        "Currently multiple IPUInfeedQueues are not supported.");
+  }
+
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+
+  HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(hlo);
+  xla::poplarplugin::PoplarFeedConfig infeed_config;
+  infeed_config.ParseFromString(infeed->infeed_config());
+
+  FeedInfo info(infeed->name(), infeed_config, infeed->shape());
+  resources_.annotations.infeed_infos.push_back(info);
+
+  // Check that the replication factor matches.
+  if (resources_.replication_factor != infeed_config.replication_factor()) {
+    return xla::FailedPrecondition(
+        "Current program has been created with replication_factor %d, however "
+        "the IPUInfeedQueue has been configured with replication_factor %d. "
+        "Either reduce the number of IPUs in your TensorFlow device, or set "
+        "the `replication_factor` to %d when creating IPUInfeedQueue.",
+        resources_.replication_factor, infeed_config.replication_factor(),
+        resources_.replication_factor);
+  }
+
+  poplar::program::Sequence seq;
+  std::vector<Shape> shapes = FlattenedXlaShape(infeed->infeed_shape());
+  // For each shape in the infeed.
+  for (int64 i = 0; i < shapes.size(); i++) {
+    // Create the tensor which will be the output of the infeed.
+    poplar::Graph& graph = GetGraphWithOutputIndex(resources_, hlo, i);
+    auto source = std::make_pair(hlo, i);
+
+    Shape& shape = shapes[i];
+    TF_ASSIGN_OR_RETURN(poplar::Tensor out, AddTensor(graph, source, shape,
+                                                      resources_, tensor_map));
+
+    // Create the FIFO feed.
+    TF_ASSIGN_OR_RETURN(auto prog,
+                        CreateInfeed(resources_, hlo, i, shape, out));
+    seq.add(prog);
+
+    TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, hlo, i, out));
+  }
+
+  infeed_sequences_[stage].add(seq);
+  return Status::OK();
+}
+
+Status PipelineVisitor::HandleOutfeed(HloInstruction* hlo) {
+  VLOG(1) << "Processing " << hlo->ToString();
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateOutfeed(resources_, hlo, tensor_map));
+
+  outfeed_sequences_[stage].add(prog);
   return Status::OK();
 }
 

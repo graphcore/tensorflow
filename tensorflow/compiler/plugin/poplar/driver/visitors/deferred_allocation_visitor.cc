@@ -16,9 +16,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_allocation_visitor.h"
 
 #include <poplar/CycleCount.hpp>
-#include <popops/DynamicSlice.hpp>
-#include <popops/ElementWise.hpp>
-#include <popops/Zero.hpp>
 
 #include "google/protobuf/util/message_differencer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -202,116 +199,11 @@ Status DeferredAllocationVisitor::HandleInfeed(HloInstruction* inst) {
 StatusOr<poplar::Tensor> DeferredAllocationVisitor::PostProcessInfeedAllocation(
     const HloInstruction* inst, const int64 tuple_index, const Shape& shape,
     poplar::Tensor tensor) {
-  const HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
-
-  poplar::Graph& graph = GetGraph(resources_, inst);
-
-  // Parse the infeed config to find out how much data to prefetch if at all.
-  xla::poplarplugin::PoplarFeedConfig infeed_config;
-  infeed_config.ParseFromString(infeed->infeed_config());
-
-  // The amount of data the user has specified to be prefetched on each host
-  // sync.
-  size_t io_batch_size = std::max<size_t>(1, infeed_config.io_batch_size());
-
   poplar::program::Sequence& seq =
       resources_.merge_infeed_io_copies ? merged_infeed_sequence : sequence;
-
-  // A functor wrapper to either use synthetic data or copy from the host,
-  // depending on the global synthetic flags.
-  auto init_synthetic_or_copy = [&](poplar::program::Sequence& seq,
-                                    const Shape& data_shape,
-                                    poplar::Tensor& tensor_to_update) {
-    if (!UseSyntheticData()) {
-      auto fifo = graph.addHostToDeviceFIFO(
-          GetInfeedCopyHandle(infeed->name(), tuple_index),
-          tensor_to_update.elementType(), tensor_to_update.numElements());
-      seq.add(poplar::program::Copy(fifo, tensor_to_update, false));
-    } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
-      // Initialize the tensor with a synthetic initalizer.
-      auto& initializer = DataInitializer::GetSyntheticDataInitializer();
-      TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(data_shape));
-      TF_RETURN_IF_ERROR(
-          SetInitialTensorValue(graph, tensor_to_update, literal));
-    }
-    // If neither case then we want synthetic data but don't want it initalized
-    // so we just return the empty tensor unchanged.
-    return Status::OK();
-  };
-
-  if (io_batch_size != 1) {
-    // Extend the old shape to add a new dimension for the batches of memory.
-    std::vector<size_t> new_shape = tensor.shape();
-    new_shape.insert(new_shape.begin(), io_batch_size);
-
-    std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
-    for (int i = 0; i < io_batch_size; ++i) {
-      if (resources_.always_rearrange_copies_on_host) {
-        // When rearranging on the host, it is better to keep the layout of the
-        // slices in the output tensor layout, in order to minimise on-device
-        // rearrangement.
-        cloned_tensors[i] = graph.clone(tensor);
-      } else {
-        // When rearranging on the device, it is better to rearrange after the
-        // dynamic slice, so that the rearrangement only takes place on the
-        // slice, not the whole incoing pegged_memory buffer.
-        cloned_tensors[i] =
-            graph.addVariable(tensor.elementType(), tensor.shape(),
-                              poplar::VariableMappingMethod::LINEAR);
-      }
-    }
-    // Concatenate all the cloned tensors then reshape to make sure we are
-    // in the shape [io_batch_size][original_shape].
-    poplar::Tensor pegged_memory =
-        poplar::concat(cloned_tensors).reshape(new_shape);
-
-    // A counter for tracking the number of entries in the buffer
-    poplar::Tensor counter = graph.addVariable(
-        poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
-        GetDebugName(inst) + "/InfeedCtr/" + std::to_string(tuple_index));
-    resources_.zeroed_tensors.push_back(counter);
-
-    // The body for copying from host and zeroing the counter.
-    poplar::program::Sequence true_body;
-
-    // If we are using synthetic data, init pegged_memory with it otherwise host
-    // copy. Either way we will have a tensor with some number of prefetched
-    // batches and we will dynamic slice the actual batch from that. This is to
-    // ensure that we can benchmark synthetic vs non-synthetic without changing
-    // the graph too much.
-    TF_RETURN_IF_ERROR(init_synthetic_or_copy(
-        true_body,
-        XlaShapeFromPoplarShape(shape.element_type(), pegged_memory.shape()),
-        pegged_memory));
-
-    // The NOP body.
-    poplar::program::Sequence false_body;
-
-    // Predicate for fetching the next batch
-    poplar::Tensor predicate = popops::map(
-        graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
-        GetDebugName(inst) + "/InfeedCtrCmp/" + std::to_string(tuple_index));
-
-    // The main body which contains the control flow for copy from host and
-    // the dynamic slice.
-    seq.add(poplar::program::If(predicate, true_body, false_body));
-
-    // Use dynamic slice to extract the slices from the buffer
-    poplar::Tensor slice = popops::dynamicSlice(
-        graph, pegged_memory, counter.reshape({1}), {0}, {1}, seq,
-        GetDebugName(inst) + "/Slice/" + std::to_string(tuple_index));
-    seq.add(poplar::program::Copy(slice, tensor));
-
-    // Increment the counter by one.
-    popops::mapInPlace(
-        graph, pe::Rem(pe::Add(pe::_1, pe::Const(1)), pe::Const(io_batch_size)),
-        {counter}, seq,
-        GetDebugName(inst) + "/InfeedCtrInc/" + std::to_string(tuple_index));
-
-  } else {
-    // Just an normal copy from host->tensor or init tensor with synthetic data.
-    TF_RETURN_IF_ERROR(init_synthetic_or_copy(seq, shape, tensor));
-  }
+  TF_ASSIGN_OR_RETURN(
+      auto prog, CreateInfeed(resources_, inst, tuple_index, shape, tensor));
+  seq.add(prog);
   return tensor;
 }
 

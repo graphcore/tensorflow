@@ -57,8 +57,6 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleReplicaId);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandlePartitionId);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleGetDimensionSize);
-  HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleInfeed);
-  HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleOutfeed);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleRng);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleRngGetAndUpdateState);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleReverse);
@@ -91,13 +89,14 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleBatchNormInference);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleBatchNormGrad);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleAddDependency);
-  HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleAfterAll);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleConstant);
 
   Status HandleCall(HloInstruction* hlo) override;
   Status HandleCustomCall(HloInstruction* hlo) override;
   Status HandleGetTupleElement(HloInstruction* hlo) override;
   Status HandleTuple(HloInstruction* hlo) override;
+  Status HandleInfeed(HloInstruction* hlo) override;
+  Status HandleOutfeed(HloInstruction* hlo) override;
 
   virtual Status HandleFifo(HloInstruction* hlo);
   virtual Status HandleInterIpuCopy(HloInstruction* hlo);
@@ -114,6 +113,8 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
  private:
   std::vector<poplar::program::Sequence> copy_sequences_;
   std::vector<poplar::program::Sequence> fifo_sequences_;
+  std::vector<poplar::program::Sequence> infeed_sequences_;
+  std::vector<poplar::program::Sequence> outfeed_sequences_;
   std::vector<poplar::program::Sequence> program_sequences_;
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;

@@ -105,6 +105,14 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
         replace_parameter_with_lowered_instruction = {},
     absl::flat_hash_set<HloInstruction*> forced_parameters = {});
 
+// Replaces a pipeline stage with a new one, including a new computation.
+// Propagates all the information to the new stage and removes the old stage and
+// its computation.
+StatusOr<HloInstruction*> ReplacePipelineStageWith(
+    HloInstruction* stage, std::unique_ptr<HloComputation> new_computation,
+    const std::vector<HloInstruction*> new_operands,
+    bool remove_unused_operands);
+
 // Get output tuple indices for unused stage outputs.
 StatusOr<std::set<int64>> GetUnusedPipelineStageOutputIndices(
     const HloInstruction* stage);
@@ -161,11 +169,12 @@ class PipelineDataflowAnalysis {
   static StatusOr<std::unique_ptr<PipelineDataflowAnalysis>> GetAnalysis(
       const PipelineStages& pipeline_stages,
       bool allow_duplicate_gte_edges = false,
-      bool allow_communication_ops = false);
+      bool allow_communication_ops = false, bool allow_feeds = false);
 
   explicit PipelineDataflowAnalysis(const PipelineStages& pipeline_stages,
                                     bool allow_duplicate_gte_edges,
-                                    bool allow_communication_ops);
+                                    bool allow_communication_ops,
+                                    bool allow_feeds);
 
   // Returns whether the instruction needs to be lowered given the current
   // analysis.
@@ -230,6 +239,7 @@ class PipelineDataflowAnalysis {
 
   bool allow_duplicate_gte_edges_;
   bool allow_communication_ops_;
+  bool allow_feeds_;
 };
 }  // namespace poplarplugin
 }  // namespace xla

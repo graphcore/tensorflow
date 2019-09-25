@@ -321,7 +321,6 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages) {
   return added_computations;
 }
 
-namespace {
 // Replace pipeline stage with a new one with a new computation.
 StatusOr<HloInstruction*> ReplacePipelineStageWith(
     HloInstruction* stage, std::unique_ptr<HloComputation> new_computation,
@@ -358,7 +357,6 @@ StatusOr<HloInstruction*> ReplacePipelineStageWith(
 
   return new_stage;
 }
-}  // namespace
 
 StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage, const std::vector<HloInstruction*>& ordered_lowering,
@@ -807,10 +805,11 @@ Status RemoveOutputsFromStage(HloInstruction* stage,
 
 PipelineDataflowAnalysis::PipelineDataflowAnalysis(
     const PipelineStages& pipeline_stages, bool allow_duplicate_gte_edges,
-    bool allow_communication_ops)
+    bool allow_communication_ops, bool allow_feeds)
     : pipeline_stages_(pipeline_stages),
       allow_duplicate_gte_edges_(allow_duplicate_gte_edges),
-      allow_communication_ops_(allow_communication_ops) {
+      allow_communication_ops_(allow_communication_ops),
+      allow_feeds_(allow_feeds) {
   // Put stages into lookup tables so that we can quickly get the stage id from
   // an instruction.
   for (int64 id = 0; id != pipeline_stages_.forward.size(); ++id) {
@@ -1013,10 +1012,12 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       // It is an error if a GTE on the output from a PipelineStage(Backward) is
       // used by any other pipeline stage.
       //
+      // We do not need to lower GTEs on infeeds if we are allowing feeds.
+      //
       // Any other GTE needs to be lowered.
-      if (IsPipelineStageOrBackwardOp(inst->operand(0))) {
+      const HloInstruction* gte_input = inst->operand(0);
+      if (IsPipelineStageOrBackwardOp(gte_input)) {
         // DuplicateGTEEdges should make sure each GTE only has one user.
-        const HloInstruction* gte_input = inst->operand(0);
         if (!allow_duplicate_gte_edges_ && inst->user_count() != 1) {
           return InternalErrorStrCat("Expected instruction ",
                                      gte_input->ToString(),
@@ -1029,6 +1030,8 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
             TF_RETURN_IF_ERROR(VerifyPipelineUsage(gte_input, gte_user));
           }
         }
+        return false;
+      } else if (allow_feeds_ && gte_input->opcode() == HloOpcode::kInfeed) {
         return false;
       } else {
         // Any other GTE has to be lowered.
@@ -1110,6 +1113,58 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         return true;
       }
     }
+    case HloOpcode::kAfterAll: {
+      if (allow_feeds_) {
+        // Need to lower an after all if it doesn't have a single infeed/outfeed
+        // user or it has operands.
+        auto user_is_feed = [](const HloInstruction* inst) {
+          return inst->opcode() == HloOpcode::kInfeed ||
+                 inst->opcode() == HloOpcode::kOutfeed;
+        };
+        return inst->operand_count() != 0 || inst->user_count() != 1 ||
+               !user_is_feed(inst->users()[0]);
+      } else {
+        return true;
+      }
+    }
+    case HloOpcode::kInfeed: {
+      if (allow_feeds_) {
+        // Make sure the token does not need to be lowered.
+        TF_ASSIGN_OR_RETURN(bool token_needs_lowering,
+                            HasToBeLowered(inst->operand(0)));
+        if (token_needs_lowering) {
+          return true;
+        }
+        // We need to lower the infeed if:
+        // * it does not have a single user, or
+        if (inst->user_count() != 1) {
+          return true;
+        }
+        // * that single user is not a GTE with a single user on tuple index =
+        // 0, or
+        const HloInstruction* user = inst->users()[0];
+        if (user->opcode() != HloOpcode::kGetTupleElement ||
+            user->tuple_index() != 0 || user->user_count() != 1) {
+          return true;
+        }
+        // * the user of the gte is not a pipeline stage.
+        return !IsPipelineStageOrBackwardOp(user->users()[0]);
+      } else {
+        return true;
+      }
+    }
+    case HloOpcode::kOutfeed: {
+      if (allow_feeds_) {
+        // We need to lower an outfeed if either of its operands needs lowering.
+        TF_ASSIGN_OR_RETURN(bool input_needs_lowering,
+                            HasToBeLowered(inst->operand(0)));
+        TF_ASSIGN_OR_RETURN(bool token_needs_lowering,
+                            HasToBeLowered(inst->operand(1)));
+        return input_needs_lowering || token_needs_lowering;
+      } else {
+        return true;
+      }
+    }
     default:
       return true;
   }
@@ -1134,7 +1189,7 @@ Status PipelineDataflowAnalysis::UpdateThroughInstruction(
     HloValueSet* value_set = CreateValueSet(inst);
     value_set->AddValue(CreateValue(inst));
   } else {
-    // Forward all the from operands.
+    // Forward all the values from operands.
     HloValueSet* value_set = CreateValueSet(inst);
     value_set->AssignUnionOf({&operands_value_set});
   }
@@ -1144,9 +1199,11 @@ Status PipelineDataflowAnalysis::UpdateThroughInstruction(
 StatusOr<std::unique_ptr<PipelineDataflowAnalysis>>
 PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages,
                                       bool allow_duplicate_gte_edges,
-                                      bool allow_communication_ops) {
+                                      bool allow_communication_ops,
+                                      bool allow_feeds) {
   auto analysis = absl::make_unique<PipelineDataflowAnalysis>(
-      pipeline_stages, allow_duplicate_gte_edges, allow_communication_ops);
+      pipeline_stages, allow_duplicate_gte_edges, allow_communication_ops,
+      allow_feeds);
 
   if (analysis->pipeline_stages_.forward.size()) {
     HloComputation* pipeline_computation =

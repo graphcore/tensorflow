@@ -49,15 +49,12 @@ limitations under the License.
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
-#include <popops/DynamicSlice.hpp>
-#include <popops/ElementWise.hpp>
 #include <popops/Zero.hpp>
 #include <poputil/Util.hpp>
 
 using ::tensorflow::str_util::Join;
 
 namespace se = ::stream_executor;
-namespace pe = popops::expr;
 
 namespace xla {
 namespace poplarplugin {
@@ -426,142 +423,8 @@ Status FullVisitor::HandleGather(HloInstruction* inst) {
 
 Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  if (resources_.annotations.outfeed_infos.size()) {
-    return InvalidArgument("Only one IPUOutfeedQueue supported per graph.");
-  }
-
-  poplar::program::Sequence seq;
-  poplar::Graph& graph = GetGraph(resources_, inst);
-
-  HloOutfeedInstruction* outfeed = Cast<HloOutfeedInstruction>(inst);
-  xla::poplarplugin::PoplarFeedConfig outfeed_config;
-  outfeed_config.ParseFromString(outfeed->outfeed_config());
-
-  size_t io_batch_size = std::max<size_t>(1, outfeed_config.io_batch_size());
-
-  // Check that the replication factor matches.
-  if (resources_.replication_factor != outfeed_config.replication_factor()) {
-    return xla::FailedPrecondition(
-        "Current program has been created with replication_factor %d, however "
-        "the IPUOutfeedQueue has been configured with replication_factor %d. "
-        "Either reduce the number of IPUs in your TensorFlow device, or set "
-        "the `replication_factor` to %d when creating IPUOutfeedQueue.",
-        resources_.replication_factor, outfeed_config.replication_factor(),
-        resources_.replication_factor);
-  }
-
-  // operand 1 is the input
-  // operand 2 is the token
-  if (outfeed->operand_count() != 2) {
-    return InvalidArgument("Expected operand_count() == 2 for outfeed ops");
-  }
-
-  if (UseSyntheticData()) {
-    return Status::OK();
-  }
-
-  HloInstruction* operand = outfeed->operands()[0];
-  const Shape& shape = operand->shape();
-  if (ShapeUtil::IsNestedTuple(shape)) {
-    return InvalidArgument("Nested tuple shapes are not supported for outfeed");
-  }
-
-  ArgVector input_tensors;
-  const bool expand_constants = true;
-  if (shape.IsTuple()) {
-    input_tensors = FindInstructionInputs(tensor_map, resources_, inst, 0, seq,
-                                          expand_constants);
-  } else {
-    TF_ASSIGN_OR_RETURN(
-        poplar::Tensor in,
-        FindInstructionInput(tensor_map, resources_, inst, 0, seq));
-    input_tensors.emplace_back(in);
-  }
-
-  for (unsigned i = 0; i < input_tensors.size(); ++i) {
-    poplar::Tensor& in = input_tensors[i];
-
-    if (io_batch_size == 1) {
-      // Simply copy to the stream
-      auto fifo =
-          graph.addDeviceToHostFIFO(GetOutfeedCopyHandle(inst->name(), i),
-                                    in.elementType(), in.numElements());
-
-      seq.add(poplar::program::Copy(in, fifo, false));
-    } else {
-      // Batch multiple writes, and then write as a block
-
-      // Extend the old shape to add a new dimension for the batches of memory
-      std::vector<size_t> new_shape = in.shape();
-      new_shape.insert(new_shape.begin(), io_batch_size);
-
-      std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
-      for (int i = 0; i < io_batch_size; ++i) {
-        if (resources_.always_rearrange_copies_on_host) {
-          // When rearranging on the host it is better to have the slices of the
-          // buffer laid out in the same form as the 'in' tensor so that there
-          // is no cost of rearrangement.
-          cloned_tensors[i] = graph.clone(in);
-        } else {
-          // When the data is rearranged on the device, it is beter to have the
-          // slices arranged in the standard order of the host buffer, and then
-          // to have the rearragement done only once, during the dynamicUpdate.
-          cloned_tensors[i] =
-              graph.addVariable(in.elementType(), in.shape(),
-                                poplar::VariableMappingMethod::LINEAR);
-        }
-      }
-      poplar::Tensor batched =
-          poplar::concat(cloned_tensors).reshape(new_shape);
-
-      //  A counter for counting slots
-      poplar::Tensor counter = graph.addVariable(
-          poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
-          GetDebugName(inst) + "/OutfeedCtr/" + std::to_string(i));
-      resources_.zeroed_tensors.push_back(counter);
-
-      // Use dynamic slice update to put the slices into the buffer
-      popops::dynamicUpdate(graph, batched, in.expand({0}),
-                            counter.reshape({1}), {0}, {1}, seq,
-                            GetDebugName(inst) + "/Slice" + std::to_string(i));
-
-      // Increment the counter by one.
-      popops::mapInPlace(
-          graph,
-          pe::Rem(pe::Add(pe::_1, pe::Const(1)), pe::Const(io_batch_size)),
-          {counter}, seq,
-          GetDebugName(inst) + "/OutfeedCtrInc/" + std::to_string(i));
-
-      // The body for copying to host and zeroing the counter.
-      poplar::program::Sequence true_body;
-
-      // Copy the data to the host
-      if (!UseSyntheticData()) {
-        auto fifo = graph.addDeviceToHostFIFO(
-            GetOutfeedCopyHandle(outfeed->name(), i), batched.elementType(),
-            batched.numElements());
-        true_body.add(poplar::program::Copy(batched, fifo, false));
-      }
-
-      // The NOP body.
-      poplar::program::Sequence false_body;
-
-      // Check the counter doesn't equal
-      poplar::Tensor predicate = popops::map(
-          graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
-          GetDebugName(inst) + "/OutfeedCtrCmp/" + std::to_string(i));
-
-      // The main body which contains the control flow for copy from host and
-      // the dynamic slice.
-      seq.add(poplar::program::If(predicate, true_body, false_body));
-    }
-  }
-
-  FeedInfo info(outfeed->name(), outfeed_config,
-                outfeed->operands()[0]->shape());
-  resources_.annotations.outfeed_infos.push_back(info);
-  sequence.add(seq);
-
+  TF_ASSIGN_OR_RETURN(auto prog, CreateOutfeed(resources_, inst, tensor_map));
+  sequence.add(prog);
   return Status::OK();
 }
 

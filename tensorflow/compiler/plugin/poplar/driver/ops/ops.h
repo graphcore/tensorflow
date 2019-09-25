@@ -381,6 +381,16 @@ StatusOr<poplar::program::Program> CreateTuple(CompilerResources& res,
                                                bool expand_constants = true,
                                                bool preserve_aliases = false);
 
+StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
+                                                 const HloInstruction* inst,
+                                                 TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
+                                                const HloInstruction* inst,
+                                                int64 tuple_index,
+                                                const xla::Shape& output_shape,
+                                                poplar::Tensor tensor);
+
 /* Op Creation Helpers */
 
 StatusOr<poplar::program::Sequence> CreateSort(

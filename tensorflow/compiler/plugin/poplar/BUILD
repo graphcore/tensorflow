@@ -140,6 +140,7 @@ cc_library(
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
         "driver/passes/pipeline_copy_inserter.cc",
+        "driver/passes/pipeline_feed_hoisting.cc",
         "driver/passes/pipeline_fifo_inserter.cc",
         "driver/passes/pipeline_fixer.cc",
         "driver/passes/pipeline_optimizer.cc",
@@ -239,6 +240,7 @@ cc_library(
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
         "driver/passes/pipeline_copy_inserter.h",
+        "driver/passes/pipeline_feed_hoisting.h",
         "driver/passes/pipeline_fifo_inserter.h",
         "driver/passes/pipeline_fixer.h",
         "driver/passes/pipeline_optimizer.h",
@@ -397,6 +399,7 @@ cc_library(
         "driver/ops/custom_ops/poputil/stateful_noop.cc",
         "driver/ops/custom_ops/poputil/user_op.cc",
         "driver/ops/cast_to_gfloat_ops.cc",
+        "driver/ops/feed_ops.cc",
         "driver/ops/graph_caching_util.cc",
         "driver/ops/gather_ops.cc",
         "driver/ops/map_ops.cc",
@@ -1670,6 +1673,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "pipeline_feed_hoisting_test",
+    srcs = ["tests/pipeline_feed_hoisting_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -2821,6 +2839,7 @@ test_suite(
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
         "pipeline_copy_inserter_test",
+        "pipeline_feed_hoisting_test",
         "pipeline_fifo_inserter_test",
         "pipeline_fixer_test",
         "pipeline_optimizer_test",
