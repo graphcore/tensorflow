@@ -118,9 +118,12 @@ StatusOr<HloInstruction*> HoistOutfeed(HloInstruction* stage,
   root->SetupDerivedInstruction(new_root);
 
   // Use the new root and change the shape of the output.
-  TF_RETURN_IF_ERROR(root->ReplaceAllUsesWithDifferentShape(new_root));
   stage_comp->set_root_instruction(new_root, true);
   *stage->mutable_shape() = new_root->shape();
+  if (root->user_count() == 0) {
+    // Remove the old root.
+    TF_RETURN_IF_ERROR(stage_comp->RemoveInstruction(root));
+  }
 
   // Create new sharding which has the extra sharding for the outfeed input.
   HloSharding new_sharding = HloSharding::SingleTuple(

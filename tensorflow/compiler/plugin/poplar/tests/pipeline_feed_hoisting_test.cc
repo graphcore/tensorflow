@@ -91,6 +91,7 @@ ENTRY e {
       FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
   EXPECT_THAT(stages.forward[0]->operand_count(), 2);
+  EXPECT_THAT(stages.forward[0]->to_apply()->instruction_count(), 7);
 
   PipelineFeedHoisting hoister;
   TF_ASSERT_OK_AND_ASSIGN(changed, hoister.Run(module.get()));
@@ -100,6 +101,7 @@ ENTRY e {
   EXPECT_THAT(stages.forward[0]->operand_count(), 3);
   EXPECT_TRUE(Match(stages.forward[0]->operand(2),
                     m::GetTupleElement(m::Infeed(m::AfterAll()), 0)));
+  EXPECT_THAT(stages.forward[0]->to_apply()->instruction_count(), 5);
 }
 
 TEST_F(PipelineFeedHoistingTest, HoistTupleInfeed) {
@@ -156,6 +158,7 @@ ENTRY e {
       FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
   EXPECT_THAT(stages.forward[0]->operand_count(), 2);
+  EXPECT_THAT(stages.forward[0]->to_apply()->instruction_count(), 8);
 
   PipelineFeedHoisting hoister;
   TF_ASSERT_OK_AND_ASSIGN(changed, hoister.Run(module.get()));
@@ -166,6 +169,7 @@ ENTRY e {
   EXPECT_TRUE(Match(stages.forward[0]->operand(2),
                     m::GetTupleElement(m::Infeed(m::AfterAll()), 0)));
   EXPECT_TRUE(stages.forward[0]->operand(2)->shape().IsTuple());
+  EXPECT_THAT(stages.forward[0]->to_apply()->instruction_count(), 6);
 }
 
 TEST_F(PipelineFeedHoistingTest, CantHoistInfeed) {
@@ -341,6 +345,7 @@ ENTRY e {
       FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
   EXPECT_THAT(ShapeUtil::TupleElementCount(stages.forward[1]->shape()), 2);
+  EXPECT_THAT(stages.forward[1]->to_apply()->instruction_count(), 5);
 
   PipelineFeedHoisting hoister;
   TF_ASSERT_OK_AND_ASSIGN(changed, hoister.Run(module.get()));
@@ -352,6 +357,7 @@ ENTRY e {
   EXPECT_TRUE(Match(
       outfeed, m::Outfeed(m::GetTupleElement(m::Op().Is(stages.forward[1]), 2),
                           m::AfterAll())));
+  EXPECT_THAT(stages.forward[1]->to_apply()->instruction_count(), 3);
 }
 
 TEST_F(PipelineFeedHoistingTest, HoistOutfeedTuple) {
@@ -406,6 +412,7 @@ ENTRY e {
       FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
   EXPECT_THAT(ShapeUtil::TupleElementCount(stages.forward[1]->shape()), 2);
+  EXPECT_THAT(stages.forward[1]->to_apply()->instruction_count(), 5);
 
   PipelineFeedHoisting hoister;
   TF_ASSERT_OK_AND_ASSIGN(changed, hoister.Run(module.get()));
@@ -417,6 +424,7 @@ ENTRY e {
   EXPECT_TRUE(Match(
       outfeed, m::Outfeed(m::GetTupleElement(m::Op().Is(stages.forward[1]), 2),
                           m::AfterAll())));
+  EXPECT_THAT(stages.forward[1]->to_apply()->instruction_count(), 4);
 }
 
 TEST_F(PipelineFeedHoistingTest, CantHoistOutfeed) {
