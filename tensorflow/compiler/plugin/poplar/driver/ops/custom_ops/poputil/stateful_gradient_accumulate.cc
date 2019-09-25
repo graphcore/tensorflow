@@ -71,8 +71,9 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
     poplar::Tensor input = FlattenAndConcatenteTensors(input_tensors);
     poplar::Tensor counter = master_graph.addVariable(
         poplar::UNSIGNED_INT, {}, GetDebugName(inst) + "/Counter");
+    // Map counter to the next tile.
+    MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
     res.zeroed_tensors.push_back(counter);
-    graph.setTileMapping(counter, 0);
 
     poplar::Tensor accumulator =
         graph.clone(input, GetDebugName(inst) + "/Accumulator");

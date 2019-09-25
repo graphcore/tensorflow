@@ -105,8 +105,10 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
 
     // A counter for tracking the number of entries in the buffer
     poplar::Tensor counter = graph.addVariable(
-        poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
+        poplar::UNSIGNED_INT, {},
         GetDebugName(inst) + "/InfeedCtr/" + std::to_string(tuple_index));
+    // Map counter to the next tile.
+    MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
     res.zeroed_tensors.push_back(counter);
 
     // The body for copying from host and zeroing the counter.
@@ -232,8 +234,11 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
 
       //  A counter for counting slots
       poplar::Tensor counter = graph.addVariable(
-          poplar::UNSIGNED_INT, {}, poplar::VariableMappingMethod::LINEAR,
+          poplar::UNSIGNED_INT, {},
           GetDebugName(inst) + "/OutfeedCtr/" + std::to_string(i));
+      // Map counter to the next tile.
+      MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
+                                       counter);
       res.zeroed_tensors.push_back(counter);
 
       // Use dynamic slice update to put the slices into the buffer
