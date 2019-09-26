@@ -83,10 +83,10 @@ graph, or the train op for a training graph.
 
   f = tf.summary.FileWriter('logs')
   with tf.Session() as s:
-    sum_out, ... = s.run([add_sum, ...])
+    sum_out, ... = s.run([all_sum, ...])
     f.add_summary(sum_out, 0)
 
-    print "c = " + str(c)
+    print("c = {}".format(c))
 
 
 Enabling tracing in the hardware configuration options
