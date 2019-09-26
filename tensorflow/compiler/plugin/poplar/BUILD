@@ -1715,6 +1715,25 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "ml_type_classify_test",
+    size = "small",
+    shard_count = 2,
+    srcs = ["tests/ml_type_classify_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+tf_xla_py_test(
     name = "ipu_model_device_test",
     size = "medium",
     srcs = ["tests/ipu_model_device_test.py"],
@@ -2830,6 +2849,7 @@ test_suite(
         "matmul_graph_caching_test",
         "matmul_test",
         "matmul_option_test",
+        "ml_type_classify_test",
         "module_flatten_test",
         "monitored_session_test",
         "multi_ipu_test",
