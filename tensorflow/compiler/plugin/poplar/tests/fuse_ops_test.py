@@ -306,7 +306,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=3)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'add/fusion/scaledAdd/cast',
+          'add/fusion/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testScaledSubtractFromVariable(self):
@@ -326,7 +329,10 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log(assert_len=3)
 
-      ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'sub/fusion/scaledSub/cast',
+          'sub/fusion/AddTo'
+      ]
       report.assert_all_compute_sets_and_list(ok)
 
   def testConvolutionBiasApply(self):
@@ -415,6 +421,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Transpose*',
           'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/Conv_4x4/Convolve*',
+          'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/cast',
           'gradients/vs/conv2d/Conv2D_grad/Conv2DBackpropFilter/fusion*/AddTo*',
           'vs/conv2d/Conv2D/convolution*/Conv_1x1'
       ]
