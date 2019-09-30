@@ -24,6 +24,7 @@ from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
+from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
 
 
@@ -808,10 +809,15 @@ def move_variable_initialization_to_cpu(graph=None):
   if not graph:
     graph = ops.get_default_graph()
 
+  variables = []
+  for v in graph.get_collection('variables'):
+    # We assume a distribution strategy knows better how to
+    # initialize its own variables, so skip those.
+    if not isinstance(v, values.DistributedVariable):
+      variables.append(v)
+
   init_ops = []
-  dep_ops = [
-      x.initializer.inputs[1].op for x in graph.get_collection('variables')
-  ]
+  dep_ops = [v.initializer.inputs[1].op for v in variables]
   visited = set()
 
   while dep_ops:

@@ -25,11 +25,13 @@ from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.distribute import collective_all_reduce_strategy
 from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
 from tensorflow.python.distribute import distribute_lib
-from tensorflow.python.eager import tape
+from tensorflow.python.distribute import numpy_dataset
+from tensorflow.python.distribute import values
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
-from tensorflow.python.util import nest
+from tensorflow.python.ops import collective_ops
+from tensorflow.python.ops import variable_scope
 
 
 class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
@@ -69,6 +71,14 @@ def current_device():
   return constant_op.constant(1.).device
 
 
+class IPUSyncOnReadVariable(values.SyncOnReadVariable):  # pylint: disable=abstract-method
+  pass
+
+
+class IPUMirroredVariable(values.MirroredVariable):  # pylint: disable=abstract-method
+  pass
+
+
 class IPUMultiWorkerExtended(
     collective_all_reduce_strategy.CollectiveAllReduceExtended):
   def __init__(self, container_strategy, cluster_resolver):
@@ -82,54 +92,115 @@ class IPUMultiWorkerExtended(
       raise ValueError("Expected one device per worker for variables")
     self._variable_device = devices[0]
 
+  def _get_variable_creator_initial_value(self, replica_id, device,
+                                          primary_var, **kwargs):
+    assert replica_id == 0
+    assert device is not None
+    assert primary_var is None
+
+    def initial_value_fn():  # pylint: disable=g-missing-docstring
+      # Only the first device participates in the broadcast of initial values.
+      group_key = self._collective_keys.get_group_key([device])
+      group_size = self._num_workers
+      collective_instance_key = (
+          self._collective_keys.get_variable_instance_key())
+
+      # Override colocation and XLA attributes for initializers.
+      attrs = {
+          "_class": attr_value_pb2.AttrValue(s=b'loc:@cpu'),
+          "_XlaCompile": attr_value_pb2.AttrValue(b=False),
+          "_XlaScope": attr_value_pb2.AttrValue(s=b''),
+      }
+      with ops.device(device), \
+          ops.get_default_graph()._attr_scope(attrs):  # pylint: disable=protected-access
+        initial_value = kwargs["initial_value"]
+        if callable(initial_value):
+          initial_value = initial_value()
+        assert not callable(initial_value)
+        initial_value = ops.convert_to_tensor(initial_value,
+                                              dtype=kwargs.get("dtype", None))
+
+        if self._num_workers > 1:
+          if self._is_chief:
+            bcast_send = collective_ops.broadcast_send(
+                initial_value, initial_value.shape, initial_value.dtype,
+                group_size, group_key, collective_instance_key)
+            with ops.control_dependencies([bcast_send]):
+              return array_ops.identity(initial_value)
+          else:
+            return collective_ops.broadcast_recv(initial_value.shape,
+                                                 initial_value.dtype,
+                                                 group_size, group_key,
+                                                 collective_instance_key)
+        return initial_value
+
+    return initial_value_fn
+
   def _create_variable(self, next_creator, *args, **kwargs):
-    # Cache a snapshot of the variable on the current device,
-    # otherwise the XLA cluster containing the ops consuming the
-    # variable might be moved to the host to be colocated with it.
-    kwargs["caching_device"] = current_device()
+    colocate_with = kwargs.pop("colocate_with", None)
+    if colocate_with is None:
+      device_map = self._device_map
+      logical_device = 0
+    elif isinstance(colocate_with, numpy_dataset.SingleDevice):
+      with ops.device(colocate_with.device):
+        return next_creator(*args, **kwargs)
+    else:
+      device_map = colocate_with.device_map
+      logical_device = colocate_with.logical_device
 
-    # In case we are inside an ipu_jit_scope, we need to override it
-    # to disable XLA for variable initialization on the host.
-    disable_xla = {"_XlaCompile": attr_value_pb2.AttrValue(b=False)}
-
-    graph = ops.get_default_graph()
-    with ops.device(self._variable_device), \
-        graph._attr_scope(disable_xla):  # pylint: disable=protected-access
+    def _real_creator(devices, *args, **kwargs):
+      assert len(devices) == 1
+      assert devices[0] == self._variable_device
 
       # The chief worker will initialize and broadcast the value to
       # the other workers.
       kwargs["initial_value"] = self._get_variable_creator_initial_value(
-          replica_id=0,  # First replica on each worker.
+          replica_id=0,  # First (and only) replica on each worker.
           device=self._variable_device,
           primary_var=None,
           **kwargs)
 
-      # Don't record operations (e.g. other variable reads) during
-      # variable creation.
-      with tape.stop_recording():
-        return next_creator(*args, **kwargs)
+      # For sync-on-read variables we do not override the device
+      # placement, allowing them to be placed on the IPU. They will
+      # be transfered and reduced on the hosts only when read.
+      synchronization = kwargs.get("synchronization")
+      if synchronization == variable_scope.VariableSynchronization.ON_READ:
+        return [next_creator(*args, **kwargs)]
 
-  def _update(self, var, fn, args, kwargs, group):
-    # The implementations of _update() and _update_non_slot() are identical
-    # except _update() passes `var` as the first argument to `fn()`.
-    return self._update_non_slot(var, fn, (var, ) + tuple(args), kwargs, group)
+      # Cache a snapshot of the variable on the current device,
+      # otherwise the XLA cluster containing the ops consuming the
+      # variable might be moved to the host to be colocated with it.
+      kwargs["caching_device"] = current_device()
 
-  def _update_non_slot(self, colocate_with, fn, args, kwargs, should_group):
-    with ops.device(self._variable_device), \
-        distribute_lib.UpdateContext(colocate_with):
-      result = fn(*args, **kwargs)
-      if should_group:
-        return result
-      return nest.map_structure(self._local_results, result)
+      # In case we are inside an ipu_jit_scope, we need to override it
+      # to disable XLA for variable initialization on the host.
+      disable_xla = {
+          "_XlaCompile": attr_value_pb2.AttrValue(b=False),
+          "_XlaScope": attr_value_pb2.AttrValue(s=b''),
+      }
+
+      graph = ops.get_default_graph()
+      with ops.device(self._variable_device), \
+          graph._attr_scope(disable_xla):  # pylint: disable=protected-access
+        return [next_creator(*args, **kwargs)]
+
+    return distribute_lib.create_mirrored_variable(
+        self._container_strategy(), device_map, logical_device, _real_creator,
+        IPUMirroredVariable, IPUSyncOnReadVariable, *args, **kwargs)
 
   def read_var(self, var):
     return var.read_value()
 
   def _reduce_to(self, reduce_op, value, destinations):
+    if isinstance(value, values.DistributedValues):
+      assert len(value.values) == 1
+      value = value.values[0]
+
     # Make sure the reduction is done on the variable device
     # by wrapping the inputs in an identity op on that device.
     with ops.device(self._variable_device):
-      value = array_ops.identity(value)
+      value = array_ops.identity(value, name="reduce_to")
+
     return super(IPUMultiWorkerExtended,
                  self)._reduce_to(reduce_op, value, destinations)
 
@@ -137,14 +208,16 @@ class IPUMultiWorkerExtended(
     # Make sure the reduction is done on the variable device
     # by wrapping the inputs in an identity op on that device.
     with ops.device(self._variable_device):
-      value_destination_pairs = [(array_ops.identity(v), d)
+      value_destination_pairs = [(array_ops.identity(v,
+                                                     name="batch_reduce"), d)
                                  for (v, d) in value_destination_pairs]
+
     return super(IPUMultiWorkerExtended,
                  self)._batch_reduce_to(reduce_op, value_destination_pairs)
 
   def _call_for_each_replica(self, fn, args, kwargs):
     with distribute_lib.ReplicaContext(
-        self._container_strategy(), replica_id_in_sync_group=self._task_id), \
+        self._container_strategy(), replica_id_in_sync_group=0), \
         ops.device(self._variable_device):
       return fn(*args, **kwargs)
 

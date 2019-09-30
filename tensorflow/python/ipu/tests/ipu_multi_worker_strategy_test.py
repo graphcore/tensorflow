@@ -30,8 +30,12 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_run_config
+from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMirroredVariable
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategy
+from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
 from tensorflow.python.ipu.scopes import ipu_scope
+from tensorflow.python.keras.layers.normalization import BatchNormalization
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
@@ -46,6 +50,10 @@ from tensorflow.python.training.monitored_session import MonitoredTrainingSessio
 class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
   @classmethod
   def setUpClass(cls):
+    cfg = ipu_utils.create_ipu_config()
+    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=1)
+    ipu_utils.configure_ipu_system(cfg)
+
     cls._num_workers = 2
     cls._cluster_spec = multi_worker_test_base.create_in_process_cluster(
         num_workers=cls._num_workers, num_ps=0, has_chief=False)
@@ -133,8 +141,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
                                     self._cluster_spec,
                                     num_gpus=0)
 
-  def _test_variable_placement_and_initialization(self, task_type, task_id,
-                                                  _num_gpus):
+  def _test_mirrored_variable(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
@@ -148,6 +155,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       def per_replica_fn():
         with ops.device("/device:IPU:0"):
           w0 = variable_scope.get_variable(name="w0", initializer=task_id + 1)
+          self.assertIsInstance(w0, IPUMirroredVariable)
           self.assertEqual(variable_device, w0.device)
           cached_value = w0.value()
           self.assertEqual(compute_device, cached_value.device)
@@ -166,11 +174,51 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         self.assertEqual([1.0], sess.run(variables.global_variables()))
         self.assertEqual(2.0, sess.run(sum_ret))  # 1*1 + 1*1
 
-  def test_variable_placement_and_initialization(self):
-    self._run_between_graph_clients(
-        self._test_variable_placement_and_initialization,
-        self._cluster_spec,
-        num_gpus=0)
+  def test_mirrored_variable(self):
+    self._run_between_graph_clients(self._test_mirrored_variable,
+                                    self._cluster_spec,
+                                    num_gpus=0)
+
+  def _test_sync_on_read_variable(self, task_type, task_id, _num_gpus):
+    strategy, target, sess_config = self._create_test_objects(
+        task_type=task_type, task_id=task_id)
+
+    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
+        task_type, task_id)
+    compute_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
+        task_type, task_id)
+
+    with strategy.scope():
+
+      def per_replica_fn(x):
+        with ops.device("/device:IPU:0"):
+          w0 = variable_scope.get_variable(
+              name="w0",
+              initializer=task_id + 1,
+              synchronization=variable_scope.VariableSynchronization.ON_READ,
+              aggregation=variable_scope.VariableAggregation.MEAN)
+          self.assertIsInstance(w0, IPUSyncOnReadVariable)
+          self.assertEqual(compute_device, w0.device)
+          initializer_tensor = w0.values[0].initializer.inputs[1]
+          self.assertEqual(variable_device, initializer_tensor.device)
+          return w0.assign_add(x)
+
+      inputs = array_ops.placeholder(dtype=np.int32, shape=())
+      assign_add_op = strategy.experimental_run_v2(per_replica_fn,
+                                                   args=[inputs])
+
+      with session_lib.Session(target=target, config=sess_config) as sess:
+        sess.run(variables.global_variables_initializer())
+        # Both should have initial value from first worker
+        self.assertEqual([1.0], sess.run(variables.global_variables()))
+        sess.run(assign_add_op, feed_dict={inputs: task_id + 1})
+        # mean(1 + 1, 1 + 2) = 2.5
+        self.assertEqual([2.5], sess.run(variables.global_variables()))
+
+  def test_sync_on_read_variable(self):
+    self._run_between_graph_clients(self._test_sync_on_read_variable,
+                                    self._cluster_spec,
+                                    num_gpus=0)
 
   def _test_train_split_device_host_fn(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
@@ -452,6 +500,65 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def test_ipu_estimator_train(self):
     self._run_between_graph_clients(self._test_ipu_estimator_train,
+                                    self._cluster_spec,
+                                    num_gpus=0)
+
+  def _test_batch_normalization(self, task_type, task_id, _num_gpus):
+    strategy, target, sess_config = self._create_test_objects(
+        task_type=task_type, task_id=task_id)
+
+    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
+        task_type, task_id)
+    compute_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
+        task_type, task_id)
+
+    with strategy.scope():
+      batch_norm = BatchNormalization(momentum=0.0)
+
+      def per_replica_fn(x):
+        with ops.device("/device:IPU:0"):
+          y = batch_norm(x, training=True)
+
+          self.assertIsInstance(batch_norm.beta, IPUMirroredVariable)
+          self.assertIsInstance(batch_norm.gamma, IPUMirroredVariable)
+          self.assertEqual(variable_device, batch_norm.beta.device)
+          self.assertEqual(variable_device, batch_norm.gamma.device)
+
+          self.assertIsInstance(batch_norm.moving_mean, IPUSyncOnReadVariable)
+          self.assertIsInstance(batch_norm.moving_variance,
+                                IPUSyncOnReadVariable)
+          self.assertEqual(compute_device, batch_norm.moving_mean.device)
+          self.assertEqual(compute_device, batch_norm.moving_variance.device)
+
+          return y
+
+      def compiled_per_replica_fn(inputs):
+        with ipu_scope("/device:IPU:0"):
+          [out] = ipu_compiler.compile(per_replica_fn, inputs=[inputs])
+          return out
+
+      inputs = array_ops.placeholder(dtype=np.float32, shape=(2, 1))
+      per_replica_y = strategy.experimental_run_v2(compiled_per_replica_fn,
+                                                   args=[inputs])
+      sum_y = strategy.reduce(ReduceOp.SUM, per_replica_y, axis=None)
+      self.assertEqual(variable_device, batch_norm.moving_mean.get().device)
+
+      with session_lib.Session(target=target, config=sess_config) as sess:
+        sess.run(variables.global_variables_initializer())
+        sess.run(sum_y, feed_dict={inputs: [[2.0 * (task_id + 1)], [0.0]]})
+
+        task_local_mean = batch_norm.moving_mean.get(variable_device)
+        self.assertAllEqual([task_id + 1], sess.run(task_local_mean))
+
+        # mean(mean(2, 0), mean(4, 0)) = mean(1, 3) = 1.5
+        global_mean = batch_norm.moving_mean
+        self.assertAllEqual([1.5], sess.run(global_mean))
+
+        # mean(var(2, 0), var(4, 0)) = mean(1, 4) = 2.5
+        self.assertAllEqual([2.5], sess.run(batch_norm.moving_variance))
+
+  def test_batch_normalization(self):
+    self._run_between_graph_clients(self._test_batch_normalization,
                                     self._cluster_spec,
                                     num_gpus=0)
 
