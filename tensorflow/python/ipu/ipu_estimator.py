@@ -25,6 +25,7 @@ import six
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import dtypes
@@ -37,6 +38,7 @@ from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import ops as ipu_ops
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategy
 from tensorflow.python.ipu.ipu_outfeed_queue import IPUOutfeedMode
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import control_flow_ops
@@ -161,7 +163,7 @@ class _IPUGlobalStepCounterAndStopHook(session_run_hook.SessionRunHook):
       run_context.request_stop()
 
 
-def _call_input_fn(input_fn, mode, params, config):
+def _call_input_fn(input_fn, mode, params, config, input_context):
   input_fn_args = function_utils.fn_args(input_fn)
   kwargs = {}
   if "mode" in input_fn_args:
@@ -170,6 +172,8 @@ def _call_input_fn(input_fn, mode, params, config):
     kwargs["params"] = params
   if "config" in input_fn_args:
     kwargs["config"] = config
+  if input_context and "input_context" in input_fn_args:
+    kwargs["input_context"] = input_context
   return input_fn(**kwargs)
 
 
@@ -376,11 +380,21 @@ def _call_host_fn(host_call_fn, host_call_args):
   return ret
 
 
+def _get_input_context():
+  strategy = distribution_strategy_context.get_strategy()
+  if isinstance(strategy, IPUMultiWorkerStrategy):
+    return strategy.extended._make_input_context()  # pylint: disable=protected-access
+  return None
+
+
 def _augment_model_fn(model_fn):
   """Returns a new model_fn, which wraps the IPU support."""
-  def _model_fn(features, labels, mode, config, params):  # pylint: disable=unused-argument
+  def _model_fn(features, labels, mode, config, params):
+    del features, labels  # We call the input_fn directly from here instead
     input_fn = params[_INPUT_FN_KEY]
-    dataset = _call_input_fn(input_fn, mode, params, config)
+    input_context = _get_input_context()
+    dataset = _call_input_fn(input_fn, mode, params, config, input_context)
+
     if not isinstance(dataset, dataset_ops.Dataset):
       raise ValueError("input_fn must return Dataset")
 

@@ -473,10 +473,16 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     features = np.array([[1.0], [2.0]], dtype=np.float32)
     labels = np.array([[1.0], [2.0]], dtype=np.float32)
 
-    def my_input_fn():
+    def my_input_fn(input_context):
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
       dataset = dataset.batch(1, drop_remainder=True).repeat()
-      dataset = dataset.shard(self._num_workers, task_id)
+
+      num_shards = input_context.num_input_pipelines
+      shard_index = input_context.input_pipeline_id
+      self.assertEqual(self._num_workers, num_shards)
+      self.assertEqual(task_id, shard_index)
+
+      dataset = dataset.shard(num_shards=num_shards, index=shard_index)
       return dataset
 
     config = ipu_run_config.RunConfig(
