@@ -81,6 +81,10 @@ def pipeline(computational_stages,
   (see `ipu.ipu_outfeed_queue.IPUOutfeedQueue`) is required and all the outputs
   from the last computational stage are enqueued to the `outfeed_queue`.
 
+  Note that pipelining also supports recomputation, to enable it, use the
+  `tensorflow.ipu.utils.set_recomputation_options()` function when configuring
+  the device.
+
   For example a simple inference network for the MNIST can be split across two
   IPUs:
 

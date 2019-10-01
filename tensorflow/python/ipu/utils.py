@@ -347,11 +347,11 @@ def set_recomputation_options(opts, allow_recompute=True):
 
   Args:
     allow_recompute: Whether or not to re-compute instructions during training.
-                     If this is enabled then we will attempt to pattern match
-                     instructions in the forward pass and recompute them in
-                     the backward pass to avoid having to preserve that
-                     memory. Enabling this option can reduce memory usage at
-                     the expense of extra computation.
+      If this is enabled then we will attempt to pattern match
+      instructions/pipeline stages in the forward pass and recompute them in the
+      backward pass to avoid having to preserve activations which increase the
+      maximum memory liveness. Enabling this option can reduce memory usage at
+      the expense of extra computation.
 
   Returns:
     The IpuOptions configuration protobuf.

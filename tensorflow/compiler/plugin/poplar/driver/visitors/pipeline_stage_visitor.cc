@@ -41,5 +41,31 @@ Status PipelineStageVisitor::HandleTuple(HloInstruction* inst) {
   return Status::OK();
 }
 
+StatusOr<std::vector<bool>> PipelineStageVisitor::GetOutputCopies(
+    const HloInstruction* inst, bool used_for_recomputation) {
+  std::vector<bool> result;
+  const Shape& output_shape = inst->shape();
+  if (!output_shape.IsTuple()) {
+    return FailedPrecondition(
+        "Expected the output of the PipelineStage to be a tuple shape.");
+  }
+
+  // Get which outputs of the stage are used.
+  absl::flat_hash_set<int64> used_gtes_indicies;
+  for (const HloInstruction* user : inst->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    used_gtes_indicies.insert(user->tuple_index());
+  }
+
+  // We need to add copies if the subshape has a user (i.e. there is a tuple
+  // index).
+  for (int64 i = 0; i < ShapeUtil::TupleElementCount(output_shape); i++) {
+    const Shape& subshape = ShapeUtil::GetTupleElementShape(output_shape, i);
+    result.resize(result.size() + FlattenedXlaShape(subshape).size(),
+                  used_for_recomputation && used_gtes_indicies.contains(i));
+  }
+  return result;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

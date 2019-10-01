@@ -22,7 +22,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_inline_call.h"
@@ -74,61 +73,6 @@ CompileInplaceSubComputation(CompilerResources& res, const ArgVectors& inputs,
   TF_RETURN_IF_ERROR(comp->AcceptOrdered(visitor.get(), order));
 
   return visitor;
-}
-
-StatusOr<poplar::program::Program> CreatePipelineStageOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map) {
-  VLOG(1) << "Processing " << inst->name();
-  poplar::program::Sequence seq;
-  ArgVectors inputs(inst->operand_count());
-  // First get all the inplace inputs - we do not expand constants and we
-  // preserve all the aliasing.
-  TF_ASSIGN_OR_RETURN(
-      ArgVectors inplace_inputs,
-      FindInplaceOutputTensors(tensor_map, res, inst, seq, false, true));
-  auto inplace_inputs_itr = inplace_inputs.begin();
-  auto inst_description = HloInstructionDescription(inst);
-  // Keep track of inputs which are not inplace (i.e. parameters for forward
-  // stages).
-  absl::flat_hash_set<int64> non_inplace_operand_indices;
-  for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
-    non_inplace_operand_indices.insert(op_idx);
-  }
-
-  // Populate the inputs with the inplace inputs first.
-  for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
-    inputs[inplace_idx] = *inplace_inputs_itr;
-    inplace_inputs_itr++;
-    non_inplace_operand_indices.erase(inplace_idx);
-  }
-  // Get all the non inplace inputs.
-  if (inst_description.GetInplaceOperandIndexes().size() !=
-      inst->operand_count()) {
-    CHECK(IsPipelineStage(inst));
-    for (int64 op_idx : non_inplace_operand_indices) {
-      inputs[op_idx] =
-          FindInstructionInputs(tensor_map, res, inst, op_idx, seq, false);
-    }
-  }
-  HloComputation* stage_computation = inst->to_apply();
-
-  PipelineStageVisitor visitor(res, inputs);
-  auto order = stage_computation->parent()
-                   ->schedule()
-                   .sequence(stage_computation)
-                   .instructions();
-  TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(&visitor, order));
-
-  // Get the sequence for the stage.
-  seq.add(visitor.GetSequence());
-  // Forward the outputs.
-  const OutVector& pipeline_outputs = visitor.outputs();
-  for (size_t i = 0; i < pipeline_outputs.size(); i++) {
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
-  }
-
-  return seq;
 }
 
 StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
@@ -263,9 +207,6 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
     TF_ASSIGN_OR_RETURN(seq, CreateRepeatOp(res, inst, output, tensor_map));
   } else if (IsPipelineOp(inst)) {
     TF_ASSIGN_OR_RETURN(seq, CreatePipelineOp(res, inst, output, tensor_map));
-  } else if (IsPipelineStageOrBackwardOp(inst)) {
-    TF_ASSIGN_OR_RETURN(seq,
-                        CreatePipelineStageOp(res, inst, output, tensor_map));
   } else {
     ArgVectors args = GetCallInputs(res, inst, tensor_map, seq);
     TF_ASSIGN_OR_RETURN(

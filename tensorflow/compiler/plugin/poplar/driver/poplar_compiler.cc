@@ -60,6 +60,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
@@ -528,7 +529,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplarExecutor->GetMaxSchedulerSearchSpaceSize(), module.get(),
       poplarExecutor->FloatingPointBehaviour(),
       poplarExecutor->AlwaysRearrangeCopiesOnTheHost(),
-      poplarExecutor->GetSchedulerSelection());
+      poplarExecutor->GetSchedulerSelection(),
+      poplarExecutor->RecomputationEnabled());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -590,18 +592,20 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
     pipeline.AddPass<RecomputeInstructions>(
-        poplarExecutor->InstructionRecomputationEnabled());
+        poplarExecutor->RecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<DependencyReplacer>(true);
     pipeline.AddPass<ShardingPass>();
-    pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<PipelineFeedHoisting>();
+    pipeline.AddPass<PipelineFIFOInserter>();
     pipeline.AddPass<InterIpuCopyInserter>();
     // Passes below this point need to respect the inplace information.
     pipeline.AddPass<InplaceFinder>();
-    pipeline.AddPass<PipelineCopyInserter>();
     pipeline.AddPass<ExpressionOutliner>();
+    pipeline.AddPass<PipelineCopyInserter>();
+    pipeline.AddPass<PipelineRecomputation>(
+        poplarExecutor->RecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     // Beyond this point non of the passes in the pipeline are allowed to modify
     // the instructions in the HloModule.
@@ -612,7 +616,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     // }
 
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
-    pipeline.AddPass<PipelineVerifier>();
+    pipeline.AddPass<PipelineVerifier>(poplarExecutor->RecomputationEnabled());
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<AllocationFinder>(resources.annotations);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);

@@ -38,15 +38,21 @@ class PipelineDataflowAnalysis;
 // PipelineStageBackward.
 bool IsPipelineStageOrBackwardOp(const HloInstruction* inst);
 
+// Returns whether the instruction is a PipelineStage op of any kind.
+bool IsAnyPipelineStageOp(const HloInstruction* inst);
+
 // Helper function for the PipelineDataflowAnalysis. Is used to identify whether
 // an instruction is allowed to produce outputs in a PipelineOp.
 bool IsProducerOp(const HloInstruction* inst);
 
-// Helper struct for holding onto both forward and backward (if any)
+// Helper struct for holding onto forward, backward and recomputation (if any)
 // PipelineStages.
+// Note that we might not have a recomputation for every pipeline stage
+// therefore need to use a map.
 struct PipelineStages {
   std::vector<HloInstruction*> forward;
   std::vector<HloInstruction*> backward;
+  absl::flat_hash_map<int64, HloInstruction*> recomputation;
 };
 
 // Get all the pipelines in the module.
@@ -143,18 +149,24 @@ Status RemoveOutputsFromStage(HloInstruction* stage,
                               const std::set<int64>& outputs_to_remove);
 
 // Helper struct for identifying pipeline stages.
+enum class StageType {
+  kForward,
+  kBackward,
+  kRecomputation,
+};
+
 struct StageID {
-  StageID(bool is_forward, int64 id) : is_forward(is_forward), id(id) {}
+  StageID(StageType stage_type, int64 id) : stage_type(stage_type), id(id) {}
 
   bool operator==(const StageID& other) const {
-    return is_forward == other.is_forward && id == other.id;
+    return stage_type == other.stage_type && id == other.id;
   }
 
   bool operator!=(const StageID& other) const { return !operator==(other); }
 
   std::string ToString() const;
 
-  bool is_forward;
+  StageType stage_type;
   int64 id;
 };
 
@@ -169,12 +181,13 @@ class PipelineDataflowAnalysis {
   static StatusOr<std::unique_ptr<PipelineDataflowAnalysis>> GetAnalysis(
       const PipelineStages& pipeline_stages,
       bool allow_duplicate_gte_edges = false,
-      bool allow_communication_ops = false, bool allow_feeds = false);
+      bool allow_communication_ops = false, bool allow_feeds = false,
+      bool allow_recomputation = false);
 
   explicit PipelineDataflowAnalysis(const PipelineStages& pipeline_stages,
                                     bool allow_duplicate_gte_edges,
                                     bool allow_communication_ops,
-                                    bool allow_feeds);
+                                    bool allow_feeds, bool allow_recomputation);
 
   // Returns whether the instruction needs to be lowered given the current
   // analysis.
@@ -192,9 +205,15 @@ class PipelineDataflowAnalysis {
   Status VerifyPipelineUsage(const HloInstruction* pipeline_stage,
                              const HloInstruction* pipeline_stage_user) const;
 
-  // Verifies that the parameter is only used the one stage (fwd and/or bwd).
+  // Verifies that the parameter is only used by one stage (fwd, recomp and/or
+  // bwd).
   Status VerifyParameterUsage(const HloInstruction* parameter,
                               const HloInstruction* pipeline_stage_user);
+
+  // Verifies that the infeed is only used by one stage (fwd and possibly
+  // recomp).
+  Status VerifyInfeedUsage(const HloInstruction* infeed,
+                           const HloInstruction* pipeline_stage_user);
 
   // Verifies that the inputs to the Pipeline Stage are allowed.
   Status VerifyPipelineStageOperands(
@@ -236,10 +255,12 @@ class PipelineDataflowAnalysis {
   // Hash maps to speed up lookup.
   absl::flat_hash_map<HloInstruction*, int64> fwd_stages_lookup_;
   absl::flat_hash_map<HloInstruction*, int64> bwd_stages_lookup_;
+  absl::flat_hash_map<HloInstruction*, int64> recomputation_stages_lookup_;
 
   bool allow_duplicate_gte_edges_;
   bool allow_communication_ops_;
   bool allow_feeds_;
+  bool allow_recomputation_;
 };
 }  // namespace poplarplugin
 }  // namespace xla

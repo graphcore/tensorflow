@@ -461,7 +461,7 @@ HloInstructionDescription::HloInstructionDescription(
         std::iota(indexes.begin(), indexes.end(), 0);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = indexes;
-      } else if (IsPipelineStage(inst)) {
+      } else if (IsPipelineStage(inst) || IsPipelineStageRecomputation(inst)) {
         // A forward pipeline stage is only inplace on operands which are not
         // parameters.
         for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {

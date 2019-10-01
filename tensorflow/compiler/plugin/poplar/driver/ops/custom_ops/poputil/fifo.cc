@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -123,7 +124,6 @@ class FifoOp : public PoplibsOpDef {
     auto counter = graph.addVariable(poplar::UNSIGNED_INT, {},
                                      GetDebugName(inst) + "/counter");
     graph.setTileMapping(counter, 0);
-    graph.setInitialValue(counter, 0);
     res.zeroed_tensors.push_back(counter);
 
     for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {

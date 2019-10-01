@@ -408,7 +408,7 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisNoOpsToLower) {
       FindInstruction(module0, "pipeline_stage_0");
   {
     EXPECT_THAT(analysis->GetStageID(pipeline_stage_0).ValueOrDie(),
-                StageID(true, 0));
+                StageID(StageType::kForward, 0));
     auto& value_set = analysis->GetValueSet(pipeline_stage_0);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_0);
   }
@@ -426,9 +426,9 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisNoOpsToLower) {
       FindInstruction(module0, "pipeline_stage_1");
   {
     EXPECT_THAT(analysis->GetStageID(pipeline_stage_1).ValueOrDie(),
-                StageID(true, 1));
+                StageID(StageType::kForward, 1));
     EXPECT_THAT(analysis->GetPreviousStageID(pipeline_stage_1).ValueOrDie(),
-                StageID(true, 0));
+                StageID(StageType::kForward, 0));
     auto& value_set = analysis->GetValueSet(pipeline_stage_1);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_1);
   }
@@ -447,9 +447,9 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisNoOpsToLower) {
       FindInstruction(module0, "pipeline_stage_1_bwd");
   {
     EXPECT_THAT(analysis->GetStageID(pipeline_stage_1_bwd).ValueOrDie(),
-                StageID(false, 1));
+                StageID(StageType::kBackward, 1));
     EXPECT_THAT(analysis->GetPreviousStageID(pipeline_stage_1_bwd).ValueOrDie(),
-                StageID(true, 1));
+                StageID(StageType::kForward, 1));
     auto& value_set = analysis->GetValueSet(pipeline_stage_1_bwd);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_1_bwd);
   }
@@ -469,9 +469,9 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisNoOpsToLower) {
       FindInstruction(module0, "pipeline_stage_0_bwd");
   {
     EXPECT_THAT(analysis->GetStageID(pipeline_stage_0_bwd).ValueOrDie(),
-                StageID(false, 0));
+                StageID(StageType::kBackward, 0));
     EXPECT_THAT(analysis->GetPreviousStageID(pipeline_stage_0_bwd).ValueOrDie(),
-                StageID(false, 1));
+                StageID(StageType::kBackward, 1));
     auto& value_set = analysis->GetValueSet(pipeline_stage_0_bwd);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_0_bwd);
   }
@@ -739,7 +739,7 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisOpsToLower) {
       FindInstruction(module0, "pipeline_stage_0");
   {
     EXPECT_THAT(analysis->GetStageID(pipeline_stage_0).ValueOrDie(),
-                StageID(true, 0));
+                StageID(StageType::kForward, 0));
     auto& value_set = analysis->GetValueSet(pipeline_stage_0);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_0);
     EXPECT_FALSE(analysis->HasToBeLowered(pipeline_stage_0).ValueOrDie());
@@ -774,9 +774,9 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisOpsToLower) {
       FindInstruction(module0, "pipeline_stage_1");
   {
     EXPECT_THAT(analysis->GetStageID(pipeline_stage_1).ValueOrDie(),
-                StageID(true, 1));
+                StageID(StageType::kForward, 1));
     EXPECT_THAT(analysis->GetPreviousStageID(pipeline_stage_1).ValueOrDie(),
-                StageID(true, 0));
+                StageID(StageType::kForward, 0));
     auto& value_set = analysis->GetValueSet(pipeline_stage_1);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_1);
     EXPECT_FALSE(analysis->HasToBeLowered(pipeline_stage_1).ValueOrDie());
@@ -806,9 +806,9 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisOpsToLower) {
       FindInstruction(module0, "pipeline_stage_1_bwd");
   {
     EXPECT_THAT(analysis->GetStageID(pipeline_stage_1_bwd).ValueOrDie(),
-                StageID(false, 1));
+                StageID(StageType::kBackward, 1));
     EXPECT_THAT(analysis->GetPreviousStageID(pipeline_stage_1_bwd).ValueOrDie(),
-                StageID(true, 1));
+                StageID(StageType::kForward, 1));
     auto& value_set = analysis->GetValueSet(pipeline_stage_1_bwd);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_1_bwd);
     EXPECT_FALSE(analysis->HasToBeLowered(pipeline_stage_1_bwd).ValueOrDie());
@@ -853,9 +853,9 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisOpsToLower) {
       FindInstruction(module0, "pipeline_stage_0_bwd");
   {
     EXPECT_THAT(analysis->GetStageID(pipeline_stage_0_bwd).ValueOrDie(),
-                StageID(false, 0));
+                StageID(StageType::kBackward, 0));
     EXPECT_THAT(analysis->GetPreviousStageID(pipeline_stage_0_bwd).ValueOrDie(),
-                StageID(false, 1));
+                StageID(StageType::kBackward, 1));
     auto& value_set = analysis->GetValueSet(pipeline_stage_0_bwd);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_0_bwd);
     EXPECT_FALSE(analysis->HasToBeLowered(pipeline_stage_0_bwd).ValueOrDie());

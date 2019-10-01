@@ -16,11 +16,14 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
 
@@ -48,6 +51,7 @@ limitations under the License.
 #include <poplar/GraphElements.hpp>
 #include <poplar/Tensor.hpp>
 #include <poplar/exceptions.hpp>
+#include <poputil/Util.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -61,9 +65,52 @@ namespace {
  *
  * @returns The unary predicate.
  */
-std::function<bool(HloInstruction*)> HasHloOpcode(HloOpcode opcode) {
+std::function<bool(const HloInstruction*)> HasHloOpcode(HloOpcode opcode) {
   return [opcode](const HloInstruction* inst) -> bool {
     return inst->opcode() == opcode;
+  };
+}
+
+/**
+ * Construct a unary predicate which checks if a given HloInstruction is a
+ * custom Poplibs instruction of a specified type.
+ *
+ * @param lib The library to capture and compare against.
+ * @param op The operation to capture and compare against.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(const HloInstruction*)> IsPoplibsInstruction(
+    PoplibsOp_Lib lib, PoplibsOp_Op op) {
+  return [lib, op](const HloInstruction* inst) -> bool {
+    return IsPoplibsHloCustomOp(inst) &&
+           inst->custom_call_target() ==
+               GetPoplibsCustomOpTargetString(lib, op);
+  };
+}
+
+/**
+ * Construct a unary predicate which checks if a given HloInstruction is an
+ * HloFifoInstruction.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(const HloInstruction*)> IsFifoInstruction() {
+  return [](const HloInstruction* inst) -> bool {
+    return IsPoplibsInstruction(PoplibsOp::Poputil, PoplibsOp::Fifo)(inst);
+  };
+}
+
+/**
+ * Construct a unary predicate which checks if a given HloInstruction is an
+ * HloIpuInterCopy.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(const HloInstruction*)> IsIpuInterCopyInstruction() {
+  return [](const HloInstruction* inst) -> bool {
+    return IsPoplibsInstruction(PoplibsOp::Poputil,
+                                PoplibsOp::IpuInterCopy)(inst);
   };
 }
 
@@ -80,7 +127,9 @@ int64 GetPipelineStageCount(const HloInstruction* pipeline) {
   HloComputation* pipeline_computation = pipeline->to_apply();
 
   return absl::c_count_if(pipeline_computation->instructions(),
-                          HasHloOpcode(HloOpcode::kCall));
+                          [](const HloInstruction* inst) {
+                            return IsPipelineStageOrBackwardOp(inst);
+                          });
 }
 
 /**
@@ -143,6 +192,11 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
         std::make_pair(*itr, std::distance(stage.forward.begin(), itr)));
   }
 
+  // Assign the recomputation stages to the same stage as the forward stage.
+  for (auto pair : stage.recomputation) {
+    result[pair.second] = pair.first;
+  }
+
   // Partition out the stage calls instructions and skip them.
   auto stages_end = std::stable_partition(
       instructions.begin(), instructions.end(), HasHloOpcode(HloOpcode::kCall));
@@ -163,67 +217,122 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   // stage.
   auto get_stage_from_users = [&](const HloInstruction* inst) {
     auto users = inst->users();
-    return result.at(
-        *std::min_element(users.begin(), users.end(), inst_comparison));
+    return result.at(*absl::c_min_element(users, inst_comparison));
   };
 
   // Get the stage given the operands. Requires all the operands to already have
   // a stage.
   auto get_stage_from_operands = [&](const HloInstruction* inst) {
     auto operands = inst->operands();
-    return result.at(
-        *std::max_element(operands.begin(), operands.end(), inst_comparison));
+    return result.at(*absl::c_max_element(operands, inst_comparison));
   };
 
-  // Go through all the remaining instructions and assign the stages. Note that
-  // we are visiting in post-order.
-  for (auto itr = stages_end; itr != instructions.end(); ++itr) {
+  // Partition out infeeds.
+  auto infeeds_end = std::stable_partition(stages_end, instructions.end(),
+                                           HasHloOpcode(HloOpcode::kInfeed));
+  for (auto itr = stages_end; itr != infeeds_end; ++itr) {
     HloInstruction* inst = *itr;
-    switch (inst->opcode()) {
-      case HloOpcode::kParameter: {
-        result[inst] = get_stage_from_users(inst);
-        break;
-      }
-      case HloOpcode::kInfeed: {
-        // For the Infeed, assign the stages for the infeed, its gte user, and
-        // the input token.
-        const HloInstruction* token = inst->operand(0);
-        CHECK_EQ(inst->user_count(), 1);
-        const HloInstruction* gte = inst->users()[0];
-        CHECK_EQ(gte->user_count(), 1);
-        const HloInstruction* pipeline_stage = gte->users()[0];
-        int64 stage = result.at(pipeline_stage);
-        result[inst] = stage;
-        result[gte] = stage;
-        result[token] = stage;
-        break;
-      }
-      case HloOpcode::kOutfeed: {
-        // Outfeed takes the stage from the operand 0.
-        int64 stage = result.at(inst->operand(0));
-        result[inst] = stage;
-        // Set the stage for the input token too.
-        const HloInstruction* token = inst->operand(1);
-        result[token] = stage;
-        break;
-      }
-      case HloOpcode::kAfterAll: {
-        // Don't assign a stage for after-all instructions, they will get their
-        // stage from the infeed or outfeed.
-        break;
-      }
-      default: {
-        // Only assign the stage if no other instruction assigned it for us.
-        if (!result.contains(inst)) {
-          result[inst] = get_stage_from_operands(inst);
-        }
-        break;
-      }
+    // For an infeed, assign the stages for the infeed, its gte user, and
+    // the input token.
+    const HloInstruction* token = inst->operand(0);
+    CHECK_EQ(inst->user_count(), 1);
+    const HloInstruction* gte = inst->users()[0];
+    // Expect at least one user of GTE to be a forward stage.
+    auto fwd_stage_itr = absl::c_find_if(
+        gte->users(),
+        [](const HloInstruction* inst) { return IsPipelineStage(inst); });
+    int64 stage = result.at(*fwd_stage_itr);
+    result[inst] = stage;
+    result[gte] = stage;
+    result[token] = stage;
+  }
+
+  // Partition out the outfeeds.
+  auto outfeeds_end = std::stable_partition(infeeds_end, instructions.end(),
+                                            HasHloOpcode(HloOpcode::kOutfeed));
+  for (auto itr = infeeds_end; itr != outfeeds_end; ++itr) {
+    HloInstruction* inst = *itr;
+    // For an outfeed, assign the stages for the outfeed, its gte operand, and
+    // the input token.
+    const HloInstruction* gte = inst->operand(0);
+    const HloInstruction* token = inst->operand(1);
+    int64 stage = result.at(gte->operand(0));
+    result[inst] = stage;
+    result[gte] = stage;
+    result[token] = stage;
+  }
+
+  // Partition out GTEs which have not been assigned a stage - these are
+  // assigned to the same stage as their input.
+  auto gtes_end = std::stable_partition(
+      outfeeds_end, instructions.end(), [&result](const HloInstruction* inst) {
+        return HasHloOpcode(HloOpcode::kGetTupleElement)(inst) &&
+               !result.contains(inst);
+      });
+  for (auto itr = outfeeds_end; itr != gtes_end; ++itr) {
+    HloInstruction* inst = *itr;
+    result[inst] = get_stage_from_operands(inst);
+  }
+
+  // Partition out FIFOs - if the FIFO is an input to a recomputation stage,
+  // then it is assigned to that stage, otherwise it it assigned to the same
+  // stage as its input.
+  auto fifos_end =
+      std::stable_partition(gtes_end, instructions.end(), IsFifoInstruction());
+  for (auto itr = gtes_end; itr != fifos_end; ++itr) {
+    HloInstruction* inst = *itr;
+    CHECK_EQ(inst->user_count(), 1);
+    if (IsPipelineStageRecomputation(inst->users()[0])) {
+      result[inst] = get_stage_from_users(inst);
+    } else {
+      result[inst] = get_stage_from_operands(inst);
     }
   }
+
+  // Partition out parameters - these are assigned to the first stage in which
+  // they are used in.
+  auto parameters_end = std::stable_partition(
+      fifos_end, instructions.end(), HasHloOpcode(HloOpcode::kParameter));
+  for (auto itr = fifos_end; itr != parameters_end; ++itr) {
+    HloInstruction* inst = *itr;
+    result[inst] = get_stage_from_users(inst);
+  }
+
+  // Go through the remaining instructions and assign them to stages given their
+  // operands. Note that we are visiting in post-order.
+  for (auto itr = parameters_end; itr != instructions.end(); ++itr) {
+    HloInstruction* inst = *itr;
+    // Only assign the stage if no other instruction assigned it for us.
+    if (!result.contains(inst)) {
+      result[inst] = get_stage_from_operands(inst);
+    }
+  }
+
   if (result.size() != pipeline_computation->instruction_count()) {
     LOG(FATAL) << "Could not assign all the instructions to Pipeline Stages.";
   }
+  return result;
+}
+
+/**
+ * Get the pipeline stages which have recomputation.
+ *
+ * @param pipeline The outer pipeline instruction.
+ *
+ * @returns The mapping of the ith stage to a IPU device.
+ *
+ * @note Assumes the pipeline is correctly constructed.
+ */
+absl::flat_hash_set<int> GetPipelineStagesWithRecomputation(
+    const HloInstruction* pipeline) {
+  HloComputation* pipeline_computation = pipeline->to_apply();
+  // Cannot reasonably return StatusOr because this is called inside a
+  // constructor.
+  auto stages = GetPipelineStages(pipeline_computation).ValueOrDie();
+  absl::flat_hash_set<int> result;
+  absl::c_transform(
+      stages.recomputation, std::inserter(result, result.begin()),
+      [](const std::pair<int64, HloInstruction*>& pair) { return pair.first; });
   return result;
 }
 
@@ -428,11 +537,212 @@ StatusOr<int> GetPipelineStage(
 
   return inst_stage_mapping.at(hlo);
 }
+
+/**
+ * Get all the inputs for the pipeline stage, making sure to preserve aliasing.
+ * Note that there is a mix of inplace and not inplace inputs - we get all of
+ * them.
+ *
+ * @param seq The sequence to use if any copies are inserted.
+ * @param res The compiler resources.
+ * @param inst The instruction for which we are getting inputs.
+ * @param tensor_map The map which stores the tensors.
+ *
+ * @returns A 2D array of pipeline stage inputs.
+ */
+StatusOr<ArgVectors> GetPipelineStageInputs(poplar::program::Sequence& seq,
+                                            CompilerResources& res,
+                                            const HloInstruction* inst,
+                                            TensorMap& tensor_map) {
+  ArgVectors inputs(inst->operand_count());
+  // First get all the inplace inputs - we do not expand constants and we
+  // preserve all the aliasing.
+  TF_ASSIGN_OR_RETURN(
+      ArgVectors inplace_inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, false, true));
+  auto inplace_inputs_itr = inplace_inputs.begin();
+  auto inst_description = HloInstructionDescription(inst);
+  // Keep track of inputs which are not inplace (i.e. parameters for forward
+  // stages).
+  absl::flat_hash_set<int64> non_inplace_operand_indices;
+  for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+    non_inplace_operand_indices.insert(op_idx);
+  }
+
+  // Populate the inputs with the inplace inputs first.
+  for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
+    inputs[inplace_idx] = *inplace_inputs_itr;
+    inplace_inputs_itr++;
+    non_inplace_operand_indices.erase(inplace_idx);
+  }
+  // Get all the non inplace inputs.
+  if (inst_description.GetInplaceOperandIndexes().size() !=
+      inst->operand_count()) {
+    CHECK(IsPipelineStage(inst) || IsPipelineStageRecomputation(inst));
+    for (int64 op_idx : non_inplace_operand_indices) {
+      inputs[op_idx] =
+          FindInstructionInputs(tensor_map, res, inst, op_idx, seq, false);
+    }
+  }
+  return inputs;
+}
+
+/**
+ * When recomputation is enabled, copies need to be inserted for all the non
+ * parameter inputs as we are re-using the forward stage Poplar Sequence/visitor
+ * for both the forward and recomputation stage. Note that we do not to add
+ * copies for parameters as these are always the same/are not modified. Note
+ * that since we are adding these copies, the FIFO instructions can be executed
+ * after the PipelineStage and before the PipelineStageRecomputation since the
+ * values won't be modified inplace.
+ *
+ * @param inst The pipeline stage instruction for which we are adding copies.
+ * @param inst The Poplar graph for where the tensors are from.
+ * @param inst_inputs The inputs to the instruction.
+ * @param visitor_inputs The inputs to the visitor for which we insert copies.
+ *
+ * @returns A Poplar program sequence which constains the copies.
+ */
+StatusOr<poplar::program::Sequence> AddCopiesForNonParameterInputs(
+    const HloInstruction* inst, poplar::Graph& graph,
+    const ArgVectors& inst_inputs, const ArgVectors& visitor_inputs) {
+  poplar::program::Sequence seq;
+  auto inst_description = HloInstructionDescription(inst);
+  // For each inplace operand, go through all the tensors for that operand and
+  // add copies from the instruction input tensors to the visitor input tensors
+  // (preserving the aliasing).
+  for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
+    CHECK_EQ(inst_inputs[inplace_idx].size(),
+             visitor_inputs[inplace_idx].size());
+    for (int64 flat_idx = 0; flat_idx != inst_inputs[inplace_idx].size();
+         ++flat_idx) {
+      seq.add(TensorCopyWithAliasing(graph, inst_inputs[inplace_idx][flat_idx],
+                                     visitor_inputs[inplace_idx][flat_idx]));
+    }
+  }
+  return seq;
+}
+
+/**
+ * Creates the PipelineStageVisitor for a PiplineStage or PipelineStageBackward
+ * instruction and populates the sequence ready for the execution.
+ *
+ * @param seq The Poplar sequence for which is used for the execution.
+ * @param res The compiler resources.
+ * @param inst The PiplineStage or PipelineStageBackward instruction which is
+ * being lowered.
+ * @param tensor_map The map which stores the input/output tensors.
+ * @param used_for_recomputation Indicates whether this stage will be used for a
+ * recomputation stage too, which means we will want to reuse the visitor.
+ *
+ * @returns The visitor created when lowering the stage into Poplar.
+ */
+StatusOr<std::unique_ptr<PipelineStageVisitor>> CreatePipelineStageOp(
+    poplar::program::Sequence& seq, CompilerResources& res,
+    const HloInstruction* inst, TensorMap& tensor_map,
+    bool used_for_recomputation) {
+  poplar::Graph& graph = GetGraph(res, inst);
+  // Get the inputs for the pipeline stage.
+  TF_ASSIGN_OR_RETURN(auto inputs,
+                      GetPipelineStageInputs(seq, res, inst, tensor_map));
+  // When recomputation is enabled, we need to add copies for inplace inputs of
+  // a forward pipeline stage (i.e. non parameters/weights), so that we can
+  // reuse the code for the recomputation stage.
+  ArgVectors visitor_inputs = inputs;
+  if (used_for_recomputation) {
+    auto inst_description = HloInstructionDescription(inst);
+    for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
+      for (int64 flat_idx = 0; flat_idx != inputs[inplace_idx].size();
+           ++flat_idx) {
+        const std::string name = absl::StrCat(GetDebugName(inst), "/clone/",
+                                              inplace_idx, "/", flat_idx);
+        visitor_inputs[inplace_idx][flat_idx] =
+            graph.clone(visitor_inputs[inplace_idx][flat_idx], name,
+                        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+      }
+    }
+  }
+
+  auto visitor = absl::make_unique<PipelineStageVisitor>(res, visitor_inputs);
+  HloComputation* stage_computation = inst->to_apply();
+  auto order = stage_computation->parent()
+                   ->schedule()
+                   .sequence(stage_computation)
+                   .instructions();
+  TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(visitor.get(), order));
+
+  if (used_for_recomputation) {
+    // Add the copies.
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence copy_sequences,
+        AddCopiesForNonParameterInputs(inst, graph, inputs, visitor_inputs));
+    seq.add(copy_sequences);
+  }
+
+  // Get the sequence for the stage.
+  seq.add(visitor->GetSequence());
+  // Set the outputs.
+  const OutVector& pipeline_outputs = visitor->outputs();
+  TF_ASSIGN_OR_RETURN(const std::vector<bool> add_output_copies,
+                      visitor->GetOutputCopies(inst, used_for_recomputation));
+  CHECK_EQ(pipeline_outputs.size(), add_output_copies.size());
+  for (size_t i = 0; i < pipeline_outputs.size(); i++) {
+    poplar::Tensor output = pipeline_outputs[i];
+    if (add_output_copies[i]) {
+      output = poputil::duplicate(
+          graph, output, seq, absl::StrCat(GetDebugName(inst), "/output/", i));
+    }
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
+  }
+
+  return visitor;
+}
+
+/**
+ * Loweres a PipelineStageRecomputation into Poplar by reusing the sequence from
+ * the corresponding PipelineStage visitor.
+ *
+ * @param res The compiler resources.
+ * @param inst The PipelineStageRecomputation instruction which is being
+ * lowered.
+ * @param tensor_map The map which stores the input/output tensors.
+ * @param visitor Pointer to the corresponding forward stage
+ * PipelineStageVisitor from which we reuse the program.
+ *
+ * @returns The Poplar sequence with lowering of the stage.
+ */
+StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
+    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
+    PipelineStageVisitor* forward_stage_visitor) {
+  poplar::program::Sequence seq;
+  poplar::Graph& graph = GetGraph(res, inst);
+  // Get the inputs for the pipeline stage.
+  TF_ASSIGN_OR_RETURN(auto inputs,
+                      GetPipelineStageInputs(seq, res, inst, tensor_map));
+
+  // Add copies for the visitor inputs so that we can reuse the visitor program.
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Sequence copy_sequences,
+      AddCopiesForNonParameterInputs(inst, graph, inputs,
+                                     forward_stage_visitor->inputs()));
+  seq.add(copy_sequences);
+
+  // Get the sequence for the stage.
+  seq.add(forward_stage_visitor->GetSequence());
+
+  // Set the outputs.
+  const OutVector& pipeline_outputs = forward_stage_visitor->outputs();
+  for (size_t i = 0; i < pipeline_outputs.size(); i++) {
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
+  }
+  return seq;
+}
 }  // namespace
 
 PipelineVisitor::PipelineVisitor(
     int64 stage_count, const std::vector<int>& stage_ipu_mapping,
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
+    const absl::flat_hash_set<int> stages_with_recomputation,
     CompilerResources& res, const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
     : InplaceSubComputationVisitor(res, inputs, dependent_subcomputations),
@@ -441,8 +751,10 @@ PipelineVisitor::PipelineVisitor(
       infeed_sequences_(stage_count),
       outfeed_sequences_(stage_count),
       program_sequences_(stage_count),
+      recomputation_sequences_(stage_count),
       stage_ipu_mapping_(stage_ipu_mapping),
-      inst_stage_mapping_(inst_stage_mapping) {}
+      inst_stage_mapping_(inst_stage_mapping),
+      stages_with_recomputation_(stages_with_recomputation) {}
 
 PipelineVisitor::PipelineVisitor(
     const HloInstruction* pipeline, CompilerResources& res,
@@ -450,7 +762,8 @@ PipelineVisitor::PipelineVisitor(
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
     : PipelineVisitor(GetPipelineStageCount(pipeline),
                       GetPipelineStageDeviceMapping(pipeline),
-                      GetPipelineInstStageMapping(pipeline), res, inputs,
+                      GetPipelineInstStageMapping(pipeline),
+                      GetPipelineStagesWithRecomputation(pipeline), res, inputs,
                       dependent_subcomputations) {}
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
@@ -496,14 +809,21 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
   auto infeed_sequences = ConstructRampUpSchedule(offsets, infeed_sequences_);
   auto program_sequences = ConstructRampUpSchedule(offsets, program_sequences_);
   auto fifo_sequences = ConstructRampUpSchedule(offsets, fifo_sequences_);
+  auto recomputation_sequences =
+      ConstructRampUpSchedule(offsets, recomputation_sequences_);
   auto outfeed_sequences = ConstructRampUpSchedule(offsets, outfeed_sequences_);
   auto copy_sequences = ConstructRampUpSchedule(offsets, copy_sequences_);
 
-  // Concatenate the infeed, compute, fifo, outfeed and copy programs.
+  // Concatenate the programs in the correct order.
+  // We always execute in following order - infeeds, fwd/bwd stages, fifos,
+  // recomputation stages, outfeeds and then inter-ipu-copies.
   infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
                           program_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
                           fifo_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          recomputation_sequences.begin(),
+                          recomputation_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
                           outfeed_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
@@ -533,16 +853,23 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
   auto program_sequences = ConstructRampDownSchedule(
       offsets, program_sequences_, {}, additional_iterations);
   auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
+  auto recomputation_sequences =
+      ConstructSchedule(offsets, recomputation_sequences_);
   auto outfeed_sequences = ConstructRampDownSchedule(
       offsets, outfeed_sequences_, {}, additional_iterations);
   auto copy_sequences = ConstructRampDownSchedule(offsets, copy_sequences_, {},
                                                   additional_iterations);
 
-  // Concatenate the infeed, compute, fifo, outfeed and copy programs.
+  // Concatenate the programs in the correct order.
+  // We always execute in following order - infeeds, fwd/bwd stages, fifos,
+  // recomputation stages, outfeeds and then inter-ipu-copies.
   infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
                           program_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
                           fifo_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          recomputation_sequences.begin(),
+                          recomputation_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
                           outfeed_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
@@ -567,17 +894,24 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
+  auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
   auto infeed_sequences = ConstructSchedule(offsets, infeed_sequences_);
   auto program_sequences = ConstructSchedule(offsets, program_sequences_);
-  auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
+  auto recomputation_sequences =
+      ConstructSchedule(offsets, recomputation_sequences_);
   auto outfeed_sequences = ConstructSchedule(offsets, outfeed_sequences_);
   auto copy_sequences = ConstructSchedule(offsets, copy_sequences_);
 
-  // Concatenate the infeed, compute, fifo, outfeed and copy programs.
+  // Concatenate the programs in the correct order.
+  // We always execute in following order - infeeds, fwd/bwd stages, fifos,
+  // recomputation stages, outfeeds and then inter-ipu-copies.
   infeed_sequences.insert(infeed_sequences.end(), program_sequences.begin(),
                           program_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), fifo_sequences.begin(),
                           fifo_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          recomputation_sequences.begin(),
+                          recomputation_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
                           outfeed_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
@@ -604,39 +938,37 @@ Status PipelineVisitor::HandleCall(HloInstruction* hlo) {
   HloComputation* comp = hlo->to_apply();
   VLOG(1) << "Processing " << hlo->name() << " : " << comp->name()
           << " as a pipeline stage";
-
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
-                      CreateCallOp(resources_, hlo, hlo->shape(), tensor_map));
 
-  program_sequences_[stage].add(prog);
+  if (IsPipelineStageOrBackwardOp(hlo)) {
+    const bool has_recomputation = stages_with_recomputation_.contains(stage);
+    poplar::program::Sequence seq;
+    TF_ASSIGN_OR_RETURN(fwd_stage_visitors_[stage],
+                        CreatePipelineStageOp(seq, resources_, hlo, tensor_map,
+                                              has_recomputation));
+    program_sequences_[stage].add(seq);
+  } else if (IsPipelineStageRecomputation(hlo)) {
+    // Recomputation stages reuse the forward stage visitor.
+    auto visitor = fwd_stage_visitors_.at(stage).get();
+    TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
+                        CreatePipelineStageRecomputationOp(
+                            resources_, hlo, tensor_map, visitor));
+    recomputation_sequences_[stage].add(seq);
+  } else {
+    return HandleNotImplemented(hlo);
+  }
 
   return Status::OK();
 }
 
 Status PipelineVisitor::HandleCustomCall(HloInstruction* hlo) {
-  if (!IsPoplibsHloCustomOp(hlo)) {
+  if (IsFifoInstruction()(hlo)) {
+    return HandleFifo(hlo);
+  } else if (IsIpuInterCopyInstruction()(hlo)) {
+    return HandleInterIpuCopy(hlo);
+  } else {
     return HandleNotImplemented(hlo);
   }
-
-  const bool is_inter_ipu_copy_hlo =
-      hlo->custom_call_target() ==
-      GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                     PoplibsOp::IpuInterCopy);
-
-  if (is_inter_ipu_copy_hlo) {
-    return HandleInterIpuCopy(hlo);
-  }
-
-  const bool is_fifo_hlo =
-      hlo->custom_call_target() ==
-      GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::Fifo);
-
-  if (is_fifo_hlo) {
-    return HandleFifo(hlo);
-  }
-
-  return HandleNotImplemented(hlo);
 }
 
 Status PipelineVisitor::HandleFifo(HloInstruction* hlo) {
@@ -675,10 +1007,13 @@ Status PipelineVisitor::HandleGetTupleElement(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->name();
 
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+  poplar::program::Sequence& seq = IsPipelineStageRecomputation(hlo->operand(0))
+                                       ? recomputation_sequences_[stage]
+                                       : program_sequences_[stage];
+
   TF_ASSIGN_OR_RETURN(
       ArgVectors output_tensors,
-      FindInplaceOutputTensors(tensor_map, resources_, hlo,
-                               program_sequences_[stage], false));
+      FindInplaceOutputTensors(tensor_map, resources_, hlo, seq, false));
   CHECK_EQ(output_tensors.size(), 1);
   CHECK_EQ(output_tensors[0].size(), CountShapes(hlo->shape()));
   for (int64 i = 0; i < output_tensors[0].size(); i++) {

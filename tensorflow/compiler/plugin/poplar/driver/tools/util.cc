@@ -330,6 +330,11 @@ bool IsPipelineStageBackward(const HloInstruction* inst) {
       inst, PoplarBackendConfig::CallConfig::PipelineStageBackward);
 }
 
+bool IsPipelineStageRecomputation(const HloInstruction* inst) {
+  return CallConfigHasType(
+      inst, PoplarBackendConfig::CallConfig::PipelineStageRecomputation);
+}
+
 bool IsPipelineOp(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
 }

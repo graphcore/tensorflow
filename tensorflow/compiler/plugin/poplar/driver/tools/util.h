@@ -123,6 +123,7 @@ bool IsArithmeticExpressionFusion(const HloInstruction*);
 bool IsRepeatLoop(const HloInstruction*);
 bool IsPipelineStage(const HloInstruction*);
 bool IsPipelineStageBackward(const HloInstruction*);
+bool IsPipelineStageRecomputation(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 bool CallCanBeInlined(const HloInstruction*);
 int64 GetPipelineRepeatCount(const HloInstruction*);

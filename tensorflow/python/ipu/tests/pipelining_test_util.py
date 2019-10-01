@@ -1,0 +1,232 @@
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# =============================================================================
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.framework import ops
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import standard_ops
+from tensorflow.python.ops import variable_scope
+from tensorflow.python.ops import variables
+from tensorflow.python.ipu import gradient_accumulation_optimizer
+from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu import ipu_infeed_queue
+from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu import loops
+from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu import scopes
+from tensorflow.python.ipu import utils
+
+
+def next_feed_id():
+  result = 'feed' + str(next_feed_id.feed_count)
+  next_feed_id.feed_count += 1
+  return result
+
+
+next_feed_id.feed_count = 0
+
+
+class PipelineTester(object):
+  @staticmethod
+  def _cpu_with_grad_accum(session, stages, inputs, input_values, repeat_count,
+                           pipeline_depth, dataset, optimizer):
+
+    with variable_scope.variable_scope("cpu", use_resource=True, reuse=False):
+
+      def pipeline(*args):
+        iterator = dataset.make_one_shot_iterator()
+        next_example, next_label = iterator.get_next()
+        outputs = pipelining_ops._convert_to_list(args)  # pylint: disable=W0212
+        outputs.append(next_example)
+        outputs.append(next_label)
+        for stage in stages:
+          outputs = stage(*pipelining_ops._convert_to_list(outputs))  # pylint: disable=W0212
+        return outputs
+
+      loss = pipeline(*inputs)
+
+      trainable_variables = variables.trainable_variables()
+      accum_vars = [
+          standard_ops.Variable(array_ops.zeros_like(var.initialized_value()),
+                                trainable=False) for var in trainable_variables
+      ]
+      zero_ops = [var.assign(array_ops.zeros_like(var)) for var in accum_vars]
+      grads = optimizer.compute_gradients(loss, trainable_variables)
+      accum_ops = [
+          accum_vars[i].assign_add(gv[0]) for i, gv in enumerate(grads)
+      ]
+      train_step = optimizer.apply_gradients([(accum_vars[i], gv[1])
+                                              for i, gv in enumerate(grads)])
+
+    session.run(variables.global_variables_initializer())
+    losses = []
+    with ops.device("cpu"):
+      for _ in range(repeat_count):
+        session.run(zero_ops)
+        for _ in range(pipeline_depth):
+          l, _ = session.run([loss, accum_ops],
+                             feed_dict=dict(zip(inputs, input_values)))
+          losses.append(l)
+        # Run the train_step ops to update the weights based on accumulated
+        # gradients
+        session.run(train_step)
+    return losses
+
+  @staticmethod
+  def _sharded_on_ipu(session, stages, inputs, input_values, repeat_count,
+                      pipeline_depth, dataset, optimizer, recomp):
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    with variable_scope.variable_scope("ipu_sharded",
+                                       use_resource=True,
+                                       reuse=False):
+
+      def pipeline(*args):
+        outputs = args
+        for i, stage in enumerate(stages):
+          with scopes.ipu_shard(i):
+            outputs = stage(*pipelining_ops._convert_to_list(outputs))  # pylint: disable=W0212
+        loss = outputs
+        enqueue_op = outfeed_queue.enqueue(loss)
+        opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+            optimizer, pipeline_depth)
+        outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
+        outs.append(enqueue_op)
+        outs.append(opt.minimize(loss))
+        return outs
+
+      def my_net(*args):
+        return loops.repeat(pipeline_depth,
+                            pipeline,
+                            inputs=args,
+                            infeed_queue=infeed_queue)
+
+    with ops.device("/device:IPU:0"):
+      compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
+
+    outfeed_op = outfeed_queue.dequeue()
+
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    if recomp:
+      cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
+    session.run(variables.global_variables_initializer())
+    session.run(infeed_queue.initializer)
+    for _ in range(repeat_count):
+      session.run(compiled_model_pipeline,
+                  feed_dict=dict(zip(inputs, input_values)))
+    return session.run(outfeed_op)
+
+  @staticmethod
+  def _pipeline_on_ipu(session, stages, inputs, input_values, repeat_count,
+                       pipeline_depth, dataset, optimizer, test_wrapper,
+                       expected_max_tile_memory, recomp):
+
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    with variable_scope.variable_scope("ipu", use_resource=True, reuse=False):
+
+      def optimizer_stage(loss):
+        opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+            optimizer, pipeline_depth)
+        return loss, opt.minimize(loss)
+
+      def my_net(*args):
+        return pipelining_ops.pipeline(stages,
+                                       pipeline_depth,
+                                       repeat_count=repeat_count,
+                                       inputs=args,
+                                       optimizer_stage=optimizer_stage,
+                                       infeed_queue=infeed_queue,
+                                       outfeed_queue=outfeed_queue)
+
+    with ops.device("/device:IPU:0"):
+      compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
+
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    if recomp:
+      cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
+    outfeed_op = outfeed_queue.dequeue()
+    report = tu.ReportJSON(test_wrapper, session, configure_device=False)
+
+    session.run(variables.global_variables_initializer())
+    session.run(infeed_queue.initializer)
+    session.run(compiled_model_pipeline,
+                feed_dict=dict(zip(inputs, input_values)))
+    out = session.run(outfeed_op)[0]
+    report.parse_log()
+    report.assert_pipeline_stages_on_expected_ipu(range(len(stages)))
+    report.assert_max_tile_memory_in_range(expected_max_tile_memory * 0.8,
+                                           expected_max_tile_memory * 1.2)
+    return out
+
+  @staticmethod
+  def compare_pipeline_to_cpu(session,
+                              stages,
+                              inputs,
+                              input_values,
+                              repeat_count,
+                              pipeline_depth,
+                              dataset_fn,
+                              optimizer,
+                              test_wrapper,
+                              expected_max_tile_memory,
+                              recomp=False):
+    cpu_losses = PipelineTester._cpu_with_grad_accum(session, stages, inputs,
+                                                     input_values,
+                                                     repeat_count,
+                                                     pipeline_depth,
+                                                     dataset_fn(), optimizer)
+    pipeline_losses = PipelineTester._pipeline_on_ipu(
+        session, stages, inputs, input_values, repeat_count, pipeline_depth,
+        dataset_fn(), optimizer, test_wrapper, expected_max_tile_memory,
+        recomp)
+    test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
+
+  @staticmethod
+  def compare_pipeline_to_sharding(session,
+                                   stages,
+                                   inputs,
+                                   input_values,
+                                   repeat_count,
+                                   pipeline_depth,
+                                   dataset_fn,
+                                   optimizer,
+                                   test_wrapper,
+                                   expected_max_tile_memory,
+                                   recomp=False):
+    pipeline_losses = PipelineTester._pipeline_on_ipu(
+        session, stages, inputs, input_values, repeat_count, pipeline_depth,
+        dataset_fn(), optimizer, test_wrapper, expected_max_tile_memory,
+        recomp)
+    sharded_losses = PipelineTester._sharded_on_ipu(session, stages, inputs,
+                                                    input_values, repeat_count,
+                                                    pipeline_depth,
+                                                    dataset_fn(), optimizer,
+                                                    recomp)
+    test_wrapper.assertAllClose(sharded_losses, pipeline_losses)

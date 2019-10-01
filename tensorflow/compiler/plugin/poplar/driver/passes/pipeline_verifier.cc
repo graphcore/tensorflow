@@ -47,13 +47,17 @@ Status HasCompatiblePipelineSharding(const HloSharding& expected,
 }
 }  // namespace
 
+PipelineVerifier::PipelineVerifier(bool allow_recomputation)
+    : allow_recomputation_(allow_recomputation) {}
+
 Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
                                         CallGraph* call_graph) {
   HloComputation* pipeline_computation = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages,
                       GetPipelineStages(pipeline_computation));
-  TF_ASSIGN_OR_RETURN(auto analysis, PipelineDataflowAnalysis::GetAnalysis(
-                                         stages, true, true, true));
+  TF_ASSIGN_OR_RETURN(auto analysis,
+                      PipelineDataflowAnalysis::GetAnalysis(
+                          stages, true, true, true, allow_recomputation_));
 
   // Make sure all the instructions in the pipeline_computation do not require
   // lowering. Note that the lowering checks validity of the usage.
@@ -65,7 +69,7 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
           " which should have been lowered into a PipelineStage.");
     }
     // Verify sharding for the stages.
-    if (IsPipelineStageOrBackwardOp(inst)) {
+    if (IsAnyPipelineStageOp(inst)) {
       const HloSharding expected_sharding =
           *inst->sharding().ExtractSingleSharding();
       // Check that the sharding of all operands matches the output sharding.

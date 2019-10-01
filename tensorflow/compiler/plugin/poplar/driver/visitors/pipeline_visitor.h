@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
 
 #define HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(X) \
@@ -33,6 +34,7 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   PipelineVisitor(
       int64 stage_count, const std::vector<int>& stage_ipu_mapping,
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
+      const absl::flat_hash_set<int> stages_with_recomputation,
       CompilerResources& res, const ArgVectors& inputs,
       const std::vector<const SubComputationVisitor*>&
           dependent_subcomputations = {});
@@ -116,9 +118,12 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   std::vector<poplar::program::Sequence> infeed_sequences_;
   std::vector<poplar::program::Sequence> outfeed_sequences_;
   std::vector<poplar::program::Sequence> program_sequences_;
+  std::vector<poplar::program::Sequence> recomputation_sequences_;
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;
-
+  absl::flat_hash_set<int> stages_with_recomputation_;
+  absl::flat_hash_map<int, std::unique_ptr<PipelineStageVisitor>>
+      fwd_stage_visitors_;
   poplar::program::Program GetPipelineRampUpSequence() const;
   poplar::program::Program GetPipelineRampDownSequence(
       int additional_iterations = 0) const;

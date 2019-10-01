@@ -89,6 +89,8 @@ struct CompilerResources {
 
   std::string scheduler_selection;
 
+  bool recomputation_enabled;
+
   CompilerResources(
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
@@ -100,7 +102,7 @@ struct CompilerResources {
       int64 max_scheduler_search_space_size, HloModule* module,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
-      const std::string& scheduler_selection)
+      const std::string& scheduler_selection, bool recomputation_enabled)
       : annotations(module),
         information(
             max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
@@ -114,7 +116,8 @@ struct CompilerResources {
         replication_factor(replication_factor),
         merge_infeed_io_copies(merge_infeed_io_copies),
         always_rearrange_copies_on_host(always_rearrange_copies_on_host),
-        scheduler_selection(scheduler_selection) {}
+        scheduler_selection(scheduler_selection),
+        recomputation_enabled(recomputation_enabled) {}
 };
 
 }  // namespace poplarplugin

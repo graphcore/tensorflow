@@ -43,188 +43,8 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import normalization_ops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import scopes
-
-
-def next_feed_id():
-  result = 'feed' + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
-
-
-class _PipelineTester(object):
-  @staticmethod
-  def _cpu_with_grad_accum(session, stages, inputs, input_values, repeat_count,
-                           pipeline_depth, dataset, optimizer):
-
-    with variable_scope.variable_scope("cpu", use_resource=True):
-
-      def pipeline(*args):
-        iterator = dataset.make_one_shot_iterator()
-        next_example, next_label = iterator.get_next()
-        outputs = pipelining_ops._convert_to_list(args)
-        outputs.append(next_example)
-        outputs.append(next_label)
-        for stage in stages:
-          outputs = stage(*pipelining_ops._convert_to_list(outputs))
-        return outputs
-
-      loss = pipeline(*inputs)
-
-      trainable_variables = variables.trainable_variables()
-      accum_vars = [
-          standard_ops.Variable(array_ops.zeros_like(var.initialized_value()),
-                                trainable=False) for var in trainable_variables
-      ]
-      zero_ops = [var.assign(array_ops.zeros_like(var)) for var in accum_vars]
-      grads = optimizer.compute_gradients(loss, trainable_variables)
-      accum_ops = [
-          accum_vars[i].assign_add(gv[0]) for i, gv in enumerate(grads)
-      ]
-      train_step = optimizer.apply_gradients([(accum_vars[i], gv[1])
-                                              for i, gv in enumerate(grads)])
-
-    session.run(variables.global_variables_initializer())
-    losses = []
-    with ops.device("cpu"):
-      for _ in range(repeat_count):
-        session.run(zero_ops)
-        for _ in range(pipeline_depth):
-          l, _ = session.run([loss, accum_ops],
-                             feed_dict=dict(zip(inputs, input_values)))
-          losses.append(l)
-        # Run the train_step ops to update the weights based on accumulated
-        # gradients
-        session.run(train_step)
-    return losses
-
-  @staticmethod
-  def _sharded_on_ipu(session, stages, inputs, input_values, repeat_count,
-                      pipeline_depth, dataset, optimizer):
-
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
-
-    with variable_scope.variable_scope("ipu_sharded", use_resource=True):
-
-      def pipeline(*args):
-        outputs = args
-        for i, stage in enumerate(stages):
-          with scopes.ipu_shard(i):
-            outputs = stage(*pipelining_ops._convert_to_list(outputs))
-        loss = outputs
-        enqueue_op = outfeed_queue.enqueue(loss)
-        opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
-            optimizer, pipeline_depth)
-        outs = list(args[:len(args) - infeed_queue.number_of_tuple_elements])
-        outs.append(enqueue_op)
-        outs.append(opt.minimize(loss))
-        return outs
-
-      def my_net(*args):
-        return loops.repeat(pipeline_depth,
-                            pipeline,
-                            inputs=args,
-                            infeed_queue=infeed_queue)
-
-    with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
-
-    outfeed_op = outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-    tu.move_variable_initialization_to_cpu()
-
-    session.run(variables.global_variables_initializer())
-    session.run(infeed_queue.initializer)
-    for _ in range(repeat_count):
-      session.run(compiled_model_pipeline,
-                  feed_dict=dict(zip(inputs, input_values)))
-    return session.run(outfeed_op)
-
-  @staticmethod
-  def _pipeline_on_ipu(session, stages, inputs, input_values, repeat_count,
-                       pipeline_depth, dataset, optimizer, test_wrapper,
-                       expected_max_tile_memory):
-
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
-
-    with variable_scope.variable_scope("ipu", use_resource=True):
-
-      def optimizer_stage(loss):
-        opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
-            optimizer, pipeline_depth)
-        return loss, opt.minimize(loss)
-
-      def my_net(*args):
-        return pipelining_ops.pipeline(stages,
-                                       pipeline_depth,
-                                       repeat_count=repeat_count,
-                                       inputs=args,
-                                       optimizer_stage=optimizer_stage,
-                                       infeed_queue=infeed_queue,
-                                       outfeed_queue=outfeed_queue)
-
-    with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
-
-    outfeed_op = outfeed_queue.dequeue()
-    report = tu.ReportJSON(test_wrapper,
-                           session,
-                           pipelining=True,
-                           io_trace=False)
-    tu.move_variable_initialization_to_cpu()
-
-    session.run(variables.global_variables_initializer())
-    session.run(infeed_queue.initializer)
-    session.run(compiled_model_pipeline,
-                feed_dict=dict(zip(inputs, input_values)))
-    out = session.run(outfeed_op)[0]
-    report.parse_log()
-    report.assert_pipeline_stages_on_expected_ipu(range(len(stages)))
-    report.assert_max_tile_memory_in_range(expected_max_tile_memory * 0.8,
-                                           expected_max_tile_memory * 1.2)
-    return out
-
-  @staticmethod
-  def compare_pipeline_to_cpu(session, stages, inputs, input_values,
-                              repeat_count, pipeline_depth, dataset_fn,
-                              optimizer, test_wrapper,
-                              expected_max_tile_memory):
-    cpu_losses = _PipelineTester._cpu_with_grad_accum(session, stages, inputs,
-                                                      input_values,
-                                                      repeat_count,
-                                                      pipeline_depth,
-                                                      dataset_fn(), optimizer)
-    pipeline_losses = _PipelineTester._pipeline_on_ipu(session, stages, inputs,
-                                                       input_values,
-                                                       repeat_count,
-                                                       pipeline_depth,
-                                                       dataset_fn(), optimizer,
-                                                       test_wrapper,
-                                                       expected_max_tile_memory)
-    test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
-
-  @staticmethod
-  def compare_pipeline_to_sharding(session, stages, inputs, input_values,
-                                   repeat_count, pipeline_depth, dataset_fn,
-                                   optimizer, test_wrapper,
-                                   expected_max_tile_memory):
-    pipeline_losses = _PipelineTester._pipeline_on_ipu(session, stages, inputs,
-                                                       input_values,
-                                                       repeat_count,
-                                                       pipeline_depth,
-                                                       dataset_fn(), optimizer,
-                                                       test_wrapper,
-                                                       expected_max_tile_memory)
-    sharded_losses = _PipelineTester._sharded_on_ipu(session, stages, inputs,
-                                                     input_values,
-                                                     repeat_count,
-                                                     pipeline_depth,
-                                                     dataset_fn(), optimizer)
-    test_wrapper.assertAllClose(sharded_losses, pipeline_losses)
+from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.tests import pipelining_test_util
 
 
 class PipeliningTest(test_util.TensorFlowTestCase):
@@ -295,8 +115,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed1")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed1")
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -320,15 +140,17 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                      infeed_queue=infeed_queue,
                                      outfeed_queue=outfeed_queue)
 
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
     with ops.device("/device:IPU:0"):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
-    tu.move_variable_initialization_to_cpu()
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
@@ -348,8 +170,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed2")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed2")
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -373,15 +195,17 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                      infeed_queue=infeed_queue,
                                      outfeed_queue=outfeed_queue)
 
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
     with ops.device("/device:IPU:0"):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
-    tu.move_variable_initialization_to_cpu()
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
@@ -401,8 +225,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed3")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed3")
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -463,8 +287,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed4")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed4")
     device_mapping = [2, 0, 1]
 
     def stage1(c, **kwargs):
@@ -496,10 +320,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
-    tu.move_variable_initialization_to_cpu()
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, pipelining=True, io_trace=False)
+      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
@@ -522,8 +350,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed5")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed5")
     device_mapping = [2, 2, 2]
 
     def stage1(c, **kwargs):
@@ -555,10 +383,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
-    tu.move_variable_initialization_to_cpu()
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, pipelining=True, io_trace=False)
+      report = tu.ReportJSON(self, sess, configure_device=False)
       report.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
@@ -582,8 +414,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed6")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed6")
 
     def stage1(c, **kwargs):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -613,10 +445,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device("/device:IPU:0"):
       r = ipu_compiler.compile(my_net, inputs=[c])
 
-    tu.move_variable_initialization_to_cpu()
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, pipelining=True, io_trace=False)
+      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
@@ -630,7 +466,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testPipelineGradIntermediates(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed7")
 
     with ops.device('cpu'):
       lr = array_ops.placeholder(np.float32, shape=[])
@@ -696,10 +532,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
                                                      inputs=[x, lr])
 
-    tu.move_variable_initialization_to_cpu()
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, pipelining=True, io_trace=False)
+      report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), lr: 0.01})
       losses_pipeline = sess.run(outfeed_op)
@@ -716,7 +556,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testIllegalCapture(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed8")
 
     with ops.device('cpu'):
       y = array_ops.placeholder(np.float32, shape=[])
@@ -737,8 +577,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       y = array_ops.placeholder(np.float32, shape=[])
 
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegexp(ValueError, 'Trying to capture the tensor'):
         ipu_compiler.compile(model_pipeline, inputs=[x])
@@ -754,8 +592,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with ops.device("/device:IPU:0"):
       with self.assertRaisesRegexp(ValueError,
                                    'Pipeline requires at least two'):
@@ -763,7 +599,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testDuplicateInputsOutputs(self):
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed9")
 
     def stage1(x, y):
       return x, y, y, x
@@ -786,11 +622,15 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       y = array_ops.placeholder(np.float32, shape=[1, 2])
 
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with ops.device("/device:IPU:0"):
       compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
                                                      inputs=[x, y])
+
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
     #TODO(T10784) test how many IPU copies are here once we insert IPU copies.
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
@@ -815,8 +655,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return {"a": a, "b": b, "idx": idx}
 
     dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed10")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed10")
 
     def stage1(c, **kwargs):
       y = layers.Conv2D(2,
@@ -863,13 +703,16 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                      infeed_queue=infeed_queue,
                                      outfeed_queue=outfeed_queue)
 
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
     with ops.device("/device:IPU:0"):
       r = ipu_compiler.compile(my_net, inputs=[c])
+
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
 
     tu.move_variable_initialization_to_cpu()
     outfeed_op = outfeed_queue.dequeue()
@@ -943,11 +786,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       c = array_ops.placeholder(np.float32, shape=[])
 
     with self.test_session() as sess:
-      _PipelineTester.compare_pipeline_to_cpu(sess,
-                                              [stage1, stage2, stage3, stage4],
-                                              [c], [10.01], repeat_count,
-                                              pipeline_depth, dataset_fn,
-                                              optimizer, self, 5280)
+      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
+          pipeline_depth, dataset_fn, optimizer, self, 15500)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -1046,11 +887,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         return loss
 
     with self.test_session() as sess:
-      _PipelineTester.compare_pipeline_to_sharding(sess,
-                                                   [stage1, stage2, stage3],
-                                                   [], [], repeat_count,
-                                                   pipeline_depth, dataset_fn,
-                                                   optimizer, self, 9300)
+      pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+          sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
+          dataset_fn, optimizer, self, 22700)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -1097,11 +936,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         return loss
 
     with self.test_session() as sess:
-      _PipelineTester.compare_pipeline_to_cpu(sess,
-                                              [stage1, stage2, stage3, stage4],
-                                              [], [], repeat_count,
-                                              pipeline_depth, dataset_fn,
-                                              optimizer, self, 5220)
+      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+          sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
+          pipeline_depth, dataset_fn, optimizer, self, 12600)
 
 
 if __name__ == "__main__":

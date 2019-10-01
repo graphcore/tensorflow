@@ -211,7 +211,8 @@ class ReportJSON(object):
                execution_trace=True,
                sharded=False,
                compilation_trace=True,
-               pipelining=False):
+               pipelining=False,
+               configure_device=True):
     self.test = test
     self.sess = sess
     # If no session is passed to the constructor then assume
@@ -219,14 +220,15 @@ class ReportJSON(object):
     if sess:
       with ops.device('cpu'):
         self.report = gen_ipu_ops.ipu_event_trace()
-      configure_ipu_system(compilation_trace,
-                           io_trace,
-                           execution_trace=execution_trace,
-                           text_report=False,
-                           compile_ipu_code=compile_ipu_code,
-                           device_count_override=device_count_override,
-                           sharded=sharded,
-                           pipelining=pipelining)
+      if configure_device:
+        configure_ipu_system(compilation_trace,
+                             io_trace,
+                             execution_trace=execution_trace,
+                             text_report=False,
+                             compile_ipu_code=compile_ipu_code,
+                             device_count_override=device_count_override,
+                             sharded=sharded,
+                             pipelining=pipelining)
 
   def reset(self):
     assert self.sess, "A valid session must be passed to the constructor" \

@@ -755,7 +755,6 @@ cluster_1  {
   EXPECT_TRUE(inserterPass.Run(module).ValueOrDie());
 
   // A tree of 4 GTEs, 2 inter IPU copies, and 2 tuples will be added
-  VLOG(0) << comp->ToString();
   ASSERT_EQ(comp->instruction_count(), 8);
 }
 

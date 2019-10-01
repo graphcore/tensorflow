@@ -30,6 +30,14 @@ class PipelineStageVisitor : public InplaceSubComputationVisitor {
   PipelineStageVisitor(CompilerResources& res, const ArgVectors& inputs);
 
   Status HandleTuple(HloInstruction* inst) override;
+
+  // When recomputation of the pipline is enabled, the forward and the
+  // recomputation stage share the Poplar program, meaning that their outputs
+  // will be in the same tensor. To prevent clobbering of the tensors, copies
+  // need to be inserted. This function takes a PipelineStage instruction and
+  // returns for which output (flat_index) tensors we need to add copies.
+  StatusOr<std::vector<bool>> GetOutputCopies(const HloInstruction* inst,
+                                              bool used_for_recomputation);
 };
 
 }  // namespace poplarplugin

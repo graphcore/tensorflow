@@ -39,6 +39,8 @@ namespace poplarplugin {
  */
 class PipelineVerifier : public HloModulePass {
  public:
+  PipelineVerifier(bool allow_recomputation);
+
   absl::string_view name() const override { return "pipeline-verifier"; }
 
   StatusOr<bool> Run(HloModule* module) override;
@@ -46,6 +48,8 @@ class PipelineVerifier : public HloModulePass {
  private:
   // Verify a pipeline can be lowered.
   Status VerifyPipeline(HloInstruction* pipeline_op, CallGraph* call_graph);
+
+  bool allow_recomputation_;
 };
 
 }  // namespace poplarplugin

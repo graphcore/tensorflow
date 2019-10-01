@@ -42,7 +42,7 @@ Status PipelineFixer::InsertStatefulNoopsIntoStages() {
 
 Status PipelineFixer::UpdateStage(const StageID& stage_id,
                                   HloInstruction* new_stage) {
-  if (stage_id.is_forward) {
+  if (stage_id.stage_type == StageType::kForward) {
     stages_.forward[stage_id.id] = new_stage;
   } else {
     stages_.backward[stage_id.id] = new_stage;
@@ -51,7 +51,7 @@ Status PipelineFixer::UpdateStage(const StageID& stage_id,
 }
 
 HloInstruction* PipelineFixer::GetStage(const StageID& stage_id) {
-  if (stage_id.is_forward) {
+  if (stage_id.stage_type == StageType::kForward) {
     return stages_.forward[stage_id.id];
   } else {
     return stages_.backward[stage_id.id];
@@ -126,7 +126,7 @@ StatusOr<std::vector<HloInstruction*>> FindClusterToLower(
     return IsPipelineStageBackward(value->instruction());
   };
 
-  if (stage_id.is_forward &&
+  if (stage_id.stage_type == StageType::kForward &&
       absl::c_any_of(value_set.values(), value_from_bwd)) {
     return std::vector<HloInstruction*>();
   }
@@ -213,7 +213,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
     // through this stage.
     // Note that we currently assume that forward stages do not require
     // threading as the Python API does not allow for unthreaded inputs.
-    if (stage_id.is_forward) {
+    if (stage_id.stage_type == StageType::kForward) {
       continue;
     }
     TF_ASSIGN_OR_RETURN(StageID previous_stage_id,
@@ -495,6 +495,10 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_RETURN_IF_ERROR(RemovePipelineWrapper(pipeline_comp));
 
   TF_ASSIGN_OR_RETURN(stages_, GetPipelineStages(pipeline_comp));
+  if (stages_.recomputation.size()) {
+    return FailedPrecondition(
+        "PipelineStageRecomputation are not allowed in the PiplineFixer pass.");
+  }
   // Go through the stages and insert stateful no-ops to make sure DCE does not
   // remove stages. This is usually caused by the constant propagation in TF2XLA
   // layer.
