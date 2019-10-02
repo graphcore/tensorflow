@@ -1373,6 +1373,24 @@ xla_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "random_ops",
+    size = "small",
+    srcs = ["tests/random_ops.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
 xla_test(
     name = "recomputation_test",
     srcs = ["tests/recomputation_test.cc"],
@@ -2979,6 +2997,7 @@ test_suite(
     tests = [
         ":replicated_tests",
         ":dropout_hw_test",
+        ":random_ops"
     ],
 )
 

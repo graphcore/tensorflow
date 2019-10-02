@@ -51,19 +51,32 @@ class StatelessRandomUniformOp : public PoplibsOpDef {
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
-
     TF_ASSIGN_OR_RETURN(poplar::Tensor seed,
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
     seed = seed.reinterpret(poplar::UNSIGNED_INT);
 
+    // The reference must be mapped linearly, this will define which tiles are
+    // generating the random numbers. Different tiles won't generate the same
+    // numbers from the same seed (as each tile mutates it by the modifier).
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddTensor(graph, std::make_pair(inst, 0), output_shape,
-                                  res, tensor_map));
+                        AddPlainTensor(graph, GetDebugName(inst) + "/Reference",
+                                       output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
     auto out = poprand::uniform(graph, &seed, 0, ref, dtype, 0.0, 1.0, seq,
                                 GetDebugName(inst));
+
+    // If this operation has an allocation target allocate a tensor of that
+    // layout and copy the result into it after the random numbers have been
+    // generated.
+    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
+                          AddTensor(graph, std::make_pair(inst, 0),
+                                    output_shape, res, tensor_map));
+      seq.add(poplar::program::Copy(out, new_out));
+      out = new_out;
+    }
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;
@@ -93,14 +106,28 @@ class StatelessRandomUniformIntOp : public PoplibsOpDef {
     TF_ASSIGN_OR_RETURN(int upper_val,
                         LiteralScalarToNativeType<int>(upper->literal()));
 
+    // The reference must be mapped linearly, this will define which tiles are
+    // generating the random numbers. Different tiles won't generate the same
+    // numbers from the same seed (as each tile mutates it by the modifier).
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddTensor(graph, std::make_pair(inst, 0), output_shape,
-                                  res, tensor_map));
+                        AddPlainTensor(graph, GetDebugName(inst) + "/Reference",
+                                       output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
     auto out = poprand::uniform(graph, &seed, 0, ref, dtype, lower_val,
                                 upper_val, seq, GetDebugName(inst));
+
+    // If this operation has an allocation target allocate a tensor of that
+    // layout and copy the result into it after the random numbers have been
+    // generated.
+    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
+                          AddTensor(graph, std::make_pair(inst, 0),
+                                    output_shape, res, tensor_map));
+      seq.add(poplar::program::Copy(out, new_out));
+      out = new_out;
+    }
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;
@@ -121,14 +148,28 @@ class StatelessRandomNormalOp : public PoplibsOpDef {
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
     seed = seed.reinterpret(poplar::UNSIGNED_INT);
 
+    // The reference must be mapped linearly, this will define which tiles are
+    // generating the random numbers. Different tiles won't generate the same
+    // numbers from the same seed (as each tile mutates it by the modifier).
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddTensor(graph, std::make_pair(inst, 0), output_shape,
-                                  res, tensor_map));
+                        AddPlainTensor(graph, GetDebugName(inst) + "/Reference",
+                                       output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
     auto out = poprand::normal(graph, &seed, 0, ref, dtype, 0.0, 1.0, seq,
                                GetDebugName(inst));
+
+    // If this operation has an allocation target allocate a tensor of that
+    // layout and copy the result into it after the random numbers have been
+    // generated.
+    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
+                          AddTensor(graph, std::make_pair(inst, 0),
+                                    output_shape, res, tensor_map));
+      seq.add(poplar::program::Copy(out, new_out));
+      out = new_out;
+    }
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;
@@ -148,14 +189,28 @@ class StatelessTruncatedNormalOp : public PoplibsOpDef {
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
     seed = seed.reinterpret(poplar::UNSIGNED_INT);
 
+    // The reference must be mapped linearly, this will define which tiles are
+    // generating the random numbers. Different tiles won't generate the same
+    // numbers from the same seed (as each tile mutates it by the modifier).
     TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddTensor(graph, std::make_pair(inst, 0), output_shape,
-                                  res, tensor_map));
+                        AddPlainTensor(graph, GetDebugName(inst) + "/Reference",
+                                       output_shape, res, false));
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
     auto out = poprand::truncatedNormal(graph, &seed, 0, ref, dtype, 0.0, 1.0,
                                         1.0, seq, GetDebugName(inst));
+
+    // If this operation has an allocation target allocate a tensor of that
+    // layout and copy the result into it after the random numbers have been
+    // generated.
+    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
+                          AddTensor(graph, std::make_pair(inst, 0),
+                                    output_shape, res, tensor_map));
+      seq.add(poplar::program::Copy(out, new_out));
+      out = new_out;
+    }
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;

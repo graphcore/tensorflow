@@ -69,11 +69,12 @@ class DropoutOp : public PoplibsOpDef {
 
     // Create an empty tensor for the dropout. This is internal to the poprand
     // implementation but is exposed anyway so we need to provide it.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor reference,
-                        AddTensor(graph, std::make_pair(inst, 0),
-                                  XlaShapeFromPoplarShape(
-                                      xla::PrimitiveType::F32, input.shape()),
-                                  res, tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor reference,
+        AddPlainTensor(
+            graph, GetDebugName(inst) + "/Reference",
+            XlaShapeFromPoplarShape(xla::PrimitiveType::F32, input.shape()),
+            res, false));
 
     xla::Shape seed_shape =
         XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2});
