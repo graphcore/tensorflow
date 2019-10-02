@@ -13,10 +13,14 @@
 // limitations under the License.
 // ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/scheduler.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
+#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
@@ -161,7 +165,13 @@ ENTRY c1 {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  Scheduler scheduler;
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
   auto instruction_order = module0->schedule().sequence(entry).instructions();
@@ -226,7 +236,13 @@ TEST_F(HloInplaceDependencyTest, MultipleUpdateInPlacePeers) {
                 in_place_ops.count(inst->name()) == 1);
   }
 
-  Scheduler scheduler;
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
   auto instruction_order = module0->schedule().sequence(entry).instructions();
@@ -279,7 +295,13 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithInterdependency) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  Scheduler scheduler;
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
   auto instruction_order = module0->schedule().sequence(entry).instructions();
@@ -334,7 +356,13 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithRightOrder) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  Scheduler scheduler;
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
   auto instruction_order = module0->schedule().sequence(entry).instructions();
@@ -385,7 +413,13 @@ TEST_F(HloInplaceDependencyTest, InplaceCorrectDependencies) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
 
-  Scheduler scheduler;
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
   auto instruction_order = module0->schedule().sequence(entry).instructions();

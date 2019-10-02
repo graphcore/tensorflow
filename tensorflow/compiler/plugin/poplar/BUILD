@@ -151,7 +151,6 @@ cc_library(
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_combiner.cc",
-        "driver/passes/scheduler.cc",
         "driver/passes/sharding_pass.cc",
         "driver/passes/while_loop_condition_simplify.cc",
         "driver/passes/while_loop_to_repeat_simplify.cc",
@@ -208,6 +207,7 @@ cc_library(
         "driver/schedulers/clustering_scheduler.cc",
         "driver/schedulers/ipu_scheduler.cc",
         "driver/schedulers/liveness_look_ahead_scheduler.cc",
+        "driver/schedulers/shortest_path_scheduler.cc",        
         "driver/schedulers/sync_list_scheduler.cc"
     ],
     hdrs = [
@@ -252,7 +252,6 @@ cc_library(
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_combiner.h",
-        "driver/passes/scheduler.h",
         "driver/passes/sharding_pass.h",
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
@@ -303,6 +302,7 @@ cc_library(
         "driver/schedulers/liveness_look_ahead_scheduler.h",
         "driver/schedulers/schedule_tree.h",
         "driver/schedulers/schedule_utils.h",
+        "driver/schedulers/shortest_path_scheduler.h",
         "driver/schedulers/sync_list_scheduler.h"
     ],
     deps = [
@@ -947,6 +947,17 @@ xla_test(
 )
 
 xla_test(
+    name = "shortest_path_scheduler_test",
+    srcs = ["tests/shortest_path_scheduler_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "dynamic_slice_layout_test",
     srcs = ["tests/dynamic_slice_layout_test.cc"],
     backends = ["poplar"],
@@ -1110,19 +1121,6 @@ xla_test(
     srcs = ["tests/fuse_wide_const_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
-    deps = [
-        ":optimizers",
-        "//tensorflow/compiler/xla/service:hlo_matchers",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
-    ],
-)
-
-xla_test(
-    name = "scheduler_test",
-    srcs = ["tests/scheduler_test.cc"],
-    backends = ["poplar"],
-    copts = ["-fexceptions"],
-    size = "small",
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
@@ -2888,10 +2886,10 @@ test_suite(
         "remapping_test",
         "root_token_replacer_test",
         "scatter_combiner_test",
-        "scheduler_test",
         "scheduler_tree_test",
         "sharded_inplace_test",
         "sharding_pass_test",
+        "shortest_path_scheduler_test",
         "simple_network_test",
         "sort_op_cc_test",
         "sort_op_py_test",

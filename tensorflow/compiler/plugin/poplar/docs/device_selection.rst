@@ -120,6 +120,8 @@ liveness on one tile of the processor.  The available schedulers are:
     schedulable one, as given by the `max_scheduler_lookahead_depth` and
     `max_scheduler_search_space_size` options described above.  It attempts
     to look through areas of high liveness.
+   * ``ShortestPath``, which schedules the graph giving priority to 
+    the shortest path to the root.
 
 See the documentation in :ref:`api-section` for more details.
 

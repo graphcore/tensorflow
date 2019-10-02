@@ -77,6 +77,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/ipu_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/liveness_look_ahead_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/convolution_preplanning.h"
@@ -415,6 +416,9 @@ StatusOr<std::vector<IpuSchedulerAlgorithm>> GetSchedulerList(
   if (res.scheduler_selection == "LookAhead") {
     schedulers.push_back(
         CreateLivenessLookAheadMemoryScheduler(res.information));
+  }
+  if (res.scheduler_selection == "ShortestPath") {
+    schedulers.push_back(CreateShortestPathScheduler(res.information));
   }
 
   if (schedulers.size() == 0) {
