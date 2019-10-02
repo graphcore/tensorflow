@@ -90,6 +90,12 @@ class DropoutOp : public PoplibsOpDef {
       global_seed_tensor = graph.addVariable(poplar::INT, {2});
       poputil::mapTensorLinearly(graph, global_seed_tensor);
 
+      // Make sure the random seed has a random number to make each operation
+      // less deterministic.
+      int random_seed[] = {std::rand(), std::rand()};
+      graph.setInitialValue(global_seed_tensor,
+                            poplar::ArrayRef<int>(random_seed, 2));
+
       // Create the literal value to add onto the seed each iteration.
       int32_t increment_literal[] = {1, 0};
       poplar::Tensor increment_tensor =
