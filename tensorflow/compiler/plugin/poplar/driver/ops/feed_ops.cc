@@ -182,6 +182,10 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
         res.replication_factor);
   }
 
+  FeedInfo info(outfeed->name(), outfeed_config,
+                outfeed->operands()[0]->shape());
+  res.annotations.outfeed_infos.push_back(info);
+
   if (UseSyntheticData()) {
     return seq;
   }
@@ -257,12 +261,10 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
       poplar::program::Sequence true_body;
 
       // Copy the data to the host
-      if (!UseSyntheticData()) {
-        auto fifo = graph.addDeviceToHostFIFO(
-            GetOutfeedCopyHandle(outfeed->name(), i), batched.elementType(),
-            batched.numElements());
-        true_body.add(poplar::program::Copy(batched, fifo, false));
-      }
+      auto fifo = graph.addDeviceToHostFIFO(
+          GetOutfeedCopyHandle(outfeed->name(), i), batched.elementType(),
+          batched.numElements());
+      true_body.add(poplar::program::Copy(batched, fifo, false));
 
       // The NOP body.
       poplar::program::Sequence false_body;
@@ -278,9 +280,6 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
     }
   }
 
-  FeedInfo info(outfeed->name(), outfeed_config,
-                outfeed->operands()[0]->shape());
-  res.annotations.outfeed_infos.push_back(info);
   return seq;
 }
 
