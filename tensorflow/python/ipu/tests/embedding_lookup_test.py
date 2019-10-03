@@ -19,22 +19,33 @@ from __future__ import print_function
 
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python import ipu
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import random_ops
+from tensorflow.python.ops import variables
+from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
+from tensorflow.python.training import gradient_descent
 
 
 class EmbeddingLookupTest(test_util.TensorFlowTestCase):
+  def validate_output(self, input_tensor, indices, output_tensor):
+    for i, value in enumerate(indices):
+      if isinstance(value, np.int32):
+        self.assertEqual(tuple(output_tensor[i]), tuple(input_tensor[value]))
+      else:
+        self.validate_output(input_tensor, value, output_tensor[i])
+
   @test_util.deprecated_graph_mode_only
   def testGather(self):
     def my_net(w, i):
       out = ipu.ops.embedding_ops.embedding_lookup(w,
                                                    i,
                                                    min_encoding_size=1200)
+      self.assertEqual(out.shape, (8, 200))
       return [out]
 
     with ops.device('cpu'):
@@ -53,6 +64,95 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
 
       result = sess.run(r, {i: i_h, w: w_h})
       self.assertAllClose(result[0], np.take(w_h, i_h, axis=0))
+      self.assertEqual(result[0].shape, (8, 200))
+
+  def testAutoFlatten(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        x1 = array_ops.placeholder(np.int32, shape=[3, 4, 2])
+
+      def network(x, x1):
+        out = ipu.ops.embedding_ops.embedding_lookup(x, x1)
+        self.assertEqual(out.shape, (3, 4, 2, 16))
+        return out, x, x1
+
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          x = variable_scope.get_variable("x",
+                                          initializer=random_ops.random_normal(
+                                              [100, 16], stddev=0.1))
+          r = ipu.ipu_compiler.compile(network, inputs=[x, x1])
+
+      sess.run(variables.variables_initializer([x]))
+      out, input_tensor, indices = sess.run(
+          r, {
+              x1: [[[10, 11], [12, 13], [14, 15], [16, 17]],
+                   [[20, 21], [22, 23], [24, 25], [26, 27]],
+                   [[30, 31], [32, 33], [34, 35], [36, 37]]]
+          })
+      self.assertEqual(out.shape, (3, 4, 2, 16))
+      self.validate_output(input_tensor, indices, out)
+
+  def testWithResourceVariable(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        x1 = array_ops.placeholder(np.int32, shape=[10])
+        lr = array_ops.placeholder(np.int32, shape=[])
+
+      def network(x, x1, lr):
+        g1 = ipu.ops.embedding_ops.embedding_lookup(x, x1)
+        self.assertEqual(g1.shape, (10, 16))
+        optimizer = gradient_descent.GradientDescentOptimizer(lr)
+        train = optimizer.minimize(g1)
+        return g1, x, x1, train
+
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          x = variable_scope.get_variable("x",
+                                          initializer=random_ops.random_normal(
+                                              [100, 16], stddev=0.1))
+          r = ipu.ipu_compiler.compile(network, inputs=[x, x1, lr])
+
+      sess.run(variables.variables_initializer([x]))
+      out, input_tensor, indices = sess.run(
+          r, {
+              x1: [4, 8, 15, 16, 23, 42, 8, 4, 15, 16],
+              lr: 0.1,
+          })
+      self.assertEqual(out.shape, (10, 16))
+      self.validate_output(input_tensor, indices, out)
+
+  def testWithResourceVariableAutoFlatten(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        x1 = array_ops.placeholder(np.int32, shape=[3, 4, 2])
+        lr = array_ops.placeholder(np.int32, shape=[])
+
+      def network(x, x1, lr):
+        g1 = ipu.ops.embedding_ops.embedding_lookup(x, x1)
+        self.assertEqual(g1.shape, (3, 4, 2, 16))
+        optimizer = gradient_descent.GradientDescentOptimizer(lr)
+        train = optimizer.minimize(g1)
+        return g1, x, x1, train
+
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          x = variable_scope.get_variable("x",
+                                          initializer=random_ops.random_normal(
+                                              [100, 16], stddev=0.1))
+          r = ipu.ipu_compiler.compile(network, inputs=[x, x1, lr])
+
+      sess.run(variables.variables_initializer([x]))
+      out, input_tensor, indices = sess.run(
+          r, {
+              x1: [[[10, 11], [12, 13], [14, 15], [16, 17]],
+                   [[20, 21], [22, 23], [24, 25], [26, 27]],
+                   [[30, 31], [32, 33], [34, 35], [36, 37]]],
+              lr:
+              0.1,
+          })
+      self.assertEqual(out.shape, (3, 4, 2, 16))
+      self.validate_output(input_tensor, indices, out)
 
 
 if __name__ == "__main__":

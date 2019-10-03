@@ -46,6 +46,7 @@ py_library(
     name = "ipu_grad_ops_lib",
     srcs_version = "PY2AND3",
     srcs = [
+        "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
         "ops/internal_ops_grad.py",
         "ops/pipelining_ops_grad.py",
@@ -170,6 +171,7 @@ tf_py_test(
     size = "large",
     srcs = ["tests/embedding_lookup_test.py"],
     additional_deps = [
+        ":ipu_grad_ops_lib",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",

@@ -32,12 +32,15 @@ limitations under the License.
 #include <poplar/OptionFlags.hpp>
 #include <poplin/Convolution.hpp>
 #include <poplin/MatMul.hpp>
+#include <popops/DynamicSlice.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poputil/GraphFunction.hpp>
 
 #include <memory>
 
 namespace xla {
+class HloInstruction;
+
 namespace poplarplugin {
 
 // This structure contains additional information required to lower the graph
@@ -90,6 +93,8 @@ struct CompilerResources {
   std::string scheduler_selection;
 
   bool recomputation_enabled;
+
+  std::map<HloInstruction*, popops::SlicePlan> embedding_plans;
 
   CompilerResources(
       const poplar::OptionFlags& conv_options,

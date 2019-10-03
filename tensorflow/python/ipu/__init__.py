@@ -36,6 +36,7 @@ from tensorflow.python.ipu import vertex_edsl
 from tensorflow.python.ipu.ops import custom_ops
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ipu.ops import embedding_ops
+from tensorflow.python.ipu.ops import embedding_ops_grad
 from tensorflow.python.ipu.ops import internal_ops
 from tensorflow.python.ipu.ops import internal_ops_grad
 from tensorflow.python.ipu.ops import normalization_ops
