@@ -37,7 +37,8 @@ PoplarExecutable::PoplarExecutable(
     const bool is_constant_graph,
     std::vector<std::vector<Literal>> literal_output, const bool is_remap_graph,
     std::vector<uint64> remaped_output, uint32 replication_factor,
-    const InfeedInfos& infeed_infos, const OutfeedInfos& outfeed_infos)
+    const InfeedInfos& infeed_infos, const OutfeedInfos& outfeed_infos,
+    StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       poplar_engine_(std::move(engine)),
@@ -50,6 +51,8 @@ PoplarExecutable::PoplarExecutable(
       replication_factor_(replication_factor),
       infeed_infos_(std::move(infeed_infos)),
       outfeed_infos_(std::move(outfeed_infos)),
+      stream_infos_(std::move(stream_infos)),
+      stream_meta_infos_(std::move(stream_meta_info)),
       loaded_from_cache_(false) {}
 
 PoplarExecutable::~PoplarExecutable() {
@@ -191,7 +194,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       std::move(hlo_module), std::move(profile_printer),
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
       {}, false, {}, replication_factor, std::move(infeeds),
-      std::move(outfeeds));
+      std::move(outfeeds), {}, {});
 
   executable->loaded_from_cache_ = true;
 

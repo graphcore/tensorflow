@@ -1,17 +1,17 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# =============================================================================
+#  Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+
+#      http://www.apache.org/licenses/LICENSE-2.0
+
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#  =============================================================================
 
 from __future__ import absolute_import
 from __future__ import division
@@ -177,6 +177,48 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(np.zeros([20]), gradients[0][0])
       self.assertAllEqual(np.zeros([5, 2]), gradients[1][0])
       self.assertAllEqual(np.full([10], 3.0), gradients[2][0])
+
+  @test_util.deprecated_graph_mode_only
+  def testUserOpCPU(self):
+    cwd = os.getcwd()
+    outputs = {
+        "output_types": [dtypes.float32, dtypes.int32, dtypes.float32],
+        "output_shapes": [
+            tensor_shape.TensorShape([20]),
+            tensor_shape.TensorShape([10, 10, 10]),
+            tensor_shape.TensorShape([1]),
+        ],
+    }
+    lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
+
+    def my_net(x, y):
+      output = ipu.custom_ops.cpu_user_operation([x, y],
+                                                 lib_path,
+                                                 outs=outputs)
+      return output
+
+    with ipu.scopes.ipu_scope('/device:IPU:0'):
+      x = array_ops.placeholder(np.float32, shape=[20])
+      y = array_ops.placeholder(np.int32, shape=[10, 10, 10])
+
+      model = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
+
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      res = sess.run(
+          model, {
+              x: np.ones([20]),
+              y: np.full([10, 10, 10], fill_value=6, dtype=np.int32),
+          })
+
+      # The first operation is in[0] + 6
+      self.assertAllEqual(np.full([20], 7.0), res[0])
+
+      # The second part is in[1] / 2
+      self.assertAllEqual(np.full([10, 10, 10], 3, dtype=np.int32), res[1])
+
+      # The third part is the sum of the last two so 20*7 + 1000*3.
+      self.assertAllEqual(np.full([1], 3140.0), res[2])
 
 
 if __name__ == "__main__":

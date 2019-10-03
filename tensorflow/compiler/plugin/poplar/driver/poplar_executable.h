@@ -52,7 +52,8 @@ class PoplarExecutable : public Executable {
                    const bool is_remap_graph,
                    std::vector<uint64> remaped_output,
                    uint32 replication_factor_, const InfeedInfos& infeed_infos,
-                   const OutfeedInfos& outfeed_infos);
+                   const OutfeedInfos& outfeed_infos, StreamInfos&& stream_info,
+                   StreamMetaInfos&& stream_meta_info);
 
   ~PoplarExecutable() override;
 
@@ -80,6 +81,12 @@ class PoplarExecutable : public Executable {
   const InfeedInfos& GetInfeedInfos() const { return infeed_infos_; }
 
   const OutfeedInfos& GetOutfeedInfos() const { return outfeed_infos_; }
+
+  const StreamInfos& GetStreamInfos() const { return stream_infos_; }
+
+  const StreamMetaInfos& GetStreamMetaInfos() const {
+    return stream_meta_infos_;
+  }
 
   const uint32 GetReplicationFactor() const { return replication_factor_; }
 
@@ -120,6 +127,8 @@ class PoplarExecutable : public Executable {
   uint32 replication_factor_;
   InfeedInfos infeed_infos_;
   OutfeedInfos outfeed_infos_;
+  StreamInfos stream_infos_;
+  StreamMetaInfos stream_meta_infos_;
   bool loaded_from_cache_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutable);

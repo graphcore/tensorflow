@@ -19,9 +19,9 @@ limitations under the License.
 #include <poplar/Tensor.hpp>
 #include <popops/ElementWise.hpp>
 
+#include <iostream>
 #include <unordered_map>
 #include <unordered_set>
-
 namespace pe = popops::expr;
 
 // Custom poplar kernel.
@@ -61,4 +61,27 @@ extern "C" poplar::program::Program Build_grad(
                            seq);
       });
   return seq;
+}
+
+// Custom host program.
+extern "C" void Callback(const std::vector<void*>& data,
+                         const std::vector<std::uint32_t>& number_of_elements,
+                         std::vector<void*>& outputs) {
+  float acc = 0.0f;
+  float* out_ptr = (float*)outputs[0];
+  float* in_ptr = (float*)data[0];
+  for (int i = 0; i < number_of_elements[0]; ++i) {
+    out_ptr[i] = in_ptr[i] + 6.0f;
+    acc += out_ptr[i];
+  }
+
+  std::int32_t* out_ptr2 = (std::int32_t*)outputs[1];
+  std::int32_t* in_ptr2 = (std::int32_t*)data[1];
+  for (int i = 0; i < number_of_elements[1]; ++i) {
+
+    out_ptr2[i] = in_ptr2[i] / 2;
+    acc += out_ptr2[i];
+  }
+
+  *((float*)outputs[2]) = acc;
 }

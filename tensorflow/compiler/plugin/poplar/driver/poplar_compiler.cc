@@ -832,7 +832,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       is_constant_graph, std::move(constant_output), is_remap_graph,
       std::move(remaped_output), replication_factor,
       std::move(resources.annotations.infeed_infos),
-      std::move(resources.annotations.outfeed_infos));
+      std::move(resources.annotations.outfeed_infos),
+      std::move(resources.annotations.stream_infos),
+      std::move(resources.annotations.stream_meta_infos));
 
   executable.reset(poplar_executable);
 

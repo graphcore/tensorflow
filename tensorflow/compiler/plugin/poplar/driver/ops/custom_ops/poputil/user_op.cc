@@ -73,70 +73,193 @@ class UserOpImpl : public PoplibsOpDef {
         const std::vector<poplar::Tensor>& old_inputs,
         std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix);
 
+    // We have a special function pointer type for when the intent is to execute
+    // the operation on the host by reading the raw bytes, executing the on the
+    // host, then copying back.
+    void (*as_function_host_rw_ptr)(
+        const std::vector<void*>& data,
+        const std::vector<std::uint32_t>& number_of_elements,
+        std::vector<void*>& outputs);
+
+    // Convert the function pointer to each of the types of function we could
+    // have.
     as_function_ptr = reinterpret_cast<decltype(as_function_ptr)>(
         user_op_inst->GetPointerToFunc());
     as_function_ptr_gradient =
         reinterpret_cast<decltype(as_function_ptr_gradient)>(
             user_op_inst->GetPointerToFunc());
-
+    as_function_host_rw_ptr =
+        reinterpret_cast<decltype(as_function_host_rw_ptr)>(
+            user_op_inst->GetPointerToFunc());
     poplar::program::Sequence seq;
     std::vector<poplar::Tensor> outputs;
 
-    const size_t number_of_outputs = output_shape.tuple_shapes_size();
+    // Track the number of outputs/inputs this operation has.
+    const std::uint32_t number_of_outputs = output_shape.tuple_shapes_size();
+    const std::uint32_t number_of_inputs = user_op_inst->NumInputs();
 
-    if (!is_gradient) {
-      std::vector<poplar::Tensor> inputs(user_op_inst->NumInputs());
+    // If this is a user operation we have to copy over all the buffers.
+    const bool is_user_read_write = user_op_inst->IsReadWrite();
 
-      // Get the variadic inputs and store them in the vector.
-      for (size_t i = 0; i < user_op_inst->NumInputs(); ++i) {
+    // We use the instruction name to keep track of which buffers are allocated
+    // to which user op.
+    const std::string instruction_name = GetDebugName(inst);
+
+    // If this is a user op copy the buffers. At this stage we add the copy
+    // operations to the graph and allocate the streams. To connect the actual
+    // stream we create the StreamCopyInfo structures to communicate with
+    // poplar_executor which does the actual linking of the streams.
+    if (is_user_read_write) {
+      // A wrapper around the user functor which we finally call down to.
+      auto functor = [=](std::vector<void*>& data,
+                         std::vector<std::uint32_t>& number_of_elements,
+                         std::vector<void*>& outputs) {
+        as_function_host_rw_ptr(data, number_of_elements, outputs);
+      };
+
+      // We add a map of user ops to their owned streams.
+      res.annotations.stream_infos.insert({instruction_name, {}});
+      std::list<StreamCopyInfo>& info_list =
+          res.annotations.stream_infos[instruction_name];
+
+      // Allocate a stream info
+      res.annotations.stream_meta_infos[instruction_name] = {inst,
+                                                             number_of_inputs};
+      StreamCopyMetaInfo& meta_info =
+          res.annotations.stream_meta_infos[instruction_name];
+
+      for (std::uint32_t i = 0; i < user_op_inst->NumInputs(); ++i) {
+        // Get the poplar tensor.
         TF_ASSIGN_OR_RETURN(
             poplar::Tensor in,
             FindInstructionInput(tensor_map, res, inst, i, seq, false));
-        inputs[i] = in;
+
+        // Give each input a stream identifier based on the instruction name.
+        const std::string stream_name =
+            instruction_name + "_read_" + std::to_string(i);
+
+        // Create a datastream for the input tensor.
+        poplar::DataStream stream = graph.addDeviceToHostFIFO(
+            stream_name, in.elementType(), in.numElements());
+
+        // Allocate this structure to communicate to the executor, which
+        // callbacks to register to which input tensors.
+        StreamCopyInfo info{inst,
+                            stream_name,
+                            in.numElements(),
+                            graph.getTarget().getTypeSize(in.elementType()),
+                            i,
+                            functor};
+        info_list.push_back(info);
+
+        // Copy from the tensor into the host stream. We will later attach a
+        // callback to this.
+        seq.add(poplar::program::Copy(in, stream));
       }
-      // Call the user operation and add it to the sequence.s
-      seq.add(as_function_ptr(graph, inputs, outputs, GetDebugName(inst)));
+
+      // Add an ontile sync to stop the copies from host being merged with the
+      // above as there is an invisble dependency in the callback.
+      seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL));
+
+      // Track the index of the output within the tuple.
+      std::uint32_t output_index = 0;
+      outputs.resize(number_of_outputs);
+
+      // Now go over and add a copy from the device back to the host for each
+      // output.
+      for (xla::Shape shape : output_shape.tuple_shapes()) {
+        // Convert the XLA output node into a poplar tensor.
+        TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(shape));
+        std::vector<size_t> poplar_shape = PoplarShapeFromXlaShape(shape);
+
+        // Add the output variable to the graph.
+        poplar::Tensor output_tensor = graph.addVariable(
+            poplar_type, poplar_shape,
+            instruction_name + "_output_" + std::to_string(output_index));
+
+        // Add stream ID for each output tensor.
+        const std::string stream_name =
+            instruction_name + "_write_" + std::to_string(output_index);
+
+        // Copy from the host into these new tensors.
+        poplar::DataStream stream =
+            graph.addHostToDeviceFIFO(stream_name, output_tensor.elementType(),
+                                      output_tensor.numElements());
+
+        // Allocate this structure to communicate to the executor so the
+        // executor knows how much memory to allocate for the callback to write
+        // into.
+        StreamCopyInfo info{
+            inst, stream_name, output_tensor.numElements(),
+            graph.getTarget().getTypeSize(output_tensor.elementType()),
+            output_index};
+        info_list.push_back(std::move(info));
+
+        // Store a reference to this stream copy info.
+        StreamCopyInfo* ref = &info_list.back();
+        meta_info.output_stream_info.push_back(ref);
+
+        // Add the copy to the graph.
+        seq.add(poplar::program::Copy(stream, output_tensor));
+
+        outputs[output_index] = output_tensor;
+        output_index++;
+      }
     } else {
-      // There is a gradient for each output and if we are doing the backward
-      // pass then the input will be packed like: | Gradients | previous_outputs
-      // | previous_inputs |
-      const size_t size_of_gradient =
-          (user_op_inst->NumInputs() - number_of_outputs) / 2;
+      if (!is_gradient) {
+        std::vector<poplar::Tensor> inputs(user_op_inst->NumInputs());
 
-      std::vector<poplar::Tensor> gradients;
-      std::vector<poplar::Tensor> previous_outputs;
-      std::vector<poplar::Tensor> previous_inputs;
+        // Get the variadic inputs and store them in the vector.
+        for (size_t i = 0; i < user_op_inst->NumInputs(); ++i) {
+          TF_ASSIGN_OR_RETURN(
+              poplar::Tensor in,
+              FindInstructionInput(tensor_map, res, inst, i, seq, false));
+          inputs[i] = in;
+        }
+        // Call the user operation and add it to the sequence.s
+        seq.add(as_function_ptr(graph, inputs, outputs, instruction_name));
+      } else {
+        // There is a gradient for each output and if we are doing the backward
+        // pass then the input will be packed like: | Gradients |
+        // previous_outputs | previous_inputs |
+        const size_t size_of_gradient =
+            (user_op_inst->NumInputs() - number_of_outputs) / 2;
 
-      // Get the gradients.s
-      for (size_t i = 0; i < size_of_gradient; ++i) {
-        TF_ASSIGN_OR_RETURN(
-            poplar::Tensor in,
-            FindInstructionInput(tensor_map, res, inst, i, seq, false));
+        std::vector<poplar::Tensor> gradients;
+        std::vector<poplar::Tensor> previous_outputs;
+        std::vector<poplar::Tensor> previous_inputs;
 
-        gradients.push_back(in);
+        // Get the gradients.s
+        for (size_t i = 0; i < size_of_gradient; ++i) {
+          TF_ASSIGN_OR_RETURN(
+              poplar::Tensor in,
+              FindInstructionInput(tensor_map, res, inst, i, seq, false));
+
+          gradients.push_back(in);
+        }
+
+        // Get the previous inputs.
+        for (size_t i = size_of_gradient; i < size_of_gradient * 2; ++i) {
+          TF_ASSIGN_OR_RETURN(
+              poplar::Tensor in,
+              FindInstructionInput(tensor_map, res, inst, i, seq, false));
+          previous_outputs.push_back(in);
+        }
+
+        // Get the previous outputs.
+        for (size_t i = size_of_gradient * 2; i < user_op_inst->NumInputs();
+             ++i) {
+          TF_ASSIGN_OR_RETURN(
+              poplar::Tensor in,
+              FindInstructionInput(tensor_map, res, inst, i, seq, false));
+          previous_inputs.push_back(in);
+        }
+
+        // Call the user operation and add it to the sequence.
+        seq.add(as_function_ptr_gradient(graph, gradients, previous_inputs,
+                                         previous_outputs, outputs,
+                                         GetDebugName(inst)));
       }
-
-      // Get the previous inputs.
-      for (size_t i = size_of_gradient; i < size_of_gradient * 2; ++i) {
-        TF_ASSIGN_OR_RETURN(
-            poplar::Tensor in,
-            FindInstructionInput(tensor_map, res, inst, i, seq, false));
-        previous_outputs.push_back(in);
-      }
-
-      // Get the previous outputs.
-      for (size_t i = size_of_gradient * 2; i < user_op_inst->NumInputs();
-           ++i) {
-        TF_ASSIGN_OR_RETURN(
-            poplar::Tensor in,
-            FindInstructionInput(tensor_map, res, inst, i, seq, false));
-        previous_inputs.push_back(in);
-      }
-
-      // Call the user operation and add it to the sequence.
-      seq.add(as_function_ptr_gradient(graph, gradients, previous_inputs,
-                                       previous_outputs, outputs,
-                                       GetDebugName(inst)));
     }
 
     // Register each of the returned tuple elements (if any) as outputs.

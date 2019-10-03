@@ -25,7 +25,7 @@ namespace poplarplugin {
 HloUserOpInstruction::HloUserOpInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& path, void* fn_ptr, void* metadata_fn_ptr,
-    void* allocator_function_ptr, bool is_gradient)
+    void* allocator_function_ptr, bool is_gradient, bool is_user_read_write)
     : HloPoplarInstruction(
           shape, inputs,
           GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::UserOp),
@@ -34,7 +34,8 @@ HloUserOpInstruction::HloUserOpInstruction(
       metadata_function_ptr_(metadata_fn_ptr),
       allocator_function_ptr_(allocator_function_ptr),
       gp_path(path),
-      is_gradient_(is_gradient) {
+      is_gradient_(is_gradient),
+      is_user_read_write_(is_user_read_write) {
   set_custom_call_has_side_effect(true);
   num_inputs_ = inputs.size();
 
@@ -117,16 +118,16 @@ std::unique_ptr<HloInstruction> HloUserOpInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return CreateUserOp(new_operands, shape, GetPath(), function_ptr_,
                       metadata_function_ptr_, allocator_function_ptr_,
-                      is_gradient_);
+                      is_gradient_, is_user_read_write_);
 }
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& gp_path, void* function_ptr, void* metadata_function_ptr,
-    void* allocator_function_ptr, bool is_gradient) {
+    void* allocator_function_ptr, bool is_gradient, bool is_user_read_write) {
   return absl::make_unique<HloUserOpInstruction>(
       inputs, shape, gp_path, function_ptr, metadata_function_ptr,
-      allocator_function_ptr, is_gradient);
+      allocator_function_ptr, is_gradient, is_user_read_write);
 }
 
 namespace {
@@ -158,9 +159,14 @@ static HloPoplarInstructionFactory user_op_factory(
       TF_ASSIGN_OR_RETURN(bool is_gradient,
                           attribute_map.GetAttributeAsBool("is_gradient"));
 
+      TF_ASSIGN_OR_RETURN(
+          bool is_user_read_write,
+          attribute_map.GetAttributeAsBool("is_user_read_write"));
+
       return CreateUserOp(call->operands(), call->shape(), gp_path,
                           operation_fn_ptr, metadata_function_ptr,
-                          allocator_function_ptr, is_gradient);
+                          allocator_function_ptr, is_gradient,
+                          is_user_read_write);
     });
 }  // namespace
 

@@ -59,6 +59,37 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
   }
 }
 
+// Helper structure to wrap the parameters/returned values of the LoadLibrary
+// call.
+struct LibraryLoadInfo {
+  // System abstract handle to the library handle returned by system dynamic
+  // library open call.
+  void* handle;
+
+  // Pointer to the list of operations contained within the .so.
+  const void* buffer;
+
+  // Size of the above buffer.
+  size_t size;
+};
+
+int64 GetSymbolAddressAsInt64(const LibraryLoadInfo& library,
+                              const std::string& sym_name) {
+  // Extract the function from the library. We expect (and require) the user
+  // function to be an undecorated 'C' type symbol
+  void* function_ptr = nullptr;
+  Status status = Env::Default()->GetSymbolFromLibrary(
+      library.handle, sym_name.c_str(), &function_ptr);
+
+  if (!status.ok()) {
+    return 0l;
+  }
+
+  // Convert the pointer to a uint64 (attribute map/json doesn't store
+  // pointers).
+  return reinterpret_cast<uint64>(function_ptr);
+}
+
 }  // namespace
 
 // This is not the public facing library API but we need to call this one
@@ -67,29 +98,12 @@ void XlaShapesFromAttr(OpKernelConstruction* ctx,
 Status LoadLibrary(const char* library_filename, void** result,
                    const void** buf, size_t* len);
 
-class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
- private:
-  // Helper structure to wrap the parameters/returned values of the LoadLibrary
-  // call.
-  struct LibraryLoadInfo {
-    // System abstract handle to the library handle returned by system dynamic
-    // library open call.
-    void* handle;
-
-    // Pointer to the list of operations contained within the .so.
-    const void* buffer;
-
-    // Size of the above buffer.
-    size_t size;
-  };
-
+class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
  public:
-  explicit PoputilUserOp(OpKernelConstruction* context)
+  explicit PoputilUserOpBase(OpKernelConstruction* context)
       : XlaOpKernel(context), IpuOpKernel() {
     // Extract the library path from the operation.
     OP_REQUIRES_OK(context, context->GetAttr("library_path", &library_path));
-
-    OP_REQUIRES_OK(context, context->GetAttr("gp_path", &gp_path));
 
     OP_REQUIRES_OK(context, context->GetAttr("op_name", &op_name));
 
@@ -97,9 +111,12 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
     XlaShapesFromAttr(context, output_shape);
   }
 
-  void Compile(XlaOpKernelContext* context) override {
-    LibraryLoadInfo library;
+  virtual void Compile(XlaOpKernelContext* context) override {}
 
+  IPUCustomKernelsUtil::AttributeMap& GetAttrMap() { return attribute_map_; }
+
+  // This is void so the OP_REQUIRES_OK work.
+  void LoadLibrary(LibraryLoadInfo& library, XlaOpKernelContext* context) {
     Status status = ::tensorflow::LoadLibrary(
         library_path.c_str(), &library.handle, &library.buffer, &library.size);
 
@@ -110,29 +127,19 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
                          " with error:" + status.ToString()));
     }
 
+    // Initialize the symbols which are common to all types of user op.
     int64 fn_ptr = GetSymbolAddressAsInt64(library, op_name);
     if (fn_ptr == 0) {
       OP_REQUIRES_OK(context,
                      errors::InvalidArgument("Couldn't read " + op_name +
                                              " symbol from library"));
     }
-
-    int64 metadata_fn_ptr =
-        GetSymbolAddressAsInt64(library, op_name + "_metadata");
-
-    int64 allocator_fn_ptr =
-        GetSymbolAddressAsInt64(library, op_name + "_allocator");
-
-    attribute_map_.AddAttribute("operation_fn", fn_ptr);
-
-    attribute_map_.AddAttribute("metadata_function", metadata_fn_ptr);
-
-    attribute_map_.AddAttribute("allocator_function", allocator_fn_ptr);
     attribute_map_.AddAttribute("is_gradient", is_gradient);
+    attribute_map_.AddAttribute("operation_fn", fn_ptr);
+  }
 
-    attribute_map_.AddAttribute("gp_path", gp_path);
-
-    const auto num_inputs = context->num_inputs();
+  void CreateCustomCall(XlaOpKernelContext* context) {
+    const size_t num_inputs = context->num_inputs();
 
     // Create the input tuple.
     std::vector<xla::XlaOp> inputs(num_inputs);
@@ -151,7 +158,7 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
     xla::XlaOp call_output = xla::CustomCall(
         builder,
         GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::UserOp),
-        inputs, output_tuple_shape, attribute_map_.Serialise());
+        inputs, output_tuple_shape, GetAttrMap().Serialise());
 
     // Extract each element from the output tuple.
     for (int i = 0; i < output_shape.size(); ++i) {
@@ -160,32 +167,9 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
     }
   }
 
- private:
-  int64 GetSymbolAddressAsInt64(const LibraryLoadInfo& library,
-                                const std::string& sym_name) {
-    // Extract the function from the library. We expect (and require) the user
-    // function to be an undecorated 'C' type symbol
-    void* function_ptr = nullptr;
-    Status status = Env::Default()->GetSymbolFromLibrary(
-        library.handle, sym_name.c_str(), &function_ptr);
-
-    if (!status.ok()) {
-      return 0l;
-    }
-
-    // Convert the pointer to a uint64 (attribute map/json doesn't store
-    // pointers).
-    return reinterpret_cast<uint64>(function_ptr);
-  }
-
- private:
-  TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOp);
-
+ protected:
   // The path to the shared library as provided by the user.
   std::string library_path;
-
-  // The (optional) path to any codelets which have been added.
-  std::string gp_path;
 
   // Path to the name of the user op which will be looked up in the shared
   // library.
@@ -194,11 +178,79 @@ class PoputilUserOp : public XlaOpKernel, IpuOpKernel {
   std::vector<xla::Shape> output_shape;
 
   bool is_gradient;
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOpBase);
+};
+
+class PoputilUserOp : public PoputilUserOpBase {
+ public:
+  explicit PoputilUserOp(OpKernelConstruction* context)
+      : PoputilUserOpBase(context) {
+    OP_REQUIRES_OK(context, context->GetAttr("gp_path", &gp_path));
+  }
+
+  void Compile(XlaOpKernelContext* context) final {
+    // Load the shared library.
+    LibraryLoadInfo library;
+    LoadLibrary(library, context);
+
+    // Handle the metadata specific to this type of user op.
+    int64 metadata_fn_ptr =
+        GetSymbolAddressAsInt64(library, op_name + "_metadata");
+    int64 allocator_fn_ptr =
+        GetSymbolAddressAsInt64(library, op_name + "_allocator");
+
+    GetAttrMap().AddAttribute("metadata_function", metadata_fn_ptr);
+    GetAttrMap().AddAttribute("allocator_function", allocator_fn_ptr);
+    GetAttrMap().AddAttribute("gp_path", gp_path);
+    GetAttrMap().AddAttribute("is_user_read_write", false);
+
+    // Set up all the context information to actually create the custom call.
+    CreateCustomCall(context);
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOp);
+
+  std::string gp_path;
+};
+
+class PoputilUserReadWriteOp : public PoputilUserOpBase {
+ public:
+  explicit PoputilUserReadWriteOp(OpKernelConstruction* context)
+      : PoputilUserOpBase(context) {}
+
+  void Compile(XlaOpKernelContext* context) final {
+    // Load the shared library.
+    LibraryLoadInfo library;
+    LoadLibrary(library, context);
+
+    GetAttrMap().AddAttribute("metadata_function", (int64)0);
+    GetAttrMap().AddAttribute("allocator_function", (int64)0);
+
+    std::string null_string = "";
+    GetAttrMap().AddAttribute("gp_path", null_string);
+    GetAttrMap().AddAttribute("is_user_read_write", true);
+
+    // Set up all the context information to actually create the custom call.
+    CreateCustomCall(context);
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserReadWriteOp);
+
+  std::string gp_path;
 };
 
 REGISTER_XLA_OP(Name("IpuUserOp")
                     .Device(DEVICE_IPU_XLA_JIT)
                     .CompileTimeConstantInput("library_path"),
                 PoputilUserOp);
+
+REGISTER_XLA_OP(Name("IpuUserReadWriteOp")
+                    .Device(DEVICE_IPU_XLA_JIT)
+                    .CompileTimeConstantInput("library_path"),
+                PoputilUserReadWriteOp);
 
 }  // namespace tensorflow

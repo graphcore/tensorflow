@@ -53,4 +53,36 @@ REGISTER_OP("IpuUserOp")
         gp_path (optional): Path to the gp file if provided.
     )doc");
 
+REGISTER_OP("IpuUserReadWriteOp")
+    .Input("input: input_types")
+    .Output("output: output_types")
+    .Attr("input_types: list(type) >= 0")
+    .Attr("output_types: list(type) >= 0")
+    .Attr("output_shapes: list(shape) >= 0")
+    .Attr("library_path: string")
+    .Attr("op_name: string")
+    .Attr("is_gradient: bool")
+    // We don't know what the user is going to do.
+    .SetIsStateful()
+
+    // Infer the shape from the output shapes list.
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      std::vector<PartialTensorShape> shapes;
+      TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &shapes));
+      for (int i = 0; i < shapes.size(); ++i) {
+        shape_inference::ShapeHandle out;
+        TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(shapes[i], &out));
+        c->set_output(i, out);
+      }
+      return Status::OK();
+    })
+    .Doc(R"doc(
+        Adds a prebuilt user operation to the tensorflow graph. 
+        input: The variadic input to the user op.
+        output_shapes: The shape of each tuple element output
+        output_types: The type of each tuple element output
+        library_path: The path to the shared library containing
+            the operation.
+    )doc");
+
 }  // namespace tensorflow

@@ -25,7 +25,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
  public:
   explicit HloUserOpInstruction(absl::Span<HloInstruction* const> operands,
                                 const Shape& shape, const std::string& gp_path,
-                                void*, void*, void*, bool is_gradient);
+                                void*, void*, void*, bool is_gradient,
+                                bool is_user_read_write);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -42,6 +43,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   const std::string& GetPath() const { return gp_path; }
 
   bool IsGradient() const { return is_gradient_; }
+
+  bool IsReadWrite() const { return is_user_read_write_; }
 
  protected:
   std::vector<string> ExtraPoplarAttributesToStringImpl(
@@ -83,11 +86,16 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   MetadataStructure metadata_;
 
   bool is_gradient_;
+
+  // Is this a read/write user op. That is an operation which streams the
+  // tensors to host, executes some processing, then streams the outputs back.
+  bool is_user_read_write_;
 };
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> operands, const Shape& shape,
-    const std::string& gp_path, void*, void*, void*, bool is_gradient);
+    const std::string& gp_path, void*, void*, void*, bool is_gradient,
+    bool is_user_read_write);
 
 }  // namespace poplarplugin
 }  // namespace xla

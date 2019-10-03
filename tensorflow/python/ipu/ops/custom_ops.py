@@ -19,15 +19,15 @@ from tensorflow.python.ipu.vertex_edsl import DefaultNameSource
 
 def codelet_expression_op(vertex_expression, *args):
   """
-  Add a custom fused elementwise expression operation to the graph.
+    Add a custom fused elementwise expression operation to the graph.
 
-  Note that no autograd is done on this fused operation because the autograd
-  code does not understand the internal structure of the fused codelet.
+    Note that no autograd is done on this fused operation because the autograd
+    code does not understand the internal structure of the fused codelet.
 
-  :param vertex_expression: an vertex expression instance
-  :param args: The arguments to the operation as a vector of Tensors
-  :return: The Tensor which is a result of applying the elementwise operation
-  """
+    :param vertex_expression: an vertex expression instance
+    :param args: The arguments to the operation as a vector of Tensors
+    :return: The Tensor which is a result of applying the elementwise operation
+    """
   dtype = args[0].dtype
   placeholders = map(lambda x: PlaceholderVertexExpr("in" + str(x), None),
                      range(0, len(args)))
@@ -45,17 +45,17 @@ def precompiled_user_op(inputs,
                         name=None,
                         op_name=None):
   """
-    Call the poplar function located in the shared library at 'library_path'
-    as part of the normal tensorflow execution with the given 'inputs'. The
-    shape and type of the output should be specified by 'outs' if it is None it
-    will default to no output. 'outs' should be a dictionary with two elements
-    like so:
+      Call the poplar function located in the shared library at 'library_path'
+      as part of the normal tensorflow execution with the given 'inputs'. The
+      shape and type of the output should be specified by 'outs' if it is None it
+      will default to no output. 'outs' should be a dictionary with two elements
+      like so:
 
-    outs = {
-          "output_types": [my_types_as_a_list],
-          "output_shapes": [my_shapes_as_a_list],
-      }
-  """
+      outs = {
+            "output_types": [my_types_as_a_list],
+            "output_shapes": [my_shapes_as_a_list],
+        }
+    """
 
   if outs is None:
     outs = {
@@ -65,6 +65,7 @@ def precompiled_user_op(inputs,
   gp_path = gp_path if gp_path else ""
   name = name if name else "UserOp"
   op_name = op_name if op_name else "Build"
+
   return gen_poputil_ops.ipu_user_op(inputs,
                                      library_path=library_path,
                                      gp_path=gp_path,
@@ -72,3 +73,38 @@ def precompiled_user_op(inputs,
                                      name=name,
                                      is_gradient=False,
                                      **outs)
+
+
+def cpu_user_operation(inputs,
+                       library_path,
+                       outs=None,
+                       name=None,
+                       op_name=None):
+  """
+      Call the CPU function located in the shared library at 'library_path'
+      as part of the normal tensorflow execution with the given 'inputs' 
+      copied from the IPU to the CPU. The shape and type of the output should
+      be specified by 'outs' if it is None it will default to no output. 
+      'outs' should be a dictionary with two elements like so:
+
+      outs = {
+            "output_types": [my_types_as_a_list],
+            "output_shapes": [my_shapes_as_a_list],
+        }
+    """
+
+  if outs is None:
+    outs = {
+        "output_types": [],
+        "output_shapes": [],
+    }
+  name = name if name else "UserOp"
+  op_name = op_name if op_name else "Callback"
+  return gen_poputil_ops.ipu_user_read_write_op(
+      inputs,
+      library_path=library_path,
+      op_name=op_name,
+      name=name,
+      is_gradient=False,
+      **outs)
+
