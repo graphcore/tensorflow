@@ -30,6 +30,8 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 
+from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+
 
 class EmbeddingLookupTest(test_util.TensorFlowTestCase):
   def validate_output(self, input_tensor, indices, output_tensor):
@@ -38,6 +40,25 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
         self.assertEqual(tuple(output_tensor[i]), tuple(input_tensor[value]))
       else:
         self.validate_output(input_tensor, value, output_tensor[i])
+
+  def _validate_gradient_output(self, indices, grads, output_tensor, visited):
+    for i, value in enumerate(indices):
+      if isinstance(value, np.int32):
+        visited.append(value)
+        self.assertEqual(tuple(grads[i]), tuple(output_tensor[value]))
+      else:
+        self._validate_gradient_output(value, grads[i], output_tensor, visited)
+
+  def validate_gradient_output(self, indices, grads, output_tensor):
+    visited = []
+    # Check all the indices contain the corresponding gradient slice.
+    self._validate_gradient_output(indices, grads, output_tensor, visited)
+    # Check the other values are 0:
+    for i, output_slice in enumerate(output_tensor):
+      if i not in visited:
+        self.assertFalse(output_slice.any())
+      else:
+        self.assertTrue(output_slice.any())
 
   @test_util.deprecated_graph_mode_only
   def testGather(self):
@@ -153,6 +174,38 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
           })
       self.assertEqual(out.shape, (3, 4, 2, 16))
       self.validate_output(input_tensor, indices, out)
+
+  def testGradient(self):
+    with self.session() as sess:
+      with ops.device('cpu'):
+        x1 = array_ops.placeholder(np.int32, shape=[3, 4, 2])
+        grads = array_ops.placeholder(np.float32, shape=[3, 4, 2, 16])
+
+      def network(x, x1, grads):
+        out = gen_popops_ops.ipu_multi_update(array_ops.zeros_like(x),
+                                              gradient=grads,
+                                              indices=x1)
+        self.assertEqual(out.shape, x.shape)
+        return out, x1, grads
+
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          x = variable_scope.get_variable("x",
+                                          initializer=random_ops.random_normal(
+                                              [100, 16], stddev=0.1))
+          r = ipu.ipu_compiler.compile(network, inputs=[x, x1, grads])
+
+      sess.run(variables.variables_initializer([x]))
+      out, indices, gradient = sess.run(
+          r, {
+              x1: [[[10, 11], [12, 13], [14, 15], [16, 17]],
+                   [[20, 21], [22, 23], [24, 25], [26, 27]],
+                   [[30, 31], [32, 33], [34, 35], [36, 37]]],
+              grads:
+              np.random.rand(*grads.shape)
+          })
+      self.assertEqual(out.shape, x.shape)
+      self.validate_gradient_output(indices, gradient, out)
 
 
 if __name__ == "__main__":

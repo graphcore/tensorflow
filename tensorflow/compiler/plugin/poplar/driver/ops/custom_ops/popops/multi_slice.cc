@@ -128,9 +128,8 @@ class MultiUpdateOp : public PoplibsOpDef {
                         FindInstructionInput(tensor_map, res, inst, 2, seq));
     popops::SlicePlan plan;  // TODO: Get it from res
 
-    gradient = gradient.expand({1});
     popops::multiUpdate(
-        graph, input, gradient,
+        graph, input, gradient.flatten(0, gradient.rank() - 1).expand({1}),
         indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
         {1}, seq, plan, {}, absl::StrCat(GetDebugName(inst), "/multiUpdate"));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, input));
