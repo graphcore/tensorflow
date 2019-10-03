@@ -48,7 +48,6 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::Graph& master_graph = GetMasterGraph(res);
     poplar::program::Sequence seq;
 
     const HloStatefulGradientAccumulate* grad_inst =
@@ -69,8 +68,8 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
     }
     // Create a concatenated and flattened tensor of the input tensors.
     poplar::Tensor input = FlattenAndConcatenteTensors(input_tensors);
-    poplar::Tensor counter = master_graph.addVariable(
-        poplar::UNSIGNED_INT, {}, GetDebugName(inst) + "/Counter");
+    poplar::Tensor counter = graph.addVariable(poplar::UNSIGNED_INT, {},
+                                               GetDebugName(inst) + "/Counter");
     // Map counter to the next tile.
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
     res.zeroed_tensors.push_back(counter);
@@ -85,7 +84,7 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
     // Output the accumulated gradients if counter == MiniBatchesToAccumulate -
     // 1 otherwise output all zeros.
     poplar::Tensor output_grads = popops::map(
-        master_graph,
+        graph,
         pe::Equal(pe::_1, pe::Const(grad_inst->MiniBatchesToAccumulate() - 1)),
         {counter}, seq, GetDebugName(inst) + "/CheckOutputGradients");
 
@@ -107,7 +106,7 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
       popops::zero(graph, accumulator, if_true,
                    GetDebugName(inst) + "/ZeroAccumulator");
       // Zero the counter.
-      popops::zero(master_graph, counter, if_true,
+      popops::zero(graph, counter, if_true,
                    GetDebugName(inst) + "/ZeroCounter");
     }
     poplar::program::Sequence if_false;
@@ -115,7 +114,7 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
       // Set output to all zeros.
       popops::zero(graph, output, if_false, GetDebugName(inst) + "/ZeroOutput");
       // Increase counter.
-      popops::mapInPlace(master_graph, pe::Add(pe::_1, pe::Const(1)), {counter},
+      popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)), {counter},
                          if_false, GetDebugName(inst) + "/IncreaseCounter");
     }
     seq.add(poplar::program::If(output_grads, if_true, if_false));
