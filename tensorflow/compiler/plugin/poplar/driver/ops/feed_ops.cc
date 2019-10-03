@@ -183,7 +183,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
   }
 
   if (UseSyntheticData()) {
-    return Status::OK();
+    return seq;
   }
 
   HloInstruction* operand = outfeed->operands()[0];
