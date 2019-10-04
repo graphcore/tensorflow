@@ -21,6 +21,7 @@ from functools import reduce
 from operator import mul
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+from tensorflow.python.ops import array_ops
 from tensorflow.python.util import deprecation
 
 
@@ -37,7 +38,7 @@ def embedding_lookup(params,
     `tf.nn.embedding_lookup` for the IPU.
 
     Args:
-        params: A single 2D tensor representing the complete embedding tensor.
+        params: A single tensor representing the complete embedding tensor.
         ids: A `Tensor` with type `int32` containing the slices to be extracted
              from `params`.
         name: A name for the operation.
@@ -49,4 +50,21 @@ def embedding_lookup(params,
         A `Tensor` with the same type as the tensors in `params`.
     """
   name = name or "embedding_lookup"
-  return gen_popops_ops.ipu_multi_slice(params, ids, name=name)
+  ids_shape = ids.shape.as_list()
+  params_shape = params.shape.as_list()
+
+  # Flatten all the indices.
+  num_ids = reduce(mul, ids_shape, 1)
+  ids_flat = array_ops.reshape(ids, [num_ids])
+
+  # Flatten params into a 2D shape.
+  slice_dim_size = params_shape[0]
+  params_shape.pop(0)
+  embedding_size = reduce(mul, params_shape, 1)
+  params_2d = array_ops.reshape(params, [slice_dim_size, embedding_size])
+
+  # Do the lookup.
+  result = gen_popops_ops.ipu_multi_slice(params_2d, ids_flat, name=name)
+
+  # Reshape into [ids[0], ... , ids[n - 1], params[1], ..., params[n - 1]]
+  return array_ops.reshape(result, list(ids_shape) + list(params_shape))

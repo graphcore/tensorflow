@@ -67,9 +67,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testGather(self):
     def my_net(w, i):
-      out = ipu.ops.embedding_ops.embedding_lookup(w,
-                                                   i,
-                                                   min_encoding_size=1200)
+      out = ipu.ops.embedding_ops.embedding_lookup(w, i)
       self.assertEqual(out.shape, (8, 200))
       return [out]
 
@@ -222,6 +220,30 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
               0.1,
           })
       self.validate_gradient_output(indices, gradient, out, 0.1)
+
+  def test4D(self):
+    def my_net(w, i):
+      out = ipu.ops.embedding_ops.embedding_lookup(w, i)
+      self.assertEqual(out.shape, (8, 2, 200, 4))
+      return [out]
+
+    with ops.device('cpu'):
+      i = array_ops.placeholder(np.int32, [8, 2])
+      w = array_ops.placeholder(np.float32, [32, 200, 4])
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
+
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+    with sl.Session() as sess:
+      i_h = np.arange(0, 16).reshape([8, 2])
+      w_h = np.arange(25600).reshape([32, 200, 4])
+
+      result = sess.run(r, {i: i_h, w: w_h})
+      self.assertAllClose(result[0], np.take(w_h, i_h, axis=0))
+      self.assertEqual(result[0].shape, (8, 2, 200, 4))
 
 
 if __name__ == "__main__":
