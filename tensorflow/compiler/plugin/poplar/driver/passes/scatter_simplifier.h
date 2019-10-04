@@ -13,26 +13,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_SCATTER_COMBINER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_SCATTER_COMBINER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_SCATTER_SIMPLIFIER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_SCATTER_SIMPLIFIER_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
-#include "tensorflow/core/framework/types.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
 namespace poplarplugin {
 
-// Combines multiple scatters into a single one.
-class ScatterCombiner : public HloMatcher {
+/**
+ * A pass which converts scatters into multiUpdate(Add) operations.
+ */
+class ScatterSimplifier : public HloModulePass {
  public:
-  ScatterCombiner(struct CompilerAnnotations& annotations);
+  absl::string_view name() const override { return "scatter-simplifier"; }
 
-  ~ScatterCombiner() override = default;
-  absl::string_view name() const override { return "scatter-combiner"; }
-
- private:
-  bool HandleMatch(HloMatcherMatched& match,
-                   const absl::optional<int64>) override;
+  StatusOr<bool> Run(HloModule* module) override;
 };
 
 }  // namespace poplarplugin

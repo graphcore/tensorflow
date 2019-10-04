@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "tensorflow/core/lib/core/errors.h"
@@ -217,30 +218,9 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
-  // Applying scattered deltas into a tensor with constant learning rate.
+  // Applying scattered (multiUpdateAdd with scale factor 1) deltas into a tensor with scale.
   HloMatcherPattern(
-    PatternType("scatter_update_inplace"),
-    PatternMetaTarget(3),
-    PatternInputs({6, 7, 8}),
-    PatternInplaceInputs({6}),
-    PatternOutputs({0}),
-    Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({6, 1}), IsAddOrSubtract},
-      {HloOpcode::kMultiply, NodeOperands({3, 2})},
-      {HloOpcode::kBroadcast, NodeOperands({9})},
-      {HloOpcode::kScatter, NodeOperands({4, 7, 8}), IsMultiUpdateAdd},
-      {HloOpcode::kBroadcast, NodeOperands({5})},
-      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloOpcode::kConstant, NodeOperands({}), IsFloatScalarConstant}
-    })
-  ),
-
-  // Applying scattered deltas into a tensor with variable learning rate.
-  HloMatcherPattern(
-    PatternType("scatter_update_inplace"),
+    PatternType("fused_multi_update_add"),
     PatternMetaTarget(3),
     PatternInputs({6, 7, 8, 9}),
     PatternInplaceInputs({6}),
@@ -249,41 +229,20 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({6, 1}), IsAddOrSubtract},
       {HloOpcode::kMultiply, NodeOperands({3, 2})},
       {HloOpcode::kBroadcast, NodeOperands({9})},
-      {HloOpcode::kScatter, NodeOperands({4, 7, 8}), IsMultiUpdateAdd},
+      {HloOpcode::kCustomCall, NodeOperands({4, 7, 8, 10}), IsInstructionType<HloMultiUpdateAddInstruction>},
       {HloOpcode::kBroadcast, NodeOperands({5})},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsFloatScalar}
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantOne},
     })
   ),
 
-  // Applying scattered deltas into a tensor with constant learning rate, where there is a reshape.
+  // Applying scattered (multiUpdateAdd with scale factor 1) deltas into a tensor with scale, with a reshape on the update.
   HloMatcherPattern(
-    PatternType("scatter_update_inplace"),
-    PatternMetaTarget(3),
-    PatternInputs({7, 8, 9}),
-    PatternInplaceInputs({7}),
-    PatternOutputs({0}),
-    Pattern({
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({7, 1}), IsAddOrSubtract},
-      {HloOpcode::kReshape, NodeOperands({2})},
-      {HloOpcode::kMultiply, NodeOperands({4, 3})},
-      {HloOpcode::kBroadcast, NodeOperands({10})},
-      {HloOpcode::kScatter, NodeOperands({5, 8, 9}), IsMultiUpdateAdd},
-      {HloOpcode::kBroadcast, NodeOperands({6})},
-      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloOpcode::kConstant, NodeOperands({}), IsFloatScalarConstant}
-    })
-  ),
-
-  // Applying scattered deltas into a tensor with variable learning rate, where there is a reshape.
-  HloMatcherPattern(
-    PatternType("scatter_update_inplace"),
+    PatternType("fused_multi_update_add"),
     PatternMetaTarget(3),
     PatternInputs({7, 8, 9, 10}),
     PatternInplaceInputs({7}),
@@ -293,13 +252,57 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloOpcode::kReshape, NodeOperands({2})},
       {HloOpcode::kMultiply, NodeOperands({4, 3})},
       {HloOpcode::kBroadcast, NodeOperands({10})},
-      {HloOpcode::kScatter, NodeOperands({5, 8, 9}), IsMultiUpdateAdd},
+      {HloOpcode::kCustomCall, NodeOperands({5, 8, 9, 11}), IsInstructionType<HloMultiUpdateAddInstruction>},
       {HloOpcode::kBroadcast, NodeOperands({6})},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsFloatScalar}
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantOne},
+    })
+  ),
+
+  // Applying scattered (multiUpdate) deltas into a tensor with scale.
+  HloMatcherPattern(
+    PatternType("fused_multi_update_add"),
+    PatternMetaTarget(3),
+    PatternInputs({6, 7, 8, 9}),
+    PatternInplaceInputs({6}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({6, 1}), IsAddOrSubtract},
+      {HloOpcode::kMultiply, NodeOperands({3, 2})},
+      {HloOpcode::kBroadcast, NodeOperands({9})},
+      {HloOpcode::kCustomCall, NodeOperands({4, 7, 8}), IsInstructionType<HloMultiUpdateInstruction>},
+      {HloOpcode::kBroadcast, NodeOperands({5})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
+    })
+  ),
+
+  // Applying scattered (multiUpdate) deltas into a tensor with scale, with a reshape on the update.
+  HloMatcherPattern(
+    PatternType("fused_multi_update_add"),
+    PatternMetaTarget(3),
+    PatternInputs({7, 8, 9, 10}),
+    PatternInplaceInputs({7}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({7, 1}), IsAddOrSubtract},
+      {HloOpcode::kReshape, NodeOperands({2})},
+      {HloOpcode::kMultiply, NodeOperands({4, 3})},
+      {HloOpcode::kBroadcast, NodeOperands({10})},
+      {HloOpcode::kCustomCall, NodeOperands({5, 8, 9}), IsInstructionType<HloMultiUpdateInstruction>},
+      {HloOpcode::kBroadcast, NodeOperands({6})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
     })
   ),
 

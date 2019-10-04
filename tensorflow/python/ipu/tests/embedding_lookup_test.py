@@ -24,6 +24,7 @@ from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
@@ -41,18 +42,21 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       else:
         self.validate_output(input_tensor, value, output_tensor[i])
 
-  def _validate_gradient_output(self, indices, grads, output_tensor, visited):
+  def _validate_gradient_output(self, indices, grads, output_tensor, scale,
+                                visited):
     for i, value in enumerate(indices):
       if isinstance(value, np.int32):
         visited.append(value)
-        self.assertEqual(tuple(grads[i]), tuple(output_tensor[value]))
+        self.assertEqual(tuple(grads[i] * scale), tuple(output_tensor[value]))
       else:
-        self._validate_gradient_output(value, grads[i], output_tensor, visited)
+        self._validate_gradient_output(value, grads[i], output_tensor, scale,
+                                       visited)
 
-  def validate_gradient_output(self, indices, grads, output_tensor):
+  def validate_gradient_output(self, indices, grads, output_tensor, scale):
     visited = []
     # Check all the indices contain the corresponding gradient slice.
-    self._validate_gradient_output(indices, grads, output_tensor, visited)
+    self._validate_gradient_output(indices, grads, output_tensor, scale,
+                                   visited)
     # Check the other values are 0:
     for i, output_slice in enumerate(output_tensor):
       if i not in visited:
@@ -92,19 +96,21 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device('cpu'):
         x1 = array_ops.placeholder(np.int32, shape=[3, 4, 2])
 
-      def network(x, x1):
+      def network(x1):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          x = variable_scope.get_variable(
+              "x",
+              shape=[100, 16],
+              dtype=np.float32,
+              initializer=init_ops.random_normal_initializer(stddev=0.1))
         out = ipu.ops.embedding_ops.embedding_lookup(x, x1)
         self.assertEqual(out.shape, (3, 4, 2, 16))
         return out, x, x1
 
       with ops.device("/device:IPU:0"):
-        with variable_scope.variable_scope("vs", use_resource=True):
-          x = variable_scope.get_variable("x",
-                                          initializer=random_ops.random_normal(
-                                              [100, 16], stddev=0.1))
-          r = ipu.ipu_compiler.compile(network, inputs=[x, x1])
+        r = ipu.ipu_compiler.compile(network, inputs=[x1])
 
-      sess.run(variables.variables_initializer([x]))
+      sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
               x1: [[[10, 11], [12, 13], [14, 15], [16, 17]],
@@ -120,7 +126,13 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
         x1 = array_ops.placeholder(np.int32, shape=[10])
         lr = array_ops.placeholder(np.int32, shape=[])
 
-      def network(x, x1, lr):
+      def network(x1, lr):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          x = variable_scope.get_variable(
+              "x",
+              shape=[100, 16],
+              dtype=np.float32,
+              initializer=init_ops.random_normal_initializer(stddev=0.1))
         g1 = ipu.ops.embedding_ops.embedding_lookup(x, x1)
         self.assertEqual(g1.shape, (10, 16))
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
@@ -128,13 +140,9 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
         return g1, x, x1, train
 
       with ops.device("/device:IPU:0"):
-        with variable_scope.variable_scope("vs", use_resource=True):
-          x = variable_scope.get_variable("x",
-                                          initializer=random_ops.random_normal(
-                                              [100, 16], stddev=0.1))
-          r = ipu.ipu_compiler.compile(network, inputs=[x, x1, lr])
+        r = ipu.ipu_compiler.compile(network, inputs=[x1, lr])
 
-      sess.run(variables.variables_initializer([x]))
+      sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
               x1: [4, 8, 15, 16, 23, 42, 8, 4, 15, 16],
@@ -145,25 +153,28 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
 
   def testWithResourceVariableAutoFlatten(self):
     with self.session() as sess:
-      with ops.device('cpu'):
-        x1 = array_ops.placeholder(np.int32, shape=[3, 4, 2])
-        lr = array_ops.placeholder(np.int32, shape=[])
 
-      def network(x, x1, lr):
+      def network(x1, lr):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          x = variable_scope.get_variable(
+              "x",
+              shape=[100, 16],
+              dtype=np.float32,
+              initializer=init_ops.random_normal_initializer(stddev=0.1))
         g1 = ipu.ops.embedding_ops.embedding_lookup(x, x1)
         self.assertEqual(g1.shape, (3, 4, 2, 16))
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(g1)
         return g1, x, x1, train
 
-      with ops.device("/device:IPU:0"):
-        with variable_scope.variable_scope("vs", use_resource=True):
-          x = variable_scope.get_variable("x",
-                                          initializer=random_ops.random_normal(
-                                              [100, 16], stddev=0.1))
-          r = ipu.ipu_compiler.compile(network, inputs=[x, x1, lr])
+      with ops.device('cpu'):
+        x1 = array_ops.placeholder(np.int32, shape=[3, 4, 2])
+        lr = array_ops.placeholder(np.float32, shape=[])
 
-      sess.run(variables.variables_initializer([x]))
+      with ops.device("/device:IPU:0"):
+        r = ipu.ipu_compiler.compile(network, inputs=[x1, lr])
+
+      sess.run(variables.global_variables_initializer())
       out, input_tensor, indices = sess.run(
           r, {
               x1: [[[10, 11], [12, 13], [14, 15], [16, 17]],
@@ -180,32 +191,37 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       with ops.device('cpu'):
         x1 = array_ops.placeholder(np.int32, shape=[3, 4, 2])
         grads = array_ops.placeholder(np.float32, shape=[3, 4, 2, 16])
+        lr = array_ops.placeholder(np.float32, shape=[])
 
-      def network(x, x1, grads):
-        out = gen_popops_ops.ipu_multi_update(array_ops.zeros_like(x),
-                                              gradient=grads,
-                                              indices=x1)
+      def network(x1, grads, lr):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          x = variable_scope.get_variable(
+              "x",
+              shape=[100, 16],
+              dtype=np.float32,
+              initializer=init_ops.random_normal_initializer(stddev=0.1))
+        out = gen_popops_ops.ipu_multi_update_add(array_ops.zeros_like(x),
+                                                  updates=grads,
+                                                  indices=x1,
+                                                  scale=lr)
         self.assertEqual(out.shape, x.shape)
         return out, x1, grads
 
       with ops.device("/device:IPU:0"):
-        with variable_scope.variable_scope("vs", use_resource=True):
-          x = variable_scope.get_variable("x",
-                                          initializer=random_ops.random_normal(
-                                              [100, 16], stddev=0.1))
-          r = ipu.ipu_compiler.compile(network, inputs=[x, x1, grads])
+        r = ipu.ipu_compiler.compile(network, inputs=[x1, grads, lr])
 
-      sess.run(variables.variables_initializer([x]))
+      sess.run(variables.global_variables_initializer())
       out, indices, gradient = sess.run(
           r, {
               x1: [[[10, 11], [12, 13], [14, 15], [16, 17]],
                    [[20, 21], [22, 23], [24, 25], [26, 27]],
                    [[30, 31], [32, 33], [34, 35], [36, 37]]],
               grads:
-              np.random.rand(*grads.shape)
+              np.random.rand(*grads.shape),
+              lr:
+              0.1,
           })
-      self.assertEqual(out.shape, x.shape)
-      self.validate_gradient_output(indices, gradient, out)
+      self.validate_gradient_output(indices, gradient, out, 0.1)
 
 
 if __name__ == "__main__":

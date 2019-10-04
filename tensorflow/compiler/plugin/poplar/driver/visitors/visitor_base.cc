@@ -79,7 +79,7 @@ static std::map<std::string, CustomCallFn> custom_call_map = {
     {"implicit_binary_inplace", CreateBinaryElementwiseOp},
     {"implicit_ternary", CreateTernaryElementwiseOp},
     {"implicit_ternary_inplace", CreateTernaryElementwiseOp},
-    {"scatter_update_inplace", CreateScatterUpdateOp},
+    {"fused_multi_update_add", CreateFusedMultiUpdateAddOp},
 };
 
 BaseVisitor::BaseVisitor(CompilerResources& res) : resources_(res) {

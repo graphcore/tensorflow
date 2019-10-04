@@ -136,6 +136,8 @@ cc_library(
         "driver/passes/inter_ipu_copy_inserter.cc",
         "driver/passes/lower_frontend_attributes.cc",
         "driver/passes/module_flatten.cc",
+        "driver/passes/multi_update_canonicalize.cc",
+        "driver/passes/multi_update_combiner.cc",
         "driver/passes/not_supported_gather_expander.cc",
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
@@ -150,7 +152,7 @@ cc_library(
         "driver/passes/recompute_instructions.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
-        "driver/passes/scatter_combiner.cc",
+        "driver/passes/scatter_simplifier.cc",
         "driver/passes/sharding_pass.cc",
         "driver/passes/while_loop_condition_simplify.cc",
         "driver/passes/while_loop_to_repeat_simplify.cc",
@@ -208,7 +210,7 @@ cc_library(
         "driver/schedulers/clustering_scheduler.cc",
         "driver/schedulers/ipu_scheduler.cc",
         "driver/schedulers/liveness_look_ahead_scheduler.cc",
-        "driver/schedulers/shortest_path_scheduler.cc",        
+        "driver/schedulers/shortest_path_scheduler.cc",
         "driver/schedulers/sync_list_scheduler.cc"
     ],
     hdrs = [
@@ -238,6 +240,8 @@ cc_library(
         "driver/passes/inter_ipu_copy_inserter.h",
         "driver/passes/lower_frontend_attributes.h",
         "driver/passes/module_flatten.h",
+        "driver/passes/multi_update_canonicalize.h",
+        "driver/passes/multi_update_combiner.h",
         "driver/passes/not_supported_gather_expander.h",
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
@@ -252,7 +256,7 @@ cc_library(
         "driver/passes/recompute_instructions.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
-        "driver/passes/scatter_combiner.h",
+        "driver/passes/scatter_simplifier.h",
         "driver/passes/sharding_pass.h",
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
@@ -1499,8 +1503,8 @@ xla_test(
 )
 
 xla_test(
-    name = "scatter_combiner_test",
-    srcs = ["tests/scatter_combiner_test.cc"],
+    name = "multi_update_combiner_test",
+    srcs = ["tests/multi_update_combiner_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     size = "medium",
@@ -1714,6 +1718,36 @@ xla_test(
 xla_test(
     name = "pipeline_recomputation_test",
     srcs = ["tests/pipeline_recomputation_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "scatter_simplifier_test",
+    srcs = ["tests/scatter_simplifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "multi_update_canonicalize_test",
+    srcs = ["tests/multi_update_canonicalize_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     size = "small",
@@ -2892,6 +2926,8 @@ test_suite(
         "monitored_session_test",
         "multi_ipu_test",
         "multi_run_test",
+        "multi_update_canonicalize_test",
+        "multi_update_combiner_test",
         "norm_graph_caching_sharded_test",
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
@@ -2908,7 +2944,7 @@ test_suite(
         "reduce_test",
         "remapping_test",
         "root_token_replacer_test",
-        "scatter_combiner_test",
+        "scatter_simplifier_test",
         "scheduler_tree_test",
         "sharded_inplace_test",
         "sharding_pass_test",

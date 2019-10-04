@@ -12,13 +12,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
-#include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_combiner.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 
+#include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -29,15 +33,15 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-using ScatterCombinerTest = HloTestBase;
+using MultiUpdateCombinerTest = HloTestBase;
 
-int64 GetNumScatters(const HloComputation* comp) {
+int64 GetNumMultiUpdateAdds(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
-    return inst->opcode() == HloOpcode::kScatter;
+    return IsInstructionType<HloMultiUpdateAddInstruction>(inst);
   });
 }
 
-TEST_F(ScatterCombinerTest, TestTwoLookups) {
+TEST_F(MultiUpdateCombinerTest, TestTwoLookups) {
   std::string hlo_string = R"(
 HloModule top
 scatter-combiner {
@@ -66,12 +70,22 @@ main {
   auto* module = module0.get();
 
   CompilerAnnotations annotations(module);
-  ScatterCombiner sc(annotations);
+
+  ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
+  MultiUpdateCanonicalize mu_canon;
+  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
+  HloCSE cse(false);
+  EXPECT_TRUE(cse.Run(module).ValueOrDie());
+  MultiUpdateCombiner mu_combiner(annotations);
+  EXPECT_TRUE(mu_combiner.Run(module).ValueOrDie());
+
   auto root = module->entry_computation()->root_instruction();
-  EXPECT_TRUE(Match(
-      root, m::Scatter(m::Broadcast(), m::Concatenate(), m::Concatenate())));
-  EXPECT_EQ(GetNumScatters(module->entry_computation()), 1);
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 1);
+
+  EXPECT_TRUE(Match(root, m::CustomCall(m::Broadcast(), m::Concatenate(),
+                                        m::Concatenate(), m::Constant())));
 
   // Check the expected value.
   std::vector<int32> arg0_vals(15);
@@ -92,7 +106,11 @@ main {
                      ->GetData(arg3_shape)
                      .ValueOrDie();
   Literal result =
-      Execute(std::move(module0), {&arg0, &arg1, &arg2, &arg3}).ValueOrDie();
+      Execute(
+          std::move(
+              ParseAndReturnVerifiedModule(hlo_string, config).ValueOrDie()),
+          {&arg0, &arg1, &arg2, &arg3})
+          .ValueOrDie();
 
   ShapeUtil::ForEachIndex(result.shape(),
                           [&](absl::Span<const int64> output_index) {
@@ -114,7 +132,7 @@ main {
                           });
 }
 
-TEST_F(ScatterCombinerTest, TestThreeLookups) {
+TEST_F(MultiUpdateCombinerTest, TestThreeLookups) {
   std::string hlo_string = R"(
 HloModule top
 scatter-combiner {
@@ -149,15 +167,31 @@ main {
   auto* module = module_or_status.ValueOrDie().get();
 
   CompilerAnnotations annotations(module);
-  ScatterCombiner sc(annotations);
+
+  ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 3);
+  MultiUpdateCanonicalize mu_canon;
+  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
+  MultiUpdateCombiner mu_combiner(annotations);
+  int64 execution_count = -1;
+  bool changed = false;
+  do {
+    HloCSE cse(false);
+    cse.Run(module).ValueOrDie();
+    changed = mu_combiner.Run(module).ValueOrDie();
+    execution_count++;
+  } while (changed);
+  EXPECT_TRUE(execution_count);
+
   auto root = module->entry_computation()->root_instruction();
-  EXPECT_TRUE(Match(
-      root, m::Scatter(m::Broadcast(), m::Concatenate(), m::Concatenate())));
-  EXPECT_EQ(GetNumScatters(module->entry_computation()), 1);
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 1);
+
+  EXPECT_TRUE(Match(root, m::CustomCall(m::Broadcast(), m::Concatenate(),
+                                        m::Concatenate(), m::Constant())));
 }
 
-TEST_F(ScatterCombinerTest, TestThreeLookupsDifferentCompNames) {
+TEST_F(MultiUpdateCombinerTest, TestThreeLookupsDifferentCompNames) {
   std::string hlo_string = R"(
 HloModule top
 scatter-combiner1 {
@@ -202,15 +236,35 @@ main {
   auto* module = module_or_status.ValueOrDie().get();
 
   CompilerAnnotations annotations(module);
-  ScatterCombiner sc(annotations);
+
+  ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 3);
+  MultiUpdateCanonicalize mu_canon;
+  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
+  MultiUpdateCombiner mu_combiner(annotations);
+  int64 execution_count = -1;
+  bool changed = false;
+  do {
+    HloCSE cse(false);
+    cse.Run(module).ValueOrDie();
+    changed = mu_combiner.Run(module).ValueOrDie();
+    execution_count++;
+  } while (changed);
+  EXPECT_TRUE(execution_count);
+
   auto root = module->entry_computation()->root_instruction();
-  EXPECT_TRUE(Match(
-      root, m::Scatter(m::Broadcast(), m::Concatenate(), m::Concatenate())));
-  EXPECT_EQ(GetNumScatters(module->entry_computation()), 1);
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 1);
+
+  EXPECT_TRUE(Match(root, m::CustomCall(m::Broadcast(), m::Concatenate(),
+                                        m::Concatenate(), m::Constant())));
+
+  EXPECT_THAT(root->operand(0)->opcode(), HloOpcode::kBroadcast);
+  EXPECT_THAT(root->operand(1)->opcode(), HloOpcode::kConcatenate);
+  EXPECT_THAT(root->operand(2)->opcode(), HloOpcode::kConcatenate);
 }
 
-TEST_F(ScatterCombinerTest, CompNotAdd) {
+TEST_F(MultiUpdateCombinerTest, CompNotAdd) {
   std::string hlo_string = R"(
 HloModule top
 scatter-combiner1 {
@@ -255,13 +309,27 @@ main {
   auto* module = module_or_status.ValueOrDie().get();
 
   CompilerAnnotations annotations(module);
-  ScatterCombiner sc(annotations);
+
+  ScatterSimplifier sc;
   EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_EQ(GetNumMultiUpdateAdds(module->entry_computation()), 2);
+  MultiUpdateCanonicalize mu_canon;
+  EXPECT_TRUE(mu_canon.Run(module).ValueOrDie());
+  MultiUpdateCombiner mu_combiner(annotations);
+  int64 execution_count = -1;
+  bool changed = false;
+  do {
+    HloCSE cse(false);
+    cse.Run(module).ValueOrDie();
+    changed = mu_combiner.Run(module).ValueOrDie();
+    execution_count++;
+  } while (changed);
+  EXPECT_TRUE(execution_count);
+
   auto root = module->entry_computation()->root_instruction();
-  EXPECT_TRUE(Match(root, m::Add(m::Scatter(m::Broadcast(), m::Concatenate(),
-                                            m::Concatenate()),
+  EXPECT_TRUE(Match(root, m::Add(m::CustomCall(m::Broadcast(), m::Concatenate(),
+                                               m::Concatenate(), m::Constant()),
                                  m::Scatter())));
-  EXPECT_EQ(GetNumScatters(module->entry_computation()), 2);
 }
 
 }  // namespace

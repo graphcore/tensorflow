@@ -27,6 +27,7 @@ bool IsRandomNormal(const HloInstruction*);
 bool IsRandomUniform(const HloInstruction*);
 bool IsCompareEqual(const HloInstruction*);
 bool IsConstantZero(const HloInstruction*);
+bool IsConstantOne(const HloInstruction*);
 bool IsExternalPadding(const HloInstruction*);
 bool IsFloat(const HloInstruction*);
 bool IsScalar(const HloInstruction*);
@@ -60,8 +61,8 @@ bool IsNormGradient(const xla::HloInstruction*);
 bool IsNonLinearityGradient(const xla::HloInstruction*);
 bool IsNonLinearity(const xla::HloInstruction*);
 bool IsSupportedAllReduce(const HloInstruction*);
-bool IsMultiUpdate(const HloInstruction*);
-bool IsMultiUpdateAdd(const HloInstruction*);
+bool IsMultiUpdateScatter(const HloInstruction*);
+bool IsMultiUpdateAddScatter(const HloInstruction*);
 template <typename T>
 bool IsInstructionType(const HloInstruction* inst) {
   return DynCast<T>(inst);

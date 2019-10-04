@@ -720,8 +720,8 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*',
-          'Copy_',
           'ExpandDims/input/fusion*/multiUpdateAdd',
+          'ExpandDims/input/fusion*/NegateScale/Op/Negate',
           'vs/Gather*/gather.*/multiSlice',
           'vs/add/add*/AddTo',
           'vs/Sum/reduce*/Reduce',
@@ -783,14 +783,74 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'ExpandDims/input/fusion*/multiUpdateAdd',
-          'ExpandDims/input/fusion*/negate_scale/Op/Negate',
+          'ExpandDims/input/fusion*/NegateScale/Op/Negate',
           'vs/Gather*/gather.*/multiSlice',
           'vs/add/add*/AddTo',
           'vs/Sum/reduce*/Reduce',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
-  def testScatterWithReshape(self):
+  def testScatterSingleLookup(self):
+    with self.session() as sess:
+
+      def network(x, y, la, lr):
+        del x
+        with variable_scope.variable_scope("vs", use_resource=True):
+          w = variable_scope.get_variable(
+              "w",
+              shape=[10, 200],
+              dtype=np.float32,
+              initializer=init_ops.constant_initializer(2.))
+          g = nn.embedding_lookup(w, y)
+
+          ce = losses.absolute_difference(labels=la, predictions=g)
+          loss = math_ops.reduce_mean(ce)
+
+        optimizer = gradient_descent.GradientDescentOptimizer(lr)
+        train = optimizer.minimize(loss)
+        return loss, train
+
+      with ops.device('cpu'):
+        x = array_ops.placeholder(np.float32, shape=[1, 100, 100, 2])
+        y = array_ops.placeholder(np.int32, shape=[10])
+        la = array_ops.placeholder(np.float32, shape=[10, 200])
+        lr = array_ops.placeholder(np.float32, shape=[])
+
+      report = tu.ReportJSON(self, sess, io_trace=False)
+
+      with ops.device("/device:IPU:0"):
+        r = xla.compile(network, inputs=[x, y, la, lr])
+
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      out = sess.run(
+          r, {
+              x: np.ones(x.shape),
+              y: np.ones(y.shape),
+              la: np.ones(la.shape),
+              lr: 0.1,
+          })
+      self.assertAllClose(out, [1.0])
+
+      report.parse_log()
+      # pylint: disable=line-too-long
+      ok = [
+          '__seed*',
+          'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
+          'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
+          'GradientDescent/update_vs/w/ResourceScatterAdd/custom-call*/multiUpdateAdd',
+          'gradients/vs/absolute_difference/Abs_grad/Sign',
+          'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
+          'vs/embedding_lookup/gather.*/multiSlice',
+          'vs/absolute_difference/Sub/subtract.*/AddTo',
+          'vs/absolute_difference/Abs/abs.*/Op/Absolute',
+          'vs/absolute_difference/Sum/reduce',
+          'vs/absolute_difference/value/multiply',
+      ]
+      # pylint: enable=line-too-long
+      report.assert_all_compute_sets_and_list(ok)
+
+  def testScatterMultipleLookupsWithReshape(self):
     with self.session() as sess:
 
       def network(x, y1, y2, la, lr):
@@ -842,7 +902,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/multiUpdateAdd',
-          'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/negate_scale/Op/Negate',
+          'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/NegateScale/Op/Negate',
           'gradients/vs/absolute_difference/Abs_grad/Sign',
           'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
           'vs/embedding_lookup/gather.*/multiSlice',

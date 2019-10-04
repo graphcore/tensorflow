@@ -52,6 +52,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
@@ -66,7 +68,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_combiner.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
@@ -586,11 +588,20 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
       pass.AddPass<ReshapeMover>();
       pass.AddPass<SortSimplifier>();
-      pass.AddPass<ScatterCombiner>(resources.annotations);
       pass.AddPass<HloDCE>();
       pass.AddPass<WhileLoopConditionSimplify>();
       pass.AddPass<PipelineOptimizer>();
       pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
+    }
+    pipeline.AddPass<ScatterSimplifier>();
+    {
+      auto& pass =
+          pipeline.AddPass<HloPassFix<HloPassPipeline>>("scatter-optimizer");
+      pass.AddPass<MultiUpdateCanonicalize>();
+      pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
+      pass.AddPass<HloCSE>(true);
+      pass.AddPass<HloDCE>();
+      pass.AddPass<MultiUpdateCombiner>(resources.annotations);
     }
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();

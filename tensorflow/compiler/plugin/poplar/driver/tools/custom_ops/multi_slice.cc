@@ -22,6 +22,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+// MultiSlice
 HloMultiSliceInstruction::HloMultiSliceInstruction(
     const Shape& shape, HloInstruction* const input,
     HloInstruction* const indices)
@@ -61,12 +62,18 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(
   return absl::make_unique<HloMultiSliceInstruction>(shape, input, indices);
 }
 
+// MultiUpdate
 HloMultiUpdateInstruction::HloMultiUpdateInstruction(
-    const Shape& shape, HloInstruction* const input,
-    HloInstruction* const gradient, HloInstruction* const indices)
-    : HloPoplarInstruction(shape, {input, gradient, indices},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Popops, PoplibsOp::MultiUpdate)) {}
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    std::size_t index_vector_dim, std::size_t update_dim, bool is_update)
+    : HloPoplarInstruction(
+          shape, operands,
+          GetPoplibsCustomOpTargetString(
+              PoplibsOp::Popops,
+              is_update ? PoplibsOp::MultiUpdateAdd : PoplibsOp::MultiUpdate),
+          index_vector_dim, update_dim),
+      index_vector_dim_(index_vector_dim),
+      update_dim_(update_dim) {}
 
 absl::flat_hash_set<int64> HloMultiUpdateInstruction::AllocatingIndices()
     const {
@@ -86,22 +93,47 @@ std::unique_ptr<HloInstruction>
 HloMultiUpdateInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  return CreateMultiUpdate(shape, new_operands[0], new_operands[1],
-                           new_operands[2]);
+  return CreateMultiUpdate(shape, new_operands, index_vector_dim_, update_dim_);
 }
 
 std::vector<std::string>
 HloMultiUpdateInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {};
+  std::vector<std::string> attributes;
+  attributes.push_back("index_vector_dim=" + std::to_string(index_vector_dim_));
+  attributes.push_back("update_dim=" + std::to_string(update_dim_));
+  return attributes;
 }
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
-    const Shape& shape, HloInstruction* const input,
-    HloInstruction* const gradient, HloInstruction* const indices) {
-  return absl::make_unique<HloMultiUpdateInstruction>(shape, input, gradient,
-                                                      indices);
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    std::size_t index_vector_dim, std::size_t update_dim) {
+  return absl::make_unique<HloMultiUpdateInstruction>(
+      shape, operands, index_vector_dim, update_dim);
 }
+
+// MultiUpdateAdd
+HloMultiUpdateAddInstruction::HloMultiUpdateAddInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    std::size_t index_vector_dim, std::size_t update_dim)
+    : HloMultiUpdateInstruction(shape, operands, index_vector_dim, update_dim,
+                                true) {}
+
+std::unique_ptr<HloInstruction>
+HloMultiUpdateAddInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return CreateMultiUpdateAdd(shape, new_operands, index_vector_dim_,
+                              update_dim_);
+}
+
+std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    std::size_t index_vector_dim, std::size_t update_dim) {
+  return absl::make_unique<HloMultiUpdateAddInstruction>(
+      shape, operands, index_vector_dim, update_dim);
+}
+
 namespace {
 StatusOr<std::unique_ptr<HloInstruction>> HloMultiSliceInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -111,9 +143,26 @@ StatusOr<std::unique_ptr<HloInstruction>> HloMultiSliceInstructionFactoryFunc(
 
 StatusOr<std::unique_ptr<HloInstruction>> HloMultiUpdateInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
-  return CreateMultiUpdate(call->shape(), call->mutable_operand(0),
-                           call->mutable_operand(1), call->mutable_operand(2));
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  TF_ASSIGN_OR_RETURN(uint64 index_vector_dim,
+                      attribute_map.GetAttributeAsUInt64("index_vector_dim"));
+  TF_ASSIGN_OR_RETURN(uint64 update_dim,
+                      attribute_map.GetAttributeAsUInt64("update_dim"));
+  return CreateMultiUpdate(call->shape(), call->operands(), index_vector_dim,
+                           update_dim);
 }
+
+StatusOr<std::unique_ptr<HloInstruction>>
+HloMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  TF_ASSIGN_OR_RETURN(uint64 index_vector_dim,
+                      attribute_map.GetAttributeAsUInt64("index_vector_dim"));
+  TF_ASSIGN_OR_RETURN(uint64 update_dim,
+                      attribute_map.GetAttributeAsUInt64("update_dim"));
+  return CreateMultiUpdateAdd(call->shape(), call->operands(), index_vector_dim,
+                              update_dim);
+}
+
 static HloPoplarInstructionFactory multi_slice_factory(
     GetPoplibsCustomOpTargetString(PoplibsOp::Popops, PoplibsOp::MultiSlice),
     HloMultiSliceInstructionFactoryFunc);
@@ -121,6 +170,11 @@ static HloPoplarInstructionFactory multi_slice_factory(
 static HloPoplarInstructionFactory multi_update_factory(
     GetPoplibsCustomOpTargetString(PoplibsOp::Popops, PoplibsOp::MultiUpdate),
     HloMultiUpdateInstructionFactoryFunc);
+
+static HloPoplarInstructionFactory multi_update_add_factory(
+    GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
+                                   PoplibsOp::MultiUpdateAdd),
+    HloMultiUpdateAddInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

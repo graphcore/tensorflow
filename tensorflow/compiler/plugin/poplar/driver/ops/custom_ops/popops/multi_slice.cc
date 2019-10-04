@@ -12,12 +12,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 
-#include <popops/DynamicSlice.hpp>
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
+
+#include <popops/DynamicSlice.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -28,12 +32,14 @@ StatusOr<poplar::Tensor> CreateIndicesTensor(
     const xla::Shape& xla_indices_shape, const std::string& name) {
   std::vector<size_t> indices_shape =
       PoplarShapeFromXlaShape(xla_indices_shape);
+  TF_ASSIGN_OR_RETURN(poplar::Type indices_type,
+                      PoplarDataType(xla_indices_shape));
   const auto num_indices =
       std::accumulate(indices_shape.begin(), indices_shape.end(), 1,
                       std::multiplies<std::size_t>());
   return popops::createIndicesTensor(graph, {0}, num_indices, plan, {}, name)
       .reshape(indices_shape)
-      .reinterpret(poplar::INT);
+      .reinterpret(indices_type);
 }
 
 StatusOr<poplar::Tensor> CreateInputTensor(poplar::Graph& graph,
@@ -44,11 +50,11 @@ StatusOr<poplar::Tensor> CreateInputTensor(poplar::Graph& graph,
       graph, type, PoplarShapeFromXlaShape(xla_input_shape), {0}, {1}, 0, name);
 }
 
-StatusOr<poplar::Tensor> CreateGradientTensor(
+StatusOr<poplar::Tensor> CreateUpdatesTensor(
     poplar::Graph& graph, const popops::SlicePlan& plan,
-    const xla::Shape& xla_input_shape, const xla::Shape& xla_gradient_shape,
+    const xla::Shape& xla_input_shape, const xla::Shape& xla_updates_shape,
     const xla::Shape& xla_indices_shape, const std::string& name) {
-  TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(xla_gradient_shape));
+  TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(xla_updates_shape));
   std::vector<size_t> indices_shape =
       PoplarShapeFromXlaShape(xla_indices_shape);
   const auto num_indices =
@@ -57,7 +63,7 @@ StatusOr<poplar::Tensor> CreateGradientTensor(
   poplar::Tensor out = popops::createSliceTensor(
       graph, type, PoplarShapeFromXlaShape(xla_input_shape), {0}, {1},
       num_indices, plan, {}, name);
-  out = out.reshape(PoplarShapeFromXlaShape(xla_gradient_shape));
+  out = out.reshape(PoplarShapeFromXlaShape(xla_updates_shape));
   return out;
 }
 
@@ -86,6 +92,7 @@ class MultiSliceOp : public PoplibsOpDef {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     return seq;
   }
+
   StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
                                      CompilerResources& res,
                                      const std::string& name,
@@ -103,10 +110,14 @@ class MultiSliceOp : public PoplibsOpDef {
         return CreateIndicesTensor(graph, plan, inst->operand(1)->shape(),
                                    GetDebugName(inst) + "/indices");
       }
+      default: {
+        return FailedPrecondition(
+            "Invalid allocation index %d for instruction ", input_index,
+            inst->ToString());
+      }
     }
   }
 };
-
 REGISTER_POPLIBS_OP(Popops, MultiSlice, MultiSliceOp);
 
 class MultiUpdateOp : public PoplibsOpDef {
@@ -115,27 +126,12 @@ class MultiUpdateOp : public PoplibsOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::program::Sequence seq;
-
-    TF_ASSIGN_OR_RETURN(ArgVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
-    CHECK_EQ(inputs.size(), 1);
-    CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor input = inputs[0][0];
-    TF_ASSIGN_OR_RETURN(poplar::Tensor gradient,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq));
-    TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq));
-    popops::SlicePlan plan;  // TODO: Get it from res
-
-    popops::multiUpdate(
-        graph, input, gradient.flatten(0, gradient.rank() - 1).expand({1}),
-        indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
-        {1}, seq, plan, {}, absl::StrCat(GetDebugName(inst), "/multiUpdate"));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, input));
+    TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
+                        CreateMultiUpdate(res, inst, tensor_map));
 
     return seq;
   }
+
   StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
                                      CompilerResources& res,
                                      const std::string& name,
@@ -150,19 +146,37 @@ class MultiUpdateOp : public PoplibsOpDef {
       }
       case 1: {
         popops::SlicePlan plan;  // TODO: Get it from res
-        return CreateGradientTensor(
-            graph, plan, inst->operand(0)->shape(), inst->operand(1)->shape(),
-            inst->operand(2)->shape(), GetDebugName(inst) + "/gradient");
+        return CreateIndicesTensor(graph, plan, inst->operand(1)->shape(),
+                                   GetDebugName(inst) + "/indices");
       }
       case 2: {
         popops::SlicePlan plan;  // TODO: Get it from res
-        return CreateIndicesTensor(graph, plan, inst->operand(2)->shape(),
-                                   GetDebugName(inst) + "/indices");
+        return CreateUpdatesTensor(
+            graph, plan, inst->operand(0)->shape(), inst->operand(2)->shape(),
+            inst->operand(1)->shape(), GetDebugName(inst) + "/updates");
+      }
+      default: {
+        return FailedPrecondition(
+            "Invalid allocation index %d for instruction ", input_index,
+            inst->ToString());
       }
     }
   }
 };
 REGISTER_POPLIBS_OP(Popops, MultiUpdate, MultiUpdateOp);
+
+class MultiUpdateAddOp : public MultiUpdateOp {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
+                        CreateMultiUpdateAdd(res, inst, tensor_map));
+    return seq;
+  }
+};
+REGISTER_POPLIBS_OP(Popops, MultiUpdateAdd, MultiUpdateAddOp);
 
 }  // namespace
 }  // namespace poplarplugin

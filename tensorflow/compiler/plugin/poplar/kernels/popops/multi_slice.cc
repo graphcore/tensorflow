@@ -58,31 +58,57 @@ REGISTER_IPU_OP("IpuMultiSlice", PopopsMultiSliceOp);
 
 class PopopsMultiUpdateOp : public XlaOpKernel, IpuOpKernel {
  public:
-  using XlaOpKernel::XlaOpKernel;
+  PopopsMultiUpdateOp(OpKernelConstruction* ctx, bool is_update_add = false)
+      : XlaOpKernel(ctx), IpuOpKernel(), is_update_add_(is_update_add) {}
 
   void Compile(XlaOpKernelContext* ctx) override {
     const TensorShape input_shape = ctx->InputShape(0);
+    const TensorShape indices_shape = ctx->InputShape(1);
+    const TensorShape updates_shape = ctx->InputShape(2);
     xla::PrimitiveType input_type;
     OP_REQUIRES_OK(ctx,
                    DataTypeToPrimitiveType(ctx->input_type(0), &input_type));
 
+    if (is_update_add_) {
+      const TensorShape scale_shape = ctx->InputShape(3);
+      OP_REQUIRES(ctx, TensorShapeUtils::IsScalar(scale_shape),
+                  errors::InvalidArgument("scale must be a scalar, but got: ",
+                                          scale_shape.DebugString()));
+    }
+
     xla::XlaBuilder& b = *ctx->builder();
     xla::Shape xla_output_shape =
         TensorShapeToXLAShape(input_type, input_shape);
-    std::vector<xla::XlaOp> args = {ctx->Input(0), ctx->Input(1),
-                                    ctx->Input(2)};
+    const auto num_inputs = ctx->num_inputs();
+    std::vector<xla::XlaOp> args(num_inputs);
+    for (int i = 0; i != num_inputs; ++i) {
+      args[i] = ctx->Input(i);
+    }
+    attribute_map_.AddAttribute("update_dim", updates_shape.dims() - 1);
+    attribute_map_.AddAttribute("index_vector_dim", indices_shape.dims());
 
-    xla::XlaOp call_output =
-        xla::CustomCall(&b,
-                        GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                                       PoplibsOp::MultiUpdate),
-                        args, xla_output_shape, attribute_map_.Serialise());
+    xla::XlaOp call_output = xla::CustomCall(
+        &b,
+        GetPoplibsCustomOpTargetString(
+            PoplibsOp::Popops, is_update_add_ ? PoplibsOp::MultiUpdateAdd
+                                              : PoplibsOp::MultiUpdate),
+        args, xla_output_shape, attribute_map_.Serialise());
     ctx->SetOutput(0, call_output);
   }
 
  private:
+  const bool is_update_add_;
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsMultiUpdateOp);
 };
-
 REGISTER_IPU_OP("IpuMultiUpdate", PopopsMultiUpdateOp);
+
+class PopopsMultiUpdateAddOp : public PopopsMultiUpdateOp {
+ public:
+  PopopsMultiUpdateAddOp(OpKernelConstruction* ctx)
+      : PopopsMultiUpdateOp(ctx, true){};
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(PopopsMultiUpdateAddOp);
+};
+REGISTER_IPU_OP("IpuMultiUpdateAdd", PopopsMultiUpdateAddOp);
 }  // namespace tensorflow

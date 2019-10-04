@@ -31,124 +31,10 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-
-// Transposes the given scatter_indices such that the index_vector_dim becomes
-// the most-minor dimension.
-poplar::Tensor TransposeIndexVectorDimToLast(poplar::Tensor indices,
-                                             unsigned index_vector_dim) {
-  if (indices.rank() == index_vector_dim) {
-    return indices;
-  }
-
-  if (indices.rank() == index_vector_dim + 1) {
-    return indices;
-  }
-
-  std::vector<unsigned> permutation(indices.rank());
-
-  const auto front = std::begin(permutation);
-  const auto mid = std::next(std::begin(permutation), index_vector_dim);
-  const auto back = std::end(permutation) - 1;
-
-  std::iota(front, mid, 0);
-  std::iota(mid, back, index_vector_dim + 1);
-  *back = index_vector_dim;
-
-  return indices.dimShuffle(permutation);
-}
-
-// Canonicalizes the scatter_indices tensor in order to keep them uniform while
-// performing the scatter operation.
-poplar::Tensor CanonicalizeScatterIndices(poplar::Tensor scatter_indices,
-                                          unsigned index_vector_dim) {
-  // Transpose the non-index-vector dimensions to the front.
-  poplar::Tensor scatter_indices_t =
-      TransposeIndexVectorDimToLast(scatter_indices, index_vector_dim);
-
-  const bool indices_are_scalar = scatter_indices_t.rank() == index_vector_dim;
-
-  // The number of dimensions in scatter_indices that are index dimensions.
-  const std::size_t index_dims_in_scatter_indices = indices_are_scalar ? 0 : 1;
-
-  // If there is only one index (i.e. scatter_indices has rank 1 and this
-  // scatter is really just a dynamic update slice) add a leading degenerate
-  // dimension for uniformity.  Otherwise create a "collapsed" leading dimension
-  // that subsumes all of the non-index-vector dimensions.
-  std::vector<std::size_t> shape = scatter_indices_t.shape();
-  if (shape.size() == index_dims_in_scatter_indices) {
-    shape.insert(shape.begin(), 1);
-    return scatter_indices_t.reshape(shape);
-  }
-
-  if (indices_are_scalar) {
-    return scatter_indices_t.reshape({scatter_indices_t.numElements(), 1});
-  }
-
-  // Collapse all but the dimensions (0 or 1) in scatter_indices containing
-  // the index vectors.
-  std::vector<std::size_t> new_shape = {
-      scatter_indices_t.numElements() / shape.back(), shape.back()};
-  return scatter_indices_t.reshape(new_shape);
-}
-
-// Permutes the `updates` tensor such that all the scatter dims appear in the
-// major dimensions and all the window dimensions appear in the minor
-// dimensions.
-poplar::Tensor PermuteScatterAndWindowDims(
-    poplar::Tensor updates, const std::vector<unsigned> update_window_dims) {
-  std::vector<unsigned> permutation(updates.rank());
-
-  std::iota(std::begin(permutation), std::end(permutation), 0);
-
-  const auto is_window_dim = [&update_window_dims](unsigned dim) {
-    return !std::binary_search(std::begin(update_window_dims),
-                               std::end(update_window_dims), dim);
-  };
-
-  std::stable_partition(std::begin(permutation), std::end(permutation),
-                        is_window_dim);
-
-  return updates.dimShuffle(permutation);
-}
-
-// Expands or contracts the scatter indices in the updates tensor.
-poplar::Tensor AdjustScatterDims(std::vector<std::size_t> scatter_indices_shape,
-                                 poplar::Tensor updates,
-                                 unsigned index_vector_dim) {
-  unsigned rank = scatter_indices_shape.size();
-
-  if (index_vector_dim < scatter_indices_shape.size()) {
-    rank--;
-  }
-
-  auto shape = updates.shape();
-  if (rank == 0) {
-    shape.insert(shape.begin(), 1);
-
-    // If there are no scatter dims, this must be a dynamic-update-slice kind of
-    // scatter. In this case, we prepend a degenerate dimension to work
-    // uniformly in the while loop.
-    return updates.reshape(shape);
-  }
-
-  auto begin = std::begin(shape);
-  auto collapse = std::next(std::begin(shape), rank);
-  auto end = std::end(shape);
-
-  std::vector<std::size_t> new_shape;
-  new_shape.push_back(
-      std::accumulate(begin, collapse, 1, std::multiplies<std::size_t>()));
-  new_shape.insert(std::end(new_shape), collapse, end);
-
-  return updates.reshape(new_shape);
-}
-
 enum class UpdateMode { Replace, Accumulate };
 void MultiUpdateInternal(poplar::Graph& graph, poplar::Tensor operand,
                          const poplar::Tensor& indices,
                          const poplar::Tensor& updates,
-                         std::size_t index_vector_dim,
-                         std::vector<unsigned> update_window_dims,
                          poplar::program::Sequence& prog,
                          const std::string& debug_prefix, UpdateMode mode,
                          absl::optional<poplar::Tensor> scale = absl::nullopt) {
@@ -157,48 +43,26 @@ void MultiUpdateInternal(poplar::Graph& graph, poplar::Tensor operand,
   if (updates.numElements() == 0) {
     return;
   }
-
-  // Canonicalize the scatter_indices, after which the size of its most-major
-  // dimension must be same as the while loop trip count.
-  poplar::Tensor canonical_scatter_iIndices =
-      CanonicalizeScatterIndices(indices, index_vector_dim);
-
-  // Canonicalize the updates, after which the size of its most-major dimension
-  // must be same as the while loop trip count.
-  poplar::Tensor canonical_updates =
-      PermuteScatterAndWindowDims(updates, update_window_dims);
-  poplar::Tensor adjusted_canonical_updates =
-      AdjustScatterDims(indices.shape(), canonical_updates, index_vector_dim)
-          .expand({1});
-
-  // Since we can assume we are in the 2D case, the only possible solution is
-  // transpose.
-  if (update_window_dims[0] == 0) {
-    operand = operand.transpose();
-  }
+  poplar::Tensor expanded_updates = updates.expand({indices.shape().back()});
 
   if (mode == UpdateMode::Replace) {
-    popops::multiUpdate(
-        graph, operand, adjusted_canonical_updates,
-        canonical_scatter_iIndices.reinterpret(poplar::UNSIGNED_INT), {0}, {1},
-        prog, popops::SlicePlan(), poplar::OptionFlags(), debug_prefix);
+    popops::multiUpdate(graph, operand, expanded_updates,
+                        indices.reinterpret(poplar::UNSIGNED_INT), {0}, {1},
+                        prog, popops::SlicePlan(), poplar::OptionFlags(),
+                        debug_prefix);
   } else {
-    popops::multiUpdateAdd(
-        graph, operand, adjusted_canonical_updates,
-        canonical_scatter_iIndices.reinterpret(poplar::UNSIGNED_INT), *scale,
-        {0}, {1}, prog, popops::SlicePlan(), poplar::OptionFlags(),
-        debug_prefix);
+    popops::multiUpdateAdd(graph, operand, expanded_updates,
+                           indices.reinterpret(poplar::UNSIGNED_INT), *scale,
+                           {0}, {1}, prog, popops::SlicePlan(),
+                           poplar::OptionFlags(), debug_prefix);
   }
 }
 }  // namespace
 
-StatusOr<poplar::program::Program> CreateMultiUpdate(
-    CompilerResources& res, const HloScatterInstruction* inst,
-    TensorMap& tensor_map) {
-  const auto dim_numbers = inst->scatter_dimension_numbers();
-  const auto update_window_dims = dim_numbers.update_window_dims();
-  const auto index_vector_dim = dim_numbers.index_vector_dim();
-
+StatusOr<poplar::program::Program> CreateMultiUpdate(CompilerResources& res,
+                                                     const HloInstruction* inst,
+                                                     TensorMap& tensor_map) {
+  VLOG(1) << "Processing " << inst->name() << " as multiUpdate";
   poplar::program::Sequence prog;
   poplar::Graph& graph = GetGraph(res, inst);
 
@@ -207,18 +71,13 @@ StatusOr<poplar::program::Program> CreateMultiUpdate(
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor operand = inputs[0][0];
-
   TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
                       FindInstructionInput(tensor_map, res, inst, 1, prog));
-
   TF_ASSIGN_OR_RETURN(poplar::Tensor updates,
                       FindInstructionInput(tensor_map, res, inst, 2, prog));
 
-  VLOG(1) << "Processing " << inst->name() << " as multiUpdate";
-
-  MultiUpdateInternal(graph, operand, indices, updates, index_vector_dim,
-                      {update_window_dims.begin(), update_window_dims.end()},
-                      prog, GetDebugName(inst), UpdateMode::Replace);
+  MultiUpdateInternal(graph, operand, indices, updates, prog,
+                      GetDebugName(inst), UpdateMode::Replace);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
@@ -226,12 +85,8 @@ StatusOr<poplar::program::Program> CreateMultiUpdate(
 }
 
 StatusOr<poplar::program::Program> CreateMultiUpdateAdd(
-    CompilerResources& res, const HloScatterInstruction* inst,
-    TensorMap& tensor_map) {
-  const auto dim_numbers = inst->scatter_dimension_numbers();
-  const auto update_window_dims = dim_numbers.update_window_dims();
-  const auto index_vector_dim = dim_numbers.index_vector_dim();
-
+    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map) {
+  VLOG(1) << "Processing " << inst->name() << " as multiUpdateAdd";
   poplar::program::Sequence prog;
   poplar::Graph& graph = GetGraph(res, inst);
 
@@ -240,44 +95,33 @@ StatusOr<poplar::program::Program> CreateMultiUpdateAdd(
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor operand = inputs[0][0];
-
   TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
                       FindInstructionInput(tensor_map, res, inst, 1, prog));
-
   TF_ASSIGN_OR_RETURN(poplar::Tensor updates,
                       FindInstructionInput(tensor_map, res, inst, 2, prog));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
+                      FindInstructionInput(tensor_map, res, inst, 3, prog));
 
-  VLOG(1) << "Processing " << inst->name() << " as multiUpdateAdd";
-
-  poplar::Tensor scale = graph.addConstant(
-      operand.elementType(), {}, 1, GetDebugName(inst) + "/const_1_scale");
-  graph.setTileMapping(scale, 0);
-
-  MultiUpdateInternal(graph, operand, indices, updates, index_vector_dim,
-                      {update_window_dims.begin(), update_window_dims.end()},
-                      prog, GetDebugName(inst), UpdateMode::Accumulate, scale);
+  MultiUpdateInternal(graph, operand, indices, updates, prog,
+                      GetDebugName(inst), UpdateMode::Accumulate, scale);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
   return prog;
 }
 
-StatusOr<poplar::program::Program> CreateScatterUpdateOp(
+StatusOr<poplar::program::Program> CreateFusedMultiUpdateAddOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {
   auto fusion_root = inst->fused_instructions_computation()->root_instruction();
 
-  const bool negate_multiplier = fusion_root->opcode() == HloOpcode::kSubtract;
+  const bool negate_scale = fusion_root->opcode() == HloOpcode::kSubtract;
   const bool has_reshape =
       fusion_root->operand(1)->opcode() == HloOpcode::kReshape;
   // Get the rhs of the root operation, looking through the reshape.
   auto rhs_inst = has_reshape ? fusion_root->operand(1)->operand(0)
                               : fusion_root->operand(1);
   CHECK_EQ(rhs_inst->opcode(), HloOpcode::kMultiply);
-  auto scatter = Cast<HloScatterInstruction>(rhs_inst->operand(0));
-  const auto dim_numbers = scatter->scatter_dimension_numbers();
-  const auto update_window_dims = dim_numbers.update_window_dims();
-  const auto index_vector_dim = dim_numbers.index_vector_dim();
 
   poplar::program::Sequence prog;
   poplar::Graph& graph = GetGraph(res, inst);
@@ -287,50 +131,27 @@ StatusOr<poplar::program::Program> CreateScatterUpdateOp(
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor operand = inputs[0][0];
-
   TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
                       FindInstructionInput(tensor_map, res, inst, 1, prog));
-
   TF_ASSIGN_OR_RETURN(poplar::Tensor updates,
                       FindInstructionInput(tensor_map, res, inst, 2, prog));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
+                      FindInstructionInput(tensor_map, res, inst, 3, prog));
+  scale = negate_scale ? popops::neg(graph, scale, prog,
+                                     GetDebugName(inst) + "/NegateScale")
+                       : scale;
 
   // A tensor view of the operand which depends on whether there is a reshape or
   // not.
-  poplar::Tensor scatter_into = operand;
+  poplar::Tensor operand_reshaped = operand;
   if (has_reshape) {
     // Reshape the operand so that the values are scattered into it.
     std::vector<size_t> dims(PoplarShapeFromXlaShape(rhs_inst->shape()));
-    scatter_into = scatter_into.reshape(dims);
+    operand_reshaped = operand_reshaped.reshape(dims);
   }
 
-  auto scale = rhs_inst->operand(1)->operand(0);
-  poplar::Tensor scale_tensor;
-  if (inst->operand_count() == 3) {
-    // Constant scale - get the value from the literal.
-    CHECK_EQ(scale->opcode(), HloOpcode::kConstant);
-    TF_ASSIGN_OR_RETURN(float scale_value,
-                        LiteralScalarToNativeType<float>(scale->literal()));
-    scale_value = negate_multiplier ? -scale_value : scale_value;
-
-    scale_tensor = graph.addConstant(operand.elementType(), {}, scale_value,
-                                     GetDebugName(inst) + "/const_scale");
-    graph.setTileMapping(scale_tensor, 0);
-
-  } else {
-    CHECK_EQ(inst->operand_count(), 4);
-    CHECK_EQ(scale->opcode(), HloOpcode::kParameter);
-    TF_ASSIGN_OR_RETURN(scale_tensor,
-                        FindInstructionInput(tensor_map, res, inst, 3, prog));
-    scale_tensor = negate_multiplier
-                       ? popops::neg(graph, scale_tensor, prog,
-                                     GetDebugName(inst) + "/negate_scale")
-                       : scale_tensor;
-  }
-
-  MultiUpdateInternal(graph, scatter_into, indices, updates, index_vector_dim,
-                      {update_window_dims.begin(), update_window_dims.end()},
-                      prog, GetDebugName(inst), UpdateMode::Accumulate,
-                      scale_tensor);
+  MultiUpdateInternal(graph, operand_reshaped, indices, updates, prog,
+                      GetDebugName(inst), UpdateMode::Accumulate, scale);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
   return prog;

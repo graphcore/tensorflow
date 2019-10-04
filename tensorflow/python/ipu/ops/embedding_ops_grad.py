@@ -23,7 +23,9 @@ from tensorflow.python.ops import array_ops
 def _ipu_multi_update(op, grads):
   """Gradients for the IpuMultiSlice op."""
   return [
-      gen_popops_ops.ipu_multi_update(array_ops.zeros_like(op.inputs[0]),
-                                      gradient=grads,
-                                      indices=op.inputs[1]), None
+      gen_popops_ops.ipu_multi_update_add(array_ops.zeros_like(op.inputs[0]),
+                                          indices=op.inputs[1],
+                                          updates=grads,
+                                          scale=array_ops.constant(
+                                              1, op.inputs[0].dtype)), None
   ]

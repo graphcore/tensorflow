@@ -21,17 +21,25 @@ namespace {
 // TODO popops::multiUpdate and popops::multiUpdateAdd only supports the 2D
 // case.
 bool CheckValidAttributes(const HloScatterInstruction* inst) {
+  const Shape operand_shape = inst->operand(0)->shape();
+  const Shape indices_shape = inst->operand(1)->shape();
+  const Shape updates_shape = inst->operand(2)->shape();
   const auto dim_numbers = inst->scatter_dimension_numbers();
   const auto update_window_dims = dim_numbers.update_window_dims();
   const auto inserted_window_dims = dim_numbers.inserted_window_dims();
   const auto scatter_dims_to_operand_dims =
       dim_numbers.scatter_dims_to_operand_dims();
-
-  return !(
-      (inst->operand(0)->shape().rank() != 2) ||
-      (inst->operand(2)->shape().rank() != 2) ||
-      (scatter_dims_to_operand_dims.size() != 1) ||
-      (inserted_window_dims.size() != 1 || (update_window_dims.size()) != 1));
+  const auto index_vector_dim = dim_numbers.index_vector_dim();
+  const uint64 index_dim_size =
+      indices_shape.rank() == index_vector_dim
+          ? 1
+          : indices_shape.dimensions(index_vector_dim);
+  return operand_shape.rank() == 2 && index_dim_size == 1 &&
+         scatter_dims_to_operand_dims.size() == 1 &&
+         scatter_dims_to_operand_dims[0] == 0 &&
+         inserted_window_dims.size() == 1 && inserted_window_dims[0] == 0 &&
+         update_window_dims.size() == 1 &&
+         update_window_dims[0] == (updates_shape.rank() - 1);
 }
 }  // namespace
 
@@ -53,6 +61,11 @@ bool IsRandomUniform(const HloInstruction* inst) {
 bool IsConstantZero(const HloInstruction* inst) {
   return !ShapeUtil::IsZeroElementArray(inst->shape()) &&
          inst->literal().IsAll(0);
+}
+
+bool IsConstantOne(const HloInstruction* inst) {
+  return !ShapeUtil::IsZeroElementArray(inst->shape()) &&
+         inst->literal().IsAll(1);
 }
 
 bool IsExternalPadding(const HloInstruction* inst) {
@@ -317,7 +330,7 @@ bool IsSupportedAllReduce(const HloInstruction* inst) {
   return false;
 }
 
-bool IsMultiUpdate(const HloInstruction* inst) {
+bool IsMultiUpdateScatter(const HloInstruction* inst) {
   if (auto scatter = DynCast<HloScatterInstruction>(inst)) {
     auto root_inst = scatter->to_apply()->root_instruction();
     return Match(root_inst, m::Parameter(1)) && CheckValidAttributes(scatter);
@@ -325,7 +338,7 @@ bool IsMultiUpdate(const HloInstruction* inst) {
   return false;
 }
 
-bool IsMultiUpdateAdd(const HloInstruction* inst) {
+bool IsMultiUpdateAddScatter(const HloInstruction* inst) {
   if (auto scatter = DynCast<HloScatterInstruction>(inst)) {
     auto root_inst = scatter->to_apply()->root_instruction();
     return Match(root_inst, m::Add(m::Parameter(0), m::Parameter(1))) &&

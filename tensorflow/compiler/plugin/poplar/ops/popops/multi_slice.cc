@@ -38,8 +38,17 @@ Internal implementation multiSlice for embeddings.
 
 REGISTER_OP("IpuMultiUpdate")
     .Input("input: dtype")
-    .Input("gradient: dtype")
     .Input("indices: int32")
+    .Input("updates: dtype")
+    .Output("output: dtype")
+    .Attr("dtype: {float16, float32, int32}")
+    .SetShapeFn(shape_inference::UnchangedShape);
+
+REGISTER_OP("IpuMultiUpdateAdd")
+    .Input("input: dtype")
+    .Input("indices: int32")
+    .Input("updates: dtype")
+    .Input("scale: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
     .SetShapeFn(shape_inference::UnchangedShape);

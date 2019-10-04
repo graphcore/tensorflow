@@ -59,6 +59,7 @@ message PoplibsOp {
     CastGfloatToNative = 44;
     MultiSlice = 45;
     MultiUpdate = 46;
+    MultiUpdateAdd = 47;
   }
   required Op op = 2;
 }

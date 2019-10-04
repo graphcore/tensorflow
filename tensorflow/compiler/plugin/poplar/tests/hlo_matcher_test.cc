@@ -855,7 +855,7 @@ ENTRY c1 {
           {HloOpcode::kReshape, NodeOperands({2})},
           {HloOpcode::kMultiply, NodeOperands({4, 3})},
           {HloOpcode::kBroadcast, NodeOperands({10})},
-          {HloOpcode::kScatter, NodeOperands({5, 8, 9}), IsMultiUpdateAdd},
+          {HloOpcode::kScatter, NodeOperands({5, 8, 9}), IsMultiUpdateAddScatter},
           {HloOpcode::kBroadcast, NodeOperands({6})},
           {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
           {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
