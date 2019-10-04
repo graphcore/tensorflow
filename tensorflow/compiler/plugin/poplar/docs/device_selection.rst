@@ -25,7 +25,7 @@ Supported types
 
 Poplar and the poplibs libraries support the following data types:
 
-::
+.. code-block:: python
 
   tf.float32
   tf.float16
@@ -82,35 +82,35 @@ In addition to ``auto_select_ipus`` and ``select_ipus``, several other functions
 exist for configuring the hardware and compiler.
 
 * ``set_compilation_options`` sets general options to be passed to the Poplar
-compiler.
+  compiler.
 * ``set_convolution_options``, ``set_matmul_options`` and
-``set_pooling_options`` pass specific options directly to the ``poplibs``
-convolution and pooling operations.
+  ``set_pooling_options`` pass specific options directly to the ``poplibs``
+  convolution and pooling operations.
 * ``set_report_options`` allows options to be passed directly to the Poplar
-summary report generator.
+  summary report generator.
 * ``set_ipu_model_options`` allows control of the Poplar IPU_MODEL device type.
 * ``set_recomputation_options`` turns on recomputation, to reduce the memory
-requirement at the expense of speed.
+  requirement at the expense of speed.
 * ``set_floating_point_behaviour_options`` allows control of the IPUs floating
-point control register.
+  point control register.
 
 More options are available on the ``create_ipu_config`` function itself. These
 mostly control specific features of the Poplar and poplibs operations.
 
 * ``max_scheduler_lookahead_depth`` controls how far the scheduler can look
-beyond a given scheduling decision to understand the max-liveness implications.
-This search space grows very quickly and can take an unacceptable amount of
-time for large ``max_scheduler_lookahead_depth``.
+  beyond a given scheduling decision to understand the max-liveness implications.
+  This search space grows very quickly and can take an unacceptable amount of
+  time for large ``max_scheduler_lookahead_depth``.
 * ``max_scheduler_search_space_size`` introduces an upper-limit to the size of
-the schedule search space to guarantee that it will terminate in a reasonable
-amount of time.
+  the schedule search space to guarantee that it will terminate in a reasonable
+  amount of time.
 
 * ``scheduler_selection`` controls the particular scheduler that is selected
-to perform the scheduling of instructions in the compilation stage.  By
-default, several schedules will be created and the one with the lowest
-predicted liveness chosen.  This can sometimes produce incorrect results
-because the overall peak liveness isn't always a good measure for the maximum
-liveness on one tile of the processor.  The available schedulers are:
+  to perform the scheduling of instructions in the compilation stage.  By
+  default, several schedules will be created and the one with the lowest
+  predicted liveness chosen.  This can sometimes produce incorrect results
+  because the overall peak liveness isn't always a good measure for the maximum
+  liveness on one tile of the processor.  The available schedulers are:
 
   * ``Clustering``, which groups clusters of operations together in order to
     look through stretches of instructions with potentially high liveness.
@@ -191,7 +191,7 @@ The environment variable ``TF_POPLAR_FLAGS`` can have the argument
 be placed.  Fused XLA/HLO graphs are hashed into a 64 bit hash and stored
 in this directory.
 
-::
+.. code-block:: python
 
   TF_POPLAR_FLAGS='--executable_cache_path=/tmp/cachedir'
 
@@ -219,7 +219,7 @@ Unsupported operations will cause the compilation to fail. By including
 creation of the session, you can check whether the operations in your graph have
 been targeted at the Poplar device:
 
-::
+.. code-block:: python
 
   # Creates a session with log_device_placement set to True.
   sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))

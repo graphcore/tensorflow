@@ -71,7 +71,6 @@ Python API
   :members:
   :noindex:
 
-  .. automodule:: tensorflow.python.ipu.optimizers.map_gradient_optimizer
+.. automodule:: tensorflow.python.ipu.optimizers.map_gradient_optimizer
   :members:
   :noindex:
-  

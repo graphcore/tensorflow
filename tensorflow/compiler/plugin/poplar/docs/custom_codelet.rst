@@ -21,7 +21,7 @@ The shared object file must contain an undecorated symbol `Build`, which should
 be declared as below.  It should add vertices to the graph that perform the
 custom operation.
 
-::
+.. code-block:: cpp
 
   extern "C"
   poplar::program::Program Build(
@@ -30,13 +30,13 @@ custom operation.
 
 The arguments are:
 
-* graph - the poplar graph into which to add tensors and vertices.
-* inputs - a vector of poplar tensors which are inputs to the operation.
-* outputs - a vector into which to store the outputs of the operation. The
-            vector will contain zero entries when the `Build` function is
-            called.
-* debugPrefix - the debug name that has been given to the operation in the
-                TensorFlow graph.
+:graph: the poplar graph into which to add tensors and vertices.
+:inputs: a vector of poplar tensors which are inputs to the operation.
+:outputs: a vector into which to store the outputs of the operation. The
+  vector will contain zero entries when the `Build` function is called.
+:debugPrefix:
+  the debug name that has been given to the operation in
+  the TensorFlow graph.
 
 The shared object file can optionally contain an undecorated symbol
 `IsElementWise`, which indicates whether the custom operation is element-wise.
@@ -44,7 +44,7 @@ If an operation takes one or more tensors of the same shape, and performs an
 expression on only corresponding elements in the input tensors,  and produces
 a tensor of the same shape, then it is elementwise.
 
-::
+.. code-block:: cpp
 
   extern "C" bool IsElementWise()
 
@@ -74,11 +74,11 @@ for giving a custom fused expression to the compiler.  This will be encoded into
 a single compute set.
 
 The arguments to the python function are a callable python function which
-encodes the arithmetic expression, and the tensor arguemnts to the operation.
+encodes the arithmetic expression, and the tensor arguments to the operation.
 
 For instance:
 
-::
+.. code-block:: python
 
   def my_custom_op(x, y, z):
       return x * x + y * z

@@ -4,7 +4,7 @@ Troubleshooting
 The following error (especially the lines containing ``VariableV2``) indicate
 that a variable has been created which is not a resource variable.
 
-::
+.. code-block:: none
 
     InvalidArgumentError (see above for traceback): Cannot assign a device for operation
       'InceptionV1/Logits/Conv2d_0c_1x1/biases': Could not satisfy explicit device specification

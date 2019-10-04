@@ -33,6 +33,7 @@ class MapGradientOptimizer(optimizer.Optimizer):
 
 
   Example
+
   .. code-block:: python
 
      # Define function which will modify computed gradients.

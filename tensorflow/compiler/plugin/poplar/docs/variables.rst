@@ -6,7 +6,7 @@ to obey certain operations, such as ``assign_add``. Make sure that all variables
 are added using a variable scope that is marked as a resource. This can be done
 globally:
 
-::
+.. code-block:: python
 
   vscope = tf.get_variable_scope()
   vscope.set_use_resource(True)
@@ -16,7 +16,7 @@ globally:
 
 or locally in a specific scope:
 
-::
+.. code-block:: python
 
   with tf.variable_scope("vs", use_resource=True):
     var = tf.get_variable(name, shape=[...], dtype=tf.float32, initializer=tf.constant_initializer(0.5))
@@ -39,7 +39,7 @@ To avoid this, in the CPU context, use the expression
 ``tf.train.get_or_create_global_step()`` before you create any special training
 sessions.  This will ensure that the global_step variable is on the CPU.
 
-::
+.. code-block:: python
 
   with tf.device("cpu"):
     tf.train.get_or_create_global_step()

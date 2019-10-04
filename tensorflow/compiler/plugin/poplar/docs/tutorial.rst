@@ -25,7 +25,7 @@ device as well as their functional interdependence are important to review.
 
 Graph
     A computational graph is the connectivity framework of a deep learning
-    model, where nodes are operators and edges are the data streams the connect
+    model, where nodes are operators and edges are the data streams that connect
     them. Building a deep learning model in TensorFlow is the functional
     equivalent of designing a graph, where specified layer operations, (e.g.
     fully-connected layers), are nodes, and the sequence and connectivity of
@@ -107,7 +107,7 @@ so desired, but to actually run on the emulator vs actual hardware, the
 environment variable *TF_POPLAR_FLAGS='--use_ipu_model'* would have to be set,
 as in
 
-::
+.. code-block:: python
 
     # Using IPU model vs IPU hardware
     if self.base_dictionary['ipu_model']:
@@ -142,7 +142,7 @@ operations are placed on the IPU system.
 Then the graph is executed by using `session.run()`, the following output can
 be seen in the console log.
 
-::
+.. code-block:: none
 
     ... [VARIOUS OUTPUT LINES FROM SCRIPT]...
     ...: I tensorflow/compiler/plugin/poplar/driver/executor.cc:660] Device /device:IPU:0 attached to IPU: 0
@@ -152,14 +152,15 @@ Beyond summing the vectors correctly, the line directly preceding informs us
 that the targeted device was the IPU, and the index of the actual IPU that ran
 the graph was IPU *0*. It is noted that *"/device:IPU:0"* in the script is an
 identifier for the IPU, and so when using *auto_select_ipus*, the actual IPU
-selected to run the graph may not necessarily by *IPU 0*, and could be any of
+selected to run the graph may not necessarily be *IPU 0*, and could be any of
 the other IPUs that are free and available on the server. More on this in the
 sharding discussion.
 
 XLA Graph
 ~~~~~~~~~
 
-The previous script was very basic graph that consisted of the summation of
+The previous script introduced a very basic graph that consisted of the
+summation of
 three vectors and published the results of a forward pass. For certain
 applications, it will be necessary to incorporate control flow structures, as in
 conditionals of the nature of *if* or *while* statements. Certain recurrent
@@ -216,7 +217,7 @@ Given that this graph and the one given in the previous section are the same, it
 is apparent that *ipu.ipu_compiler.compile* is not required to perform the
 desired sum. That said, if
 
-::
+.. code-block:: python
 
 
     def basic_graph(pa, pb, pc):
@@ -228,7 +229,7 @@ desired sum. That said, if
 
 where to be replaced with
 
-::
+.. code-block:: python
 
 
     def while_loop_graph(pa):
@@ -268,17 +269,17 @@ Let's now return to our basic script and add the sharding component.
     :language: python
     :linenos:
 
-Focusing on the sharding facets of this new script, line *13* uses
+Focusing on the sharding facets of this new script, line *14* uses
 *auto_select_ipus* to select 4 separate IPUs for the task. This will allow the
 script to go through the IPUs currently available to the host, determine which
 are being utilised and which are free, and then subscribe to those IPUs that are
 available.
 
-In lines *29-37*, the standard sum graph is defined, (with the addition of one
+In lines *29-38*, the standard sum graph is defined, (with the addition of one
 more sum for shard *2*), and now each portion of the sum is performed on a
 distinct shard, using
 
-::
+.. code-block:: python
 
     with ipu.ops.ipu_shard(shard_index):
 
@@ -290,7 +291,7 @@ be performed without running through the *XLA* library.
 
 Reviewing the output of the session run,
 
-::
+.. code-block:: none
 
     ... [VARIOUS OUTPUT LINES FROM SCRIPT]...
     ...:  I tensorflow/compiler/plugin/poplar/driver/executor.cc:660] Device /device:IPU:0 attached to IPUs: 5,7,4,6

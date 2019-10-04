@@ -285,11 +285,13 @@ class PopnnLSTM(_PopnnRNN):
       training: whether this operation will be used in training or inference.
 
     Returns:
-      output: a tensor of shape [time_len, batch_size, num_units].
-      output_states: An `LSTMStateTuple` of the same shape and structure as
-        initial_state. If the initial state used the deprecated behaviour of
-        not passing `LSTMStateTuple`, then a tuple
-        (output_h_state, output_c_state) is returned.
+      tuple of output and output states:
+
+      * output: a tensor of shape [time_len, batch_size, num_units].
+      * output_states: An `LSTMStateTuple` of the same shape and structure as
+          initial_state. If the initial state used the deprecated behaviour of
+          not passing `LSTMStateTuple`, then a tuple
+          (output_h_state, output_c_state) is returned.
 
     Raises:
       ValueError: if initial_state is not valid.
