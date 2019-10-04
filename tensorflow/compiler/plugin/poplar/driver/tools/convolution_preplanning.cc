@@ -59,7 +59,7 @@ Status ConvolutionPreplanning::StorePreplanConv(const HloInstruction* inst,
                                                 CompilerResources& resources,
                                                 int64 input_index,
                                                 int64 kernel_index) {
-  auto& target = GetMasterGraph(resources).getTarget();
+  auto& target = GetGraph(resources, inst).getTarget();
   TF_ASSIGN_OR_RETURN(
       poplin::ConvParams conv_params,
       GetConvolutionParameters(inst, input_index, kernel_index));
