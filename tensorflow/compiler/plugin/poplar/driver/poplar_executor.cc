@@ -494,12 +494,16 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
       bool all_queues_empty = true;
       for (auto& outfeed_context : outfeed_contexts) {
         int io_batch_size = outfeed_context->config.io_batch_size();
-
         for (auto& tensor_queues :
              outfeed_context->callback_to_io_thread_queues) {
           for (auto& replica_queue : tensor_queues) {
             all_queues_empty &= !replica_queue->HasItemsWaiting();
           }
+        }
+
+        // Track empty queues when we are trying to exit
+        if (all_queues_empty && outfeed_thread_cancelled_) {
+          all_queues_empty_for++;
         }
 
         // Continue if all the outfeed queues are empty.
@@ -561,9 +565,6 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
             queue->FinishedFront();
           }
         }
-      }
-      if (all_queues_empty && outfeed_thread_cancelled_) {
-        all_queues_empty_for++;
       }
     }
     // Notify the main thread that outfeeds are done.
@@ -2030,15 +2031,20 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       }
       // Launch the IO threads when we are not using synthetic data and have
       // infeeds/outfeeds.
+      bool io_threads_running = false;
       if (!UseSyntheticData() &&
           (!infeed_infos.empty() || !outfeed_infos.empty())) {
         LaunchIOThreads(infeed_infos, outfeed_infos);
+        io_threads_running = true;
       }
 
       // Run the main engine
       current_engine_->enableExecutionProfiling();
       current_engine_->run(PoplarProgramType::MAIN_SEQUENCE);
-      StopIOThreads(outfeed_infos);
+
+      if (io_threads_running) {
+        StopIOThreads(outfeed_infos);
+      }
 
       // We need to call post process to make sure all the data is in the
       // right format on the host
