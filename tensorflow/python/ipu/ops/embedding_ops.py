@@ -20,13 +20,12 @@ Popops embedding operators.
 from functools import reduce
 from operator import mul
 
-from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+from tensorflow.python.ops import embedding_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import array_ops
-from tensorflow.python.util import deprecation
+from tensorflow.python.platform import tf_logging as logging
 
 
-@deprecation.deprecated_args(None, "stop passing this argument.",
-                             "one_hot_threshold", "min_encoding_size")
 def embedding_lookup(params,
                      ids,
                      name=None,
@@ -39,8 +38,8 @@ def embedding_lookup(params,
 
     Args:
         params: A single tensor representing the complete embedding tensor.
-        ids: A `Tensor` with type `int32` containing the slices to be extracted
-             from `params`.
+        ids: A `Tensor` with type `int32` containing the ids to be looked up in
+             `params`.
         name: A name for the operation.
         one_hot_threshold: The threshold below which the embedding lookup will
                            become a one-hot with matmul.
@@ -51,20 +50,72 @@ def embedding_lookup(params,
     """
   name = name or "embedding_lookup"
   ids_shape = ids.shape.as_list()
-  params_shape = params.shape.as_list()
+  M = reduce(mul, ids.shape, 1)
+  K = params.shape[0]
+  N = params.shape[1]
+  ids_flat = array_ops.reshape(ids, [M])
 
-  # Flatten all the indices.
-  num_ids = reduce(mul, ids_shape, 1)
-  ids_flat = array_ops.reshape(ids, [num_ids])
+  # Handle the small case with a one-hot and matmul
+  if K < one_hot_threshold:
+    ids_one_hot = array_ops.one_hot(ids,
+                                    K,
+                                    name=name + "_one_hot",
+                                    dtype=params.dtype)
+    ids_one_hot = array_ops.reshape(ids_one_hot, [M, K])
+    result = math_ops.matmul(ids_one_hot, params, name=name + "_lookup")
+    return array_ops.reshape(result, list(ids.shape) + [N])
 
-  # Flatten params into a 2D shape.
-  slice_dim_size = params_shape[0]
-  params_shape.pop(0)
-  embedding_size = reduce(mul, params_shape, 1)
-  params_2d = array_ops.reshape(params, [slice_dim_size, embedding_size])
+  # Handle a badly balanced case by splitting and applying two embedding lookups
+  elif N < min_encoding_size:
+    balance_factor = (min_encoding_size + N - 1) // N
 
-  # Do the lookup.
-  result = gen_popops_ops.ipu_multi_slice(params_2d, ids_flat, name=name)
+    # If the intermediate tensor would be larger than the embedding tensor,
+    # then fallback to the default embedding_lookup.
+    if (reduce(mul, ids.shape, 1) * N * balance_factor) > reduce(
+        mul, params.shape, 1):
+      return embedding_ops.embedding_lookup(params, ids, name=name)
 
-  # Reshape into [ids[0], ... , ids[n - 1], params[1], ..., params[n - 1]]
-  return array_ops.reshape(result, list(ids_shape) + list(params_shape))
+    # Do we need to pad the input tensor?
+    if K % balance_factor != 0:
+      padding = balance_factor - (K % balance_factor)
+      logging.warning(
+          "Rebalancing of input tensor to embedding_lookup op named '" +
+          str(name) + "' failed. Consider adding " + str(padding) +
+          " rows to your embedding.")
+      return embedding_ops.embedding_lookup(params, ids, name=name)
+
+    # Reshape to distribute the tensor across more of the tiles
+    params = array_ops.reshape(params,
+                               [K // balance_factor, N * balance_factor])
+
+    # This embedding lookup will get balance_factor more elements than desired
+    rows = embedding_lookup(params,
+                            ids_flat // balance_factor,
+                            name=name + "_balanced",
+                            one_hot_threshold=one_hot_threshold,
+                            min_encoding_size=0)
+
+    row_shape = rows.shape.as_list()
+    M1 = row_shape[0]
+    N1 = row_shape[1]
+
+    # Build new indices which extract the desired elements from the rows tensor
+    ids1 = (math_ops.range(0, M1) * balance_factor) + (ids_flat %
+                                                       balance_factor)
+
+    # Reshape the rows, so that a single embedding encoding is in each row
+    rows = array_ops.reshape(rows, [M1 * balance_factor, N1 // balance_factor])
+
+    # Extract the desired embedding elements
+    result = embedding_lookup(rows,
+                              ids1,
+                              name=name + "_reduce",
+                              one_hot_threshold=one_hot_threshold,
+                              min_encoding_size=0)
+
+    # Reshape back to the user shape
+    return array_ops.reshape(result, list(ids_shape) + [N])
+
+  # Fallback to the tf embedding lookup
+  else:
+    return embedding_ops.embedding_lookup(params, ids, name=name)

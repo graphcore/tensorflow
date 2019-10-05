@@ -122,7 +122,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
     with self.session() as sess:
       with ops.device('cpu'):
         x1 = array_ops.placeholder(np.int32, shape=[10])
-        lr = array_ops.placeholder(np.int32, shape=[])
+        lr = array_ops.placeholder(np.float32, shape=[])
 
       def network(x1, lr):
         with variable_scope.variable_scope("vs", use_resource=True):
