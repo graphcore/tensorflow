@@ -259,7 +259,7 @@ PoplarExecutor::PoplarExecutor()
     : ordinal_(0),
       current_engine_(nullptr),
       device_open_(false),
-      poplar_device_hash_(0),
+      poplar_device_hash_(42),
       hardware_configured_(false),
       infeed_thread_pool_(tensorflow::Env::Default(),
                           "poplar_infeed_thread_pool_",
