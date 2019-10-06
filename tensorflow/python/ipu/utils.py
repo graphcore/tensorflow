@@ -67,7 +67,8 @@ def create_ipu_config(profiling=False,
                       max_cross_replica_sum_buffer_size=0,
                       max_inter_ipu_copies_buffer_size=0,
                       max_scheduler_lookahead_depth=5,
-                      max_scheduler_search_space_size=64):
+                      max_scheduler_search_space_size=64,
+                      prefetch_data_streams=True):
   """Create an empty IPU session configuration structure.
 
   Args:
@@ -113,6 +114,8 @@ def create_ipu_config(profiling=False,
       when considering valid schedules.
     max_scheduler_search_space_size: The maximum number of nodes to consider
       when building the tree of future schedules.
+    prefetch_data_streams: When set to true, the prefetching of data for data
+      streams on the host will be overlapped with execution on the IPU.
 
   Returns:
     An IpuOptions configuration protobuf, suitable for passing to
@@ -153,6 +156,7 @@ def create_ipu_config(profiling=False,
   opts.max_scheduler_lookahead_depth = max_scheduler_lookahead_depth
   opts.max_scheduler_search_space_size = max_scheduler_search_space_size
 
+  opts.prefetch_data_streams = prefetch_data_streams
   return opts
 
 

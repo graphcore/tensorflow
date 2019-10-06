@@ -34,6 +34,7 @@ def configure_ipu_system(compilation_trace=True,
                          replicated=False,
                          compile_ipu_code=False,
                          enable_ipu_events=False,
+                         prefetch_data_streams=True,
                          engine_opts=None,
                          device_count_override=None):
   opts = IpuOptions()
@@ -49,6 +50,7 @@ def configure_ipu_system(compilation_trace=True,
   opts.profiling.max_report_size = 0x10000000  # 256MB
   opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = compile_ipu_code
+  opts.prefetch_data_streams = prefetch_data_streams
 
   # yapf: disable
   assert not (pipelining and device_count_override

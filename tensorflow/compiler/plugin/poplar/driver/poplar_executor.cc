@@ -55,6 +55,7 @@ limitations under the License.
 
 #include <poplar/DeviceManager.hpp>
 #include <poplar/IPUModel.hpp>
+#include <poplar/StreamCallback.hpp>
 #include <poplar/Tensor.hpp>
 
 /*
@@ -242,8 +243,9 @@ PoplarExecutor::InfeedDatasetIterator::InfeedDatasetIterator(
   replication_factor = std::max<int64>(replication_factor, 1);
   for (uint64 i = 0; i < shapes.size(); i++) {
     for (uint64 replica_id = 0; replica_id < replication_factor; replica_id++) {
-      void* ptr = tensorflow::port::AlignedMalloc(sizeof(QueueType), 64);
-      tensor_queues[i].emplace_back(new (ptr) QueueType(nullptr, post_apply));
+      void* ptr = tensorflow::port::AlignedMalloc(sizeof(InfeedQueueType), 64);
+      tensor_queues[i].emplace_back(new (ptr)
+                                        InfeedQueueType(nullptr, post_apply));
     }
   }
 }
@@ -267,9 +269,9 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
         ShapeUtil::ByteSizeOf(shapes[i]) / replication_factor;
     num_bytes_per_replica *= outfeed_info.config.io_batch_size();
     for (uint64 replica_id = 0; replica_id < replication_factor; replica_id++) {
-      void* ptr = tensorflow::port::AlignedMalloc(sizeof(QueueType), 64);
+      void* ptr = tensorflow::port::AlignedMalloc(sizeof(OutfeedQueueType), 64);
       callback_to_io_thread_queues[i].emplace_back(
-          new (ptr) QueueType(num_bytes_per_replica));
+          new (ptr) OutfeedQueueType(num_bytes_per_replica));
     }
   }
 }
@@ -319,6 +321,37 @@ void PoplarExecutor::Deallocate(se::DeviceMemoryBase* mem) {
   }
 }
 
+namespace {
+class InfeedPrefetchCallback : public poplar::StreamCallback {
+ public:
+  InfeedPrefetchCallback(InfeedQueueType* queue, uint64 num_bytes)
+      : queue_(queue), num_bytes_(num_bytes) {}
+
+  poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
+    tensorflow::TensorBuffer* buffer;
+    // Try to get a value from the queue.
+    if (queue_->TryPop(buffer)) {
+      std::memcpy(dest, buffer->data(), num_bytes_);
+      return poplar::StreamCallback::Result::Success;
+    } else {
+      return poplar::StreamCallback::Result::NotAvailable;
+    }
+  }
+
+  void fetch(void* dest) noexcept override {
+    tensorflow::TensorBuffer* buffer;
+    queue_->BlockPop(buffer);
+    std::memcpy(dest, buffer->data(), num_bytes_);
+  }
+
+  void complete() noexcept override { queue_->AdvanceReadPosition(); }
+
+ private:
+  InfeedQueueType* queue_;
+  const uint64 num_bytes_;
+};
+}  // namespace
+
 void PoplarExecutor::ConnectInfeedsToStreamCallback(
     const InfeedInfos& infeed_infos) {
   // Don't connect any streams if using synthetic data
@@ -341,13 +374,11 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
       for (auto replica_id = 0; replica_id < current_replication_factor_;
            ++replica_id) {
         auto& queue = infeed_dataset_iterator->tensor_queues[j][replica_id];
+        auto infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
+            queue.get(), bytes_per_replica);
         current_engine_->connectStreamToCallback(
             GetInfeedCopyHandle(infeed_info.stream_prefix, j), replica_id,
-            [&queue, bytes_per_replica](void* dest) {
-              tensorflow::TensorBuffer* buffer;
-              queue->BlockPop(buffer);
-              std::memcpy(dest, buffer->data(), bytes_per_replica);
-            });
+            std::move(infeed_callback));
       }
     }
   }
@@ -453,6 +484,7 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
                   tensorflow::DMAHelper::buffer(&tensor_slices[replica_id]);
               tb->Ref();
               queue->BlockPush(tb);
+              queue->AdvanceWritePosition();
             }
           }
         } else {
@@ -934,6 +966,18 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
 
   VLOG(1) << "Opened Poplar device type " << GetDeviceTargetName();
   device_open_ = true;
+
+  // By setting stream options before user options we make sure the user can
+  // override this default behaviour.
+  if (current_config_.prefetch_data_streams()) {
+    // By default we only rearrange copies on the host for resource variable
+    // inputs which do not need to be prefetched, however if we rearrange
+    // everything on the host, we do not overlap any stream buffers.
+    option_flags_.set(
+        "exchange.streamBufferOverlap",
+        AlwaysRearrangeCopiesOnTheHost() ? "none" : "hostRearrangeOnly");
+    option_flags_.set("exchange.enablePrefetch", "true");
+  }
 
   for (const auto& opt : current_config_.compilation_options()) {
     option_flags_.set(opt.option(), opt.value());

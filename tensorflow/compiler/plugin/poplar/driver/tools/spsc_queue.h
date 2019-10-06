@@ -91,14 +91,13 @@ class SPSCQueue {
    * \param item The element to push.
    *
    * \note This function won't block, but assumes there is space
-   *       (i.e. IsFull() == false).
+   *       (i.e. IsFull() == false) and it does not advance the write position.
    */
   inline void Push(const T& item) {
     assert(!IsFull());
 
     post_apply_(buffer_[write_position_]);
     buffer_[write_position_] = item;
-    AdvanceWritePosition();
   }
 
   /**
@@ -146,13 +145,13 @@ class SPSCQueue {
    * \param item The element to pop into.
    *
    * \note This function won't block, but assumes there is at least a single
-   * element (i.e. IsEmpty() == false).
+   * element (i.e. IsEmpty() == false) and it does not advance the read
+   * position.
    */
   inline void Pop(T& item) {
     assert(!IsEmpty());
 
     item = buffer_[read_position_];
-    AdvanceReadPosition();
   }
 
   /**

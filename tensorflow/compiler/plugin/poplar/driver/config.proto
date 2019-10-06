@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package xla.poplarplugin;
-// NEXT ID 16
+// NEXT ID 17
 message IpuOptions {
   // Structure for setting an idividual Poplar OptionFlag for OptionFlags
   message PoplarOptionFlag {
@@ -133,4 +133,7 @@ message IpuOptions {
   // The maximum number of nodes to consider when building the tree of future
   // schedules.
   int64 max_scheduler_search_space_size = 15;
+
+  // Whether to prefetch data for data streams.
+  bool prefetch_data_streams = 16;
 };

@@ -109,6 +109,9 @@ using Args = tensorflow::gtl::ArraySlice<se::DeviceMemoryBase>;
 
 using ConversionList = std::vector<ConversionFn>;
 
+using InfeedQueueType = SPSCQueue<tensorflow::TensorBuffer*, 2048>;
+using OutfeedQueueType = SPSCOutfeedQueue<2048>;
+
 class PoplarExecutor : public se::internal::StreamExecutorInterface {
  public:
   explicit PoplarExecutor();
@@ -679,21 +682,18 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime> process_flib;
     const std::vector<xla::Shape> shapes;
 
-    using QueueType = SPSCQueue<tensorflow::TensorBuffer*, 2048>;
-    std::vector<std::vector<std::unique_ptr<QueueType>>> tensor_queues;
+    std::vector<std::vector<std::unique_ptr<InfeedQueueType>>> tensor_queues;
   };
 
   struct OutfeedContext {
     OutfeedContext(const FeedInfo& outfeed_info);
     OutfeedContext() = delete;
 
-    using QueueType = SPSCOutfeedQueue<2048>;
-
     const PoplarFeedConfig config;
     const std::vector<xla::Shape> shapes;
     std::vector<tensorflow::DataType> tf_data_types;
     std::vector<tensorflow::TensorShape> tf_shapes;
-    std::vector<std::vector<std::unique_ptr<QueueType>>>
+    std::vector<std::vector<std::unique_ptr<OutfeedQueueType>>>
         callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
