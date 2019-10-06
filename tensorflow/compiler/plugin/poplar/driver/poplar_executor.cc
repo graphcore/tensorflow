@@ -181,6 +181,25 @@ std::vector<Shape> GetOutfeedShapes(const std::vector<Shape>& output_shapes,
   return result;
 }
 
+int64 GetConfigHash(const IpuOptions& to_hash) {
+  IpuOptions hashable_config = to_hash;
+
+  // Remove elements which do not contribute to a difference in the
+  // compiled executable.  We hash the device characteristics independently
+  // so there is no need to do any device selection state.
+  hashable_config.mutable_profiling()->set_enable_poplar_reports_text(false);
+  hashable_config.mutable_profiling()->set_report_every_nth_execution(0);
+  hashable_config.mutable_profiling()->set_enable_ipu_trace_events(false);
+  hashable_config.mutable_profiling()->set_enable_poplar_reports_cbor(false);
+  hashable_config.mutable_profiling()->set_report_directory(std::string());
+  hashable_config.mutable_profiling()->set_max_report_size(0);
+  hashable_config.mutable_device_config()->Clear();
+
+  std::string config_proto_str;
+  tensorflow::SerializeToStringDeterministic(hashable_config,
+                                             &config_proto_str);
+  return std::hash<string>()(config_proto_str);
+}
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -979,10 +998,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   poplar_target.push_back((unsigned)target.getTargetType());
 
   // Generate Options hash
-  std::string config_proto_str;
-  tensorflow::SerializeToStringDeterministic(current_config_,
-                                             &config_proto_str);
-  poplar_target.push_back(std::hash<string>()(config_proto_str));
+  poplar_target.push_back(GetConfigHash(current_config_));
 
   // Generate compiler hashes
   poplar_target.push_back(std::hash<string>()(tf_git_version()));
