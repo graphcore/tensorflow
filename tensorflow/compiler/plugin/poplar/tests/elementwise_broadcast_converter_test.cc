@@ -368,6 +368,31 @@ ENTRY c1 {
   EXPECT_EQ(fusion_op2->operand(0)->parameter_number(), 1);
 }
 
+TEST_F(ElementwiseBroadcastConvert, AllInputsConstant) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  c0 = f16[] constant(0)
+  bcast1 = f16[1,16,16,4] broadcast(c0), dimensions={}
+  c1 = f16[] constant(0)
+  bcast2 = f16[1,16,16,4] broadcast(c1), dimensions={}
+  c2 = f16[] constant(0)
+  bcast3 = f16[1,16,16,4] broadcast(c2), dimensions={}
+  ROOT %clamp = f16[1,16,16,4] clamp(bcast1, bcast2, bcast3)
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  ElementwiseBroadcastConverter ebc;
+  EXPECT_FALSE(ebc.Run(module0).ValueOrDie());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

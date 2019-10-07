@@ -53,7 +53,13 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
   }
 
   if (non_broadcast_operands.size() == inst->operand_count()) {
-    // Non of the operands are broadcasting.
+    // None of the operands are broadcasting.
+    return false;
+  }
+
+  if (constant_broadcast_operands.size() == inst->operand_count()) {
+    // If all the inputs are scalar constants, then the constant
+    // folding/algebraic simplifier passes should deal with this.
     return false;
   }
 
@@ -161,16 +167,19 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
 }  // namespace
 
 StatusOr<bool> ElementwiseBroadcastConverter::Run(HloModule* module) {
-  absl::flat_hash_set<HloInstruction*> binary_and_ternary_ops;
+  std::vector<HloInstruction*> binary_and_ternary_ops;
   // Find all ternary and binary ops.
-  for (auto comp : module->MakeNonfusionComputations()) {
-    for (auto inst : comp->instructions()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+    for (auto inst : comp->MakeInstructionPostOrder()) {
       if (inst->IsElementwise() &&
           inst->opcode() != HloOpcode::kDynamicUpdateSlice) {
         switch (inst->operand_count()) {
           case 2:
           case 3:
-            binary_and_ternary_ops.insert(inst);
+            binary_and_ternary_ops.push_back(inst);
             break;
           default:
             break;
@@ -185,7 +194,6 @@ StatusOr<bool> ElementwiseBroadcastConverter::Run(HloModule* module) {
     changed |= changed_op;
   }
   return changed;
-}  // namespace poplarplugin
-
+}
 }  // namespace poplarplugin
 }  // namespace xla
