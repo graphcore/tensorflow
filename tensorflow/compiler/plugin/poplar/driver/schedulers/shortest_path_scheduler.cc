@@ -302,6 +302,11 @@ StatusOr<HloInstructionSequence> ScheduleInstructions(
   seq_costs.ComputeSchedule();
   HloInstructionSequence sequence = seq_costs.GetScheduleSequence();
 
+  if (sequence.size() == 0) {
+    // Computations of only parameters will not be scheduled
+    sequence = HloInstructionSequence(comp->MakeInstructionPostOrder());
+  }
+
   return sequence;
 }
 

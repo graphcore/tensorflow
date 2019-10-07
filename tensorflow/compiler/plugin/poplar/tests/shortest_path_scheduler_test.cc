@@ -718,6 +718,73 @@ HloModule top
   EXPECT_EQ(seq[13]->name(), "tuple0");
 }
 
+TEST_F(ShortestPathSchedulerTest, TestOnlyArg) {
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  ROOT p0 = f32[] parameter(0)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  ASSERT_EQ(seq.size(), 1);
+}
+
+TEST_F(ShortestPathSchedulerTest, TestOnlyArgsAndTuple) {
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  p2 = f32[] parameter(2)
+  ROOT t = (f32[], f32[], f32[]) tuple(p0, p1, p2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  ASSERT_EQ(seq.size(), 4);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
