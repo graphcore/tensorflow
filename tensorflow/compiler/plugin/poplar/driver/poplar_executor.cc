@@ -289,7 +289,7 @@ PoplarExecutor::PoplarExecutor()
       has_cycle_counter_(false) {
   // TODO should this use the time/ms?
   static std::random_device rd;
-  seed_gen.seed(rd());
+  seed_generator_.Seed(rd());
 }
 
 PoplarExecutor::~PoplarExecutor() {}
@@ -1793,18 +1793,16 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
 }
 
 void PoplarExecutor::ConnectSeedCallback() {
-  auto& gen = seed_gen;
   // Don't connect any streams if using synthetic data
   if (UseSyntheticData()) {
     return;
   }
 
-  // This callbacks are executed in a single thread so it is safe to call the
-  // random number generator from each callback.
+  auto& generator = seed_generator_;
   for (int replica_id = 0; replica_id < current_replication_factor_;
        ++replica_id) {
-    auto callback = [&gen](void* ptr) mutable {
-      reinterpret_cast<uint64_t*>(ptr)[0] = gen();
+    auto callback = [&generator, replica_id](void* ptr) mutable {
+      reinterpret_cast<uint64_t*>(ptr)[0] = generator.Get(replica_id);
     };
 
     current_engine_->connectStreamToCallback(GetRandomNumberSeedStream(),
@@ -1812,7 +1810,7 @@ void PoplarExecutor::ConnectSeedCallback() {
   }
 }
 
-void PoplarExecutor::ResetSeed(int seed) { seed_gen.seed(seed); }
+void PoplarExecutor::ResetSeed(int seed) { seed_generator_.Seed(seed); }
 
 std::string PoplarExecutor::GetCycleCounterStream() {
   return "__cycle_count_stream";
@@ -2053,6 +2051,10 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         LaunchIOThreads(infeed_infos, outfeed_infos);
         io_threads_running = true;
       }
+
+      // Before executing the main program, prepare the random seeds for each
+      // replica.
+      seed_generator_.PrepareSeedsForReplicas(current_replication_factor_);
 
       // Run the main engine
       current_engine_->enableExecutionProfiling();

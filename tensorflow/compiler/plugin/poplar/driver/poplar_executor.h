@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_transfer_manager.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/seed_generator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_outfeed_queue.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_queue.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
@@ -708,7 +709,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>
       outfeed_contexts_;
 
-  std::mt19937_64 seed_gen;
+  SeedGenerator seed_generator_;
 
   std::string ReportFileExtension() const;
 
