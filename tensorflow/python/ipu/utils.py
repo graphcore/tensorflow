@@ -827,10 +827,15 @@ def move_variable_initialization_to_cpu(graph=None):
       init_ops += [op]
       dep_ops += [x.op for x in op.inputs]
 
+  # pylint: disable=protected-access
   for op in init_ops:
     op._set_device('/device:CPU:0')
-    op._set_attr('_class', attr_value_pb2.AttrValue(s=b'loc:@cpu'))
+    op._set_attr(
+        '_class',
+        attr_value_pb2.AttrValue(list=attr_value_pb2.AttrValue.ListValue(
+            s=[b'loc:@cpu'])))
     op._set_attr('_XlaCompile', attr_value_pb2.AttrValue(b=False))
     op._set_attr('_XlaScope', attr_value_pb2.AttrValue(s=b''))
+  # pylint: enable=protected-access
 
   return
