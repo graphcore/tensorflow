@@ -420,6 +420,7 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
 std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
     const InfeedInfos& infeed_infos) {
   infeed_thread_cancelled_ = false;
+  infeeds_done_ = false;
 
   std::vector<InfeedDatasetIterator*> infeed_dataset_iterators;
   infeed_dataset_iterators.reserve(infeed_infos.size());
@@ -494,6 +495,12 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
         }
       }
     }
+    // Notify the main thread that infeeds are done.
+    {
+      std::lock_guard<std::mutex> l(infeeds_mutex_);
+      infeeds_done_ = true;
+    }
+    infeeds_cond_var_.notify_one();
   };
 }
 
@@ -646,9 +653,17 @@ void PoplarExecutor::LaunchIOThreads(const InfeedInfos& infeed_infos,
   }
 }
 
-void PoplarExecutor::StopIOThreads(const OutfeedInfos& outfeed_infos) {
+void PoplarExecutor::StopIOThreads(const InfeedInfos& infeed_infos,
+                                   const OutfeedInfos& outfeed_infos) {
   infeed_thread_cancelled_ = true;
   outfeed_thread_cancelled_ = true;
+
+  if (infeed_infos.size()) {
+    // Block until the infeed thread has finished.
+    std::unique_lock<std::mutex> l(infeeds_mutex_);
+    infeeds_cond_var_.wait(l,
+                           [this] { return std::atomic_load(&infeeds_done_); });
+  }
 
   if (outfeed_infos.size()) {
     // Block until the outfeed thread has finished.
@@ -2105,7 +2120,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       current_engine_->run(PoplarProgramType::MAIN_SEQUENCE);
 
       if (io_threads_running) {
-        StopIOThreads(outfeed_infos);
+        StopIOThreads(infeed_infos, outfeed_infos);
       }
 
       // We need to call post process to make sure all the data is in the

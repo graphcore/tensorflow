@@ -606,7 +606,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                        const OutfeedInfos& outfeed_infos);
 
   // Sets cancellation flags and notifies the threads running to stop.
-  void StopIOThreads(const OutfeedInfos& outfeed_infos);
+  void StopIOThreads(const InfeedInfos& infeed_infos,
+                     const OutfeedInfos& outfeed_infos);
 
   void DeferredDeallocation();
 
@@ -618,11 +619,17 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   std::recursive_mutex mutex_;
 
+  std::mutex infeeds_mutex_;
+
+  std::condition_variable infeeds_cond_var_;
+
   std::mutex outfeeds_mutex_;
 
   std::condition_variable outfeeds_cond_var_;
 
   std::atomic<bool> infeed_thread_cancelled_;
+
+  std::atomic<bool> infeeds_done_;
 
   std::atomic<bool> outfeed_thread_cancelled_;
 
