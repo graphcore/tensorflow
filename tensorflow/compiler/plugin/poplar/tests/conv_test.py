@@ -10,12 +10,17 @@ import numpy as np
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
+from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
+from tensorflow.python.ops import variable_scope
+from tensorflow.python.ops import variables
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import nn_ops
+from tensorflow.python.training import gradient_descent
 
 
 class IpuXlaConvTest(xla_test.XLATestCase):
@@ -487,6 +492,67 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       mem_nchw = report.get_total_tile_memory()
 
       self.assertTrue((mem_nhwc - mem_nchw) / mem_nhwc > -0.1)
+
+  def testGroupedConvolutions(self):
+    """
+    Check we can compile a graph with grouped convolutions, ie. where the
+    input and output features are divided into K groups, with the N outputs
+    in the kth group just depending on the M inputs in the kth group.
+    """
+    ndims = 2
+    M = 3
+    N = 5
+    K = 7  # input features per group, output features per group, number of groups
+    with self.session() as sess:
+      with variable_scope.variable_scope("vs", use_resource=True):
+        with ops.device("cpu"):
+          inp = array_ops.placeholder(np.float32, [1] + [24] * ndims + [M * K],
+                                      name="input")
+          bias = array_ops.placeholder(np.float32, [N * K], name="bias")
+        with ops.device("/device:IPU:0"):
+          weights = variable_scope.get_variable("weights",
+                                                [8] * ndims + [M, N * K])
+          output = nn.convolution(inp,
+                                  weights,
+                                  strides=[1] + [4] * ndims + [1],
+                                  padding="VALID",
+                                  name='cnv')
+          output = nn.bias_add(output, bias, name='bias_add')
+          loss = math_ops.reduce_sum(math_ops.square(output))
+          optimizer = gradient_descent.GradientDescentOptimizer(0.0005)
+          train = optimizer.minimize(loss)
+
+      train = ipu.ipu_compiler.compile(lambda: (loss, train), [])
+
+      report = tu.ReportJSON(self, sess)
+
+      sess.run(variables.global_variables_initializer())
+
+      report.reset()
+
+      fd = {
+          inp: np.random.random_sample([1] + [24] * ndims + [M * K]),
+          bias: np.random.random_sample([N * K])
+      }
+      sess.run(train, fd)
+
+      report.parse_log()
+
+      ok = [
+          '__seed*',
+          'Copy_',
+          'host-exchange*',
+          'vs/cnv/convolution*/Conv_8x8_stride4x4/Convolve',
+          'vs/cnv/convolution*/Conv_8x8_stride4x4/Reduce0',
+          'vs/cnv/convolution*/Conv_8x8_stride4x4/Reduce1',
+          'vs/gradients/vs/cnv_grad/Conv2DBackpropFilter/fusion*/Conv_5x5',
+          'vs/gradients/vs/cnv_grad/Conv2DBackpropFilter/fusion*/AddTo',
+          'vs/gradients/vs/Square_grad/Mul/fusion*/Op/Multiply',
+          'vs/bias_add/fusion/Op/Add',
+          'vs/Sum/reduce',
+          'vs/Square/multiply*/Op/Multiply',
+      ]
+      report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":

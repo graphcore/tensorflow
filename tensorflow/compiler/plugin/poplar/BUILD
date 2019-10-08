@@ -1975,6 +1975,7 @@ tf_xla_py_test(
         ":test_utils_py",
         ":ipu_ops_py",
         "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:constant_op",
         "//tensorflow/python:nn_ops",
