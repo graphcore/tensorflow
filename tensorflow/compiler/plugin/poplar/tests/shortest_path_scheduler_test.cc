@@ -74,20 +74,13 @@ HloModule top
 
   ASSERT_EQ(seq.size(), 7);
 
-  std::vector<std::string> expected_sequence;
-  expected_sequence.emplace_back("p0");
-  expected_sequence.emplace_back("cos0");
-  expected_sequence.emplace_back("p1");
-  expected_sequence.emplace_back("add0");
-  expected_sequence.emplace_back("p2");
-  expected_sequence.emplace_back("add1");
-  expected_sequence.emplace_back("tuple");
-
-  int index = 0;
-  for (auto inst : seq) {
-    EXPECT_EQ(inst->name(), expected_sequence[index]);
-    index++;
-  }
+  EXPECT_EQ(seq[0]->name(), "p0");
+  EXPECT_EQ(seq[1]->name(), "cos0");
+  EXPECT_EQ(seq[2]->name(), "p1");
+  EXPECT_EQ(seq[3]->name(), "add0");
+  EXPECT_EQ(seq[4]->name(), "p2");
+  EXPECT_EQ(seq[5]->name(), "add1");
+  EXPECT_EQ(seq[6]->name(), "tuple");
 }
 
 TEST_F(ShortestPathSchedulerTest, TestShortestPathScheduler1) {
@@ -140,20 +133,13 @@ HloModule top
 
   ASSERT_EQ(seq.size(), 7);
 
-  std::vector<std::string> expected_sequence;
-  expected_sequence.emplace_back("p0");
-  expected_sequence.emplace_back("cos0");
-  expected_sequence.emplace_back("cos1");
-  expected_sequence.emplace_back("cos3");
-  expected_sequence.emplace_back("cos2");
-  expected_sequence.emplace_back("cos4");
-  expected_sequence.emplace_back("tuple");
-
-  int index = 0;
-  for (auto inst : seq) {
-    EXPECT_EQ(inst->name(), expected_sequence[index]);
-    index++;
-  }
+  EXPECT_EQ(seq[0]->name(), "p0");
+  EXPECT_EQ(seq[1]->name(), "cos0");
+  EXPECT_EQ(seq[2]->name(), "cos1");
+  EXPECT_EQ(seq[3]->name(), "cos3");
+  EXPECT_EQ(seq[4]->name(), "cos2");
+  EXPECT_EQ(seq[5]->name(), "cos4");
+  EXPECT_EQ(seq[6]->name(), "tuple");
 }
 
 // from old scheduler test
@@ -783,6 +769,121 @@ HloModule top
   auto seq = s.instructions();
 
   ASSERT_EQ(seq.size(), 4);
+}
+
+TEST_F(ShortestPathSchedulerTest, TestArgsWithControlPredecessors) {
+  //   p0(-->p2)
+  //   |
+  // cos0  p1
+  //   |  /
+  // add0   p2
+  //   |  /
+  //  add1
+  //   |
+  //  tuple
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  p1 = f32[] parameter(1)
+  p2 = f32[] parameter(2)
+  p0 = f32[] parameter(0), control-predecessors={p2}
+  cos0 = f32[] cosine(p0)
+  add0 = f32[] add(cos0, p1)
+  add1 = f32[] add(add0, p2)
+  ROOT tuple = (f16[]) tuple(add1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  ASSERT_EQ(seq.size(), 7);
+
+  EXPECT_EQ(seq[0]->name(), "p1");
+  EXPECT_EQ(seq[1]->name(), "p2");
+  EXPECT_EQ(seq[2]->name(), "p0");
+  EXPECT_EQ(seq[3]->name(), "cos0");
+  EXPECT_EQ(seq[4]->name(), "add0");
+  EXPECT_EQ(seq[5]->name(), "add1");
+  EXPECT_EQ(seq[6]->name(), "tuple");
+}
+
+TEST_F(ShortestPathSchedulerTest, TestArgsWithControlDepsOnSameInst) {
+  //   p0(-->p1)
+  //   |
+  // add0----p1
+  //   |
+  // cos0   p2
+  //   |  /
+  //  add1
+  //   |
+  //  tuple
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  p1 = f32[] parameter(1)
+  p0 = f32[] parameter(0), control-predecessors={p1}
+  add0 = f32[] add(p0, p1)
+  cos0 = f32[] cosine(add0)
+  p2 = f32[] parameter(2)
+  add1 = f32[] add(cos0, p2)
+  ROOT tuple = (f16[]) tuple(add1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateShortestPathScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  ASSERT_EQ(seq.size(), 7);
+
+  LOG(INFO) << "seq";
+  for (auto* i : seq) {
+    LOG(INFO) << i->name();
+  }
+
+  EXPECT_EQ(seq[0]->name(), "p1");
+  EXPECT_EQ(seq[1]->name(), "p0");
+  EXPECT_EQ(seq[2]->name(), "add0");
+  EXPECT_EQ(seq[3]->name(), "cos0");
+  EXPECT_EQ(seq[4]->name(), "p2");
+  EXPECT_EQ(seq[5]->name(), "add1");
+  EXPECT_EQ(seq[6]->name(), "tuple");
 }
 
 }  // namespace

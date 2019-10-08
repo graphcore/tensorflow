@@ -61,7 +61,6 @@ class SequenceCosts {
   // each instruction.
   void FindCosts(HloComputation* comp) {
     FindCosts(comp->root_instruction());
-
     for (auto inst : comp->instructions()) {
       if (inst->user_count() == 0 && inst != comp->root_instruction()) {
         FindCosts(inst);
@@ -150,13 +149,13 @@ class SequenceCosts {
     for (auto inst_cost_pair : costs_) {
       const HloInstruction* inst = inst_cost_pair.first;
       int64 cost = inst_cost_pair.second;
-      if (inst->operand_count() == 0 &&
-          inst->control_predecessors().size() == 0) {
-        if (inst->opcode() != HloOpcode::kParameter) {
+      if (inst->opcode() != HloOpcode::kParameter) {
+        if (inst->operand_count() == 0 &&
+            inst->control_predecessors().size() == 0) {
           InsertIntoReady(inst);
+        } else {
+          InsertIntoNotReady(inst);
         }
-      } else {
-        InsertIntoNotReady(inst);
       }
     }
   }
@@ -180,13 +179,13 @@ class SequenceCosts {
   // This function schedules the first (best) instruction from ready container.
   void ScheduleReady() {
     auto un_set = ready_.begin()->second;
-    if (!un_set.empty()) {
-      const HloInstruction* inst = *(un_set.begin());
-      scheduled_.insert(inst);
-      InsertToSequence(inst);
-      EraseFromReady(inst);
-      CheckIfNewReady(inst);
-    }
+    CHECK(!un_set.empty());
+
+    const HloInstruction* inst = *(un_set.begin());
+    scheduled_.insert(inst);
+    InsertToSequence(inst);
+    EraseFromReady(inst);
+    CheckIfNewReady(inst);
   }
 
   // Check if all parameters of instruction were scheduled.
@@ -202,17 +201,25 @@ class SequenceCosts {
   }
 
   // Will schedule all parameters, which has not been scheduled yet, of the
-  // instruction. And it populates list list_scheduled_param by them.
-  void ScheduleParam(const HloInstruction* inst,
+  // instruction. And it populates list list_scheduled_param with them.
+  bool ScheduleParam(const HloInstruction* inst,
                      std::vector<const HloInstruction*>& list_scheduled_param) {
     for (auto operand : inst->operands()) {
       if (operand->opcode() == HloOpcode::kParameter &&
           !scheduled_.contains(operand)) {
-        scheduled_.insert(operand);
-        InsertToSequence(operand);
-        list_scheduled_param.push_back(operand);
+        bool ok = absl::c_all_of(
+            operand->control_predecessors(),
+            [&](HloInstruction* dep) { return scheduled_.contains(dep); });
+
+        if (ok) {
+          scheduled_.insert(operand);
+          InsertToSequence(operand);
+          list_scheduled_param.push_back(operand);
+          return true;
+        }
       }
     }
+    return false;
   }
 
   // When we schedule parameters of first (best) instruction from not ready list
@@ -230,7 +237,6 @@ class SequenceCosts {
   // redundancy: it iterates till find action)
   void ScheduleParamOfHighestNotReady() {
     std::vector<const HloInstruction*> list_scheduled_param;
-    const HloInstruction* check_inst = nullptr;
     bool new_param_scheduled = false;
     for (auto pair_not_ready : not_ready_) {
       if (new_param_scheduled) {
@@ -239,10 +245,10 @@ class SequenceCosts {
 
       for (auto inst : pair_not_ready.second) {
         if (!AreAllParamScheduled(inst)) {
-          ScheduleParam(inst, list_scheduled_param);
-          new_param_scheduled = true;
-          check_inst = inst;
-          break;
+          if (ScheduleParam(inst, list_scheduled_param)) {
+            new_param_scheduled = true;
+            break;
+          }
         }
       }
     }
