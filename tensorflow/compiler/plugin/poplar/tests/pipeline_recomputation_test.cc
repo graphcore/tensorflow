@@ -416,6 +416,11 @@ ENTRY cluster {
         EXPECT_THAT(user_of_user, stages.backward[stage_id]);
       }
     }
+
+    // Expect that the recomputation stage has a control predecessor that
+    // is the forward pass.
+    ASSERT_EQ(1, recomp_stage->control_predecessors().size());
+    EXPECT_EQ(fwd_stage, recomp_stage->control_predecessors()[0]);
   }
 }
 

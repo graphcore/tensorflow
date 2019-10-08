@@ -127,6 +127,10 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
       TF_RETURN_IF_ERROR(
           pipeline_comp->RemoveInstructionAndUnusedOperands(operand));
     }
+
+    // Make sure that the fwd pass is executed before the recomputation
+    fwd_stage->AddControlDependencyTo(recomp_stage);
+
     VLOG(1) << "Added recomputation for pipeline stage " << stage_id;
     changed = true;
   }
