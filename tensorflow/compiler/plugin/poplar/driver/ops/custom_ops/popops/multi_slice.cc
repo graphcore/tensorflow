@@ -79,7 +79,7 @@ class MultiSliceOp : public PoplibsOpDef {
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
     TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
                         FindInstructionInput(tensor_map, res, inst, 1, seq));
-    popops::SlicePlan plan;  // TODO: Get it from res
+    const popops::SlicePlan& plan = *res.slice_plan_mappings[inst->operand(0)];
     poplar::Tensor output = popops::multiSlice(
         graph, input,
         indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
@@ -106,7 +106,8 @@ class MultiSliceOp : public PoplibsOpDef {
                                  GetDebugName(inst) + "/input");
       }
       case 1: {
-        popops::SlicePlan plan;  // TODO: Get it from res
+        const popops::SlicePlan& plan =
+            *res.slice_plan_mappings[inst->operand(1)];
         return CreateIndicesTensor(graph, plan, inst->operand(1)->shape(),
                                    GetDebugName(inst) + "/indices");
       }
@@ -145,12 +146,14 @@ class MultiUpdateOp : public PoplibsOpDef {
                                  GetDebugName(inst) + "/input");
       }
       case 1: {
-        popops::SlicePlan plan;  // TODO: Get it from res
+        const popops::SlicePlan& plan =
+            *res.slice_plan_mappings[inst->operand(1)];
         return CreateIndicesTensor(graph, plan, inst->operand(1)->shape(),
                                    GetDebugName(inst) + "/indices");
       }
       case 2: {
-        popops::SlicePlan plan;  // TODO: Get it from res
+        const popops::SlicePlan& plan =
+            *res.slice_plan_mappings[inst->operand(2)];
         return CreateUpdatesTensor(
             graph, plan, inst->operand(0)->shape(), inst->operand(2)->shape(),
             inst->operand(1)->shape(), GetDebugName(inst) + "/updates");

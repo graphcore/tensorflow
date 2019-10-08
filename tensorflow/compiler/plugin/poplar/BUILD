@@ -431,6 +431,7 @@ cc_library(
         "driver/tools/convolution_preplanning.cc",
         "driver/tools/conv_poplar_util.cc",
         "driver/tools/data_initializer.cc",
+        "driver/tools/embedding_plans_preplanning.cc",
         "driver/tools/generic_graph_caching.cc",
         "driver/tools/mapping_helper.cc",
         "driver/tools/poplar_util.cc",
@@ -466,6 +467,7 @@ cc_library(
         "driver/tools/convolution_preplanning.h",
         "driver/tools/conv_poplar_util.h",
         "driver/tools/data_initializer.h",
+        "driver/tools/embedding_plans_preplanning.h",
         "driver/tools/generic_graph_caching.h",
         "driver/tools/mapping_helper.h",
         "driver/tools/poplar_util.h",
@@ -1369,6 +1371,24 @@ xla_test(
 xla_test(
     name = "deferred_allocation_visitor_test",
     srcs = ["tests/deferred_allocation_visitor_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo",
+        "//tensorflow/compiler/xla/service:hlo_runner",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:test",
+    ],
+)
+
+xla_test(
+    name = "slice_plan_test",
+    srcs = ["tests/slice_plan_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -2952,6 +2972,7 @@ test_suite(
         "sharding_pass_test",
         "shortest_path_scheduler_test",
         "simple_network_test",
+        "slice_plan_test",
         "sort_op_cc_test",
         "sort_op_py_test",
         "sparse_softmax_test",

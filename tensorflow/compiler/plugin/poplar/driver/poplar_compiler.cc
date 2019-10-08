@@ -84,6 +84,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/convolution_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
@@ -712,11 +713,15 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     CreatePoplarGraphs(resources, module.get(), poplar_device);
     auto& main_graph = GetMasterGraph(resources);
 
+    EmbeddingPlansPreplanning embeddings_preplanning;
+    TF_RETURN_IF_ERROR(embeddings_preplanning.Plan(module.get(), resources));
+
     try {
       ConvolutionPreplanning convolution_preplanning;
       TF_RETURN_IF_ERROR(convolution_preplanning.Plan(module.get(), resources));
       auto order = module->schedule().sequence(entry).instructions();
 
+      // The following line starts the lowering in poplar.
       TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus("[Build graph] ", e);

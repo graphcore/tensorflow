@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import numpy as np
 
 from tensorflow.python import ipu
@@ -247,4 +248,6 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
 
 
 if __name__ == "__main__":
+  os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
+                                os.environ.get('TF_XLA_FLAGS', ''))
   googletest.main()

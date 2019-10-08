@@ -50,6 +50,10 @@ struct CompilerResources {
 
   std::vector<poplar::Graph> shard_graphs;
 
+  std::map<const HloInstruction*, popops::SlicePlan*> slice_plan_mappings;
+
+  std::list<popops::SlicePlan> slice_plans;
+
   CompilerAnnotations annotations;
 
   CompilerInformation information;
