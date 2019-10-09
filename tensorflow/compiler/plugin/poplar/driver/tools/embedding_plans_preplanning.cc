@@ -156,12 +156,19 @@ class EmbeddingPlansMap {
   }
 
  private:
+  const HloInstruction* FindSource(const HloInstruction* inst) {
+    switch (inst->opcode()) {
+      case HloOpcode::kReshape:
+        return FindSource(inst->operand(0));
+    }
+    return inst;
+  }
+
   StatusOr<PlanId> _AddInstructionToMappings(const HloInstruction* inst) {
     std::vector<const HloInstruction*> new_ops;
     PlanId plan = -1;
 
-    for (int i = 0; i < inst->operand_count(); i++) {
-      const HloInstruction* op = inst->operand(i);
+    auto process_op = [&](const HloInstruction* op) {
       auto mapping = mappings.find(op);
       if (mapping == mappings.end()) {
         if (plan < 0) {
@@ -178,7 +185,18 @@ class EmbeddingPlansMap {
           TF_ASSIGN_OR_RETURN(plan, _FusePlans(plan, mapping->second));
         }
       }
+
+      return Status::OK();
+    };
+
+    for (auto op : inst->operands()) {
+      TF_RETURN_IF_ERROR(process_op(op));
+      const HloInstruction* src = FindSource(op);
+      if (src != op) {
+        TF_RETURN_IF_ERROR(process_op(src));
+      }
     }
+
     if (plan < 0) {
       plan = plans.size();
       plans.emplace_back();

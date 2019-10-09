@@ -222,6 +222,60 @@ ENTRY main (arg0.1: s32[24,1], arg2.3: f32[], arg3.4: f32[100,16], arg4.5: f32[1
   EXPECT_EQ(plan_slice, plan_slice_2);
 }
 
+TEST_F(SlicePlanTest, SharedOffsetsReshape) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main (arg0.1: s32[24], arg2.3: f32[], arg3.4: f32[100,16], arg4.5: f32[100,16], arg5.6: f32[100,16], arg6.7: f32[100,16]) -> (f32[24,16], f32[24,16], f32[100,16], f32[100,16]) {
+  input = f32[100,16] parameter(2), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  offsets = s32[24] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  slice = f32[24,16] custom-call(f32[100,16] input, s32[24] offsets), custom_call_target="Popops::MultiSlice", metadata={op_type="IpuMultiSlice" op_name="vs/embedding_lookup"}, backend_config="null\n"
+  input.2 = f32[100,16] parameter(3), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  slice.2 = f32[24,16] custom-call(f32[100,16] input.2, s32[24] offsets), custom_call_target="Popops::MultiSlice", metadata={op_type="IpuMultiSlice" op_name="vs/embedding_lookup_1"}, backend_config="null\n"
+  gradients = f32[100,16] parameter(4), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  lr = f32[] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  broadcast_lr = f32[100,16] broadcast(f32[] lr), dimensions={}, metadata={op_type="ResourceApplyGradientDescent" op_name="vs/GradientDescent/update_vs/x/ResourceApplyGradientDescent"}
+  constant.15 = f32[100,16] constant({...}), metadata={op_type="IpuMultiUpdate" op_name="vs/gradients/vs/embedding_lookup_grad/IpuMultiUpdate"}
+  constant.16 = f32[24,16] constant({...}), metadata={op_type="IpuMultiUpdate" op_name="vs/gradients/vs/embedding_lookup_grad/IpuMultiUpdate"}
+  update = f32[100,16] custom-call(f32[100,16] %constant.15, s32[24] offsets, f32[24,16] %constant.16), custom_call_target="Popops::MultiUpdate", metadata={op_type="IpuMultiUpdate" op_name="vs/gradients/vs/embedding_lookup_grad/IpuMultiUpdate"}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  mul = f32[100,16] multiply(f32[100,16] broadcast_lr, f32[100,16] update), metadata={op_type="ResourceApplyGradientDescent" op_name="vs/GradientDescent/update_vs/x/ResourceApplyGradientDescent"}
+  sub = f32[100,16] subtract(f32[100,16] gradients, f32[100,16] mul), metadata={op_type="ResourceApplyGradientDescent" op_name="vs/GradientDescent/update_vs/x/ResourceApplyGradientDescent"}
+  gradients.2 = f32[100,16] parameter(5), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  broadcast_lr.2 = f32[100,16] broadcast(f32[] lr), dimensions={}, metadata={op_type="ResourceApplyGradientDescent" op_name="vs/GradientDescent_1/update_vs/y/ResourceApplyGradientDescent"}
+  constant.18 = f32[100,16] constant({...}), metadata={op_type="IpuMultiUpdate" op_name="vs/gradients_1/vs/embedding_lookup_1_grad/IpuMultiUpdate"}
+  constant.19 = f32[24,16] constant({...}), metadata={op_type="IpuMultiUpdate" op_name="vs/gradients_1/vs/embedding_lookup_1_grad/IpuMultiUpdate"}
+  update.2 = f32[100,16] custom-call(f32[100,16] constant.18, s32[24] offsets, f32[24,16] %constant.19), custom_call_target="Popops::MultiUpdate", metadata={op_type="IpuMultiUpdate" op_name="vs/gradients_1/vs/embedding_lookup_1_grad/IpuMultiUpdate"}, backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  mul.2 = f32[100,16] multiply(f32[100,16] broadcast_lr.2, f32[100,16] update.2), metadata={op_type="ResourceApplyGradientDescent" op_name="vs/GradientDescent_1/update_vs/y/ResourceApplyGradientDescent"}
+  sub.2 = f32[100,16] subtract(f32[100,16] gradients.2, f32[100,16] mul.2), metadata={op_type="ResourceApplyGradientDescent" op_name="vs/GradientDescent_1/update_vs/y/ResourceApplyGradientDescent"}
+  ROOT tuple.53 = (f32[24,16], f32[24,16], f32[100,16], f32[100,16]) tuple(f32[24,16] slice, f32[24,16] slice.2, f32[100,16] update, f32[100,16] update.2), metadata={op_name="XLA_Retvals"}
+}
+)";
+  std::unique_ptr<HloModule> module =
+      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
+  auto resources = GetMockResources(module.get(), false);
+  HloPassPipeline pipeline = GetMockPipeline(*resources.get());
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  EmbeddingPlansPreplanning embeddings_preplanning;
+  TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
+  EntryVisitor visitor(*resources);
+  auto entry_computation = module->entry_computation();
+  TF_EXPECT_OK(entry_computation->Accept(&visitor));
+
+  auto root = entry_computation->root_instruction();
+  auto slice = root->operand(0);
+  auto slice_2 = root->operand(1);
+  auto update = root->operand(2);
+  auto update_2 = root->operand(3);
+
+  auto plan_slice = check_operands_slice_plans_match(slice, *resources);
+  auto plan_update = check_operands_slice_plans_match(update, *resources);
+  auto plan_slice_2 = check_operands_slice_plans_match(slice_2, *resources);
+  auto plan_update_2 = check_operands_slice_plans_match(update_2, *resources);
+
+  EXPECT_EQ(plan_slice, plan_update);
+  EXPECT_EQ(plan_slice_2, plan_update_2);
+  EXPECT_EQ(plan_slice, plan_slice_2);
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
