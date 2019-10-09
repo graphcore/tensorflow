@@ -240,6 +240,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
           sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
           pipeline_depth, dataset_fn, optimizer, self, 12600, True)
 
+  @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
     # Stage3 has a stateful op there it cannot be recomputed.
     def dataset_fn():

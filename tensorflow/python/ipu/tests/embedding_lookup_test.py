@@ -90,6 +90,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0], np.take(w_h, i_h, axis=0))
       self.assertEqual(result[0].shape, (8, 200))
 
+  @test_util.deprecated_graph_mode_only
   def testAutoFlatten(self):
     with self.session() as sess:
       with ops.device('cpu'):
@@ -119,6 +120,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertEqual(out.shape, (3, 4, 2, 16))
       self.validate_output(input_tensor, indices, out)
 
+  @test_util.deprecated_graph_mode_only
   def testWithResourceVariable(self):
     with self.session() as sess:
       with ops.device('cpu'):
@@ -150,6 +152,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertEqual(out.shape, (10, 16))
       self.validate_output(input_tensor, indices, out)
 
+  @test_util.deprecated_graph_mode_only
   def testWithResourceVariableAutoFlatten(self):
     with self.session() as sess:
 
@@ -185,6 +188,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertEqual(out.shape, (3, 4, 2, 16))
       self.validate_output(input_tensor, indices, out)
 
+  @test_util.deprecated_graph_mode_only
   def testGradient(self):
     with self.session() as sess:
       with ops.device('cpu'):
@@ -222,6 +226,7 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
           })
       self.validate_gradient_output(indices, gradient, out, 0.1)
 
+  @test_util.deprecated_graph_mode_only
   def test4D(self):
     def my_net(w, i):
       out = ipu.ops.embedding_ops.embedding_lookup(w, i)

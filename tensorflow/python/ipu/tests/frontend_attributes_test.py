@@ -53,6 +53,7 @@ def _createFeeders(inputs, dimensions, dtype):
 
 
 class FrontendAttributesTest(test_util.TensorFlowTestCase):
+  @test_util.deprecated_graph_mode_only
   def testSimpleSingleAttribute(self):
     with ops.device("/device:IPU:0"):
       op1 = ops.get_default_graph().create_op("FloatOutput", [],
@@ -66,6 +67,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
         self.assertIsNone(_getFrontendAttributes(op1))
         self.assertEqual(attributes2.map.get("attr_a"), "a")
 
+  @test_util.deprecated_graph_mode_only
   def testSimpleMultipleAttributes(self):
     with ops.device("/device:IPU:0"):
       op1 = ops.get_default_graph().create_op("FloatOutput", [],
@@ -87,6 +89,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           self.assertEqual(attributes3.map.get("attr_a"), "a")
           self.assertEqual(attributes3.map.get("attr_b"), "b")
 
+  @test_util.deprecated_graph_mode_only
   def testSingleAttributeWithScopes(self):
     op1 = None
     op2 = None
@@ -115,6 +118,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       self.assertEqual(attributes3.map.get("attr_a"), "a")
       self.assertIsNone(_getFrontendAttributes(op4))
 
+  @test_util.deprecated_graph_mode_only
   def testMultipleAttributesWithScopes(self):
     op1 = None
     op2 = None
@@ -147,6 +151,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
       self.assertIsNone(attributes3.map.get("attr_b"))
       self.assertIsNone(_getFrontendAttributes(op4))
 
+  @test_util.deprecated_graph_mode_only
   def testStochasticRounding(self):
     op1 = None
     op2 = None
@@ -215,6 +220,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
               backend_config_pb2.NOT_SET))
       self.assertIsNone(attributes5.map.get("attr_b"))
 
+  @test_util.deprecated_graph_mode_only
   def testMatMulPartialsType(self):
     with self.session() as sess:
       outputs = {}
@@ -245,6 +251,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
         report.parse_log()
         report.assert_vertices_contain_list([expected_output[0]])
 
+  @test_util.deprecated_graph_mode_only
   def testLSTMPartialsType(self):
     ops.reset_default_graph()
     with self.session() as sess:
