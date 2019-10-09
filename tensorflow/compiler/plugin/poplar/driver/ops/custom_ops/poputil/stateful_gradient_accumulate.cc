@@ -91,16 +91,15 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
     poplar::Tensor output = input;
     poplar::program::Sequence if_true;
     {
-      poplar::Tensor result = accumulator;
       if (do_all_reduce) {
-        // All reduce the accumulator tensor.
-        result = popops::replicatedAllReduce(
-            GetMasterGraph(res), accumulator, popops::Operation::ADD, if_true,
-            GetDebugName(inst), GetReplicateAllReduceOptions());
+        // All reduce the accumulator tensor into the output.
+        popops::replicatedAllReduceWithOutput(
+            GetMasterGraph(res), accumulator, output, popops::Operation::ADD,
+            if_true, GetDebugName(inst), GetReplicateAllReduceOptions());
+      } else {
+        // Copy accumulator into output.
+        if_true.add(poplar::program::Copy(accumulator, output));
       }
-
-      // Copy accumulator into output.
-      if_true.add(poplar::program::Copy(result, output));
 
       // Zero the accumulator.
       popops::zero(graph, accumulator, if_true,
