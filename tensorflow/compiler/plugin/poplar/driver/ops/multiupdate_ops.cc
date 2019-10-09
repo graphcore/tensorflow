@@ -31,45 +31,31 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-
-StatusOr<popops::SlicePlan*> GetSlicePlan(const HloInstruction* inst,
-                                          const CompilerResources& res) {
-  auto plan = res.slice_plan_mappings.find(inst->operand(0));
-  if (plan == res.slice_plan_mappings.end()) {
-    return xla::FailedPrecondition(
-        "Could not find input in slice plan mappings");
-  }
-  return plan->second;
-}
-
 enum class UpdateMode { Replace, Accumulate };
-Status MultiUpdateInternal(
-    poplar::Graph& graph, const popops::SlicePlan& plan, poplar::Tensor operand,
-    const poplar::Tensor& indices, const poplar::Tensor& updates,
-    poplar::program::Sequence& prog, const std::string& debug_prefix,
-    UpdateMode mode, absl::optional<poplar::Tensor> scale = absl::nullopt) {
+void MultiUpdateInternal(poplar::Graph& graph, poplar::Tensor operand,
+                         const poplar::Tensor& indices,
+                         const poplar::Tensor& updates,
+                         poplar::program::Sequence& prog,
+                         const std::string& debug_prefix, UpdateMode mode,
+                         absl::optional<poplar::Tensor> scale = absl::nullopt) {
   // If the updates tensor is empty, there is no need to update the operand. We
   // can return the operand as is.
   if (updates.numElements() == 0) {
-    return Status::OK();
+    return;
   }
-  if (indices.shape().size() != 2 || indices.shape()[1] != 1) {
-    return xla::FailedPrecondition(
-        "Indices should be 2D with the second dimension set to 1.");
-  }
-  poplar::Tensor expanded_updates = updates.expand({1});
+  poplar::Tensor expanded_updates = updates.expand({indices.shape().back()});
 
   if (mode == UpdateMode::Replace) {
     popops::multiUpdate(graph, operand, expanded_updates,
                         indices.reinterpret(poplar::UNSIGNED_INT), {0}, {1},
-                        prog, plan, poplar::OptionFlags(), debug_prefix);
+                        prog, popops::SlicePlan(), poplar::OptionFlags(),
+                        debug_prefix);
   } else {
     popops::multiUpdateAdd(graph, operand, expanded_updates,
                            indices.reinterpret(poplar::UNSIGNED_INT), *scale,
-                           {0}, {1}, prog, plan, poplar::OptionFlags(),
-                           debug_prefix);
+                           {0}, {1}, prog, popops::SlicePlan(),
+                           poplar::OptionFlags(), debug_prefix);
   }
-  return Status::OK();
 }
 }  // namespace
 
@@ -90,10 +76,8 @@ StatusOr<poplar::program::Program> CreateMultiUpdate(CompilerResources& res,
   TF_ASSIGN_OR_RETURN(poplar::Tensor updates,
                       FindInstructionInput(tensor_map, res, inst, 2, prog));
 
-  TF_ASSIGN_OR_RETURN(popops::SlicePlan * plan, GetSlicePlan(inst, res));
-  TF_RETURN_IF_ERROR(MultiUpdateInternal(graph, *plan, operand, indices,
-                                         updates, prog, GetDebugName(inst),
-                                         UpdateMode::Replace));
+  MultiUpdateInternal(graph, operand, indices, updates, prog,
+                      GetDebugName(inst), UpdateMode::Replace);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
@@ -118,10 +102,8 @@ StatusOr<poplar::program::Program> CreateMultiUpdateAdd(
   TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
                       FindInstructionInput(tensor_map, res, inst, 3, prog));
 
-  TF_ASSIGN_OR_RETURN(popops::SlicePlan * plan, GetSlicePlan(inst, res));
-  TF_RETURN_IF_ERROR(MultiUpdateInternal(graph, *plan, operand, indices,
-                                         updates, prog, GetDebugName(inst),
-                                         UpdateMode::Accumulate, scale));
+  MultiUpdateInternal(graph, operand, indices, updates, prog,
+                      GetDebugName(inst), UpdateMode::Accumulate, scale);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
@@ -168,10 +150,8 @@ StatusOr<poplar::program::Program> CreateFusedMultiUpdateAddOp(
     operand_reshaped = operand_reshaped.reshape(dims);
   }
 
-  TF_ASSIGN_OR_RETURN(popops::SlicePlan * plan, GetSlicePlan(inst, res));
-  TF_RETURN_IF_ERROR(MultiUpdateInternal(
-      graph, *plan, operand_reshaped, indices, updates, prog,
-      GetDebugName(inst), UpdateMode::Accumulate, scale));
+  MultiUpdateInternal(graph, operand_reshaped, indices, updates, prog,
+                      GetDebugName(inst), UpdateMode::Accumulate, scale);
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
   return prog;
