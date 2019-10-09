@@ -34,9 +34,9 @@ namespace {
 // Partition the ops into regions where they are independent, can colocate,
 // have the same type and same inplaceness.
 template <typename Iter>
-std::vector<absl::flat_hash_set<HloInstruction*>> Partition(
+std::vector<std::vector<HloInstruction*>> Partition(
     Iter begin, Iter end, HloReachabilityMap* reachability_map) {
-  std::vector<absl::flat_hash_set<HloInstruction*>> result;
+  std::vector<std::vector<HloInstruction*>> result;
   while (begin != end) {
     auto first = *begin;
     auto pred = [&](const HloInstruction* inst) {
@@ -48,7 +48,7 @@ std::vector<absl::flat_hash_set<HloInstruction*>> Partition(
     auto itr = std::stable_partition(begin, end, pred);
     // The vector of instructions in [begin, itr) might not be independent.
     // We now greedily cluster it into independent clusters.
-    std::vector<absl::flat_hash_set<HloInstruction*>> clusters;
+    std::vector<std::vector<HloInstruction*>> clusters;
     while (begin != itr) {
       bool found_cluster = false;
       // Go through all existing clusters and check if the instruction is
@@ -60,7 +60,7 @@ std::vector<absl::flat_hash_set<HloInstruction*>> Partition(
               return !reachability_map->IsConnected(inst, *begin);
             });
         if (can_insert) {
-          cluster.insert(*begin);
+          cluster.push_back(*begin);
           found_cluster = true;
           break;
         }
