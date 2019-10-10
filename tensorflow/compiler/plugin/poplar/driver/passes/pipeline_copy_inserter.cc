@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -28,8 +29,8 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-StatusOr<bool> AddCopyIfParamterModifiedInplace(HloInstruction* call,
-                                                int64 parameter_number) {
+StatusOr<bool> AddCopyIfParameterModifiedInplace(HloInstruction* call,
+                                                 int64 parameter_number) {
   HloComputation* comp = call->to_apply();
   HloInstruction* parameter = comp->parameter_instruction(parameter_number);
   if (IsOutputModifiedInplace(parameter)) {
@@ -59,7 +60,7 @@ StatusOr<bool> InsertForwardStageCopies(PipelineStages& stages) {
         continue;
       }
       TF_ASSIGN_OR_RETURN(bool added,
-                          AddCopyIfParamterModifiedInplace(stage, op_idx));
+                          AddCopyIfParameterModifiedInplace(stage, op_idx));
       changed |= added;
     }
   }
@@ -95,7 +96,7 @@ StatusOr<bool> InsertReadOnlyVariableCopies(HloInstruction* pipeline_op) {
       // instructions if necessary.
       for (int64 index : user->OperandIndices(param_inst)) {
         TF_ASSIGN_OR_RETURN(bool added,
-                            AddCopyIfParamterModifiedInplace(user, index));
+                            AddCopyIfParameterModifiedInplace(user, index));
         changed |= added;
       }
     }
@@ -115,7 +116,7 @@ StatusOr<bool> InsertIntraIPUCopies(PipelineStages& stages) {
         if (operand->opcode() == HloOpcode::kGetTupleElement) {
           if (IsPipelineStageOrBackwardOp(operand->operand(0))) {
             TF_ASSIGN_OR_RETURN(
-                bool added, AddCopyIfParamterModifiedInplace(stage, op_idx));
+                bool added, AddCopyIfParameterModifiedInplace(stage, op_idx));
             changed |= added;
           } else {
             // Any other GTE input can only be an infeed.
@@ -125,6 +126,91 @@ StatusOr<bool> InsertIntraIPUCopies(PipelineStages& stages) {
       }
     }
   }
+  return changed;
+}
+
+/**
+ * Get the pipeline stage to device mapping.
+ *
+ * @param pipeline The outer pipeline instruction.
+ *
+ * @returns The mapping of the ith stage to a IPU device.
+ *
+ * @note Assumes the pipeline is correctly constructed.
+ */
+std::vector<int> GetPipelineStageDeviceMapping(const HloInstruction* pipeline) {
+  HloComputation* pipeline_computation = pipeline->to_apply();
+  std::vector<HloInstruction*> instructions(
+      pipeline_computation->instructions().begin(),
+      pipeline_computation->instructions().end());
+
+  // Cannot reasonably return StatusOr because this is called inside a
+  // constructor.
+  auto stage = GetPipelineStages(pipeline_computation).ValueOrDie();
+  stage.forward.insert(stage.forward.end(), stage.backward.rbegin(),
+                       stage.backward.rend());
+
+  std::vector<int> result(stage.forward.size());
+
+  const auto get_stage_shard = [](const HloInstruction* hlo) -> int {
+    return *hlo->sharding_unique_device();
+  };
+  absl::c_transform(stage.forward, result.begin(), get_stage_shard);
+
+  return result;
+}
+
+StatusOr<bool> InsertIntraIPUCopiesBetweenStages(HloInstruction* pipeline_op,
+                                                 PipelineStages& stages) {
+  TF_ASSIGN_OR_RETURN(auto backend_config,
+                      pipeline_op->backend_config<PoplarBackendConfig>());
+
+  // If we are interleaving pipeline stages, we don't need to insert copies
+  // between stages.
+  if (backend_config.call_config().pipeline_config().interleave()) {
+    return false;
+  }
+
+  // Get the stage-device mapping
+  auto device_mapping = GetPipelineStageDeviceMapping(pipeline_op);
+  auto stages_ = stages.forward;
+  stages_.insert(stages_.end(), stages.backward.begin(), stages.backward.end());
+
+  // Compute the device index difference between adjacent stages.
+  std::adjacent_difference(device_mapping.begin(), device_mapping.end(),
+                           device_mapping.begin());
+  // Remove the head.
+  device_mapping.erase(device_mapping.begin());
+
+  bool changed = false;
+
+  // For each zero, which represents a adjacent pair of stages on the same IPU,
+  // insert a copy on the consumer's operands.
+  for (auto itr = std::find(device_mapping.begin(), device_mapping.end(), 0);
+       itr != device_mapping.end();
+       itr = std::find(itr + 1, device_mapping.end(), 0)) {
+    auto producer_idx = std::distance(device_mapping.begin(), itr);
+    auto consumer_idx = 1 + producer_idx;
+
+    VLOG(3) << "Insert copy between stage " << producer_idx << " and "
+            << consumer_idx;
+
+    auto consumer = stages_[consumer_idx];
+
+    for (auto operand : consumer->operands()) {
+      if (operand->opcode() == HloOpcode::kGetTupleElement) {
+        HloInstruction* copy =
+            pipeline_op->to_apply()->AddInstruction(HloInstruction::CreateUnary(
+                operand->shape(), HloOpcode::kCopy, operand));
+
+        copy->set_sharding(operand->sharding());
+        TF_RETURN_IF_ERROR(operand->ReplaceUseWith(consumer, copy));
+
+        changed = true;
+      }
+    }
+  }
+
   return changed;
 }
 }  // namespace
@@ -139,10 +225,14 @@ StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
   // Insert copies for any read-only pipeline inputs.
   TF_ASSIGN_OR_RETURN(bool inserted_ro_copies,
                       InsertReadOnlyVariableCopies(pipeline_op));
+  // Insert intra IPU copies between stages that are on the same IPU.
+  TF_ASSIGN_OR_RETURN(bool inserted_intra_copies_between_stages,
+                      InsertIntraIPUCopiesBetweenStages(pipeline_op, stages));
   // Insert intra IPU copies for any outputs from the previous stage on the same
   // device.
   TF_ASSIGN_OR_RETURN(bool inserted_intra_copies, InsertIntraIPUCopies(stages));
-  return inserted_fwd_copies || inserted_ro_copies || inserted_intra_copies;
+  return inserted_fwd_copies || inserted_ro_copies || inserted_intra_copies ||
+         inserted_intra_copies_between_stages;
 }
 
 StatusOr<bool> PipelineCopyInserter::Run(HloModule* module) {

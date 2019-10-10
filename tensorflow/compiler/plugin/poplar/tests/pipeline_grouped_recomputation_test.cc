@@ -13,9 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -31,9 +31,9 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-using PipelineRecomputationTest = HloTestBase;
+using PipelineGroupedRecomputationTest = HloTestBase;
 
-TEST_F(PipelineRecomputationTest, TestRecomputation1) {
+TEST_F(PipelineGroupedRecomputationTest, TestRecomputation1) {
   std::string hlo = R"(
 HloModule cluster
 
@@ -360,7 +360,7 @@ ENTRY cluster {
   arg6.7 = f32[2]{0} parameter(6), parameter_replication={false}
   arg5.6 = f32[1,1,2,2]{3,2,1,0} parameter(5), parameter_replication={false}
   arg3.4 = f32[2]{0} parameter(3), parameter_replication={false}
-  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"interleave\":true}}}"
+  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   get-tuple-element.269 = f32[2]{0} get-tuple-element(call.267), index=1
   get-tuple-element.273 = f32[2]{0} get-tuple-element(call.267), index=5
   get-tuple-element.268 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=0
@@ -416,15 +416,10 @@ ENTRY cluster {
         EXPECT_THAT(user_of_user, stages.backward[stage_id]);
       }
     }
-
-    // Expect that the recomputation stage has a control predecessor that
-    // is the forward pass.
-    ASSERT_EQ(1, recomp_stage->control_predecessors().size());
-    EXPECT_EQ(fwd_stage, recomp_stage->control_predecessors()[0]);
   }
 }
 
-TEST_F(PipelineRecomputationTest, TestNoBackwardStages) {
+TEST_F(PipelineGroupedRecomputationTest, TestNoBackwardStages) {
   std::string hlo = R"(
 HloModule top
 
@@ -460,7 +455,7 @@ ENTRY e {
   e.weights0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.weights1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
   e.weights2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.weights0, e.weights1, e.weights2), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"interleave\":true}}}"
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.weights0, e.weights1, e.weights2), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
   auto config = GetModuleConfigForTest();
@@ -479,7 +474,7 @@ ENTRY e {
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineRecomputationTest, TestRecomputationDisabled) {
+TEST_F(PipelineGroupedRecomputationTest, TestRecomputationDisabled) {
   std::string hlo = R"(
 HloModule cluster
 
@@ -806,7 +801,7 @@ ENTRY cluster {
   arg6.7 = f32[2]{0} parameter(6), parameter_replication={false}
   arg5.6 = f32[1,1,2,2]{3,2,1,0} parameter(5), parameter_replication={false}
   arg3.4 = f32[2]{0} parameter(3), parameter_replication={false}
-  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"interleave\":true}}}"
+  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   get-tuple-element.269 = f32[2]{0} get-tuple-element(call.267), index=1
   get-tuple-element.273 = f32[2]{0} get-tuple-element(call.267), index=5
   get-tuple-element.268 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=0

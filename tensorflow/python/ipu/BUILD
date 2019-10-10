@@ -488,6 +488,43 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "pipelining_grouped_recomputation_test",
+    size = "large",
+    srcs = ["tests/pipelining_grouped_recomputation_test.py"],
+    shard_count = 4,
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
+    name = "pipelining_grouped_test",
+    size = "large",
+    srcs = ["tests/pipelining_grouped_test.py"],
+    shard_count = 16,
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
     name = "pipelining_recomputation_test",
     size = "large",
     srcs = ["tests/pipelining_recomputation_test.py"],
@@ -540,6 +577,8 @@ test_suite(
         "ipu_multi_worker_strategy_test",
         "map_gradient_optimizer_test",
         "pipelining_conv_classify_test",
+        "pipelining_grouped_recomputation_test",
+        "pipelining_grouped_test",
         "pipelining_recomputation_test",
         "pipelining_test",
         "pop_datastream_test",

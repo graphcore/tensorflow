@@ -267,6 +267,7 @@ class PipelineOp : public XlaOpKernel {
                     "Expected PipelineStage to have no explicit outputs."));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("interleave", &interleave_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -358,6 +359,11 @@ class PipelineOp : public XlaOpKernel {
                    builder->SetInstructionFrontendAttribute(
                        outputs, FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT),
                        std::to_string(repeat_count_)));
+    // Set the interleave flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(PIPELINE_INTERLEAVE),
+                       std::to_string(interleave_)));
     // A pipeline has no explicit outputs, only updates of resource variables.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
       XlaResource* resource;
@@ -383,6 +389,7 @@ class PipelineOp : public XlaOpKernel {
   DataTypeVector input_types_;
   int64 pipeline_depth_;
   int64 repeat_count_;
+  bool interleave_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

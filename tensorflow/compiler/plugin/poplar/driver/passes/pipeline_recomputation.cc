@@ -95,6 +95,13 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     recomp_stage->set_backend_config(config);
     CHECK(IsPipelineStageRecomputation(recomp_stage));
 
+    TF_ASSIGN_OR_RETURN(PoplarBackendConfig pipeline_config,
+                        pipeline_op->backend_config<PoplarBackendConfig>());
+
+    const bool interleave =
+        pipeline_config.call_config().pipeline_config().interleave();
+    const int fifo_depth_multiplier = interleave ? 1 : 2;
+
     // Replace all the non parameter inputs with FIFOs.
     auto recomp_operands = recomp_stage->operands();
     for (int64 op_idx = 0; op_idx != recomp_operands.size(); ++op_idx) {
@@ -103,8 +110,9 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
         continue;
       }
       // Create the FIFO.
-      HloInstruction* fifo_inst = pipeline_comp->AddInstruction(
-          CreateFifo(operand, stages.forward.size() - stage_id - 1));
+      HloInstruction* fifo_inst = pipeline_comp->AddInstruction(CreateFifo(
+          operand,
+          fifo_depth_multiplier * (stages.forward.size() - stage_id - 1)));
       fifo_inst->set_sharding(operand->sharding());
       // Use the fifo as the input.
       TF_RETURN_IF_ERROR(recomp_stage->ReplaceOperandWith(op_idx, fifo_inst));

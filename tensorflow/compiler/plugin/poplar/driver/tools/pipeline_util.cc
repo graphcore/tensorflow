@@ -1078,6 +1078,8 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
   switch (inst->opcode()) {
     case HloOpcode::kCall:
       return !IsAnyPipelineStageOp(inst);
+    case HloOpcode::kCopy:
+      return !allow_communication_ops_;
     case HloOpcode::kParameter:
       return false;
     case HloOpcode::kGetTupleElement: {

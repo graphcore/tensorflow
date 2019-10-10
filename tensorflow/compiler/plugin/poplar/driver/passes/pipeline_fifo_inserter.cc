@@ -38,6 +38,12 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
 
   const int64 last_stage_id = stages.forward.size() - 1;
 
+  TF_ASSIGN_OR_RETURN(PoplarBackendConfig config,
+                      pipeline_op->backend_config<PoplarBackendConfig>());
+
+  const bool interleave = config.call_config().pipeline_config().interleave();
+  const int fifo_depth_multiplier = interleave ? 1 : 2;
+
   for (HloInstruction* stage : stages.backward) {
     TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));
     TF_ASSIGN_OR_RETURN(StageID previous_stage_id,
@@ -74,11 +80,13 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
                                      ".");
       }
     }
+
     for (HloInstruction* fwd_stage_input : fwd_stage_inputs) {
       // Insert the FIFO between forward and backward stage.
       VLOG(3) << "Inserting FIFO for stage " << stage_id.id;
       HloInstruction* fifo_inst = pipeline_comp->AddInstruction(
-          CreateFifo(fwd_stage_input, last_stage_id - stage_id.id));
+          CreateFifo(fwd_stage_input,
+                     fifo_depth_multiplier * (last_stage_id - stage_id.id)));
       // Forward sharding from the stage onto the FIFO.
       fifo_inst->set_sharding(fwd_stage_input->sharding());
       TF_RETURN_IF_ERROR(fwd_stage_input->ReplaceUseWith(stage, fifo_inst));

@@ -114,6 +114,15 @@ std::function<bool(const HloInstruction*)> IsIpuInterCopyInstruction() {
   };
 }
 
+bool GetPipelineInterleaveMode(const HloInstruction* pipeline) {
+  // Cannot reasonably return StatusOr because this is called inside a
+  // constructor.
+  auto backend_config =
+      pipeline->backend_config<PoplarBackendConfig>().ValueOrDie();
+
+  return backend_config.call_config().pipeline_config().interleave();
+}
+
 /**
  * Get the number of stages in a pipeline.
  *
@@ -274,12 +283,19 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     result[inst] = get_stage_from_operands(inst);
   }
 
+  // Partition out the copies.
+  auto copies_end = std::stable_partition(gtes_end, instructions.end(),
+                                          HasHloOpcode(HloOpcode::kCopy));
+  for (auto itr = gtes_end; itr != copies_end; ++itr) {
+    result[*itr] = get_stage_from_operands(*itr);
+  }
+
   // Partition out FIFOs - if the FIFO is an input to a recomputation stage,
   // then it is assigned to that stage, otherwise it it assigned to the same
   // stage as its input.
-  auto fifos_end =
-      std::stable_partition(gtes_end, instructions.end(), IsFifoInstruction());
-  for (auto itr = gtes_end; itr != fifos_end; ++itr) {
+  auto fifos_end = std::stable_partition(copies_end, instructions.end(),
+                                         IsFifoInstruction());
+  for (auto itr = copies_end; itr != fifos_end; ++itr) {
     HloInstruction* inst = *itr;
     CHECK_EQ(inst->user_count(), 1);
     if (IsPipelineStageRecomputation(inst->users()[0])) {
@@ -418,6 +434,76 @@ std::vector<int> CircularUnion(const std::vector<ElementType>& input,
 }
 
 /**
+ * Find the indices of all possible circular unions, including overlaps.
+ *
+ * @param input The sequence of input elements.
+ *
+ * @returns a list of indices of valid rotations of the input that do not
+ *          overlap.
+ */
+template <typename ElementType>
+std::vector<int> AllUnion(const std::vector<ElementType>& input) {
+  std::vector<int> result(input.size());
+
+  // This is trivially just every offset.
+  absl::c_iota(result, 0);
+
+  return result;
+}
+
+/**
+ * Construct a pipeline schedule given an offset and some schedulable
+ * components.
+ *
+ * @param offsets The offsets of each parallel sequence of inputs.
+ * @param input The input sequence to schedule.
+ *
+ * @returns A 2D array of pipeline schedule where each row represents the
+ *          parallel sequence, and each column represents a single timestep
+ *          where a single step of the input is scheduled.
+ */
+template <typename ElementType>
+std::vector<std::vector<ElementType>> ConstructScheduleInternal(
+    const std::vector<int>& offsets, const std::vector<ElementType>& input) {
+  std::vector<std::vector<ElementType>> result(offsets.size(), input);
+
+  for (int i = 0; i < offsets.size(); ++i) {
+    std::rotate(result[i].begin(),
+                std::next(result[i].begin(), result[i].size() - offsets[i]),
+                result[i].end());
+  }
+
+  return result;
+}
+
+template <typename ElementType>
+std::vector<std::vector<ElementType>> TransposeSchedule(
+    const std::vector<std::vector<ElementType>>& input) {
+  std::vector<std::vector<ElementType>> result(input[0].size());
+
+  for (int i = 0; i < input.size(); ++i) {
+    for (int k = 0; k < input[i].size(); ++k) {
+      result[k].push_back(input[i][k]);
+    }
+  }
+
+  return result;
+}
+
+template <typename ElementType>
+std::vector<std::vector<ElementType>> RotateSchedule(
+    const std::vector<std::vector<ElementType>>& input) {
+  std::vector<std::vector<ElementType>> result = input;
+
+  for (int i = 0; i < result.size() - 1; ++i) {
+    std::rotate(result[i].begin(), std::next(result[i].begin(), i + 1),
+                result[i].end());
+  }
+
+  return result;
+}
+
+/**
  * Construct a pipeline schedule given an offset and some schedulable
  * components.
  *
@@ -430,13 +516,15 @@ std::vector<int> CircularUnion(const std::vector<ElementType>& input,
  */
 template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructSchedule(
-    const std::vector<int>& offsets, const std::vector<ElementType>& input) {
-  std::vector<std::vector<ElementType>> result(offsets.size(), input);
+    const std::vector<int>& offsets, const std::vector<ElementType>& input,
+    bool interleave) {
+  auto result = ConstructScheduleInternal(offsets, input);
 
-  for (int i = 0; i < offsets.size(); ++i) {
-    std::rotate(result[i].begin(),
-                std::next(result[i].begin(), result[i].size() - offsets[i]),
-                result[i].end());
+  // Force the stages to be added to poplar in a consistent order.
+  if (!interleave) {
+    result = TransposeSchedule(result);
+    result = RotateSchedule(result);
+    result = TransposeSchedule(result);
   }
 
   return result;
@@ -461,8 +549,7 @@ template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructRampUpSchedule(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
     ElementType empty_element = {}) {
-  std::vector<std::vector<ElementType>> result =
-      ConstructSchedule(offsets, input);
+  auto result = ConstructScheduleInternal(offsets, input);
 
   for (int i = 0; i < offsets.size(); ++i) {
     std::fill(result[i].begin(), std::next(result[i].begin(), offsets[i]),
@@ -493,13 +580,13 @@ template <typename ElementType>
 std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
     const std::vector<int>& offsets, const std::vector<ElementType>& input,
     ElementType empty_element = {}, const int additional_iterations = 0) {
-  std::vector<std::vector<ElementType>> result =
-      ConstructSchedule(offsets, input);
+  auto result = ConstructScheduleInternal(offsets, input);
 
   for (int i = additional_iterations; i < offsets.size(); ++i) {
     std::fill(std::next(result[i].begin(), offsets[i]), result[i].end(),
               empty_element);
   }
+
   return result;
 }
 
@@ -516,10 +603,10 @@ std::vector<ElementType> FlattenSchedule(
     const std::vector<std::vector<ElementType>>& inputs) {
   std::vector<ElementType> result;
 
-  for (int i = 0; i < inputs[0].size(); ++i) {
-    for (const auto& input : inputs) {
-      result.push_back(input[i]);
-    }
+  auto inputs_transpose = TransposeSchedule(inputs);
+
+  for (const auto inputs : inputs_transpose) {
+    result.insert(result.end(), inputs.begin(), inputs.end());
   }
 
   return result;
@@ -740,12 +827,14 @@ StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
 }  // namespace
 
 PipelineVisitor::PipelineVisitor(
-    int64 stage_count, const std::vector<int>& stage_ipu_mapping,
+    bool interleave, int64 stage_count,
+    const std::vector<int>& stage_ipu_mapping,
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     const absl::flat_hash_set<int> stages_with_recomputation,
     CompilerResources& res, const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
     : InplaceSubComputationVisitor(res, inputs, dependent_subcomputations),
+      interleave_(interleave),
       copy_sequences_(stage_count),
       fifo_sequences_(stage_count),
       infeed_sequences_(stage_count),
@@ -760,7 +849,8 @@ PipelineVisitor::PipelineVisitor(
     const HloInstruction* pipeline, CompilerResources& res,
     const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
-    : PipelineVisitor(GetPipelineStageCount(pipeline),
+    : PipelineVisitor(GetPipelineInterleaveMode(pipeline),
+                      GetPipelineStageCount(pipeline),
                       GetPipelineStageDeviceMapping(pipeline),
                       GetPipelineInstStageMapping(pipeline),
                       GetPipelineStagesWithRecomputation(pipeline), res, inputs,
@@ -768,20 +858,25 @@ PipelineVisitor::PipelineVisitor(
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
-  const auto overlap_length = CircularUnion(stage_ipu_mapping_).size();
+  const auto overlap_length = interleave_
+                                  ? CircularUnion(stage_ipu_mapping_).size()
+                                  : stage_ipu_mapping_.size();
+
   if (iterations % overlap_length) {
     // TODO(T11404)
     return FailedPrecondition(
-        "The pipeline depth of the pipeline must be a multiple of %d.",
-        overlap_length);
+        "The pipeline depth of the pipeline must be a multiple of %d, but it "
+        "is %d.",
+        overlap_length, iterations);
   }
-  // To account for ramp up and ramp down we need at least overlap_length * 2
+  // To account for ramp up and ramp down we need at least overlap_length
   // iterations.
-  if (iterations < overlap_length * 2) {
+  if (iterations < overlap_length) {
     return FailedPrecondition(
-        "The pipeline depth of the pipeline must be at least %d.",
-        overlap_length * 2);
+        "The pipeline depth of the pipeline must be at least %d, but it is %d.",
+        overlap_length, iterations);
   }
+
   poplar::program::Program ramp_up = GetPipelineRampUpSequence();
   poplar::program::Program repeat_block = GetPipelineRepeatBlockSequence();
 
@@ -791,8 +886,10 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
       GetPipelineRampDownSequence(iterations % overlap_length);
 
   program.add(ramp_up);
-  program.add(
-      poplar::program::Repeat((iterations / overlap_length) - 1, repeat_block));
+  if ((iterations / overlap_length) - 1 > 0) {
+    program.add(poplar::program::Repeat((iterations / overlap_length) - 1,
+                                        repeat_block));
+  }
   program.add(ramp_down);
 
   return program;
@@ -800,8 +897,14 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
 
 // Collect the pipeline stage programs and call CreateRampSequences
 poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
-  // Find the set of non-overlapping program offsets.
-  auto offsets = CircularUnion(stage_ipu_mapping_);
+  std::vector<int> offsets;
+
+  if (interleave_) {
+    // Find the set of non-overlapping program offsets.
+    offsets = CircularUnion(stage_ipu_mapping_);
+  } else {
+    offsets = AllUnion(stage_ipu_mapping_);
+  }
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
@@ -844,7 +947,15 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
 poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
     int additional_iterations) const {
   // Find the set of non-overlapping program offsets.
-  auto offsets = CircularUnion(stage_ipu_mapping_);
+  std::vector<int> offsets;
+
+  if (interleave_) {
+    // Find the set of non-overlapping program offsets.
+    offsets = CircularUnion(stage_ipu_mapping_);
+  } else {
+    offsets = AllUnion(stage_ipu_mapping_);
+  }
+
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
@@ -852,9 +963,10 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
                                                     {}, additional_iterations);
   auto program_sequences = ConstructRampDownSchedule(
       offsets, program_sequences_, {}, additional_iterations);
-  auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
+  auto fifo_sequences =
+      ConstructSchedule(offsets, fifo_sequences_, interleave_);
   auto recomputation_sequences =
-      ConstructSchedule(offsets, recomputation_sequences_);
+      ConstructSchedule(offsets, recomputation_sequences_, interleave_);
   auto outfeed_sequences = ConstructRampDownSchedule(
       offsets, outfeed_sequences_, {}, additional_iterations);
   auto copy_sequences = ConstructRampDownSchedule(offsets, copy_sequences_, {},
@@ -890,17 +1002,30 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
 poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
     const {
   // Find the set of non-overlapping program offsets.
-  auto offsets = CircularUnion(stage_ipu_mapping_);
+  std::vector<int> offsets;
+
+  if (interleave_) {
+    // Find the set of non-overlapping program offsets.
+    offsets = CircularUnion(stage_ipu_mapping_);
+  } else {
+    offsets = AllUnion(stage_ipu_mapping_);
+  }
+
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
-  auto fifo_sequences = ConstructSchedule(offsets, fifo_sequences_);
-  auto infeed_sequences = ConstructSchedule(offsets, infeed_sequences_);
-  auto program_sequences = ConstructSchedule(offsets, program_sequences_);
+  auto fifo_sequences =
+      ConstructSchedule(offsets, fifo_sequences_, interleave_);
+  auto infeed_sequences =
+      ConstructSchedule(offsets, infeed_sequences_, interleave_);
+  auto program_sequences =
+      ConstructSchedule(offsets, program_sequences_, interleave_);
   auto recomputation_sequences =
-      ConstructSchedule(offsets, recomputation_sequences_);
-  auto outfeed_sequences = ConstructSchedule(offsets, outfeed_sequences_);
-  auto copy_sequences = ConstructSchedule(offsets, copy_sequences_);
+      ConstructSchedule(offsets, recomputation_sequences_, interleave_);
+  auto outfeed_sequences =
+      ConstructSchedule(offsets, outfeed_sequences_, interleave_);
+  auto copy_sequences =
+      ConstructSchedule(offsets, copy_sequences_, interleave_);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
@@ -957,6 +1082,18 @@ Status PipelineVisitor::HandleCall(HloInstruction* hlo) {
   } else {
     return HandleNotImplemented(hlo);
   }
+
+  return Status::OK();
+}
+
+Status PipelineVisitor::HandleCopy(HloInstruction* hlo) {
+  VLOG(1) << "Processing " << hlo->name();
+
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Program prog,
+      CreateCopy(resources_, hlo, GetOutputShape(hlo), tensor_map));
+  copy_sequences_[stage].add(prog);
 
   return Status::OK();
 }

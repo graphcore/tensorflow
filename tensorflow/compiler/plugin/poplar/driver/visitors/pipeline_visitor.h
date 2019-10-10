@@ -32,7 +32,8 @@ struct CompilerResources;
 class PipelineVisitor : public InplaceSubComputationVisitor {
  public:
   PipelineVisitor(
-      int64 stage_count, const std::vector<int>& stage_ipu_mapping,
+      bool interleave, int64 stage_count,
+      const std::vector<int>& stage_ipu_mapping,
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
       const absl::flat_hash_set<int> stages_with_recomputation,
       CompilerResources& res, const ArgVectors& inputs,
@@ -94,6 +95,7 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleConstant);
 
   Status HandleCall(HloInstruction* hlo) override;
+  Status HandleCopy(HloInstruction* hlo) override;
   Status HandleCustomCall(HloInstruction* hlo) override;
   Status HandleGetTupleElement(HloInstruction* hlo) override;
   Status HandleTuple(HloInstruction* hlo) override;
@@ -113,6 +115,7 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
       int64 flat_tensor_index, const HloComputation* computation) override;
 
  private:
+  bool interleave_;
   std::vector<poplar::program::Sequence> copy_sequences_;
   std::vector<poplar::program::Sequence> fifo_sequences_;
   std::vector<poplar::program::Sequence> infeed_sequences_;

@@ -70,6 +70,13 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
                   GetAttribute(attributes, PIPELINE_REPEAT_COUNT));
               int64 repeat_count = std::stoll(repeat_count_str);
               pipeline_config->set_repeat_count(repeat_count);
+
+              // Get the interleave flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string interleave_str,
+                  GetAttribute(attributes, PIPELINE_INTERLEAVE));
+              bool interleave = std::stol(interleave_str) == 1;
+              pipeline_config->set_interleave(interleave);
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:

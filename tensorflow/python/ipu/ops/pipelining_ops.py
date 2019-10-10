@@ -22,6 +22,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from enum import Enum
+
 from tensorflow.compiler.plugin.poplar.ops import gen_pipelining_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -34,6 +36,11 @@ from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
 
 
+class PipelineSchedule(Enum):
+  Grouped = 0
+  Interleaved = 1
+
+
 def pipeline(computational_stages,
              pipeline_depth,
              repeat_count=1,
@@ -42,6 +49,7 @@ def pipeline(computational_stages,
              outfeed_queue=None,
              optimizer_stage=None,
              device_mapping=None,
+             pipeline_schedule=None,
              name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
@@ -222,6 +230,8 @@ def pipeline(computational_stages,
       computational stage and uses that to call a TensorFlow Optimizer in order
       to generate the backward pass for the model.
     device_mapping: optional stage to ipu mapping override.
+    pipeline_schedule: Which scheduling algorithm to use for pipeline lowering.
+      Defaults to `PipelineSchedule.Interleaved`.
     name: name of this pipeline.
 
   Returns:
@@ -266,6 +276,13 @@ def pipeline(computational_stages,
     raise ValueError(
         "Each stage must be mapped to an IPU: %d mappings != %d stages" %
         (len(device_mapping), len(computational_stages)))
+
+  if pipeline_schedule is None:
+    pipeline_schedule = PipelineSchedule.Interleaved
+
+  if not isinstance(pipeline_schedule, PipelineSchedule):
+    raise ValueError("The given pipeline_schedule is not a member of the "
+                     "PipelineSchedule enumeration.")
 
   control_outputs = []
 
@@ -346,7 +363,8 @@ def pipeline(computational_stages,
           Tout=func_graph.output_types,
           output_shapes=func_graph.output_shapes,
           pipeline_depth=pipeline_depth,
-          repeat_count=repeat_count)
+          repeat_count=repeat_count,
+          interleave=pipeline_schedule == PipelineSchedule.Interleaved)
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %

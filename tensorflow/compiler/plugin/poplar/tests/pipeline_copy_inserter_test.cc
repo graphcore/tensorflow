@@ -310,9 +310,14 @@ ENTRY e {
 
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module.get(), "pipeline_stage_1");
-  // Copy inserted because value is used with no intermediate IPU copy.
+  // Copy not inserted inside the stage because value is used with a copy in the
+  // pipeline.
   EXPECT_TRUE(Match(pipeline_stage_1->to_apply()->root_instruction(),
-                    m::Tuple(m::Log(m::Copy(m::Parameter(0))))));
+                    m::Tuple(m::Log(m::Parameter(0)))));
+  // Copy inserted in the pipeline between stages because adjacent stages have
+  // the same sharding information.
+  EXPECT_TRUE(Match(pipeline_stage_1->operand(0),
+                    m::Copy(m::GetTupleElement(m::Op()))));
 }
 
 TEST_F(PipelineCopyInserterTest, TestInfeed) {

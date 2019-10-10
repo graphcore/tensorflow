@@ -140,7 +140,7 @@ class PipelineTester(object):
   @staticmethod
   def _pipeline_on_ipu(session, stages, inputs, input_values, repeat_count,
                        pipeline_depth, dataset, optimizer, test_wrapper,
-                       expected_max_tile_memory, recomp):
+                       expected_max_tile_memory, recomp, interleave):
 
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
@@ -153,13 +153,17 @@ class PipelineTester(object):
         return loss, opt.minimize(loss)
 
       def my_net(*args):
-        return pipelining_ops.pipeline(stages,
-                                       pipeline_depth,
-                                       repeat_count=repeat_count,
-                                       inputs=args,
-                                       optimizer_stage=optimizer_stage,
-                                       infeed_queue=infeed_queue,
-                                       outfeed_queue=outfeed_queue)
+        return pipelining_ops.pipeline(
+            stages,
+            pipeline_depth,
+            repeat_count=repeat_count,
+            inputs=args,
+            optimizer_stage=optimizer_stage,
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            pipeline_schedule=(pipelining_ops.PipelineSchedule.Interleaved
+                               if interleave else
+                               pipelining_ops.PipelineSchedule.Grouped))
 
     with ops.device("/device:IPU:0"):
       compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
@@ -196,7 +200,8 @@ class PipelineTester(object):
                               optimizer,
                               test_wrapper,
                               expected_max_tile_memory,
-                              recomp=False):
+                              recomp=False,
+                              interleave=True):
     cpu_losses = PipelineTester._cpu_with_grad_accum(session, stages, inputs,
                                                      input_values,
                                                      repeat_count,
@@ -205,7 +210,7 @@ class PipelineTester(object):
     pipeline_losses = PipelineTester._pipeline_on_ipu(
         session, stages, inputs, input_values, repeat_count, pipeline_depth,
         dataset_fn(), optimizer, test_wrapper, expected_max_tile_memory,
-        recomp)
+        recomp, interleave)
     test_wrapper.assertAllClose(cpu_losses, pipeline_losses)
 
   @staticmethod
@@ -219,11 +224,12 @@ class PipelineTester(object):
                                    optimizer,
                                    test_wrapper,
                                    expected_max_tile_memory,
-                                   recomp=False):
+                                   recomp=False,
+                                   interleave=True):
     pipeline_losses = PipelineTester._pipeline_on_ipu(
         session, stages, inputs, input_values, repeat_count, pipeline_depth,
         dataset_fn(), optimizer, test_wrapper, expected_max_tile_memory,
-        recomp)
+        recomp, interleave)
     sharded_losses = PipelineTester._sharded_on_ipu(session, stages, inputs,
                                                     input_values, repeat_count,
                                                     pipeline_depth,

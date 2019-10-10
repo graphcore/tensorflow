@@ -22,6 +22,8 @@ enum FrontendAttributeId {
   // Used in pipelining to indicate how many times the pipeline should be
   // executed.
   PIPELINE_REPEAT_COUNT = 5;
+  // Used to select the pipeline schedule.
+  PIPELINE_INTERLEAVE = 6;
 };
 
 enum StochasticRounding {
@@ -78,6 +80,7 @@ message PoplarBackendConfig {
     message PipelineConfig {
       int64 pipeline_depth = 1;
       int64 repeat_count = 2;
+      bool interleave = 3;
     }
 
     message CallConfig {
