@@ -720,6 +720,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*',
+          '/Zero',
           'ExpandDims/input/fusion*/multiUpdateAdd',
           'ExpandDims/input/fusion*/NegateScale/Op/Negate',
           'vs/Gather*/gather.*/multiSlice',
@@ -782,6 +783,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*',
+          '/Zero',
           'ExpandDims/input/fusion*/multiUpdateAdd',
           'ExpandDims/input/fusion*/NegateScale/Op/Negate',
           'vs/Gather*/gather.*/multiSlice',
@@ -836,6 +838,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
+          '/Zero',
           'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
           'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
           'GradientDescent/update_vs/w/ResourceScatterAdd/custom-call*/multiUpdateAdd',
@@ -901,6 +904,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
+          '/Zero',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/multiUpdateAdd',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/NegateScale/Op/Negate',
           'gradients/vs/absolute_difference/Abs_grad/Sign',
