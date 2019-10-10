@@ -45,6 +45,10 @@ class Graph;
 class Tensor;
 }  // namespace poplar
 
+namespace popops {
+class SlicePlan;
+}  // namespace popops
+
 namespace xla {
 class HloModule;
 class HloInstruction;
@@ -124,6 +128,10 @@ StatusOr<std::string> GetInstructionCompilationInfo(
 poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
                                                  const poplar::Tensor& src,
                                                  const poplar::Tensor& dst);
+
+// Get a slice plan for an instruction.
+StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
+                                                const HloInstruction* inst);
 }  // namespace poplarplugin
 }  // namespace xla
 

@@ -50,6 +50,11 @@ struct CompilerResources {
 
   std::vector<poplar::Graph> shard_graphs;
 
+  absl::flat_hash_map<const HloInstruction*, const popops::SlicePlan*>
+      slice_plan_mappings;
+
+  std::list<popops::SlicePlan> slice_plans;
+
   CompilerAnnotations annotations;
 
   CompilerInformation information;
@@ -93,8 +98,6 @@ struct CompilerResources {
   std::string scheduler_selection;
 
   bool recomputation_enabled;
-
-  std::map<HloInstruction*, popops::SlicePlan> embedding_plans;
 
   CompilerResources(
       const poplar::OptionFlags& conv_options,

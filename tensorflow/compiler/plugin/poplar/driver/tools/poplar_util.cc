@@ -32,6 +32,7 @@ limitations under the License.
 #include <fstream>
 #include <limits>
 
+#include <popops/DynamicSlice.hpp>
 #include <popops/Zero.hpp>
 #include <poputil/TileMapping.hpp>
 
@@ -384,6 +385,16 @@ poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
   dst_flat = poplar::concat(dst_flat.slices(flat_dealiased_intervals));
   seq.add(poplar::program::Copy(src_flat, dst_flat));
   return seq;
+}
+
+StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
+                                                const HloInstruction* inst) {
+  auto plan = res.slice_plan_mappings.find(inst);
+  if (plan == res.slice_plan_mappings.end()) {
+    return xla::FailedPrecondition("Could not find a slice plan for %s.",
+                                   inst->ToString().c_str());
+  }
+  return plan->second;
 }
 }  // namespace poplarplugin
 }  // namespace xla

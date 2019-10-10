@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -43,11 +44,13 @@ StatusOr<poplar::Tensor> CreateIndicesTensor(
 }
 
 StatusOr<poplar::Tensor> CreateInputTensor(poplar::Graph& graph,
+                                           const popops::SlicePlan& plan,
                                            const xla::Shape& xla_input_shape,
                                            const std::string& name) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(xla_input_shape));
-  return popops::createSliceableTensor(
-      graph, type, PoplarShapeFromXlaShape(xla_input_shape), {0}, {1}, 0, name);
+  return popops::createSliceableTensor(graph, type,
+                                       PoplarShapeFromXlaShape(xla_input_shape),
+                                       {0}, {1}, plan, {}, name);
 }
 
 StatusOr<poplar::Tensor> CreateUpdatesTensor(
@@ -79,11 +82,13 @@ class MultiSliceOp : public PoplibsOpDef {
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
     TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
                         FindInstructionInput(tensor_map, res, inst, 1, seq));
-    popops::SlicePlan plan;  // TODO: Get it from res
+
+    TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
+
     poplar::Tensor output = popops::multiSlice(
         graph, input,
         indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
-        {1}, seq, plan, {}, absl::StrCat(GetDebugName(inst), "/output"));
+        {1}, seq, *plan, {}, absl::StrCat(GetDebugName(inst), "/output"));
     auto poplar_output_shape = PoplarShapeFromXlaShape(output_shape);
 
     // Unflatten the output:
@@ -100,14 +105,14 @@ class MultiSliceOp : public PoplibsOpDef {
                                      const TensorMap& tensor_map) override {
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
+    TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     switch (input_index) {
       case 0: {
-        return CreateInputTensor(graph, inst->operand(0)->shape(),
+        return CreateInputTensor(graph, *plan, inst->operand(0)->shape(),
                                  GetDebugName(inst) + "/input");
       }
       case 1: {
-        popops::SlicePlan plan;  // TODO: Get it from res
-        return CreateIndicesTensor(graph, plan, inst->operand(1)->shape(),
+        return CreateIndicesTensor(graph, *plan, inst->operand(1)->shape(),
                                    GetDebugName(inst) + "/indices");
       }
       default: {
@@ -139,20 +144,19 @@ class MultiUpdateOp : public PoplibsOpDef {
                                      const TensorMap& tensor_map) override {
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
+    TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     switch (input_index) {
       case 0: {
-        return CreateInputTensor(graph, inst->operand(0)->shape(),
+        return CreateInputTensor(graph, *plan, inst->operand(0)->shape(),
                                  GetDebugName(inst) + "/input");
       }
       case 1: {
-        popops::SlicePlan plan;  // TODO: Get it from res
-        return CreateIndicesTensor(graph, plan, inst->operand(1)->shape(),
+        return CreateIndicesTensor(graph, *plan, inst->operand(1)->shape(),
                                    GetDebugName(inst) + "/indices");
       }
       case 2: {
-        popops::SlicePlan plan;  // TODO: Get it from res
         return CreateUpdatesTensor(
-            graph, plan, inst->operand(0)->shape(), inst->operand(2)->shape(),
+            graph, *plan, inst->operand(0)->shape(), inst->operand(2)->shape(),
             inst->operand(1)->shape(), GetDebugName(inst) + "/updates");
       }
       default: {
