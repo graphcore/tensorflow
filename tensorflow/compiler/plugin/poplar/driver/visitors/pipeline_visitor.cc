@@ -1042,6 +1042,12 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
                           copy_sequences.end());
 
+  if (!interleave_) {
+    for (auto& seq : infeed_sequences) {
+      seq.resize(1);
+    }
+  }
+
   // Flatten the schedule to a linear sequence.
   auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
 
@@ -1050,7 +1056,11 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
     repeat_block.add(seq);
   }
 
-  return repeat_block;
+  if (interleave_) {
+    return repeat_block;
+  } else {
+    return poplar::program::Repeat(offsets.size(), repeat_block);
+  }
 }
 
 Status PipelineVisitor::HandleNotImplemented(HloInstruction* hlo) {

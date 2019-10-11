@@ -295,7 +295,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 21000, True, False)
+          pipeline_depth, dataset_fn, optimizer, self, 17000, True, False)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare5(self):
