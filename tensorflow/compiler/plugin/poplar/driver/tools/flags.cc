@@ -72,6 +72,9 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
       {"executable_cache_path", "Path to the executable cache. (path)"},
       {"dump_schedule_as_dot", "Dumps the scheduler graph as a dot file."},
       {"tensor_map_file_path", "Directory for tensor map dump files."},
+      {"null_data_feed",
+       "Don't provide data to an infeed, for performance "
+       "measurement."},
       {"fallback_scheduler",
        "Use the sync list scheduler rather than the default one."},
       {"allow_nans", "will allow NaNs."}};
@@ -110,6 +113,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(tensor_map_file_path)
     ADD_FLAG(fallback_scheduler)
     ADD_FLAG(allow_nans)
+    ADD_FLAG(null_data_feed)
 
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(add_all_reduce_copies)

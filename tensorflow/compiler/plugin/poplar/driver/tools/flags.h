@@ -92,6 +92,10 @@ class PoplarXlaFlags {
   // compilation only.
   std::size_t hlo_hash;
 
+  // When true, the infeed callback will return immediately without providing
+  // any real data
+  bool null_data_feed;
+
  private:
   PoplarXlaFlags();
 };

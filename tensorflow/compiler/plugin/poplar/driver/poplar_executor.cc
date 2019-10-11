@@ -350,6 +350,18 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
   InfeedQueueType* queue_;
   const uint64 num_bytes_;
 };
+
+class NullPrefetchCallback : public poplar::StreamCallback {
+ public:
+  NullPrefetchCallback() {}
+
+  poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
+    return poplar::StreamCallback::Result::Success;
+  }
+
+  void fetch(void* dest) noexcept override {}
+  void complete() noexcept override {}
+};
 }  // namespace
 
 void PoplarExecutor::ConnectInfeedsToStreamCallback(
@@ -374,8 +386,13 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
       for (auto replica_id = 0; replica_id < current_replication_factor_;
            ++replica_id) {
         auto& queue = infeed_dataset_iterator->tensor_queues[j][replica_id];
-        auto infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
-            queue.get(), bytes_per_replica);
+        std::unique_ptr<poplar::StreamCallback> infeed_callback;
+        if (PoplarXlaFlags::Get().null_data_feed) {
+          infeed_callback = absl::make_unique<NullPrefetchCallback>();
+        } else {
+          infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
+              queue.get(), bytes_per_replica);
+        }
         current_engine_->connectStreamToCallback(
             GetInfeedCopyHandle(infeed_info.stream_prefix, j), replica_id,
             std::move(infeed_callback));
