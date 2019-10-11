@@ -720,6 +720,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*',
+          'host-exchange-local-copy-*/OnTileCopy-0',
           '/Zero',
           'ExpandDims/input/fusion*/multiUpdateAdd',
           'ExpandDims/input/fusion*/NegateScale/Op/Negate',
@@ -783,6 +784,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*',
+          'host-exchange-local-copy-*/OnTileCopy-0',
           '/Zero',
           'ExpandDims/input/fusion*/multiUpdateAdd',
           'ExpandDims/input/fusion*/NegateScale/Op/Negate',
@@ -904,6 +906,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
+          'host-exchange-local-copy-*/OnTileCopy-0',
           '/Zero',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/multiUpdateAdd',
           'GradientDescent/update_vs/w/ResourceApplyGradientDescent/fusion*/NegateScale/Op/Negate',

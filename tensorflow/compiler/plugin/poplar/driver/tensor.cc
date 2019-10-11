@@ -52,7 +52,6 @@ limitations under the License.
 #include <poplar/OptionFlags.hpp>
 #include <poplar/TensorCloneMethod.hpp>
 #include <poplin/Norms.hpp>
-#include <popops/DynamicSlice.hpp>
 #include <popops/Gather.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
@@ -138,8 +137,8 @@ ArgVector GetTensorsMaybeExpand(
       const uint64 tiles_used = GetNumberOfUsedTiles(graph, tensor);
       const auto& tensor_shape = tensor.shape();
       const auto num_elements =
-          std::accumulate(tensor_shape.begin(), tensor_shape.end(), 1,
-                          std::multiplies<std::size_t>());
+          std::accumulate(tensor_shape.begin(), tensor_shape.end(),
+                          std::size_t(1), std::multiplies<std::size_t>());
 
       if (tiles_used == 1 && num_elements > 1) {
         auto expanded_tensor = AddLinearlyMappedTensorWithOffset(
@@ -246,6 +245,21 @@ poplar::Tensor ConvertToDeviceLayout(const Shape& shape,
   return out;
 }
 
+StatusOr<poplar::Tensor> CreateIndicesTensor(
+    poplar::Graph& graph, const popops::SlicePlan& plan,
+    const xla::Shape& xla_indices_shape, const std::string& name) {
+  std::vector<size_t> indices_shape =
+      PoplarShapeFromXlaShape(xla_indices_shape);
+  TF_ASSIGN_OR_RETURN(poplar::Type indices_type,
+                      PoplarDataType(xla_indices_shape));
+  const auto num_indices =
+      std::accumulate(indices_shape.begin(), indices_shape.end(),
+                      std::size_t(1), std::multiplies<std::size_t>());
+  return popops::createIndicesTensor(graph, {0}, num_indices, plan, {}, name)
+      .reshape(indices_shape)
+      .reinterpret(indices_type);
+}
+
 poplar::Tensor ConvertFromDeviceLayout(const Shape& shape,
                                        const poplar::Tensor& tensor) {
   // Dimshuffle then reshape
@@ -275,6 +289,13 @@ StatusOr<poplar::Tensor> AddPlainTensor(poplar::Graph& graph,
   } else {
     return AddLinearlyMappedTensor(graph, poplar_type, dim, debug_name);
   }
+}
+
+StatusOr<poplar::Tensor> AddIndicesTensor(poplar::Graph& graph,
+                                          const std::string& debug_name,
+                                          const xla::Shape& shape,
+                                          CompilerResources& resources) {
+  return CreateIndicesTensor(graph, popops::SlicePlan(), shape, debug_name);
 }
 
 template <typename IIter1, typename IIter2, typename OIter, typename Zipper>
@@ -1035,6 +1056,11 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
                 out, AddScatterTensor(graph, debug_name, tshape, slice_shape));
             break;
           }
+          case 1: {
+            TF_ASSIGN_OR_RETURN(
+                out, AddIndicesTensor(graph, debug_name, tshape, resources));
+            break;
+          }
           case 2: {
             const auto update_window_dims =
                 scatter->scatter_dimension_numbers().update_window_dims();
@@ -1106,6 +1132,11 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
                          graph, debug_name, tshape,
                          {slice_sizes.begin(), slice_sizes.end()},
                          {start_index_map.begin(), start_index_map.end()}));
+            break;
+          }
+          case 1: {
+            TF_ASSIGN_OR_RETURN(
+                out, AddIndicesTensor(graph, debug_name, tshape, resources));
             break;
           }
           default:

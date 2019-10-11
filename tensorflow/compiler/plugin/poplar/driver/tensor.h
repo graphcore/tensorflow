@@ -10,6 +10,7 @@
 #include "tensorflow/core/platform/types.h"
 
 #include <poplar/TensorCloneMethod.hpp>
+#include <popops/DynamicSlice.hpp>
 
 namespace poplar {
 class Tensor;
@@ -91,6 +92,10 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
     const unsigned feature_dimension,
     std::vector<const HloInstruction*> forward_path,
     const TensorMap& tensor_map);
+
+StatusOr<poplar::Tensor> CreateIndicesTensor(
+    poplar::Graph& graph, const popops::SlicePlan& plan,
+    const xla::Shape& xla_indices_shape, const std::string& name);
 
 // Returns true if the given tensor source has a special layout allocation
 // target.

@@ -28,21 +28,6 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-StatusOr<poplar::Tensor> CreateIndicesTensor(
-    poplar::Graph& graph, const popops::SlicePlan& plan,
-    const xla::Shape& xla_indices_shape, const std::string& name) {
-  std::vector<size_t> indices_shape =
-      PoplarShapeFromXlaShape(xla_indices_shape);
-  TF_ASSIGN_OR_RETURN(poplar::Type indices_type,
-                      PoplarDataType(xla_indices_shape));
-  const auto num_indices =
-      std::accumulate(indices_shape.begin(), indices_shape.end(), 1,
-                      std::multiplies<std::size_t>());
-  return popops::createIndicesTensor(graph, {0}, num_indices, plan, {}, name)
-      .reshape(indices_shape)
-      .reinterpret(indices_type);
-}
-
 StatusOr<poplar::Tensor> CreateInputTensor(poplar::Graph& graph,
                                            const popops::SlicePlan& plan,
                                            const xla::Shape& xla_input_shape,
@@ -61,8 +46,8 @@ StatusOr<poplar::Tensor> CreateUpdatesTensor(
   std::vector<size_t> indices_shape =
       PoplarShapeFromXlaShape(xla_indices_shape);
   const auto num_indices =
-      std::accumulate(indices_shape.begin(), indices_shape.end(), 1,
-                      std::multiplies<std::size_t>());
+      std::accumulate(indices_shape.begin(), indices_shape.end(),
+                      std::size_t(1), std::multiplies<std::size_t>());
   poplar::Tensor out = popops::createSliceTensor(
       graph, type, PoplarShapeFromXlaShape(xla_input_shape), {0}, {1},
       num_indices, plan, {}, name);
