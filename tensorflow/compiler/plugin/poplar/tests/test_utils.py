@@ -8,7 +8,6 @@ from __future__ import print_function
 import collections
 import contextlib
 import fnmatch
-import re
 import json as js
 import numpy as np
 
@@ -36,7 +35,9 @@ def configure_ipu_system(compilation_trace=True,
                          enable_ipu_events=False,
                          prefetch_data_streams=True,
                          engine_opts=None,
-                         device_count_override=None):
+                         device_count_override=None,
+                         max_cross_replica_sum_buffer_size=0,
+                         max_inter_ipu_copies_buffer_size=0):
   opts = IpuOptions()
   opts.profiling.enable_ipu_trace_events = (compilation_trace or io_trace
                                             or execution_trace
@@ -51,6 +52,8 @@ def configure_ipu_system(compilation_trace=True,
   opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = compile_ipu_code
   opts.prefetch_data_streams = prefetch_data_streams
+  opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
+  opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
 
   # yapf: disable
   assert not (pipelining and device_count_override
@@ -93,14 +96,6 @@ def ipu_session():
     yield sess
 
 
-def get_compute_sets_from_report(report):
-  lines = report.split('\n')
-  cs = [x for x in lines if re.search(' OnTileExecute .*: ', x)]
-  cs = [x.split(":")[1].strip() for x in cs]
-  cs = [x.split()[0] for x in cs]
-  return cs
-
-
 def items_matching_at_least_one_pattern(items, patterns):
   matches = []
   patterns = [x + '*' for x in patterns]
@@ -132,14 +127,8 @@ def missing_whitelist_entries_in_names(names, whitelist):
   return fail_list
 
 
-def check_all_compute_sets_and_list(cs_list, whitelist):
-  return (not missing_names_in_whitelist_entries(cs_list, whitelist)
-          and not missing_whitelist_entries_in_names(cs_list, whitelist))
-
-
 def count_matches_in_list(input_list, to_match):
-  input_set = set(input_list)
-  return len([s for s in input_set if fnmatch.fnmatch(s, to_match)])
+  return len([s for s in input_list if fnmatch.fnmatch(s, to_match)])
 
 
 class TensorMap(object):
@@ -214,7 +203,10 @@ class ReportJSON(object):
                sharded=False,
                compilation_trace=True,
                pipelining=False,
-               configure_device=True):
+               configure_device=True,
+               replicated=False,
+               max_cross_replica_sum_buffer_size=0,
+               max_inter_ipu_copies_buffer_size=0):
     self.test = test
     self.sess = sess
     # If no session is passed to the constructor then assume
@@ -223,14 +215,18 @@ class ReportJSON(object):
       with ops.device('cpu'):
         self.report = gen_ipu_ops.ipu_event_trace()
       if configure_device:
-        configure_ipu_system(compilation_trace,
-                             io_trace,
-                             execution_trace=execution_trace,
-                             text_report=False,
-                             compile_ipu_code=compile_ipu_code,
-                             device_count_override=device_count_override,
-                             sharded=sharded,
-                             pipelining=pipelining)
+        configure_ipu_system(
+            compilation_trace,
+            io_trace,
+            execution_trace=execution_trace,
+            text_report=False,
+            compile_ipu_code=compile_ipu_code,
+            device_count_override=device_count_override,
+            sharded=sharded,
+            pipelining=pipelining,
+            replicated=replicated,
+            max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
+            max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size)
 
   def reset(self):
     assert self.sess, "A valid session must be passed to the constructor" \
@@ -460,36 +456,6 @@ class ReportJSON(object):
   def assert_compute_sets_matches(self, expr, num_matches, msg=None):
     self.test.assertEqual(count_matches_in_list(self.get_compute_sets(), expr),
                           num_matches, msg)
-
-
-def extract_all_strings_from_event_trace(events):
-  result = ""
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    try:
-      if evt.type == IpuTraceEvent.COMPILE_BEGIN:
-        pass
-      if evt.type == IpuTraceEvent.COMPILE_END:
-        result = result + evt.compile_end.compilation_report.decode('utf-8')
-      if evt.type == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER:
-        result = result + evt.data_transfer.data_transfer.decode('utf-8')
-      if evt.type == IpuTraceEvent.DEVICE_TO_HOST_TRANSFER:
-        result = result + evt.data_transfer.data_transfer.decode('utf-8')
-      if evt.type == IpuTraceEvent.LOAD_ENGINE:
-        pass
-      if evt.type == IpuTraceEvent.EXECUTE:
-        result = result + evt.execute.execution_report.decode('utf-8')
-    except UnicodeDecodeError:
-      pass
-  return result
-
-
-def extract_all_types_from_event_trace(events):
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    result += [evt.type]
-  return result
 
 
 def extract_all_events(events):

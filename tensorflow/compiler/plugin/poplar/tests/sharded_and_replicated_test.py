@@ -16,14 +16,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import fnmatch
-import json
 import numpy as np
 import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.python import ipu
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
@@ -76,13 +72,12 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
 
       outfed = outfeed_queue.dequeue()
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=True,
-          max_cross_replica_sum_buffer_size=10000,
-          max_inter_ipu_copies_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 4)
-      ipu.utils.configure_ipu_system(cfg)
+      tu.ReportJSON(self,
+                    sess,
+                    execution_trace=False,
+                    max_cross_replica_sum_buffer_size=10000,
+                    max_inter_ipu_copies_buffer_size=10000,
+                    device_count_override=4)
 
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
@@ -122,49 +117,25 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         inp = array_ops.placeholder(np.float32, [1, 32, 32, 4], name="data")
         lab = array_ops.placeholder(np.float32, [1, 8], name="labels")
-        report = gen_ipu_ops.ipu_event_trace()
 
       out = ipu.ipu_compiler.compile(my_graph, [inp, lab])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=True,
-          max_cross_replica_sum_buffer_size=10000,
-          max_inter_ipu_copies_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 4)
-      ipu.utils.configure_ipu_system(cfg)
+      report = tu.ReportJSON(self,
+                             sess,
+                             execution_trace=False,
+                             max_cross_replica_sum_buffer_size=10000,
+                             max_inter_ipu_copies_buffer_size=10000,
+                             device_count_override=4)
 
-      sess.run(report)
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       fd = {inp: np.ones([1, 32, 32, 4]), lab: np.ones([1, 8])}
       sess.run(out, fd)
 
-      rep = sess.run(report)
-
-      num_compiles = 0
-
-      evts = ipu.utils.extract_all_events(rep)
-      for evt in evts:
-        if evt.type == IpuTraceEvent.COMPILE_END:
-          num_compiles = num_compiles + 1
-
-      self.assertEqual(num_compiles, 1)
-
-      compile_report = ipu.utils.extract_compile_reports(rep)
-      self.assertEqual(len(compile_report), 1)
-
-      js = json.loads(compile_report[0][1])
-      cs_list = js['computeSets']['names']
-
-      # There are 13 global communications
-      n_inter_ipu_copies = 0
-      for n in cs_list:
-        if fnmatch.fnmatch(n, '*/GlobalPre/*'):
-          n_inter_ipu_copies = n_inter_ipu_copies + 1
-
-      self.assertEqual(n_inter_ipu_copies, 13)
+      report.parse_log()
+      report.assert_compute_sets_matches(
+          "*/GlobalPre/*", 6, "There should be 6 global communications")
 
   def testShardedAndReplicatedAndGradientAccumulateTraining(self):
     with self.session() as sess:
@@ -198,49 +169,24 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
         r = ipu.loops.repeat(2, my_graph, [v], infeed_queue)
         return r
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
       out = ipu.ipu_compiler.compile(my_net, [])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=True,
-          max_cross_replica_sum_buffer_size=10000,
-          max_inter_ipu_copies_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 4)
-      ipu.utils.configure_ipu_system(cfg)
+      report = tu.ReportJSON(self,
+                             sess,
+                             execution_trace=False,
+                             max_cross_replica_sum_buffer_size=10000,
+                             max_inter_ipu_copies_buffer_size=10000,
+                             device_count_override=4)
 
       sess.run(infeed_queue.initializer)
       sess.run(variables.global_variables_initializer())
-      sess.run(report)
+      report.reset()
 
       sess.run(out)
 
-      rep = sess.run(report)
-
-      num_compiles = 0
-
-      evts = ipu.utils.extract_all_events(rep)
-      for evt in evts:
-        if evt.type == IpuTraceEvent.COMPILE_END:
-          num_compiles = num_compiles + 1
-
-      self.assertEqual(num_compiles, 1)
-
-      compile_report = ipu.utils.extract_compile_reports(rep)
-      self.assertEqual(len(compile_report), 1)
-
-      js = json.loads(compile_report[0][1])
-      cs_list = js['computeSets']['names']
-
-      # There are 13 global communications
-      n_inter_ipu_copies = 0
-      for n in cs_list:
-        if fnmatch.fnmatch(n, '*/GlobalPre/*'):
-          n_inter_ipu_copies = n_inter_ipu_copies + 1
-
-      self.assertEqual(n_inter_ipu_copies, 13)
+      report.parse_log()
+      report.assert_compute_sets_matches(
+          "*/GlobalPre/*", 6, "There should be 6 global communications")
 
 
 if __name__ == "__main__":

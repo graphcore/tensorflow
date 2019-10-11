@@ -22,7 +22,6 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class BiasApplyGraphCachingTest(xla_test.XLATestCase):
@@ -44,14 +43,11 @@ class BiasApplyGraphCachingTest(xla_test.XLATestCase):
                bias_apply(biases2, grads2, 0.1) +
                bias_apply(biases3, grads3, 0.2))
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       r = sess.run(
           out, {
@@ -64,11 +60,8 @@ class BiasApplyGraphCachingTest(xla_test.XLATestCase):
               vlr: 0.1
           })
       self.assertAllClose(r, [-1., -1.])
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
-      self.assertEqual(tu.count_matches_in_list(cs_list, '*ReduceOnTile*'), 1)
+      report.parse_log()
+      report.assert_compute_sets_matches("*ReduceOnTile*", 1)
 
   def testMatchBecauseEvenWhenNotInplace(self):
     with self.session() as sess:
@@ -82,14 +75,11 @@ class BiasApplyGraphCachingTest(xla_test.XLATestCase):
 
         out = bias_apply(biases1, grads1) + bias_apply(biases1, grads2)
 
-        with ops.device('cpu'):
-          report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(True, True, True)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       r = sess.run(
           out, {
@@ -98,12 +88,11 @@ class BiasApplyGraphCachingTest(xla_test.XLATestCase):
               grads2: np.ones([2, 10])
           })
       self.assertAllClose(r, [0., 0.])
-      result = sess.run(report)
-
-      s = tu.extract_all_strings_from_event_trace(result)
-      cs_list = tu.get_compute_sets_from_report(s)
-      # We still reuse the code even though only one reduce is inplace.
-      self.assertEqual(tu.count_matches_in_list(cs_list, '*ReduceOnTile*'), 1)
+      report.parse_log()
+      report.assert_compute_sets_matches(
+          "*ReduceOnTile*", 1,
+          "We should still reuse the code even though only one reduce is inplace"
+      )
 
 
 if __name__ == "__main__":
