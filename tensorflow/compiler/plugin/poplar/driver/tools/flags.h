@@ -94,7 +94,12 @@ class PoplarXlaFlags {
 
   // When true, the infeed callback will return immediately without providing
   // any real data
-  bool null_data_feed;
+  bool null_data_feed = false;
+
+  // When set, and profiling is enabled, then a text summary of the profile will
+  // be dumped into the standard output, in addition to the normal report
+  // processing.
+  bool dump_text_reports_to_stdio = false;
 
  private:
   PoplarXlaFlags();

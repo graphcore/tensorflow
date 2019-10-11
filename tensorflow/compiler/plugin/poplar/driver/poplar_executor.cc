@@ -2176,6 +2176,13 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
             auto graph_profile = current_engine_->getGraphProfile();
             auto exec_profile = current_engine_->getExecutionProfile();
 
+            if (PoplarXlaFlags::Get().dump_text_reports_to_stdio) {
+              auto opts = GetReportFlags();
+              SetFlagIfNotPresent(opts, "showExecutionSteps", "true");
+              poplar::printExecutionSummary(std::cout, graph_profile,
+                                            exec_profile, opts);
+            }
+
             if (CompilerReportingTextFormat()) {
               auto opts = GetReportFlags();
               SetFlagIfNotPresent(opts, "showExecutionSteps", "true");

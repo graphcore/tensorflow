@@ -820,6 +820,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         } else {
           poplar::serializeToJSON(report_stream, rep);
         }
+
+        if (PoplarXlaFlags::Get().dump_text_reports_to_stdio) {
+          auto opts = poplarExecutor->GetReportFlags();
+          SetFlagIfNotPresent(opts, "showVarStorage", "true");
+          poplar::printGraphSummary(std::cout, rep, opts);
+        }
       } catch (const std::exception& e) {
         return PoplarExceptionToTensorflowStatus("[Compiler report] ", e);
       }
