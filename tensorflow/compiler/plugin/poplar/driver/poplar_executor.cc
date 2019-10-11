@@ -460,8 +460,12 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
         // only need to check if the first queue is full to know whether all the
         // queues are full.
         if (infeed_dataset_iterator->tensor_queues[0][0]->IsFull()) {
+          VLOG(1) << "Infeed queue is full.";
           continue;
         }
+
+        const bool was_empty =
+            infeed_dataset_iterator->tensor_queues[0][0]->IsEmpty();
 
         bool end_of_sequence = false;
         std::vector<tensorflow::Tensor> outputs;
@@ -504,6 +508,10 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
               queue->BlockPush(tb);
               queue->AdvanceWritePosition();
             }
+          }
+
+          if (was_empty) {
+            VLOG(1) << "Infeed queue is empty.";
           }
         } else {
           infeed_thread_cancelled_ = true;
