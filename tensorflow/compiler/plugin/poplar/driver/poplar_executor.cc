@@ -362,7 +362,11 @@ class NullPrefetchCallback : public poplar::StreamCallback {
     return poplar::StreamCallback::Result::Success;
   }
 
-  void fetch(void* dest) noexcept override {}
+  void fetch(void* dest) noexcept override {
+    // This case shouldn't be hit, if poplar prefetches the data.
+    std::memcpy(dest, buffer.data(), num_bytes_);
+  }
+
   void complete() noexcept override {}
 
  private:
