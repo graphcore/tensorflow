@@ -174,13 +174,9 @@ class FifoOp : public PoplibsOpDef {
       input_flat = poplar::concat(input_flat.slices(flat_dealiased_intervals));
 
       // Create a buffer of the given depth and the same mapping as the input.
-      std::vector<poplar::Tensor> cloned_tensors(fifo_inst->depth());
-      for (int64 i = 0; i != fifo_inst->depth(); ++i) {
-        cloned_tensors[i] = graph.clone(
-            input_flat.expand({0}),
-            absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx));
-      }
-      poplar::Tensor buffer = poplar::concat(cloned_tensors);
+      poplar::Tensor buffer = popops::createSliceableTensorFromSlice(
+          graph, input_flat.expand({0}), {0}, {fifo_inst->depth()},
+          absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx));
 
       // Create the output with the same mapping as the input.
       poplar::Tensor output_flat =

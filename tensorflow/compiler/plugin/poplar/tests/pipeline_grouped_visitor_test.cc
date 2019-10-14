@@ -761,11 +761,15 @@ ENTRY pipeline {
                               const poplar::ProfileValue& step) -> int {
     return accum + step["cyclesOverlapped"].asInt();
   };
+  auto cycles = [](int accum, const poplar::ProfileValue& step) -> int {
+    return accum + step["cycles"].asInt();
+  };
+
   int total_overlapped_cycles =
       std::accumulate(steps.begin(), steps.end(), 0, overlapped_cycles);
-
+  int total_cycles = std::accumulate(steps.begin(), steps.end(), 0, cycles);
   // Check we overlapped enough cycles. This value was determined empirically
-  ASSERT_GT(total_overlapped_cycles, 2700);
+  ASSERT_GT(((float)total_overlapped_cycles) / total_cycles, 0.53);
 }
 
 // This tests that poplar OnTileExecute programs overlap sufficiently for a
@@ -937,11 +941,14 @@ ENTRY pipeline {
                               const poplar::ProfileValue& step) -> int {
     return accum + step["cyclesOverlapped"].asInt();
   };
+  auto cycles = [](int accum, const poplar::ProfileValue& step) -> int {
+    return accum + step["cycles"].asInt();
+  };
   int total_overlapped_cycles =
       std::accumulate(steps.begin(), steps.end(), 0, overlapped_cycles);
-
+  int total_cycles = std::accumulate(steps.begin(), steps.end(), 0, cycles);
   // Check we overlapped enough cycles. This value was determined empirically
-  ASSERT_GT(total_overlapped_cycles, 5500);
+  ASSERT_GT(((float)total_overlapped_cycles) / total_cycles, 0.49);
 }
 
 // Tests that poplar revisits IPUs in the expected order.
