@@ -301,8 +301,8 @@ class GRUTest(xla_test.XLATestCase):
       report.parse_log()
 
       report.assert_compute_sets_matches(
-          '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve', 1,
-          "There should be one fwd GRU")
+          '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve', 2,
+          "There should be two fwd GRUs")
       report.assert_compute_sets_matches('*/MulOGate/Op/Multiply', 1,
                                          "There should be one bwd GRU")
 
@@ -357,8 +357,8 @@ class GRUTest(xla_test.XLATestCase):
 
       report.parse_log()
       report.assert_compute_sets_matches(
-          '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve', 2,
-          "There should be two fwd GRUs")
+          '*BasicGruCell/ProcessUnits/Weight/Conv*/Convolve', 4,
+          "There should be four fwd GRUs")
       report.assert_compute_sets_matches('*/MulOGate/Op/Multiply', 2,
                                          "There should be two bwd GRUs")
 
