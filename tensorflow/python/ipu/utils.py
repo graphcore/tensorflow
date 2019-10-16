@@ -242,8 +242,15 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
 
   Args:
     opts: An IpuOptions session control protobuf.
-    matmul_options: A dictionary of poplar option flags for the
-      matrix multiplication operations.
+    matmul_options: A dictionary containing the poplar option flag
+      "availableMemoryProportion" for the matrix multiplication operations.
+      It indicates the proportion of tile memory to be made available as
+      temporary memory for the matrix multiplications (float between 0 and 1.0).
+      Less temporary memory will generally result in a multiplication that
+      takes more cycles to complete. However, because always live memory
+      (like code and vertex state) is not tracked when planning it,
+      a multiplication using less temporary memory may use more memory overall,
+      due to an increase of always live memory.
     clear_pass_type: When set to True, the Pass type will not
       be set in the options passed to the poplar operation.
 
