@@ -448,7 +448,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     initial_w = 2.0
     optimizer = GradientDescentOptimizer(learning_rate)
 
-    def host_model_fn(grads):
+    def host_model_fn(*grads):
       grads_and_vars = zip(grads, variables.trainable_variables())
       with ops.name_scope("apply_gradients"):
         train_op = optimizer.apply_gradients(grads_and_vars)
@@ -463,7 +463,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         grads_and_vars = optimizer.compute_gradients(loss)
       grads = [g for (g, _) in grads_and_vars]
       train_op = array_ops.identity(loss)
-      host_call = (host_model_fn, [grads])
+      host_call = (host_model_fn, grads)
 
       return ipu_estimator.IPUEstimatorSpec(mode=mode,
                                             loss=loss,

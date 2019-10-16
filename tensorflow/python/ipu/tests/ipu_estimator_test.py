@@ -159,7 +159,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     def my_host_fn(loss):
       loss_sum = variable_scope.get_variable(name="loss_sum", initializer=0.0)
-      self.assertEqual("/device:CPU:*", loss_sum.device)
+      self.assertEqual("/device:CPU:0", loss_sum.device)
       return loss_sum.assign_add(loss)
 
     def my_model_fn(features, labels, mode):

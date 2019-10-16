@@ -24,6 +24,7 @@ import collections
 import six
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
+from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.estimator import estimator as estimator_lib
@@ -51,7 +52,8 @@ from tensorflow.python.util import function_utils
 _INITIAL_LOSS = 0.0
 _INPUT_FN_KEY = "input_fn"
 _CROSS_REPLICA_SUM_OP = "IpuCrossReplicaSum"
-_HOST_DEVICE = "cpu"
+_HOST_DEVICE = "/device:CPU:0"
+_IPU_DEVICE = "/device:IPU:0"
 
 # Keys that cannot be used in the `params` dictionary passed to the
 # IPUEstimator
@@ -187,6 +189,35 @@ def _validate_replicated_training_graph():
          ).format(_CROSS_REPLICA_SUM_OP))
 
 
+def _add_send_to_host_ops(tensors):
+  """Returns attributes for matching recv ops"""
+  recv_ops_attrs = []
+
+  for tensor in tensors:
+    model_fn_lib._check_is_tensor_or_operation(  # pylint: disable=protected-access
+        tensor, "`host_call` argument")
+
+    attrs = dict(tensor_name=tensor.name,
+                 send_device=_IPU_DEVICE,
+                 send_device_incarnation=0,
+                 recv_device=_HOST_DEVICE)
+
+    gen_sendrecv_ops.ipu_send_to_host(tensor, **attrs)
+
+    # The recv op has an additional type argument.
+    attrs["T"] = tensor.dtype
+    recv_ops_attrs.append(attrs)
+
+  return recv_ops_attrs
+
+
+def _add_recv_at_host_ops(recv_ops_attrs):
+  tensors = []
+  for attrs in recv_ops_attrs:
+    tensors.append(gen_sendrecv_ops.ipu_recv_at_host(**attrs))
+  return tensors
+
+
 class _ModelFnWrapper(object):
   def __init__(self, model_fn, config, params, infeed_queue):
     self._model_fn = model_fn
@@ -221,11 +252,16 @@ class _ModelFnWrapper(object):
   def _capture_host_call(self, host_call):
     if host_call:
       assert self._captured_host_call_fn is None, "Can only capture host_call once"
-      self._captured_host_call_fn, self._captured_host_call_args = host_call
+      self._captured_host_call_fn, tensors = host_call
+      self._captured_host_call_args = _add_send_to_host_ops(tensors)
 
   @property
   def captured_host_call_fn(self):
     return self._captured_host_call_fn
+
+  @property
+  def captured_host_call_args(self):
+    return _add_recv_at_host_ops(self._captured_host_call_args)
 
   def create_training_loop(self):
     def training_step(total_loss, features, labels=None):
@@ -266,8 +302,6 @@ class _ModelFnWrapper(object):
         # Simplify the graph by avoiding the loop.
         args = self._infeed_queue._dequeue()  # pylint: disable=protected-access
         total_loss = training_step(_INITIAL_LOSS, *args)
-        if self._captured_host_call_args is not None:
-          return total_loss, self._captured_host_call_args
         return total_loss
 
       total_loss = loops.repeat(self._iterations_per_loop,
@@ -377,6 +411,7 @@ def _call_host_fn(host_call_fn, host_call_args):
 
   model_fn_lib._check_is_tensor_or_operation(  # pylint: disable=protected-access
       ret, "`host_call` return value")
+
   return ret
 
 
@@ -436,7 +471,7 @@ def _augment_model_fn(model_fn):
     else:
       raise ValueError("Unknown mode: {}".format(mode))
 
-    with ipu_scope("/device:IPU:0"):
+    with ipu_scope(_IPU_DEVICE):
       compiled_loop = ipu_compiler.compile(loop)
 
     if config.ipu_run_config.compile_summary:
@@ -452,17 +487,17 @@ def _augment_model_fn(model_fn):
     eval_metric_ops = {}
 
     if mode == model_fn_lib.ModeKeys.TRAIN:
-      if len(compiled_loop) == 1:
-        train_op = loss = compiled_loop[0]
+      loss = compiled_loop[0]
+      if model_fn_wrapper.captured_host_call_fn is None:
+        train_op = loss
       else:
-        loss, host_call_args = compiled_loop
         # The base class will run both `train_op` and `loss`.
         # Let `train_op` be the return value from the host call.
         # If there is a dependency on the `loss` calculated on
         # the IPU, they will be sequenced. Otherwise they might
         # run in parallel on the IPU and CPU.
         train_op = _call_host_fn(model_fn_wrapper.captured_host_call_fn,
-                                 host_call_args)
+                                 model_fn_wrapper.captured_host_call_args)
     elif mode == model_fn_lib.ModeKeys.PREDICT:
       with ops.control_dependencies([compiled_loop]):
         predictions = outfeed_queue.dequeue()
