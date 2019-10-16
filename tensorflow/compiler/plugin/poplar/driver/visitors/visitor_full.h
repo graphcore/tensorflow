@@ -30,7 +30,7 @@ namespace poplarplugin {
  * that adds other operations which do element to element
  * mixing, for instance convolution.  It also adds ops
  * that change the shape of the tensor, for instance Reverse
- * or Concatinate.
+ * or Concatenate.
  */
 class FullVisitor : public BaseVisitor {
  public:
@@ -85,6 +85,10 @@ class FullVisitor : public BaseVisitor {
   Status HandleGather(HloInstruction* inst) override;
 
   Status HandleOutfeed(HloInstruction* inst) override;
+
+  Status HandleSend(HloInstruction* inst) override;
+
+  Status HandleSendDone(HloInstruction* inst) override;
 };
 
 }  // namespace poplarplugin

@@ -409,6 +409,7 @@ cc_library(
         "driver/ops/custom_ops/poputil/user_op.cc",
         "driver/ops/cast_to_gfloat_ops.cc",
         "driver/ops/feed_ops.cc",
+        "driver/ops/send_ops.cc",
         "driver/ops/graph_caching_util.cc",
         "driver/ops/gather_ops.cc",
         "driver/ops/map_ops.cc",
@@ -582,7 +583,8 @@ cc_library(
         "kernels/poputil/replication_factor.cc",
         "kernels/poputil/replication_index.cc",
         "kernels/poputil/stateful_gradient_accumulate.cc",
-        "kernels/poputil/user_operation.cc"
+        "kernels/poputil/user_operation.cc",
+        "kernels/sendrecv_kernels.cc",
     ],
     hdrs = [
         "kernels/ipu_kernels_common.h",
@@ -771,6 +773,27 @@ tf_custom_op_py_library(
 )
 
 cc_library(
+    name = "sendrecv_ops",
+    srcs = ["ops/sendrecv_ops.cc"],
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "sendrecv_ops_wrapper_py",
+    out = "ops/gen_sendrecv_ops.py",
+    deps = [":sendrecv_ops"],
+    visibility = ["//tensorflow:internal"],
+)
+
+tf_custom_op_py_library(
+    name = "sendrecv_ops_py",
+    kernels = [":sendrecv_ops"],
+    deps = [":sendrecv_ops_wrapper_py"],
+    srcs_version = "PY2AND3",
+)
+
+cc_library(
     name = "pipelining_ops",
     srcs = ["ops/pipelining/pipelining.cc"],
     deps = ["//tensorflow/core:framework"],
@@ -810,6 +833,7 @@ cc_library(
         ":poprand_ops",
         ":poputil_ops",
         ":pop_datastream_ops",
+        ":sendrecv_ops",
         "//tensorflow/compiler/jit/kernels:xla_ops",
         "//tensorflow/compiler/jit:xla_jit_headers_lib",
         "//tensorflow/compiler/jit:xla_device",
@@ -2218,6 +2242,24 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+    ],
+)
+
+tf_xla_py_test(
+    name = "sendrecv_ops_test",
+    size = "medium",
+    srcs = ["tests/sendrecv_ops_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        ":sendrecv_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow:tensorflow_py",
     ],
 )
 

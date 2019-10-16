@@ -30,6 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 
 #include "tensorflow/compiler/tf2xla/shape_util.h"
+#include "tensorflow/compiler/tf2xla/type_util.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/transfer_manager.h"
@@ -288,7 +289,8 @@ PoplarExecutor::PoplarExecutor()
       outfeed_thread_pool_(tensorflow::Env::Default(),
                            "poplar_outfeed_thread_pool_",
                            PoplarExecutor::NUM_THREADS),
-      has_cycle_counter_(false) {
+      has_cycle_counter_(false),
+      rendezvous_(tensorflow::NewLocalRendezvous()) {
   // TODO should this use the time/ms?
   static std::random_device rd;
   seed_generator_.Seed(rd());
@@ -319,6 +321,58 @@ void PoplarExecutor::Deallocate(se::DeviceMemoryBase* mem) {
       tc->ref_count--;
     }
   }
+}
+
+Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
+    const SendInfos& send_infos) {
+  for (const SendInfo& send : send_infos) {
+    VLOG(1) << "Connecting Poplar stream to rendezvous key '"
+            << send.rendezvous_key << "' with shape " << send.shape;
+
+    tensorflow::TensorShape shape;
+    TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(send.shape, &shape));
+
+    TF_ASSIGN_OR_RETURN(
+        const tensorflow::DataType type,
+        tensorflow::EncodePrimitiveTypeAsDataType(send.shape.element_type()));
+
+    tensorflow::Rendezvous::ParsedKey key;
+    TF_RETURN_IF_ERROR(
+        tensorflow::Rendezvous::ParseKey(send.rendezvous_key, &key));
+
+    // We allow capturing a raw pointer in the lambda as `this` which holds
+    // a refcount of it should outlive the engine.
+    tensorflow::Rendezvous* rendezvous = rendezvous_.get();
+
+    // Accept the output from the first replica.
+    current_engine_->connectStreamToCallback(
+        send.stream_handle,
+        /*replica_id=*/0,
+        [rendezvous, key, tensor = tensorflow::Tensor(type, shape)](void* src) {
+          auto* dst = tensorflow::DMAHelper::buffer(&tensor);
+
+          // We reuse the same tensor every time to avoid allocating in this
+          // callback. This should be safe since every Send op must be matched
+          // by a corresponding Recv op in the same graph, so the tensor must
+          // be consumed before the next execution of the graph. Verify this
+          // assumption here by checking that we are the only owner.
+          CHECK(dst->RefCountIsOne());
+          std::memcpy(dst->data(), src, dst->size());
+
+          // Sending here increases the refcount until it is consumed.
+          rendezvous->Send(key, tensorflow::Rendezvous::Args{}, tensor,
+                           /*is_dead=*/false);
+        });
+
+    // Discard the output from the remainding replicas.
+    for (int replica_id = 1; replica_id < current_replication_factor_;
+         ++replica_id) {
+      current_engine_->connectStreamToCallback(send.stream_handle, replica_id,
+                                               [](void*) {});
+    }
+  }
+
+  return Status::OK();
 }
 
 namespace {
@@ -1888,6 +1942,10 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
   return Status::OK();
 }
 
+tensorflow::Rendezvous* PoplarExecutor::GetRendezvous() {
+  return rendezvous_.get();
+}
+
 void PoplarExecutor::ConnectSeedCallback() {
   // Don't connect any streams if using synthetic data
   if (UseSyntheticData()) {
@@ -2065,6 +2123,9 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
               (void*)memory_buffer.back().get();
         }
       }
+
+      TF_RETURN_IF_ERROR(
+          ConnectSendCallbacksToRendezvous(executable.GetSendInfos()));
 
       const auto& infeed_infos = executable.GetInfeedInfos();
       if (!infeed_infos.empty()) {

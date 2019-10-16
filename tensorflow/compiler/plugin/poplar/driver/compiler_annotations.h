@@ -45,8 +45,22 @@ struct FeedInfo {
   Shape shape;
 };
 
+struct SendInfo {
+  SendInfo(const std::string& stream_handle, const std::string& rendezvous_key,
+           const Shape& shape)
+      : stream_handle(stream_handle),
+        rendezvous_key(rendezvous_key),
+        shape(shape) {}
+  SendInfo() = delete;
+
+  std::string stream_handle;
+  std::string rendezvous_key;
+  Shape shape;
+};
+
 using OutfeedInfos = std::vector<FeedInfo>;
 using InfeedInfos = std::vector<FeedInfo>;
+using SendInfos = std::vector<SendInfo>;
 
 // We use this structure to communicate data about the DataStreams between the
 // UserOp custom operation and the PoplarExecutable so it can link the streams
@@ -137,6 +151,8 @@ struct CompilerAnnotations {
   StreamInfos stream_infos;
 
   StreamMetaInfos stream_meta_infos;
+
+  SendInfos send_infos;
 
   TensorsWithLayouts tensors_with_layout;
 

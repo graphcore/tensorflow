@@ -732,6 +732,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     // Register the outfeeds which this executable creates.
     TF_RETURN_IF_ERROR(
         poplarExecutor->RegisterOutfeeds(resources.annotations.outfeed_infos));
+
     // Set up the random seed
     TF_ASSIGN_OR_RETURN(auto seed_setup,
                         InitializeSeed(main_graph, replication_factor));
@@ -790,7 +791,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         if (!poplarExecutor->HaveCachedExecutable(cache_filename)) {
           TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
               cache_filename, exec, resources.annotations.infeed_infos,
-              resources.annotations.outfeed_infos, replication_factor,
+              resources.annotations.outfeed_infos,
+              resources.annotations.send_infos, replication_factor,
               poplarExecutor->GetReportFlags()));
         }
       }
@@ -856,7 +858,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(resources.annotations.infeed_infos),
       std::move(resources.annotations.outfeed_infos),
       std::move(resources.annotations.stream_infos),
-      std::move(resources.annotations.stream_meta_infos));
+      std::move(resources.annotations.stream_meta_infos),
+      std::move(resources.annotations.send_infos));
 
   executable.reset(poplar_executable);
 

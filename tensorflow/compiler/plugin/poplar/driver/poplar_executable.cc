@@ -38,7 +38,8 @@ PoplarExecutable::PoplarExecutable(
     std::vector<std::vector<Literal>> literal_output, const bool is_remap_graph,
     std::vector<uint64> remaped_output, uint32 replication_factor,
     const InfeedInfos& infeed_infos, const OutfeedInfos& outfeed_infos,
-    StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info)
+    StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info,
+    SendInfos&& send_infos)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       poplar_engine_(std::move(engine)),
@@ -53,6 +54,7 @@ PoplarExecutable::PoplarExecutable(
       outfeed_infos_(std::move(outfeed_infos)),
       stream_infos_(std::move(stream_infos)),
       stream_meta_infos_(std::move(stream_meta_info)),
+      send_infos_(std::move(send_infos)),
       loaded_from_cache_(false) {}
 
 PoplarExecutable::~PoplarExecutable() {
@@ -190,11 +192,12 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   auto iomap = InputOutputAliasingMap(hlo_module.get());
 
+  // TODO(hakons): Deserialize send_infos
   auto executable = new PoplarExecutable(
       std::move(hlo_module), std::move(profile_printer),
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
       {}, false, {}, replication_factor, std::move(infeeds),
-      std::move(outfeeds), {}, {});
+      std::move(outfeeds), {}, {}, {});
 
   executable->loaded_from_cache_ = true;
 
@@ -204,7 +207,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 /*static*/ Status PoplarExecutable::Serialize(
     const std::string& filename, const poplar::Executable& executable,
     const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
-    uint32 replication_count, const poplar::OptionFlags& opts) {
+    const SendInfos& sends, uint32 replication_count,
+    const poplar::OptionFlags& opts) {
   PoplarExecutableProto proto;
 
   // Write poplar executable to a file
@@ -232,6 +236,12 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     feed->set_stream_prefix(outfeed.stream_prefix);
     *(feed->mutable_config()) = outfeed.config;
     *(feed->mutable_shape()) = outfeed.shape.ToProto();
+  }
+
+  if (!sends.empty()) {
+    // TODO(hakons): Implement this
+    return tensorflow::errors::Unimplemented(
+        "Serialization of executables with send nodes not supported");
   }
 
   // write the compilation options into the serialized executable

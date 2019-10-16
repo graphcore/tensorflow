@@ -574,6 +574,8 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kRoundNearestAfz:
     case HloOpcode::kSelect:
     case HloOpcode::kSelectAndScatter:
+    case HloOpcode::kSend:
+    case HloOpcode::kSendDone:
     case HloOpcode::kTupleSelect: {
       type_ = HloInstructionType::kNotInplace;
       break;
@@ -585,8 +587,6 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kFft:
     case HloOpcode::kRecv:
     case HloOpcode::kRecvDone:
-    case HloOpcode::kSend:
-    case HloOpcode::kSendDone:
     case HloOpcode::kTrace:
     default: {
       LOG(FATAL) << "Unrecognized op " << inst->opcode()

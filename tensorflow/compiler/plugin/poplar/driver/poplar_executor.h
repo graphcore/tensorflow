@@ -50,6 +50,7 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/process_function_library_runtime.h"
 
+#include "tensorflow/core/framework/rendezvous.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/core/threadpool.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
@@ -426,6 +427,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status RegisterOutfeeds(const OutfeedInfos& outfeed_infos);
 
+  tensorflow::Rendezvous* GetRendezvous();
+
   void ResetSeed(int seed);
 
   void SetHasCycleCounter() { has_cycle_counter_ = true; }
@@ -587,6 +590,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Convers the data into the right host format
   static void PostProcessBuffer(TensorControl* tc);
 
+  // Connect buffers sent by send operations in the engine to the receive
+  // operations using the rendezvous mechanism.
+  Status ConnectSendCallbacksToRendezvous(const SendInfos& send_infos);
+
   // Connect buffers provided by infeed transfer manager to Poplar
   // HostToDevice FIFO
   void ConnectInfeedsToStreamCallback(const InfeedInfos& infeed_infos);
@@ -721,6 +728,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   std::string ReportFileExtension() const;
 
   bool has_cycle_counter_;
+
+  tensorflow::core::RefCountPtr<tensorflow::Rendezvous> rendezvous_;
 };
 
 }  // namespace poplarplugin
