@@ -2,7 +2,18 @@
     "linters": {
         "clang-format": {
             "type": "clang-format",
-            "include": "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
+            "include": [
+                 "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
+                 "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
+            ]
+        },
+        "cpplint": {
+            "type": "cpplint",
+            "bin": ["./.linters/cpplint"],
+            "include": [
+                 "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
+                 "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
+            ]
         },
         "yapf": {
             "type": "yapf",

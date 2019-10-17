@@ -140,7 +140,7 @@ std::once_flag help_flag_printed;
 
 int64 SizeFunction(const BufferValue& buffer) {
   return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
-};
+}
 
 std::string GetPathToGraphProgFile(std::string filename) {
   Dl_info dlInfo;

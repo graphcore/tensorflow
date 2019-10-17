@@ -407,7 +407,7 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
 
 class NullPrefetchCallback : public poplar::StreamCallback {
  public:
-  NullPrefetchCallback(uint64 num_bytes) : num_bytes_(num_bytes) {
+  explicit NullPrefetchCallback(uint64 num_bytes) : num_bytes_(num_bytes) {
     buffer = std::vector<unsigned char>(num_bytes, 0x02);
   }
 
@@ -1199,7 +1199,7 @@ void PoplarExecutor::AddCompileBeginEventRecord(
   evt.mutable_compile_begin()->set_module_name(std::move(module_name));
 
   reports_.push_back(evt);
-};
+}
 
 std::string PoplarExecutor::ReportFileExtension() const {
   std::string report_file_extension = "";

@@ -501,12 +501,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         const ArgsHandleMap&, const int) const = 0;
 
    protected:
-    OutputAllocation(){};
+    OutputAllocation() {}
   };
 
   class ConstantOutputAllocation : public OutputAllocation {
    public:
-    ConstantOutputAllocation(const std::vector<std::vector<Literal>>& constants)
+    explicit ConstantOutputAllocation(
+        const std::vector<std::vector<Literal>>& constants)
         : constants_(constants) {}
 
     se::DeviceMemoryBase GetAllocation(
