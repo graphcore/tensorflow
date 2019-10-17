@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package xla.poplarplugin;
-// NEXT ID 17
+// NEXT ID 18
 message IpuOptions {
   // Structure for setting an idividual Poplar OptionFlag for OptionFlags
   message PoplarOptionFlag {
@@ -136,4 +136,7 @@ message IpuOptions {
 
   // Whether to prefetch data for data streams.
   bool prefetch_data_streams = 16;
+
+  // Whether to fuse multi_slice operations that use the same input.
+  bool enable_multi_slice_combiner = 17;
 };

@@ -52,6 +52,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_slice_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
@@ -603,6 +604,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<HloCSE>(true);
       pass.AddPass<HloDCE>();
       pass.AddPass<MultiUpdateCombiner>(resources.annotations);
+      if (poplarExecutor->EnableMultiSliceCombiner()) {
+        pass.AddPass<MultiSliceCombiner>(resources.annotations);
+      }
     }
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();

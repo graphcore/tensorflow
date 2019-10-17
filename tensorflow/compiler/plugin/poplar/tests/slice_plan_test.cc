@@ -138,7 +138,7 @@ ENTRY main {
   offsets2 = s32[12,1] parameter(3)
   slice1 = f32[24,16] custom-call(input1, offsets1), custom_call_target="Popops::MultiSlice"
   slice2 = f32[12,16] custom-call(input2, offsets2), custom_call_target="Popops::MultiSlice"
-  ROOT t = (f32[24,16], s32[12,16]) tuple(slice1, slice2)
+  ROOT t = (f32[24,16], f32[12,16]) tuple(slice1, slice2)
 }
 )";
   std::unique_ptr<HloModule> module =
@@ -169,7 +169,7 @@ ENTRY main {
   offsets = s32[24,1] parameter(1)
   slice = f32[24,16] custom-call(input, offsets), custom_call_target="Popops::MultiSlice"
   one = f32[] constant(1)
-	big_one = f32[24,16] broadcast(one), dimensions={}
+  big_one = f32[24,16] broadcast(one), dimensions={}
   slice_modified = f32[24,16] add(slice, big_one)
   lr = f32[] constant(-0.1)
   update = f32[100,16] custom-call(input, offsets, slice_modified, lr), custom_call_target="Popops::MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
@@ -206,9 +206,9 @@ ENTRY main {
   slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="Popops::MultiSlice"
   slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="Popops::MultiSlice"
   one = f32[] constant(1)
-	big_one1 = f32[24,16] broadcast(one), dimensions={}
+  big_one1 = f32[24,16] broadcast(one), dimensions={}
   slice1_modified = f32[24,16] add(slice1, big_one1)
-	big_one2 = f32[12,16] broadcast(one), dimensions={}
+  big_one2 = f32[12,16] broadcast(one), dimensions={}
   slice2_modified = f32[12,16] add(slice2, big_one2)
   lr = f32[] constant(-0.1)
   concat_offsets = s32[36,1] concatenate(offsets1, offsets2), dimensions={0}
@@ -250,7 +250,7 @@ ENTRY main {
   slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="Popops::MultiSlice"
   slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="Popops::MultiSlice"
   one = f32[] constant(1)
-	big_one1 = f32[24,16] broadcast(one), dimensions={}
+  big_one1 = f32[24,16] broadcast(one), dimensions={}
   slice1_modified = f32[24,16] add(slice1, big_one1)
   lr = f32[] constant(-0.1)
   update = f32[100,16] custom-call(input, offsets1, slice1_modified, lr), custom_call_target="Popops::MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"

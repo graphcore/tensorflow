@@ -357,6 +357,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.retain_control_dependencies();
   }
 
+  bool EnableMultiSliceCombiner() const {
+    return current_config_.enable_multi_slice_combiner();
+  }
+
   int64 GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }

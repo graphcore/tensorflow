@@ -26,6 +26,7 @@ from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
+from tensorflow.python.util import deprecation
 
 
 def configure_ipu_system(config, device="cpu"):
@@ -51,6 +52,9 @@ def configure_ipu_system(config, device="cpu"):
     sess.run(cfg_op)
 
 
+@deprecation.deprecated_args(None, "Use set_optimization_options() instead.",
+                             "max_cross_replica_sum_buffer_size",
+                             "max_inter_ipu_copies_buffer_size")
 def create_ipu_config(profiling=False,
                       enable_ipu_events=False,
                       use_poplar_text_report=False,
@@ -131,6 +135,7 @@ def create_ipu_config(profiling=False,
   opts = IpuOptions()
   opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = True
+  opts.enable_multi_slice_combiner = False
 
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
   opts.profiling.enable_compilation_trace = profiling
@@ -160,8 +165,39 @@ def create_ipu_config(profiling=False,
   return opts
 
 
+def set_optimization_options(opts,
+                             combine_embedding_lookups=True,
+                             max_cross_replica_sum_buffer_size=0,
+                             max_inter_ipu_copies_buffer_size=0):
+  """Set the IPU options related to performance / optimizations.
+
+  .. code-block:: python
+
+      # Create a device with fusion for multiSlices sharing the same input
+      # enabled.
+      opts = create_ipu_config()
+      opts = set_optimization_options(opts,
+                                      combine_embedding_lookups=True)
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    combine_embedding_lookups: Fuse embedding lookups on the same tensor. This
+      might improve performance but increase memory usage.
+    max_cross_replica_sum_buffer_size: The maximum number of bytes that can be
+      waiting before a cross replica sum op is scheduled.
+    max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
+      waiting before a inter IPU copy between IPUs is scheduled.
+  """
+  # Internally embedding lookups are implemented using multiSlice operations.
+  opts.enable_multi_slice_combiner = combine_embedding_lookups
+  opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
+  opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+
+
 def set_compilation_options(opts, compilation_options=None):
-  """Set the IPU compilation options for the session..
+  """Set the IPU compilation options for the session.
 
   .. code-block:: python
 
@@ -170,7 +206,7 @@ def set_compilation_options(opts, compilation_options=None):
       opts = set_compilation_options(opts,
           compilation_options={"debug.instrumentCompute": "true",
                                "target.workerStackSizeInBytes": "64"})
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -203,7 +239,7 @@ def set_convolution_options(opts, convolution_options=None):
       opts = create_ipu_config()
       opts = set_convolution_options(opts,
           convolution_options={"tempMemoryBudget": "1000000"})
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -236,7 +272,7 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
       opts = create_ipu_config()
       opts = set_matmul_options(opts,
           matmul_options={"availableMemoryProportion": "0.5"})
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -280,7 +316,7 @@ def set_pooling_options(opts, pooling_options=None):
       opts = create_ipu_config()
       opts = set_pooling_options(opts,
           pooling_options={"poolUseIntrospectiveMapping": "false"})
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -314,7 +350,7 @@ def set_report_options(opts, report_options=None):
       opts = create_ipu_config()
       opts = set_report_options(opts,
           report_options={"reportOption1": "false"})
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -422,7 +458,7 @@ def auto_select_ipus(opts, num_ipus):
     # Create a single device, with one IPU
     opts = create_ipu_config()
     opts = auto_select_ipus(opts, num_ipus=1)
-    ipu.utils.configure_ipu_system(cfg)
+    ipu.utils.configure_ipu_system(opts)
     with tf.Session() as s:
       ...
 
@@ -431,7 +467,7 @@ def auto_select_ipus(opts, num_ipus):
     # Create two devices, with 2 IPUs per device.
     opts = create_ipu_config()
     opts = auto_select_ipus(opts, num_ipus=[2,2])
-    ipu.utils.configure_ipu_system(cfg)
+    ipu.utils.configure_ipu_system(opts)
     with tf.Session() as s:
       ...
 
@@ -441,7 +477,7 @@ def auto_select_ipus(opts, num_ipus):
     # in the second device.
     opts = create_ipu_config()
     opts = auto_select_ipus(opts, num_ipus=[1,2])
-    ipu.utils.configure_ipu_system(cfg)
+    ipu.utils.configure_ipu_system(opts)
     with tf.Session() as s:
       ...
 
@@ -591,7 +627,7 @@ def select_ipus(opts, indices):
       # IPU configuration index 0
       opts = create_ipu_config()
       opts = select_ipus(opts, indices=[0])
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -601,7 +637,7 @@ def select_ipus(opts, indices):
       # IPU configuration index 8
       opts = create_ipu_config()
       opts = select_ipus(opts, indices=[8])
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -611,7 +647,7 @@ def select_ipus(opts, indices):
       # indices 0 and 1
       opts = create_ipu_config()
       opts = select_ipus(opts, indices=[0, 1])
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -623,7 +659,7 @@ def select_ipus(opts, indices):
       # 00:da:00.0)
       opts = create_ipu_config()
       opts = select_ipus(opts, indices=[37, 38])
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
@@ -633,7 +669,7 @@ def select_ipus(opts, indices):
       # 0000:1a:00.0, 0000:1b:00.0, 0000:1c:00.0, 0000:1d:00.0.
       opts = create_ipu_config()
       opts = select_ipus(opts, indices=[0, 1, 2, 3])
-      ipu.utils.configure_ipu_system(cfg)
+      ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 

@@ -93,6 +93,8 @@ exist for configuring the hardware and compiler.
   requirement at the expense of speed.
 * ``set_floating_point_behaviour_options`` allows control of the IPUs floating
   point control register.
+* ``set_optimization_options`` allows control of the performance / memory usage
+  trade offs.
 
 More options are available on the ``create_ipu_config`` function itself. These
 mostly control specific features of the Poplar and poplibs operations.
