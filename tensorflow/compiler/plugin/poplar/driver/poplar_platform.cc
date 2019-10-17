@@ -19,8 +19,8 @@ limitations under the License.
 #include "absl/memory/memory.h"
 #include "absl/strings/str_format.h"
 
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 
@@ -30,6 +30,8 @@ limitations under the License.
 #include "tensorflow/stream_executor/lib/initialize.h"
 #include "tensorflow/stream_executor/lib/status.h"
 #include "tensorflow/stream_executor/lib/status_macros.h"
+
+#include "tensorflow/core/public/version.h"
 
 #include <poplar/Device.hpp>
 #include <poplar/DeviceManager.hpp>
@@ -45,7 +47,8 @@ namespace xla {
 namespace poplarplugin {
 
 PoplarPlatform::PoplarPlatform() : name_("Poplar") {
-  VLOG(1) << "Poplar version: " << poplar::versionString();
+  VLOG(1) << "Poplar version: " << poplar::versionString()
+          << " Poplar Tensorflow version: " << tf_git_version() << ")";
 }
 
 PoplarPlatform::~PoplarPlatform() {}
