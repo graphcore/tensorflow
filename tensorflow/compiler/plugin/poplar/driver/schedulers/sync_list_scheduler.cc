@@ -333,7 +333,8 @@ class SyncListScheduler {
       // we will schedule all of the all-reduce ops
       if (best->opcode() == HloOpcode::kAllReduce ||
           waiting_syncs > max_syncs_) {
-        for (auto itr = ready_queue.begin(); itr != ready_queue.end(); ++itr) {
+        auto itr = ready_queue.begin();
+        while (itr != ready_queue.end()) {
           auto instr = itr->second.instruction;
 
           // If it's an all-reduce op
@@ -354,8 +355,10 @@ class SyncListScheduler {
             }
 
             // Remove the op from the read queue and set
-            ready_queue.erase(itr);
+            itr = ready_queue.erase(itr);
             ready_instructions.erase(instr);
+          } else {
+            ++itr;
           }
         }
 
