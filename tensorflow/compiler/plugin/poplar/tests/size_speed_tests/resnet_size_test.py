@@ -157,7 +157,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory_in_range(46000000, 47000000)
+      report.assert_total_tile_memory_in_range(44500000, 46500000)
 
 
 if __name__ == "__main__":
