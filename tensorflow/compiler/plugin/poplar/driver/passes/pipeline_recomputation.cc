@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -116,6 +117,13 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
       fifo_inst->set_sharding(operand->sharding());
       // Use the fifo as the input.
       TF_RETURN_IF_ERROR(recomp_stage->ReplaceOperandWith(op_idx, fifo_inst));
+      // If there is an inplace user of the operand, then we need to add a
+      // control dependency from the new FIFO instruction to that user.
+      auto optional_inplace_user = GetInplaceModifier(operand);
+      if (optional_inplace_user) {
+        TF_RETURN_IF_ERROR(
+            fifo_inst->AddControlDependencyTo(*optional_inplace_user));
+      }
     }
 
     // Wire inputs to the bwd stage which are FIFOs to use the recomp stage.
@@ -129,9 +137,14 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
       HloInstruction* gte = operand->mutable_operand(0);
       CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
       CHECK_EQ(gte->operand(0), fwd_stage);
+      // Create a GTE from the recomputation output and wire it to the BWD
+      // stage.
       HloInstruction* new_gte = pipeline_comp->AddInstruction(
           gte->CloneWithNewOperands(gte->shape(), {recomp_stage}));
       TF_RETURN_IF_ERROR(bwd_stage->ReplaceOperandWith(op_idx, new_gte));
+
+      // Remove the old operand.
+      TF_RETURN_IF_ERROR(operand->DropAllControlDeps());
       TF_RETURN_IF_ERROR(
           pipeline_comp->RemoveInstructionAndUnusedOperands(operand));
     }

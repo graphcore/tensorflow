@@ -73,10 +73,14 @@ class HloInstructionDescription {
 
   HloInstructionType type_;
 };
+// Given an instruction, get an instruction which modifies it inplace (if there
+// is one).
+absl::optional<HloInstruction*> GetInplaceModifier(HloInstruction* inst);
 
 // Given an instruction, check if it's output will ever be modified by an
 // Inplace Read/Write instruction.
-bool IsOutputModifiedInplace(const HloInstruction* inst);
+bool IsOutputModifiedInplace(HloInstruction* inst);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

@@ -664,23 +664,23 @@ bool HloInstructionDescription::IsInplace(HloInstruction* inst,
   }
 }
 
-bool IsOutputModifiedInplace(const HloInstruction* hlo) {
+absl::optional<HloInstruction*> GetInplaceModifier(HloInstruction* inst) {
   // Go through all the users, looking through inplace read-only/GTEs.
-  std::stack<const HloInstruction*> to_visit;
-  to_visit.push(hlo);
-  absl::flat_hash_set<const HloInstruction*> visited;
+  std::stack<HloInstruction*> to_visit;
+  to_visit.push(inst);
+  absl::flat_hash_set<HloInstruction*> visited;
   while (!to_visit.empty()) {
-    const HloInstruction* inst = to_visit.top();
+    HloInstruction* inst = to_visit.top();
     to_visit.pop();
     if (visited.contains(inst)) {
       continue;
     }
     visited.insert(inst);
-    for (const HloInstruction* user : inst->users()) {
+    for (HloInstruction* user : inst->users()) {
       auto inplace_description = HloInstructionDescription(user);
       // Returns true if `user` uses `inst` inplace.
-      auto is_used_inplace = [inplace_description](const HloInstruction* inst,
-                                                   const HloInstruction* user) {
+      auto is_used_inplace = [inplace_description](HloInstruction* inst,
+                                                   HloInstruction* user) {
         return absl::c_any_of(inplace_description.GetInplaceOperandIndexes(),
                               [&inst, &user](int64 inplace_idx) {
                                 return user->operand(inplace_idx) == inst;
@@ -690,7 +690,7 @@ bool IsOutputModifiedInplace(const HloInstruction* hlo) {
         case HloInstructionType::kInplaceReadWrite: {
           if (IsLoweredInplace(user) && is_used_inplace(inst, user)) {
             // We have found a user which will modify the output.
-            return true;
+            return user;
           }
           break;
         }
@@ -707,7 +707,11 @@ bool IsOutputModifiedInplace(const HloInstruction* hlo) {
     }
   }
 
-  return false;
+  return absl::nullopt;
+}
+
+bool IsOutputModifiedInplace(HloInstruction* inst) {
+  return GetInplaceModifier(inst).has_value();
 }
 }  // namespace poplarplugin
 }  // namespace xla

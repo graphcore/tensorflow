@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
@@ -828,6 +829,93 @@ ENTRY cluster {
   PipelineRecomputation recomputation(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
+}
+
+TEST_F(PipelineRecomputationTest, TestControlDependencies) {
+  std::string hlo = R"(
+HloModule top
+
+stage_0_fwd {
+  in0 = f32[1,4,4,2] parameter(0)
+  in1 = f32[1,4,4,2] parameter(1)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0, in1)
+}
+
+stage_1_fwd {
+  in1 = f32[1,4,4,2] parameter(0)
+  in2 = f32[1,4,4,2] parameter(1)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1, in2)
+}
+
+stage_1_bwd {
+  in1_grad = f32[1,4,4,2] parameter(0)
+  in2_grad = f32[1,4,4,2] parameter(1)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1_grad, in2_grad)
+}
+
+stage_0_bwd {
+  in0_grad = f32[1,4,4,2] parameter(0)
+  in1_grad = f32[1,4,4,2] parameter(1)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0_grad, in1_grad)
+}
+
+pipeline {
+  after-all = token[] after-all()
+  infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576"
+  in0 = f32[1,4,4,2] get-tuple-element(infeed), index=0
+  in1 = f32[1,4,4,2] parameter(0)
+  in2 = f32[1,4,4,2] parameter(1)
+  stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(in1, in0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  stage_0_0 = f32[1,4,4,2] get-tuple-element(stage_0), index=0
+  stage_0_1 = f32[1,4,4,2] get-tuple-element(stage_0), index=1
+  stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_0, stage_0_1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  stage_1_1 = f32[1,4,4,2] get-tuple-element(stage_1), index=0
+  stage_1_2 = f32[1,4,4,2] get-tuple-element(stage_1), index=1
+  stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_1, stage_1_2), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
+  stage_1_bwd_1 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=0
+  stage_1_bwd_2 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=1
+  stage_0_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_bwd_1, stage_0_0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2)
+}
+
+ENTRY e {
+  e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+}
+)";
+  auto config = GetModuleConfigForTest();
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  ShardingPass sharding;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  PipelineFIFOInserter inserter;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  InplaceFinder inplace_finder;
+  TF_ASSERT_OK_AND_ASSIGN(changed, inplace_finder.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
+  auto fifo = stages.backward[0]->operand(1);
+  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
+  EXPECT_THAT(fifo->control_successors(),
+              ::testing::ElementsAre(stages.forward[1]));
+
+  PipelineRecomputation recomputation(true);
+  TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_comp));
+
+  fifo = stages.recomputation.at(0)->operand(1);
+  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
+  EXPECT_THAT(fifo->control_successors(),
+              ::testing::ElementsAre(stages.forward[0]));
 }
 }  // namespace
 }  // namespace poplarplugin
