@@ -40,7 +40,7 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
 
       with ops.device("/device:CPU:0"):
         recv_op = gen_sendrecv_ops.ipu_recv_at_host(
-            tensor_type=dtype,
+            T=dtype,
             tensor_name="test_tensor",
             send_device="/device:IPU:0",
             send_device_incarnation=0,
@@ -76,12 +76,12 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
         send_2 = ipu_compiler.compile(make_device_fn(2), inputs=[input_2])
 
       with ops.device("/device:CPU:0"):
-        recv_1 = gen_sendrecv_ops.ipu_recv_at_host(tensor_type=dtypes.float32,
+        recv_1 = gen_sendrecv_ops.ipu_recv_at_host(T=dtypes.float32,
                                                    tensor_name="tensor_1",
                                                    send_device="/device:IPU:0",
                                                    send_device_incarnation=0,
                                                    recv_device="/device:CPU:0")
-        recv_2 = gen_sendrecv_ops.ipu_recv_at_host(tensor_type=dtypes.float32,
+        recv_2 = gen_sendrecv_ops.ipu_recv_at_host(T=dtypes.float32,
                                                    tensor_name="tensor_2",
                                                    send_device="/device:IPU:0",
                                                    send_device_incarnation=0,
@@ -126,7 +126,7 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
       with ops.device("/device:CPU:0"):
         for i in range(L - 1):
           received.append(
-              gen_sendrecv_ops.ipu_recv_at_host(tensor_type=dtype,
+              gen_sendrecv_ops.ipu_recv_at_host(T=dtype,
                                                 tensor_name="x_{}".format(i),
                                                 send_device="/device:IPU:0",
                                                 send_device_incarnation=0,

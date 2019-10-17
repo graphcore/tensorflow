@@ -28,8 +28,8 @@ REGISTER_OP("IpuSendToHost")
     .SetShapeFn(shape_inference::NoOutputs);
 
 REGISTER_OP("IpuRecvAtHost")
-    .Output("tensor: tensor_type")
-    .Attr("tensor_type: type")
+    .Output("tensor: T")
+    .Attr("T: type")
     .Attr("tensor_name: string")
     .Attr("send_device: string")
     .Attr("send_device_incarnation: int")
