@@ -213,6 +213,37 @@ StatusOr<bool> InsertIntraIPUCopiesBetweenStages(HloInstruction* pipeline_op,
 
   return changed;
 }
+
+bool IsOutfeed(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kOutfeed;
+}
+
+StatusOr<bool> InsertIntraIPUCopiesBeforeOutfeed(HloInstruction* pipeline_op) {
+  // Find outfeed instructions in the pipeline computation.
+  auto pipeline_comp = pipeline_op->to_apply();
+  auto instructions = pipeline_comp->MakeInstructionPostOrder();
+  auto itr = std::stable_partition(instructions.begin(), instructions.end(),
+                                   IsOutfeed);
+
+  instructions.erase(itr, instructions.end());
+
+  // Replace the outfeed operand with a copy of that operand.
+  bool changed = false;
+  for (auto outfeed : instructions) {
+    auto operand = outfeed->mutable_operand(0);
+
+    HloInstruction* copy =
+        pipeline_comp->AddInstruction(HloInstruction::CreateUnary(
+            operand->shape(), HloOpcode::kCopy, operand));
+
+    copy->set_sharding(operand->sharding());
+    TF_RETURN_IF_ERROR(operand->ReplaceUseWith(outfeed, copy));
+
+    changed = true;
+  }
+
+  return changed;
+}
 }  // namespace
 
 StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
@@ -228,11 +259,15 @@ StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
   // Insert intra IPU copies between stages that are on the same IPU.
   TF_ASSIGN_OR_RETURN(bool inserted_intra_copies_between_stages,
                       InsertIntraIPUCopiesBetweenStages(pipeline_op, stages));
+  // Insert intra IPU copies before outfeed instructions.
+  TF_ASSIGN_OR_RETURN(bool inserted_intra_copies_before_outfeed,
+                      InsertIntraIPUCopiesBeforeOutfeed(pipeline_op));
   // Insert intra IPU copies for any outputs from the previous stage on the same
   // device.
   TF_ASSIGN_OR_RETURN(bool inserted_intra_copies, InsertIntraIPUCopies(stages));
   return inserted_fwd_copies || inserted_ro_copies || inserted_intra_copies ||
-         inserted_intra_copies_between_stages;
+         inserted_intra_copies_between_stages ||
+         inserted_intra_copies_before_outfeed;
 }
 
 StatusOr<bool> PipelineCopyInserter::Run(HloModule* module) {

@@ -117,6 +117,7 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
  private:
   bool interleave_;
   std::vector<poplar::program::Sequence> copy_sequences_;
+  std::vector<poplar::program::Sequence> inter_ipu_copy_sequences_;
   std::vector<poplar::program::Sequence> fifo_sequences_;
   std::vector<poplar::program::Sequence> infeed_sequences_;
   std::vector<poplar::program::Sequence> outfeed_sequences_;

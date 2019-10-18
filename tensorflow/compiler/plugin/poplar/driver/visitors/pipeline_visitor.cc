@@ -263,7 +263,8 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     HloInstruction* inst = *itr;
     // For an outfeed, assign the stages for the outfeed, its gte operand, and
     // the input token.
-    const HloInstruction* gte = inst->operand(0);
+    const HloInstruction* copy = inst->operand(0);
+    const HloInstruction* gte = copy->operand(0);
     const HloInstruction* token = inst->operand(1);
     int64 stage = result.at(gte->operand(0));
     result[inst] = stage;
@@ -836,6 +837,7 @@ PipelineVisitor::PipelineVisitor(
     : InplaceSubComputationVisitor(res, inputs, dependent_subcomputations),
       interleave_(interleave),
       copy_sequences_(stage_count),
+      inter_ipu_copy_sequences_(stage_count),
       fifo_sequences_(stage_count),
       infeed_sequences_(stage_count),
       outfeed_sequences_(stage_count),
@@ -914,8 +916,11 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
   auto fifo_sequences = ConstructRampUpSchedule(offsets, fifo_sequences_);
   auto recomputation_sequences =
       ConstructRampUpSchedule(offsets, recomputation_sequences_);
+  auto copy_sequences =
+      ConstructSchedule(offsets, copy_sequences_, interleave_);
+  auto inter_ipu_copy_sequences =
+      ConstructSchedule(offsets, inter_ipu_copy_sequences_, interleave_);
   auto outfeed_sequences = ConstructRampUpSchedule(offsets, outfeed_sequences_);
-  auto copy_sequences = ConstructRampUpSchedule(offsets, copy_sequences_);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
@@ -927,10 +932,13 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
   infeed_sequences.insert(infeed_sequences.end(),
                           recomputation_sequences.begin(),
                           recomputation_sequences.end());
-  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
-                          outfeed_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
                           copy_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_ipu_copy_sequences.begin(),
+                          inter_ipu_copy_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
+                          outfeed_sequences.end());
 
   // Flatten the schedule to a linear sequence.
   auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
@@ -967,10 +975,12 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
       ConstructSchedule(offsets, fifo_sequences_, interleave_);
   auto recomputation_sequences =
       ConstructSchedule(offsets, recomputation_sequences_, interleave_);
+  auto copy_sequences =
+      ConstructSchedule(offsets, copy_sequences_, interleave_);
+  auto inter_ipu_copy_sequences =
+      ConstructSchedule(offsets, inter_ipu_copy_sequences_, interleave_);
   auto outfeed_sequences = ConstructRampDownSchedule(
       offsets, outfeed_sequences_, {}, additional_iterations);
-  auto copy_sequences = ConstructRampDownSchedule(offsets, copy_sequences_, {},
-                                                  additional_iterations);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
@@ -982,10 +992,13 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
   infeed_sequences.insert(infeed_sequences.end(),
                           recomputation_sequences.begin(),
                           recomputation_sequences.end());
-  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
-                          outfeed_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
                           copy_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_ipu_copy_sequences.begin(),
+                          inter_ipu_copy_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
+                          outfeed_sequences.end());
 
   // Flatten the schedule to a linear sequence.
   auto repeat_block_sequences = FlattenSchedule(infeed_sequences);
@@ -1022,10 +1035,12 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
       ConstructSchedule(offsets, program_sequences_, interleave_);
   auto recomputation_sequences =
       ConstructSchedule(offsets, recomputation_sequences_, interleave_);
-  auto outfeed_sequences =
-      ConstructSchedule(offsets, outfeed_sequences_, interleave_);
   auto copy_sequences =
       ConstructSchedule(offsets, copy_sequences_, interleave_);
+  auto inter_ipu_copy_sequences =
+      ConstructSchedule(offsets, inter_ipu_copy_sequences_, interleave_);
+  auto outfeed_sequences =
+      ConstructSchedule(offsets, outfeed_sequences_, interleave_);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
@@ -1037,10 +1052,13 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
   infeed_sequences.insert(infeed_sequences.end(),
                           recomputation_sequences.begin(),
                           recomputation_sequences.end());
-  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
-                          outfeed_sequences.end());
   infeed_sequences.insert(infeed_sequences.end(), copy_sequences.begin(),
                           copy_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(),
+                          inter_ipu_copy_sequences.begin(),
+                          inter_ipu_copy_sequences.end());
+  infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
+                          outfeed_sequences.end());
 
   if (!interleave_) {
     for (auto& seq : infeed_sequences) {
@@ -1145,7 +1163,7 @@ Status PipelineVisitor::HandleInterIpuCopy(HloInstruction* hlo) {
       poplar::program::Program prog,
       CreateCustomCallOp(resources_, hlo, hlo->shape(), tensor_map));
 
-  copy_sequences_[stage].add(prog);
+  inter_ipu_copy_sequences_[stage].add(prog);
 
   return Status::OK();
 }

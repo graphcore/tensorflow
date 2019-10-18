@@ -769,7 +769,7 @@ ENTRY pipeline {
       std::accumulate(steps.begin(), steps.end(), 0, overlapped_cycles);
   int total_cycles = std::accumulate(steps.begin(), steps.end(), 0, cycles);
   // Check we overlapped enough cycles. This value was determined empirically
-  ASSERT_GT(((float)total_overlapped_cycles) / total_cycles, 0.53);
+  ASSERT_GT((static_cast<float>(total_overlapped_cycles)) / total_cycles, 0.49);
 }
 
 // This tests that poplar OnTileExecute programs overlap sufficiently for a
