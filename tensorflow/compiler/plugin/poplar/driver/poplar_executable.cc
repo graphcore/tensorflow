@@ -17,13 +17,15 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
+
+#include <fstream>
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
-
-#include <fstream>
 
 namespace xla {
 namespace poplarplugin {
@@ -162,20 +164,26 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   int replication_factor = proto.replication_factor();
 
   InfeedInfos infeeds;
-  for (const auto infeed : proto.infeeds()) {
-    infeeds.push_back(
-        {infeed.stream_prefix(), infeed.config(), Shape(infeed.shape())});
+  for (const auto& infeed : proto.infeeds()) {
+    infeeds.emplace_back(infeed.stream_prefix(), infeed.config(),
+                         Shape(infeed.shape()));
   }
 
   OutfeedInfos outfeeds;
-  for (const auto outfeed : proto.outfeeds()) {
-    outfeeds.push_back(
-        {outfeed.stream_prefix(), outfeed.config(), Shape(outfeed.shape())});
+  for (const auto& outfeed : proto.outfeeds()) {
+    outfeeds.emplace_back(outfeed.stream_prefix(), outfeed.config(),
+                          Shape(outfeed.shape()));
+  }
+
+  SendInfos sends;
+  for (const auto& send : proto.sends()) {
+    sends.emplace_back(send.stream_handle(), send.rendezvous_key(),
+                       Shape(send.shape()));
   }
 
   // Load the poplar compilation options from the serialized executable
   poplar::OptionFlags opts;
-  for (const auto flag : proto.option_flags()) {
+  for (const auto& flag : proto.option_flags()) {
     opts.set(flag.key(), flag.value());
   }
 
@@ -192,12 +200,11 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   auto iomap = InputOutputAliasingMap(hlo_module.get());
 
-  // TODO(hakons): Deserialize send_infos
   auto executable = new PoplarExecutable(
       std::move(hlo_module), std::move(profile_printer),
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
       {}, false, {}, replication_factor, std::move(infeeds),
-      std::move(outfeeds), {}, {}, {});
+      std::move(outfeeds), {}, {}, std::move(sends));
 
   executable->loaded_from_cache_ = true;
 
@@ -238,10 +245,11 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     *(feed->mutable_shape()) = outfeed.shape.ToProto();
   }
 
-  if (!sends.empty()) {
-    // TODO(hakons): Implement this
-    return tensorflow::errors::Unimplemented(
-        "Serialization of executables with send nodes not supported");
+  for (const auto& send : sends) {
+    auto* send_proto = proto.add_sends();
+    send_proto->set_stream_handle(send.stream_handle);
+    send_proto->set_rendezvous_key(send.rendezvous_key);
+    *(send_proto->mutable_shape()) = send.shape.ToProto();
   }
 
   // write the compilation options into the serialized executable

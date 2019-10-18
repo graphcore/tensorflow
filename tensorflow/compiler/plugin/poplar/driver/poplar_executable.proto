@@ -12,6 +12,12 @@ message FeedConfig {
   ShapeProto shape = 3;
 }
 
+message SendConfig {
+  string stream_handle = 1;
+  string rendezvous_key = 2;
+  ShapeProto shape = 3;
+}
+
 message PoplarOptionFlag {
   string key = 1;
   string value = 2;
@@ -33,4 +39,6 @@ message PoplarExecutableProto {
 
   // The OptionFlags which were used during engine compilation
   repeated PoplarOptionFlag option_flags = 5;
+
+  repeated SendConfig sends = 6;
 };

@@ -6,6 +6,7 @@ import tempfile
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
 from tensorflow.compiler.tests import xla_test
 from tensorflow.core.framework import summary_pb2
 from tensorflow.python import ipu
@@ -108,6 +109,41 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       result1, dequeued1, report1 = _run_in_new_process(build_and_run_model)
       self.assertAllEqual(dequeued0, dequeued1)
       self.assertEqual(result0, result1)
+      self.assertEqual(1, _count_ipu_compilations(report0))
+      self.assertEqual(0, _count_ipu_compilations(report1))
+
+  @test_util.deprecated_graph_mode_only
+  def test_model_with_send_to_host_op(self):
+    def build_and_run_model():
+      def my_net(x):
+        return gen_sendrecv_ops.ipu_send_to_host(x,
+                                                 tensor_name="test_tensor",
+                                                 send_device="/device:IPU:0",
+                                                 send_device_incarnation=0,
+                                                 recv_device="/device:CPU:0")
+
+      v = array_ops.placeholder(np.float32, shape=())
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        send_op = ipu.ipu_compiler.compile(my_net, inputs=[v])
+      with ops.device("/device:CPU:0"):
+        recv_op = gen_sendrecv_ops.ipu_recv_at_host(
+            T=np.float32,
+            tensor_name="test_tensor",
+            send_device="/device:IPU:0",
+            send_device_incarnation=0,
+            recv_device="/device:CPU:0")
+
+      compile_report = ipu_compile_summary("compile_report", send_op)
+
+      tu.configure_ipu_system()
+      with session.Session() as sess:
+        return sess.run([send_op, recv_op, compile_report], feed_dict={v: 1.0})
+
+    with _temporary_executable_cache_path():
+      _, received0, report0 = _run_in_new_process(build_and_run_model)
+      _, received1, report1 = _run_in_new_process(build_and_run_model)
+      self.assertEqual(received0, received1)
+      self.assertEqual(received0, 1.0)
       self.assertEqual(1, _count_ipu_compilations(report0))
       self.assertEqual(0, _count_ipu_compilations(report1))
 
