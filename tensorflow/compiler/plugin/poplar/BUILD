@@ -2845,6 +2845,19 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "executable_cache_test",
+    size = "small",
+    srcs = ["tests/executable_cache_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "logging_example_1",
     size = "small",
     srcs = ["docs/logging_example_1.py"],
@@ -3169,9 +3182,10 @@ test_suite(
 test_suite(
     name = "hardware_tests",
     tests = [
-        ":replicated_tests",
         ":dropout_hw_test",
-        ":random_ops"
+        ":executable_cache_test",
+        ":random_ops",
+        ":replicated_tests",
     ],
 )
 
