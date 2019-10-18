@@ -1,3 +1,17 @@
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -75,7 +89,7 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
   }
 
   // Create a concatenated and flattened tensor of the input tensors.
-  auto t = FlattenAndConcatenteTensors(tensors_to_copy);
+  auto t = FlattenAndConcatenateTensors(tensors_to_copy);
 
   t = poputil::copyToIpu(GetMasterGraph(res), t, seq, *std::begin(dst_devices),
                          GetDebugName(inst),

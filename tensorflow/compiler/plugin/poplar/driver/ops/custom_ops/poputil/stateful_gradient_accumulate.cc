@@ -67,7 +67,7 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
       input_tensors[i] = inputs[i][0];
     }
     // Create a concatenated and flattened tensor of the input tensors.
-    poplar::Tensor input = FlattenAndConcatenteTensors(input_tensors);
+    poplar::Tensor input = FlattenAndConcatenateTensors(input_tensors);
     poplar::Tensor counter = graph.addVariable(poplar::UNSIGNED_INT, {},
                                                GetDebugName(inst) + "/Counter");
     // Map counter to the next tile.

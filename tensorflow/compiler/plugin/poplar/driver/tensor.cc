@@ -192,13 +192,32 @@ std::vector<size_t> PoplarShapeFromXlaShape(const xla::Shape& xla_shape) {
   return shape;
 }
 
-poplar::Tensor FlattenAndConcatenteTensors(
+poplar::Tensor FlattenAndConcatenateTensors(
     const std::vector<poplar::Tensor>& tensors) {
   std::vector<poplar::Tensor> flat_tensors(tensors.size());
   absl::c_transform(
       tensors, flat_tensors.begin(),
       [&](const poplar::Tensor& tensor) { return tensor.flatten(); });
   return poplar::concat(flat_tensors);
+}
+
+StatusOr<poplar::Tensor> SliceTensor(
+    poplar::Tensor tensor_to_slice,
+    const HloInstruction::InstructionVector& slices, int64 slice_index,
+    int64 dimension) {
+  size_t offset = 0;
+  for (auto slice : slices) {
+    if (!slice->shape().IsArray()) {
+      return xla::FailedPrecondition("SliceTensor - Shape not supported.");
+    }
+    const size_t tensor_size = slice->shape().dimensions(dimension);
+    if (slice_index == 0) {
+      return tensor_to_slice.slice(offset, offset + tensor_size, dimension);
+    }
+    offset += tensor_size;
+    slice_index--;
+  }
+  return xla::InvalidArgument("Slice index out of bounds");
 }
 
 std::vector<poplar::Tensor> SliceTensorIntoTensorsLike(
@@ -351,10 +370,21 @@ static StatusOr<std::size_t> FindSeqDim(const xla::Shape& shape_xla,
       "Cannot compute slice sequence dimension");
 }
 
+StatusOr<int64> GetSliceIndex(const HloInstruction* inst,
+                              const HloInstruction* slice) {
+  for (auto operand = inst->operands().begin();
+       operand != inst->operands().end(); operand++) {
+    if (*operand == slice) {
+      return operand - inst->operands().begin();
+    }
+  }
+  return xla::InternalError("Failed to find slice in operands");
+}
+
 static StatusOr<poplar::Tensor> PathTransform(
-    poplar::Graph& graph, poplar::Tensor in,
+    poplar::Graph& graph, poplar::Tensor in, int64 input_index,
     const std::vector<const HloInstruction*>& path) {
-  // Now apply any transformations required by the path from the source to
+  // Now revert any transformations required by the path from the source to
   // the target
 
   for (auto i = path.rbegin(); i != path.rend(); ++i) {
@@ -387,6 +417,18 @@ static StatusOr<poplar::Tensor> PathTransform(
         in = graph.clone(poplar_type, in, GetDebugName(inst));
         break;
       }
+      case HloOpcode::kConcatenate: {
+        if (i + 1 == path.rend()) {
+          return xla::FailedPrecondition("Can't find concatenate source");
+        }
+        TF_ASSIGN_OR_RETURN(auto slice_index, GetSliceIndex(inst, *(i + 1)));
+        TF_ASSIGN_OR_RETURN(in, SliceTensor(in, inst->operands(), slice_index,
+                                            inst->concatenate_dimension()));
+        TF_ASSIGN_OR_RETURN(auto poplar_type,
+                            PoplarDataType(inst->operand(0)->shape()));
+        in = graph.clone(poplar_type, in, GetDebugName(inst));
+        break;
+      };
       default: {
         // All other instructions in the path do not modify the shape
         break;
@@ -430,6 +472,10 @@ static StatusOr<poplar::Tensor> ReversePathTransform(
         TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(inst->shape()));
         in = graph.clone(poplar_type, in, GetDebugName(inst));
         break;
+      }
+      case HloOpcode::kConcatenate: {
+        return xla::FailedPrecondition(
+            "ReversePathTransform - Concatenante not supported");
       }
       default: {
         // All other instructions in the path do not modify the shape
@@ -1159,8 +1205,8 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
     }
   }
 
-  TF_ASSIGN_OR_RETURN(out,
-                      PathTransform(graph, out, tensor_target.backward_path));
+  TF_ASSIGN_OR_RETURN(
+      out, PathTransform(graph, out, input_index, tensor_target.backward_path));
   return out;
 }
 
@@ -1663,18 +1709,18 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
   //
   // For example:
   // t = tuple(x, y, x, x, z)
-  // Here x is used thrice, at indices 0, 2 and 3. We therefore allow the first
-  // occurrence (index 0) to be inplace and we add copies for all other
+  // Here x is used thrice, at indices 0, 2 and 3. We therefore allow the
+  // first occurrence (index 0) to be inplace and we add copies for all other
   // occurrences (index 2 and 3).
   //
   // We keep a vector which keeps track whether the tuple inplace
-  // operand at index `i` is used at some other inplace index `j` and therefore
-  // requires a copy.
+  // operand at index `i` is used at some other inplace index `j` and
+  // therefore requires a copy.
   std::vector<bool> tuple_repeated_use(inplace_indexes.size(), false);
   if (inst->opcode() == HloOpcode::kTuple) {
-    // Go through all the indices, and for operand and index `i`, find all other
-    // occurrences of that operand (set K).
-    // Then we need to do a copy for all operands indices K - {i}.
+    // Go through all the indices, and for operand and index `i`, find all
+    // other occurrences of that operand (set K). Then we need to do a copy
+    // for all operands indices K - {i}.
 
     // Keep a set of indices which we have already made the decision for.
     absl::flat_hash_set<int64> visited_indices;

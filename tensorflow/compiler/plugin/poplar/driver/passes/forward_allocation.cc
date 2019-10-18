@@ -139,6 +139,7 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path) {
       }
     }
     switch (inst->opcode()) {
+      case HloOpcode::kConcatenate:
       case HloOpcode::kReshape:
       case HloOpcode::kTranspose:
         return output_and_all_operands_same_type(inst);

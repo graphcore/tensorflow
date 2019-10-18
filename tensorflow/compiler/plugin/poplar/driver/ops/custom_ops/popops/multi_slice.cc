@@ -45,9 +45,8 @@ StatusOr<poplar::Tensor> CreateUpdatesTensor(
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(xla_updates_shape));
   std::vector<size_t> indices_shape =
       PoplarShapeFromXlaShape(xla_indices_shape);
-  const auto num_indices =
-      std::accumulate(indices_shape.begin(), indices_shape.end(),
-                      std::size_t(1), std::multiplies<std::size_t>());
+  const auto num_indices = absl::c_accumulate(indices_shape, std::size_t(1),
+                                              std::multiplies<std::size_t>());
   poplar::Tensor out = popops::createSliceTensor(
       graph, type, PoplarShapeFromXlaShape(xla_input_shape), {0}, {1},
       num_indices, plan, {}, name);

@@ -140,7 +140,7 @@ TensorsWithLayouts GetAllLayoutsInPath(const TensorSource& source,
       }
       default: { break; }
     }
-    ops_with_layout.insert(std::make_pair(user, tuple_index));
+    ops_with_layout.insert(TensorSource(user, tuple_index));
     parent = user;
   }
   return ops_with_layout;
@@ -148,15 +148,17 @@ TensorsWithLayouts GetAllLayoutsInPath(const TensorSource& source,
 
 void AllocationFinder::AddTensorTarget(const TensorSource& source,
                                        const TensorTarget& tensor_target) {
+  // Insert only if the source is not already in the map.
   tensor_allocation_map.insert(std::make_pair(source, tensor_target));
   auto ops_with_layout = GetAllLayoutsInPath(source, tensor_target);
   absl::c_copy(ops_with_layout,
                std::inserter(tensors_with_layout, tensors_with_layout.end()));
 }
 
-bool AllocationFinder::CompareTargets(const TensorTarget& a,
-                                      const TensorTarget& b) {
-  return IsTrainingForward(a.tgt) && !IsTrainingForward(b.tgt);
+bool AllocationFinder::CompareTargets(const TensorTarget& new_target,
+                                      const TensorTarget& existing_target) {
+  return IsTrainingForward(new_target.tgt) &&
+         !IsTrainingForward(existing_target.tgt);
 }
 
 void AllocationFinder::FindConsumers(const TensorSource& src,
@@ -305,6 +307,10 @@ void AllocationFinder::FindConsumers(const TensorSource& src,
           break;
         }
         case HloOpcode::kConvert: {
+          FindConsumers(src, user, index);
+          break;
+        }
+        case HloOpcode::kConcatenate: {
           FindConsumers(src, user, index);
           break;
         }

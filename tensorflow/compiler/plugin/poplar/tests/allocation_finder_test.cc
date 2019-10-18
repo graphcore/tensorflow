@@ -3235,7 +3235,7 @@ ENTRY cast1 {
   %p1 = f16[1,16,16,2] parameter(1)
   %p2 = f16[3,3,2,4] parameter(2)
   %add = f16[1,16,16,2] add(%p0, %p1)
-  %p3 = f16[1,16,16,2] convert(%p0) 
+  %p3 = f16[1,16,16,2] convert(%p0)
   %conv = f16[1,16,16,4] convolution(%p3, %p2), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
   ROOT %t = (f16[1,16,16,4], f16[1,16,16,2]) tuple(%conv, %add)
 }
@@ -3291,7 +3291,7 @@ HloModule top
 ENTRY cast2 {
   %a = f16[1,16,16,2] parameter(0)
   %b = f32[3,3,2,4] parameter(1)
-  %c_cast = f16[3,3,2,4] convert(%b)   
+  %c_cast = f16[3,3,2,4] convert(%b)
   %d_conv = f16[1,16,16,4] convolution(%a, %c_cast), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
   %e = f32[1,16,16,4] parameter(2)
   %f_cast = f16[1,16,16,4] convert(%e)
@@ -3413,9 +3413,9 @@ HloModule top
 ENTRY cast4 {
   %a = f16[1,16,16,2] parameter(0)
   %b = f32[3,3,2,4] parameter(1)
-  %c_cast = f16[3,3,2,4] convert(%b)   
+  %c_cast = f16[3,3,2,4] convert(%b)
   %d_conv = f16[1,16,16,4] convolution(%a, %c_cast), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
-  %d_conv_cast = f32[1,16,16,4] convert(%d_conv) 
+  %d_conv_cast = f32[1,16,16,4] convert(%d_conv)
   %e = f16[1,16,16,4] parameter(2)
   %f_cast = f32[1,16,16,4] convert(%e)
   %g_add = f32[1,16,16,4] add(%d_conv_cast, %f_cast)
@@ -3509,6 +3509,63 @@ ENTRY cast4 {
   EXPECT_TRUE(allocation_map.count(std::make_pair(remap_deduce, 0)) == 1);
   EXPECT_TRUE(allocation_map.count(std::make_pair(a, 0)) == 1);
   EXPECT_TRUE(allocation_map.count(std::make_pair(e, 0)) == 1);
+}
+
+TEST_F(AllocationFinderTest, AllocationsWithConcat) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY main {
+  %p0 = f32[1,16,16,2] parameter(0)
+  %p1 = f16[1,16,16,2] parameter(1)
+  %p2 = f16[3,3,2,2] parameter(2)
+  %add = f16[1,16,16,2] add(%p0, %p1)
+  %c0 = f16[3,3,2,4] concatenate(%p2, %p2), dimensions={3}
+  %conv = f16[1,16,16,4] convolution(%p0, %c0), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
+  ROOT %t = (f16[1,16,16,4], f16[1,16,16,2]) tuple(%conv, %add)
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(3);
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1, 2});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* conv = root->operand(0);
+  const auto* ip0 = conv->operand(0);
+  const auto* ip2 = conv->operand(1)->operand(0);
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], ip0);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path[0], ip2);
+
+  auto tensors_with_layout = annotations.tensors_with_layout;
+  EXPECT_EQ(tensors_with_layout.size(), 3);
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 // // TODO:
