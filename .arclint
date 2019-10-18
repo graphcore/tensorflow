@@ -13,7 +13,10 @@
             "include": [
                  "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
                  "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
-            ]
+            ],
+            "severity": {
+              "runtime/references": "advice"
+            }
         },
         "yapf": {
             "type": "yapf",
