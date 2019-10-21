@@ -34,6 +34,9 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.compat.v1 import disable_v2_behavior
+
+disable_v2_behavior()
 
 
 def next_feed_id():

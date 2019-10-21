@@ -32,6 +32,9 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu.tests import pipelining_test_util
+from tensorflow.compat.v1 import disable_v2_behavior
+
+disable_v2_behavior()
 
 
 class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):

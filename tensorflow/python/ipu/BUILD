@@ -447,6 +447,7 @@ tf_py_test(
     size = "small",
     srcs = ["tests/utils_test.py"],
     additional_deps = [
+        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/compiler/xla:compiler_py",

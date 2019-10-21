@@ -45,6 +45,9 @@ from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.tests import pipelining_test_util
+from tensorflow.compat.v1 import disable_v2_behavior
+
+disable_v2_behavior()
 
 
 class PipeliningTest(test_util.TensorFlowTestCase):

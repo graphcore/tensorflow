@@ -23,6 +23,9 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
+from tensorflow.compat.v1 import disable_v2_behavior
+
+disable_v2_behavior()
 
 
 def count_compile_end_events(events):

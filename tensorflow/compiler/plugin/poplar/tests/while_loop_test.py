@@ -26,7 +26,10 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import momentum
 from tensorflow.python.platform import googletest
+from tensorflow.compat.v1 import disable_v2_behavior
 import tensorflow as tf
+
+disable_v2_behavior()
 
 
 class WhileLoopTest(xla_test.XLATestCase):

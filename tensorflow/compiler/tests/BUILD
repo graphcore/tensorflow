@@ -991,6 +991,7 @@ tf_xla_py_test(
     use_xla_device = False,
     deps = [
         ":xla_test",
+        "//tensorflow:tensorflow_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",

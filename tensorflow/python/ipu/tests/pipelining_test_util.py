@@ -30,6 +30,7 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
+from tensorflow.compat.v1 import data as compat_v1_data
 
 
 def next_feed_id():
@@ -49,7 +50,8 @@ class PipelineTester(object):
     with variable_scope.variable_scope("cpu", use_resource=True, reuse=False):
 
       def pipeline(*args):
-        iterator = dataset.make_one_shot_iterator()
+        # TF2 replacement for: iterator = dataset.make_one_shot_iterator()
+        iterator = compat_v1_data.make_one_shot_iterator(dataset)
         next_example, next_label = iterator.get_next()
         outputs = pipelining_ops._convert_to_list(args)  # pylint: disable=W0212
         outputs.append(next_example)

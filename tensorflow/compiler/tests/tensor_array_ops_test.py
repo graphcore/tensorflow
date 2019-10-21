@@ -37,7 +37,9 @@ from tensorflow.python.ops import tensor_array_grad  # pylint: disable=unused-im
 from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
+from tensorflow.compat.v1 import disable_v2_behavior
 
+disable_v2_behavior()
 
 def _make_converter(dtype):
   def _converter(x):

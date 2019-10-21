@@ -45,6 +45,9 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
 from tensorflow.python.training.momentum import MomentumOptimizer
 from tensorflow.python.training.monitored_session import MonitoredTrainingSession
+from tensorflow.compat.v1 import disable_v2_behavior
+
+disable_v2_behavior()
 
 
 class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
