@@ -44,7 +44,7 @@ class DropoutOp : public PoplibsOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
-                                             const xla::Shape&,
+                                             const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
     // Seed the random number generator exactly once. If we don't wrap it we
     // will likely be seeding it with the same value as subsequent calls to this
@@ -146,6 +146,17 @@ class DropoutOp : public PoplibsOpDef {
     poplar::Tensor final_output =
         poprand::dropout(graph, &as_unsgined, seed_modifier, input, reference,
                          rate, scale, seq, GetDebugName(inst));
+
+    // If this operation has an allocation target allocate a tensor of that
+    // layout and copy the result into it after the random numbers have been
+    // generated.
+    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+      TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
+                          AddTensor(graph, std::make_pair(inst, 0),
+                                    output_shape, res, tensor_map));
+      seq.add(poplar::program::Copy(final_output, new_out));
+      final_output = new_out;
+    }
 
     // Mark that tensor as our output.
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, final_output));
