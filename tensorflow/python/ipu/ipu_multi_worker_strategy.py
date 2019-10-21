@@ -13,8 +13,8 @@
 # limitations under the License.
 # ===================================================================
 """
-IPUMultiWorkerStrategy
-~~~~~~~~~~~~~~~~~~~~~~
+Distributed training with IPUs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from __future__ import absolute_import
@@ -38,7 +38,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   """This is a distribution strategy for synchronous training using
   IPUs on multiple workers with between-graph replication.
 
-  It places variables on the host device of each worker, and does
+  It places variables on the host device of each worker, and uses
   multi-worker all-reduce to to keep the variables in sync, using
   TensorFlow's implementation of collective operations over gRPC.
 
@@ -53,14 +53,22 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   updates to their copies of the variables. In other words,
   `optimizer.compute_gradients()` is done on the device, while
   `optimizer.apply_gradients()` is done on the host. All the "slot"
-  variables used by the optimizer (e.g. the accumulator in momentum)
+  variables used by the optimizer (e.g. the momentum accumulator)
   are kept only in host memory and never used on the device, saving
   device memory.
 
-  It does not yet work with the `IPUEstimator` which tries to compile
-  one big XLA cluster for everything, which conflicts with how this
-  strategy will split out the `optimizer.apply_gradients()` part and
-  place it on the host.
+  The default behavior is to sync (allreduce) the variables when
+  they are written (sync-on-write). This is a good choice when
+  reads are at least as common as writes. However, for variables
+  where writes are more common than reads (like metrics or population
+  statistics in batch normalization layers), it is beneficial to
+  only sync (allreduce) the variables when they are read
+  (sync-on-read). In both cases, it is important that all the workers
+  participate in the sync, otherwise progress will be blocked.
+  Take special care in the latter case (with sync-on-read variables),
+  because it implies that all the workers need to read these variables
+  at the same time. For example, it implies that all the workers must
+  checkpoint the model at the same time.
   """
   def __init__(self, cluster_resolver):
     super(IPUMultiWorkerStrategy,

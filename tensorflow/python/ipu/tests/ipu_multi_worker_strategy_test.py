@@ -22,6 +22,7 @@ from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import cross_device_utils
+from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import multi_worker_test_base
 from tensorflow.python.distribute import multi_worker_util
 from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
@@ -461,6 +462,10 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       w = variable_scope.get_variable(name="w", initializer=initial_w)
       predictions = features * w
       loss = losses.mean_squared_error(labels=labels, predictions=predictions)
+
+      # Note: According to some comments, this might be subject to change in TF2.
+      # Remember to update documentation and examples when this happens.
+      self.assertEqual(ReduceOp.MEAN, distribute_lib.get_loss_reduction())
 
       with ops.name_scope("compute_gradients"):
         grads_and_vars = optimizer.compute_gradients(loss)

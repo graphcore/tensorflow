@@ -31,6 +31,10 @@ Python API
   :members:
   :noindex:
 
+.. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
+  :members: IPUMultiWorkerStrategy
+  :noindex:
+
 .. automodule:: tensorflow.python.ipu.loops
   :members:
   :noindex:

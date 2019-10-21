@@ -2880,6 +2880,17 @@ tf_xla_py_test(
 )
 
 py_test(
+    name = "distributed_training_example",
+    size = "large",
+    srcs = ["docs/distributed_training_example.py"],
+    args = ["--num-steps=100"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+py_test(
     name = "ipu_estimator_example",
     size = "large",
     srcs = ["docs/ipu_estimator_example.py"],
@@ -3140,6 +3151,7 @@ test_suite(
 test_suite(
     name = "doc_examples",
     tests = [
+        "distributed_training_example",
         "ipu_estimator_example",
         "logging_example_1",
         "perf_training_example",

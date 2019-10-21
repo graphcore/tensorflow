@@ -531,7 +531,7 @@ class IPUEstimator(estimator_lib.Estimator):
   data feeds. It also provides a simple way to use multiple IPUs in the
   form of either data parallelism or model parallelism.
 
-  For efficency, it supports compiling a graph that contains multiple
+  For efficiency, it supports compiling a graph that contains multiple
   iterations of the training/prediction/evaluation loop, which will be
   fully executed on the IPU before yielding back to the TensorFlow
   Python runtime on the CPU.
