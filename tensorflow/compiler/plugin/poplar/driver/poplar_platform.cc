@@ -48,6 +48,7 @@ namespace poplarplugin {
 
 PoplarPlatform::PoplarPlatform() : name_("Poplar") {
   VLOG(1) << "Poplar version: " << poplar::versionString()
+          << " Poplar package: " << poplar::packageHash()
           << " Poplar Tensorflow version: " << tf_git_version() << ")";
 }
 
@@ -115,13 +116,8 @@ StatusOr<std::unique_ptr<se::DeviceDescription>>
 PoplarPlatform::DescriptionForDevice(int ordinal) const {
   se::internal::DeviceDescriptionBuilder builder;
 
-  std::string tf_poplar_build_tag = TOSTRING(TF_POPLAR_BUILD_TAG);
-
   builder.set_name("Poplar");
-  const auto version = poplar::versionString() +
-                       " (Poplar package: " + poplar::packageHash() +
-                       ") (Tensorflow package: " + tf_poplar_build_tag + ")";
-  builder.set_platform_version(version);
+  builder.set_platform_version("");
 
   return builder.Build();
 }
