@@ -272,14 +272,29 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     result[token] = stage;
   }
 
+  // Partition out the Inter IPU copies and also assign stage to their operands.
+  auto inter_ipu_copies_end = std::stable_partition(
+      outfeeds_end, instructions.end(), IsIpuInterCopyInstruction());
+  for (auto itr = outfeeds_end; itr != inter_ipu_copies_end; ++itr) {
+    HloInstruction* inst = *itr;
+    // Assign stages to the operands of the inter IPU copy.
+    for (HloInstruction* operand : inst->operands()) {
+      CHECK_EQ(operand->opcode(), HloOpcode::kGetTupleElement);
+      result[operand] = get_stage_from_operands(operand);
+    }
+    // Then assign it to the copy.
+    result[inst] = get_stage_from_operands(inst);
+  }
+
   // Partition out GTEs which have not been assigned a stage - these are
   // assigned to the same stage as their input.
   auto gtes_end = std::stable_partition(
-      outfeeds_end, instructions.end(), [&result](const HloInstruction* inst) {
+      inter_ipu_copies_end, instructions.end(),
+      [&result](const HloInstruction* inst) {
         return HasHloOpcode(HloOpcode::kGetTupleElement)(inst) &&
                !result.contains(inst);
       });
-  for (auto itr = outfeeds_end; itr != gtes_end; ++itr) {
+  for (auto itr = inter_ipu_copies_end; itr != gtes_end; ++itr) {
     HloInstruction* inst = *itr;
     result[inst] = get_stage_from_operands(inst);
   }
