@@ -15,7 +15,8 @@
                  "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
             ],
             "severity": {
-              "runtime/references": "advice"
+              "runtime/references": "advice",
+              "build/c++11": "disabled"
             }
         },
         "yapf": {
