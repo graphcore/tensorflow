@@ -217,23 +217,43 @@ void DumpIfPoplarOutOfMemoryAllocationException(
     } catch (const poplar::graph_memory_allocation_error& p_e) {
       if (p_e.graphProfile.type() == poplar::ProfileValue::Type::MAP &&
           p_e.graphProfile.size() != 0) {
+        auto opts = poplarExecutor->GetReportFlags();
+        SetFlagIfNotPresent(opts, "showVarStorage", "true");
+
+        // Always produce a text report
         std::ofstream stream(dump_filename);
         if (!stream) {
           LOG(WARNING) << "Unable to open file " << dump_filename
                        << ", the profiler summary will not be saved.";
         } else {
-          if (poplarExecutor->CompilerReportingTextFormat()) {
-            auto opts = poplarExecutor->GetReportFlags();
-            SetFlagIfNotPresent(opts, "showVarStorage", "true");
-            poplar::printGraphSummary(stream, p_e.graphProfile, opts);
-          } else if (poplarExecutor->CompilerReportingCborFormat()) {
-            poplar::serializeToCBOR(stream, p_e.graphProfile);
-          } else {
-            poplar::serializeToJSON(stream, p_e.graphProfile);
-          }
+          poplar::printGraphSummary(stream, p_e.graphProfile, opts);
+          LOG(INFO) << "Out of memory summary saved to " << dump_filename
+                    << ".txt.";
+        }
 
-          LOG(INFO) << "Profile summary has been saved to " << dump_filename
-                    << ".";
+        if (!poplarExecutor->CompilerReportingTextFormat()) {
+          // Produce binary file
+          if (poplarExecutor->CompilerReportingCborFormat()) {
+            std::ofstream cbor_stream(dump_filename + ".cbor");
+            if (!cbor_stream) {
+              LOG(WARNING) << "Unable to open file " << dump_filename
+                           << ".cbor , the profiler summary will not be saved.";
+            } else {
+              poplar::serializeToCBOR(cbor_stream, p_e.graphProfile);
+              LOG(INFO) << "Out of memory CBOR profile saved to "
+                        << dump_filename << ".cbor.";
+            }
+          } else {
+            std::ofstream js_stream(dump_filename + ".js");
+            if (!js_stream) {
+              LOG(WARNING) << "Unable to open file " << dump_filename
+                           << ".js , the profiler summary will not be saved.";
+            } else {
+              poplar::serializeToJSON(js_stream, p_e.graphProfile);
+              LOG(INFO) << "Out of memory JSON profile saved to "
+                        << dump_filename << ".js.";
+            }
+          }
         }
       }
     }

@@ -16,9 +16,9 @@ parts of the graph which will be compiled.  For most graphs, the function
 ``ipu_compiler.compile()`` must be used.  This must be placed inside an IPU
 device scope.
 
-The function ``ipu_compiler.compile()`` will cause all operations created by the
-python function passed into its first argument to be placed on the IPU system,
-and be compiled together into a single Poplar executable.
+The function ``ipu_compiler.compile()`` will cause all operations created by
+the python function passed into its first argument to be placed on the IPU
+system, and be compiled together into a single Poplar executable.
 
 Supported types
 ~~~~~~~~~~~~~~~
@@ -78,8 +78,8 @@ They are divided into roughly three categories.
 2) IO control.
 3) Graph creation.
 
-In addition to ``auto_select_ipus`` and ``select_ipus``, several other functions
-exist for configuring the hardware and compiler.
+In addition to ``auto_select_ipus`` and ``select_ipus``, several other
+functions exist for configuring the hardware and compiler.
 
 * ``set_compilation_options`` sets general options to be passed to the Poplar
   compiler.
@@ -100,9 +100,9 @@ More options are available on the ``create_ipu_config`` function itself. These
 mostly control specific features of the Poplar and poplibs operations.
 
 * ``max_scheduler_lookahead_depth`` controls how far the scheduler can look
-  beyond a given scheduling decision to understand the max-liveness implications.
-  This search space grows very quickly and can take an unacceptable amount of
-  time for large ``max_scheduler_lookahead_depth``.
+  beyond a given scheduling decision to understand the max-liveness
+  implications. This search space grows very quickly and can take an
+  unacceptable amount of time for large ``max_scheduler_lookahead_depth``.
 * ``max_scheduler_search_space_size`` introduces an upper-limit to the size of
   the schedule search space to guarantee that it will terminate in a reasonable
   amount of time.
@@ -151,8 +151,10 @@ constant value X (synthetic_data_initializer=X)
 ``--max_compilation_threads`` sets the maximum number of threads which Poplar
 is allowed to use for compiling the executable.
 
-``--save_oom_profiler`` specifies a file where the compilation profile will be
-stored in the event of an out-of-memory when compiling.
+``--save_oom_profiler`` specifies a file base where the compilation profile
+will be stored in the event of an out-of-memory when compiling.  A Poplar
+text summary will be written to <base>.txt, and either a JSON or CBOR profile
+will be written to <base>.[js|cbor].
 
 ``--save_vertex_graph`` dumps the Poplar vertex graph (DOT file) to the given
 directory.
@@ -173,9 +175,10 @@ the GraphCore specific one.
 
 ``--allow_nans`` will allow NaNs.
 
-``--log_cycle_count`` will log the number of cycles used in evaluating the main graph.
-The numeric argument indicates on which tile the cycle count operation will be created.
-This may be used as an alternative to profiling for graphs with dynamic control flow.
+``--log_cycle_count`` will log the number of cycles used in evaluating the
+main graph. The numeric argument indicates on which tile the cycle count
+operation will be created. This may be used as an alternative to profiling
+for graphs with dynamic control flow.
 
 The options can be used at the same time by treating them as command line
 switches, eg. ``--executable_cache_path=/tmp/cache --allow_nans``
@@ -218,8 +221,8 @@ supported. For instance, ``JpegDecode``.
 
 Unsupported operations will cause the compilation to fail. By including
 ``config=tf.ConfigProto(log_device_placement=True)`` as an argument to the
-creation of the session, you can check whether the operations in your graph have
-been targeted at the Poplar device:
+creation of the session, you can check whether the operations in your graph
+have been targeted at the Poplar device:
 
 .. code-block:: python
 
