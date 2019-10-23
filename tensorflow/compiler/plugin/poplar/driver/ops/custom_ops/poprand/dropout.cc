@@ -111,31 +111,23 @@ class DropoutOp : public PoplibsOpDef {
       // iteration.
       poplar::Tensor temp_seed =
           global_seed_tensor.reinterpret(poplar::UNSIGNED_INT);
-      poplar::Tensor increment_tensor = poprand::uniform(
-          graph, nullptr, 0, global_seed_tensor, poplar::INT,
-          std::numeric_limits<std::int32_t>::min(),
-          std::numeric_limits<std::int32_t>::max(), seq, GetDebugName(inst));
 
+      // Also add the IPU number so each replica has a different seed.
+      poplar::Tensor indexConstant =
+          graph.addReplicationIndexConstant().reshape({1});
+      graph.setTileMapping(indexConstant, 0);
+
+      if (indexConstant.elementType() == poplar::UNSIGNED_INT) {
+        indexConstant = indexConstant.reinterpret(poplar::INT);
+      }
+
+      poplar::Tensor one_tensor = graph.addConstant(poplar::INT, {1}, 1);
+      graph.setTileMapping(one_tensor, 0);
+
+      auto increment_tensor = poplar::concat(indexConstant, one_tensor);
       popops::addInPlace(graph, global_seed_tensor, increment_tensor, seq,
                          GetDebugName(inst) + "/AddIncrement");
       seed_to_use = &global_seed_tensor;
-
-      // Also add the IPU number so each replica has a different seed.
-      if (res.replication_factor > 1) {
-        poplar::Tensor indexConstant = graph.addReplicationIndexConstant();
-
-        if (indexConstant.elementType() == poplar::UNSIGNED_INT) {
-          indexConstant = indexConstant.reinterpret(poplar::INT);
-        }
-
-        // Multiply each element in the incrementing tensor by the replication
-        // factor to give each factor a different value.
-        popops::mulInPlace(graph, increment_tensor, indexConstant, seq,
-                           GetDebugName(inst) + "/MultiplyIncByReplica");
-
-        popops::addInPlace(graph, global_seed_tensor, indexConstant, seq,
-                           GetDebugName(inst) + "/AddReplicaId");
-      }
     }
 
     // Dropout expects an unsigned int but tensorflow takes in int32 when
