@@ -14,6 +14,9 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
+
+#include <set>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
@@ -125,7 +128,10 @@ HloInstruction* FindOperand(HloInstruction* inst,
       // We look through FIFO ops
       source = source->mutable_operand(0);
     } else if (IsInstructionType<HloIpuInterCopy>(source)) {
-      // We look through inter-ipu copy ops
+      // We look through inter-ipu copy ops.
+      source = source->mutable_operand(0);
+    } else if (IsPopOpsFusion(source, "zero_pad")) {
+      // We look through zero pads.
       source = source->mutable_operand(0);
     } else {
       done = true;
@@ -222,29 +228,26 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
     arg0_set.insert(it.first);
   }
 
-  std::set<HloInstruction*> fwd;
-  std::set<HloInstruction*> wu;
-
   for (auto it : arg0_set) {
-    if (arg0_fwd_map.count(it) > 1) {
-      const auto& targets = arg0_fwd_map.equal_range(it);
+    std::set<HloInstruction*> fwd;
+    std::set<HloInstruction*> wu;
+    const auto& targets = arg0_fwd_map.equal_range(it);
 
-      for (auto t = targets.first; t != targets.second; ++t) {
-        auto* arg0 = t->second->operand(operands.at(t->second).first);
-        if (IsArg1Gradient(t->second, arg0)) {
-          wu.insert(t->second);
-        } else {
-          fwd.insert(t->second);
-        }
+    for (auto t = targets.first; t != targets.second; ++t) {
+      auto* arg0 = t->second->operand(operands.at(t->second).first);
+      if (IsArg1Gradient(t->second, arg0)) {
+        wu.insert(t->second);
+      } else {
+        fwd.insert(t->second);
       }
+    }
 
-      if (fwd.size() > 0 && wu.size() > 0) {
-        for (HloInstruction* i : fwd) {
-          classifications[i] = MLType::TRAINING_FWD;
-        }
-        for (HloInstruction* i : wu) {
-          classifications[i] = MLType::TRAINING_WU;
-        }
+    if (fwd.size() > 0 && wu.size() > 0) {
+      for (HloInstruction* i : fwd) {
+        classifications[i] = MLType::TRAINING_FWD;
+      }
+      for (HloInstruction* i : wu) {
+        classifications[i] = MLType::TRAINING_WU;
       }
     }
   }
@@ -266,6 +269,7 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
     HloInstruction* mapped = annotations_.flattened_inst_map_bwd.at(it.first);
     TF_RETURN_IF_ERROR(SetInstructionMLType(mapped, it.second));
   }
+
   if (VLOG_IS_ON(2)) {
     for (const auto& it : classifications) {
       VLOG(2) << it.first->name() << " : " << MLType_Name(it.second);
