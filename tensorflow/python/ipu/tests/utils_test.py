@@ -63,6 +63,37 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.auto_select_ipus(cfg, [1, 1])
     self.assertTrue(isinstance(cfg, IpuOptions))
     self.assertTrue(len(cfg.device_config), 2)
+    self.assertFalse(cfg.floating_point_behaviour.flags_set)
+
+    cfg = ipu.utils.set_floating_point_behaviour_options(cfg)
+    self.assertTrue(cfg.floating_point_behaviour.flags_set)
+
+    self.assertFalse(cfg.enable_matmul_combiner)
+    cfg = ipu.utils.set_optimization_options(cfg, combine_matmuls=True)
+    self.assertTrue(cfg.enable_matmul_combiner)
+
+    self.assertFalse(cfg.convolution_options)
+    cfg = ipu.utils.set_convolution_options(cfg,
+                                            {"tempMemoryBudget": "1000000"})
+    self.assertTrue(cfg.convolution_options)
+
+    self.assertFalse(cfg.clear_matmul_pass_type)
+    cfg = ipu.utils.set_matmul_options(cfg, clear_pass_type=True)
+    self.assertTrue(cfg.clear_matmul_pass_type)
+
+    self.assertFalse(cfg.pooling_options)
+    cfg = ipu.utils.set_pooling_options(
+        cfg, pooling_options={"poolUseIntrospectiveMapping": "false"})
+    self.assertTrue(cfg.pooling_options)
+
+    self.assertFalse(cfg.profiling.options)
+    cfg = ipu.utils.set_report_options(
+        cfg, report_options={"reportOption1": "false"})
+    self.assertTrue(cfg.profiling.options)
+
+    self.assertFalse(cfg.speed_size_config.has_allow_recompute)
+    cfg = ipu.utils.set_recomputation_options(cfg)
+    self.assertTrue(cfg.speed_size_config.has_allow_recompute)
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, [4, 4])

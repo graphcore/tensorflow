@@ -199,6 +199,7 @@ def set_optimization_options(opts,
   opts.enable_matmul_combiner = combine_matmuls
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+  return opts
 
 
 def set_compilation_options(opts, compilation_options=None):
@@ -223,10 +224,10 @@ def set_compilation_options(opts, compilation_options=None):
   Returns:
     The IpuOptions configuration protobuf, with engine compilation options set.
   """
-  if not isinstance(compilation_options, dict):
-    raise Exception("`compilation_options` must be a dictionary")
+  if compilation_options:
+    if not isinstance(compilation_options, dict):
+      raise Exception("`compilation_options` must be a dictionary")
 
-  if compilation_options is not None:
     for (option_name, value) in compilation_options.items():
       compilation_option = opts.compilation_options.add()
       compilation_option.option = option_name
@@ -256,10 +257,10 @@ def set_convolution_options(opts, convolution_options=None):
   Returns:
     The IpuOptions configuration protobuf, with convolution options set.
   """
-  if not isinstance(convolution_options, dict):
-    raise Exception("`convolution_options` must be a dictionary")
+  if convolution_options:
+    if not isinstance(convolution_options, dict):
+      raise Exception("`convolution_options` must be a dictionary")
 
-  if convolution_options is not None:
     for (option_name, value) in convolution_options.items():
       opt = opts.convolution_options.add()
       opt.option = option_name
@@ -298,10 +299,10 @@ def set_matmul_options(opts, matmul_options=None, clear_pass_type=False):
   Returns:
     The IpuOptions configuration protobuf, with matmul options set.
   """
-  if not isinstance(matmul_options, dict):
-    raise Exception("`matmul_options` must be a dictionary")
+  if matmul_options:
+    if not isinstance(matmul_options, dict):
+      raise Exception("`matmul_options` must be a dictionary")
 
-  if matmul_options is not None:
     for (option_name, value) in matmul_options.items():
       opt = opts.matmul_options.add()
       opt.option = option_name
@@ -333,10 +334,10 @@ def set_pooling_options(opts, pooling_options=None):
   Returns:
     The IpuOptions configuration protobuf, with pooling options set.
   """
-  if not isinstance(pooling_options, dict):
-    raise Exception("`pooling_options` must be a dictionary")
+  if pooling_options:
+    if not isinstance(pooling_options, dict):
+      raise Exception("`pooling_options` must be a dictionary")
 
-  if pooling_options is not None:
     for (option_name, value) in pooling_options.items():
       opt = opts.pooling_options.add()
       opt.option = option_name
@@ -367,10 +368,10 @@ def set_report_options(opts, report_options=None):
   Returns:
     The IpuOptions configuration protobuf, with convolution options set.
   """
-  if not isinstance(report_options, dict):
-    raise Exception("`report_options` must be a dictionary")
+  if report_options:
+    if not isinstance(report_options, dict):
+      raise Exception("`report_options` must be a dictionary")
 
-  if report_options is not None:
     for (option_name, value) in report_options.items():
       opt = opts.profiling.options.add()
       opt.option = option_name
