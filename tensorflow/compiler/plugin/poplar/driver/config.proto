@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package xla.poplarplugin;
-// NEXT ID 18
+// NEXT ID 19
 message IpuOptions {
   // Structure for setting an idividual Poplar OptionFlag for OptionFlags
   message PoplarOptionFlag {
@@ -139,4 +139,7 @@ message IpuOptions {
 
   // Whether to fuse multi_slice operations that use the same input.
   bool enable_multi_slice_combiner = 17;
+
+  // Whether to fuse matmul operations that use the same input or the same weights.
+  bool enable_matmul_combiner = 18;
 };

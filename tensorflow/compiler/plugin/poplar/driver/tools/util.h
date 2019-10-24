@@ -194,6 +194,30 @@ SliceInfo GetSliceInfo(const std::vector<size_t>& shape_to_slice,
 // Same as above, but for XLA shapes.
 SliceInfo GetSliceInfo(const Shape& shape_to_slice, const Shape& slice_shape);
 
+Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
+                           const int64 dimension);
+// Poplar's dimShuffle does: return_value.dimensions[i] =
+// argument.dimensions[permutations[i]] Whereas ShapeUtil::PermuteDimensions
+// does: return_value.dimensions[permutation[i]] = argument.dimensions[i].
+template <typename Output, typename Input>
+std::vector<Output> InvertPermutations(const std::vector<Input>& permutations) {
+  std::vector<Output> result(permutations.size());
+
+  for (Output i = 0; i < permutations.size(); ++i) {
+    result[permutations[i]] = i;
+  }
+  return result;
+}
+
+template <typename Input>
+std::vector<unsigned> ToUnsignedVector(const std::vector<Input>& input) {
+  std::vector<unsigned> results(input.size());
+  for (unsigned i = 0; i < input.size(); ++i) {
+    results[i] = input[i];
+  }
+  return results;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
 

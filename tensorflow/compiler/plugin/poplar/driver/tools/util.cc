@@ -25,6 +25,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
+#include "tensorflow/compiler/xla/service/shape_inference.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
 namespace xla {
@@ -587,6 +588,18 @@ SliceInfo GetSliceInfo(const std::vector<size_t>& shape_to_slice,
   }
 
   return slice_info;
+}
+
+Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
+                           const int64 dimension) {
+  std::vector<const Shape*> inst_shapes;
+  absl::c_transform(insts, std::back_inserter(inst_shapes),
+                    [](HloInstruction* inst) { return &inst->shape(); });
+  auto statusor = ShapeInference::InferConcatOpShape(inst_shapes, dimension);
+  if (!statusor.ok()) {
+    LOG(FATAL) << "Failed concatentating shapes together.";
+  }
+  return statusor.ValueOrDie();
 }
 
 }  // namespace poplarplugin

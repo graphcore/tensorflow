@@ -361,6 +361,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.enable_multi_slice_combiner();
   }
 
+  bool EnableMatmulCombiner() const {
+    return current_config_.enable_matmul_combiner();
+  }
+
   int64 GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }

@@ -136,6 +136,7 @@ def create_ipu_config(profiling=False,
   opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = True
   opts.enable_multi_slice_combiner = False
+  opts.enable_matmul_combiner = False
 
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
   opts.profiling.enable_compilation_trace = profiling
@@ -166,7 +167,8 @@ def create_ipu_config(profiling=False,
 
 
 def set_optimization_options(opts,
-                             combine_embedding_lookups=True,
+                             combine_embedding_lookups=False,
+                             combine_matmuls=False,
                              max_cross_replica_sum_buffer_size=0,
                              max_inter_ipu_copies_buffer_size=0):
   """Set the IPU options related to performance / optimizations.
@@ -185,6 +187,8 @@ def set_optimization_options(opts,
   Args:
     combine_embedding_lookups: Fuse embedding lookups on the same tensor. This
       might improve performance but increase memory usage.
+    combine_matmuls: Fuse matmul operations if they share the same weights or
+      the same input.
     max_cross_replica_sum_buffer_size: The maximum number of bytes that can be
       waiting before a cross replica sum op is scheduled.
     max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
@@ -192,6 +196,7 @@ def set_optimization_options(opts,
   """
   # Internally embedding lookups are implemented using multiSlice operations.
   opts.enable_multi_slice_combiner = combine_embedding_lookups
+  opts.enable_matmul_combiner = combine_matmuls
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
 

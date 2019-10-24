@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
@@ -635,74 +636,20 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
     auto rhs_batch_dimensions = dot_dims.rhs_batch_dimensions();
 
     // DimShuffle the LHS to [Batch..., M..., Contracting...]
-    std::vector<unsigned> lhs_permutation;
-    lhs_permutation.reserve(lhs.rank());
-
-    absl::c_copy(lhs_batch_dimensions, std::back_inserter(lhs_permutation));
-    for (int i = 0; i < lhs.rank(); ++i) {
-      if (absl::c_find(lhs_reduction_dimensions, i) ==
-              lhs_reduction_dimensions.end() &&
-          absl::c_find(lhs_batch_dimensions, i) == lhs_batch_dimensions.end()) {
-        lhs_permutation.push_back(i);
-      }
-    }
-    absl::c_copy(lhs_reduction_dimensions, std::back_inserter(lhs_permutation));
+    std::vector<unsigned> lhs_permutation =
+        LeftMatMulPermutations(lhs.shape(), dot_dims);
     lhs = lhs.dimShuffle(lhs_permutation);
 
-    // DimShuffle the RHS to [Contracting..., Batch..., N...]
-    std::vector<unsigned> rhs_permutation;
-    rhs_permutation.reserve(rhs.rank());
-
-    absl::c_copy(rhs_batch_dimensions, std::back_inserter(rhs_permutation));
-    absl::c_copy(rhs_reduction_dimensions, std::back_inserter(rhs_permutation));
-    for (int i = 0; i < rhs.rank(); ++i) {
-      if (absl::c_find(rhs_reduction_dimensions, i) ==
-              rhs_reduction_dimensions.end() &&
-          absl::c_find(rhs_batch_dimensions, i) == rhs_batch_dimensions.end()) {
-        rhs_permutation.push_back(i);
-      }
-    }
+    // DimShuffle the RHS to [Batch..., Contracting..., N...]
+    std::vector<unsigned> rhs_permutation =
+        RightMatMulPermutations(rhs.shape(), dot_dims);
     rhs = rhs.dimShuffle(rhs_permutation);
 
     // Collapse the LHS dimensions down to [Batch, M, Contracting]
-    const auto lhs_shape = lhs.shape();
-    const auto lhs_shape_itr_begin = lhs_shape.begin();
-    const auto lhs_shape_itr_a =
-        lhs_shape_itr_begin + lhs_batch_dimensions.size();
-    const auto lhs_shape_itr_end = lhs_shape.end();
-    const auto lhs_shape_itr_b =
-        lhs_shape_itr_end - lhs_reduction_dimensions.size();
-
-    const auto lhs_b =
-        std::accumulate(lhs_shape_itr_begin, lhs_shape_itr_a, std::size_t(1),
-                        std::multiplies<std::size_t>());
-    const auto lhs_m =
-        std::accumulate(lhs_shape_itr_a, lhs_shape_itr_b, std::size_t(1),
-                        std::multiplies<std::size_t>());
-    const auto lhs_k =
-        std::accumulate(lhs_shape_itr_b, lhs_shape_itr_end, std::size_t(1),
-                        std::multiplies<std::size_t>());
-    lhs = lhs.reshape({lhs_b, lhs_m, lhs_k});
+    lhs = lhs.reshape(LeftMatMulPackShape(lhs.shape(), dot_dims));
 
     // Collapse the RHS dimensions down to [Batch, Contracting, N]
-    const auto rhs_shape = rhs.shape();
-    const auto rhs_shape_itr_begin = rhs_shape.begin();
-    const auto rhs_shape_itr_a =
-        rhs_shape_itr_begin + lhs_batch_dimensions.size();
-    const auto rhs_shape_itr_b =
-        rhs_shape_itr_a + rhs_reduction_dimensions.size();
-    const auto rhs_shape_itr_end = rhs_shape.end();
-
-    const auto rhs_b =
-        std::accumulate(rhs_shape_itr_begin, rhs_shape_itr_a, std::size_t(1),
-                        std::multiplies<std::size_t>());
-    const auto rhs_k =
-        std::accumulate(rhs_shape_itr_a, rhs_shape_itr_b, std::size_t(1),
-                        std::multiplies<std::size_t>());
-    const auto rhs_n =
-        std::accumulate(rhs_shape_itr_b, rhs_shape_itr_end, std::size_t(1),
-                        std::multiplies<std::size_t>());
-    rhs = rhs.reshape({rhs_b, rhs_k, rhs_n});
+    rhs = rhs.reshape(RightMatMulPackShape(rhs.shape(), dot_dims));
 
     if (VLOG_IS_ON(2)) {
       std::stringstream stream;

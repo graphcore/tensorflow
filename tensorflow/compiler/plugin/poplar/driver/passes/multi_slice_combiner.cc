@@ -59,18 +59,6 @@ static const std::vector<HloMatcherPattern> patterns = {
 };
 // clang-format on
 
-Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
-                           const int64 dimension) {
-  std::vector<const Shape*> inst_shapes;
-  absl::c_transform(insts, std::back_inserter(inst_shapes),
-                    [](HloInstruction* inst) { return &inst->shape(); });
-  auto statusor = ShapeInference::InferConcatOpShape(inst_shapes, dimension);
-  if (!statusor.ok()) {
-    LOG(FATAL) << "Failed concatentating shapes together.";
-  }
-  return statusor.ValueOrDie();
-}
-
 }  // namespace
 
 MultiSliceCombiner::MultiSliceCombiner(struct CompilerAnnotations& annotations)

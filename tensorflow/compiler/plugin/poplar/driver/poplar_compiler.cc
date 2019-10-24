@@ -51,6 +51,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/matmul_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_slice_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
@@ -607,6 +608,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       if (poplarExecutor->EnableMultiSliceCombiner()) {
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
+    }
+    if (poplarExecutor->EnableMatmulCombiner()) {
+      pipeline.AddPass<MatmulCombiner>(resources.annotations);
     }
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();
