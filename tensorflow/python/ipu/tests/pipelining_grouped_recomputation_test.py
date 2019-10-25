@@ -91,7 +91,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 18000, True, False)
+          pipeline_depth, dataset_fn, optimizer, self, 14770, True, False)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -192,7 +192,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
           sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 22700, True, False)
+          dataset_fn, optimizer, self, 23984, True, False)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -241,7 +241,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 13500, True, False)
+          pipeline_depth, dataset_fn, optimizer, self, 13681, True, False)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
@@ -298,7 +298,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 17000, True, False)
+          pipeline_depth, dataset_fn, optimizer, self, 15986, True, False)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare5(self):
@@ -346,7 +346,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 13000, True, False)
+          pipeline_depth, dataset_fn, optimizer, self, 12478, True, False)
 
 
 if __name__ == "__main__":

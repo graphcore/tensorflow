@@ -91,7 +91,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 15500, True)
+          pipeline_depth, dataset_fn, optimizer, self, 14374, True)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -192,7 +192,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
           sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 22700, True)
+          dataset_fn, optimizer, self, 22906, True)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -241,7 +241,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 12600, True)
+          pipeline_depth, dataset_fn, optimizer, self, 13821, True)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
@@ -298,7 +298,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 15500, True)
+          pipeline_depth, dataset_fn, optimizer, self, 15590, True)
 
 
 if __name__ == "__main__":

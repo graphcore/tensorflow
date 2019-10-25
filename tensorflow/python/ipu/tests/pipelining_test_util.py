@@ -187,8 +187,7 @@ class PipelineTester(object):
     out = session.run(outfeed_op)[0]
     report.parse_log()
     report.assert_pipeline_stages_on_expected_ipu(range(len(stages)))
-    report.assert_max_tile_memory_in_range(expected_max_tile_memory * 0.8,
-                                           expected_max_tile_memory * 1.2)
+    report.assert_max_tile_memory(expected_max_tile_memory, tolerance=0.2)
     return out
 
   @staticmethod

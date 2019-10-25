@@ -16,7 +16,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import json
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
@@ -68,11 +67,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
@@ -99,11 +95,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(46, [4, 4]))
@@ -133,11 +126,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, [4, 4]))
@@ -167,11 +157,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu.utils.create_ipu_config(merge_infeed_io_copies=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess, merge_infeed_io_copies=True)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, [4, 4]))
@@ -204,11 +191,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(4, [4, 4]))
@@ -233,11 +217,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(5, [4, 4]))
@@ -266,11 +247,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(91, [4, 4]))
@@ -306,11 +284,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
       self.assertAllClose(result[0], np.broadcast_to(129.5, [4, 4]))
@@ -334,11 +309,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         return ipu.ipu_compiler.compile(my_net)
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(program(0))
       self.assertAllClose(result[0], np.broadcast_to(0, [4, 4]))
@@ -375,11 +347,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         return ipu.ipu_compiler.compile(my_net)
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue1.initializer)
       sess.run(infeed_queue2.initializer)
       result = sess.run(program(5, infeed_queue1))
@@ -402,12 +371,12 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   def testMultipleInitializations(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    infeed_queue.initializer
+    _ = infeed_queue.initializer
     with self.assertRaisesRegexp(
         ValueError,
         'The IPUInfeedQueue `initializer` function can only be accessed once.'
     ):
-      infeed_queue.initializer
+      _ = infeed_queue.initializer
 
   @test_util.deprecated_graph_mode_only
   def testTrainingLoopWithInfeed(self):
@@ -466,12 +435,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
 
       self.assertAllClose(result[0], np.broadcast_to(21, [4, 4]))
@@ -502,13 +468,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed_queue1.dequeue()
     outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           'Only one IPUOutfeedQueue supported per graph'):
@@ -536,11 +499,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res, {v: np.ones([4, 4], np.float32)})
 
@@ -579,11 +539,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
 
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -637,11 +595,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
 
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -680,11 +636,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
 
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -748,11 +702,9 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
     outfed = outfeed_queue.dequeue()
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
 
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
       self.assertAllClose(result[0], np.broadcast_to(31, shape))
@@ -889,13 +841,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res1 = ipu.ipu_compiler.compile(my_net1, inputs=[v1])
       res2 = ipu.ipu_compiler.compile(my_net2, inputs=[v2])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed1 = outfeed_queue1.dequeue()
     outfeed2 = outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       result1 = sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       self.assertAllClose(result1[0], np.broadcast_to(6, [4, 4]))
       outfed1 = sess.run(outfeed1)
@@ -942,13 +891,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res1 = ipu.ipu_compiler.compile(my_net1, inputs=[v1])
       res2 = ipu.ipu_compiler.compile(my_net2, inputs=[v2])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed1 = outfeed_queue1.dequeue()
     outfeed2 = outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       result1 = sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       self.assertAllClose(result1[0], np.broadcast_to(6, [4, 4]))
       result2 = sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
@@ -993,13 +939,10 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       res1 = ipu.ipu_compiler.compile(my_net1, inputs=[v1])
       res2 = ipu.ipu_compiler.compile(my_net2, inputs=[v2])
 
-    cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed_queue1.dequeue()
     outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
+      tu.ReportJSON(self, sess)
       sess.run(res1, {v1: np.ones([4, 4], np.float32)})
       with self.assertRaisesRegexp(errors.FailedPreconditionError,
                                    'Outfeed with id=\'a\' already exists'):
@@ -1080,18 +1023,14 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       a = array_ops.placeholder(np.float32, [4])
       b = array_ops.placeholder(np.float32, [4])
-      e = gen_ipu_ops.ipu_event_trace()
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
-      evts = sess.run(e)
+      report = tu.ReportJSON(self, sess)
+      report.reset()
 
       fd = {a: [1., 1., 1., 1.], b: [0., 0., 0., 0.]}
       result = sess.run(res, fd)
@@ -1107,24 +1046,12 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
                   [21., 21., 21., 21.], [34., 34., 34., 34.]]
       self.assertAllClose(outfed, expected)
 
-      ee = sess.run(e)
-
-      evts = tu.extract_all_compile_end_events(ee)
-      self.assertEqual(len(evts), 1)
-      js = json.loads(evts[0].compile_end.compilation_report)
-
-      tile_mem = js["memory"]["byTile"]["total"]
-      total_mem = sum(tile_mem)
-      self.assertAllInRange(tile_mem, 0, 3602)
-      self.assertAllInRange([total_mem], 0, 3877494)
-
-      evts = tu.extract_all_execute_events(ee)
-      self.assertEqual(len(evts), 1)
-
-      js = json.loads(evts[0].execute.execution_report)
+      report.parse_log()
+      report.assert_each_tile_memory_is_less_than(3590)
+      report.assert_total_tile_memory(3877694)
 
       total_outfeeds = 0
-      for s in js['simulation']['steps']:
+      for s in report.get_execution_reports()[0]['simulation']['steps']:
         if s['type'] == 'StreamCopy':
           # batch x shape=[4] floats + header
           if s['totalData'] == b_count * 4 * 4 + 4:
@@ -1154,18 +1081,14 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       a = array_ops.placeholder(np.float32, [4])
       b = array_ops.placeholder(np.float32, [4])
-      e = gen_ipu_ops.ipu_event_trace()
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
-      evts = sess.run(e)
+      report = tu.ReportJSON(self, sess)
+      report.reset()
 
       fd = {a: [1., 1., 1., 1.], b: [0., 0., 0., 0.]}
       result = sess.run(res, fd)
@@ -1179,24 +1102,12 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       expected = [34., 34., 34., 34.]
       self.assertAllClose(outfed, expected)
 
-      ee = sess.run(e)
-
-      evts = tu.extract_all_compile_end_events(ee)
-      self.assertEqual(len(evts), 1)
-
-      js = json.loads(evts[0].compile_end.compilation_report)
-      tile_mem = js["memory"]["byTile"]["total"]
-      total_mem = sum(tile_mem)
-      self.assertAllInRange(tile_mem, 0, 3602)
-      self.assertAllInRange([total_mem], 0, 3877494)
-
-      evts = tu.extract_all_execute_events(ee)
-      self.assertEqual(len(evts), 1)
-
-      js = json.loads(evts[0].execute.execution_report)
+      report.parse_log()
+      report.assert_each_tile_memory_is_less_than(3590)
+      report.assert_total_tile_memory(3877694)
 
       total_outfeeds = 0
-      for s in js['simulation']['steps']:
+      for s in report.get_execution_reports()[0]['simulation']['steps']:
         if s['type'] == 'StreamCopy':
           # batch x shape=[4] floats + header
           if s['totalData'] == b_count * 4 * 4 + 4:
@@ -1226,18 +1137,14 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       a = array_ops.placeholder(np.float32, [1024, 256])
       b = array_ops.placeholder(np.float32, [256, 512])
-      e = gen_ipu_ops.ipu_event_trace()
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
-      evts = sess.run(e)
+      report = tu.ReportJSON(self, sess)
+      report.reset()
 
       fd = {a: np.ones(a.shape), b: np.zeros(b.shape)}
       sess.run(res, fd)
@@ -1248,23 +1155,12 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       expected = np.zeros([1024, 512])
       self.assertAllClose(outfed, expected)
 
-      ee = sess.run(e)
-
-      evts = tu.extract_all_compile_end_events(ee)
-      self.assertEqual(len(evts), 1)
-
-      js = json.loads(evts[0].compile_end.compilation_report)
-      tile_mem = js["memory"]["byTile"]["total"]
-      self.assertAllInRange([max(tile_mem)], 0, 54337)
-      self.assertAllInRange([sum(tile_mem)], 0, 61397813)
-
-      evts = tu.extract_all_execute_events(ee)
-      self.assertEqual(len(evts), 1)
-
-      js = json.loads(evts[0].execute.execution_report)
+      report.parse_log()
+      report.assert_max_tile_memory(54253)
+      report.assert_total_tile_memory(61291409)
 
       total_outfeeds = 0
-      for s in js['simulation']['steps']:
+      for s in report.get_execution_reports()[0]['simulation']['steps']:
         if s['type'] == 'StreamCopy':
           # batch x shape=[1024*256] floats + header
           if s['totalData'] == b_count * 1024 * 512 * 4 + 4:
@@ -1294,20 +1190,16 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       a = array_ops.placeholder(np.float32, [1024, 256])
       b = array_ops.placeholder(np.float32, [256, 512])
-      e = gen_ipu_ops.ipu_event_trace()
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[a, b])
 
-    cfg = ipu.utils.create_ipu_config(profiling=True,
-                                      profile_execution=True,
-                                      always_rearrange_copies_on_the_host=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
-
     outfeed = outfeed_queue.dequeue()
     with session_lib.Session() as sess:
-      evts = sess.run(e)
+      report = tu.ReportJSON(self,
+                             sess,
+                             always_rearrange_copies_on_the_host=True)
+      report.reset()
 
       fd = {a: np.ones(a.shape), b: np.zeros(b.shape)}
       sess.run(res, fd)
@@ -1318,23 +1210,12 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       expected = np.zeros([1024, 512])
       self.assertAllClose(outfed, expected)
 
-      ee = sess.run(e)
-
-      evts = tu.extract_all_compile_end_events(ee)
-      self.assertEqual(len(evts), 1)
-
-      js = json.loads(evts[0].compile_end.compilation_report)
-      tile_mem = js["memory"]["byTile"]["total"]
-      self.assertAllInRange([max(tile_mem)], 0, 53802)
-      self.assertAllInRange([sum(tile_mem)], 0, 60371309)
-
-      evts = tu.extract_all_execute_events(ee)
-      self.assertEqual(len(evts), 1)
-
-      js = json.loads(evts[0].execute.execution_report)
+      report.parse_log()
+      report.assert_max_tile_memory(53718)
+      report.assert_total_tile_memory(60260632)
 
       total_outfeeds = 0
-      for s in js['simulation']['steps']:
+      for s in report.get_execution_reports()[0]['simulation']['steps']:
         if s['type'] == 'StreamCopy':
           # batch x shape=[1024*256] floats + header
           if s['totalData'] == b_count * 1024 * 512 * 4 + 4:

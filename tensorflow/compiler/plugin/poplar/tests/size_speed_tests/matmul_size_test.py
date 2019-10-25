@@ -74,7 +74,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
       sess.run(loss, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory_in_range(15500000, 16500000)
+      report.assert_total_tile_memory(15916011)
 
   def testTrainingBs1(self):
     with self.session() as sess:
@@ -101,7 +101,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
-      report.assert_total_tile_memory_in_range(10500000, 11500000)
+      report.assert_total_tile_memory(11026809)
 
   def testTrainingBs2(self):
     with self.session() as sess:
@@ -126,7 +126,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
-      report.assert_total_tile_memory_in_range(24000000, 24500000)
+      report.assert_total_tile_memory(24218556)
 
 
 if __name__ == "__main__":

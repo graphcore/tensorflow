@@ -671,7 +671,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 15500)
+          pipeline_depth, dataset_fn, optimizer, self, 14172)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -772,7 +772,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
           sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 22700)
+          dataset_fn, optimizer, self, 22738)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -821,7 +821,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 12600)
+          pipeline_depth, dataset_fn, optimizer, self, 13821)
 
 
 if __name__ == "__main__":

@@ -37,7 +37,9 @@ def configure_ipu_system(compilation_trace=True,
                          engine_opts=None,
                          device_count_override=None,
                          max_cross_replica_sum_buffer_size=0,
-                         max_inter_ipu_copies_buffer_size=0):
+                         max_inter_ipu_copies_buffer_size=0,
+                         merge_infeed_io_copies=False,
+                         always_rearrange_copies_on_the_host=False):
   opts = IpuOptions()
   opts.profiling.enable_ipu_trace_events = (compilation_trace or io_trace
                                             or execution_trace
@@ -54,6 +56,9 @@ def configure_ipu_system(compilation_trace=True,
   opts.prefetch_data_streams = prefetch_data_streams
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+  opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
+  opts.speed_size_config.always_rearrange_copies_on_the_host = \
+      always_rearrange_copies_on_the_host
 
   # yapf: disable
   assert not (pipelining and device_count_override
@@ -206,7 +211,9 @@ class ReportJSON(object):
                configure_device=True,
                replicated=False,
                max_cross_replica_sum_buffer_size=0,
-               max_inter_ipu_copies_buffer_size=0):
+               max_inter_ipu_copies_buffer_size=0,
+               merge_infeed_io_copies=False,
+               always_rearrange_copies_on_the_host=False):
     self.test = test
     self.sess = sess
     # If no session is passed to the constructor then assume
@@ -226,7 +233,10 @@ class ReportJSON(object):
             pipelining=pipelining,
             replicated=replicated,
             max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
-            max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size)
+            max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size,
+            merge_infeed_io_copies=merge_infeed_io_copies,
+            always_rearrange_copies_on_the_host=
+            always_rearrange_copies_on_the_host)
 
   def reset(self):
     assert self.sess, "A valid session must be passed to the constructor" \
@@ -318,18 +328,19 @@ class ReportJSON(object):
           count_matches_in_list(self.get_device_to_host_event_names(), name),
           1, msg)
 
+  def get_each_tile_memory(self):
+    return self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"]
+
   # Excluding gaps
   def get_max_tile_memory(self):
-    return max(
-        self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
+    return max(self.get_each_tile_memory())
 
   def get_always_live_memory(self):
     return sum(self.events[IpuTraceEvent.COMPILE_END]["memory"]["liveness"]
                ["alwaysLive"]["bytesByTile"])
 
   def get_total_tile_memory(self):
-    return sum(
-        self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"])
+    return sum(self.get_each_tile_memory())
 
   def get_vertices(self):
     return self.events[IpuTraceEvent.COMPILE_END]["vertexTypes"]["names"]
@@ -400,14 +411,25 @@ class ReportJSON(object):
           ipus.pop(), expected_ipu,
           "Stage %d did not run on the expected IPU" % (i + 1))
 
-  def assert_total_tile_memory_in_range(self, low, high):
+  def assert_each_tile_memory_is_less_than(self, expected, tolerance=0.01):
+    low = 0
+    high = int(expected * (1.0 + tolerance))
+    self.test.assertAllInRange(self.get_each_tile_memory(), low, high)
+
+  def assert_total_tile_memory(self, expected, tolerance=0.01):
+    low = int(expected * (1.0 - tolerance))
+    high = int(expected * (1.0 + tolerance))
     self.test.assertAllInRange([self.get_total_tile_memory()], low, high)
 
-  def assert_max_tile_memory_in_range(self, low, high):
+  def assert_max_tile_memory(self, expected, tolerance=0.01):
+    low = int(expected * (1.0 - tolerance))
+    high = int(expected * (1.0 + tolerance))
     self.test.assertAllInRange([self.get_max_tile_memory()], low, high)
 
-  def assert_always_live_memory_in_range(self, low, high):
-    self.test.assertAllInRange([self.get_max_tile_memory()], low, high)
+  def assert_always_live_memory(self, expected, tolerance=0.01):
+    low = int(expected * (1.0 - tolerance))
+    high = int(expected * (1.0 + tolerance))
+    self.test.assertAllInRange([self.get_always_live_memory()], low, high)
 
   # Asserts all the compute sets match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one compute set
   def assert_all_compute_sets_and_list(self, ok):

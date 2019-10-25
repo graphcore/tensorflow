@@ -29,7 +29,6 @@ from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
-from tensorflow.python.ops import standard_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import googletest
@@ -39,10 +38,8 @@ from tensorflow.python.ipu import gradient_accumulation_optimizer
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
-from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import normalization_ops
 from tensorflow.python.ipu import pipelining_ops
-from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
@@ -837,7 +834,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
           sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 22700)
+          dataset_fn, optimizer, self, 22738)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -886,7 +883,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 12600)
+          pipeline_depth, dataset_fn, optimizer, self, 13821)
 
 
 if __name__ == "__main__":

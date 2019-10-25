@@ -41,13 +41,13 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       sess.run(variables.global_variables_initializer())
 
       report.parse_log()
-      report.assert_max_tile_memory_in_range(10000, 12000)
+      report.assert_max_tile_memory(10560)
 
       out = sess.run(output, {pb: np.ones(shape=shape, dtype=dtype)})
       self.assertAllClose(np.full(shape, 7, dtype=dtype), out)
 
       report.parse_log()
-      report.assert_max_tile_memory_in_range(30000, 33000)
+      report.assert_max_tile_memory(31382)
 
   def testWideConstantWithAllocationTarget(self):
     with self.session() as sess:
@@ -93,8 +93,8 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
 
-      report.assert_max_tile_memory_in_range(10000, 15000)
-      report.assert_always_live_memory_in_range(10000, 15000)
+      report.assert_max_tile_memory(12116)
+      report.assert_always_live_memory(4031208)
 
 
 if __name__ == "__main__":
