@@ -193,12 +193,17 @@ def set_optimization_options(opts,
       waiting before a cross replica sum op is scheduled.
     max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
       waiting before a inter IPU copy between IPUs is scheduled.
+
+  Returns:
+    The IpuOptions configuration protobuf.
   """
   # Internally embedding lookups are implemented using multiSlice operations.
   opts.enable_multi_slice_combiner = combine_embedding_lookups
   opts.enable_matmul_combiner = combine_matmuls
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+  return opts
+
   return opts
 
 
