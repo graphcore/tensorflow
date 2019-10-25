@@ -146,7 +146,7 @@ ENTRY main {
   ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {0});
-    auto offset_idx = offset1.Get<int32>({output_index[0]});
+    auto offset_idx = offset1.Get<int32>({output_index[0], 0});
     auto input_value = input.Get<float>({offset_idx, output_index[1]});
     EXPECT_EQ(value, input_value);
     return true;
@@ -155,7 +155,7 @@ ENTRY main {
   ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {1});
-    auto offset_idx = offset2.Get<int32>({output_index[0]});
+    auto offset_idx = offset2.Get<int32>({output_index[0], 0});
     auto input_value = input.Get<float>({offset_idx, output_index[1]});
     EXPECT_EQ(value, input_value);
     return true;
@@ -245,7 +245,7 @@ ENTRY main {
   ShapeUtil::ForEachIndex(slice1, [&](absl::Span<const int64> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {0});
-    auto offset_idx = offset1.Get<int32>({output_index[0]});
+    auto offset_idx = offset1.Get<int32>({output_index[0], 0});
     auto input_value = input.Get<float>({offset_idx, output_index[1]});
     EXPECT_EQ(value, input_value);
     return true;
@@ -254,7 +254,7 @@ ENTRY main {
   ShapeUtil::ForEachIndex(slice2, [&](absl::Span<const int64> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {1});
-    auto offset_idx = offset2.Get<int32>({output_index[0]});
+    auto offset_idx = offset2.Get<int32>({output_index[0], 0});
     auto input_value = input.Get<float>({offset_idx, output_index[1]});
     EXPECT_EQ(value, input_value);
     return true;
@@ -263,7 +263,7 @@ ENTRY main {
   ShapeUtil::ForEachIndex(slice3, [&](absl::Span<const int64> output_index) {
     EXPECT_EQ(output_index.size(), 2);
     float value = result.Get<float>(output_index, {2});
-    auto offset_idx = offset3.Get<int32>({output_index[0]});
+    auto offset_idx = offset3.Get<int32>({output_index[0], 0});
     auto input_value = input.Get<float>({offset_idx, output_index[1]});
     EXPECT_EQ(value, input_value);
     return true;
