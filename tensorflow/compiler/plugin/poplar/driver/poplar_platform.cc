@@ -47,9 +47,10 @@ namespace xla {
 namespace poplarplugin {
 
 PoplarPlatform::PoplarPlatform() : name_("Poplar") {
-  VLOG(1) << "Poplar version: " << poplar::versionString()
-          << " Poplar package: " << poplar::packageHash()
-          << " Poplar Tensorflow version: " << tf_git_version() << ")";
+  VLOG(tensorflow::INFO) << "Poplar version: " << poplar::versionString()
+                         << " Poplar package: " << poplar::packageHash()
+                         << " Poplar Tensorflow version: " << tf_git_version()
+                         << ")";
 }
 
 PoplarPlatform::~PoplarPlatform() {}
