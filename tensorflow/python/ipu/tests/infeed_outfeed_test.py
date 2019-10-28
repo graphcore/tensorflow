@@ -18,7 +18,6 @@ from __future__ import print_function
 
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.client import session as session_lib
@@ -364,7 +363,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
   def testUndefinedShape(self):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     dataset = dataset.batch(10, drop_remainder=False)
-    with self.assertRaisesRegexp(ValueError, 'Output shape \((\?|None),'):
+    with self.assertRaisesRegex(ValueError, r'Output shape \((\?|None),'):
       ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
 
   @test_util.deprecated_graph_mode_only
@@ -372,7 +371,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     dataset = tu.create_single_increasing_dataset(10, shape=[4, 4])
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
     _ = infeed_queue.initializer
-    with self.assertRaisesRegexp(
+    with self.assertRaisesRegex(
         ValueError,
         'The IPUInfeedQueue `initializer` function can only be accessed once.'
     ):
@@ -472,7 +471,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     outfeed_queue2.dequeue()
     with session_lib.Session() as sess:
       tu.ReportJSON(self, sess)
-      with self.assertRaisesRegexp(
+      with self.assertRaisesRegex(
           errors.InvalidArgumentError,
           'Only one IPUOutfeedQueue supported per graph'):
         sess.run(res, {v: np.ones([4, 4], np.float32)})
@@ -944,8 +943,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
     with session_lib.Session() as sess:
       tu.ReportJSON(self, sess)
       sess.run(res1, {v1: np.ones([4, 4], np.float32)})
-      with self.assertRaisesRegexp(errors.FailedPreconditionError,
-                                   'Outfeed with id=\'a\' already exists'):
+      with self.assertRaisesRegex(errors.FailedPreconditionError,
+                                  'Outfeed with id=\'a\' already exists'):
         sess.run(res2, {v2: np.full([5, 5], 4, np.float32)})
 
   @test_util.deprecated_graph_mode_only
@@ -1048,7 +1047,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       report.parse_log()
       report.assert_each_tile_memory_is_less_than(3650, tolerance=0.1)
-      report.assert_total_tile_memory(3956500, tolerance=0.1))
+      report.assert_total_tile_memory(3956500, tolerance=0.1)
 
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:
@@ -1104,7 +1103,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       report.parse_log()
       report.assert_each_tile_memory_is_less_than(3650, tolerance=0.1)
-      report.assert_total_tile_memory(3956500, tolerance=0.1))
+      report.assert_total_tile_memory(3956500, tolerance=0.1)
 
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:

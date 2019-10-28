@@ -47,7 +47,6 @@ class PoputilPrintTensorOp : public XlaOpKernel, IpuOpKernel {
       : XlaOpKernel(ctx), IpuOpKernel() {}
 
   void Compile(XlaOpKernelContext* ctx) override {
-    const DataType dtype = output_type(0);
     xla::XlaBuilder* b = ctx->builder();
 
     auto input = ctx->Input(0);
