@@ -30,6 +30,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import while_v2
 from tensorflow.python.platform import tf_logging as logging
+from tensorflow import TensorArray
 
 
 def while_loop(condition,
@@ -61,9 +62,10 @@ def while_loop(condition,
     TypeError: if body or condition has the wrong signature.
   """
 
-  # Converts inputs to Tensors.
+  # Converts inputs to Tensors if not TensorArray.
   inputs = [] if inputs is None else [
-      ops.convert_to_tensor(x) for x in _convert_to_list(inputs)
+      ops.convert_to_tensor(x) if not isinstance(x, TensorArray) else x
+      for x in _convert_to_list(inputs)
   ]
   input_types = [x.dtype for x in inputs]
   input_arity = len(inputs)
