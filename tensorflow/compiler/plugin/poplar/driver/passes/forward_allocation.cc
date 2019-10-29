@@ -127,9 +127,11 @@ static bool output_and_all_operands_same_type(const HloInstruction* inst) {
 
 // TODO - fix this.  it needs to take into account the indices of the path
 // from one op to the next. and probably do something to do with in-place ops
-static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path) {
-  const auto is_node_ok_on_path = [](HloInstruction* inst, const unsigned,
-                                     const unsigned) {
+static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
+                           const HloInstruction* source) {
+  const auto is_node_ok_on_path = [path, source](HloInstruction* inst,
+                                                 const unsigned path_idx,
+                                                 const unsigned path_size) {
     // Element-wise ops are ok.
     if (IsPopOpsElementwise(inst)) {
       if (inst->opcode() == HloOpcode::kConvert) {
@@ -138,11 +140,21 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path) {
         return output_and_all_operands_same_type(inst);
       }
     }
+    if (IsPopOpsFusion(inst, "zero_pad")) {
+      return output_and_all_operands_same_type(inst);
+    }
     switch (inst->opcode()) {
       case HloOpcode::kConcatenate:
       case HloOpcode::kReshape:
       case HloOpcode::kTranspose:
         return output_and_all_operands_same_type(inst);
+      case HloOpcode::kPad: {
+        // Only handle operand 0
+        const HloInstruction* op_source =
+            (path_idx == 0) ? source : path[path_idx - 1];
+        return inst->operand_index(op_source) == 0 &&
+               output_and_all_operands_same_type(inst);
+      }
       default:
         break;
     }
@@ -556,7 +568,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
           prefix.pop_back();
           suffix.erase(suffix.begin());
           suffix.pop_back();
-          const auto prefix_path_ok = IsPrefixPathOk(prefix);
+          const auto prefix_path_ok = IsPrefixPathOk(prefix, source);
           const auto suffix_path_ok = IsSuffixPathOk(suffix);
           if (prefix_path_ok && suffix_path_ok) {
             if (!source_consumers[source].contains(layout_producer)) {
@@ -647,7 +659,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
         prefix.pop_back();
         auto layout_producer = target->mutable_operand(layout_operand_idx);
         // Check that the prefix path is one that we can traverse.
-        const auto prefix_path_ok = IsPrefixPathOk(prefix);
+        const auto prefix_path_ok = IsPrefixPathOk(prefix, source);
         if (!prefix_path_ok) {
           continue;
         }

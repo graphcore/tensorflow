@@ -155,6 +155,9 @@ Status SetInitialTensorValue(poplar::Graph& graph, poplar::Tensor& tensor,
 template <typename T>
 poplar::Tensor TileTensor(const T& multiples, const poplar::Tensor& in);
 
+StatusOr<poplar::Tensor> UnpadTensor(const PaddingConfig& cfg,
+                                     const poplar::Tensor& in);
+
 StatusOr<poplar::Tensor> PadTensor(const PaddingConfig& cfg,
                                    const poplar::Tensor& in,
                                    const poplar::Tensor& pad);

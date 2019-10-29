@@ -430,6 +430,20 @@ static StatusOr<poplar::Tensor> PathTransform(
         in = graph.clone(poplar_type, in, GetDebugName(inst));
         break;
       };
+      case HloOpcode::kPad: {
+        TF_ASSIGN_OR_RETURN(in, UnpadTensor(inst->padding_config(), in));
+        break;
+      }
+      case HloOpcode::kFusion: {
+        if (IsPopOpsFusion(inst, "zero_pad")) {
+          TF_ASSIGN_OR_RETURN(in,
+                              UnpadTensor(inst->fused_instructions_computation()
+                                              ->root_instruction()
+                                              ->padding_config(),
+                                          in));
+        }
+        break;
+      }
       default: {
         // All other instructions in the path do not modify the shape
         break;
@@ -477,6 +491,16 @@ static StatusOr<poplar::Tensor> ReversePathTransform(
       case HloOpcode::kConcatenate: {
         return xla::FailedPrecondition(
             "ReversePathTransform - Concatenante not supported");
+      }
+      case HloOpcode::kPad: {
+        return xla::FailedPrecondition(
+            "ReversePathTransform - Pad not supported.");
+      }
+      case HloOpcode::kFusion: {
+        if (IsPopOpsFusion(inst, "zero_pad")) {
+          return xla::FailedPrecondition(
+              "ReversePathTransform - 'zero_pad' Fusion not supported.");
+        }
       }
       default: {
         // All other instructions in the path do not modify the shape
@@ -1316,6 +1340,42 @@ template poplar::Tensor TileTensor<tensorflow::BCast::Vec>(
 
 template poplar::Tensor TileTensor<std::vector<std::size_t>>(
     const std::vector<std::size_t>&, const poplar::Tensor&);
+
+StatusOr<poplar::Tensor> UnpadTensor(const PaddingConfig& cfg,
+                                     const poplar::Tensor& in) {
+  poplar::Tensor out = in;
+  for (unsigned d = 0; d < in.rank(); d++) {
+    std::vector<std::size_t> shape(out.shape());
+    // Remove front and back padding first:
+    size_t begin = cfg.dimensions(d).edge_padding_low();
+    if (shape[d] < cfg.dimensions(d).edge_padding_high()) {
+      return xla::FailedPrecondition(
+          "Edge %zu is larger than padded edge %zu for dimension %u",
+          cfg.dimensions(d).edge_padding_high(), shape[d], d);
+    }
+    size_t end = shape[d] - cfg.dimensions(d).edge_padding_high();
+    if (begin > end) {
+      return xla::FailedPrecondition(
+          "Unpadded end %zu is before beginning %zu for dimension %u", end,
+          begin, d);
+    }
+    if (begin > 0 || end != shape[d]) {
+      out = out.slice(begin, end, d);
+      CHECK_EQ(end - begin, out.shape()[d]);
+      shape[d] = end - begin;
+    }
+
+    // Remove interior padding:
+    if (cfg.dimensions(d).interior_padding() > 0 && shape[d] > 0) {
+      out = out.subSample(cfg.dimensions(d).interior_padding() + 1, d);
+      CHECK_EQ(
+          (out.shape()[d] - 1) * (cfg.dimensions(d).interior_padding() + 1) + 1,
+          shape[d]);
+    }
+  }
+
+  return out;
+}
 
 StatusOr<poplar::Tensor> PadTensor(const PaddingConfig& cfg,
                                    const poplar::Tensor& in,

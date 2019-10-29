@@ -253,6 +253,8 @@ void AllocationFinder::FindConsumers(const TensorSource& src,
                 tensor_allocation_map.erase(src);
               }
               AddTensorTarget(src, t);
+            } else if (name == "zero_pad") {
+              FindConsumers(src, user, index);
             }
           }
           break;
@@ -312,6 +314,12 @@ void AllocationFinder::FindConsumers(const TensorSource& src,
         }
         case HloOpcode::kConcatenate: {
           FindConsumers(src, user, index);
+          break;
+        }
+        case HloOpcode::kPad: {
+          if (op_index == 0) {
+            FindConsumers(src, user, index);
+          }
           break;
         }
         default: {

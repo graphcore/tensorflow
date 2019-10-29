@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/shape_inference.h"
 
+#include "tensorflow/compiler/xla/literal_comparison.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -3566,6 +3567,457 @@ ENTRY main {
   EXPECT_EQ(tensors_with_layout.size(), 3);
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
+}
+
+TEST_F(AllocationFinderTest, AllocationsWithPad) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f32[1,4,6,1] parameter(0)
+  c0 = f32[] constant(0)
+  padded_p0 = f32[1,16,16,2] pad(p0, c0), padding=0_0x2_1_3x0_0_2x0_1
+  p1 = f32[3,3,1,2] parameter(1)
+
+  p1_t = f32[3,3,2,1] transpose(p1), dimensions={0, 1, 3, 2}
+
+  conv = f32[1,16,16,1] convolution(padded_p0, p1_t), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
+
+  ROOT t = (f32[1,16,16,1]) tuple(conv)
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(2);
+  config.set_resource_input_count(0);
+  config.set_input_mapping({0, 1});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* conv = root->operand(0);
+  const auto* padded_ip0 = conv->operand(0);
+  const auto* trans = conv->operand(1);
+  const auto* ip0 = padded_ip0->operand(0);
+  const auto* ip1 = trans->operand(0);
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path[0], ip0);
+  EXPECT_EQ(t.backward_path[1], padded_ip0);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path[0], ip1);
+  EXPECT_EQ(t.backward_path[1], trans);
+
+  auto tensors_with_layout = annotations.tensors_with_layout;
+  EXPECT_EQ(tensors_with_layout.size(), 4);
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(padded_ip0, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(trans, 0)));
+
+  Literal p0_data =
+      LiteralUtil::CreateR4<float>({{{{10}, {20}, {30}, {40}, {50}, {60}},
+                                     {{11}, {21}, {31}, {41}, {51}, {61}},
+                                     {{12}, {22}, {32}, {42}, {52}, {62}},
+                                     {{13}, {23}, {33}, {43}, {53}, {63}}}});
+  Literal p1_data =
+      LiteralUtil::CreateR4<float>({{{
+                                         {{0.1}, {0.2}, {0.3}},  // NOLINT
+                                         {{0.4}, {0.5}, {0.6}},  // NOLINT
+                                         {{0.7}, {0.8}, {0.9}}   // NOLINT
+                                     },
+                                     {
+                                         {{0}, {1}, {2}},  // NOLINT
+                                         {{5}, {4}, {3}},  // NOLINT
+                                         {{6}, {7}, {8}}   // NOLINT
+                                     }}});
+  std::vector<Literal*> inputs(2);
+  inputs[0] = &p0_data;
+  inputs[1] = &p1_data;
+  std::vector<Literal> results = Execute(std::move(module.ValueOrDie()), inputs)
+                                     .ValueOrDie()
+                                     .DecomposeTuple();
+
+  // Reference values
+  // clang-format off
+  Literal expected = LiteralUtil::CreateR4<float>({{
+  { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+    {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}},
+  { {30}, {50}, {140}, {60}, {100}, {210}, {90}, {150},
+    {280}, {120}, {200}, {350}, {150}, {250}, {420}, {180}},
+  { {9}, {7}, {20}, {18}, {14}, {30}, {27}, {21},
+    {40}, {36}, {28}, {50}, {45}, {35}, {60}, {54}},
+  { {3}, {1}, {10}, {6}, {2}, {15}, {9}, {3},
+    {20}, {12}, {4}, {25}, {15}, {5}, {30}, {18}},
+  { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+    {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}},
+  { {33}, {55}, {147}, {63}, {105}, {217}, {93}, {155},
+    {287}, {123}, {205}, {357}, {153}, {255}, {427}, {183}},
+  { {9.9},  {7.7}, {21}, {18.9}, {14.7}, {31}, {27.9}, {21.7},
+    {41}, {36.9}, {28.7}, {51}, {45.9}, {35.7}, {61}, {54.9}},
+  { {3.3},  {1.1}, {10.5}, {6.3}, {2.1}, {15.5}, {9.3}, {3.1},
+    {20.5}, {12.3}, {4.1}, {25.5}, {15.3}, {5.1}, {30.5}, {18.3}},
+  { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+    {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}},
+  { {36}, {60}, {154}, {66}, {110}, {224}, {96}, {160},
+    {294}, {126}, {210}, {364}, {156}, {260}, {434}, {186}},
+  { {10.8}, {8.4}, {22}, {19.8}, {15.4}, {32}, {28.8}, {22.4},
+    {42}, {37.8}, {29.4}, {52}, {46.8}, {36.4}, {62}, {55.8}},
+  { {3.6},  {1.2}, {11}, {6.6}, {2.2}, {16}, {9.6}, {3.2},
+    {21}, {12.6}, {4.2}, {26}, {15.6}, {5.2}, {31}, {18.6}},
+  { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+    {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}},
+  { {39}, {65}, {161}, {69}, {115}, {231}, {99}, {165},
+    {301}, {129}, {215}, {371}, {159}, {265}, {441}, {189}},
+  { {11.7}, {9.1}, {23}, {20.7}, {16.1}, {33}, {29.7}, {23.1},
+    {43}, {38.7}, {30.1}, {53}, {47.7}, {37.1}, {63}, {56.7}},
+  { {3.9}, {1.3}, {11.5}, {6.9}, {2.3}, {16.5}, {9.9}, {3.3},
+    {21.5}, {12.9}, {4.3}, {26.5}, {15.9}, {5.3}, {31.5}, {18.9}}
+  }});
+  // clang-format on
+
+  EXPECT_TRUE(LiteralTestUtil::NearOrEqual(expected, results[0],
+                                           ErrorSpec{1e-3, 1e-3}));
+}
+
+TEST_F(AllocationFinderTest, AllocationsWithPadZero) {
+  std::string hlo = R"(
+HloModule top
+
+_pop_op_zero_pad {
+  p0 = f32[1,4,6,1] parameter(0)
+  c0 = f32[] constant(0)
+  ROOT padded = f32[1,16,16,2] pad(p0, c0), padding=0_0x2_1_3x0_0_2x0_1
+}
+
+ENTRY c1 {
+  p0 = f32[1,4,6,1] parameter(0)
+  padded_p0 = f32[1,16,16,2] fusion(p0), kind=kCustom, calls=_pop_op_zero_pad
+  p1 = f32[3,3,1,2] parameter(1)
+
+  p1_t = f32[3,3,2,1] transpose(p1), dimensions={0, 1, 3, 2}
+
+  conv = f32[1,16,16,1] convolution(padded_p0, p1_t), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
+
+  ROOT t = (f32[1,16,16,1]) tuple(conv)
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(2);
+  config.set_resource_input_count(0);
+  config.set_input_mapping({0, 1});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* conv = root->operand(0);
+  const auto* padded_ip0 = conv->operand(0);
+  const auto* trans = conv->operand(1);
+  const auto* ip0 = padded_ip0->operand(0);
+  const auto* ip1 = trans->operand(0);
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path[0], ip0);
+  EXPECT_EQ(t.backward_path[1], padded_ip0);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path[0], ip1);
+  EXPECT_EQ(t.backward_path[1], trans);
+
+  auto tensors_with_layout = annotations.tensors_with_layout;
+  EXPECT_EQ(tensors_with_layout.size(), 4);
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(padded_ip0, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(trans, 0)));
+
+  Literal p0_data =
+      LiteralUtil::CreateR4<float>({{{{10}, {20}, {30}, {40}, {50}, {60}},
+                                     {{11}, {21}, {31}, {41}, {51}, {61}},
+                                     {{12}, {22}, {32}, {42}, {52}, {62}},
+                                     {{13}, {23}, {33}, {43}, {53}, {63}}}});
+  Literal p1_data =
+      LiteralUtil::CreateR4<float>({{{
+                                         {{0.1}, {0.2}, {0.3}},  // NOLINT
+                                         {{0.4}, {0.5}, {0.6}},  // NOLINT
+                                         {{0.7}, {0.8}, {0.9}}   // NOLINT
+                                     },
+                                     {
+                                         {{0}, {1}, {2}},  // NOLINT
+                                         {{5}, {4}, {3}},  // NOLINT
+                                         {{6}, {7}, {8}}   // NOLINT
+                                     }}});
+  std::vector<Literal*> inputs(2);
+  inputs[0] = &p0_data;
+  inputs[1] = &p1_data;
+  std::vector<Literal> results = Execute(std::move(module.ValueOrDie()), inputs)
+                                     .ValueOrDie()
+                                     .DecomposeTuple();
+
+  // Reference values
+  // clang-format off
+  Literal expected = LiteralUtil::CreateR4<float>({{
+  { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+    {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}},
+  { {30}, {50}, {140}, {60}, {100}, {210}, {90}, {150},
+    {280}, {120}, {200}, {350}, {150}, {250}, {420}, {180}},
+  { {9}, {7}, {20}, {18}, {14}, {30}, {27}, {21},
+    {40}, {36}, {28}, {50}, {45}, {35}, {60}, {54}},
+  { {3}, {1}, {10}, {6}, {2}, {15}, {9}, {3},
+    {20}, {12}, {4}, {25}, {15}, {5}, {30}, {18}},
+  { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+    {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}},
+  { {33}, {55}, {147}, {63}, {105}, {217}, {93}, {155},
+    {287}, {123}, {205}, {357}, {153}, {255}, {427}, {183}},
+  { {9.9},  {7.7}, {21}, {18.9}, {14.7}, {31}, {27.9}, {21.7},
+    {41}, {36.9}, {28.7}, {51}, {45.9}, {35.7}, {61}, {54.9}},
+  { {3.3},  {1.1}, {10.5}, {6.3}, {2.1}, {15.5}, {9.3}, {3.1},
+    {20.5}, {12.3}, {4.1}, {25.5}, {15.3}, {5.1}, {30.5}, {18.3}},
+  { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+    {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}},
+  { {36}, {60}, {154}, {66}, {110}, {224}, {96}, {160},
+    {294}, {126}, {210}, {364}, {156}, {260}, {434}, {186}},
+  { {10.8}, {8.4}, {22}, {19.8}, {15.4}, {32}, {28.8}, {22.4},
+    {42}, {37.8}, {29.4}, {52}, {46.8}, {36.4}, {62}, {55.8}},
+  { {3.6},  {1.2}, {11}, {6.6}, {2.2}, {16}, {9.6}, {3.2},
+    {21}, {12.6}, {4.2}, {26}, {15.6}, {5.2}, {31}, {18.6}},
+  { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
+    {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}},
+  { {39}, {65}, {161}, {69}, {115}, {231}, {99}, {165},
+    {301}, {129}, {215}, {371}, {159}, {265}, {441}, {189}},
+  { {11.7}, {9.1}, {23}, {20.7}, {16.1}, {33}, {29.7}, {23.1},
+    {43}, {38.7}, {30.1}, {53}, {47.7}, {37.1}, {63}, {56.7}},
+  { {3.9}, {1.3}, {11.5}, {6.9}, {2.3}, {16.5}, {9.9}, {3.3},
+    {21.5}, {12.9}, {4.3}, {26.5}, {15.9}, {5.3}, {31.5}, {18.9}}
+  }});
+  // clang-format on
+
+  EXPECT_TRUE(LiteralTestUtil::NearOrEqual(expected, results[0],
+                                           ErrorSpec{1e-3, 1e-3}));
+}
+
+TEST_F(AllocationFinderTest, BatchNormInfParamsWithPad) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY top {
+ p0 = f32[1,4,4,8] parameter(0)
+ p1 = f32[1,1,8,8] parameter(1)
+ conv = f32[1,4,4,8] convolution(p0, p1), window={size=1x1}, dim_labels=b01f_01io->b01f
+ p2 = f32[1,8] parameter(2)
+ p2_r = f32[8] reshape(p2)
+ p3 = f32[1,3] parameter(3)
+ p3_r = f32[3] reshape(p3)
+ c0 = f32[] constant(1)
+ padded_p3 = f32[8] pad(p3_r, c0), padding=1_2_1
+ p4 = f32[8] parameter(4)
+ p5 = f32[8] parameter(5)
+ ROOT batch-norm-inf = f32[1,4,4,8] batch-norm-inference(conv, p2_r, padded_p3, p4, p5), epsilon=0.001, feature_index=3
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(6);
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1, 2, 3, 4, 5});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* bn = root;
+  const auto* conv = bn->operand(0);
+  const auto* ip0 = conv->operand(0);
+  const auto* ip1 = conv->operand(1);
+  const auto* p2_r = bn->operand(1);
+  const auto* ip2 = p2_r->operand(0);
+  const auto* padded_p3 = bn->operand(2);
+  const auto* p3_r = padded_p3->operand(0);
+  const auto* ip3 = p3_r->operand(0);
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  // Will have both of the convolution parameters
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1);
+
+  ForwardAllocation fwd_finder(annotations);
+  EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
+
+  // We have added one new entry for the bias add
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  EXPECT_EQ(t.tgt, bn);
+  EXPECT_EQ(t.input_index, 1);
+  EXPECT_EQ(t.layout, conv);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], p2_r);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  EXPECT_EQ(t.tgt, bn);
+  EXPECT_EQ(t.input_index, 2);
+  EXPECT_EQ(t.layout, conv);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path[0], p3_r);
+  EXPECT_EQ(t.backward_path[1], padded_p3);
+
+  auto tensors_with_layout = annotations.tensors_with_layout;
+  EXPECT_EQ(tensors_with_layout.size(), 7);
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(p2_r, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(padded_p3, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(p3_r, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
+}
+TEST_F(AllocationFinderTest, BatchNormInfParamsWithZeroPad) {
+  std::string hlo = R"(
+HloModule top
+
+_pop_op_zero_pad {
+  p0 = f32[3] parameter(0)
+  c0 = f32[] constant(0)
+  ROOT padded = f32[8] pad(p0, c0), padding=1_2_1
+}
+
+ENTRY top {
+ p0 = f32[1,4,4,8] parameter(0)
+ p1 = f32[1,1,8,8] parameter(1)
+ conv = f32[1,4,4,8] convolution(p0, p1), window={size=1x1}, dim_labels=b01f_01io->b01f
+ p2 = f32[1,8] parameter(2)
+ p2_r = f32[8] reshape(p2)
+ p3 = f32[1,3] parameter(3)
+ p3_r = f32[3] reshape(p3)
+ padded_p3 = f32[8] fusion(p3_r), kind=kCustom, calls=_pop_op_zero_pad
+ p4 = f32[8] parameter(4)
+ p5 = f32[8] parameter(5)
+ ROOT batch-norm-inf = f32[1,4,4,8] batch-norm-inference(conv, p2_r, padded_p3, p4, p5), epsilon=0.001, feature_index=3
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(6);
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1, 2, 3, 4, 5});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* bn = root;
+  const auto* conv = bn->operand(0);
+  const auto* ip0 = conv->operand(0);
+  const auto* ip1 = conv->operand(1);
+  const auto* p2_r = bn->operand(1);
+  const auto* ip2 = p2_r->operand(0);
+  const auto* padded_p3 = bn->operand(2);
+  const auto* p3_r = padded_p3->operand(0);
+  const auto* ip3 = p3_r->operand(0);
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  // Will have both of the convolution parameters
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1);
+
+  ForwardAllocation fwd_finder(annotations);
+  EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
+
+  // We have added one new entry for the bias add
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  EXPECT_EQ(t.tgt, bn);
+  EXPECT_EQ(t.input_index, 1);
+  EXPECT_EQ(t.layout, conv);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], p2_r);
+
+  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  EXPECT_EQ(t.tgt, bn);
+  EXPECT_EQ(t.input_index, 2);
+  EXPECT_EQ(t.layout, conv);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path[0], p3_r);
+  EXPECT_EQ(t.backward_path[1], padded_p3);
+
+  auto tensors_with_layout = annotations.tensors_with_layout;
+  EXPECT_EQ(tensors_with_layout.size(), 7);
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(p2_r, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(padded_p3, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(p3_r, 0)));
+  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
 }
 
 // // TODO:
