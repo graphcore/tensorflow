@@ -228,7 +228,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
         with ipu.scopes.partials_type(np.float32):
           pa, pb, fd = _createInputs([2, 2], np.float16)
           output = math_ops.matmul(pa, pb)
-          outputs[output] = ("poplin::ReduceAdd<half,float", fd)
+          outputs[output] = ("poplin::ConvPartial*<half,float", fd)
         with ipu.scopes.partials_type(np.float16):
           pa, pb, fd = _createInputs([3, 3], np.float16)
           output = math_ops.matmul(pa, pb)
@@ -236,7 +236,7 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
           with ipu.scopes.partials_type(np.float32):
             pa, pb, fd = _createInputs([4, 4], np.float16)
             output = math_ops.matmul(pa, pb)
-            outputs[output] = ("poplin::ReduceAdd<half,float", fd)
+            outputs[output] = ("poplin::ConvPartial*<half,float", fd)
           pa, pb, fd = _createInputs([5, 5], np.float16)
           output = math_ops.matmul(pa, pb)
           outputs[output] = ("poplin::ConvPartial*<half,half", fd)
