@@ -75,7 +75,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
   def testTrain(self):
     def my_model_fn(features, labels, mode):
-      self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
       with variable_scope.variable_scope("vs", use_resource=True):
         predictions = layers.Dense(units=1)(features)
@@ -104,14 +104,14 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     estimator.train(input_fn=my_input_fn, steps=4, hooks=[session_run_counter])
 
-    self.assertEquals(2, session_run_counter.num_session_runs)
-    self.assertEquals(4, estimator.get_variable_value("global_step"))
+    self.assertEqual(2, session_run_counter.num_session_runs)
+    self.assertEqual(4, estimator.get_variable_value("global_step"))
 
     # Calling it again should work
     estimator.train(input_fn=my_input_fn, steps=4, hooks=[session_run_counter])
 
-    self.assertEquals(4, session_run_counter.num_session_runs)
-    self.assertEquals(8, estimator.get_variable_value("global_step"))
+    self.assertEqual(4, session_run_counter.num_session_runs)
+    self.assertEqual(8, estimator.get_variable_value("global_step"))
 
     # The number of steps is rounded up to the
     # next multiple of `iterations_per_loop`
@@ -119,14 +119,14 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                     max_steps=9,
                     hooks=[session_run_counter])
 
-    self.assertEquals(5, session_run_counter.num_session_runs)
-    self.assertEquals(10, estimator.get_variable_value("global_step"))
+    self.assertEqual(5, session_run_counter.num_session_runs)
+    self.assertEqual(10, estimator.get_variable_value("global_step"))
 
   def testPassingParams(self):
     exepected_params = {"my_param": 42}
 
     def my_input_fn(mode, params):
-      self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
       self.assertTrue("my_param" in params)
       self.assertTrue(params["my_param"] == 42)
       dataset = tu.create_dual_increasing_dataset(10,
@@ -136,7 +136,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
       return dataset
 
     def my_model_fn(features, labels, mode, params):
-      self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
       self.assertTrue("my_param" in params)
       self.assertTrue(params["my_param"] == 42)
       loss = math_ops.reduce_sum(features + labels, name="loss")
@@ -224,7 +224,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
                                            config=ipu_run_config.RunConfig())
 
-    with self.assertRaisesRegexp(
+    with self.assertRaisesRegex(
         TypeError, "`host_call` return value must be Operation or Tensor"):
       estimator.train(input_fn=my_input_fn, steps=1)
 
@@ -248,7 +248,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2))
 
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
-    with self.assertRaisesRegexp(
+    with self.assertRaisesRegex(
         ValueError, "host_call is not allowed for iterations_per_loop > 1"):
       estimator.train(input_fn=my_input_fn, steps=2)
 
@@ -300,7 +300,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
                                            config=ipu_run_config.RunConfig())
 
-    with self.assertRaisesRegexp(ValueError, "model_fn does not take labels"):
+    with self.assertRaisesRegex(ValueError, "model_fn does not take labels"):
       estimator.train(input_fn=my_input_fn, steps=1)
 
   def testNotPassingDataset(self):
@@ -317,12 +317,12 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
                                            config=ipu_run_config.RunConfig())
 
-    with self.assertRaisesRegexp(ValueError, "must return Dataset"):
+    with self.assertRaisesRegex(ValueError, "must return Dataset"):
       estimator.train(input_fn=my_input_fn, steps=1)
 
   def testVerifyTrainFeeds(self):
     def my_model_fn(features, labels, mode):
-      self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
       loss = math_ops.reduce_sum(features + labels, name="loss")
 
@@ -353,7 +353,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                     steps=num_steps,
                     hooks=[session_run_counter])
 
-    self.assertEquals(session_run_counter.num_session_runs, num_steps)
+    self.assertEqual(session_run_counter.num_session_runs, num_steps)
 
     model_dir = estimator.model_dir
     events_file = glob.glob(model_dir + "/*tfevents*")
@@ -388,7 +388,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
         return self._result
 
     def my_model_fn(features, labels, mode):
-      self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
       with variable_scope.variable_scope("vs", use_resource=True):
         predictions = layers.Dense(units=1)(features)
@@ -439,16 +439,16 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     warm_started_estimator_variables = introspect_hook.result
 
-    self.assertEquals(six.viewkeys(estimator_variables),
-                      six.viewkeys(warm_started_estimator_variables))
+    self.assertEqual(six.viewkeys(estimator_variables),
+                     six.viewkeys(warm_started_estimator_variables))
 
     for k, _ in six.iteritems(estimator_variables):
-      self.assertEquals(estimator_variables[k][0],
-                        warm_started_estimator_variables[k][0])
+      self.assertEqual(estimator_variables[k][0],
+                       warm_started_estimator_variables[k][0])
 
   def testCompileSummary(self):
     def my_model_fn(features, labels, mode):
-      self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
       with variable_scope.variable_scope("vs", use_resource=True):
         predictions = layers.Dense(units=1)(features)
@@ -513,7 +513,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
         return self._events
 
     def my_model_fn(features, labels, mode):
-      self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
       with variable_scope.variable_scope("vs", use_resource=True):
         predictions = layers.Dense(units=1)(features)
@@ -553,7 +553,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
   def testLossAveraging(self):
     def my_model_fn(features, labels, mode):
-      self.assertEquals(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
       loss = math_ops.reduce_sum(features + labels, name="loss")
 
@@ -587,7 +587,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                     steps=num_steps,
                     hooks=[session_run_counter])
 
-    self.assertEquals(session_run_counter.num_session_runs, num_session_runs)
+    self.assertEqual(session_run_counter.num_session_runs, num_session_runs)
 
     model_dir = estimator.model_dir
     events_file = glob.glob(model_dir + "/*tfevents*")
@@ -635,7 +635,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     config = ipu_run_config.RunConfig()
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
-    with self.assertRaisesRegexp(ValueError, "must contain eval_metric_ops"):
+    with self.assertRaisesRegex(ValueError, "must contain eval_metric_ops"):
       estimator.evaluate(my_input_fn, steps=1)
 
   def testPredictTensorTwoPerIteration(self):
@@ -777,24 +777,24 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
                                            config=config)
 
-    with self.assertRaisesRegexp(ValueError,
-                                 "must be a multiple of iterations_per_loop"):
+    with self.assertRaisesRegex(ValueError,
+                                "must be a multiple of iterations_per_loop"):
       estimator.train(input_fn=lambda: None, steps=1)
 
-    with self.assertRaisesRegexp(ValueError,
-                                 "must be a multiple of iterations_per_loop"):
+    with self.assertRaisesRegex(ValueError,
+                                "must be a multiple of iterations_per_loop"):
       estimator.evaluate(input_fn=lambda: None, steps=2)
 
   def testIPURunConfig(self):
-    with self.assertRaisesRegexp(
-        ValueError, "configuration requires more than one device"):
+    with self.assertRaisesRegex(ValueError,
+                                "configuration requires more than one device"):
       ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                   num_replicas=3,
                                   ipu_options=None,
                                   compile_summary=True)
 
-    with self.assertRaisesRegexp(
-        ValueError, "configuration requires more than one device"):
+    with self.assertRaisesRegex(ValueError,
+                                "configuration requires more than one device"):
       ipu_run_config.IPURunConfig(iterations_per_loop=2,
                                   num_shards=2,
                                   ipu_options=None,
@@ -818,7 +818,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                                              compile_summary=True)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
-    with self.assertRaisesRegexp(ValueError, "`IpuOptions` configured with"):
+    with self.assertRaisesRegex(ValueError, "`IpuOptions` configured with"):
       ipu_options = ipu_utils.create_ipu_config(profiling=True)
       ipu_options = ipu_utils.auto_select_ipus(ipu_options, 3)
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
@@ -853,7 +853,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                                              compile_summary=True)
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
-    with self.assertRaisesRegexp(ValueError, "`IpuOptions` configured with"):
+    with self.assertRaisesRegex(ValueError, "`IpuOptions` configured with"):
       ipu_options = ipu_utils.create_ipu_config(profiling=True)
       ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2])
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
@@ -861,7 +861,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                                                ipu_options=ipu_options,
                                                compile_summary=True)
 
-    with self.assertRaisesRegexp(ValueError, "`IpuOptions` configured with"):
+    with self.assertRaisesRegex(ValueError, "`IpuOptions` configured with"):
       ipu_options = ipu_utils.create_ipu_config(profiling=True)
       ipu_options = ipu_utils.select_ipus(ipu_options, [0, 1, 2])
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
@@ -932,7 +932,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     # predict
     predictions = estimator.predict(input_fn=my_input_fn)
-    self.assertEquals(10.0, next(predictions))
+    self.assertEqual(10.0, next(predictions))
 
     # evaluate
     scores = estimator.evaluate(my_input_fn, steps=1)
@@ -967,21 +967,21 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                                            config=ipu_run_config.RunConfig())
 
     # train
-    self.assertEquals(0, training_hook.num_session_runs)
+    self.assertEqual(0, training_hook.num_session_runs)
     estimator.train(input_fn=my_input_fn, steps=1)
-    self.assertEquals(1, training_hook.num_session_runs)
+    self.assertEqual(1, training_hook.num_session_runs)
 
     # predict: not evaluated before generator is consumed
-    self.assertEquals(0, prediction_hook.num_session_runs)
+    self.assertEqual(0, prediction_hook.num_session_runs)
     predictions = estimator.predict(input_fn=my_input_fn)
-    self.assertEquals(0, prediction_hook.num_session_runs)
+    self.assertEqual(0, prediction_hook.num_session_runs)
     next(predictions)
-    self.assertEquals(1, prediction_hook.num_session_runs)
+    self.assertEqual(1, prediction_hook.num_session_runs)
 
     # evaluate
-    self.assertEquals(0, evaluation_hook.num_session_runs)
+    self.assertEqual(0, evaluation_hook.num_session_runs)
     estimator.evaluate(my_input_fn, steps=1)
-    self.assertEquals(1, evaluation_hook.num_session_runs)
+    self.assertEqual(1, evaluation_hook.num_session_runs)
 
 
 if __name__ == "__main__":
