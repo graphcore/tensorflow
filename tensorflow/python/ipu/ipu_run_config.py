@@ -65,8 +65,9 @@ class IPURunConfig(
 
     if num_devices != num_configured_devices:
       raise ValueError(
-          '`IpuOptions` configured with {} devices, but `IPURunConfig` configured with {} devices'
-          .format(num_configured_devices, num_devices))
+          '`IPURunConfig` configured with {} devices ({} num_replicas times {} num_shards),'
+          ' but `IpuOptions` configured with {} devices'.format(
+              num_devices, num_replicas, num_shards, num_configured_devices))
 
     return super(IPURunConfig,
                  cls).__new__(cls,

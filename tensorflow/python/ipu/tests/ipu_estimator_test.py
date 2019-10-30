@@ -825,7 +825,10 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                                                ipu_options=ipu_options,
                                                compile_summary=True)
 
-    with self.assertRaisesRegexp(ValueError, "`IpuOptions` configured with"):
+    with self.assertRaisesRegex(
+        ValueError, r"`IPURunConfig` configured with 4 devices "
+        r"\(4 num_replicas times 1 num_shards\), "
+        r"but `IpuOptions` configured with 3 devices"):
       ipu_options = ipu_utils.create_ipu_config(profiling=True)
       ipu_options = ipu_utils.auto_select_ipus(ipu_options, 3)
       ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
