@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/kernels/pipelining/rearrange_pipeline_stage_arguments.h"
 
+#include <string>
+
 #include "tensorflow/compiler/tf2xla/tf2xla_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/common_runtime/function.h"
@@ -316,23 +318,23 @@ Status MaybeRewritePiplineStageNode(
 
 }  // namespace
 
-Status RearrangePipelineStageArguments(
+Status RearrangeFunctionArguments(
     std::function<Status(const NameAttrList&, const FunctionBody**)>
         get_function_body_fn,
-    NameAttrList& new_pipeline_func, const NameAttrList& old_pipeline_func,
+    NameAttrList& new_func, const NameAttrList& old_func,
     FunctionLibraryDefinition* fld) {
-  if (old_pipeline_func.attr().size()) {
+  if (old_func.attr().size()) {
     return errors::FailedPrecondition(
         "Expected NameAttrList for the `to_apply` attribute to not have any "
         "attributes.");
   }
 
-  const FunctionBody* pipeline_body;
-  TF_RETURN_IF_ERROR(get_function_body_fn(old_pipeline_func, &pipeline_body));
+  const FunctionBody* func_body;
+  TF_RETURN_IF_ERROR(get_function_body_fn(old_func, &func_body));
 
   // Create a new graph representing the Pipeline function.
   std::unique_ptr<Graph> graph(new Graph(fld));
-  CopyGraph(*pipeline_body->graph, graph.get());
+  CopyGraph(*func_body->graph, graph.get());
 
   // Rewrite PiplineStage nodes.
   bool rewritten = false;
@@ -351,11 +353,11 @@ Status RearrangePipelineStageArguments(
 
   // Save the new FunctionDef and use that for the Pipeline op.
   FunctionDef new_fdef;
-  string new_name = fld->UniqueFunctionName(
-      absl::StrCat(old_pipeline_func.name(), "_rewritten_"));
+  string new_name =
+      fld->UniqueFunctionName(absl::StrCat(old_func.name(), "_rewritten_"));
   TF_RETURN_IF_ERROR(GraphToFunctionDef(*graph.get(), new_name, &new_fdef));
   TF_RETURN_IF_ERROR(fld->AddFunctionDef(new_fdef));
-  new_pipeline_func.set_name(new_name);
+  new_func.set_name(new_name);
 
   return Status::OK();
 }

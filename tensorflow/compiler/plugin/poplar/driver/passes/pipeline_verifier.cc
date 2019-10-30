@@ -14,10 +14,12 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/service/call_graph.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -93,8 +95,45 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
               HasCompatiblePipelineSharding(expected_sharding, inst));
         }
       }
+    } else if (IsPipelineResourceUpdate(inst)) {
+      // Issue a warning if there are any gradient accumulation operations in
+      // the resource update.
+      TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_in_stage,
+                          GetAllComputationsCalledBy(inst, call_graph));
+      for (HloComputation* comp : called_in_stage) {
+        for (HloInstruction* inst : comp->instructions()) {
+          if (DynCast<HloStatefulGradientAccumulate>(inst)) {
+            LOG(INFO)
+                << "Detected a gradient accumulation operation inside "
+                   "the resource update part of the pipeline which might "
+                   "lead to unintended behaviour. Please note that unless "
+                   "continuous weight update has been enabled, the pipelining "
+                   "operation automatically handles and generates gradient "
+                   "accumulation operations.";
+          }
+        }
+      }
     }
   }
+
+  // Verify that the input/output have the same sharding.
+  std::vector<HloSharding> input_sharding;
+  for (const HloInstruction* operand : pipeline_op->operands()) {
+    const HloSharding& sharding = operand->sharding();
+    if (sharding.IsTuple()) {
+      absl::c_copy(sharding.tuple_elements(),
+                   std::back_inserter(input_sharding));
+    } else {
+      input_sharding.push_back(sharding);
+    }
+  }
+
+  if (input_sharding != pipeline_op->sharding().tuple_elements()) {
+    return InternalErrorStrCat(
+        "Expected the sharding of inputs and outputs of pipeline ",
+        pipeline_op->name(), " to match.");
+  }
+
   return Status::OK();
 }
 

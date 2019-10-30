@@ -15,14 +15,15 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_PIPELINE_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_PIPELINE_UTIL_H_
 
+#include <map>
+#include <set>
+
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 
 #include "absl/container/flat_hash_map.h"
-
-#include <map>
 
 namespace xla {
 
@@ -41,6 +42,10 @@ bool IsPipelineStageOrBackwardOp(const HloInstruction* inst);
 // Returns whether the instruction is a PipelineStage op of any kind.
 bool IsAnyPipelineStageOp(const HloInstruction* inst);
 
+// Returns whether the instruction is a PipelineStage op of any kind or the
+// PipelineResourceUpdate.
+bool IsAnyPipelineStageOpOrResourceUpdate(const HloInstruction* inst);
+
 // Helper function for the PipelineDataflowAnalysis. Is used to identify whether
 // an instruction is allowed to produce outputs in a PipelineOp.
 bool IsProducerOp(const HloInstruction* inst);
@@ -53,6 +58,7 @@ struct PipelineStages {
   std::vector<HloInstruction*> forward;
   std::vector<HloInstruction*> backward;
   absl::flat_hash_map<int64, HloInstruction*> recomputation;
+  absl::optional<HloInstruction*> resource_update;
 };
 
 // Get all the pipelines in the module.
@@ -109,44 +115,44 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     const std::vector<HloInstruction*>& ordered_lowering = {},
     std::map<int64, HloInstruction*>
         replace_parameter_with_lowered_instruction = {},
-    absl::flat_hash_set<HloInstruction*> forced_parameters = {});
+    absl::flat_hash_set<HloInstruction*> forced_parameters = {},
+    bool replace_resource_update_uses = true);
 
-// Replaces a pipeline stage with a new one, including a new computation.
-// Propagates all the information to the new stage and removes the old stage and
+// Replaces a call with a new one, including a new computation.
+// Propagates all the information to the new call and removes the old call and
 // its computation.
-StatusOr<HloInstruction*> ReplacePipelineStageWith(
-    HloInstruction* stage, std::unique_ptr<HloComputation> new_computation,
+StatusOr<HloInstruction*> ReplaceCallWith(
+    HloInstruction* call, std::unique_ptr<HloComputation> new_computation,
     const std::vector<HloInstruction*> new_operands,
     bool remove_unused_operands);
 
-// Get output tuple indices for unused stage outputs.
-StatusOr<std::set<int64>> GetUnusedPipelineStageOutputIndices(
-    const HloInstruction* stage);
+// Get output tuple indices for unused call outputs.
+StatusOr<std::set<int64>> GetUnusedCallOutputIndices(
+    const HloInstruction* call);
 
-// Get parameter numbers for parameter instructions in the stage which have no
+// Get parameter numbers for parameter instructions in the call which have no
 // users.
-StatusOr<std::set<int64>> GetUnusedParametersInPipelineStage(
-    const HloInstruction* stage);
+StatusOr<std::set<int64>> GetUnusedParametersInCall(const HloInstruction* call);
 
-// Get tuple indices for stage outputs which are used in multiple places.
+// Get tuple indices for call outputs which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
 // occurrences.
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageOutputs(
-    const HloInstruction* stage);
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallOutputs(
+    const HloInstruction* call);
 
-// Get tuple indices for stage operands which are used in multiple places.
+// Get tuple indices for call operands which are used in multiple places.
 // Returns a map from the tuple index of first occurrence to a set of all other
 // occurrences.
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageInputs(
-    const HloInstruction* stage);
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
+    const HloInstruction* call);
 
-// Removes parameters from the stage, and any operands which now have no users.
-StatusOr<HloInstruction*> RemoveParametersFromStage(
-    HloInstruction* stage, const std::set<int64>& parameters_to_remove);
+// Removes parameters from the call, and any operands which now have no users.
+StatusOr<HloInstruction*> RemoveParametersFromCall(
+    HloInstruction* call, const std::set<int64>& parameters_to_remove);
 
-// Removes outputs from the stage, and GTEs which are not used by anything.
-Status RemoveOutputsFromStage(HloInstruction* stage,
-                              const std::set<int64>& outputs_to_remove);
+// Removes outputs from the call, and GTEs which are not used by anything.
+Status RemoveOutputsFromCall(HloInstruction* call,
+                             const std::set<int64>& outputs_to_remove);
 
 // Helper struct for identifying pipeline stages.
 enum class StageType {

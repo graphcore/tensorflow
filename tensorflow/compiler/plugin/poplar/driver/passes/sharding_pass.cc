@@ -529,7 +529,7 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
       continue;
     }
     for (auto* inst : comp->instructions()) {
-      if (inst->has_sharding() && !IsPipelineStageOrBackwardOp(inst)) {
+      if (inst->has_sharding() && !IsAnyPipelineStageOp(inst)) {
         bool remove_sharding = false;
 
         auto sharding = inst->sharding();

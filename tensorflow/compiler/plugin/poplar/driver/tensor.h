@@ -172,6 +172,12 @@ StatusOr<poplar::Tensor> BroadcastTensor(
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
                        const poplar::Tensor& tensor);
 
+/* This returns a [range) which correspond to the flat tuple indices of output
+ * tensors.
+ */
+std::pair<int64, int64> FindGetTupleElementTupleIndices(
+    const HloInstruction* inst);
+
 /* This returns a vector of all poplar tensors which are outputs of the inst
  * operand index `input` in range [range.first, range.second).
  */

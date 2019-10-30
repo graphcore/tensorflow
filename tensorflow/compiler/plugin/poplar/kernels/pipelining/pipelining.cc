@@ -255,6 +255,92 @@ class PipelineStageBackwardOp : public PipelineStageOp {
 };
 REGISTER_IPU_OP("PipelineStageBackward", PipelineStageBackwardOp);
 
+class PipelineResourceUpdateOp : public XlaOpKernel {
+ public:
+  explicit PipelineResourceUpdateOp(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
+    DataTypeVector output_types;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types));
+    OP_REQUIRES(ctx, output_types.size() == 0,
+                errors::InvalidArgument("Expected PipelineResourceUpdate "
+                                        "to have no explicit outputs."));
+  }
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    auto builder = ctx->builder();
+    // First get all the arguments and compile the computation.
+    int num_resource_args = 0;
+    auto arguments_or = GetXlaArguments(ctx, input_types_, &num_resource_args);
+    OP_REQUIRES_OK(ctx, arguments_or.status());
+    std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
+
+    VLOG(2) << "Building PipelineResourceUpdate function with "
+            << input_types_.size() << " inputs including " << num_resource_args
+            << " resources.";
+
+    // Rewrite the PipelineResourceUpdate function such that arguments to
+    // PipelineResourceUpdate ops are rearranged and resource variables
+    // moved to the back.
+    NameAttrList new_to_apply;
+    OP_REQUIRES_OK(
+        ctx,
+        RearrangeFunctionArguments(
+            [&ctx](const NameAttrList& function, const FunctionBody** fbody) {
+              return ctx->compiler()->FindFunctionBody(function, fbody);
+            },
+            new_to_apply, *to_apply_, ctx->compiler()->local_flib_def()));
+
+    XlaCompiler::CompileOptions compile_options = GetDefaultCompileOptions();
+    compile_options.return_updated_values_for_all_resources = true;
+
+    // Compile the computation.
+    XlaCompiler::CompilationResult result;
+    OP_REQUIRES_OK(ctx, ctx->compiler()->CompileFunction(
+                            compile_options, new_to_apply, arguments, &result));
+
+    // Get the non constant XLA arguments.
+    auto inputs_or = GetXlaInputs(ctx, arguments, result.input_mapping);
+    OP_REQUIRES_OK(ctx, inputs_or.status());
+    std::vector<xla::XlaOp> inputs = inputs_or.ValueOrDie();
+
+    auto outputs = xla::Call(builder, *result.computation, inputs);
+    // Set the config type of the call.
+    OP_REQUIRES_OK(
+        ctx, builder->SetInstructionFrontendAttribute(
+                 outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
+                 PoplarBackendConfig_CallConfig_Type_Name(
+                     PoplarBackendConfig::CallConfig::PipelineResourceUpdate)));
+
+    // We expect the resource update stage to only resource outputs.
+    for (int i = 0; i < result.resource_updates.size(); ++i) {
+      const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
+      XlaResource* resource;
+      OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
+      OP_REQUIRES(
+          ctx, update.modified,
+          errors::Internal("Expected the resource output to be modified."));
+      OP_REQUIRES_OK(ctx,
+                     resource->SetFromPack(
+                         arguments[update.input_index].tensor_array_gradients,
+                         xla::GetTupleElement(outputs, i), builder));
+
+      VLOG(2) << "Variable: pos: " << i << " name: " << resource->name()
+              << " modified: " << update.modified
+              << " type: " << DataTypeString(update.type)
+              << " shape: " << update.shape.DebugString();
+    }
+  }
+
+ private:
+  const NameAttrList* to_apply_;
+  DataTypeVector input_types_;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(PipelineResourceUpdateOp);
+};
+REGISTER_IPU_OP("PipelineResourceUpdate", PipelineResourceUpdateOp);
+
 class PipelineOp : public XlaOpKernel {
  public:
   explicit PipelineOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
@@ -278,7 +364,7 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
-    VLOG(2) << "Building PipelineStage function with " << input_types_.size()
+    VLOG(2) << "Building Pipeline function with " << input_types_.size()
             << " inputs including " << num_resource_args << " resources.";
 
     // Rewrite the Pipeline function such that arguments to PipelineStage ops
@@ -286,7 +372,7 @@ class PipelineOp : public XlaOpKernel {
     NameAttrList new_to_apply;
     OP_REQUIRES_OK(
         ctx,
-        RearrangePipelineStageArguments(
+        RearrangeFunctionArguments(
             [&ctx](const NameAttrList& function, const FunctionBody** fbody) {
               return ctx->compiler()->FindFunctionBody(function, fbody);
             },

@@ -65,6 +65,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_update_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
@@ -618,6 +619,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<RecomputeInstructions>(
         poplarExecutor->RecomputationEnabled());
     pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<PipelineResourceUpdateFixer>();
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<DependencyReplacer>(true);
     pipeline.AddPass<ShardingPass>();
