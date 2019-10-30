@@ -733,7 +733,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ExpressionOutliner>();
     pipeline.AddPass<PipelineCopyInserter>();
     pipeline.AddPass<PipelineRecomputation>(
-        poplar_executor->RecomputationEnabled());
+        poplar_executor->RecomputationEnabled(),
+        poplar_executor->StatefulRecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     // Beyond this point non of the passes in the pipeline are allowed to modify
     // the instructions in the HloModule.

@@ -1008,6 +1008,14 @@ Status PipelineDataflowAnalysis::VerifyPipelineUsage(
           (pipeline_stage_id.id + 1) == pipeline_stage_user_id.id) {
         return Status::OK();
       }
+
+      // If we allow recomputation, then it can also be used by the
+      // corresponding recomputation stage if it's a stateful stage.
+      if (allow_recomputation_ &&
+          pipeline_stage_user_id.stage_type == StageType::kRecomputation &&
+          pipeline_stage_id.id == pipeline_stage_user_id.id) {
+        return Status::OK();
+      }
       break;
     }
     case StageType::kBackward: {
@@ -1264,18 +1272,23 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
                                 GetStageID(gte_input));
             TF_ASSIGN_OR_RETURN(StageID fifo_output_stage_id,
                                 GetStageID(inst->users()[0]));
-            // Expect the input to FIFO to be a forward stage and the output of
-            // FIFO to be a backward stage. Expect their IDs to match.
+            // Expect for a FIFO to either be between:
+            // - A forward stage and the next stage's recomputation stage
+            // (Input).
+            // - A forward stage and the corresponding recomputatoin stage
+            // (State).
             if (fifo_input_stage_id.stage_type != StageType::kForward ||
                 fifo_output_stage_id.stage_type != StageType::kRecomputation ||
-                (fifo_input_stage_id.id + 1) != fifo_output_stage_id.id) {
+                ((fifo_input_stage_id.id != fifo_output_stage_id.id) &&
+                 ((fifo_input_stage_id.id + 1) != fifo_output_stage_id.id))) {
               return UnimplementedStrCat(
                   "Trying to create a FIFO between ",
                   fifo_input_stage_id.ToString(), " and ",
                   fifo_output_stage_id.ToString(),
                   ". This violates the dataflow constraints because a FIFO "
                   "operation can only be placed between a forward "
-                  "PipelineStage and the next Recomputation PipelineStage.");
+                  "PipelineStage and its corresponding or the next "
+                  "Recomputation PipelineStage.");
             }
           }
         } else {

@@ -397,7 +397,7 @@ ENTRY cluster {
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputation recomputation(true, true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
 
@@ -492,7 +492,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(changed, inter_inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputation recomputation(true, true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
 }
@@ -860,7 +860,7 @@ ENTRY cluster {
   TF_ASSERT_OK_AND_ASSIGN(bool changed, inserter.Run(module.get()));
   EXPECT_TRUE(changed);
 
-  PipelineRecomputation recomputation(false);
+  PipelineRecomputation recomputation(false, true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
 }

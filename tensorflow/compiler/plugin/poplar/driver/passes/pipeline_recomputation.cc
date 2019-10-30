@@ -14,6 +14,11 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
+
+#include <list>
+#include <memory>
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
@@ -33,8 +38,94 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-PipelineRecomputation::PipelineRecomputation(bool allow_recomputation)
-    : allow_recomputation_(allow_recomputation) {}
+namespace {
+std::list<HloInstruction*> GetStatefulInstructions(HloComputation* comp) {
+  std::list<HloInstruction*> stateful_ops;
+  for (auto inst : comp->instructions()) {
+    if (!IsPoplarInstruction(PoplarOp::StatefulNoop)(inst) &&
+        inst->HasSideEffect()) {
+      stateful_ops.emplace_back(inst);
+    }
+  }
+  return stateful_ops;
+}
+
+// Create a new stage which returns the original stage's outputs followed by
+// the output of all the stateful ops.
+StatusOr<HloComputation*> CloneStageCompWithStates(
+    HloInstruction* stage, HloComputation* pipeline_comp) {
+  HloComputation* stage_comp = pipeline_comp->parent()->AddEmbeddedComputation(
+      stage->to_apply()->Clone("state"));
+
+  // Return the output of all the stateful ops to pipeline
+  auto* root = stage_comp->root_instruction();
+  CHECK(root->opcode() == HloOpcode::kTuple);
+  HloInstruction::InstructionVector tuple_elts = root->operands();
+
+  // Add the output of the stateful ops to the output of the computation.
+  absl::c_copy(GetStatefulInstructions(stage_comp),
+               std::back_inserter(tuple_elts));
+
+  Shape shape = stage->shape();
+  HloInstruction* new_root =
+      stage_comp->AddInstruction(HloInstruction::CreateTuple(tuple_elts));
+  root->SetupDerivedInstruction(new_root);
+  auto optional_sharding = stage->sharding().ExtractSingleSharding();
+  if (!optional_sharding) {
+    return FailedPrecondition("Could not extract single sharding.");
+  }
+  new_root->set_sharding(
+      HloSharding::SingleTuple(stage->shape(), *optional_sharding));
+  stage_comp->set_root_instruction(new_root, true);
+  TF_RETURN_IF_ERROR(stage_comp->RemoveInstruction(root));
+  return stage_comp;
+}
+
+StatusOr<HloInstruction*> CreateRecomputationStage(
+    HloComputation* original_stage_comp, HloInstruction* stage,
+    HloComputation* pipeline_comp, const HloSharding& sharding) {
+  absl::flat_hash_map<const HloInstruction*, std::unique_ptr<HloInstruction>>
+      replacements;
+  HloInstruction::InstructionVector recomp_operands = stage->operands();
+  // Outputs of the stateful ops are passed as extra parameters after
+  // the regular stage operands.
+  const int64 first_parameter_idx = stage->operands().size();
+  int64 tuple_index =
+      original_stage_comp->root_instruction()->operands().size();
+  {
+    int64 parameter_idx = first_parameter_idx;
+    // Create the gte (Fifos will be created later)
+    for (auto inst : GetStatefulInstructions(original_stage_comp)) {
+      TF_ASSIGN_OR_RETURN(HloInstruction * gte,
+                          MakeGetTupleElementHlo(stage, tuple_index++));
+      gte->set_sharding(sharding);
+
+      recomp_operands.push_back(gte);
+      auto param = HloInstruction::CreateParameter(
+          parameter_idx++, gte->shape(), inst->name() + "_state");
+      param->set_sharding(sharding);
+      replacements.emplace(inst, std::move(param));
+    }
+  }
+  HloComputation* recomp_stage_comp =
+      pipeline_comp->parent()->AddEmbeddedComputation(
+          original_stage_comp->CloneWithReplacements(
+              std::move(replacements), {}, nullptr, "recomputation"));
+
+  HloInstruction* recomp_stage =
+      pipeline_comp->AddInstruction(stage->CloneWithNewOperands(
+          original_stage_comp->root_instruction()->shape(), recomp_operands));
+  recomp_stage->set_sharding(sharding);
+  recomp_stage->set_to_apply(recomp_stage_comp);
+  recomp_stage->SetAndSanitizeName(recomp_stage_comp->name());
+  return recomp_stage;
+}
+
+}  // namespace
+PipelineRecomputation::PipelineRecomputation(bool allow_recomputation,
+                                             bool allow_stateful_recomputation)
+    : allow_recomputation_(allow_recomputation),
+      allow_stateful_recomputation_(allow_stateful_recomputation) {}
 
 StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     HloInstruction* pipeline_op) {
@@ -52,7 +143,6 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
        stage_id != static_cast<int64>(stages.forward.size()) - 1; ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
-    HloComputation* fwd_stage_comp = fwd_stage->to_apply();
     // Do not recompute a stage if it has no outputs which go into the
     // corresponding backward stage (i.e. there is no FIFO).
     const bool bwd_uses_fwd = absl::c_any_of(
@@ -61,7 +151,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
       continue;
     }
 
-    // We cannot recompute a stage if it is stateful.
+    // Stages containing stateful ops require special treatment.
     // Note that to prevent DCE each pipeline stage has had a stateful noop
     // inserted inside, so we cannot just call `HasSideEffect` on the stage
     // computation.
@@ -71,21 +161,43 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
                      ? false
                      : inst->HasSideEffect();
         });
-    if (has_side_effects) {
-      LOG(INFO) << "Recomputation has been enabled, however the pipeline stage "
-                << stage_id
-                << " cannot be recomputed because it contains instructions "
-                   "with side-effect.";
-      continue;
-    }
+    HloInstruction* recomp_stage;
 
-    // Clone the stage and its computation.
-    HloComputation* recomp_stage_computation =
-        pipeline_comp->parent()->AddEmbeddedComputation(
-            fwd_stage_comp->Clone("_recomputation"));
-    HloInstruction* recomp_stage =
-        pipeline_comp->AddInstruction(fwd_stage->Clone("_recomputation"));
-    recomp_stage->set_to_apply(recomp_stage_computation);
+    if (has_side_effects) {
+      if (!allow_stateful_recomputation_) {
+        LOG(INFO)
+            << "Recomputation has been enabled however the pipeline stage "
+            << stage_id
+            << " cannot be recomputed because recomputation of instructions "
+               "with side-effect hasn't been enabled and it contains some.";
+        continue;
+      }
+      // Find all the stateful instructions in that stage.
+      HloComputation* original_fwd_stage_comp = fwd_stage->to_apply();
+      TF_ASSIGN_OR_RETURN(auto comp_states,
+                          CloneStageCompWithStates(fwd_stage, pipeline_comp));
+      fwd_stage->set_to_apply(comp_states);
+      // Update the stage shape.
+      *fwd_stage->mutable_shape() =
+          fwd_stage->to_apply()->root_instruction()->shape();
+
+      CHECK_EQ(fwd_stage->to_apply()->root_instruction()->sharding(),
+               fwd_stage->sharding());
+      TF_ASSIGN_OR_RETURN(
+          recomp_stage,
+          CreateRecomputationStage(original_fwd_stage_comp, fwd_stage,
+                                   pipeline_comp, fwd_stage->sharding()));
+      TF_RETURN_IF_ERROR(pipeline_comp->parent()->RemoveUnusedComputations());
+    } else {
+      HloComputation* fwd_stage_comp = fwd_stage->to_apply();
+      // Clone the stage and its computation.
+      HloComputation* recomp_stage_comp =
+          pipeline_comp->parent()->AddEmbeddedComputation(
+              fwd_stage_comp->Clone("_recomputation"));
+      recomp_stage =
+          pipeline_comp->AddInstruction(fwd_stage->Clone("_recomputation"));
+      recomp_stage->set_to_apply(recomp_stage_comp);
+    }
 
     // Mark this stage as a Recomputation stage.
     TF_ASSIGN_OR_RETURN(PoplarBackendConfig config,
@@ -114,6 +226,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
       HloInstruction* fifo_inst = pipeline_comp->AddInstruction(CreateFifo(
           operand,
           fifo_depth_multiplier * (stages.forward.size() - stage_id - 1)));
+      fifo_inst->SetAndSanitizeName(operand->name() + ".fifo");
       fifo_inst->set_sharding(operand->sharding());
       // Use the fifo as the input.
       TF_RETURN_IF_ERROR(recomp_stage->ReplaceOperandWith(op_idx, fifo_inst));

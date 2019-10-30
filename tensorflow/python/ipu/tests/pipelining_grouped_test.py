@@ -572,13 +572,13 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
                          bias_initializer=init_ops.constant_initializer(0.5))
             (x)) + c + label
 
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 14172)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 14172)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -676,10 +676,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-          sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 22738)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
+        dataset_fn, optimizer, self, 22738)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -729,10 +728,9 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 13821)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 13821)
 
 
 if __name__ == "__main__":

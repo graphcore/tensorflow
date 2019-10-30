@@ -522,7 +522,9 @@ def set_ipu_model_options(opts, compile_ipu_code=True):
   return opts
 
 
-def set_recomputation_options(opts, allow_recompute=True):
+def set_recomputation_options(opts,
+                              allow_recompute=True,
+                              allow_stateful_recompute=True):
   """Set re-computation options.
 
   Args:
@@ -532,12 +534,16 @@ def set_recomputation_options(opts, allow_recompute=True):
       backward pass to avoid having to preserve activations which increase the
       maximum memory liveness. Enabling this option can reduce memory usage at
       the expense of extra computation.
+    allow_stateful_recompute: Whether or not to extend the re-compute of
+      pipeline stages to stages containing stateful operations (Has no effect
+      if allow_recompute is False).
 
   Returns:
     The IpuOptions configuration protobuf.
   """
 
   opts.speed_size_config.allow_recompute = allow_recompute
+  opts.speed_size_config.allow_stateful_recompute = allow_stateful_recompute
   opts.speed_size_config.has_allow_recompute = True
 
   return opts
