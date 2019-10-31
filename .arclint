@@ -10,6 +10,7 @@
         "cpplint": {
             "type": "cpplint",
             "bin": ["./.linters/cpplint"],
+            "flags": ["--root=tensorflow"],
             "include": [
                  "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
                  "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
