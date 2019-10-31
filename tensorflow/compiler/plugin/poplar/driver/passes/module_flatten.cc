@@ -132,6 +132,7 @@ StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
             auto* caller = call_site.instruction();
             if (caller->opcode() == HloOpcode::kCall) {
               caller->DropAllControlDeps();
+              RemoveMapEntry(caller);
               TF_ASSIGN_OR_RETURN(CallInliner::InlinedInstructionMap map,
                                   CallInliner::Inline(caller));
 
