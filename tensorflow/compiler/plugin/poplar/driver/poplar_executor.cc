@@ -1168,6 +1168,25 @@ bool PoplarExecutor::HaveExecutableCache() const {
   return !PoplarXlaFlags::Get().executable_cache_path.empty();
 }
 
+Status PoplarExecutor::CreateExecutableCacheDirIfMissing() const {
+  const auto& path = PoplarXlaFlags::Get().executable_cache_path;
+  CHECK(!path.empty());
+  auto* env = tensorflow::Env::Default();
+
+  // Two threads could race to observe the absence of the directory and
+  // simultaneously try to create it, causing the "losing" thread to get a
+  // "directory already exists" error.  We can work around this by checking
+  // again whether the dir exists.
+  if (!env->IsDirectory(path).ok()) {
+    const auto status = env->RecursivelyCreateDir(path);
+    if (!status.ok() && !env->IsDirectory(path).ok()) {
+      return status;
+    }
+  }
+
+  return Status::OK();
+}
+
 std::string PoplarExecutor::CachedExecutableFilename(
     const HloModule& module) const {
   HloHash module_hash(&module);

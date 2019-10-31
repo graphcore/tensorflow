@@ -799,6 +799,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
       if (poplarExecutor->HaveExecutableCache()) {
         if (!poplarExecutor->HaveCachedExecutable(cache_filename)) {
+          TF_RETURN_IF_ERROR(
+              poplarExecutor->CreateExecutableCacheDirIfMissing());
           TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
               cache_filename, exec, resources.annotations.infeed_infos,
               resources.annotations.outfeed_infos,

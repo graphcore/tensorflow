@@ -23,7 +23,9 @@ import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 
 @contextlib.contextmanager
 def _temporary_executable_cache_path():
-  with tempfile.TemporaryDirectory() as cache_dir:
+  with tempfile.TemporaryDirectory() as temp_dir:
+    # Use a nonexistent subdirectory that must be created
+    cache_dir = os.path.join(temp_dir, "cache")
     poplar_flags = "--executable_cache_path={} {}".format(
         cache_dir, os.environ.get("TF_POPLAR_FLAGS", ""))
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):

@@ -410,6 +410,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool HaveExecutableCache() const;
 
+  Status CreateExecutableCacheDirIfMissing() const;
+
   std::string CachedExecutableFilename(const HloModule& module) const;
 
   bool HaveCachedExecutable(const std::string& filename) const;
