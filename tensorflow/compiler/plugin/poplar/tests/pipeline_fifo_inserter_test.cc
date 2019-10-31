@@ -380,16 +380,6 @@ pipeline_stage_2_func_57_grad_98__.5 {
   ROOT tuple.46 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) tuple(fusion.4, fusion.16, fusion.15, get-tuple-element.161.clone.18), sharding={{maximal device=2}, {maximal device=2}, {maximal device=2}, {maximal device=2}}
 }
 
-resource_update {
-  arg0 = f32[1,1,2,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
-  arg1 = f32[2]{0} parameter(1), sharding={maximal device=0}
-  arg2 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=1}
-  arg3 = f32[2]{0} parameter(3), sharding={maximal device=1}
-  arg4 = f32[1,1,2,2]{3,2,1,0} parameter(4), sharding={maximal device=2}
-  arg5 = f32[2]{0} parameter(5), sharding={maximal device=2}
-  ROOT t = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg0, arg1, arg2, arg3, arg4, arg5)
-}
-
 pipeline {
   arg0.125 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
   arg1.126 = f32[] parameter(1), sharding={maximal device=0}
@@ -425,13 +415,6 @@ pipeline {
   get-tuple-element.10 = f32[2]{0} get-tuple-element(call.12), index=2, sharding={maximal device=1}
   get-tuple-element = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.13), index=1, sharding={maximal device=2}
   get-tuple-element.1 = f32[2]{0} get-tuple-element(call.13), index=2, sharding={maximal device=2}
-  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
-  gte0 = f32[1,1,2,2] get-tuple-element(call_ru), index=0
-  gte1 = f32[2] get-tuple-element(call_ru), index=1
-  gte2 = f32[1,1,2,2] get-tuple-element(call_ru), index=2
-  gte3 = f32[2] get-tuple-element(call_ru), index=3
-  gte4 = f32[1,1,2,2] get-tuple-element(call_ru), index=4
-  gte5 = f32[2] get-tuple-element(call_ru), index=5
   ROOT tuple.266 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1)
 }
 

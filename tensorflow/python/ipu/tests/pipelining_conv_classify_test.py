@@ -129,9 +129,9 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    def optimizer_function(loss):
-      opt = gradient_descent.GradientDescentOptimizer(0.01)
-      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+    def optimizer_stage(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+      return loss, opt
 
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -141,7 +141,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
                                      12,
                                      inputs=[x, lr],
                                      outfeed_queue=outfeed_queue,
-                                     optimizer_function=optimizer_function)
+                                     optimizer_stage=optimizer_stage)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -193,9 +193,9 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    def optimizer_function(loss):
-      opt = gradient_descent.GradientDescentOptimizer(0.01)
-      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+    def optimizer_stage(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+      return loss, opt
 
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -205,7 +205,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
                                      12,
                                      inputs=[x, lr],
                                      outfeed_queue=outfeed_queue,
-                                     optimizer_function=optimizer_function)
+                                     optimizer_stage=optimizer_stage)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -259,9 +259,9 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    def optimizer_function(loss):
-      opt = gradient_descent.GradientDescentOptimizer(0.01)
-      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+    def optimizer_stage(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+      return loss, opt
 
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -271,7 +271,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
                                      12,
                                      inputs=[x, lr],
                                      outfeed_queue=outfeed_queue,
-                                     optimizer_function=optimizer_function)
+                                     optimizer_stage=optimizer_stage)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 224])
@@ -325,9 +325,9 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    def optimizer_function(loss):
-      opt = gradient_descent.GradientDescentOptimizer(0.01)
-      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+    def optimizer_stage(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+      return loss, opt
 
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
@@ -337,7 +337,7 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
                                      12,
                                      inputs=[x, lr],
                                      outfeed_queue=outfeed_queue,
-                                     optimizer_function=optimizer_function)
+                                     optimizer_stage=optimizer_stage)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 224])

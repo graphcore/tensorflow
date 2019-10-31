@@ -14,10 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
-
-#include <algorithm>
-#include <utility>
-
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -34,20 +30,12 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-std::vector<HloInstruction*> OrderInnerPipelineFunctions(
-    PipelineStages& stages) {
-  const bool has_resource_update = stages.resource_update.has_value();
-
+std::vector<HloInstruction*> OrderStagesLastToFirst(PipelineStages& stages) {
   std::vector<HloInstruction*> ordered_stages(stages.forward.size() +
-                                              stages.backward.size() +
-                                              (has_resource_update ? 1 : 0));
-  absl::c_copy(stages.forward, ordered_stages.begin());
-  std::copy(stages.backward.rbegin(), stages.backward.rend(),
-            std::next(ordered_stages.begin(), stages.forward.size()));
-  if (has_resource_update) {
-    ordered_stages.back() = *stages.resource_update;
-  }
-  absl::c_reverse(ordered_stages);
+                                              stages.backward.size());
+  absl::c_copy(stages.backward, ordered_stages.begin());
+  std::copy(stages.forward.rbegin(), stages.forward.rend(),
+            std::next(ordered_stages.begin(), stages.backward.size()));
   return ordered_stages;
 }
 
@@ -195,41 +183,43 @@ StatusOr<bool> PipelineOptimizer::OptimizePipeline(
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
   // For each stage, starting from the last stage to last.
-  std::vector<HloInstruction*> ordered = OrderInnerPipelineFunctions(stages);
-  for (HloInstruction* call : ordered) {
-    VLOG(2) << "Optimizing: " << call->ToString();
+  std::vector<HloInstruction*> ordered_stages = OrderStagesLastToFirst(stages);
+  for (HloInstruction* stage : ordered_stages) {
+    VLOG(2) << "Optimizing stage: " << stage->ToString();
     // Find any duplicate outputs.
-    TF_ASSIGN_OR_RETURN(auto duplicate_outputs, GetDuplicateCallOutputs(call));
+    TF_ASSIGN_OR_RETURN(auto duplicate_outputs,
+                        GetDuplicatePipelineStageOutputs(stage));
     if (duplicate_outputs.size()) {
       VLOG(3) << "Replacing duplicate outputs.";
-      TF_RETURN_IF_ERROR(ReplaceOutputUses(call, duplicate_outputs));
+      TF_RETURN_IF_ERROR(ReplaceOutputUses(stage, duplicate_outputs));
     }
 
     // Find any unused outputs.
     TF_ASSIGN_OR_RETURN(std::set<int64> unused_outputs,
-                        GetUnusedCallOutputIndices(call));
+                        GetUnusedPipelineStageOutputIndices(stage));
     if (unused_outputs.size()) {
       VLOG(3) << "Removing unused outputs.";
-      TF_RETURN_IF_ERROR(RemoveOutputsFromCall(call, unused_outputs));
-      TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call->to_apply()).status());
+      TF_RETURN_IF_ERROR(RemoveOutputsFromStage(stage, unused_outputs));
+      TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(stage->to_apply()).status());
     }
 
     // Find any duplicate inputs and change the parameters such that they become
     // unused.
-    TF_ASSIGN_OR_RETURN(auto duplicate_inputs, GetDuplicateCallInputs(call));
+    TF_ASSIGN_OR_RETURN(auto duplicate_inputs,
+                        GetDuplicatePipelineStageInputs(stage));
     if (duplicate_inputs.size()) {
       VLOG(3) << "Replacing duplicate inputs.";
-      TF_RETURN_IF_ERROR(ReplaceDuplicateInputs(call, duplicate_inputs));
+      TF_RETURN_IF_ERROR(ReplaceDuplicateInputs(stage, duplicate_inputs));
     }
 
     // Find any unused inputs and remove them.
     TF_ASSIGN_OR_RETURN(std::set<int64> unused_parameters,
-                        GetUnusedParametersInCall(call));
+                        GetUnusedParametersInPipelineStage(stage));
     if (unused_parameters.size()) {
       VLOG(3) << "Removing unused inputs.";
-      TF_ASSIGN_OR_RETURN(call,
-                          RemoveParametersFromCall(call, unused_parameters));
-      TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call->to_apply()).status());
+      TF_ASSIGN_OR_RETURN(stage,
+                          RemoveParametersFromStage(stage, unused_parameters));
+      TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(stage->to_apply()).status());
     }
 
     changed |= (duplicate_outputs.size() || unused_outputs.size() ||

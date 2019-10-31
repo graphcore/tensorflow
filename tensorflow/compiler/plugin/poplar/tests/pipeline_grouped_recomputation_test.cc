@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
@@ -314,16 +313,6 @@ pipeline_stage_2_func_57_grad_98__.5 {
   ROOT tuple.46 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) tuple(fusion.4, fusion.16, fusion.15, get-tuple-element.161.clone.18), sharding={{maximal device=2}, {maximal device=2}, {maximal device=2}, {maximal device=2}}
 }
 
-resource_update {
-  arg0 = f32[1,1,2,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
-  arg1 = f32[2]{0} parameter(1), sharding={maximal device=0}
-  arg2 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=1}
-  arg3 = f32[2]{0} parameter(3), sharding={maximal device=1}
-  arg4 = f32[1,1,2,2]{3,2,1,0} parameter(4), sharding={maximal device=2}
-  arg5 = f32[2]{0} parameter(5), sharding={maximal device=2}
-  ROOT t = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg0, arg1, arg2, arg3, arg4, arg5)
-}
-
 pipeline {
   arg0.125 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
   arg1.126 = f32[] parameter(1), sharding={maximal device=0}
@@ -359,14 +348,7 @@ pipeline {
   get-tuple-element.10 = f32[2]{0} get-tuple-element(call.12), index=2, sharding={maximal device=1}
   get-tuple-element = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.13), index=1, sharding={maximal device=2}
   get-tuple-element.1 = f32[2]{0} get-tuple-element(call.13), index=2, sharding={maximal device=2}
-  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}", sharding={{maximal device=0}, {maximal device=0}, {maximal device=1}, {maximal device=1}, {maximal device=2}, {maximal device=2}}
-  gte0 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call_ru), index=0, sharding={maximal device=0}
-  gte1 = f32[2]{0} get-tuple-element(call_ru), index=1, sharding={maximal device=0}
-  gte2 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call_ru), index=2, sharding={maximal device=1}
-  gte3 = f32[2]{0} get-tuple-element(call_ru), index=3, sharding={maximal device=1}
-  gte4 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call_ru), index=4, sharding={maximal device=2}
-  gte5 = f32[2]{0} get-tuple-element(call_ru), index=5, sharding={maximal device=2}
-  ROOT tuple.266 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(gte0, gte1, gte2, gte3, gte4, gte5)
+  ROOT tuple.266 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1)
 }
 
 ENTRY cluster {
@@ -434,11 +416,6 @@ ENTRY cluster {
         EXPECT_THAT(user_of_user, stages.backward[stage_id]);
       }
     }
-
-    // Expect that the recomputation stage has a control predecessor that
-    // is the forward pass.
-    ASSERT_EQ(1, recomp_stage->control_predecessors().size());
-    EXPECT_EQ(fwd_stage, recomp_stage->control_predecessors()[0]);
   }
 }
 
@@ -777,16 +754,6 @@ pipeline_stage_2_func_57_grad_98__.5 {
   ROOT tuple.46 = (f32[1,4,4,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[]) tuple(fusion.4, fusion.16, fusion.15, get-tuple-element.161.clone.18), sharding={{maximal device=2}, {maximal device=2}, {maximal device=2}, {maximal device=2}}
 }
 
-resource_update {
-  arg0 = f32[1,1,2,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
-  arg1 = f32[2]{0} parameter(1), sharding={maximal device=0}
-  arg2 = f32[1,1,2,2]{3,2,1,0} parameter(2), sharding={maximal device=1}
-  arg3 = f32[2]{0} parameter(3), sharding={maximal device=1}
-  arg4 = f32[1,1,2,2]{3,2,1,0} parameter(4), sharding={maximal device=2}
-  arg5 = f32[2]{0} parameter(5), sharding={maximal device=2}
-  ROOT t = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg0, arg1, arg2, arg3, arg4, arg5)
-}
-
 pipeline {
   arg0.125 = f32[1,4,4,2]{3,2,1,0} parameter(0), sharding={maximal device=0}
   arg1.126 = f32[] parameter(1), sharding={maximal device=0}
@@ -822,14 +789,7 @@ pipeline {
   get-tuple-element.10 = f32[2]{0} get-tuple-element(call.12), index=2, sharding={maximal device=1}
   get-tuple-element = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.13), index=1, sharding={maximal device=2}
   get-tuple-element.1 = f32[2]{0} get-tuple-element(call.13), index=2, sharding={maximal device=2}
-  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}", sharding={{maximal device=0}, {maximal device=0}, {maximal device=1}, {maximal device=1}, {maximal device=2}, {maximal device=2}}
-  gte0 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call_ru), index=0, sharding={maximal device=0}
-  gte1 = f32[2]{0} get-tuple-element(call_ru), index=1, sharding={maximal device=0}
-  gte2 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call_ru), index=2, sharding={maximal device=1}
-  gte3 = f32[2]{0} get-tuple-element(call_ru), index=3, sharding={maximal device=1}
-  gte4 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call_ru), index=4, sharding={maximal device=2}
-  gte5 = f32[2]{0} get-tuple-element(call_ru), index=5, sharding={maximal device=2}
-  ROOT tuple.266 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(gte0, gte1, gte2, gte3, gte4, gte5)
+  ROOT tuple.266 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1)
 }
 
 ENTRY cluster {
@@ -863,104 +823,6 @@ ENTRY cluster {
   PipelineRecomputation recomputation(false);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_FALSE(changed);
-}
-
-TEST_F(PipelineGroupedRecomputationTest, TestControlDependencies) {
-  std::string hlo = R"(
-HloModule top
-
-stage_0_fwd {
-  in0 = f32[1,4,4,2] parameter(0)
-  in1 = f32[1,4,4,2] parameter(1)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0, in1)
-}
-
-stage_1_fwd {
-  in1 = f32[1,4,4,2] parameter(0)
-  in2 = f32[1,4,4,2] parameter(1)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1, in2)
-}
-
-stage_1_bwd {
-  in1_grad = f32[1,4,4,2] parameter(0)
-  in2_grad = f32[1,4,4,2] parameter(1)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in1_grad, in2_grad)
-}
-
-stage_0_bwd {
-  in0_grad = f32[1,4,4,2] parameter(0)
-  in1_grad = f32[1,4,4,2] parameter(1)
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0_grad, in1_grad)
-}
-
-resource_update {
-  arg0 = f32[1,4,4,2] parameter(0)
-  arg1 = f32[1,4,4,2] parameter(1)
-  arg2 = f32[1,4,4,2] parameter(2)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2)
-}
-
-pipeline {
-  after-all = token[] after-all()
-  infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576"
-  in0 = f32[1,4,4,2] get-tuple-element(infeed), index=0
-  in1 = f32[1,4,4,2] parameter(0)
-  in2 = f32[1,4,4,2] parameter(1)
-  stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(in1, in0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
-  stage_0_0 = f32[1,4,4,2] get-tuple-element(stage_0), index=0
-  stage_0_1 = f32[1,4,4,2] get-tuple-element(stage_0), index=1
-  stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_0, stage_0_1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
-  stage_1_1 = f32[1,4,4,2] get-tuple-element(stage_1), index=0
-  stage_1_2 = f32[1,4,4,2] get-tuple-element(stage_1), index=1
-  stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_1, stage_1_2), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=0}
-  stage_1_bwd_1 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=0
-  stage_1_bwd_2 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=1
-  stage_0_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_bwd_1, stage_0_0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
-  stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
-  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
-  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
-  gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2)
-}
-
-ENTRY e {
-  e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
-  e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
-}
-)";
-  auto config = GetModuleConfigForTest();
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnVerifiedModule(hlo, config));
-  ShardingPass sharding;
-  TF_ASSERT_OK_AND_ASSIGN(bool changed, sharding.Run(module.get()));
-  EXPECT_TRUE(changed);
-
-  PipelineFIFOInserter inserter;
-  TF_ASSERT_OK_AND_ASSIGN(changed, inserter.Run(module.get()));
-  EXPECT_TRUE(changed);
-
-  InplaceFinder inplace_finder;
-  TF_ASSERT_OK_AND_ASSIGN(changed, inplace_finder.Run(module.get()));
-  EXPECT_TRUE(changed);
-
-  HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
-  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
-  auto fifo = stages.backward[0]->operand(1);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
-  EXPECT_THAT(fifo->control_successors(),
-              ::testing::ElementsAre(stages.forward[1]));
-
-  PipelineRecomputation recomputation(true);
-  TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
-  EXPECT_TRUE(changed);
-  TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_comp));
-
-  fifo = stages.recomputation.at(0)->operand(1);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
-  EXPECT_THAT(fifo->control_successors(),
-              ::testing::ElementsAre(stages.forward[0]));
 }
 }  // namespace
 }  // namespace poplarplugin

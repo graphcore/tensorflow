@@ -13,17 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
-
-#include <set>
-#include <utility>
-
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
-#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
@@ -219,8 +213,6 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
     // through this stage.
     // Note that we currently assume that forward stages do not require
     // threading as the Python API does not allow for unthreaded inputs.
-    // Note that we do not need to thread outputs which are used by the resource
-    // update.
     if (stage_id.stage_type == StageType::kForward) {
       continue;
     }
@@ -239,12 +231,9 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
       CHECK_EQ(gte->user_count(), 1);
       int64 tuple_index = gte->tuple_index();
       HloInstruction* gte_user = gte->users()[0];
-      // Do not track usage if it is:
-      // * the current stage - this has already been lowered,
-      // * the root instruction,
-      // * the PipelineResourceUpdate.
-      if (!(gte_user == stage || gte_user == pipeline_root ||
-            IsPipelineResourceUpdate(gte_user))) {
+      // Do not track usage in the current stage - this has already been
+      // lowered or if the usage is the root instruction.
+      if (gte_user != stage && gte_user != pipeline_root) {
         output_users[tuple_index].insert(gte);
       }
     }
@@ -256,8 +245,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
 
     // For each GTE tuple index, get one of GTEs X, replace all the other GTEs
     // uses with it, and add X as a forced parameter. The lowering will then
-    // thread the value through and create GTEs out of this stage for all other
-    // pipeline stages (but it will not change uses in the resource update).
+    // thread the value through and create GTEs out of this stage.
     absl::flat_hash_set<HloInstruction*> forced_parameters;
     for (auto& tuple_index_users_pair : output_users) {
       absl::flat_hash_set<HloInstruction*> users =
@@ -276,7 +264,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
         stage, analysis->GetValueSet(previous_stage)));
     // Lower the instructions into the computation.
     TF_ASSIGN_OR_RETURN(stage, AddInstructionsToPipelineStage(
-                                   stage, {}, {}, forced_parameters, false));
+                                   stage, {}, {}, forced_parameters));
 
     TF_RETURN_IF_ERROR(UpdateStage(stage_id, stage));
     // Recompute the analysis.
@@ -360,7 +348,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
                                                        parameters_to_replace));
     // Check that after lowering the parameters are now unused.
     TF_ASSIGN_OR_RETURN(std::set<int64> unused_parameters,
-                        GetUnusedParametersInCall(stage));
+                        GetUnusedParametersInPipelineStage(stage));
     bool lowered_all_params =
         parameters_to_replace.size() <= unused_parameters.size() &&
         absl::c_all_of(
@@ -374,7 +362,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
                                  stage->ToString());
     }
     TF_ASSIGN_OR_RETURN(stage,
-                        RemoveParametersFromCall(stage, unused_parameters));
+                        RemoveParametersFromStage(stage, unused_parameters));
     TF_RETURN_IF_ERROR(UpdateStage(stage_id, stage));
     // Recompute the analysis.
     TF_ASSIGN_OR_RETURN(analysis,
@@ -502,126 +490,6 @@ Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
   return Status::OK();
 }
 
-StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
-  if (!stages_.resource_update) {
-    return false;
-  }
-  HloInstruction* resource_update = *stages_.resource_update;
-  HloComputation* resource_update_comp = resource_update->to_apply();
-
-  TF_ASSIGN_OR_RETURN(auto analysis,
-                      PipelineDataflowAnalysis::GetAnalysis(stages_));
-  std::set<int64> unused_op_indices;
-  // Go through all the operands and lower the ones which need lowering.
-  for (int64 op_idx = 0; op_idx != resource_update->operand_count(); ++op_idx) {
-    HloInstruction* operand = resource_update->mutable_operand(op_idx);
-    TF_ASSIGN_OR_RETURN(bool lower, analysis->HasToBeLowered(operand));
-    if (!lower) {
-      continue;
-    }
-    VLOG(3) << "Lowering the operand " << op_idx
-            << " for the PipelineResourceUpdate.";
-    // We currently only expect to constant gradients to be stageless
-    // (because they do not depend on any input, we cannot associate them
-    // with a backward stage). Note that the gradients might be accumulated.
-    HloInstruction* to_lower = operand;
-    int32 mutliplier = 1;
-    if (to_lower->opcode() != HloOpcode::kConstant) {
-      HloStatefulGradientAccumulate* grad_accum =
-          DynCast<HloStatefulGradientAccumulate>(to_lower);
-      if (!grad_accum) {
-        return FailedPrecondition(
-            "Trying to lower an input into the PipelineResourceUpdate which "
-            "should have been lowered into a Pipeline(Backward)Stage instead.");
-      }
-      to_lower = grad_accum->mutable_operand(0);
-      mutliplier = grad_accum->MiniBatchesToAccumulate();
-    }
-
-    // Find the cluster of instructions from the to_lower instruction.
-    std::vector<HloInstruction*> ordered_lowering;
-    std::vector<const HloValueSet*> value_sets;
-    absl::flat_hash_set<HloInstruction*> to_visit;
-    absl::flat_hash_set<HloInstruction*> visited;
-
-    to_visit.insert(to_lower);
-    while (!to_visit.empty()) {
-      HloInstruction* inst = *to_visit.begin();
-      ordered_lowering.push_back(inst);
-      to_visit.erase(inst);
-      value_sets.push_back(&analysis->GetValueSet(inst));
-
-      // Add any operand which has to be lowered.
-      for (HloInstruction* operand : inst->operands()) {
-        if (!visited.contains(operand)) {
-          TF_ASSIGN_OR_RETURN(bool needs_lowering,
-                              analysis->HasToBeLowered(operand));
-          if (needs_lowering) {
-            to_visit.insert(operand);
-          }
-        }
-      }
-    }
-
-    // We only expect constant gradients to be lowered, therefore we expect no
-    // producers in the cluster we are lowering.
-    HloValueSet value_set;
-    value_set.AssignUnionOf(value_sets);
-    if (value_set.values().size()) {
-      return FailedPrecondition(
-          "Detected input to the PipelineResourceUpdate which should have been "
-          "lowered into a Pipeline(Backward)Stage.");
-    }
-
-    // Do the lowering of instructions into the resource update.
-    absl::c_reverse(ordered_lowering);
-    absl::flat_hash_map<HloInstruction*, HloInstruction*>
-        old_to_new_computation;
-    for (HloInstruction* old_inst : ordered_lowering) {
-      std::vector<HloInstruction*> new_operands(old_inst->operand_count());
-      absl::c_transform(old_inst->operands(), new_operands.begin(),
-                        [&old_to_new_computation](HloInstruction* old_operand) {
-                          return old_to_new_computation.at(old_operand);
-                        });
-      HloInstruction* new_inst = resource_update_comp->AddInstruction(
-          old_inst->CloneWithNewOperands(old_inst->shape(), new_operands));
-      old_inst->SetupDerivedInstruction(new_inst);
-      old_to_new_computation[old_inst] = new_inst;
-    }
-
-    // We need to take the gradient accumulation out, therefore we multiply the
-    // result of the lowering by the number of batches we are accumulating.
-    // Create the multiplier - note that all this arthemtic will be folded by
-    // other passes.
-    // Create the literal first.
-    Literal literal(ShapeUtil::MakeShape(S32, to_lower->shape().dimensions()));
-    literal.PopulateWithValue(mutliplier);
-    HloInstruction* const_multiplier = resource_update_comp->AddInstruction(
-        HloInstruction::CreateConstant(std::move(literal)));
-    // Convert it to the right type.
-    HloInstruction* cast_multiplier = resource_update_comp->AddInstruction(
-        HloInstruction::CreateConvert(to_lower->shape(), const_multiplier));
-    // Get the lowered result and multiply it.
-    HloInstruction* lowered_multiplied =
-        resource_update_comp->AddInstruction(HloInstruction::CreateBinary(
-            to_lower->shape(), HloOpcode::kMultiply,
-            old_to_new_computation.at(to_lower), cast_multiplier));
-
-    // Replace all uses of the corresponding parameters with the to_lower
-    // instruction.
-    HloInstruction* param = resource_update_comp->parameter_instruction(op_idx);
-    TF_RETURN_IF_ERROR(param->ReplaceAllUsesWith(lowered_multiplied));
-    unused_op_indices.insert(op_idx);
-  }
-
-  // Remove unused operands.
-  TF_ASSIGN_OR_RETURN(
-      HloInstruction * new_resource_update,
-      RemoveParametersFromCall(resource_update, unused_op_indices));
-
-  return unused_op_indices.size();
-}
-
 Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_RETURN_IF_ERROR(RemovePipelineWrapper(pipeline_comp));
@@ -651,10 +519,8 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_RETURN_IF_ERROR(UniquifyPipelineStageCallsites(stages_).status());
   // Verify we can actually try and lower this Pipeline.
   TF_RETURN_IF_ERROR(VerifyPipelineStagesBeforeFixing(stages_));
-  // Run the lowering on pipeline stages.
+  // Run the lowering.
   TF_RETURN_IF_ERROR(LowerOpsIntoPipelineStages().status());
-  // Run the lowering on the resource update.
-  TF_RETURN_IF_ERROR(LowerResourceUpdateInputs().status());
   // Tidy again.
   TF_RETURN_IF_ERROR(dce.Run(pipeline_op->GetModule()).status());
   // Verify the pipeline is now ok to be lowered.

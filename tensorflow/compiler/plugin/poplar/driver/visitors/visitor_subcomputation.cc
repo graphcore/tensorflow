@@ -304,7 +304,8 @@ InplaceSubComputationVisitor::GetParameterNumberAndFlatIndex(
 }
 
 poplar::program::Sequence&
-InplaceSubComputationVisitor::GetSequenceForAliasingCopy() {
+InplaceSubComputationVisitor::GetSequenceForAliasingCopy(
+    int64, const HloComputation*) {
   // Be default just add the copies to the main sequence.
   return sequence;
 }
@@ -396,7 +397,8 @@ InplaceSubComputationVisitor::AddLoopInputOutputAliasingCopies(
                 << " for tuple index " << i;
         auto name = StrCat(debug_name, "_bodyout_temp_", i);
         unaliased_loop_outputs[i] = graph.clone(loop_outputs[i], name);
-        poplar::program::Sequence& seq = GetSequenceForAliasingCopy();
+        poplar::program::Sequence& seq =
+            GetSequenceForAliasingCopy(i, computation);
         seq.add(
             poplar::program::Copy(loop_outputs[i], unaliased_loop_outputs[i]));
         break;
@@ -414,7 +416,8 @@ InplaceSubComputationVisitor::AddLoopInputOutputAliasingCopies(
         VLOG(1) << "Adding a output to input copy in " << debug_name
                 << " for tuple index " << i;
         // Get the input ready for the next iteration.
-        poplar::program::Sequence& seq = GetSequenceForAliasingCopy();
+        poplar::program::Sequence& seq =
+            GetSequenceForAliasingCopy(i, computation);
         seq.add(
             poplar::program::Copy(unaliased_loop_outputs[i], loop_inputs[i]));
         break;

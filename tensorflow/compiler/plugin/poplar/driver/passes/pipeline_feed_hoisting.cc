@@ -92,10 +92,10 @@ StatusOr<HloInstruction*> HoistInfeed(HloInstruction* stage,
                                                stage->operands().end()};
   new_operands.push_back(new_infeed_gte);
   HloSharding sharding = stage->sharding();
-  TF_ASSIGN_OR_RETURN(
-      stage,
-      ReplaceCallWith(stage, builder.Build(old_to_new_computation.at(root)),
-                      new_operands, false));
+  TF_ASSIGN_OR_RETURN(stage,
+                      ReplacePipelineStageWith(
+                          stage, builder.Build(old_to_new_computation.at(root)),
+                          new_operands, false));
   stage->set_sharding(sharding);
 
   return stage;

@@ -67,10 +67,6 @@ bool IsAnyPipelineStageOp(const HloInstruction* inst) {
          IsPipelineStageRecomputation(inst);
 }
 
-bool IsAnyPipelineStageOpOrResourceUpdate(const HloInstruction* inst) {
-  return IsAnyPipelineStageOp(inst) || IsPipelineResourceUpdate(inst);
-}
-
 bool IsProducerOp(const HloInstruction* inst) {
   switch (inst->opcode()) {
     case HloOpcode::kCall:
@@ -115,8 +111,6 @@ StatusOr<PipelineStages> GetPipelineStages(
       pipeline_stages.backward.push_back(inst);
     } else if (IsPipelineStageRecomputation(inst)) {
       pipeline_stages.recomputation[GetPipelineStageID(inst)] = inst;
-    } else if (IsPipelineResourceUpdate(inst)) {
-      pipeline_stages.resource_update = inst;
     }
   }
   // Sort the stages and make sure the stages are continuos and starting at 0.
@@ -162,18 +156,12 @@ StatusOr<PipelineStages> GetPipelineStages(
         pipeline_stages.forward.size(), pipeline_stages.recomputation.size());
   }
 
-  if (pipeline_stages.backward.size() && !pipeline_stages.resource_update) {
-    return FailedPrecondition(
-        "Expected the XLA graph to contain a resource update function in the "
-        "Pipelining graph.");
-  }
-
   return pipeline_stages;
 }
 
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
     HloInstruction* pipeline_stage, CallGraph* call_graph) {
-  CHECK(IsAnyPipelineStageOpOrResourceUpdate(pipeline_stage));
+  CHECK(IsAnyPipelineStageOp(pipeline_stage));
   absl::flat_hash_set<HloComputation*> computations_in_pipeline;
   absl::flat_hash_set<HloComputation*> to_visit;
   to_visit.insert(pipeline_stage->to_apply());
@@ -366,47 +354,47 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages) {
   return added_computations;
 }
 
-// Replace pipeline call with a new one with a new computation.
-StatusOr<HloInstruction*> ReplaceCallWith(
-    HloInstruction* call, std::unique_ptr<HloComputation> new_computation,
+// Replace pipeline stage with a new one with a new computation.
+StatusOr<HloInstruction*> ReplacePipelineStageWith(
+    HloInstruction* stage, std::unique_ptr<HloComputation> new_computation,
     const std::vector<HloInstruction*> new_operands,
     bool remove_unused_operands) {
-  HloComputation* parent_computation = call->parent();
-  HloComputation* call_computation = call->to_apply();
-  HloModule* module = call->GetModule();
+  HloComputation* pipeline_computation = stage->parent();
+  HloComputation* stage_computation = stage->to_apply();
+  HloModule* module = stage->GetModule();
 
-  HloComputation* new_call_computation =
+  HloComputation* new_stage_computation =
       module->AddEmbeddedComputation(std::move(new_computation));
 
-  HloInstruction* new_call =
-      parent_computation->AddInstruction(HloInstruction::CreateCall(
-          new_call_computation->root_instruction()->shape(), new_operands,
-          new_call_computation));
-  call->SetupDerivedInstruction(new_call);
-  new_call->set_raw_backend_config_string(call->raw_backend_config_string());
+  HloInstruction* new_stage =
+      pipeline_computation->AddInstruction(HloInstruction::CreateCall(
+          new_stage_computation->root_instruction()->shape(), new_operands,
+          new_stage_computation));
+  stage->SetupDerivedInstruction(new_stage);
+  new_stage->set_raw_backend_config_string(stage->raw_backend_config_string());
+  CHECK(IsPipelineStageOrBackwardOp(new_stage));
 
-  VLOG(3) << "Replacing " << call->ToString() << " and computation:";
-  XLA_VLOG_LINES(3, call_computation->ToString());
-  VLOG(3) << "With " << new_call->ToString() << " and computation:";
-  XLA_VLOG_LINES(3, new_call_computation->ToString());
+  VLOG(3) << "Replacing " << stage->ToString() << " and computation:";
+  XLA_VLOG_LINES(3, stage_computation->ToString());
+  VLOG(3) << "With " << new_stage->ToString() << " and computation:";
+  XLA_VLOG_LINES(3, new_stage_computation->ToString());
 
-  TF_RETURN_IF_ERROR(call->ReplaceAllUsesWithDifferentShape(new_call));
+  TF_RETURN_IF_ERROR(stage->ReplaceAllUsesWithDifferentShape(new_stage));
   if (remove_unused_operands) {
     TF_RETURN_IF_ERROR(
-        parent_computation->RemoveInstructionAndUnusedOperands(call));
+        pipeline_computation->RemoveInstructionAndUnusedOperands(stage));
   } else {
-    TF_RETURN_IF_ERROR(parent_computation->RemoveInstruction(call));
+    TF_RETURN_IF_ERROR(pipeline_computation->RemoveInstruction(stage));
   }
-  TF_RETURN_IF_ERROR(module->RemoveEmbeddedComputation(call_computation));
+  TF_RETURN_IF_ERROR(module->RemoveEmbeddedComputation(stage_computation));
 
-  return new_call;
+  return new_stage;
 }
 
 StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage, const std::vector<HloInstruction*>& ordered_lowering,
     std::map<int64, HloInstruction*> replace_parameter_with_lowered_instruction,
-    absl::flat_hash_set<HloInstruction*> forced_parameters,
-    bool replace_resource_update_uses) {
+    absl::flat_hash_set<HloInstruction*> forced_parameters) {
   CHECK(IsPipelineStageOrBackwardOp(stage));
 
   HloComputation* pipeline_computation = stage->parent();
@@ -548,20 +536,13 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     return InternalError("Failed to fully lower a cluster into a computation.");
   }
 
-  auto replace_external_use =
-      [&replace_resource_update_uses](const HloInstruction* inst) -> bool {
-    return replace_resource_update_uses ? true
-                                        : !IsPipelineResourceUpdate(inst);
-  };
-
   // Keep track of instructions which are being lowered and have users outside
   // of this lowering. Using a map so that we iterate in the same order.
   std::map<HloInstruction*, absl::flat_hash_set<HloInstruction*>> external_uses;
   for (HloInstruction* inst : ordered_lowering) {
     // Go through all the users.
     for (HloInstruction* user : inst->users()) {
-      if (user != stage && !ordered_lowering_set.contains(user) &&
-          replace_external_use(user)) {
+      if (user != stage && !ordered_lowering_set.contains(user)) {
         // Find any outside uses of the inst - we need to create GTEs for
         // those.
         VLOG(3) << "Lowered instruction " << inst->ToString()
@@ -574,7 +555,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   for (HloInstruction* forced_operand : forced_parameters) {
     // Go through all the users.
     for (HloInstruction* user : forced_operand->users()) {
-      if (user != stage && replace_external_use(user)) {
+      if (user != stage) {
         // Find any outside uses of the inst - we need to create GTEs for
         // those.
         VLOG(3) << "Forced parameter instruction " << forced_operand->ToString()
@@ -624,9 +605,10 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   const int64 old_num_outputs = ShapeUtil::TupleElementCount(stage->shape());
   // Build the new computation and the new pipeline stage with new operands.
   std::unique_ptr<HloComputation> new_computation = builder.Build(builder_root);
-  TF_ASSIGN_OR_RETURN(HloInstruction * new_stage,
-                      ReplaceCallWith(stage, std::move(new_computation),
-                                      new_stage_operands, false));
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * new_stage,
+      ReplacePipelineStageWith(stage, std::move(new_computation),
+                               new_stage_operands, false));
 
   // Add GTEs for any new outputs.
   {
@@ -658,22 +640,20 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   return new_stage;
 }
 
-StatusOr<std::set<int64>> GetUnusedCallOutputIndices(
-    const HloInstruction* call) {
+StatusOr<std::set<int64>> GetUnusedPipelineStageOutputIndices(
+    const HloInstruction* stage) {
   std::set<int64> unused_outputs;
-  if (call->parent()->root_instruction() != call) {
-    for (int64 i = 0; i != ShapeUtil::TupleElementCount(call->shape()); ++i) {
-      unused_outputs.insert(i);
-    }
-    for (HloInstruction* user : call->users()) {
-      CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
-      unused_outputs.erase(user->tuple_index());
-    }
+  for (int64 i = 0; i != ShapeUtil::TupleElementCount(stage->shape()); ++i) {
+    unused_outputs.insert(i);
+  }
+  for (HloInstruction* user : stage->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    unused_outputs.erase(user->tuple_index());
   }
   return unused_outputs;
 }
 
-StatusOr<std::set<int64>> GetUnusedParametersInCall(
+StatusOr<std::set<int64>> GetUnusedParametersInPipelineStage(
     const HloInstruction* stage) {
   const HloComputation* stage_computation = stage->to_apply();
   std::set<int64> unused_params;
@@ -709,46 +689,47 @@ StatusOr<std::map<int64, std::set<int64>>> GetDuplicateOperands(
 }
 }  // namespace
 
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallOutputs(
-    const HloInstruction* call) {
-  return GetDuplicateOperands(call->to_apply()->root_instruction());
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageOutputs(
+    const HloInstruction* stage) {
+  return GetDuplicateOperands(stage->to_apply()->root_instruction());
 }
 
-StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
-    const HloInstruction* call) {
-  return GetDuplicateOperands(call);
+StatusOr<std::map<int64, std::set<int64>>> GetDuplicatePipelineStageInputs(
+    const HloInstruction* stage) {
+  return GetDuplicateOperands(stage);
 }
 
-StatusOr<HloInstruction*> RemoveParametersFromCall(
-    HloInstruction* call, const std::set<int64>& parameters_to_remove) {
+StatusOr<HloInstruction*> RemoveParametersFromStage(
+    HloInstruction* stage, const std::set<int64>& parameters_to_remove) {
+  CHECK(IsPipelineStageOrBackwardOp(stage));
   // Nothing to remove.
   if (parameters_to_remove.empty()) {
-    return call;
+    return stage;
   }
 
-  HloComputation* call_computation = call->to_apply();
+  HloComputation* stage_computation = stage->to_apply();
 
-  VLOG(3) << "Removing the following parameters from " << call->ToString();
+  VLOG(3) << "Removing the following parameters from " << stage->ToString();
   for (int64 param_number : parameters_to_remove) {
     VLOG(3)
         << "\t* " << param_number << " "
-        << call_computation->parameter_instruction(param_number)->ToString();
+        << stage_computation->parameter_instruction(param_number)->ToString();
   }
   // A mapping from instructions in the old computation to the new one which is
   // currently being built.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> old_to_new_computation;
-  auto builder = HloComputation::Builder(call_computation->name());
+  auto builder = HloComputation::Builder(stage_computation->name());
 
   // Lower/remove the parameters first.
-  const int64 old_num_parameters = call_computation->num_parameters();
-  std::vector<HloInstruction*> new_call_operands(old_num_parameters -
-                                                 parameters_to_remove.size());
+  const int64 old_num_parameters = stage_computation->num_parameters();
+  std::vector<HloInstruction*> new_stage_operands(old_num_parameters -
+                                                  parameters_to_remove.size());
   int64 next_parameter_number = 0;
   auto next_to_remove_itr = parameters_to_remove.begin();
   for (int64 param_number = 0; param_number != old_num_parameters;
        ++param_number) {
     HloInstruction* old_parameter =
-        call_computation->parameter_instruction(param_number);
+        stage_computation->parameter_instruction(param_number);
     // Skip the parameter if we are removing it.
     if (next_to_remove_itr != parameters_to_remove.end() &&
         *next_to_remove_itr == param_number) {
@@ -760,17 +741,17 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
           builder.AddInstruction(HloInstruction::CreateParameter(
               next_parameter_number, old_parameter->shape(),
               old_parameter->name()));
-      new_call_operands[next_parameter_number++] =
-          call->mutable_operand(param_number);
+      new_stage_operands[next_parameter_number++] =
+          stage->mutable_operand(param_number);
       old_parameter->SetupDerivedInstruction(new_parameter);
       old_to_new_computation[old_parameter] = new_parameter;
     }
   }
-  CHECK_EQ(next_parameter_number, new_call_operands.size());
+  CHECK_EQ(next_parameter_number, new_stage_operands.size());
 
   // Lower all the other instructions.
   for (HloInstruction* old_inst :
-       call_computation->MakeInstructionPostOrder()) {
+       stage_computation->MakeInstructionPostOrder()) {
     if (old_inst->opcode() == HloOpcode::kParameter) {
       continue;
     }
@@ -787,33 +768,35 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
     old_inst->SetupDerivedInstruction(new_inst);
     old_to_new_computation[old_inst] = new_inst;
   }
-  // Build the new computation and the new call with new operands.
+  // Build the new computation and the new pipeline stage with new operands.
   HloInstruction* new_root =
-      old_to_new_computation.at(call_computation->root_instruction());
+      old_to_new_computation.at(stage_computation->root_instruction());
   std::unique_ptr<HloComputation> new_computation = builder.Build(new_root);
-  TF_ASSIGN_OR_RETURN(HloInstruction * new_call,
-                      ReplaceCallWith(call, std::move(new_computation),
-                                      new_call_operands, true));
-  return new_call;
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * new_stage,
+      ReplacePipelineStageWith(stage, std::move(new_computation),
+                               new_stage_operands, true));
+  return new_stage;
 }
 
-Status RemoveOutputsFromCall(HloInstruction* call,
-                             const std::set<int64>& outputs_to_remove) {
+Status RemoveOutputsFromStage(HloInstruction* stage,
+                              const std::set<int64>& outputs_to_remove) {
+  CHECK(IsPipelineStageOrBackwardOp(stage));
   // Nothing to remove.
   if (outputs_to_remove.empty()) {
     return Status::OK();
   }
 
-  const int64 num_outputs_old = ShapeUtil::TupleElementCount(call->shape());
-  HloComputation* call_computation = call->to_apply();
-  HloInstruction* root = call_computation->root_instruction();
+  const int64 num_outputs_old = ShapeUtil::TupleElementCount(stage->shape());
+  HloComputation* stage_computation = stage->to_apply();
+  HloInstruction* root = stage_computation->root_instruction();
 
   VLOG(3) << "Removing outputs " << absl::StrJoin(outputs_to_remove, ", ")
-          << " from " << call->ToString();
+          << " from " << stage->ToString();
 
   // Get all the GTEs.
   std::map<int64, absl::flat_hash_set<HloInstruction*>> tuple_index_to_gte;
-  for (HloInstruction* user : call->users()) {
+  for (HloInstruction* user : stage->users()) {
     CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
     tuple_index_to_gte[user->tuple_index()].insert(user);
   }
@@ -838,16 +821,16 @@ Status RemoveOutputsFromCall(HloInstruction* call,
   }
 
   // Create a new root and change the shapes.
-  HloInstruction* new_root = call_computation->AddInstruction(
+  HloInstruction* new_root = stage_computation->AddInstruction(
       HloInstruction::CreateTuple(new_outputs));
-  std::vector<Shape>* mutable_call_tuple_shapes =
-      call->mutable_shape()->mutable_tuple_shapes();
-  *mutable_call_tuple_shapes = new_root->shape().tuple_shapes();
-  call_computation->set_root_instruction(new_root, true);
+  std::vector<Shape>* mutable_stage_tuple_shapes =
+      stage->mutable_shape()->mutable_tuple_shapes();
+  *mutable_stage_tuple_shapes = new_root->shape().tuple_shapes();
+  stage_computation->set_root_instruction(new_root, true);
 
   if (root->user_count() == 0) {
     TF_RETURN_IF_ERROR(
-        call_computation->RemoveInstructionAndUnusedOperands(root));
+        stage_computation->RemoveInstructionAndUnusedOperands(root));
   }
 
   return Status::OK();
@@ -1094,7 +1077,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
 
   switch (inst->opcode()) {
     case HloOpcode::kCall:
-      return !IsAnyPipelineStageOpOrResourceUpdate(inst);
+      return !IsAnyPipelineStageOp(inst);
     case HloOpcode::kCopy:
       return !allow_communication_ops_;
     case HloOpcode::kParameter:
@@ -1113,7 +1096,8 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       if (IsAnyPipelineStageOp(gte_input)) {
         // DuplicateGTEEdges should make sure each GTE only has one user.
         if (!allow_duplicate_gte_edges_ && inst->user_count() != 1) {
-          return InternalErrorStrCat("Expected instruction ", inst->ToString(),
+          return InternalErrorStrCat("Expected instruction ",
+                                     gte_input->ToString(),
                                      " to have exactly one user.");
         }
         for (const HloInstruction* gte_user : inst->users()) {
@@ -1125,17 +1109,6 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         }
         return false;
       } else if (allow_feeds_ && gte_input->opcode() == HloOpcode::kInfeed) {
-        return false;
-      } else if (IsPipelineResourceUpdate(gte_input)) {
-        for (const HloInstruction* gte_user : inst->users()) {
-          // Expect that all users of the resource update are the root
-          // instruction.
-          if (gte_user->parent()->root_instruction() != gte_user) {
-            return InternalErrorStrCat(
-                "Expected the PipelineResourceUpdate outputs to be used by the "
-                "root instruction only.");
-          }
-        }
         return false;
       } else {
         // Any other GTE has to be lowered.

@@ -46,24 +46,22 @@ StatusOr<bool> AddCopyIfParameterModifiedInplace(HloInstruction* call,
   return false;
 }
 
-StatusOr<bool> InsertStageParamterCopies(PipelineStages& pipeline_stages) {
+StatusOr<bool> InsertForwardStageCopies(PipelineStages& stages) {
   bool changed = false;
-  for (auto stages : {pipeline_stages.forward, pipeline_stages.backward}) {
-    for (HloInstruction* stage : stages) {
-      // Go through all the operands to the stage, and insert copies if
-      // necessary to make sure no parameter is modified inplace. We could
-      // alternatively mark the modifying instruction not inplace, but that
-      // might result in higher memory usage (for example a tuple going into a
-      // loop is now not inplace).
-      // TODO(T10387)
-      for (int64 op_idx = 0; op_idx != stage->operand_count(); ++op_idx) {
-        if (stage->operand(op_idx)->opcode() != HloOpcode::kParameter) {
-          continue;
-        }
-        TF_ASSIGN_OR_RETURN(bool added,
-                            AddCopyIfParameterModifiedInplace(stage, op_idx));
-        changed |= added;
+  for (HloInstruction* stage : stages.forward) {
+    // Go through all the operands to the stage, and insert copies if necessary
+    // to make sure no parameter is modified inplace.
+    // We could alternatively mark the modifying instruction not inplace, but
+    // that might result in higher memory usage (for example a tuple going into
+    // a loop is now not inplace).
+    // TODO(T10387)
+    for (int64 op_idx = 0; op_idx != stage->operand_count(); ++op_idx) {
+      if (stage->operand(op_idx)->opcode() != HloOpcode::kParameter) {
+        continue;
       }
+      TF_ASSIGN_OR_RETURN(bool added,
+                          AddCopyIfParameterModifiedInplace(stage, op_idx));
+      changed |= added;
     }
   }
   return changed;
@@ -76,8 +74,7 @@ StatusOr<bool> InsertReadOnlyVariableCopies(HloInstruction* pipeline_op) {
   // Secondly, we make sure that if a parameter of the pipeline is an output
   // of the pipeline as well then it is not modified. TF2XLA lowering of
   // pipelines expects these to not be modified.
-  if (ShapeUtil::TupleElementCount(root->shape()) !=
-      pipeline_comp->num_parameters()) {
+  if (root->operand_count() != pipeline_comp->num_parameters()) {
     return FailedPrecondition(
         "Expected the Pipeline to have %d outputs, but has %d",
         root->operand_count(), pipeline_comp->num_parameters());
@@ -253,10 +250,9 @@ StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
     HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // We first make sure that stages do not modify parameters inplace (only the
-  // resource update can modify them).
-  TF_ASSIGN_OR_RETURN(bool inserted_parameter_copies,
-                      InsertStageParamterCopies(stages));
+  // We first make sure that forward stages do not modify parameters inplace.
+  TF_ASSIGN_OR_RETURN(bool inserted_fwd_copies,
+                      InsertForwardStageCopies(stages));
   // Insert copies for any read-only pipeline inputs.
   TF_ASSIGN_OR_RETURN(bool inserted_ro_copies,
                       InsertReadOnlyVariableCopies(pipeline_op));
@@ -269,8 +265,8 @@ StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
   // Insert intra IPU copies for any outputs from the previous stage on the same
   // device.
   TF_ASSIGN_OR_RETURN(bool inserted_intra_copies, InsertIntraIPUCopies(stages));
-  return inserted_parameter_copies || inserted_ro_copies ||
-         inserted_intra_copies || inserted_intra_copies_between_stages ||
+  return inserted_fwd_copies || inserted_ro_copies || inserted_intra_copies ||
+         inserted_intra_copies_between_stages ||
          inserted_intra_copies_before_outfeed;
 }
 

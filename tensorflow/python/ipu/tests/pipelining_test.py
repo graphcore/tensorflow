@@ -41,7 +41,6 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import normalization_ops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import utils
-from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
@@ -87,24 +86,22 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       loss = math_ops.reduce_sum(y)
       return loss
 
-    def optimizer_function(loss):
-      opt = gradient_descent.GradientDescentOptimizer(0.01)
-      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+    def optimizer_stage(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01).minimize(loss)
+      return loss, opt
 
     def my_net(x):
-      return pipelining_ops.pipeline(
-          [stage1, stage2],
-          10,
-          inputs=[x],
-          optimizer_function=optimizer_function,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+      return pipelining_ops.pipeline([stage1, stage2],
+                                     10,
+                                     inputs=[x],
+                                     optimizer_stage=optimizer_stage)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
     with ops.device("/device:IPU:0"):
-      with self.assertRaisesRegex(ValueError,
-                                  'The last computational stage has tensor'):
+      with self.assertRaisesRegexp(ValueError,
+                                   'The optimizer_stage has tensor outputs'):
         ipu_compiler.compile(my_net, inputs=[x])
 
   @test_util.deprecated_graph_mode_only
@@ -413,6 +410,96 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       report.assert_pipeline_stages_on_expected_ipu(range(3))
 
   @test_util.deprecated_graph_mode_only
+  def testPipelineGradIntermediates(self):
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed7")
+
+    with ops.device('cpu'):
+      lr = array_ops.placeholder(np.float32, shape=[])
+
+    def stage1(x, lr, name=None):
+      name = "vs" + name if name else ""
+      with variable_scope.variable_scope(name, use_resource=True):
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          bias_initializer=init_ops.ones_initializer(),
+                          kernel_initializer=init_ops.ones_initializer())(x)
+        return y, lr
+
+    def stage2(x, lr, name=None):
+      name = "vs" + name if name else ""
+      with variable_scope.variable_scope(name, use_resource=True):
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          bias_initializer=init_ops.ones_initializer(),
+                          kernel_initializer=init_ops.ones_initializer(),
+                          name="stage2")(x)
+        return y, lr
+
+    def stage3(x, lr, name=None):
+      name = "vs" + name if name else ""
+      with variable_scope.variable_scope(name, use_resource=True):
+        y = layers.Conv2D(2,
+                          1,
+                          use_bias=True,
+                          bias_initializer=init_ops.ones_initializer(),
+                          kernel_initializer=init_ops.ones_initializer())(x)
+        y = layers.MaxPooling2D(2, 1, "VALID")(y)
+      return math_ops.reduce_sum(y), lr
+
+    def optimizer_stage(loss, lr):
+      opt = gradient_descent.GradientDescentOptimizer(lr)
+
+      grads = gradients_impl.gradients(loss, variables.trainable_variables())
+      grads = list(zip(grads, variables.trainable_variables()))
+      grads = [(grad + (0.1 * var), var) if 'stage2' not in var.name else
+               (grad, var) for grad, var in grads]
+      grads = [(clip_ops.clip_by_value(grad, -1., 1.), var)
+               for grad, var in grads]
+      opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+          opt, 6)
+
+      return loss, opt.apply_gradients(grads_and_vars=grads)
+
+    def model_pipeline(x, lr):
+      return pipelining_ops.pipeline([stage1, stage2, stage3],
+                                     12,
+                                     inputs=[x, lr],
+                                     outfeed_queue=outfeed_queue,
+                                     optimizer_stage=optimizer_stage)
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+      lr = array_ops.placeholder(np.float32, shape=[])
+
+    with ops.device("/device:IPU:0"):
+      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                     inputs=[x, lr])
+
+    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
+    outfeed_op = outfeed_queue.dequeue()
+    with tu.ipu_session() as sess:
+      report = tu.ReportJSON(self, sess, configure_device=False)
+      sess.run(variables.global_variables_initializer())
+      sess.run(compiled_model_pipeline, {x: np.ones(x.shape), lr: 0.01})
+      losses_pipeline = sess.run(outfeed_op)
+      # Note that the pipeline always takes the same input - see how the
+      # loss is the same for first 6 executions (gradient accumulation), then
+      # there is one stage which uses stale weights, and the remaining stages
+      # return the same value.
+      self.assertAllClose(losses_pipeline, [[
+          270., 270., 270., 270., 270., 270., 253.79999, 239.5872, 239.5872,
+          239.5872, 239.5872, 239.5872
+      ]])
+      report.parse_log()
+      report.assert_pipeline_stages_on_expected_ipu(range(3))
+
+  @test_util.deprecated_graph_mode_only
   def testIllegalCapture(self):
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed8")
 
@@ -541,19 +628,23 @@ class PipeliningTest(test_util.TensorFlowTestCase):
               kernel_initializer=init_ops.ones_initializer(),
               bias_initializer=init_ops.ones_initializer())(x)) + c, idx
 
-    def optimizer_function(loss, _):
-      def func(grad, _):
-        return clip_ops.clip_by_value(grad, -1., 1.)
+    def optimizer_stage(loss, idx):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
 
-      opt = map_gradient_optimizer.MapGradientOptimizer(
-          gradient_descent.GradientDescentOptimizer(0.01), func)
-      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+      grads = gradients_impl.gradients(loss, variables.trainable_variables())
+      grads = list(zip(grads, variables.trainable_variables()))
+      grads = [(clip_ops.clip_by_value(grad, -1., 1.), var)
+               for grad, var in grads]
+      opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+          opt, 12)
+      return loss, idx, opt.apply_gradients(grads_and_vars=grads)
 
+    # Run the pipeline twice.
     def my_net(c):
       return pipelining_ops.pipeline([stage1, stage2, stage3, stage4],
                                      12,
                                      inputs=[c],
-                                     optimizer_function=optimizer_function,
+                                     optimizer_stage=optimizer_stage,
                                      infeed_queue=infeed_queue,
                                      outfeed_queue=outfeed_queue)
 
@@ -573,7 +664,6 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
-      # Run the pipeline twice.
       sess.run(r, {c: 10.01})
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
@@ -744,7 +834,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
           sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 22700)
+          dataset_fn, optimizer, self, 22738)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -793,7 +883,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 12600)
+          pipeline_depth, dataset_fn, optimizer, self, 13821)
 
 
 if __name__ == "__main__":

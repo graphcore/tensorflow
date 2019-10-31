@@ -149,7 +149,6 @@ cc_library(
         "driver/passes/pipeline_fixer.cc",
         "driver/passes/pipeline_optimizer.cc",
         "driver/passes/pipeline_recomputation.cc",
-        "driver/passes/pipeline_resource_update_fixer.cc",
         "driver/passes/pipeline_verifier.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/recompute_instructions.cc",
@@ -257,7 +256,6 @@ cc_library(
         "driver/passes/pipeline_fixer.h",
         "driver/passes/pipeline_optimizer.h",
         "driver/passes/pipeline_recomputation.h",
-        "driver/passes/pipeline_resource_update_fixer.h",
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
         "driver/passes/recompute_instructions.h",
@@ -1912,21 +1910,6 @@ xla_test(
     ],
 )
 
-xla_test(
-    name = "pipeline_resource_update_fixer_test",
-    srcs = ["tests/pipeline_resource_update_fixer_test.cc"],
-    backends = ["poplar"],
-    copts = ["-fexceptions"],
-    size = "small",
-    deps = [
-        ":optimizers",
-        "//tensorflow/compiler/xla/service:hlo_matchers",
-        "//tensorflow/compiler/xla/service:hlo_query",
-        "//tensorflow/compiler/xla/service:shape_inference",
-        "//tensorflow/compiler/xla/tests:hlo_test_base",
-    ],
-)
-
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -3152,7 +3135,6 @@ test_suite(
         "pipeline_grouped_visitor_test",
         "pipeline_optimizer_test",
         "pipeline_recomputation_test",
-        "pipeline_resource_update_fixer_test",
         "pipeline_util_test",
         "pipeline_visitor_test",
         "recomputation_test",

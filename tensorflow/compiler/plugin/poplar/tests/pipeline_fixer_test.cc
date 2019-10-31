@@ -315,18 +315,6 @@ stage_2_bwd {
   ROOT tuple.53 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[]) tuple(convolution.35, constant.25, convolution.37, convert.36, subtract.24, subtract.25, get-tuple-element.184.clone.19)
 }
 
-resource_update {
-  arg0 = f32[1,1,2,2]{3,2,1,0} parameter(0)
-  arg1 = f32[2]{0} parameter(1)
-  arg2 = f32[1,1,2,2]{3,2,1,0} parameter(2)
-  arg3 = f32[2]{0} parameter(3)
-  arg4 = f32[1,1,2,2]{3,2,1,0} parameter(4)
-  arg5 = f32[2]{0} parameter(5)
-  arg6 = f32[1,1,2,2]{3,2,1,0} parameter(6)
-  arg7 = f32[2]{0} parameter(7)
-  ROOT t = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-}
-
 pipeline_wrapper {
   arg0.154 = f32[1,4,4,2]{3,2,1,0} parameter(0)
   arg1.155 = f32[] parameter(1)
@@ -380,16 +368,7 @@ pipeline_wrapper {
   get-tuple-element.12 = f32[2]{0} get-tuple-element(call.8), index=7
   get-tuple-element.1 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.12), index=5
   get-tuple-element = f32[2]{0} get-tuple-element(call.12), index=4
-  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.35, get-tuple-element.32, get-tuple-element.21, get-tuple-element.16, get-tuple-element.9, get-tuple-element.12, get-tuple-element.1, get-tuple-element), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
-  gte0 = f32[1,1,2,2] get-tuple-element(call_ru), index=0
-  gte1 = f32[2] get-tuple-element(call_ru), index=1
-  gte2 = f32[1,1,2,2] get-tuple-element(call_ru), index=2
-  gte3 = f32[2] get-tuple-element(call_ru), index=3
-  gte4 = f32[1,1,2,2] get-tuple-element(call_ru), index=4
-  gte5 = f32[2] get-tuple-element(call_ru), index=5
-  gte6 = f32[1,1,2,2] get-tuple-element(call_ru), index=6
-  gte7 = f32[2] get-tuple-element(call_ru), index=7
-  ROOT tuple.265 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(gte0, gte1, gte2, gte3, gte4, gte5, gte6, gte7)
+  ROOT tuple.265 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(get-tuple-element.35, get-tuple-element.32, get-tuple-element.21, get-tuple-element.16, get-tuple-element.9, get-tuple-element.12, get-tuple-element.1, get-tuple-element)
 }
 
 pipeline {
@@ -516,12 +495,6 @@ stage_0_bwd {
   ROOT stage_0_bwd_tuple = (f32[1,4,4,2]) tuple(stage_0_bwd_input_bwd)
 }
 
-resource_update {
-  arg0 = f32[1,4,4,2] parameter(0)
-  arg1 = f32[1,4,4,2] parameter(1)
-  ROOT t = (f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1)
-}
-
 pipeline_wrapper {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_lr = f32[] parameter(2)
@@ -544,11 +517,8 @@ pipeline_wrapper {
   pipeline_lr_bcast2 = f32[1,4,4,2] broadcast(pipeline_stage_1_lr), dimensions={}
   pipeline_weights0_update = f32[1,4,4,2] multiply(pipeline_input_bwd, pipeline_lr_bcast2)
   pipeline_weights0_apply = f32[1,4,4,2] subtract(pipeline_weights0, pipeline_weights0_update)
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0_apply, pipeline_weights1_apply), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
-  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
-  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
-  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
-  }
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_apply, pipeline_weights1_apply)
+}
 
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)

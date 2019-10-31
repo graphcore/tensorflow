@@ -119,7 +119,8 @@ class InplaceSubComputationVisitor : public SubComputationVisitor {
  protected:
   // Given the flat tensor index, get the sequence the copy should be inserted
   // into.
-  virtual poplar::program::Sequence& GetSequenceForAliasingCopy();
+  virtual poplar::program::Sequence& GetSequenceForAliasingCopy(
+      int64 flat_tensor_index, const HloComputation* computation);
 
   // Given an output flat index get the corresponding paramter number and flat
   // index.

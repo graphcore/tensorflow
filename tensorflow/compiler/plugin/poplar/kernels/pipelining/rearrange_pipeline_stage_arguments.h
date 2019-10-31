@@ -23,15 +23,15 @@ limitations under the License.
 namespace tensorflow {
 
 // For the given graph `g`:
-// 1. Rewrite node function to rearrange arguments and return
+// 1. Rewrite PipelineStage node functions to rearrange arguments and return
 //    values, so that all resource arguments/return values are placed in the end
 //    (as required by XlaCompiler),
 // `get_function_body_fn` is used to instantiate FunctionDef.
 // `fld` is used to store rewritten functions.
-Status RearrangeFunctionArguments(
+Status RearrangePipelineStageArguments(
     std::function<Status(const NameAttrList&, const FunctionBody**)>
         get_function_body_fn,
-    NameAttrList& new_func, const NameAttrList& old_pipeline_func,
+    NameAttrList& new_pipeline_func, const NameAttrList& old_pipeline_func,
     FunctionLibraryDefinition* fld);
 
 }  // namespace tensorflow
