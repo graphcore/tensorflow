@@ -173,7 +173,7 @@ Service::Service(const ServiceOptions& options,
     for (int i = 0; i < execute_backend_->device_count(); ++i) {
       se::StreamExecutor* executor = stream_executors.at(i);
       const auto& description = executor->GetDeviceDescription();
-      LOG(INFO) << StrFormat("  StreamExecutor device (%d): %s, %s", i,
+      LOG(INFO) << StrFormat("  StreamExecutor device (%d): %s %s", i,
                              description.name(),
                              description.platform_version());
     }
