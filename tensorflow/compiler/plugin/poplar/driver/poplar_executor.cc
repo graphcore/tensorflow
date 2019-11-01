@@ -1029,7 +1029,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
         if (current_config_.profiling().enable_execution_trace()) {
           // Enable getting the cycle counts for each compute set on hardware
           // when asking for an execution trace
-          option_flags_.set("debug.instrumentCompute", "true");
+          option_flags_.set("debug.instrument", "true");
         }
       }
     } else if (force_ipu_model) {
