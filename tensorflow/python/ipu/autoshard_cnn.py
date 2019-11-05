@@ -67,7 +67,13 @@ def convert_ops_to_nx(fwd_ops, bwd_ops=None):
       variables_seen.append(op.inputs[0].name)
     else:
       parameter_mem = 0
-    bwd_links = [t for t in op.outputs if t in bwd_inputs]
+    for t in op.outputs:
+      if t in bwd_inputs and str(t.shape) != "<unknown>":
+        logging.warning("Tensor '%s' has unknown shape." % t.name)
+    bwd_links = [
+        t for t in op.outputs
+        if t in bwd_inputs and str(t.shape) != "<unknown>"
+    ]
     if bwd_links != [] and op.type != 'ReadVariableOp' and not (
         op.type == 'Cast' and list(op.inputs)[0].op.type == 'ReadVariableOp'):
       saved_mem = np.sum([tensor_memory_use(t) for t in bwd_links])
