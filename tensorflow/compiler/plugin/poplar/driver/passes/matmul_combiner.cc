@@ -139,9 +139,11 @@ bool MatmulCombiner::HandleMatch(HloMatcherMatched& match,
     return false;
   }
 
+  HloInstruction *lhs, *rhs;
+  Shape matmul_shape, slice1_shape, slice2_shape;
   if (matmul1->operand(0) == matmul2->operand(0)) {
     // Shared lhs
-    HloInstruction* lhs = match.instruction_mapping.at(2);
+    lhs = match.instruction_mapping.at(2);
     HloInstruction* rhs1 = match.instruction_mapping.at(3);
     HloInstruction* rhs2 = match.instruction_mapping.at(4);
 
@@ -156,42 +158,25 @@ bool MatmulCombiner::HandleMatch(HloMatcherMatched& match,
     const int64 output_width = output_width1 + output_width2;
     const int64 output_height = lhs->shape().dimensions(1);
     const int64 output_batch = lhs->shape().dimensions(0);
+    slice1_shape =
+        ShapeUtil::MakeShape(matmul1->shape().element_type(),
+                             {output_batch, output_height, output_width1});
+    slice2_shape =
+        ShapeUtil::MakeShape(matmul1->shape().element_type(),
+                             {output_batch, output_height, output_width2});
 
-    std::vector<HloInstruction*> rhs = {rhs1, rhs2};
-    HloInstruction* new_rhs =
-        computation->AddInstruction(HloInstruction::CreateConcatenate(
-            GetConcatenatedShape(rhs, 2), rhs, 2));
-    rhs1->SetupDerivedInstruction(new_rhs);
+    std::vector<HloInstruction*> rhs_ops = {rhs1, rhs2};
+    rhs = computation->AddInstruction(HloInstruction::CreateConcatenate(
+        GetConcatenatedShape(rhs_ops, 2), rhs_ops, 2));
+    rhs1->SetupDerivedInstruction(rhs);
 
-    Shape matmul_shape =
+    matmul_shape =
         ShapeUtil::MakeShape(matmul1->shape().element_type(),
                              {output_batch, output_height, output_width});
-    DotDimensionNumbers new_dot_dim;
-    new_dot_dim.add_lhs_contracting_dimensions(2);
-    new_dot_dim.add_rhs_contracting_dimensions(1);
-    new_dot_dim.add_lhs_batch_dimensions(0);
-    new_dot_dim.add_rhs_batch_dimensions(0);
-
-    HloInstruction* new_matmul = computation->AddInstruction(
-        HloInstruction::CreateDot(matmul_shape, lhs, new_rhs, new_dot_dim,
-                                  matmul1->precision_config()));
-    matmul1->SetupDerivedInstruction(new_matmul);
-
-    HloInstruction* output1 =
-        computation->AddInstruction(HloInstruction::CreateSlice(
-            matmul1->shape(), new_matmul, {0, 0, 0},
-            {output_batch, output_height, output_width1}, {1, 1, 1}));
-    computation->ReplaceInstruction(matmul1, output1);
-
-    HloInstruction* output2 =
-        computation->AddInstruction(HloInstruction::CreateSlice(
-            matmul2->shape(), new_matmul, {0, 0, output_width1},
-            new_matmul->shape().dimensions(), {1, 1, 1}));
-    computation->ReplaceInstruction(matmul2, output2);
   } else {
     // Shared rhs
     HloInstruction* lhs1 = match.instruction_mapping.at(2);
-    HloInstruction* rhs = match.instruction_mapping.at(3);
+    rhs = match.instruction_mapping.at(3);
     HloInstruction* lhs2 = match.instruction_mapping.at(4);
 
     // Reshape to [Batch, Contracting, N]
@@ -206,38 +191,53 @@ bool MatmulCombiner::HandleMatch(HloMatcherMatched& match,
     const int64 output_height = output_height1 + output_height2;
     const int64 output_batch = rhs->shape().dimensions(0);
 
-    std::vector<HloInstruction*> lhs = {lhs1, lhs2};
-    HloInstruction* new_lhs =
-        computation->AddInstruction(HloInstruction::CreateConcatenate(
-            GetConcatenatedShape(lhs, 1), lhs, 1));
-    lhs1->SetupDerivedInstruction(new_lhs);
+    slice1_shape =
+        ShapeUtil::MakeShape(matmul1->shape().element_type(),
+                             {output_batch, output_height1, output_width});
+    slice2_shape =
+        ShapeUtil::MakeShape(matmul1->shape().element_type(),
+                             {output_batch, output_height2, output_width});
 
-    Shape matmul_shape =
+    std::vector<HloInstruction*> lhs_ops = {lhs1, lhs2};
+    lhs = computation->AddInstruction(HloInstruction::CreateConcatenate(
+        GetConcatenatedShape(lhs_ops, 1), lhs_ops, 1));
+    lhs1->SetupDerivedInstruction(lhs);
+
+    matmul_shape =
         ShapeUtil::MakeShape(matmul1->shape().element_type(),
                              {output_batch, output_height, output_width});
-    DotDimensionNumbers new_dot_dim;
-    new_dot_dim.add_lhs_contracting_dimensions(2);
-    new_dot_dim.add_rhs_contracting_dimensions(1);
-    new_dot_dim.add_lhs_batch_dimensions(0);
-    new_dot_dim.add_rhs_batch_dimensions(0);
-
-    HloInstruction* new_matmul = computation->AddInstruction(
-        HloInstruction::CreateDot(matmul_shape, new_lhs, rhs, new_dot_dim,
-                                  matmul1->precision_config()));
-    matmul1->SetupDerivedInstruction(new_matmul);
-
-    HloInstruction* output1 =
-        computation->AddInstruction(HloInstruction::CreateSlice(
-            matmul1->shape(), new_matmul, {0, 0, 0},
-            {output_batch, output_height1, output_width}, {1, 1, 1}));
-    computation->ReplaceInstruction(matmul1, output1);
-
-    HloInstruction* output2 =
-        computation->AddInstruction(HloInstruction::CreateSlice(
-            matmul2->shape(), new_matmul, {0, output_height1, 0},
-            new_matmul->shape().dimensions(), {1, 1, 1}));
-    computation->ReplaceInstruction(matmul2, output2);
   }
+
+  std::vector<int64> slice2_offset(3);
+  for (int i = 0; i < matmul_shape.rank(); i++) {
+    slice2_offset[i] = matmul_shape.dimensions(i) - slice2_shape.dimensions(i);
+  }
+
+  DotDimensionNumbers new_dot_dim;
+  new_dot_dim.add_lhs_contracting_dimensions(2);
+  new_dot_dim.add_rhs_contracting_dimensions(1);
+  new_dot_dim.add_lhs_batch_dimensions(0);
+  new_dot_dim.add_rhs_batch_dimensions(0);
+
+  HloInstruction* new_matmul =
+      computation->AddInstruction(HloInstruction::CreateDot(
+          matmul_shape, lhs, rhs, new_dot_dim, matmul1->precision_config()));
+  matmul1->SetupDerivedInstruction(new_matmul);
+
+  HloInstruction* slice1 = computation->AddInstruction(
+      HloInstruction::CreateSlice(slice1_shape, new_matmul, {0, 0, 0},
+                                  slice1_shape.dimensions(), {1, 1, 1}));
+  HloInstruction* output1 = computation->AddInstruction(
+      HloInstruction::CreateReshape(matmul1->shape(), slice1));
+  computation->ReplaceInstruction(matmul1, output1);
+
+  HloInstruction* slice2 = computation->AddInstruction(
+      HloInstruction::CreateSlice(slice2_shape, new_matmul, slice2_offset,
+                                  new_matmul->shape().dimensions(), {1, 1, 1}));
+  HloInstruction* output2 = computation->AddInstruction(
+      HloInstruction::CreateReshape(matmul2->shape(), slice2));
+  computation->ReplaceInstruction(matmul2, output2);
+
   return true;
 }
 
