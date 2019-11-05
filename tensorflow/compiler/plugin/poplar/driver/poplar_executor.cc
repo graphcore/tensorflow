@@ -408,23 +408,26 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
 class NullPrefetchCallback : public poplar::StreamCallback {
  public:
   explicit NullPrefetchCallback(uint64 num_bytes) : num_bytes_(num_bytes) {
-    buffer = std::vector<unsigned char>(num_bytes, 0x02);
+    for (auto& buffer : buffers_) {
+      buffer = std::vector<unsigned char>(num_bytes, 0x02);
+    }
   }
 
   poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
-    std::memcpy(dest, buffer.data(), num_bytes_);
+    std::memcpy(dest, buffers_[index_].data(), num_bytes_);
     return poplar::StreamCallback::Result::Success;
   }
 
   void fetch(void* dest) noexcept override {
     // This case shouldn't be hit, if poplar prefetches the data.
-    std::memcpy(dest, buffer.data(), num_bytes_);
+    std::memcpy(dest, buffers_[index_].data(), num_bytes_);
   }
 
-  void complete() noexcept override {}
+  void complete() noexcept override { index_ = (index_ + 1) % 16; }
 
  private:
-  std::vector<unsigned char> buffer;
+  int index_ = 0;
+  std::vector<unsigned char> buffers_[16];
   const uint64 num_bytes_;
 };
 }  // namespace
