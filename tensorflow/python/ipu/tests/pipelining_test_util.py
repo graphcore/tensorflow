@@ -149,10 +149,8 @@ class PipelineTester(object):
 
     with variable_scope.variable_scope("ipu", use_resource=True, reuse=False):
 
-      def optimizer_stage(loss):
-        opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
-            optimizer, pipeline_depth)
-        return loss, opt.minimize(loss)
+      def optimizer_function(loss):
+        return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
       def my_net(*args):
         return pipelining_ops.pipeline(
@@ -160,7 +158,7 @@ class PipelineTester(object):
             pipeline_depth,
             repeat_count=repeat_count,
             inputs=args,
-            optimizer_stage=optimizer_stage,
+            optimizer_function=optimizer_function,
             infeed_queue=infeed_queue,
             outfeed_queue=outfeed_queue,
             pipeline_schedule=(pipelining_ops.PipelineSchedule.Interleaved

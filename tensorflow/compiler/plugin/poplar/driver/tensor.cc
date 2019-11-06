@@ -1496,8 +1496,7 @@ std::pair<int64, int64> FindTupleInputIndices(const HloInstruction* tuple,
   return std::make_pair(start, end);
 }
 
-namespace {
-std::pair<int64, int64> FindGetTupleElementTupleIndecies(
+std::pair<int64, int64> FindGetTupleElementTupleIndices(
     const HloInstruction* inst) {
   const auto* gte = Cast<HloGetTupleElementInstruction>(inst);
   const HloInstruction* tuple = inst->operand(0);
@@ -1510,7 +1509,6 @@ std::pair<int64, int64> FindGetTupleElementTupleIndecies(
                           shape, gte->tuple_index()));
   return std::make_pair(start, end);
 }
-}  // namespace
 
 ArgVector FindInstructionInputsInRange(TensorMap& map, CompilerResources& res,
                                        const HloInstruction* inst, int64 input,
@@ -1622,7 +1620,7 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
     // For GTEs there is only one input, and it is always inplace
     CHECK_EQ(inplace_indexes.size(), 1);
     CHECK_EQ(inplace_indexes[0], 0);
-    auto gte_tensors_indecies = FindGetTupleElementTupleIndecies(inst);
+    auto gte_tensors_indecies = FindGetTupleElementTupleIndices(inst);
     tensors[0] = FindInstructionInputsInRange(
         map, res, inst, 0, gte_tensors_indecies, seq, expand_constants);
   } else {

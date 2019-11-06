@@ -25,6 +25,7 @@ from __future__ import print_function
 from enum import Enum
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pipelining_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
@@ -34,11 +35,52 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import control_flow_util_v2 as util
 from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.training import optimizer
 
 
 class PipelineSchedule(Enum):
   Grouped = 0
   Interleaved = 1
+
+
+class OptimizerFunctionOutput:
+  """
+  A helper class used for returning a structured output from an
+  optimizer_function in a pipeline.
+  """
+  def __init__(self, opt, loss):
+    """Creates an OptimizerFunctionOutput object.
+
+    Args:
+       opt: An instance of `optimizer.Optimizer` which is used to generate
+         the back-propagation and the weight update pipeline stages.
+       loss: The loss which is passed to the optimizer.
+    """
+    self.opt = opt
+    self.loss = loss
+
+  @property
+  def opt(self):
+    return self._opt
+
+  @opt.setter
+  def opt(self, value):
+    if not isinstance(value, optimizer.Optimizer):
+      raise TypeError(
+          "OptimizerFunctionOutput.opt must be a TensorFlow Optimizer "
+          "object.")
+    self._opt = value
+
+  @property
+  def loss(self):
+    return self._loss
+
+  @loss.setter
+  def loss(self, value):
+    if not isinstance(value, ops.Tensor):
+      raise TypeError(
+          "OptimizerFunctionOutput.loss must be a TensorFlow Tensor object.")
+    self._loss = value
 
 
 def pipeline(computational_stages,
@@ -47,9 +89,10 @@ def pipeline(computational_stages,
              inputs=None,
              infeed_queue=None,
              outfeed_queue=None,
-             optimizer_stage=None,
+             optimizer_function=None,
              device_mapping=None,
              pipeline_schedule=None,
+             continuous_weight_updates=False,
              name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
@@ -71,21 +114,19 @@ def pipeline(computational_stages,
   the model processes different batches of data) the input should be passed
   through the `infeed_queue` (see ipu.ipu_infeed_queue.IPUInfeedQueue`).
 
-  When training a model, an optional `optimizer_stage` function can be provided.
-  This function takes all the outputs from the last computational stage and it
-  can use them to generate the backwards pass of the model using the TensorFlow
+  When training a model, an optional `optimizer_function` function can be
+  provided. This function takes all the outputs from the last computational
+  stage as inputs and it returns an instance of `OptimizerFunctionOutput` which
+  ais used to generate the backwards pass of the model using the TensorFlow
   Optimizer API. This will internally create corresponding backpropagation
   pipeline stages for each pipeline stage and colocate them such that the
   activations and weights required for the gradient calculation and application
   stay on the device in order to minimise the number of copies between IPUs.
+  Note that the gradients, which are caluclated by the `compute_gradients`
+  function, will be automatically accumulated during the execution of the
+  pipeline, unless `continuous_weight_updates` is enabled.
 
-  If an `optimizer_stage` is provided and the `optimizer_stage` has any
-  tf.Tensor outputs then an `outfeed_queue` (see
-  `ipu.ipu_outfeed_queue.IPUOutfeedQueue`) is required and all the tf.Tensor
-  outputs from the `optimizer_stage` are enqueued to the `outfeed_queue`.
-
-  Alternatively, if an `optimizer_stage` is not provided and the last
-  computational stage has any outputs, then an `outfeed_queue`
+  If the last computational stage has any outputs, then an `outfeed_queue`
   (see `ipu.ipu_outfeed_queue.IPUOutfeedQueue`) is required and all the outputs
   from the last computational stage are enqueued to the `outfeed_queue`.
 
@@ -152,7 +193,7 @@ def pipeline(computational_stages,
   The results of the pipeline (probabilities and classes) are returned to the
   host by the outfeed queue.
 
-  We can also train this network by providing `optimizer_stage`:
+  We can also train this network by providing `optimizer_function`:
 
   .. code-block:: python
 
@@ -178,9 +219,9 @@ def pipeline(computational_stages,
       loss = tf.reduce_mean(cross_entropy)
       return lr, loss
 
-    def optimizer_stage(lr, loss):
-      optimizer = tf.train.GradientDescentOptimizer(lr).minimize(loss)
-      return loss, optimizer
+    def optimizer_function(lr, loss):
+      optimizer = tf.train.GradientDescentOptimizer(lr)
+      return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
     def model(lr):
       with variable_scope.variable_scope("vs", use_resource=True):
@@ -191,7 +232,7 @@ def pipeline(computational_stages,
                           inputs=[lr],
                           infeed_queue=infeed_queue,
                           outfeed_queue=outfeed_queue,
-                          optimizer_stage=optimizer_stage,
+                          optimizer_function=optimizer_function,
                           name="Pipeline")
       return pipeline_op
 
@@ -210,9 +251,10 @@ def pipeline(computational_stages,
   which calculate the gradients and apply them to the weights. Note how the loss
   is returned to the host by the outfeed queue.
 
-  Note that modifying tf.Variable values in a pipeline stage will result in
-  undefined behavior. These variables can only be modified by the automatically
-  generated backward pass when using the `optimizer_stage`.
+  Note that modifying tf.Variable values in a pipeline stage and/or during the
+  gradient calculation will result in undefined behavior. These variables can
+  only be modified by the `apply_gradients` member function of the applied
+  Optimizer.
 
   Args:
     computational_stages: a list of python functions, where each function
@@ -223,15 +265,21 @@ def pipeline(computational_stages,
     inputs: arguments passed to the first pipeline stage.
     infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued and passed
       as an input in the first pipeline stage.
-    outfeed_queue: IPUOutfeedQueue, required if the last computational stage or
-      optimizer_stage has any outputs. The outputs of these are enqueued to this
-      queue and they can be accessed on the host.
-    optimizer_stage: optional Python function which takes the output of the last
-      computational stage and uses that to call a TensorFlow Optimizer in order
-      to generate the backward pass for the model.
+    outfeed_queue: IPUOutfeedQueue, required if the last computational stage has
+      any outputs. The outputs of these are enqueued to this queue and they can
+      be accessed on the host.
+    optimizer_function: optional Python function which takes the output of the
+      last computational stage as parameters and returns an instance of
+      `pipelining_ops.OptimizationFunctionOutput` in order to generate the
+      back-propagation and weight-update parts of the model suitable for
+      training.
     device_mapping: optional stage to ipu mapping override.
     pipeline_schedule: Which scheduling algorithm to use for pipeline lowering.
       Defaults to `PipelineSchedule.Interleaved`.
+    continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training, this
+      option will apply the gradients to the resource variables immediately,
+      rather than accumulating the gradients and applying them at the end of
+      each execution of the pipeline.
     name: name of this pipeline.
 
   Returns:
@@ -242,6 +290,10 @@ def pipeline(computational_stages,
   inputs = inputs if inputs else []
   inputs = _convert_to_list(inputs)
   inputs = ops.convert_n_to_tensor(inputs)
+
+  if continuous_weight_updates:
+    raise NotImplementedError(
+        "Continuous weight updates are currently not supported.")
 
   for i, input in enumerate(inputs):
     if input.dtype == dtypes.resource:
@@ -290,7 +342,7 @@ def pipeline(computational_stages,
     outputs = args
     for stage_id, stage in enumerate(computational_stages):
       stage_infeed_queue = infeed_queue if stage_id == 0 else None
-      if stage_id == len(computational_stages) - 1 and not optimizer_stage:
+      if stage_id == len(computational_stages) - 1 and not optimizer_function:
         stage_outfeed_queue = outfeed_queue
       else:
         stage_outfeed_queue = None
@@ -303,52 +355,69 @@ def pipeline(computational_stages,
                                 infeed_queue=stage_infeed_queue,
                                 outfeed_queue=stage_outfeed_queue,
                                 name=stage_name)
-    if optimizer_stage:
-      # Apply the optimizer stage
-      outputs = optimizer_stage(*_convert_to_list(outputs))
+
+    if optimizer_function:
       outputs = _convert_to_list(outputs)
       # Enqueue any output tensors to the outfeed.
-      try:
-        outputs = [
-            o if isinstance(o, ops.Operation) else ops.convert_to_tensor(o)
-            for o in outputs
-        ]
-      except Exception as e:
-        raise ValueError(
-            "'optimizer_stage' function return values must all either be "
-            "tf.Operations or convertible to tf.Tensors. Got error: '%s'" %
-            str(e))
-
-      # Separates the returned Operations and Tensors.
-      output_operations = [o for o in outputs if isinstance(o, ops.Operation)]
-      output_tensors = [o for o in outputs if not isinstance(o, ops.Operation)]
-
-      if outputs != output_tensors + output_operations:
-        raise ValueError(
-            "optimizer_stage' function must return zero or more  Tensor values "
-            "followed by zero or more Operations.")
-
-      if output_tensors:
+      if outputs:
         # Enqueue the outfeed.
         if not outfeed_queue:
           raise ValueError(
-              "The optimizer_stage has tensor outputs: %s, but no outfeed_queue"
-              " has been provided." %
-              (', '.join(str(t) for t in output_tensors)))
-        output_operations.append(outfeed_queue.enqueue(output_tensors))
-      with ops.control_dependencies(output_operations):
-        outputs = control_flow_ops.no_op()
-    else:
-      if not isinstance(outputs, ops.Operation) and not outfeed_queue:
+              "The last computational stage has tensor outputs: %s, but no"
+              " outfeed_queue has been provided." %
+              (', '.join(str(t) for t in outputs)))
+        control_outputs.append(outfeed_queue.enqueue(outputs))
+
+      # Get the output from the optimizer function
+      opt_fn = optimizer_function(*outputs)
+      loss = opt_fn.loss
+      opt = opt_fn.opt
+
+      # Call the compute gradients function - this will be automatically put
+      # into pipeline stages.
+      grads_and_vars = opt.compute_gradients(loss)
+      # Insert gradient accumulation ops.
+      accumulated_grads_and_vars = []
+      for grad, var in grads_and_vars:
+        if grad is not None:
+          with ops.colocate_with(grad):
+            grad = gen_poputil_ops.ipu_pipeline_stateful_gradient_accumulate(
+                grad, num_mini_batches=pipeline_depth)
+        accumulated_grads_and_vars.append((grad, var))
+
+      # Create an explicit function call for the apply gradients - note that we
+      # allow external caputres here.
+      apply_grad_ops = []
+
+      def resource_update_():
+        apply_grads = opt.apply_gradients(accumulated_grads_and_vars)
+        apply_grad_ops.append(apply_grads)
+
+      with ops.name_scope(name + "/WU") as scope:
+        func_graph, captured_args = _compile_function(resource_update_, [],
+                                                      scope, apply_grad_ops,
+                                                      True)
+
+      # Create the pipeline resource update stage and lower the function into XLA.
+      with ops.control_dependencies(list(func_graph.control_captures)):
+        outputs = gen_pipelining_ops.pipeline_resource_update(
+            captured_args,
+            to_apply=util.create_new_tf_function(func_graph),
+            Tout=func_graph.output_types,
+            output_shapes=func_graph.output_shapes)
+
+    if not isinstance(outputs, ops.Operation):
+      if not outfeed_queue:
         raise ValueError(
             "The last computational stage has tensor outputs: %s, but no"
             " outfeed_queue has been provided." %
             (', '.join(str(t) for t in _convert_to_list(outputs))))
 
-    if not isinstance(outputs, ops.Operation):
-      raise ValueError(
-          "Expected the last pipeline stage to output a tf.Operation, "
-          "got %s instead." % (str(outputs)))
+      else:
+        raise ValueError(
+            "Expected the pipeline resource update stage to output a "
+            "tf.Operation, got %s instead." % (str(output)))
+
     control_outputs.append(outputs)
 
   with ops.name_scope(name) as scope:
@@ -454,7 +523,11 @@ def _pipeline_stage(func,
                                               outputs)
 
 
-def _compile_function(func, args, scope, control_outputs):
+def _compile_function(func,
+                      args,
+                      scope,
+                      control_outputs,
+                      allow_external_captures=False):
   # Automatic control dependencies are added in defuns, but not in v1
   # graphs. Propagate that behavior here.
   add_control_dependencies = ops.get_default_graph()._add_control_dependencies
@@ -471,7 +544,7 @@ def _compile_function(func, args, scope, control_outputs):
 
   # Add the external captures (resources) to arguments.
   for t in func_graph.external_captures:
-    if t.dtype != dtypes.resource:
+    if not allow_external_captures and t.dtype != dtypes.resource:
       raise ValueError(
           "Trying to capture the tensor %s which is not a resource. This tensor"
           " needs to be passed as either part of the `input` or `infeed_queue`"

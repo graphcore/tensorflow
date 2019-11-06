@@ -14,6 +14,16 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
+
+#include <stddef.h>
+#include <string.h>
+#include <map>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
@@ -37,14 +47,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <stddef.h>
-#include <string.h>
-#include <map>
-#include <string>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 #include "tensorflow/stream_executor/lib/initialize.h"
 
@@ -203,6 +205,12 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
   HloInstruction* root = pipeline_computation->root_instruction();
   CHECK_EQ(root->opcode(), HloOpcode::kTuple);
   result[root] = stage.forward.size() - 1;
+
+  // Assign the resource update stage (if there is one) to the last stage. Note
+  // that it won't actually be executed with the last stage.
+  if (stage.resource_update) {
+    result[*stage.resource_update] = stage.forward.size() - 1;
+  }
 
   // Get the stage given the users. Requires all the users to already have a
   // stage.
@@ -624,9 +632,9 @@ StatusOr<int> GetPipelineStage(
 }
 
 /**
- * Get all the inputs for the pipeline stage, making sure to preserve aliasing.
- * Note that there is a mix of inplace and not inplace inputs - we get all of
- * them.
+ * Get all the inputs for the pipeline stage/resource update, making sure to
+ * preserve aliasing. Note that there is a mix of inplace and not inplace inputs
+ * - we get all of them.
  *
  * @param seq The sequence to use if any copies are inserted.
  * @param res The compiler resources.
@@ -635,10 +643,10 @@ StatusOr<int> GetPipelineStage(
  *
  * @returns A 2D array of pipeline stage inputs.
  */
-StatusOr<ArgVectors> GetPipelineStageInputs(poplar::program::Sequence& seq,
-                                            CompilerResources& res,
-                                            const HloInstruction* inst,
-                                            TensorMap& tensor_map) {
+StatusOr<ArgVectors> GetInputs(poplar::program::Sequence& seq,
+                               CompilerResources& res,
+                               const HloInstruction* inst,
+                               TensorMap& tensor_map) {
   ArgVectors inputs(inst->operand_count());
   // First get all the inplace inputs - we do not expand constants and we
   // preserve all the aliasing.
@@ -663,7 +671,7 @@ StatusOr<ArgVectors> GetPipelineStageInputs(poplar::program::Sequence& seq,
   // Get all the non inplace inputs.
   if (inst_description.GetInplaceOperandIndexes().size() !=
       inst->operand_count()) {
-    CHECK(IsPipelineStage(inst) || IsPipelineStageRecomputation(inst));
+    CHECK(IsAnyPipelineStageOp(inst));
     for (int64 op_idx : non_inplace_operand_indices) {
       inputs[op_idx] =
           FindInstructionInputs(tensor_map, res, inst, op_idx, seq, false);
@@ -728,8 +736,7 @@ StatusOr<std::unique_ptr<PipelineStageVisitor>> CreatePipelineStageOp(
     bool used_for_recomputation) {
   poplar::Graph& graph = GetGraph(res, inst);
   // Get the inputs for the pipeline stage.
-  TF_ASSIGN_OR_RETURN(auto inputs,
-                      GetPipelineStageInputs(seq, res, inst, tensor_map));
+  TF_ASSIGN_OR_RETURN(auto inputs, GetInputs(seq, res, inst, tensor_map));
   // When recomputation is enabled, we need to add copies for inplace inputs of
   // a forward pipeline stage (i.e. non parameters/weights), so that we can
   // reuse the code for the recomputation stage.
@@ -802,8 +809,7 @@ StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
   poplar::program::Sequence seq;
   poplar::Graph& graph = GetGraph(res, inst);
   // Get the inputs for the pipeline stage.
-  TF_ASSIGN_OR_RETURN(auto inputs,
-                      GetPipelineStageInputs(seq, res, inst, tensor_map));
+  TF_ASSIGN_OR_RETURN(auto inputs, GetInputs(seq, res, inst, tensor_map));
 
   // Add copies for the visitor inputs so that we can reuse the visitor program.
   TF_ASSIGN_OR_RETURN(
@@ -820,6 +826,41 @@ StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
   for (size_t i = 0; i < pipeline_outputs.size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
   }
+  return seq;
+}
+
+/**
+ * Loweres a PipelineResourceUpdate into Poplar.
+ *
+ * @param res The compiler resources.
+ * @param inst The PipelineResourceUpdate instruction which is being
+ * lowered.
+ * @param tensor_map The map which stores the input/output tensors.
+ *
+ * @returns The Poplar sequence with lowering of the stage.
+ */
+StatusOr<poplar::program::Sequence> CreatePipelineResourceUpdateOp(
+    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map) {
+  poplar::program::Sequence seq;
+
+  // Get the inputs.
+  TF_ASSIGN_OR_RETURN(auto inputs, GetInputs(seq, res, inst, tensor_map));
+  // Create a visitor for the resource update.
+  InplaceSubComputationVisitor visitor(res, inputs);
+  HloComputation* resource_update_comp = inst->to_apply();
+  auto order = resource_update_comp->parent()
+                   ->schedule()
+                   .sequence(resource_update_comp)
+                   .instructions();
+  TF_RETURN_IF_ERROR(resource_update_comp->AcceptOrdered(&visitor, order));
+  // Add to the sequence.
+  seq.add(visitor.GetSequence());
+  // Set up the outputs.
+  const OutVector& outputs = visitor.outputs();
+  for (size_t i = 0; i < outputs.size(); i++) {
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
+  }
+
   return seq;
 }
 }  // namespace
@@ -890,6 +931,9 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
                                         repeat_block));
   }
   program.add(ramp_down);
+
+  // Add the resource update sequence.
+  program.add(resource_update_);
 
   return program;
 }
@@ -1080,32 +1124,39 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
 
 Status PipelineVisitor::HandleNotImplemented(HloInstruction* hlo) {
   return xla::Unimplemented(
-      "%s (%s) is not a valid pipeline stage hlo instruction",
+      "%s (%s) is not a valid pipeline stage Hlo instruction",
       hlo->name().c_str(), HloOpcodeString(hlo->opcode()).c_str());
 }
 
 Status PipelineVisitor::HandleCall(HloInstruction* hlo) {
   HloComputation* comp = hlo->to_apply();
-  VLOG(1) << "Processing " << hlo->name() << " : " << comp->name()
-          << " as a pipeline stage";
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-
-  if (IsPipelineStageOrBackwardOp(hlo)) {
-    const bool has_recomputation = stages_with_recomputation_.contains(stage);
-    poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(fwd_stage_visitors_[stage],
-                        CreatePipelineStageOp(seq, resources_, hlo, tensor_map,
-                                              has_recomputation));
-    program_sequences_[stage].add(seq);
-  } else if (IsPipelineStageRecomputation(hlo)) {
-    // Recomputation stages reuse the forward stage visitor.
-    auto visitor = fwd_stage_visitors_.at(stage).get();
-    TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
-                        CreatePipelineStageRecomputationOp(
-                            resources_, hlo, tensor_map, visitor));
-    recomputation_sequences_[stage].add(seq);
+  if (IsPipelineResourceUpdate(hlo)) {
+    VLOG(1) << "Processing " << hlo->name() << " : " << comp->name()
+            << " as a pipeline resource update.";
+    TF_ASSIGN_OR_RETURN(resource_update_, CreatePipelineResourceUpdateOp(
+                                              resources_, hlo, tensor_map));
   } else {
-    return HandleNotImplemented(hlo);
+    VLOG(1) << "Processing " << hlo->name() << " : " << comp->name()
+            << " as a pipeline stage";
+    TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+
+    if (IsPipelineStageOrBackwardOp(hlo)) {
+      const bool has_recomputation = stages_with_recomputation_.contains(stage);
+      poplar::program::Sequence seq;
+      TF_ASSIGN_OR_RETURN(fwd_stage_visitors_[stage],
+                          CreatePipelineStageOp(seq, resources_, hlo,
+                                                tensor_map, has_recomputation));
+      program_sequences_[stage].add(seq);
+    } else if (IsPipelineStageRecomputation(hlo)) {
+      // Recomputation stages reuse the forward stage visitor.
+      auto visitor = fwd_stage_visitors_.at(stage).get();
+      TF_ASSIGN_OR_RETURN(poplar::program::Sequence seq,
+                          CreatePipelineStageRecomputationOp(
+                              resources_, hlo, tensor_map, visitor));
+      recomputation_sequences_[stage].add(seq);
+    } else {
+      return HandleNotImplemented(hlo);
+    }
   }
 
   return Status::OK();
@@ -1167,15 +1218,24 @@ Status PipelineVisitor::HandleInterIpuCopy(HloInstruction* hlo) {
 
 Status PipelineVisitor::HandleGetTupleElement(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->name();
+  HloInstruction* gte_input = hlo->mutable_operand(0);
+  ArgVectors output_tensors;
+  if (IsPipelineResourceUpdate(gte_input)) {
+    // GTEs on the resource update are no-ops which do not modify the sequence.
+    ArgVector outputs = FindInstructionOutputs(tensor_map, gte_input);
+    auto range = FindGetTupleElementTupleIndices(hlo);
+    output_tensors.push_back(
+        {outputs.begin() + range.first, outputs.begin() + range.second});
+  } else {
+    TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+    poplar::program::Sequence& seq = IsPipelineStageRecomputation(gte_input)
+                                         ? recomputation_sequences_[stage]
+                                         : program_sequences_[stage];
+    TF_ASSIGN_OR_RETURN(
+        output_tensors,
+        FindInplaceOutputTensors(tensor_map, resources_, hlo, seq, false));
+  }
 
-  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
-  poplar::program::Sequence& seq = IsPipelineStageRecomputation(hlo->operand(0))
-                                       ? recomputation_sequences_[stage]
-                                       : program_sequences_[stage];
-
-  TF_ASSIGN_OR_RETURN(
-      ArgVectors output_tensors,
-      FindInplaceOutputTensors(tensor_map, resources_, hlo, seq, false));
   CHECK_EQ(output_tensors.size(), 1);
   CHECK_EQ(output_tensors[0].size(), CountShapes(hlo->shape()));
   for (int64 i = 0; i < output_tensors[0].size(); i++) {
@@ -1276,19 +1336,8 @@ Status PipelineVisitor::HandleTuple(HloInstruction* hlo) {
   return Status::OK();
 }
 
-poplar::program::Sequence& PipelineVisitor::GetSequenceForAliasingCopy(
-    int64 flat_tensor_index, const HloComputation* computation) {
-  const HloInstruction* root = computation->root_instruction();
-  CHECK_EQ(root->operand_count(), computation->num_parameters());
-  // Get the parameter for this input to the tuple.
-  auto param_num_index = GetParameterNumberAndFlatIndex(flat_tensor_index);
-  int64 param_number = param_num_index.first;
-
-  // Get the stage of the input to the tuple.
-  int64 stage =
-      GetPipelineStage(inst_stage_mapping_, root->operand(param_number))
-          .ValueOrDie();
-  return copy_sequences_[stage];
+poplar::program::Sequence& PipelineVisitor::GetSequenceForAliasingCopy() {
+  return resource_update_;
 }
 
 }  // namespace poplarplugin

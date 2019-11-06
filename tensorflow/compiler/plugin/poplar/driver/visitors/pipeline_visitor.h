@@ -111,8 +111,7 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
       int64 iterations) const;
 
  protected:
-  poplar::program::Sequence& GetSequenceForAliasingCopy(
-      int64 flat_tensor_index, const HloComputation* computation) override;
+  poplar::program::Sequence& GetSequenceForAliasingCopy() override;
 
  private:
   bool interleave_;
@@ -123,6 +122,7 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   std::vector<poplar::program::Sequence> outfeed_sequences_;
   std::vector<poplar::program::Sequence> program_sequences_;
   std::vector<poplar::program::Sequence> recomputation_sequences_;
+  poplar::program::Sequence resource_update_;
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;
   absl::flat_hash_set<int> stages_with_recomputation_;

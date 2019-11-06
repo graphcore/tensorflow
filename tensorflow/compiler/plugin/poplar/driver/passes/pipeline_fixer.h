@@ -73,6 +73,10 @@ class PipelineFixer : public HloModulePass {
   // that the modification is lowered to the relevent backward Pipeline stage.
   StatusOr<bool> LowerParameterUsagesIntoStages();
 
+  // Lowers inputs to the pipeline resource update which are not associated to
+  // any pipeline stage.
+  StatusOr<bool> LowerResourceUpdateInputs();
+
   // A PipelineStage is being replaced - update internal storage.
   Status UpdateStage(const StageID& stage_id, HloInstruction* new_stage);
 

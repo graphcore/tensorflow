@@ -61,24 +61,30 @@ stage_1_bwd {
   stage_1_bwd_bcast1 = f32[1,4,4,2] broadcast(stage_1_bwd_reduce), dimensions={}
   stage_1_bwd_acts_0 = f32[1,4,4,2] parameter(1)
   stage_1_bwd_acts_0_bwd = f32[1,4,4,2] add(stage_1_bwd_acts_0, stage_1_bwd_bcast1)
-  stage_1_bwd_lr = f32[] constant(0.01)
-  stage_1_bwd_lr_bcast = f32[1,4,4,2] broadcast(stage_1_bwd_lr), dimensions={}
-  stage_1_bwd_update = f32[1,4,4,2] multiply(stage_1_bwd_acts_0_bwd, stage_1_bwd_lr_bcast)
-  stage_1_bwd_weights1 = f32[1,4,4,2] parameter(2)
-  stage_1_bwd_weights1_new = f32[1,4,4,2] subtract(stage_1_bwd_weights1, stage_1_bwd_update)
-  ROOT stage_1_bwd_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_1_bwd_acts_0_bwd, stage_1_bwd_weights1_new)
+  ROOT stage_1_bwd_tuple = (f32[1,4,4,2]) tuple(stage_1_bwd_acts_0_bwd)
 }
 
 stage_0_bwd {
   stage_0_bwd_acts_0_bwd = f32[1,4,4,2] parameter(0)
   stage_0_bwd_input = f32[1,4,4,2] parameter(1)
   stage_0_bwd_input_bwd = f32[1,4,4,2] add(stage_0_bwd_input, stage_0_bwd_acts_0_bwd)
-  stage_0_bwd_lr = f32[] constant(0.01)
-  stage_0_bwd_lr_bcast = f32[1,4,4,2] broadcast(stage_0_bwd_lr), dimensions={}
-  stage_0_bwd_update = f32[1,4,4,2] multiply(stage_0_bwd_input_bwd, stage_0_bwd_lr_bcast)
-  stage_0_bwd_weights0 = f32[1,4,4,2] parameter(2)
-  stage_0_bwd_weights0_new = f32[1,4,4,2] subtract(stage_0_bwd_weights0, stage_0_bwd_update)
-  ROOT stage_0_bwd_tuple = (f32[1,4,4,2]) tuple(stage_0_bwd_weights0_new)
+  ROOT stage_0_bwd_tuple = (f32[1,4,4,2]) tuple(stage_0_bwd_input_bwd)
+}
+
+pipeline_ru {
+  ru0_bwd_input_bwd = f32[1,4,4,2] parameter(0)
+  ru0_bwd_lr = f32[] constant(0.01)
+  ru0_bwd_lr_bcast = f32[1,4,4,2] broadcast(ru0_bwd_lr), dimensions={}
+  ru0_bwd_update = f32[1,4,4,2] multiply(ru0_bwd_input_bwd, ru0_bwd_lr_bcast)
+  ru0_bwd_weights0 = f32[1,4,4,2] parameter(1)
+  ru0_bwd_weights0_new = f32[1,4,4,2] subtract(ru0_bwd_weights0, ru0_bwd_update)
+  ru1_bwd_acts_0_bwd = f32[1,4,4,2] parameter(2)
+  ru1_bwd_lr = f32[] constant(0.01)
+  ru1_bwd_lr_bcast = f32[1,4,4,2] broadcast(ru1_bwd_lr), dimensions={}
+  ru1_bwd_update = f32[1,4,4,2] multiply(ru1_bwd_acts_0_bwd, ru1_bwd_lr_bcast)
+  ru1_bwd_weights1 = f32[1,4,4,2] parameter(3)
+  ru1_bwd_weights1_new = f32[1,4,4,2] subtract(ru1_bwd_weights1, ru1_bwd_update)
+  ROOT ru0_bwd_tuple = (f32[1,4,4,2]) tuple(ru0_bwd_weights0_new, ru1_bwd_weights1_new)
 }
 
 pipeline {
@@ -90,11 +96,14 @@ pipeline {
   pipeline_stage_1 = (f32[], f32[1,4,4,2]) call(pipeline_acts_0, pipeline_weights1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
   pipeline_reduce = f32[] get-tuple-element(pipeline_stage_1), index=0
   pipeline_acts_0_local = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1
-  pipeline_stage_1_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_reduce, pipeline_acts_0_local, pipeline_weights1), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1_bwd = (f32[1,4,4,2]) call(pipeline_reduce, pipeline_acts_0_local), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   pipeline_acts_0_bwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=0
-  pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=1
-  pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
+  pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0_grad = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
+  pipeline_stage_1_grad = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=0
+  pipeline_resource_update = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_grad, pipeline_weights0, pipeline_stage_1_grad, pipeline_weights1), to_apply=pipeline_ru, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_resource_update), index=0
+  pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(pipeline_resource_update), index=1
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_new, pipeline_weights1_new)
 }
 
@@ -154,6 +163,21 @@ stage_0_bwd {
   ROOT stage_0_bwd_tuple = (f32[1,4,4,2]) tuple(stage_0_bwd_input_bwd)
 }
 
+pipeline_ru {
+  lr = f32[] parameter(4)
+  ru0_bwd_input_bwd = f32[1,4,4,2] parameter(0)
+  ru0_bwd_lr_bcast = f32[1,4,4,2] broadcast(lr), dimensions={}
+  ru0_bwd_update = f32[1,4,4,2] multiply(ru0_bwd_input_bwd, ru0_bwd_lr_bcast)
+  ru0_bwd_weights0 = f32[1,4,4,2] parameter(1)
+  ru0_bwd_weights0_new = f32[1,4,4,2] subtract(ru0_bwd_weights0, ru0_bwd_update)
+  ru1_bwd_acts_0_bwd = f32[1,4,4,2] parameter(2)
+  ru1_bwd_lr_bcast = f32[1,4,4,2] broadcast(lr), dimensions={}
+  ru1_bwd_update = f32[1,4,4,2] multiply(ru1_bwd_acts_0_bwd, ru1_bwd_lr_bcast)
+  ru1_bwd_weights1 = f32[1,4,4,2] parameter(3)
+  ru1_bwd_weights1_new = f32[1,4,4,2] subtract(ru1_bwd_weights1, ru1_bwd_update)
+  ROOT ru0_bwd_tuple = (f32[1,4,4,2]) tuple(ru0_bwd_weights0_new, ru1_bwd_weights1_new)
+}
+
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_lr = f32[] parameter(2)
@@ -168,15 +192,12 @@ pipeline {
   pipeline_acts_0_local = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=2
   pipeline_stage_1_bwd = (f32[1,4,4,2]) call(pipeline_reduce, pipeline_acts_0_local), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   pipeline_acts_0_bwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=0
-  pipeline_lr_bcast1 = f32[1,4,4,2] broadcast(pipeline_stage_1_lr), dimensions={}
-  pipeline_weights1_update = f32[1,4,4,2] multiply(pipeline_acts_0_bwd, pipeline_lr_bcast1)
-  pipeline_weights1_apply = f32[1,4,4,2] subtract(pipeline_weights1, pipeline_weights1_update)
   pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   pipeline_input_bwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
-  pipeline_lr_bcast2 = f32[1,4,4,2] broadcast(pipeline_stage_1_lr), dimensions={}
-  pipeline_weights0_update = f32[1,4,4,2] multiply(pipeline_input_bwd, pipeline_lr_bcast2)
-  pipeline_weights0_apply = f32[1,4,4,2] subtract(pipeline_weights0, pipeline_weights0_update)
-  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_apply, pipeline_weights1_apply)
+  pipeline_resource_update = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_input_bwd, pipeline_weights0, pipeline_acts_0_bwd, pipeline_weights1, pipeline_stage_1_lr), to_apply=pipeline_ru, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_resource_update), index=0
+  pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(pipeline_resource_update), index=1
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_new, pipeline_weights1_new)
 }
 
 ENTRY e {
@@ -307,6 +328,8 @@ TEST_F(PipelineUtilTest, GetPipelineStagesFwdBwdTest) {
       stages.backward,
       ::testing::ElementsAre(FindInstruction(module0, "pipeline_stage_0_bwd"),
                              FindInstruction(module0, "pipeline_stage_1_bwd")));
+  EXPECT_THAT(*stages.resource_update,
+              FindInstruction(module0, "pipeline_resource_update"));
 }
 
 TEST_F(PipelineUtilTest, GetPipelineStagesFwdBwdMismatchTest) {
@@ -404,6 +427,12 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisNoOpsToLower) {
     auto& value_set = analysis->GetValueSet(pipeline_weights0);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_weights0);
   }
+  HloInstruction* pipeline_weights1 =
+      FindInstruction(module0, "pipeline_weights1");
+  {
+    auto& value_set = analysis->GetValueSet(pipeline_weights1);
+    EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_weights1);
+  }
   HloInstruction* pipeline_stage_0 =
       FindInstruction(module0, "pipeline_stage_0");
   {
@@ -459,12 +488,6 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisNoOpsToLower) {
     auto& value_set = analysis->GetValueSet(pipeline_acts_0_bwd);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_1_bwd);
   }
-  HloInstruction* pipeline_weights1_new =
-      FindInstruction(module0, "pipeline_weights1_new");
-  {
-    auto& value_set = analysis->GetValueSet(pipeline_weights1_new);
-    EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_1_bwd);
-  }
   HloInstruction* pipeline_stage_0_bwd =
       FindInstruction(module0, "pipeline_stage_0_bwd");
   {
@@ -475,17 +498,12 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisNoOpsToLower) {
     auto& value_set = analysis->GetValueSet(pipeline_stage_0_bwd);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_0_bwd);
   }
-  HloInstruction* pipeline_weights0_new =
-      FindInstruction(module0, "pipeline_weights0_new");
-  {
-    auto& value_set = analysis->GetValueSet(pipeline_weights0_new);
-    EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_0_bwd);
-  }
   HloInstruction* pipeline_tuple = FindInstruction(module0, "pipeline_tuple");
   {
     auto& value_set = analysis->GetValueSet(pipeline_tuple);
-    HloValueSet expected_value_set = GetValueSet(
-        analysis.get(), {pipeline_stage_0_bwd, pipeline_stage_1_bwd});
+    HloValueSet expected_value_set =
+        GetValueSet(analysis.get(), {pipeline_stage_0_bwd, pipeline_stage_1_bwd,
+                                     pipeline_weights0, pipeline_weights1});
     EXPECT_THAT(value_set.values(), expected_value_set.values());
   }
 }
@@ -574,7 +592,7 @@ TEST_F(PipelineUtilTest, DuplicateGTEEdgesTestDuplication) {
   EXPECT_TRUE(duplicated_or.ok());
   EXPECT_TRUE(duplicated_or.ValueOrDie());
 
-  EXPECT_THAT(num_gtes_at_tuple_index(pipeline_stage_1, 0), 2);
+  EXPECT_THAT(num_gtes_at_tuple_index(pipeline_stage_1, 0), 1);
   EXPECT_THAT(num_gtes_at_tuple_index(pipeline_stage_1_bwd, 0), 2);
 }
 
@@ -822,33 +840,6 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisOpsToLower) {
       EXPECT_FALSE(analysis->HasToBeLowered(user).ValueOrDie());
     }
   }
-  HloInstruction* pipeline_lr_bcast1 =
-      FindInstruction(module0, "pipeline_lr_bcast1");
-  {
-    auto& value_set = analysis->GetValueSet(pipeline_lr_bcast1);
-    EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_1);
-    EXPECT_TRUE(analysis->HasToBeLowered(pipeline_lr_bcast1).ValueOrDie());
-  }
-  HloInstruction* pipeline_weights1_update =
-      FindInstruction(module0, "pipeline_weights1_update");
-  {
-    auto& value_set = analysis->GetValueSet(pipeline_weights1_update);
-    HloValueSet expected_value_set =
-        GetValueSet(analysis.get(), {pipeline_stage_1, pipeline_stage_1_bwd});
-    EXPECT_THAT(value_set.values(), expected_value_set.values());
-    EXPECT_TRUE(
-        analysis->HasToBeLowered(pipeline_weights1_update).ValueOrDie());
-  }
-  HloInstruction* pipeline_weights1_apply =
-      FindInstruction(module0, "pipeline_weights1_apply");
-  {
-    auto& value_set = analysis->GetValueSet(pipeline_weights1_apply);
-    HloValueSet expected_value_set = GetValueSet(
-        analysis.get(),
-        {pipeline_weights1, pipeline_stage_1, pipeline_stage_1_bwd});
-    EXPECT_THAT(value_set.values(), expected_value_set.values());
-    EXPECT_TRUE(analysis->HasToBeLowered(pipeline_weights1_apply).ValueOrDie());
-  }
   HloInstruction* pipeline_stage_0_bwd =
       FindInstruction(module0, "pipeline_stage_0_bwd");
   {
@@ -866,33 +857,6 @@ TEST_F(PipelineUtilTest, PipelineDataflowAnalysisOpsToLower) {
     auto& value_set = analysis->GetValueSet(pipeline_input_bwd);
     EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_0_bwd);
     EXPECT_FALSE(analysis->HasToBeLowered(pipeline_input_bwd).ValueOrDie());
-  }
-  HloInstruction* pipeline_lr_bcast2 =
-      FindInstruction(module0, "pipeline_lr_bcast2");
-  {
-    auto& value_set = analysis->GetValueSet(pipeline_lr_bcast2);
-    EXPECT_THAT(value_set.GetUniqueValue().instruction(), pipeline_stage_1);
-    EXPECT_TRUE(analysis->HasToBeLowered(pipeline_lr_bcast2).ValueOrDie());
-  }
-  HloInstruction* pipeline_weights0_update =
-      FindInstruction(module0, "pipeline_weights0_update");
-  {
-    auto& value_set = analysis->GetValueSet(pipeline_weights0_update);
-    HloValueSet expected_value_set =
-        GetValueSet(analysis.get(), {pipeline_stage_1, pipeline_stage_0_bwd});
-    EXPECT_THAT(value_set.values(), expected_value_set.values());
-    EXPECT_TRUE(
-        analysis->HasToBeLowered(pipeline_weights0_update).ValueOrDie());
-  }
-  HloInstruction* pipeline_weights0_apply =
-      FindInstruction(module0, "pipeline_weights0_apply");
-  {
-    auto& value_set = analysis->GetValueSet(pipeline_weights0_apply);
-    HloValueSet expected_value_set = GetValueSet(
-        analysis.get(),
-        {pipeline_weights0, pipeline_stage_1, pipeline_stage_0_bwd});
-    EXPECT_THAT(value_set.values(), expected_value_set.values());
-    EXPECT_TRUE(analysis->HasToBeLowered(pipeline_weights0_apply).ValueOrDie());
   }
   HloInstruction* pipeline_tuple = FindInstruction(module0, "pipeline_tuple");
   {
@@ -958,6 +922,12 @@ stage_0_bwd {
   ROOT stage_0_bwd_tuple = (f32[1,4,4,2]) tuple(stage_0_bwd_weights0_new)
 }
 
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,2] parameter(1)
+  ROOT t = (f32[1,4,4,2]) tuple(arg0, arg1)
+}
+
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
@@ -972,7 +942,10 @@ pipeline {
   pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=1
   pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
-  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_new, pipeline_weights1_new)
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0_new, pipeline_weights1_new), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
 }
 
 ENTRY e {
@@ -1035,6 +1008,11 @@ stage_0_bwd {
   ROOT stage_0_bwd_tuple = (f32[1,4,4,2]) tuple(stage_0_bwd_weights0_new)
 }
 
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0)
+  ROOT t = (f32[1,4,4,2]) tuple(arg0)
+}
+
 pipeline {
   pipeline_weights0 = f32[1,4,4,2] parameter(0)
   pipeline_stage_0 = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
@@ -1048,7 +1026,9 @@ pipeline {
   pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=1
   pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_weights0_new_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
-  ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(pipeline_weights0_new_new)
+  call_ru = (f32[1,4,4,2]) call(pipeline_weights0_new_new), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
+  ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(gte0)
 }
 
 ENTRY e {
@@ -1099,7 +1079,7 @@ TEST_F(PipelineUtilTest, VerifyPipelineAfterFixingNotOK) {
   }
 }
 
-TEST_F(PipelineUtilTest, TestGetUnusedParametersInPipelineStage) {
+TEST_F(PipelineUtilTest, TestGetUnusedParametersInCall) {
   std::string hlo = R"(
 HloModule top
 
@@ -1143,7 +1123,7 @@ ENTRY e {
   HloInstruction* pipeline_stage_0 =
       FindInstruction(module0, "pipeline_stage_0");
   {
-    auto unused_or = GetUnusedParametersInPipelineStage(pipeline_stage_0);
+    auto unused_or = GetUnusedParametersInCall(pipeline_stage_0);
     EXPECT_TRUE(unused_or.ok());
     auto unused = unused_or.ValueOrDie();
     EXPECT_THAT(unused, ::testing::ElementsAre(1));
@@ -1151,14 +1131,14 @@ ENTRY e {
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
   {
-    auto unused_or = GetUnusedParametersInPipelineStage(pipeline_stage_1);
+    auto unused_or = GetUnusedParametersInCall(pipeline_stage_1);
     EXPECT_TRUE(unused_or.ok());
     auto unused = unused_or.ValueOrDie();
     EXPECT_TRUE(unused.empty());
   }
 }
 
-TEST_F(PipelineUtilTest, TestGetUnusedPipelineStageOutputIndices) {
+TEST_F(PipelineUtilTest, TestGetUnusedCallOutputIndices) {
   std::string hlo = R"(
 HloModule top
 
@@ -1202,7 +1182,7 @@ ENTRY e {
   HloInstruction* pipeline_stage_0 =
       FindInstruction(module0, "pipeline_stage_0");
   {
-    auto unused_or = GetUnusedPipelineStageOutputIndices(pipeline_stage_0);
+    auto unused_or = GetUnusedCallOutputIndices(pipeline_stage_0);
     EXPECT_TRUE(unused_or.ok());
     auto unused = unused_or.ValueOrDie();
     EXPECT_THAT(unused, ::testing::ElementsAre(1));
@@ -1210,14 +1190,14 @@ ENTRY e {
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
   {
-    auto unused_or = GetUnusedPipelineStageOutputIndices(pipeline_stage_1);
+    auto unused_or = GetUnusedCallOutputIndices(pipeline_stage_1);
     EXPECT_TRUE(unused_or.ok());
     auto unused = unused_or.ValueOrDie();
     EXPECT_TRUE(unused.empty());
   }
 }
 
-TEST_F(PipelineUtilTest, TestGetDuplicatePipelineStageOutputs) {
+TEST_F(PipelineUtilTest, TestGetDuplicateCallOutputs) {
   std::string hlo = R"(
 HloModule top
 
@@ -1261,7 +1241,7 @@ ENTRY e {
   HloInstruction* pipeline_stage_0 =
       FindInstruction(module0, "pipeline_stage_0");
   {
-    auto duplicate_or = GetDuplicatePipelineStageOutputs(pipeline_stage_0);
+    auto duplicate_or = GetDuplicateCallOutputs(pipeline_stage_0);
     EXPECT_TRUE(duplicate_or.ok());
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_THAT(duplicate.size(), 2);
@@ -1271,14 +1251,14 @@ ENTRY e {
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
   {
-    auto duplicate_or = GetDuplicatePipelineStageOutputs(pipeline_stage_1);
+    auto duplicate_or = GetDuplicateCallOutputs(pipeline_stage_1);
     EXPECT_TRUE(duplicate_or.ok());
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_TRUE(duplicate.empty());
   }
 }
 
-TEST_F(PipelineUtilTest, TestGetDuplicatePipelineStageInputs) {
+TEST_F(PipelineUtilTest, TestGetDuplicateCallInputs) {
   std::string hlo = R"(
 HloModule top
 
@@ -1322,7 +1302,7 @@ ENTRY e {
   HloInstruction* pipeline_stage_0 =
       FindInstruction(module0, "pipeline_stage_0");
   {
-    auto duplicate_or = GetDuplicatePipelineStageInputs(pipeline_stage_0);
+    auto duplicate_or = GetDuplicateCallInputs(pipeline_stage_0);
     EXPECT_TRUE(duplicate_or.ok());
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_THAT(duplicate.size(), 1);
@@ -1331,14 +1311,14 @@ ENTRY e {
   HloInstruction* pipeline_stage_1 =
       FindInstruction(module0, "pipeline_stage_1");
   {
-    auto duplicate_or = GetDuplicatePipelineStageInputs(pipeline_stage_1);
+    auto duplicate_or = GetDuplicateCallInputs(pipeline_stage_1);
     EXPECT_TRUE(duplicate_or.ok());
     auto duplicate = duplicate_or.ValueOrDie();
     EXPECT_TRUE(duplicate.empty());
   }
 }
 
-TEST_F(PipelineUtilTest, TestRemoveParametersFromStage) {
+TEST_F(PipelineUtilTest, TestRemoveParametersFromCall) {
   std::string hlo = R"(
 HloModule top
 
@@ -1395,7 +1375,7 @@ ENTRY e {
       FindInstruction(module0, "pipeline_weights0");
   EXPECT_THAT(pipeline_stage_0->operands(),
               ::testing::ElementsAre(pipeline_weights0, pipeline_const1));
-  auto new_stage_0_or = RemoveParametersFromStage(pipeline_stage_0, {1});
+  auto new_stage_0_or = RemoveParametersFromCall(pipeline_stage_0, {1});
   EXPECT_TRUE(new_stage_0_or.ok());
   auto new_stage_0 = new_stage_0_or.ValueOrDie();
   EXPECT_THAT(new_stage_0->operands(),
@@ -1408,14 +1388,14 @@ ENTRY e {
   EXPECT_THAT(pipeline_stage_1->operands(),
               ::testing::ElementsAre(pipeline_const1, pipeline_weights1,
                                      pipeline_const2));
-  auto new_stage_1_or = RemoveParametersFromStage(pipeline_stage_1, {0, 2});
+  auto new_stage_1_or = RemoveParametersFromCall(pipeline_stage_1, {0, 2});
   EXPECT_TRUE(new_stage_1_or.ok());
   auto new_stage_1 = new_stage_1_or.ValueOrDie();
   EXPECT_THAT(new_stage_1->operands(),
               ::testing::ElementsAre(pipeline_weights1));
 }
 
-TEST_F(PipelineUtilTest, TestRemoveOutputsFromStage) {
+TEST_F(PipelineUtilTest, TestRemoveOutputsFromCall) {
   std::string hlo = R"(
 HloModule top
 
@@ -1467,7 +1447,7 @@ ENTRY e {
   EXPECT_THAT(pipeline_stage_0->operands(),
               ::testing::ElementsAre(pipeline_weights0, pipeline_const));
   EXPECT_THAT(ShapeUtil::TupleElementCount(pipeline_stage_0->shape()), 2);
-  EXPECT_TRUE(RemoveOutputsFromStage(pipeline_stage_0, {1}).ok());
+  EXPECT_TRUE(RemoveOutputsFromCall(pipeline_stage_0, {1}).ok());
   EXPECT_THAT(ShapeUtil::TupleElementCount(pipeline_stage_0->shape()), 1);
   EXPECT_THAT(pipeline_stage_0->user_count(), 1);
 
@@ -1481,98 +1461,12 @@ ENTRY e {
   HloInstruction* pipeline_stage_1_w1 = pipeline_stage_1->users()[0];
   EXPECT_THAT(pipeline_stage_1_w1->tuple_index(), 1);
   EXPECT_THAT(ShapeUtil::TupleElementCount(pipeline_stage_1->shape()), 3);
-  EXPECT_TRUE(RemoveOutputsFromStage(pipeline_stage_1, {0, 2}).ok());
+  EXPECT_TRUE(RemoveOutputsFromCall(pipeline_stage_1, {0, 2}).ok());
   EXPECT_THAT(ShapeUtil::TupleElementCount(pipeline_stage_1->shape()), 1);
   EXPECT_THAT(pipeline_stage_1_w1->tuple_index(), 0);
 }
 
 TEST_F(PipelineUtilTest, AddInstructionsToPipelineStageTest1) {
-  // Test that we can lower outputs of a stage back into a stage.
-  std::string hlo = GetNeedToLowerPipelineStages();
-
-  auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
-  EXPECT_TRUE(module.ok());
-  auto* module0 = module.ValueOrDie().get();
-  HloInstruction* pipeline_weights1 =
-      FindInstruction(module0, "pipeline_weights1");
-
-  HloInstruction* pipeline_stage_1 =
-      FindInstruction(module0, "pipeline_stage_1");
-  EXPECT_THAT(pipeline_stage_1->operands(),
-              ::testing::Contains(pipeline_weights1));
-
-  HloInstruction* pipeline_acts_0_local =
-      FindInstruction(module0, "pipeline_acts_0_local");
-  EXPECT_THAT(pipeline_acts_0_local->operands(),
-              ::testing::ElementsAre(pipeline_stage_1));
-
-  HloInstruction* pipeline_reduce = FindInstruction(module0, "pipeline_reduce");
-  EXPECT_THAT(pipeline_reduce->operands(),
-              ::testing::ElementsAre(pipeline_stage_1));
-
-  HloInstruction* pipeline_stage_1_lr =
-      FindInstruction(module0, "pipeline_stage_1_lr");
-  EXPECT_THAT(pipeline_stage_1_lr->operands(),
-              ::testing::ElementsAre(pipeline_stage_1));
-
-  HloInstruction* pipeline_stage_1_bwd =
-      FindInstruction(module0, "pipeline_stage_1_bwd");
-  EXPECT_THAT(pipeline_stage_1_bwd->operands(),
-              ::testing::ElementsAre(pipeline_reduce, pipeline_acts_0_local));
-
-  HloInstruction* pipeline_acts_0_bwd =
-      FindInstruction(module0, "pipeline_acts_0_bwd");
-  EXPECT_THAT(pipeline_acts_0_bwd->operands(),
-              ::testing::ElementsAre(pipeline_stage_1_bwd));
-
-  HloInstruction* pipeline_lr_bcast1 =
-      FindInstruction(module0, "pipeline_lr_bcast1");
-  EXPECT_THAT(pipeline_lr_bcast1->operands(),
-              ::testing::ElementsAre(pipeline_stage_1_lr));
-
-  HloInstruction* pipeline_weights1_update =
-      FindInstruction(module0, "pipeline_weights1_update");
-  EXPECT_THAT(pipeline_weights1_update->operands(),
-              ::testing::ElementsAre(pipeline_acts_0_bwd, pipeline_lr_bcast1));
-
-  HloInstruction* pipeline_weights1_apply =
-      FindInstruction(module0, "pipeline_weights1_apply");
-  EXPECT_THAT(
-      pipeline_weights1_apply->operands(),
-      ::testing::ElementsAre(pipeline_weights1, pipeline_weights1_update));
-
-  HloInstruction* pipeline_tuple = FindInstruction(module0, "pipeline_tuple");
-  EXPECT_THAT(pipeline_tuple->operands(),
-              ::testing::Contains(pipeline_weights1_apply));
-
-  HloComputation* pipeline_computation = pipeline_tuple->parent();
-  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
-  TF_ASSERT_OK_AND_ASSIGN(auto duplicated, DuplicateGTEEdges(stages));
-  EXPECT_TRUE(duplicated);
-  EXPECT_TRUE(
-      Match(pipeline_stage_1_bwd->to_apply()->root_instruction(),
-            m::Tuple(m::Add(m::Parameter(1), m::Broadcast(m::Parameter(0))))));
-  // Lower pipeline_lr_bcast1, pipeline_weights1_update and
-  // pipeline_weights1_apply into pipeline_stage_1_bwd.
-  TF_ASSERT_OK_AND_ASSIGN(
-      pipeline_stage_1_bwd,
-      AddInstructionsToPipelineStage(
-          pipeline_stage_1_bwd, {pipeline_lr_bcast1, pipeline_weights1_update,
-                                 pipeline_weights1_apply}));
-  // Check pipeline_weights1 is used by the new stage.
-  EXPECT_THAT(pipeline_stage_1_bwd->operands(),
-              ::testing::Contains(pipeline_weights1));
-  EXPECT_TRUE(Match(
-      pipeline_stage_1_bwd->to_apply()->root_instruction(),
-      m::Tuple(m::Add(m::Parameter(1), m::Broadcast(m::Parameter(0))),
-               m::Subtract(m::Parameter(),
-                           m::Multiply(m::Add(m::Parameter(1),
-                                              m::Broadcast(m::Parameter(0))),
-                                       m::Broadcast(m::Parameter()))))));
-}
-
-TEST_F(PipelineUtilTest, AddInstructionsToPipelineStageTest2) {
   // Test that we can lower inputs into a stage.
   std::string hlo = R"(
 HloModule top
@@ -1636,7 +1530,7 @@ ENTRY e {
       pipeline_stage_1->to_apply()->parameter_instruction(0)->user_count(), 0);
 }
 
-TEST_F(PipelineUtilTest, AddInstructionsToPipelineStageTest3) {
+TEST_F(PipelineUtilTest, AddInstructionsToPipelineStageTest2) {
   // Test that we can force parameters through.
   std::string hlo = R"(
 HloModule top
