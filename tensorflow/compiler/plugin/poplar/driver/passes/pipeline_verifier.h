@@ -30,12 +30,14 @@ namespace poplarplugin {
 /**
  * Pass which verifies that the Pipeline is ready to be lowered. It verifies
  * that:
- * 1. Each parameter instruction is only used by a pipeline stage and/or its
+ * 1. PipelineStatefulGradientAccumulate instructions are only used in the right
+ *    context.
+ * 2. Each parameter instruction is only used by a pipeline stage and/or its
  *    corresponding backward pipeline stage. Any other uses are illegal.
- * 2. An output of a pipeline stage is either used by the next pipeline stage
+ * 3. An output of a pipeline stage is either used by the next pipeline stage
  *    with an inter IPU copy operation between them and/or used by the
  *    corresponding pipeline stage with an FIFO operation between them.
- * 3. Verifies that all the sharding inside the pipeline stage matches.
+ * 4. Verifies that all the sharding inside the pipeline stage matches.
  */
 class PipelineVerifier : public HloModulePass {
  public:
@@ -46,6 +48,9 @@ class PipelineVerifier : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
+  // Verify PipelineStatefulGradientAccumulate usage.
+  Status VerifyGradientAccumulation(HloModule* module, CallGraph* call_graph);
+
   // Verify a pipeline can be lowered.
   Status VerifyPipeline(HloInstruction* pipeline_op, CallGraph* call_graph);
 

@@ -14,6 +14,10 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
+
+#include <memory>
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -49,6 +53,42 @@ Status HasCompatiblePipelineSharding(const HloSharding& expected,
 
 PipelineVerifier::PipelineVerifier(bool allow_recomputation)
     : allow_recomputation_(allow_recomputation) {}
+
+Status PipelineVerifier::VerifyGradientAccumulation(HloModule* module,
+                                                    CallGraph* call_graph) {
+  for (const auto& computation : module->computations()) {
+    if (IsPopOpsFusion(computation)) {
+      continue;
+    }
+    for (const HloInstruction* inst : computation->instructions()) {
+      if (!IsPoplarInstruction(PoplarOp::PipelineStatefulGradientAccumulate)(
+              inst)) {
+        continue;
+      }
+      // We expect the gradient accumulation op to be:
+      // * inside a backward pipeline stage,
+      auto call_sites = call_graph->GetNode(inst->parent()).caller_callsites();
+      if (call_sites.size() != 1 ||
+          !IsPipelineStageBackward(call_sites[0].instruction())) {
+        return FailedPrecondition(
+            "Expected Poplar custom operation "
+            "PipelineStatefulGradientAccumulate to be only used inside a "
+            "backward pipeline stage.");
+      }
+      // * only used by the root instruction.
+      if (!absl::c_all_of(inst->users(),
+                          [&computation](const HloInstruction* user) {
+                            return computation->root_instruction() == user;
+                          })) {
+        return FailedPrecondition(
+            "Expected Poplar custom operation "
+            "PipelineStatefulGradientAccumulate to be only used by the root of "
+            "the backward pipeline stage computation.");
+      }
+    }
+  }
+  return Status::OK();
+}
 
 Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
                                         CallGraph* call_graph) {
@@ -99,6 +139,9 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
 }
 
 StatusOr<bool> PipelineVerifier::Run(HloModule* module) {
+  // First verify the usage of PipelineStatefulGradientAccumulate.
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
+  TF_RETURN_IF_ERROR(VerifyGradientAccumulation(module, call_graph.get()));
   TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
                       GetPipelines(module));
   if (pipeline_ops.empty()) {
@@ -108,7 +151,6 @@ StatusOr<bool> PipelineVerifier::Run(HloModule* module) {
   CHECK_EQ(pipeline_ops.size(), 1);
   VLOG(2) << "Verifing the Pipelines.";
   XLA_VLOG_LINES(2, module->ToString());
-  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
 
   // This pass does not change anything.
   TF_RETURN_IF_ERROR(VerifyPipeline(pipeline_ops[0], call_graph.get()));

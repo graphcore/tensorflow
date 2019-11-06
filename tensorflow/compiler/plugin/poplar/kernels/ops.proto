@@ -49,4 +49,5 @@ enum PoplarOp {
   MultiSlice = 45;
   MultiUpdate = 46;
   MultiUpdateAdd = 47;
+  PipelineStatefulGradientAccumulate = 48;
 }

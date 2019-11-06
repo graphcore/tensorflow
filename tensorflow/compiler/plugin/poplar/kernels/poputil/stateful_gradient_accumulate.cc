@@ -43,8 +43,10 @@ namespace tensorflow {
 
 class StatefulGradientAccumulate : public XlaOpKernel, IpuOpKernel {
  public:
-  explicit StatefulGradientAccumulate(OpKernelConstruction* ctx)
-      : XlaOpKernel(ctx), IpuOpKernel() {
+  explicit StatefulGradientAccumulate(
+      OpKernelConstruction* ctx,
+      PoplarOp op = PoplarOp::StatefulGradientAccumulate)
+      : XlaOpKernel(ctx), IpuOpKernel(), op_(op) {
     int32 num_mini_batches;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("num_mini_batches", &num_mini_batches));
     attribute_map_.AddAttribute("num_mini_batches", num_mini_batches);
@@ -60,19 +62,29 @@ class StatefulGradientAccumulate : public XlaOpKernel, IpuOpKernel {
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
 
-    xla::XlaOp output =
-        xla::CustomCall(b, PoplarOp_Name(PoplarOp::StatefulGradientAccumulate),
-                        {input}, xla_shape, attribute_map_.Serialise());
+    xla::XlaOp output = xla::CustomCall(b, PoplarOp_Name(op_), {input},
+                                        xla_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
 
  private:
+  const PoplarOp op_;
   TF_DISALLOW_COPY_AND_ASSIGN(StatefulGradientAccumulate);
 };
 
-REGISTER_XLA_OP(
-    Name("IpuStatefulGradientAccumulate").Device(DEVICE_IPU_XLA_JIT),
-    StatefulGradientAccumulate);
+REGISTER_IPU_OP("IpuStatefulGradientAccumulate", StatefulGradientAccumulate);
+
+class PipelineStatefulGradientAccumulate : public StatefulGradientAccumulate {
+ public:
+  explicit PipelineStatefulGradientAccumulate(OpKernelConstruction* ctx)
+      : StatefulGradientAccumulate(
+            ctx, PoplarOp::PipelineStatefulGradientAccumulate) {}
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(PipelineStatefulGradientAccumulate);
+};
+REGISTER_IPU_OP("IpuPipelineStatefulGradientAccumulate",
+                PipelineStatefulGradientAccumulate);
 
 }  // namespace tensorflow

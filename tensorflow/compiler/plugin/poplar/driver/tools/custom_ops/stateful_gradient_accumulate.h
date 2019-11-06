@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_STATEFUL_GRADIENT_ACCUMULATE_H
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_STATEFUL_GRADIENT_ACCUMULATE_H
 
+#include <memory>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
 namespace xla {
@@ -25,7 +27,7 @@ class HloStatefulGradientAccumulate : public HloPoplarInstruction {
  public:
   explicit HloStatefulGradientAccumulate(
       absl::Span<HloInstruction* const> operands, int32 num_mini_batches,
-      bool is_all_reduce = false);
+      PoplarOp op = PoplarOp::StatefulGradientAccumulate);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -65,6 +67,22 @@ class HloStatefulGradientAccumulateAndAllReduce
 };
 
 std::unique_ptr<HloInstruction> CreateStatefulGradientAccumulateAndAllReduce(
+    absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
+
+class HloPipelineStatefulGradientAccumulate
+    : public HloStatefulGradientAccumulate {
+ public:
+  explicit HloPipelineStatefulGradientAccumulate(
+      absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
+  uint64 NumberOfInplaceOperands() const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreatePipelineStatefulGradientAccumulate(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
 
 }  // namespace poplarplugin

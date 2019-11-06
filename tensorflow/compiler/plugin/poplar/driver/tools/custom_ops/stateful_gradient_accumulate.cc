@@ -14,23 +14,20 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
+
+#include <memory>
+
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
-namespace {
-PoplarOp SwitchAllReduce(bool is_all_reduce) {
-  return is_all_reduce ? PoplarOp::StatefulGradientAccumulateAndAllReduce
-                       : PoplarOp::StatefulGradientAccumulate;
-}
-}  // namespace
 
 HloStatefulGradientAccumulate::HloStatefulGradientAccumulate(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches,
-    bool is_all_reduce)
-    : HloPoplarInstruction(GetHloPoplarInstructionShape(operands), operands,
-                           SwitchAllReduce(is_all_reduce), num_mini_batches),
+    PoplarOp op)
+    : HloPoplarInstruction(GetHloPoplarInstructionShape(operands), operands, op,
+                           num_mini_batches),
       num_mini_batches_(num_mini_batches) {}
 
 absl::flat_hash_set<int64> HloStatefulGradientAccumulate::AllocatingIndices()
@@ -77,7 +74,9 @@ std::unique_ptr<HloInstruction> CreateStatefulGradientAccumulation(
 HloStatefulGradientAccumulateAndAllReduce::
     HloStatefulGradientAccumulateAndAllReduce(
         absl::Span<HloInstruction* const> operands, int32 num_mini_batches)
-    : HloStatefulGradientAccumulate(operands, num_mini_batches, true) {}
+    : HloStatefulGradientAccumulate(
+          operands, num_mini_batches,
+          PoplarOp::StatefulGradientAccumulateAndAllReduce) {}
 
 std::unique_ptr<HloInstruction>
 HloStatefulGradientAccumulateAndAllReduce::CloneWithNewOperandsImpl(
@@ -90,6 +89,30 @@ HloStatefulGradientAccumulateAndAllReduce::CloneWithNewOperandsImpl(
 std::unique_ptr<HloInstruction> CreateStatefulGradientAccumulateAndAllReduce(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches) {
   return absl::make_unique<HloStatefulGradientAccumulateAndAllReduce>(
+      operands, num_mini_batches);
+}
+
+HloPipelineStatefulGradientAccumulate::HloPipelineStatefulGradientAccumulate(
+    absl::Span<HloInstruction* const> operands, int32 num_mini_batches)
+    : HloStatefulGradientAccumulate(
+          operands, num_mini_batches,
+          PoplarOp::PipelineStatefulGradientAccumulate) {}
+
+uint64 HloPipelineStatefulGradientAccumulate::NumberOfInplaceOperands() const {
+  return 0;
+}
+
+std::unique_ptr<HloInstruction>
+HloPipelineStatefulGradientAccumulate::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return absl::make_unique<HloPipelineStatefulGradientAccumulate>(
+      new_operands, num_mini_batches_);
+}
+
+std::unique_ptr<HloInstruction> CreatePipelineStatefulGradientAccumulation(
+    absl::Span<HloInstruction* const> operands, int32 num_mini_batches) {
+  return absl::make_unique<HloPipelineStatefulGradientAccumulate>(
       operands, num_mini_batches);
 }
 
@@ -108,6 +131,23 @@ HloStatefulGradientAccumulateFactoryFunc(HloCustomCallInstruction* call) {
 static HloPoplarInstructionFactory stateful_gradient_accumulate_factory(
     PoplarOp::StatefulGradientAccumulate,
     HloStatefulGradientAccumulateFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>>
+HloPipelineStatefulGradientAccumulateFactoryFunc(
+    HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  // Get the attribute values
+  TF_ASSIGN_OR_RETURN(int32 num_mini_batches,
+                      attribute_map.GetAttributeAsInt("num_mini_batches"));
+
+  return CreatePipelineStatefulGradientAccumulation(call->operands(),
+                                                    num_mini_batches);
+}
+
+static HloPoplarInstructionFactory
+    pipeline_stateful_gradient_accumulate_factory(
+        PoplarOp::PipelineStatefulGradientAccumulate,
+        HloPipelineStatefulGradientAccumulateFactoryFunc);
 
 }  // namespace
 
