@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/lstm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -119,7 +119,7 @@ poplar::Tensor PackLstmKernel(poplar::Tensor input_weights,
                         FlattenWeight(output_weights));
 }
 
-class LstmLayerFwdOp : public PoplibsOpDef {
+class LstmLayerFwdOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
                                      CompilerResources& res,
                                      const std::string& name,
@@ -260,9 +260,9 @@ class LstmLayerFwdOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Popnn, LstmLayerFwd, LstmLayerFwdOp);
+REGISTER_POPLAR_OP(LstmLayerFwd, LstmLayerFwdOp);
 
-class LstmLayerBwdOp : public PoplibsOpDef {
+class LstmLayerBwdOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -397,7 +397,7 @@ class LstmLayerBwdOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Popnn, LstmLayerBwd, LstmLayerBwdOp);
+REGISTER_POPLAR_OP(LstmLayerBwd, LstmLayerBwdOp);
 
 }  // namespace
 }  // namespace poplarplugin

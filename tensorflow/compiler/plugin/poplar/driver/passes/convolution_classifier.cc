@@ -124,10 +124,10 @@ HloInstruction* FindOperand(HloInstruction* inst,
     } else if (IsAcceptableReshape(source)) {
       // We look through transpose ops
       source = source->mutable_operand(0);
-    } else if (IsInstructionType<HloFifoInstruction>(source)) {
+    } else if (IsPoplarInstruction(PoplarOp::Fifo)(source)) {
       // We look through FIFO ops
       source = source->mutable_operand(0);
-    } else if (IsInstructionType<HloIpuInterCopy>(source)) {
+    } else if (IsPoplarInstruction(PoplarOp::IpuInterCopy)(source)) {
       // We look through inter-ipu copy ops.
       source = source->mutable_operand(0);
     } else if (IsPopOpsFusion(source, "zero_pad")) {

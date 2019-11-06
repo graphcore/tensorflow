@@ -46,16 +46,16 @@ namespace poplarplugin {
 struct CompilerResources;
 struct TensorTarget;
 
-StatusOr<poplar::Tensor> AllocatePoplibsOpTensor(
+StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& name,
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreatePoplibsOp(poplar::Graph& graph,
-                                                   CompilerResources& res,
-                                                   const HloInstruction* inst,
-                                                   const xla::Shape& output,
-                                                   TensorMap& tensor_map);
+StatusOr<poplar::program::Program> CreatePoplarOp(poplar::Graph& graph,
+                                                  CompilerResources& res,
+                                                  const HloInstruction* inst,
+                                                  const xla::Shape& output,
+                                                  TensorMap& tensor_map);
 }  // namespace poplarplugin
 }  // namespace xla
 

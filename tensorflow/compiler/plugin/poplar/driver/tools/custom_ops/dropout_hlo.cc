@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/dropout_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -26,10 +26,8 @@ HloDropoutInstruction::HloDropoutInstruction(HloInstruction* X,
                                              bool should_use_user_seed)
     : HloPoplarInstruction(
           xla::ShapeUtil::MakeTupleShape({X->shape(), seed->shape()}),
-          {X, seed},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                         PoplibsOp::Dropout),
-          rate_, scale_, seed_mod, should_use_user_seed),
+          {X, seed}, PoplarOp::Dropout, rate_, scale_, seed_mod,
+          should_use_user_seed),
       scale(scale_),
       rate(rate_),
       seed_modifier(seed_mod),
@@ -97,8 +95,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDropoutInstructionFactoryFunc(
 }
 
 static HloPoplarInstructionFactory dropout_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poprand, PoplibsOp::Dropout),
-    HloDropoutInstructionFactoryFunc);
+    PoplarOp::Dropout, HloDropoutInstructionFactoryFunc);
 
 }  // namespace
 

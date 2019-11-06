@@ -53,7 +53,7 @@ StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
     const xla::Shape& output_shape, TensorMap& tensor_map,
     experimental::popfloat::GfloatCast::CastConfig& gf_cast_cfg) {
   const HloCastNativeToGfloatInstruction* cast_inst =
-      dynamic_cast<const HloCastNativeToGfloatInstruction*>(inst);
+      Cast<HloCastNativeToGfloatInstruction>(inst);
 
   VLOG(1) << "Processing CastNativeToGfloat.";
 

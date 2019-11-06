@@ -17,7 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_RNN_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 class HloCustomCallInstruction;
@@ -43,8 +43,7 @@ class HloRNNInstruction : public HloPoplarInstruction {
  public:
   explicit HloRNNInstruction(const Shape& shape,
                              absl::Span<HloInstruction* const> operands,
-                             const std::string& custom_call_target,
-                             bool is_training, int32 num_channels,
+                             PoplarOp op, bool is_training, int32 num_channels,
                              xla::PrimitiveType partials_type);
 
   bool is_training() const;
@@ -63,7 +62,7 @@ class HloRNNInstruction : public HloPoplarInstruction {
 
 class HloRNNFwdInstruction : public HloRNNInstruction {
  public:
-  explicit HloRNNFwdInstruction(const PoplibsOp::Op& op, const Shape& shape,
+  explicit HloRNNFwdInstruction(PoplarOp op, const Shape& shape,
                                 absl::Span<HloInstruction* const> operands,
                                 bool is_training, int32 num_channels,
                                 xla::PrimitiveType partials_type);
@@ -73,12 +72,12 @@ class HloRNNFwdInstruction : public HloRNNInstruction {
   bool IsPopOpsElementwise() const override;
 
  private:
-  const PoplibsOp::Op op_;
+  const PoplarOp op_;
 };
 
 class HloRNNBwdInstruction : public HloRNNInstruction {
  public:
-  explicit HloRNNBwdInstruction(const PoplibsOp::Op& op, const Shape& shape,
+  explicit HloRNNBwdInstruction(PoplarOp op, const Shape& shape,
                                 absl::Span<HloInstruction* const> operands,
                                 bool is_training, int32 num_channels,
                                 xla::PrimitiveType partials_type);
@@ -89,7 +88,7 @@ class HloRNNBwdInstruction : public HloRNNInstruction {
   bool IsPopOpsElementwise() const override;
 
  private:
-  const PoplibsOp::Op op_;
+  const PoplarOp op_;
 };
 
 }  // namespace poplarplugin

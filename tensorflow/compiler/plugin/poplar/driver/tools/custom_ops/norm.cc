@@ -14,18 +14,17 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloNormInstruction::HloNormInstruction(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    absl::string_view custom_call_target, int32 num_groups, float epsilon,
-    int feature_index)
-    : HloPoplarInstruction(shape, operands, custom_call_target, num_groups,
-                           epsilon, feature_index),
+    const Shape& shape, absl::Span<HloInstruction* const> operands, PoplarOp op,
+    int32 num_groups, float epsilon, int feature_index)
+    : HloPoplarInstruction(shape, operands, op, num_groups, epsilon,
+                           feature_index),
       num_groups_(num_groups),
       epsilon_(epsilon),
       feature_index_(feature_index) {}

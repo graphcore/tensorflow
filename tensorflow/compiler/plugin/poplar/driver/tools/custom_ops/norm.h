@@ -25,8 +25,7 @@ class HloNormInstruction : public HloPoplarInstruction {
  public:
   explicit HloNormInstruction(const Shape& shape,
                               absl::Span<HloInstruction* const> operands,
-                              absl::string_view custom_call_target,
-                              int32 num_groups, float epsilon,
+                              PoplarOp op, int32 num_groups, float epsilon,
                               int feature_index);
 
   int32 num_groups() const;

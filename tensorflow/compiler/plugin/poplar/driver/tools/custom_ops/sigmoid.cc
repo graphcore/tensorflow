@@ -15,15 +15,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/sigmoid.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloSigmoidInstruction::HloSigmoidInstruction(HloInstruction* operand)
-    : HloPoplarInstruction(operand->shape(), {operand},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Popnn, PoplibsOp::Sigmoid)) {}
+    : HloPoplarInstruction(operand->shape(), {operand}, PoplarOp::Sigmoid) {}
 
 const HloInstruction* HloSigmoidInstruction::input() const {
   return operand(0);
@@ -60,9 +58,7 @@ std::unique_ptr<HloInstruction> CreateSigmoid(HloInstruction* operand) {
 
 HloSigmoidGradInstruction::HloSigmoidGradInstruction(HloInstruction* out,
                                                      HloInstruction* grad)
-    : HloPoplarInstruction(out->shape(), {out, grad},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Popnn, PoplibsOp::SigmoidGrad)) {}
+    : HloPoplarInstruction(out->shape(), {out, grad}, PoplarOp::SigmoidGrad) {}
 
 const HloInstruction* HloSigmoidGradInstruction::out() const {
   return operand(0);
@@ -112,8 +108,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloSigmoidInstructionFactoryFunc(
 }
 
 static HloPoplarInstructionFactory sigmoid_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::Sigmoid),
-    HloSigmoidInstructionFactoryFunc);
+    PoplarOp::Sigmoid, HloSigmoidInstructionFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> HloSigmoidGradInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -121,8 +116,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloSigmoidGradInstructionFactoryFunc(
 }
 
 static HloPoplarInstructionFactory sigmoid_grad_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::SigmoidGrad),
-    HloSigmoidGradInstructionFactoryFunc);
+    PoplarOp::SigmoidGrad, HloSigmoidGradInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

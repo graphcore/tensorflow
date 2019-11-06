@@ -55,9 +55,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     // Do not recompute a stage if it has no outputs which go into the
     // corresponding backward stage (i.e. there is no FIFO).
     const bool bwd_uses_fwd = absl::c_any_of(
-        bwd_stage->operands(), [&](const HloInstruction* operand) {
-          return IsInstructionType<HloFifoInstruction>(operand);
-        });
+        bwd_stage->operands(), IsPoplarInstruction(PoplarOp::Fifo));
     if (!bwd_uses_fwd) {
       continue;
     }
@@ -68,7 +66,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     // computation.
     const bool has_side_effects = absl::c_any_of(
         fwd_stage->to_apply()->instructions(), [](const HloInstruction* inst) {
-          return IsInstructionType<HloStatefulNoop>(inst)
+          return IsPoplarInstruction(PoplarOp::StatefulNoop)(inst)
                      ? false
                      : inst->HasSideEffect();
         });
@@ -130,7 +128,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     auto bwd_operands = bwd_stage->operands();
     for (int64 op_idx = 0; op_idx != bwd_operands.size(); ++op_idx) {
       HloInstruction* operand = bwd_operands[op_idx];
-      if (!IsInstructionType<HloFifoInstruction>(operand)) {
+      if (!IsPoplarInstruction(PoplarOp::Fifo)(operand)) {
         continue;
       }
       // We expect the FIFO input to be a GTE on a forward stage.

@@ -15,16 +15,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/truncated_normal.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloTruncatedNormalInstruction::HloTruncatedNormalInstruction(const Shape& shape)
-    : HloPoplarInstruction(
-          shape, {},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                         PoplibsOp::TruncatedNormal)) {
+    : HloPoplarInstruction(shape, {}, PoplarOp::TruncatedNormal) {
   set_custom_call_has_side_effect(true);
 }
 
@@ -71,9 +68,7 @@ HloTruncatedNormalInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory truncated_normal_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                   PoplibsOp::TruncatedNormal),
-    HloTruncatedNormalInstructionFactoryFunc);
+    PoplarOp::TruncatedNormal, HloTruncatedNormalInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

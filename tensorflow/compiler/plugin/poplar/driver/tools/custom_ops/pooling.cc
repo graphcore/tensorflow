@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 #include "tensorflow/compiler/xla/window_util.h"
 
@@ -22,10 +22,9 @@ namespace xla {
 namespace poplarplugin {
 
 HloPoolingInstruction::HloPoolingInstruction(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    absl::string_view custom_call_target, xla::Window window)
-    : HloPoplarInstruction(shape, operands, custom_call_target,
-                           window_util::ToString(window)),
+    const Shape& shape, absl::Span<HloInstruction* const> operands, PoplarOp op,
+    xla::Window window)
+    : HloPoplarInstruction(shape, operands, op, window_util::ToString(window)),
       window_(window) {}
 
 const xla::Window& HloPoolingInstruction::window() const { return window_; }
@@ -55,10 +54,7 @@ HloPoolingInstruction::ExtraPoplarAttributesToStringImpl(
 HloMaxPoolInstruction::HloMaxPoolInstruction(const Shape& shape,
                                              HloInstruction* operand,
                                              xla::Window window)
-    : HloPoolingInstruction(
-          shape, {operand},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::MaxPool),
-          window) {}
+    : HloPoolingInstruction(shape, {operand}, PoplarOp::MaxPool, window) {}
 
 const HloInstruction* HloMaxPoolInstruction::to_reduce() const {
   return operand(0);
@@ -83,10 +79,7 @@ std::unique_ptr<HloInstruction> CreateMaxPool(const Shape& shape,
 HloAvgPoolInstruction::HloAvgPoolInstruction(const Shape& shape,
                                              HloInstruction* operand,
                                              xla::Window window)
-    : HloPoolingInstruction(
-          shape, {operand},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::AvgPool),
-          window) {}
+    : HloPoolingInstruction(shape, {operand}, PoplarOp::AvgPool, window) {}
 
 const HloInstruction* HloAvgPoolInstruction::to_reduce() const {
   return operand(0);
@@ -112,9 +105,7 @@ HloMaxPoolGradInstruction::HloMaxPoolGradInstruction(
     const Shape& shape, HloInstruction* input, HloInstruction* output,
     HloInstruction* output_grad, xla::Window window)
     : HloPoolingInstruction(shape, {input, output, output_grad},
-                            GetPoplibsCustomOpTargetString(
-                                PoplibsOp::Popnn, PoplibsOp::MaxPoolGrad),
-                            window) {}
+                            PoplarOp::MaxPoolGrad, window) {}
 
 const HloInstruction* HloMaxPoolGradInstruction::input() const {
   return operand(0);
@@ -155,9 +146,7 @@ std::unique_ptr<HloInstruction> CreateMaxPoolGrad(const Shape& shape,
 
 HloAvgPoolGradInstruction::HloAvgPoolGradInstruction(
     const Shape& shape, HloInstruction* output_grad, xla::Window window)
-    : HloPoolingInstruction(shape, {output_grad},
-                            GetPoplibsCustomOpTargetString(
-                                PoplibsOp::Popnn, PoplibsOp::AvgPoolGrad),
+    : HloPoolingInstruction(shape, {output_grad}, PoplarOp::AvgPoolGrad,
                             window) {}
 
 const HloInstruction* HloAvgPoolGradInstruction::output_grad() const {
@@ -192,9 +181,8 @@ StatusOr<std::unique_ptr<HloInstruction>> MaxPoolFactoryFunc(
   return CreateMaxPool(call->shape(), call->mutable_operand(0), window);
 }
 
-static HloPoplarInstructionFactory max_pool_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::MaxPool),
-    MaxPoolFactoryFunc);
+static HloPoplarInstructionFactory max_pool_factory(PoplarOp::MaxPool,
+                                                    MaxPoolFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> AvgPoolFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -206,9 +194,8 @@ StatusOr<std::unique_ptr<HloInstruction>> AvgPoolFactoryFunc(
   return CreateAvgPool(call->shape(), call->mutable_operand(0), window);
 }
 
-static HloPoplarInstructionFactory avg_pool_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::AvgPool),
-    AvgPoolFactoryFunc);
+static HloPoplarInstructionFactory avg_pool_factory(PoplarOp::AvgPool,
+                                                    AvgPoolFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> MaxPoolGradFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -223,8 +210,7 @@ StatusOr<std::unique_ptr<HloInstruction>> MaxPoolGradFactoryFunc(
 }
 
 static HloPoplarInstructionFactory max_pool_grad_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::MaxPoolGrad),
-    MaxPoolGradFactoryFunc);
+    PoplarOp::MaxPoolGrad, MaxPoolGradFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> AvgPoolGradFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -237,8 +223,7 @@ StatusOr<std::unique_ptr<HloInstruction>> AvgPoolGradFactoryFunc(
 }
 
 static HloPoplarInstructionFactory avg_pool_grad_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::AvgPoolGrad),
-    AvgPoolGradFactoryFunc);
+    PoplarOp::AvgPoolGrad, AvgPoolGradFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

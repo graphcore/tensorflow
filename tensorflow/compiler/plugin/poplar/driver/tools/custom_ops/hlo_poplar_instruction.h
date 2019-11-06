@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hash.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -36,10 +37,9 @@ class HloPoplarInstruction : public HloCustomCallInstruction {
   // field.
   template <typename... Args>
   HloPoplarInstruction(const Shape& shape,
-                       absl::Span<HloInstruction* const> operands,
-                       absl::string_view custom_call_target,
+                       absl::Span<HloInstruction* const> operands, PoplarOp op,
                        Args&&... attributes)
-      : HloCustomCallInstruction(shape, operands, custom_call_target, "") {
+      : HloCustomCallInstruction(shape, operands, PoplarOp_Name(op), "") {
     // Hash all attributes to prevent comparisons of ops from false positives
     int64 hash = hash_util::hash(std::forward<Args>(attributes)...);
 
@@ -87,7 +87,7 @@ class HloPoplarInstructionFactory {
   using FactoryType = std::function<StatusOr<std::unique_ptr<HloInstruction>>(
       HloCustomCallInstruction*)>;
 
-  HloPoplarInstructionFactory(const std::string& name, FactoryType factory);
+  HloPoplarInstructionFactory(PoplarOp op, FactoryType factory);
 
   static bool IsCreatable(HloCustomCallInstruction* inst);
   static StatusOr<std::unique_ptr<HloInstruction>> Create(

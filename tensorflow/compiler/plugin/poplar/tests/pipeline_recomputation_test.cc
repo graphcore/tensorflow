@@ -403,8 +403,8 @@ ENTRY cluster {
       if (operand->opcode() == HloOpcode::kParameter) {
         EXPECT_THAT(operand, recomp_stage->operand(op_idx));
       } else {
-        EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(
-            recomp_stage->operand(op_idx)));
+        EXPECT_TRUE(
+            IsPoplarInstruction(PoplarOp::Fifo)(recomp_stage->operand(op_idx)));
         EXPECT_THAT(operand, recomp_stage->operand(op_idx)->operand(0));
       }
     }
@@ -903,7 +903,7 @@ ENTRY e {
   HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
   auto fifo = stages.backward[0]->operand(1);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
 
@@ -913,7 +913,7 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_comp));
 
   fifo = stages.recomputation.at(0)->operand(1);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[0]));
 }

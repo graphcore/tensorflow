@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -32,7 +32,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-class SigmoidOp : public PoplibsOpDef {
+class SigmoidOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -41,9 +41,9 @@ class SigmoidOp : public PoplibsOpDef {
     return CreateSigmoidOp(res, inst, output_shape, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Popnn, Sigmoid, SigmoidOp);
+REGISTER_POPLAR_OP(Sigmoid, SigmoidOp);
 
-class SigmoidGradOp : public PoplibsOpDef {
+class SigmoidGradOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -52,7 +52,7 @@ class SigmoidGradOp : public PoplibsOpDef {
     return CreateSigmoidGradOp(res, inst, output_shape, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Popnn, SigmoidGrad, SigmoidGradOp);
+REGISTER_POPLAR_OP(SigmoidGrad, SigmoidGradOp);
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

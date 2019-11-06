@@ -18,7 +18,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -146,7 +148,7 @@ class InterIpuCopyColocatorHelper : public InstructionColocatorHelper {
   InterIpuCopyColocatorHelper() : InstructionColocatorHelper() {}
 
   bool CanColocate(const HloInstruction* inst) const override {
-    return IsInterIpuCopy(inst);
+    return IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
   }
 
   int64 GetColocateBufferSize(
@@ -164,7 +166,8 @@ class StatefulGradientAccumulationAllReduceColocatorHelper
       : InstructionColocatorHelper() {}
 
   bool CanColocate(const HloInstruction* inst) const override {
-    return DynCast<HloStatefulGradientAccumulateAndAllReduce>(inst);
+    return IsPoplarInstruction(
+        PoplarOp::StatefulGradientAccumulateAndAllReduce)(inst);
   }
 
   int64 GetColocateBufferSize(

@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -55,7 +55,7 @@ StatusOr<std::tuple<uint32, uint32, float>> GetNormOpts(
   return std::make_tuple(feature_index, num_groups, norm_inst->epsilon());
 };
 
-class NormInferenceAndTrainingOp : public PoplibsOpDef {
+class NormInferenceAndTrainingOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
                                      CompilerResources& res,
                                      const std::string& name,
@@ -111,7 +111,7 @@ class GroupNormInferenceOp : public NormInferenceAndTrainingOp {
                                feature_index, num_groups, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Popnn, GroupNormInference, GroupNormInferenceOp);
+REGISTER_POPLAR_OP(GroupNormInference, GroupNormInferenceOp);
 
 class GroupNormTrainingOp : public NormInferenceAndTrainingOp {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
@@ -128,9 +128,9 @@ class GroupNormTrainingOp : public NormInferenceAndTrainingOp {
                               feature_index, num_groups, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Popnn, GroupNormTraining, GroupNormTrainingOp);
+REGISTER_POPLAR_OP(GroupNormTraining, GroupNormTrainingOp);
 
-class GroupNormGradOp : public PoplibsOpDef {
+class GroupNormGradOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -145,9 +145,9 @@ class GroupNormGradOp : public PoplibsOpDef {
                           feature_index, num_groups, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Popnn, GroupNormGrad, GroupNormGradOp);
+REGISTER_POPLAR_OP(GroupNormGrad, GroupNormGradOp);
 
-class GroupNormStatisticsOp : public PoplibsOpDef {
+class GroupNormStatisticsOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -162,7 +162,7 @@ class GroupNormStatisticsOp : public PoplibsOpDef {
                                 feature_index, num_groups, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Popnn, GroupNormStatistics, GroupNormStatisticsOp);
+REGISTER_POPLAR_OP(GroupNormStatistics, GroupNormStatisticsOp);
 
 }  // namespace
 }  // namespace poplarplugin

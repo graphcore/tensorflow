@@ -13,7 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
+
+#include <memory>
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -30,31 +34,29 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-void PoplibsOpManager::RegsiterOp(
-    PoplibsOp::Lib lib, PoplibsOp::Op op,
-    std::unique_ptr<PoplibsOpDef> poplibs_op_def) {
+void PoplarOpManager::RegsiterOp(PoplarOp op,
+                                 std::unique_ptr<PoplarOpDef> poplibs_op_def) {
   auto& ops = GetInstance().ops;
-  auto key = std::make_pair(lib, op);
-  if (ops.contains(key)) {
-    LOG(FATAL) << "Trying to register the same op twice ("
-               << PoplibsOp_Lib_Name(lib) << ", " << PoplibsOp_Op_Name(op)
+
+  if (ops.contains(op)) {
+    LOG(FATAL) << "Trying to register the same op twice (" << PoplarOp_Name(op)
                << ").";
   }
-  ops[key] = std::move(poplibs_op_def);
+  ops[op] = std::move(poplibs_op_def);
 }
 
-PoplibsOpManager& PoplibsOpManager::GetInstance() {
-  static PoplibsOpManager instance;
+PoplarOpManager& PoplarOpManager::GetInstance() {
+  static PoplarOpManager instance;
   return instance;
 }
 
-StatusOr<PoplibsOpDef*> PoplibsOpManager::GetOp(
+StatusOr<PoplarOpDef*> PoplarOpManager::GetOp(
     const HloCustomCallInstruction* inst) {
   // Find the poplibs info given a CustomCall instruction.
   auto ret = GetPoplibsCustomOp(inst);
   if (!ret) {
-    return xla::FailedPrecondition("Could not find custom call target %s.",
-                                   inst->custom_call_target().c_str());
+    return FailedPrecondition("Could not find custom call target for %s.",
+                              inst->custom_call_target().c_str());
   }
 
   auto& ops = GetInstance().ops;
@@ -62,15 +64,13 @@ StatusOr<PoplibsOpDef*> PoplibsOpManager::GetOp(
   if (itr != ops.end()) {
     return itr->second.get();
   }
-  return xla::FailedPrecondition("Could not find definition for %s::%s.",
-                                 PoplibsOp_Lib_Name(ret->first).c_str(),
-                                 PoplibsOp_Op_Name(ret->second).c_str());
+  return FailedPrecondition("Could not find definition for %s.",
+                            PoplarOp_Name(*ret).c_str());
 }
 
-PoplibsOpRegistrar::PoplibsOpRegistrar(
-    PoplibsOp::Lib lib, PoplibsOp::Op op,
-    std::unique_ptr<PoplibsOpDef> poplibs_op_def) {
-  PoplibsOpManager::RegsiterOp(lib, op, std::move(poplibs_op_def));
+PoplarOpRegistrar::PoplarOpRegistrar(
+    PoplarOp op, std::unique_ptr<PoplarOpDef> poplibs_op_def) {
+  PoplarOpManager::RegsiterOp(op, std::move(poplibs_op_def));
 }
 
 }  // namespace poplarplugin

@@ -173,12 +173,12 @@ Status EmbeddingPlansPreplanning::Plan(const HloModule* module,
 
   for (const HloInstruction* inst :
        entry_computation->MakeInstructionPostOrder()) {
-    if (IsInstructionType<HloMultiSliceInstruction>(inst)) {
+    if (IsPoplarInstruction(PoplarOp::MultiSlice)(inst)) {
       multi_slices[inst->operand(0)].push_back(inst);
     } else if (IsPopOpsFusion(inst, "fused_multi_update_add") ||
-               IsInstructionType<HloMultiUpdateAddInstruction>(inst)) {
+               IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst)) {
       multi_update_adds[inst->operand(0)].push_back(inst);
-    } else if (IsInstructionType<HloMultiUpdateInstruction>(inst)) {
+    } else if (IsPoplarInstruction(PoplarOp::MultiUpdate)(inst)) {
       // Note that HloMultiUpdateAddInstruction inherits from
       // HloMultiUpdateInstruction, so we need to handle it first.
       multi_updates[inst->operand(0)].push_back(inst);

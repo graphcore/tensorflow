@@ -12,27 +12,26 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/arg_min_max.h"
-#include "absl/container/flat_hash_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
+
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+
+#include "absl/container/flat_hash_map.h"
 
 namespace xla {
 namespace poplarplugin {
 
-static PoplibsOp_Op SwitchArgMinMax(bool is_arg_min) {
-  return is_arg_min ? PoplibsOp::ArgMin : PoplibsOp::ArgMax;
+static PoplarOp SwitchArgMinMax(bool is_arg_min) {
+  return is_arg_min ? PoplarOp::ArgMin : PoplarOp::ArgMax;
 }
 
 // Constructor.
 HloArgMinMax::HloArgMinMax(HloInstruction* input, const Shape shape,
                            int64 axis_, bool is_min)
-    : HloPoplarInstruction(shape, {input},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Popnn, SwitchArgMinMax(is_min)),
-                           axis),
+    : HloPoplarInstruction(shape, {input}, SwitchArgMinMax(is_min), axis),
       axis(axis_) {}
 
 absl::flat_hash_set<int64> HloArgMinMax::AllocatingIndices() const {
@@ -61,9 +60,9 @@ std::unique_ptr<HloInstruction> CreateHloArgMinMax(HloInstruction* input,
 std::unique_ptr<HloInstruction> HloArgMinMax::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  bool isArgMin = DynCast<HloArgMin>(this) != nullptr;
+  const bool is_min = IsPoplarInstruction(PoplarOp::ArgMin)(this);
 
-  return CreateHloArgMinMax(operands[0], shape, Axis(), isArgMin);
+  return CreateHloArgMinMax(operands[0], shape, Axis(), is_min);
 }
 
 std::vector<std::string> HloArgMinMax::ExtraPoplarAttributesToStringImpl(
@@ -77,7 +76,7 @@ std::vector<std::string> HloArgMinMax::ExtraPoplarAttributesToStringImpl(
 namespace {
 
 static HloPoplarInstructionFactory argmax_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::ArgMax),
+    PoplarOp::ArgMax,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
@@ -88,7 +87,7 @@ static HloPoplarInstructionFactory argmax_factory(
     });
 
 static HloPoplarInstructionFactory argmin_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::ArgMin),
+    PoplarOp::ArgMin,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);

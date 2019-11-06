@@ -25,8 +25,7 @@ class HloPoolingInstruction : public HloPoplarInstruction {
  public:
   explicit HloPoolingInstruction(const Shape& shape,
                                  absl::Span<HloInstruction* const> operands,
-                                 absl::string_view custom_call_target,
-                                 xla::Window window);
+                                 PoplarOp op, xla::Window window);
 
   const xla::Window& window() const override;
 

@@ -96,7 +96,7 @@ string BuildHloText(const SparseTestSpec& spec, bool is_select) {
     ENTRY main {
       params = %s[%s] parameter(0)
       indices = %s[%s] parameter(1)
-      ROOT out = %s[%s] custom-call(params, indices), custom_call_target="Popops::%s"
+      ROOT out = %s[%s] custom-call(params, indices), custom_call_target="%s"
     }
     )",
       params_data_type, params_shape, indices_data_type, indices_shape,

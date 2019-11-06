@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 
@@ -54,7 +54,7 @@ StatusOr<poplar::Tensor> CreateUpdatesTensor(
   return out;
 }
 
-class MultiSliceOp : public PoplibsOpDef {
+class MultiSliceOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -107,9 +107,9 @@ class MultiSliceOp : public PoplibsOpDef {
     }
   }
 };
-REGISTER_POPLIBS_OP(Popops, MultiSlice, MultiSliceOp);
+REGISTER_POPLAR_OP(MultiSlice, MultiSliceOp);
 
-class MultiUpdateOp : public PoplibsOpDef {
+class MultiUpdateOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -151,7 +151,7 @@ class MultiUpdateOp : public PoplibsOpDef {
     }
   }
 };
-REGISTER_POPLIBS_OP(Popops, MultiUpdate, MultiUpdateOp);
+REGISTER_POPLAR_OP(MultiUpdate, MultiUpdateOp);
 
 class MultiUpdateAddOp : public MultiUpdateOp {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
@@ -164,7 +164,7 @@ class MultiUpdateAddOp : public MultiUpdateOp {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Popops, MultiUpdateAdd, MultiUpdateAddOp);
+REGISTER_POPLAR_OP(MultiUpdateAdd, MultiUpdateAddOp);
 
 }  // namespace
 }  // namespace poplarplugin

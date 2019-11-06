@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_factor.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -24,9 +24,7 @@ HloReplicationFactorInstruction::HloReplicationFactorInstruction()
     : HloPoplarInstruction(
           ShapeUtil::MakeShape(primitive_util::NativeToPrimitiveType<int32>(),
                                {}),
-          {},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                         PoplibsOp::ReplicationFactor)) {}
+          {}, PoplarOp::ReplicationFactor) {}
 
 absl::flat_hash_set<int64> HloReplicationFactorInstruction::AllocatingIndices()
     const {
@@ -65,10 +63,8 @@ std::unique_ptr<HloInstruction> CreateReplicationFactorInstruction() {
 
 HloReplicationNormaliseInstruction::HloReplicationNormaliseInstruction(
     HloInstruction* operand)
-    : HloPoplarInstruction(
-          operand->shape(), {operand},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                         PoplibsOp::ReplicationNormalise)) {}
+    : HloPoplarInstruction(operand->shape(), {operand},
+                           PoplarOp::ReplicationNormalise) {}
 
 const HloInstruction* HloReplicationNormaliseInstruction::input() const {
   return operand(0);
@@ -122,13 +118,10 @@ HloReplicationFactorInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory replication_factor_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                   PoplibsOp::ReplicationFactor),
-    HloReplicationFactorInstructionFactoryFunc);
+    PoplarOp::ReplicationFactor, HloReplicationFactorInstructionFactoryFunc);
 
 static HloPoplarInstructionFactory replication_normalise_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                   PoplibsOp::ReplicationNormalise),
+    PoplarOp::ReplicationNormalise,
     HloReplicationNormaliseInstructionFactoryFunc);
 }  // namespace
 

@@ -56,9 +56,9 @@ class PoputilRemapOp : public XlaOpKernel, IpuOpKernel {
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
 
-    xla::XlaOp output = xla::CustomCall(
-        b, GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::Remap),
-        {input}, xla_shape, attribute_map_.Serialise());
+    xla::XlaOp output =
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::Remap), {input}, xla_shape,
+                        attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
@@ -85,10 +85,8 @@ class PoputilRemapDeduceOp : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
 
     xla::XlaOp output =
-        xla::CustomCall(b,
-                        GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                                       PoplibsOp::RemapDeduce),
-                        {input}, xla_shape, attribute_map_.Serialise());
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::RemapDeduce), {input},
+                        xla_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }

@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/codelet_expression_op.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -23,10 +23,7 @@ namespace poplarplugin {
 HloCodeletExpressionOpInstruction::HloCodeletExpressionOpInstruction(
     const xla::Shape& shape, absl::Span<HloInstruction* const> operands,
     const std::string& source)
-    : HloPoplarInstruction(
-          shape, operands,
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                         PoplibsOp::CodeletExpressionOp)),
+    : HloPoplarInstruction(shape, operands, PoplarOp::CodeletExpressionOp),
       source_(source) {}
 
 const std::string& HloCodeletExpressionOpInstruction::source() const {
@@ -85,8 +82,7 @@ HloCodeletExpressionOpInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory codelet_expression_op_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                   PoplibsOp::CodeletExpressionOp),
+    PoplarOp::CodeletExpressionOp,
     HloCodeletExpressionOpInstructionFactoryFunc);
 }  // namespace
 

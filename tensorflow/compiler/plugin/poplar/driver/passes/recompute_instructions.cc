@@ -46,7 +46,7 @@ namespace {
 using TuplePair = std::pair<HloInstruction*, HloInstruction*>;
 
 static bool IsTuple(HloInstruction* inst) {
-  return DynCast<HloGetTupleElementInstruction>(inst) != nullptr;
+  return inst->opcode() == HloOpcode::kGetTupleElement;
 }
 
 // Look through a tuple to find the "real" use. The first use matching

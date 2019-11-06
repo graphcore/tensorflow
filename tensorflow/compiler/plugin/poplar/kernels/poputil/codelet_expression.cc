@@ -106,10 +106,8 @@ class PoputilCodeletExpressionOp : public XlaOpKernel, IpuOpKernel {
     }
 
     xla::XlaOp output =
-        xla::CustomCall(b,
-                        GetPoplibsCustomOpTargetString(
-                            PoplibsOp::Poputil, PoplibsOp::CodeletExpressionOp),
-                        inputs, out_shape, attribute_map_.Serialise());
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::CodeletExpressionOp), inputs,
+                        out_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }

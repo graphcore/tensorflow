@@ -15,15 +15,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloRemapInstruction::HloRemapInstruction(HloInstruction* operand)
-    : HloPoplarInstruction(operand->shape(), {operand},
-                           GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                                          PoplibsOp::Remap)) {}
+    : HloPoplarInstruction(operand->shape(), {operand}, PoplarOp::Remap) {}
 
 const HloInstruction* HloRemapInstruction::input() const { return operand(0); }
 
@@ -62,8 +60,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloRemapInstructionFactoryFunc(
 }
 
 static HloPoplarInstructionFactory remap_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::Remap),
-    HloRemapInstructionFactoryFunc);
+    PoplarOp::Remap, HloRemapInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

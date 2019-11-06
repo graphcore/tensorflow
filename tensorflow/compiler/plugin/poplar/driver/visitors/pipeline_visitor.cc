@@ -20,12 +20,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
@@ -72,24 +73,6 @@ std::function<bool(const HloInstruction*)> HasHloOpcode(HloOpcode opcode) {
 }
 
 /**
- * Construct a unary predicate which checks if a given HloInstruction is a
- * custom Poplibs instruction of a specified type.
- *
- * @param lib The library to capture and compare against.
- * @param op The operation to capture and compare against.
- *
- * @returns The unary predicate.
- */
-std::function<bool(const HloInstruction*)> IsPoplibsInstruction(
-    PoplibsOp_Lib lib, PoplibsOp_Op op) {
-  return [lib, op](const HloInstruction* inst) -> bool {
-    return IsPoplibsHloCustomOp(inst) &&
-           inst->custom_call_target() ==
-               GetPoplibsCustomOpTargetString(lib, op);
-  };
-}
-
-/**
  * Construct a unary predicate which checks if a given HloInstruction is an
  * HloFifoInstruction.
  *
@@ -97,7 +80,7 @@ std::function<bool(const HloInstruction*)> IsPoplibsInstruction(
  */
 std::function<bool(const HloInstruction*)> IsFifoInstruction() {
   return [](const HloInstruction* inst) -> bool {
-    return IsPoplibsInstruction(PoplibsOp::Poputil, PoplibsOp::Fifo)(inst);
+    return IsPoplarInstruction(PoplarOp::Fifo)(inst);
   };
 }
 
@@ -109,8 +92,7 @@ std::function<bool(const HloInstruction*)> IsFifoInstruction() {
  */
 std::function<bool(const HloInstruction*)> IsIpuInterCopyInstruction() {
   return [](const HloInstruction* inst) -> bool {
-    return IsPoplibsInstruction(PoplibsOp::Poputil,
-                                PoplibsOp::IpuInterCopy)(inst);
+    return IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst);
   };
 }
 

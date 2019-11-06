@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -60,7 +60,7 @@ std::map<std::size_t, poplar::Interval> GetInverseIntervalsMap(
   return result;
 }
 
-class FifoOp : public PoplibsOpDef {
+class FifoOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -234,7 +234,7 @@ class FifoOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poputil, Fifo, FifoOp);
+REGISTER_POPLAR_OP(Fifo, FifoOp);
 
 }  // namespace
 }  // namespace poplarplugin

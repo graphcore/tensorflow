@@ -1,10 +1,28 @@
+/* Copyright 2018-2019 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+
+#include <functional>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/relu.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/sigmoid.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
@@ -291,12 +309,12 @@ bool IsPopOpsElementwiseBinary(const HloInstruction* inst) {
 
 bool IsNormInference(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kBatchNormInference ||
-         DynCast<HloGroupNormInstruction>(inst);
+         IsPoplarInstruction(PoplarOp::GroupNormInference)(inst);
 }
 
 bool IsNormTraining(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kBatchNormTraining ||
-         DynCast<HloGroupNormTrainInstruction>(inst);
+         IsPoplarInstruction(PoplarOp::GroupNormTraining)(inst);
 }
 
 bool IsNormInferenceOrTraining(const HloInstruction* inst) {
@@ -305,17 +323,17 @@ bool IsNormInferenceOrTraining(const HloInstruction* inst) {
 
 bool IsNormGradient(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kBatchNormGrad ||
-         DynCast<HloGroupNormGradInstruction>(inst);
+         IsPoplarInstruction(PoplarOp::GroupNormGrad)(inst);
 }
 
 bool IsNonLinearity(const HloInstruction* inst) {
-  return DynCast<HloReluInstruction>(inst) != nullptr ||
-         DynCast<HloSigmoidInstruction>(inst) != nullptr;
+  return IsPoplarInstruction(PoplarOp::Relu)(inst) ||
+         IsPoplarInstruction(PoplarOp::Sigmoid)(inst);
 }
 
 bool IsNonLinearityGradient(const HloInstruction* inst) {
-  return DynCast<HloReluGradInstruction>(inst) != nullptr ||
-         DynCast<HloSigmoidGradInstruction>(inst) != nullptr;
+  return IsPoplarInstruction(PoplarOp::ReluGrad)(inst) ||
+         IsPoplarInstruction(PoplarOp::SigmoidGrad)(inst);
 }
 
 bool IsCompareEqual(const HloInstruction* inst) {
@@ -323,28 +341,37 @@ bool IsCompareEqual(const HloInstruction* inst) {
 }
 
 bool IsSupportedAllReduce(const HloInstruction* inst) {
-  if (auto all_reduce = DynCast<HloAllReduceInstruction>(inst)) {
-    auto root = all_reduce->to_apply()->root_instruction();
+  if (inst->opcode() == HloOpcode::kAllReduce) {
+    const HloInstruction* root = inst->to_apply()->root_instruction();
     return Match(root, m::Add(m::Parameter(0), m::Parameter(1)));
   }
   return false;
 }
 
 bool IsMultiUpdateScatter(const HloInstruction* inst) {
-  if (auto scatter = DynCast<HloScatterInstruction>(inst)) {
-    auto root_inst = scatter->to_apply()->root_instruction();
-    return Match(root_inst, m::Parameter(1)) && CheckValidAttributes(scatter);
+  if (inst->opcode() == HloOpcode::kScatter) {
+    const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);
+    const HloInstruction* root = inst->to_apply()->root_instruction();
+    return Match(root, m::Parameter(1)) && CheckValidAttributes(scatter);
   }
   return false;
 }
 
 bool IsMultiUpdateAddScatter(const HloInstruction* inst) {
-  if (auto scatter = DynCast<HloScatterInstruction>(inst)) {
-    auto root_inst = scatter->to_apply()->root_instruction();
-    return Match(root_inst, m::Add(m::Parameter(0), m::Parameter(1))) &&
+  if (inst->opcode() == HloOpcode::kScatter) {
+    const HloScatterInstruction* scatter = Cast<HloScatterInstruction>(inst);
+    const HloInstruction* root = inst->to_apply()->root_instruction();
+    return Match(root, m::Add(m::Parameter(0), m::Parameter(1))) &&
            CheckValidAttributes(scatter);
   }
   return false;
+}
+
+std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op) {
+  return [op](const HloInstruction* inst) -> bool {
+    return IsPoplibsHloCustomOp(inst) &&
+           inst->custom_call_target() == PoplarOp_Name(op);
+  };
 }
 
 }  // namespace poplarplugin

@@ -16,7 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/topk.h"
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 
 namespace xla {
@@ -24,10 +24,7 @@ namespace poplarplugin {
 
 // Constructor.
 HloTopK::HloTopK(HloInstruction* input, const Shape shape, int64 K, bool sort)
-    : HloPoplarInstruction(
-          shape, {input},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::TopK), K,
-          sort),
+    : HloPoplarInstruction(shape, {input}, PoplarOp::TopK, K, sort),
       num_k(K),
       sorted(sort) {}
 
@@ -66,7 +63,7 @@ std::vector<std::string> HloTopK::ExtraPoplarAttributesToStringImpl(
 namespace {
 
 static HloPoplarInstructionFactory argmax_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::TopK),
+    PoplarOp::TopK,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       // Get the num_k and sorted attributes.

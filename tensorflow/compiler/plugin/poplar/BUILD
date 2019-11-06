@@ -74,8 +74,8 @@ tf_proto_library_py(
 )
 
 tf_proto_library(
-    name = "poplibs_ops",
-    srcs = ["kernels/poplibs_ops.proto"],
+    name = "ops",
+    srcs = ["kernels/ops.proto"],
     cc_api_version = 2,
     make_default_target_header_only = True,
     j2objc_api_version = 1,
@@ -98,7 +98,7 @@ cc_library(
         "kernels/custom_kernels_util.h",
     ],
     deps = [
-        ":poplibs_ops_cc_impl",
+        ":ops_cc_impl",
         ":popfloat_config_protos_cc_impl",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:hlo",
@@ -385,7 +385,7 @@ cc_library(
         "driver/ops/conv_graph_caching.cc",
         "driver/ops/conv_ops.cc",
         "driver/ops/custom_ops/custom_ops.cc",
-        "driver/ops/custom_ops/poplibs_ops.cc",
+        "driver/ops/custom_ops/poplar_ops.cc",
         "driver/ops/custom_ops/popnn/arg_min_max.cc",
         "driver/ops/custom_ops/popnn/gru.cc",
         "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
@@ -460,7 +460,7 @@ cc_library(
         "driver/ops/conv_graph_caching.h",
         "driver/ops/custom_ops/custom_ops.h",
         "driver/ops/custom_ops/popfloat/gfloat_ops_utils.h",
-        "driver/ops/custom_ops/poplibs_ops.h",
+        "driver/ops/custom_ops/poplar_ops.h",
         "driver/ops/graph_caching_util.h",
         "driver/ops/ops.h",
         "driver/poplar_compiler.h",

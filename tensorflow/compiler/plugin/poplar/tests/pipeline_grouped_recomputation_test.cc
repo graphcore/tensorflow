@@ -402,8 +402,8 @@ ENTRY cluster {
       if (operand->opcode() == HloOpcode::kParameter) {
         EXPECT_THAT(operand, recomp_stage->operand(op_idx));
       } else {
-        EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(
-            recomp_stage->operand(op_idx)));
+        EXPECT_TRUE(
+            IsPoplarInstruction(PoplarOp::Fifo)(recomp_stage->operand(op_idx)));
         EXPECT_THAT(operand, recomp_stage->operand(op_idx)->operand(0));
       }
     }

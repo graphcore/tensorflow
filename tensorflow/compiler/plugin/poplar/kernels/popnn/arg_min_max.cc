@@ -97,15 +97,11 @@ class ArgMaxMinOp : public XlaOpKernel, IpuOpKernel {
       // Call into either our ArgMin or ArgMax implementation depending on what
       // the user requested.
       if (is_min_) {
-        output = xla::CustomCall(
-            b,
-            GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::ArgMin),
-            {input}, xla_shape, attribute_map_.Serialise());
+        output = xla::CustomCall(b, PoplarOp_Name(PoplarOp::ArgMin), {input},
+                                 xla_shape, attribute_map_.Serialise());
       } else {
-        output = xla::CustomCall(
-            b,
-            GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::ArgMax),
-            {input}, xla_shape, attribute_map_.Serialise());
+        output = xla::CustomCall(b, PoplarOp_Name(PoplarOp::ArgMax), {input},
+                                 xla_shape, attribute_map_.Serialise());
       }
 
     } else {

@@ -155,10 +155,9 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
 
     // Call the output with the tuple of inputs and expect a tuple of outputs as
     // defined by the user.
-    xla::XlaOp call_output = xla::CustomCall(
-        builder,
-        GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::UserOp),
-        inputs, output_tuple_shape, GetAttrMap().Serialise());
+    xla::XlaOp call_output =
+        xla::CustomCall(builder, PoplarOp_Name(PoplarOp::UserOp), inputs,
+                        output_tuple_shape, GetAttrMap().Serialise());
 
     // Extract each element from the output tuple.
     for (int i = 0; i < output_shape.size(); ++i) {

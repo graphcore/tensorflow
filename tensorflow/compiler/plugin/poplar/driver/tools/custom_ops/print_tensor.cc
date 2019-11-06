@@ -16,7 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/print_tensor.h"
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -26,8 +26,7 @@ namespace poplarplugin {
 // Constructor.
 HloPrintTensor::HloPrintTensor(HloInstruction* input)
     : HloPoplarInstruction(ShapeUtil::MakeTokenShape(), {input},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Poputil, PoplibsOp::PrintTensor)) {
+                           PoplarOp::PrintTensor) {
   set_custom_call_has_side_effect(true);
 }
 
@@ -65,7 +64,7 @@ std::vector<std::string> HloPrintTensor::ExtraPoplarAttributesToStringImpl(
 namespace {
 
 static HloPoplarInstructionFactory print_tensor_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::PrintTensor),
+    PoplarOp::PrintTensor,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       return CreateHloPrintTensor(call->mutable_operand(0));

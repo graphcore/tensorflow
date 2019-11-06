@@ -457,10 +457,10 @@ ENTRY cluster {
   HloInstruction* stage_1_bwd = stages.backward[1];
   EXPECT_THAT(stage_1_bwd->operand_count(), 6);
   EXPECT_THAT(stage_1_bwd->operand(0)->opcode(), HloOpcode::kGetTupleElement);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(stage_1_bwd->operand(1)));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(stage_1_bwd->operand(1)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_1_bwd->operand(1))->depth(), 1);
   EXPECT_THAT(stage_1_bwd->operand(1)->sharding().GetUniqueDevice(), 1);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(stage_1_bwd->operand(2)));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(stage_1_bwd->operand(2)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_1_bwd->operand(2))->depth(), 1);
   EXPECT_THAT(stage_1_bwd->operand(2)->sharding().GetUniqueDevice(), 1);
   EXPECT_THAT(stage_1_bwd->operand(3)->opcode(), HloOpcode::kGetTupleElement);
@@ -470,7 +470,7 @@ ENTRY cluster {
   HloInstruction* stage_0_bwd = stages.backward[0];
   EXPECT_THAT(stage_0_bwd->operand_count(), 5);
   EXPECT_THAT(stage_0_bwd->operand(0)->opcode(), HloOpcode::kGetTupleElement);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(stage_0_bwd->operand(1)));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(stage_0_bwd->operand(1)));
   EXPECT_THAT(Cast<HloFifoInstruction>(stage_0_bwd->operand(1))->depth(), 2);
   EXPECT_THAT(stage_0_bwd->operand(1)->sharding().GetUniqueDevice(), 0);
   EXPECT_THAT(stage_0_bwd->operand(2)->opcode(), HloOpcode::kParameter);

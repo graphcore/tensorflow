@@ -125,10 +125,8 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
     }
 
     xla::XlaOp output_tuple =
-        xla::CustomCall(&b,
-                        GetPoplibsCustomOpTargetString(PoplibsOp::Popnn,
-                                                       PoplibsOp::LstmLayerFwd),
-                        args, output_tuple_shape, attribute_map_.Serialise());
+        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::LstmLayerFwd), args,
+                        output_tuple_shape, attribute_map_.Serialise());
 
     xla::XlaOp output_seq = xla::GetTupleElement(output_tuple, 0);
     xla::XlaOp output_h_state = xla::GetTupleElement(output_tuple, 1);
@@ -195,10 +193,8 @@ class PopnnLstmLayerBackpropOp : public XlaOpKernel, IpuOpKernel {
     }
 
     xla::XlaOp output_tuple =
-        xla::CustomCall(&b,
-                        GetPoplibsCustomOpTargetString(PoplibsOp::Popnn,
-                                                       PoplibsOp::LstmLayerBwd),
-                        args, output_tuple_shape, attribute_map_.Serialise());
+        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::LstmLayerBwd), args,
+                        output_tuple_shape, attribute_map_.Serialise());
     xla::XlaOp input_backprop = xla::GetTupleElement(output_tuple, 0);
     xla::XlaOp input_h_state_backprop = xla::GetTupleElement(output_tuple, 1);
     xla::XlaOp input_c_state_backprop = xla::GetTupleElement(output_tuple, 2);

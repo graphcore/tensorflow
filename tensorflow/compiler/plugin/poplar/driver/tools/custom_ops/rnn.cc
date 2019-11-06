@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 
 namespace xla {
@@ -48,11 +48,11 @@ StatusOr<RNNAttributes> RNNAttributes::Parse(
 
 HloRNNInstruction::HloRNNInstruction(const Shape& shape,
                                      absl::Span<HloInstruction* const> operands,
-                                     const std::string& custom_call_target,
-                                     bool is_training, int32 num_channels,
+                                     PoplarOp op, bool is_training,
+                                     int32 num_channels,
                                      xla::PrimitiveType partials_type)
-    : HloPoplarInstruction(shape, operands, custom_call_target, is_training,
-                           num_channels, partials_type),
+    : HloPoplarInstruction(shape, operands, op, is_training, num_channels,
+                           partials_type),
       is_training_(is_training),
       num_channels_(num_channels),
       partials_type_(partials_type) {}
@@ -75,12 +75,10 @@ std::vector<std::string> HloRNNInstruction::ExtraPoplarAttributesToStringImpl(
 }
 
 HloRNNFwdInstruction::HloRNNFwdInstruction(
-    const PoplibsOp::Op& op, const Shape& shape,
-    absl::Span<HloInstruction* const> operands, bool is_training,
-    int32 num_channels, xla::PrimitiveType partials_type)
-    : HloRNNInstruction(shape, operands,
-                        GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, op),
-                        is_training, num_channels, partials_type),
+    PoplarOp op, const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
+    : HloRNNInstruction(shape, operands, op, is_training, num_channels,
+                        partials_type),
       op_(op) {}
 
 absl::flat_hash_map<int64, int64> HloRNNFwdInstruction::LayoutDependencies()
@@ -93,12 +91,10 @@ uint64 HloRNNFwdInstruction::NumberOfInplaceOperands() const { return 0; }
 bool HloRNNFwdInstruction::IsPopOpsElementwise() const { return false; }
 
 HloRNNBwdInstruction::HloRNNBwdInstruction(
-    const PoplibsOp::Op& op, const Shape& shape,
-    absl::Span<HloInstruction* const> operands, bool is_training,
-    int32 num_channels, xla::PrimitiveType partials_type)
-    : HloRNNInstruction(shape, operands,
-                        GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, op),
-                        is_training, num_channels, partials_type),
+    PoplarOp op, const Shape& shape, absl::Span<HloInstruction* const> operands,
+    bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
+    : HloRNNInstruction(shape, operands, op, is_training, num_channels,
+                        partials_type),
       op_(op) {}
 
 absl::flat_hash_set<int64> HloRNNBwdInstruction::AllocatingIndices() const {

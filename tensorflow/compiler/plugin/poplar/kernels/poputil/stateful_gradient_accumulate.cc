@@ -60,11 +60,9 @@ class StatefulGradientAccumulate : public XlaOpKernel, IpuOpKernel {
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
 
-    xla::XlaOp output = xla::CustomCall(
-        b,
-        GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                       PoplibsOp::StatefulGradientAccumulate),
-        {input}, xla_shape, attribute_map_.Serialise());
+    xla::XlaOp output =
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::StatefulGradientAccumulate),
+                        {input}, xla_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }

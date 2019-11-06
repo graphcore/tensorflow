@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "absl/strings/str_cat.h"
 
@@ -26,10 +26,9 @@ HloUserOpInstruction::HloUserOpInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& path, void* fn_ptr, void* metadata_fn_ptr,
     void* allocator_function_ptr, bool is_gradient, bool is_user_read_write)
-    : HloPoplarInstruction(
-          shape, inputs,
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::UserOp),
-          fn_ptr, metadata_fn_ptr, allocator_function_ptr, path, is_gradient),
+    : HloPoplarInstruction(shape, inputs, PoplarOp::UserOp, fn_ptr,
+                           metadata_fn_ptr, allocator_function_ptr, path,
+                           is_gradient),
       function_ptr_(fn_ptr),
       metadata_function_ptr_(metadata_fn_ptr),
       allocator_function_ptr_(allocator_function_ptr),
@@ -133,7 +132,7 @@ std::unique_ptr<HloInstruction> CreateUserOp(
 namespace {
 
 static HloPoplarInstructionFactory user_op_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::UserOp),
+    PoplarOp::UserOp,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<xla::HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);

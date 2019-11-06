@@ -2459,7 +2459,7 @@ ENTRY top {
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip4, 0)));
 }
 
-TEST_F(AllocationFinderTest, ForwardAllocationCustomPoplibsOp) {
+TEST_F(AllocationFinderTest, ForwardAllocationCustomPoplarOp) {
   // Check that the layout gets forwarded to a custom op.
   std::string hlo = R"(
 HloModule top
@@ -2469,7 +2469,7 @@ ENTRY top {
   convolution = f32[1,4,4,2] convolution(arg0, arg1), window={size=1x1}, dim_labels=b01f_01io->b01f
   arg2 = f32[2] parameter(2)
   arg3 = f32[2] parameter(3)
-  ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(convolution, arg2, arg3), custom_call_target="Popnn::GroupNormTraining", backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"
+  ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(convolution, arg2, arg3), custom_call_target="GroupNormTraining", backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"
 }
 
 )";
@@ -3020,7 +3020,7 @@ ENTRY top {
   gte2 = f32[2] get-tuple-element(arg0), index=2,
       sharding={maximal device=0}
   ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(gte0, gte1, gte2),
-       custom_call_target="Popnn::GroupNormTraining",
+       custom_call_target="GroupNormTraining",
        backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"}
 )";
 
@@ -3108,7 +3108,7 @@ ENTRY top {
   gte2 = f32[2] get-tuple-element(arg0), index=2,
       sharding={maximal device=0}
   ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(gte0, gte1, gte2),
-       custom_call_target="Popnn::GroupNormTraining",
+       custom_call_target="GroupNormTraining",
        backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"
 }
 
@@ -3198,7 +3198,7 @@ ENTRY top {
   gte2 = f32[2] get-tuple-element(arg0), index=2,
       sharding={maximal device=0}
   ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(gte0, gte1, gte2),
-       custom_call_target="Popnn::GroupNormTraining",
+       custom_call_target="GroupNormTraining",
        backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"
 }
 
@@ -3464,7 +3464,7 @@ ENTRY cast4 {
   %a = f16[1,16,16,2] parameter(0)
   %b = f32[3,3,2,4] parameter(1)
   %c_cast = f16[3,3,2,4] convert(%b)
-  %remap_deduce = f16[3,3,2,4] custom-call(c_cast), custom_call_target="Poputil::RemapDeduce"
+  %remap_deduce = f16[3,3,2,4] custom-call(c_cast), custom_call_target="RemapDeduce"
   %d_conv = f16[1,16,16,4] convolution(%a, %remap_deduce), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
   %d_conv_cast = f32[1,16,16,4] convert(%d_conv)
   %e = f16[1,16,16,4] parameter(2)

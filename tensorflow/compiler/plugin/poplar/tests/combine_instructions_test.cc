@@ -203,10 +203,11 @@ ENTRY entry () -> f32[2] {
   InterIpuCopyInserter inserterPass;
   EXPECT_TRUE(inserterPass.Run(module).ValueOrDie());
 
-  auto pred = [](const HloInstruction* inst) { return IsInterIpuCopy(inst); };
   // Expect three inter IPU copies to have been inserted.
   EXPECT_EQ(body->instruction_count(), 15);
-  ASSERT_EQ(absl::c_count_if(body->instructions(), pred), 3);
+  ASSERT_EQ(absl::c_count_if(body->instructions(),
+                             IsPoplarInstruction(PoplarOp::IpuInterCopy)),
+            3);
 
   // Schedule and combine.
   HloMemoryScheduler scheduler(
@@ -220,7 +221,9 @@ ENTRY entry () -> f32[2] {
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
   // Two IPU copies have been merged.
-  EXPECT_EQ(absl::c_count_if(body->instructions(), pred), 2);
+  EXPECT_EQ(absl::c_count_if(body->instructions(),
+                             IsPoplarInstruction(PoplarOp::IpuInterCopy)),
+            2);
   EXPECT_EQ(body->instruction_count(), 16);
 }
 
@@ -236,17 +239,17 @@ add {
 
 %cluster_1  {
   %arg0 = f16[4] parameter(0)
-  %ga0 = f16[4] custom-call(arg0), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga0 = f16[4] custom-call(arg0), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   %a0 = f16[4] all-reduce(ga0), to_apply=add
-  %norm0 = f16[4] custom-call(a0), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm0 = f16[4] custom-call(a0), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   %arg1 = f16[4] parameter(1)
-  %ga1 = f16[4] custom-call(arg1), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga1 = f16[4] custom-call(arg1), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   %a1 = f16[4] all-reduce(ga1), to_apply=add
-  %norm1 = f16[4] custom-call(a1), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm1 = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   %arg2 = f16[4] parameter(2)
-  %ga2 = f16[4] custom-call(arg2), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga2 = f16[4] custom-call(arg2), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   %a2 = f16[4] all-reduce(ga2), to_apply=add
-  %norm2 = f16[4] custom-call(a2), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm2 = f16[4] custom-call(a2), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(norm0, norm1, norm2)
 }
   )";
@@ -291,10 +294,10 @@ add {
   auto s = module->schedule().sequence(module->entry_computation());
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 11);
-  auto pred = [](const HloInstruction* inst) {
-    return IsInstructionType<HloStatefulGradientAccumulateAndAllReduce>(inst);
-  };
-  ASSERT_EQ(absl::c_count_if(seq, pred), 1);
+  ASSERT_EQ(absl::c_count_if(
+                seq, IsPoplarInstruction(
+                         PoplarOp::StatefulGradientAccumulateAndAllReduce)),
+            1);
 }
 
 TEST_F(CombineInstructionsTest,
@@ -310,17 +313,17 @@ add {
 
 %cluster_1  {
   %arg0 = f16[4] parameter(0)
-  %ga0 = f16[4] custom-call(arg0), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga0 = f16[4] custom-call(arg0), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   %a0 = f16[4] all-reduce(ga0), to_apply=add
-  %norm0 = f16[4] custom-call(a0), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm0 = f16[4] custom-call(a0), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   %arg1 = f16[4] parameter(1)
-  %ga1 = f16[4] custom-call(arg1), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":5}\n"
+  %ga1 = f16[4] custom-call(arg1), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":5}\n"
   %a1 = f16[4] all-reduce(ga1), to_apply=add
-  %norm1 = f16[4] custom-call(a1), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm1 = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   %arg2 = f16[4] parameter(2)
-  %ga2 = f16[4] custom-call(arg2), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":6}\n"
+  %ga2 = f16[4] custom-call(arg2), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":6}\n"
   %a2 = f16[4] all-reduce(ga2), to_apply=add
-  %norm2 = f16[4] custom-call(a2), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm2 = f16[4] custom-call(a2), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(norm0, norm1, norm2)
 }
   )";
@@ -368,17 +371,17 @@ add {
 
 %cluster_1  {
   %arg0 = f16[4] parameter(0)
-  %ga0 = f16[4] custom-call(arg0), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga0 = f16[4] custom-call(arg0), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   %a0 = f16[4] all-reduce(ga0), to_apply=add
-  %norm0 = f16[4] custom-call(a0), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm0 = f16[4] custom-call(a0), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   %arg1 = f16[4] parameter(1)
-  %ga1 = f16[4] custom-call(arg1), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga1 = f16[4] custom-call(arg1), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   %a1 = f16[4] all-reduce(ga1), to_apply=add
-  %norm1 = f16[4] custom-call(a1), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm1 = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   %arg2 = f16[4] parameter(2)
-  %ga2 = f16[4] custom-call(arg2), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga2 = f16[4] custom-call(arg2), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   %a2 = f16[4] all-reduce(ga2), to_apply=add
-  %norm2 = f16[4] custom-call(a2), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
+  %norm2 = f16[4] custom-call(a2), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(norm0, norm1, norm2)
 }
   )";
@@ -406,13 +409,13 @@ add {
   InplaceFinder inplace_finder;
   EXPECT_TRUE(inplace_finder.Run(module).ValueOrDie());
 
-  auto pred = [](const HloInstruction* inst) {
-    return IsInstructionType<HloStatefulGradientAccumulateAndAllReduce>(inst);
-  };
-
   // Expect the gradient accumulations to be inplace.
   auto inplace_instructions = GetInplaceInstructions(module);
-  ASSERT_EQ(absl::c_count_if(inplace_instructions, pred), 3);
+  ASSERT_EQ(
+      absl::c_count_if(inplace_instructions,
+                       IsPoplarInstruction(
+                           PoplarOp::StatefulGradientAccumulateAndAllReduce)),
+      3);
 
   // Make one of the gradient accumulations not inplace.
   auto root = entry->root_instruction();
@@ -434,7 +437,10 @@ add {
   auto seq = s.instructions();
   ASSERT_EQ(seq.size(), 11);
   // Expect two gradient accumulation instructions.
-  ASSERT_EQ(absl::c_count_if(seq, pred), 2);
+  ASSERT_EQ(absl::c_count_if(
+                seq, IsPoplarInstruction(
+                         PoplarOp::StatefulGradientAccumulateAndAllReduce)),
+            2);
 }
 
 TEST_F(CombineInstructionsTest, TestDataDependency) {

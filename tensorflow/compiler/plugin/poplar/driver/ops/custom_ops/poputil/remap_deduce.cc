@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -34,7 +34,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-class RemapDeduceOp : public PoplibsOpDef {
+class RemapDeduceOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -59,7 +59,7 @@ class RemapDeduceOp : public PoplibsOpDef {
   }
 };
 
-REGISTER_POPLIBS_OP(Poputil, RemapDeduce, RemapDeduceOp);
+REGISTER_POPLAR_OP(RemapDeduce, RemapDeduceOp);
 
 }  // namespace
 }  // namespace poplarplugin

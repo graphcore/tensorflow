@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 
 namespace xla {
@@ -25,9 +25,8 @@ HloGroupNormTrainInstruction::HloGroupNormTrainInstruction(
     HloInstruction* const scale, HloInstruction* const offset, int32 num_groups,
     float epsilon, int feature_index)
     : HloNormInstruction(shape, {operand, scale, offset},
-                         GetPoplibsCustomOpTargetString(
-                             PoplibsOp::Popnn, PoplibsOp::GroupNormTraining),
-                         num_groups, epsilon, feature_index) {}
+                         PoplarOp::GroupNormTraining, num_groups, epsilon,
+                         feature_index) {}
 
 const HloInstruction* HloGroupNormTrainInstruction::operand() const {
   return HloInstruction::operand(0);
@@ -95,9 +94,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGroupNormTrainFactoryFunc(
 }
 
 static HloPoplarInstructionFactory group_norm_train_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn,
-                                   PoplibsOp::GroupNormTraining),
-    HloGroupNormTrainFactoryFunc);
+    PoplarOp::GroupNormTraining, HloGroupNormTrainFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

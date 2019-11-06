@@ -14,8 +14,9 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/arg_min_max.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -32,7 +33,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class ArgMinMaxOp : public PoplibsOpDef {
+class ArgMinMaxOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -45,14 +46,14 @@ class ArgMinMaxOp : public PoplibsOpDef {
     TF_ASSIGN_OR_RETURN(poplar::Tensor input,
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
 
-    bool is_max = DynCast<HloArgMax>(inst) != nullptr;
+    const bool is_max = IsPoplarInstruction(PoplarOp::ArgMax)(inst);
+    const bool is_min = IsPoplarInstruction(PoplarOp::ArgMin)(inst);
 
-    if (!is_max && DynCast<HloArgMin>(inst) == nullptr) {
+    if (!is_max && !is_min) {
       return xla::FailedPrecondition(
           "Expected HLO instruction to be one of HloArgMax or HloArgMin!");
     }
-
-    int64 axis = DynCast<HloArgMinMax>(inst)->Axis();
+    const int64 axis = Cast<HloArgMinMax>(inst)->Axis();
 
     std::vector<std::size_t> index_shape;
 
@@ -95,8 +96,8 @@ class ArgMinMaxOp : public PoplibsOpDef {
   }
 };
 
-REGISTER_POPLIBS_OP(Popnn, ArgMax, ArgMinMaxOp);
-REGISTER_POPLIBS_OP(Popnn, ArgMin, ArgMinMaxOp);
+REGISTER_POPLAR_OP(ArgMax, ArgMinMaxOp);
+REGISTER_POPLAR_OP(ArgMin, ArgMinMaxOp);
 
 }  // namespace
 }  // namespace poplarplugin

@@ -15,16 +15,14 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/tanh.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloTanhGradInstruction::HloTanhGradInstruction(HloInstruction* out,
                                                HloInstruction* grad)
-    : HloPoplarInstruction(out->shape(), {out, grad},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Popnn, PoplibsOp::TanhGrad)) {}
+    : HloPoplarInstruction(out->shape(), {out, grad}, PoplarOp::TanhGrad) {}
 
 const HloInstruction* HloTanhGradInstruction::out() const { return operand(0); }
 
@@ -71,8 +69,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloTanhGradInstructionFactoryFunc(
 }
 
 static HloPoplarInstructionFactory relu_grad_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::TanhGrad),
-    HloTanhGradInstructionFactoryFunc);
+    PoplarOp::TanhGrad, HloTanhGradInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

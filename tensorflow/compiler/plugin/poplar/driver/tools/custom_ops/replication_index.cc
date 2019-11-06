@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_index.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -23,10 +23,8 @@ namespace xla {
 namespace poplarplugin {
 
 HloReplicationIndexInstruction::HloReplicationIndexInstruction()
-    : HloPoplarInstruction(
-          ShapeUtil::MakeShape(S32, {}), {},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                         PoplibsOp::ReplicationIndex)) {}
+    : HloPoplarInstruction(ShapeUtil::MakeShape(S32, {}), {},
+                           PoplarOp::ReplicationIndex) {}
 
 absl::flat_hash_set<int64> HloReplicationIndexInstruction::AllocatingIndices()
     const {
@@ -70,9 +68,7 @@ HloReplicationIndexInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory fifo_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                   PoplibsOp::ReplicationIndex),
-    HloReplicationIndexInstructionFactoryFunc);
+    PoplarOp::ReplicationIndex, HloReplicationIndexInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

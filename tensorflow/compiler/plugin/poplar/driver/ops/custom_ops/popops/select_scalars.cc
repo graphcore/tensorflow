@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -25,7 +25,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-class SelectScalarFromRowsOp : public PoplibsOpDef {
+class SelectScalarFromRowsOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -34,9 +34,9 @@ class SelectScalarFromRowsOp : public PoplibsOpDef {
     return CreateSelectScalarFromRows(graph, res, inst, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Popops, SelectScalarFromRows, SelectScalarFromRowsOp);
+REGISTER_POPLAR_OP(SelectScalarFromRows, SelectScalarFromRowsOp);
 
-class UpdateScalarInRowsOp : public PoplibsOpDef {
+class UpdateScalarInRowsOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -45,7 +45,7 @@ class UpdateScalarInRowsOp : public PoplibsOpDef {
     return CreateUpdateScalarInRows(graph, res, inst, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Popops, UpdateScalarInRows, UpdateScalarInRowsOp);
+REGISTER_POPLAR_OP(UpdateScalarInRows, UpdateScalarInRowsOp);
 
 }  // namespace
 }  // namespace poplarplugin

@@ -19,7 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -34,12 +34,6 @@ namespace xla {
 namespace poplarplugin {
 
 namespace {
-bool IsMultiSlice(const HloInstruction* inst) {
-  return inst->custom_call_target() ==
-         GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                        PoplibsOp::MultiSlice);
-}
-
 // clang-format off
 static const std::vector<HloMatcherPattern> patterns = {
   // We can combine two multi slices sharing the same input into a single multi slice
@@ -49,8 +43,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternInputs({2,3,4}),
     PatternOutputs({0,1}),
     Pattern({
-      {HloOpcode::kCustomCall, NodeOperands({2, 3}), IsMultiSlice},
-      {HloOpcode::kCustomCall, NodeOperands({2, 4}), IsMultiSlice},
+      {HloOpcode::kCustomCall, NodeOperands({2, 3}), IsPoplarInstruction(PoplarOp::MultiSlice)},
+      {HloOpcode::kCustomCall, NodeOperands({2, 4}), IsPoplarInstruction(PoplarOp::MultiSlice)},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},

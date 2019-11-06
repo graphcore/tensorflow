@@ -15,7 +15,9 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MATCHER_PREDICATES_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_MATCHER_PREDICATES_H_
 
-#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include <functional>
+
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 
@@ -63,10 +65,15 @@ bool IsNonLinearity(const xla::HloInstruction*);
 bool IsSupportedAllReduce(const HloInstruction*);
 bool IsMultiUpdateScatter(const HloInstruction*);
 bool IsMultiUpdateAddScatter(const HloInstruction*);
-template <typename T>
-bool IsInstructionType(const HloInstruction* inst) {
-  return DynCast<T>(inst);
-}
+/**
+ * Construct a unary predicate which checks if a given HloInstruction is a
+ * custom Poplibs instruction of a specified type.
+ *
+ * @param lib The library to capture and compare against.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op);
 }  // namespace poplarplugin
 }  // namespace xla
 

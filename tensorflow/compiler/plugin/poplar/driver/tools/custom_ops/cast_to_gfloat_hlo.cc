@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/cast_to_gfloat_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/human_readable_json.h"
@@ -26,11 +26,8 @@ namespace poplarplugin {
 HloGfloatParamsInstruction::HloGfloatParamsInstruction(
     const Shape& shape, int32 mantissa, int32 exponent, int32 bias,
     bool en_denorm, bool en_inf, tensorflow::DataType calc_type)
-    : HloPoplarInstruction(
-          shape, {},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popfloat,
-                                         PoplibsOp::CalcGfloatParams),
-          mantissa, exponent, bias, en_denorm, en_inf, calc_type),
+    : HloPoplarInstruction(shape, {}, PoplarOp::CalcGfloatParams, mantissa,
+                           exponent, bias, en_denorm, en_inf, calc_type),
       mantissa_(mantissa),
       exponent_(exponent),
       bias_(bias),
@@ -102,18 +99,16 @@ std::unique_ptr<HloInstruction> CreateGfloatParams(
 
 HloCastNativeToGfloatInstruction::HloCastNativeToGfloatInstruction(
     const Shape& shape, HloInstruction* const operand,
-    HloInstruction* const params, tensorflow::DataType in_type_,
-    tensorflow::DataType out_type_, tensorflow::DataType calc_type_,
-    std::string cast_op_config_)
-    : HloPoplarInstruction(
-          shape, {operand, params},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popfloat,
-                                         PoplibsOp::CastNativeToGfloat),
-          in_type_, out_type_, calc_type_, cast_op_config_),
-      cast_op_config_(cast_op_config_),
-      in_type_(in_type_),
-      out_type_(out_type_),
-      calc_type_(calc_type_) {}
+    HloInstruction* const params, tensorflow::DataType in_type,
+    tensorflow::DataType out_type, tensorflow::DataType calc_type,
+    std::string cast_op_config)
+    : HloPoplarInstruction(shape, {operand, params},
+                           PoplarOp::CastNativeToGfloat, in_type, out_type,
+                           calc_type, cast_op_config),
+      cast_op_config_(cast_op_config),
+      in_type_(in_type),
+      out_type_(out_type),
+      calc_type_(calc_type) {}
 
 std::string HloCastNativeToGfloatInstruction::CastOpConfig() const {
   return cast_op_config_;
@@ -222,18 +217,16 @@ std::unique_ptr<HloInstruction> CreateCastNativeToGfloat(
 
 HloCastGfloatToNativeInstruction::HloCastGfloatToNativeInstruction(
     const Shape& shape, HloInstruction* const operand,
-    HloInstruction* const params, const tensorflow::DataType in_type_,
-    const tensorflow::DataType out_type_, const tensorflow::DataType calc_type_,
-    GFConfig::GfloatFormat gfloat_format_)
-    : HloPoplarInstruction(
-          shape, {operand, params},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popfloat,
-                                         PoplibsOp::CastGfloatToNative),
-          in_type_, out_type_, calc_type_, gfloat_format_),
-      in_type_(in_type_),
-      out_type_(out_type_),
-      calc_type_(calc_type_),
-      gfloat_format_(gfloat_format_) {}
+    HloInstruction* const params, const tensorflow::DataType in_type,
+    const tensorflow::DataType out_type, const tensorflow::DataType calc_type,
+    GFConfig::GfloatFormat gfloat_format)
+    : HloPoplarInstruction(shape, {operand, params},
+                           PoplarOp::CastGfloatToNative, in_type, out_type,
+                           calc_type, gfloat_format),
+      in_type_(in_type),
+      out_type_(out_type),
+      calc_type_(calc_type),
+      gfloat_format_(gfloat_format) {}
 
 const tensorflow::DataType HloCastGfloatToNativeInstruction::InputType() const {
   return in_type_;
@@ -295,11 +288,11 @@ HloCastGfloatToNativeInstruction::CloneWithNewOperandsImpl(
 
 std::unique_ptr<HloInstruction> CreateCastGfloatToNative(
     const Shape& shape, HloInstruction* const operand,
-    HloInstruction* const params, const tensorflow::DataType in_type_,
-    const tensorflow::DataType out_type_, const tensorflow::DataType calc_type_,
-    GFConfig::GfloatFormat gfloat_format_) {
+    HloInstruction* const params, const tensorflow::DataType in_type,
+    const tensorflow::DataType out_type, const tensorflow::DataType calc_type,
+    GFConfig::GfloatFormat gfloat_format) {
   return absl::make_unique<HloCastGfloatToNativeInstruction>(
-      shape, operand, params, in_type_, out_type_, calc_type_, gfloat_format_);
+      shape, operand, params, in_type, out_type, calc_type, gfloat_format);
 }
 
 namespace {
@@ -322,9 +315,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGfloatParamsInstructionFactoryFunc(
 }
 
 static HloPoplarInstructionFactory gfloat_params_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popfloat,
-                                   PoplibsOp::CalcGfloatParams),
-    HloGfloatParamsInstructionFactoryFunc);
+    PoplarOp::CalcGfloatParams, HloGfloatParamsInstructionFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>>
 HloCastNativeToGfloatInstructionFactoryFunc(HloCustomCallInstruction* call) {
@@ -345,9 +336,7 @@ HloCastNativeToGfloatInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory cast_native_to_gfloat_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popfloat,
-                                   PoplibsOp::CastNativeToGfloat),
-    HloCastNativeToGfloatInstructionFactoryFunc);
+    PoplarOp::CastNativeToGfloat, HloCastNativeToGfloatInstructionFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>>
 HloCastGfloatToNativeInstructionFactoryFunc(HloCustomCallInstruction* call) {
@@ -371,9 +360,7 @@ HloCastGfloatToNativeInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory cast_gfloat_to_native_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popfloat,
-                                   PoplibsOp::CastGfloatToNative),
-    HloCastGfloatToNativeInstructionFactoryFunc);
+    PoplarOp::CastGfloatToNative, HloCastGfloatToNativeInstructionFactoryFunc);
 
 }  // namespace
 }  // namespace poplarplugin

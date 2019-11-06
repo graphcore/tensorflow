@@ -15,15 +15,14 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloIpuInterCopy::HloIpuInterCopy(absl::Span<HloInstruction* const> operands)
     : HloPoplarInstruction(GetHloPoplarInstructionShape(operands), operands,
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Poputil, PoplibsOp::IpuInterCopy)) {}
+                           PoplarOp::IpuInterCopy) {}
 
 absl::flat_hash_set<int64> HloIpuInterCopy::AllocatingIndices() const {
   return {};

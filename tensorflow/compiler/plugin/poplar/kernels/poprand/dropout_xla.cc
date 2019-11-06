@@ -81,9 +81,8 @@ class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
         xla::ShapeUtil::MakeTupleShape({xla_shape, xla_seed_shape});
 
     xla::XlaOp call_output = xla::CustomCall(
-        b,
-        GetPoplibsCustomOpTargetString(PoplibsOp::Poprand, PoplibsOp::Dropout),
-        {input, seed_input}, output_tuple_shape, attribute_map_.Serialise());
+        b, PoplarOp_Name(PoplarOp::Dropout), {input, seed_input},
+        output_tuple_shape, attribute_map_.Serialise());
 
     // The actual dropout output.
     xla::XlaOp output = xla::GetTupleElement(call_output, 0);

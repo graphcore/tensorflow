@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -29,7 +29,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class IpuInterCopyOp : public PoplibsOpDef {
+class IpuInterCopyOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -109,7 +109,7 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
   return seq;
 }
 
-REGISTER_POPLIBS_OP(Poputil, IpuInterCopy, IpuInterCopyOp);
+REGISTER_POPLAR_OP(IpuInterCopy, IpuInterCopyOp);
 
 }  // namespace
 

@@ -63,7 +63,8 @@ struct DynamicSliceHelper {
 
     // Get the slice sizes in the dynamic and constant dimensions.
     std::vector<int64> slice_sizes;
-    if (auto* dyn_slice = DynCast<HloDynamicSliceInstruction>(inst)) {
+    if (inst->opcode() == HloOpcode::kDynamicSlice) {
+      auto* dyn_slice = Cast<HloDynamicSliceInstruction>(inst);
       slice_sizes = dyn_slice->dynamic_slice_sizes();
     } else {
       auto* dyn_update_slice = Cast<HloDynamicUpdateSliceInstruction>(inst);
@@ -289,7 +290,7 @@ StatusOr<poplar::program::Program> CreateIota(CompilerResources& res,
 
   poplar::Graph& graph = GetGraph(res, inst);
 
-  auto iota_inst = DynCast<HloIotaInstruction>(inst);
+  auto iota_inst = Cast<HloIotaInstruction>(inst);
   const auto iota_dimension = iota_inst->iota_dimension();
 
   // Get iota length.

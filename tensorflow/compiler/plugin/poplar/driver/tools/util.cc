@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
@@ -355,14 +356,12 @@ int64 GetPipelineStageID(const HloInstruction* inst) {
   return cfg.call_config().pipeline_stage_config().stage_id();
 }
 
-bool IsInterIpuCopy(const HloInstruction* inst) {
-  return DynCast<HloIpuInterCopy>(inst);
-}
-
 const HloInstruction* GetOperandLookThroughInterIpuCopy(
     const HloInstruction* inst, const int64 operand_idx) {
   const HloInstruction* operand = inst->operand(operand_idx);
-  return IsInterIpuCopy(operand) ? operand->operand(0) : operand;
+  return IsPoplarInstruction(PoplarOp::IpuInterCopy)(operand)
+             ? operand->operand(0)
+             : operand;
 }
 
 bool UseSyntheticData() { return PoplarXlaFlags::Get().use_synthetic_data; }

@@ -199,7 +199,7 @@ stage_2 {
   arg3.0 = f32[2]{0} parameter(3)
   broadcast = f32[1,4,4,2]{3,2,1,0} broadcast(arg3.0), dimensions={3}
   add = f32[1,4,4,2]{3,2,1,0} add(convolution, broadcast)
-  custom-call.2 = f32[1,3,3,2]{3,2,1,0} custom-call(add), custom_call_target="Popnn::MaxPool", window={size=1x2x2x1}
+  custom-call.2 = f32[1,3,3,2]{3,2,1,0} custom-call(add), custom_call_target="MaxPool", window={size=1x2x2x1}
   convert = f32[1,3,3,2]{3,2,1,0} convert(custom-call.2)
   constant = f32[] constant(0)
   convert.1 = f32[] convert(constant)
@@ -291,7 +291,7 @@ stage_2_bwd {
   reshape.9 = f32[1]{0} reshape(reshape.8)
   broadcast.36 = f32[1,3,3,2]{3,2,1,0} broadcast(reshape.9), dimensions={0}
   add.5 = f32[1,3,3,2]{3,2,1,0} add(broadcast.35, broadcast.36)
-  custom-call.7 = f32[1,4,4,2]{3,2,1,0} custom-call(arg3.15, arg2.14, add.5), custom_call_target="Popnn::MaxPoolGrad", window={size=1x2x2x1}
+  custom-call.7 = f32[1,4,4,2]{3,2,1,0} custom-call(arg3.15, arg2.14, add.5), custom_call_target="MaxPoolGrad", window={size=1x2x2x1}
   arg5.13 = f32[1,1,2,2]{3,2,1,0} parameter(2)
   reverse.16 = f32[1,1,2,2]{3,2,1,0} reverse(arg5.13), dimensions={0,1}
   convolution.35 = f32[1,4,4,2]{3,2,1,0} convolution(custom-call.7, reverse.16), window={size=1x1}, dim_labels=b01f_01oi->b01f

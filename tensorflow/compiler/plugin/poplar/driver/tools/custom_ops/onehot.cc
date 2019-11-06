@@ -16,7 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/onehot.h"
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -26,10 +26,8 @@ HloOneHotInstruction::HloOneHotInstruction(HloInstruction* indices, int64 depth,
                                            int32 axis, HloInstruction* on,
                                            HloInstruction* off,
                                            const Shape shape)
-    : HloPoplarInstruction(
-          shape, {indices, on, off},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::OneHot),
-          depth, axis),
+    : HloPoplarInstruction(shape, {indices, on, off}, PoplarOp::OneHot, depth,
+                           axis),
       depth_(depth),
       axis_(axis) {}
 
@@ -76,7 +74,7 @@ HloOneHotInstruction::ExtraPoplarAttributesToStringImpl(
 namespace {
 
 static HloPoplarInstructionFactory onehot_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::OneHot),
+    PoplarOp::OneHot,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);

@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "include/json/json.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -35,31 +35,14 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
-std::string GetPoplibsCustomOpTargetString(PoplibsOp::Lib lib,
-                                           PoplibsOp::Op op) {
-  return PoplibsOp_Lib_Name(lib) + "::" + PoplibsOp_Op_Name(op);
-}
-
-absl::optional<std::pair<PoplibsOp::Lib, PoplibsOp::Op>> GetPoplibsCustomOp(
-    const HloInstruction* inst) {
+absl::optional<PoplarOp> GetPoplibsCustomOp(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kCustomCall) {
-    std::vector<std::string> split =
-        absl::StrSplit(inst->custom_call_target(), "::");
-    if (split.size() != 2) {
-      return absl::nullopt;
-    }
-    PoplibsOp::Lib lib;
-    bool lib_parsed = PoplibsOp_Lib_Parse(split[0], &lib);
-    if (!lib_parsed) {
-      return absl::nullopt;
-    }
-
-    PoplibsOp::Op op;
-    bool op_parsed = PoplibsOp_Op_Parse(split[1], &op);
+    PoplarOp op;
+    bool op_parsed = PoplarOp_Parse(inst->custom_call_target(), &op);
     if (!op_parsed) {
       return absl::nullopt;
     }
-    return std::make_pair(lib, op);
+    return op;
   }
   return absl::nullopt;
 }

@@ -43,10 +43,8 @@ class PopopsMultiSliceOp : public XlaOpKernel, IpuOpKernel {
         TensorShapeToXLAShape(input_type, output_shape);
 
     xla::XlaOp call_output =
-        xla::CustomCall(&b,
-                        GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                                       PoplibsOp::MultiSlice),
-                        args, xla_output_shape, attribute_map_.Serialise());
+        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::MultiSlice), args,
+                        xla_output_shape, attribute_map_.Serialise());
     ctx->SetOutput(0, call_output);
   }
 
@@ -87,12 +85,11 @@ class PopopsMultiUpdateOp : public XlaOpKernel, IpuOpKernel {
     attribute_map_.AddAttribute("update_dim", updates_shape.dims() - 1);
     attribute_map_.AddAttribute("index_vector_dim", indices_shape.dims());
 
-    xla::XlaOp call_output = xla::CustomCall(
-        &b,
-        GetPoplibsCustomOpTargetString(
-            PoplibsOp::Popops, is_update_add_ ? PoplibsOp::MultiUpdateAdd
-                                              : PoplibsOp::MultiUpdate),
-        args, xla_output_shape, attribute_map_.Serialise());
+    xla::XlaOp call_output =
+        xla::CustomCall(&b,
+                        PoplarOp_Name(is_update_add_ ? PoplarOp::MultiUpdateAdd
+                                                     : PoplarOp::MultiUpdate),
+                        args, xla_output_shape, attribute_map_.Serialise());
     ctx->SetOutput(0, call_output);
   }
 

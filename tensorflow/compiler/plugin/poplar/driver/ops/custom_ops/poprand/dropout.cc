@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -40,7 +40,7 @@ std::once_flag seed_flag;
 namespace xla {
 namespace poplarplugin {
 namespace {
-class DropoutOp : public PoplibsOpDef {
+class DropoutOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -61,9 +61,7 @@ class DropoutOp : public PoplibsOpDef {
         FindInstructionInput(tensor_map, res, inst, 1, seq, false));
 
     const HloDropoutInstruction* dropout_instruction =
-        dynamic_cast<const HloDropoutInstruction*>(inst);
-    assert(dropout_instruction &&
-           "Expected operation to be an xla::poplarplugin::DropoutOp");
+        Cast<HloDropoutInstruction>(inst);
 
     // The probabilty that any given element of "x" will be discarded.
     double rate = dropout_instruction->Rate();
@@ -158,7 +156,7 @@ class DropoutOp : public PoplibsOpDef {
   }
 };
 
-REGISTER_POPLIBS_OP(Poprand, Dropout, DropoutOp);
+REGISTER_POPLAR_OP(Dropout, DropoutOp);
 
 }  // namespace
 }  // namespace poplarplugin

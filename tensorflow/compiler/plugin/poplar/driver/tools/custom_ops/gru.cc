@@ -15,7 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/gru.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 
 namespace xla {
@@ -24,7 +24,7 @@ namespace poplarplugin {
 HloGRUFwdInstruction::HloGRUFwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
-    : HloRNNFwdInstruction(PoplibsOp::GRULayerFwd, shape, operands, is_training,
+    : HloRNNFwdInstruction(PoplarOp::GRULayerFwd, shape, operands, is_training,
                            num_channels, partials_type) {}
 
 absl::flat_hash_set<int64> HloGRUFwdInstruction::AllocatingIndices() const {
@@ -48,7 +48,7 @@ std::unique_ptr<HloInstruction> CreateGRUFwd(
 HloGRUBwdInstruction::HloGRUBwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
-    : HloRNNBwdInstruction(PoplibsOp::GRULayerBwd, shape, operands, is_training,
+    : HloRNNBwdInstruction(PoplarOp::GRULayerBwd, shape, operands, is_training,
                            num_channels, partials_type) {}
 
 std::unique_ptr<HloInstruction> HloGRUBwdInstruction::CloneWithNewOperandsImpl(
@@ -76,9 +76,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGRUFwdFactoryFunc(
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type);
 }
 
-static HloPoplarInstructionFactory gru_fwd_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::GRULayerFwd),
-    HloGRUFwdFactoryFunc);
+static HloPoplarInstructionFactory gru_fwd_factory(PoplarOp::GRULayerFwd,
+                                                   HloGRUFwdFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> HloGRUBwdFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -90,9 +89,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGRUBwdFactoryFunc(
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type);
 }
 
-static HloPoplarInstructionFactory gru_bwd_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::GRULayerBwd),
-    HloGRUBwdFactoryFunc);
+static HloPoplarInstructionFactory gru_bwd_factory(PoplarOp::GRULayerBwd,
+                                                   HloGRUBwdFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

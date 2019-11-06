@@ -15,15 +15,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/relu.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloReluInstruction::HloReluInstruction(HloInstruction* operand)
-    : HloPoplarInstruction(
-          operand->shape(), {operand},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::Relu)) {}
+    : HloPoplarInstruction(operand->shape(), {operand}, PoplarOp::Relu) {}
 
 const HloInstruction* HloReluInstruction::input() const { return operand(0); }
 
@@ -57,9 +55,7 @@ std::unique_ptr<HloInstruction> CreateRelu(HloInstruction* operand) {
 
 HloReluGradInstruction::HloReluGradInstruction(HloInstruction* out,
                                                HloInstruction* grad)
-    : HloPoplarInstruction(out->shape(), {out, grad},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Popnn, PoplibsOp::ReluGrad)) {}
+    : HloPoplarInstruction(out->shape(), {out, grad}, PoplarOp::ReluGrad) {}
 
 const HloInstruction* HloReluGradInstruction::out() const { return operand(0); }
 
@@ -105,9 +101,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloReluInstructionFactoryFunc(
   return CreateRelu(call->mutable_operand(0));
 }
 
-static HloPoplarInstructionFactory relu_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::Relu),
-    HloReluInstructionFactoryFunc);
+static HloPoplarInstructionFactory relu_factory(PoplarOp::Relu,
+                                                HloReluInstructionFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> HloReluGradInstructionFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -115,8 +110,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloReluGradInstructionFactoryFunc(
 }
 
 static HloPoplarInstructionFactory relu_grad_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::ReluGrad),
-    HloReluGradInstructionFactoryFunc);
+    PoplarOp::ReluGrad, HloReluGradInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

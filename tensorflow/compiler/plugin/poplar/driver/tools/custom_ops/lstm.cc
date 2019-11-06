@@ -15,7 +15,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/lstm.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 
 namespace xla {
@@ -24,8 +24,8 @@ namespace poplarplugin {
 HloLSTMFwdInstruction::HloLSTMFwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
-    : HloRNNFwdInstruction(PoplibsOp::LstmLayerFwd, shape, operands,
-                           is_training, num_channels, partials_type) {}
+    : HloRNNFwdInstruction(PoplarOp::LstmLayerFwd, shape, operands, is_training,
+                           num_channels, partials_type) {}
 
 absl::flat_hash_set<int64> HloLSTMFwdInstruction::AllocatingIndices() const {
   return {0, 1, 2, 3, 4};
@@ -48,8 +48,8 @@ std::unique_ptr<HloInstruction> CreateLSTMFwd(
 HloLSTMBwdInstruction::HloLSTMBwdInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     bool is_training, int32 num_channels, xla::PrimitiveType partials_type)
-    : HloRNNBwdInstruction(PoplibsOp::LstmLayerBwd, shape, operands,
-                           is_training, num_channels, partials_type) {}
+    : HloRNNBwdInstruction(PoplarOp::LstmLayerBwd, shape, operands, is_training,
+                           num_channels, partials_type) {}
 
 std::unique_ptr<HloInstruction> HloLSTMBwdInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
@@ -76,9 +76,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloLSTMFwdFactoryFunc(
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type);
 }
 
-static HloPoplarInstructionFactory lstm_fwd_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::LstmLayerFwd),
-    HloLSTMFwdFactoryFunc);
+static HloPoplarInstructionFactory lstm_fwd_factory(PoplarOp::LstmLayerFwd,
+                                                    HloLSTMFwdFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> HloLSTMBwdFactoryFunc(
     HloCustomCallInstruction* call) {
@@ -90,9 +89,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloLSTMBwdFactoryFunc(
       parsed_attributes.num_channels, parsed_attributes.partials_xla_type);
 }
 
-static HloPoplarInstructionFactory lstm_bwd_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::LstmLayerBwd),
-    HloLSTMBwdFactoryFunc);
+static HloPoplarInstructionFactory lstm_bwd_factory(PoplarOp::LstmLayerBwd,
+                                                    HloLSTMBwdFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

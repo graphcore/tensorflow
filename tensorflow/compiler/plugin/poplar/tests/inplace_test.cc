@@ -582,7 +582,7 @@ ENTRY entry {
   }
 }
 
-TEST_F(HloInplaceDependencyTest, CustomPoplibsOpNotInplace) {
+TEST_F(HloInplaceDependencyTest, CustomPoplarOpNotInplace) {
   std::string hlo = R"(
 HloModule top
 
@@ -590,7 +590,7 @@ ENTRY c1 {
   p0 = s32[20] parameter(0)
   p1 = s32[20] parameter(1)
 
-  c = s32[20] custom-call(p0, p1), custom_call_target="Popnn::LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\"}\n"
+  c = s32[20] custom-call(p0, p1), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\"}\n"
 
   ROOT t = (s32[20]) tuple(c)
 }
@@ -664,7 +664,7 @@ ENTRY c1 {
   p0 = (s32[20], s32[20], s32[20], s32[20]) parameter(0)
   p0_0 = s32[20] get-tuple-element(p0), index=0
 
-  c = s32[20] custom-call(p0), custom_call_target="Popnn::LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\"}\n"
+  c = s32[20] custom-call(p0), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":4, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\"}\n"
 
   ROOT a = s32[20] add(p0_0, c)
 }
@@ -808,7 +808,7 @@ ENTRY c1 {
   softmax = f16[20,30] parameter(0)
 	labels = s32[20] parameter(1)
 
-  ROOT c = f16[20, 30] custom-call(softmax, labels), custom_call_target="Popops::UpdateScalarInRows"
+  ROOT c = f16[20, 30] custom-call(softmax, labels), custom_call_target="UpdateScalarInRows"
 }
 
 )";

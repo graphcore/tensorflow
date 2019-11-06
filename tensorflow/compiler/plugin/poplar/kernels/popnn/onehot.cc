@@ -104,9 +104,9 @@ class OneHotOp : public XlaOpKernel, IpuOpKernel {
 
     // Create the custom call to our one hot implementation instead of the usual
     // XLA node.
-    xla::XlaOp output = xla::CustomCall(
-        b, GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::OneHot),
-        {indices, on, off}, xla_shape, attribute_map_.Serialise());
+    xla::XlaOp output =
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::OneHot), {indices, on, off},
+                        xla_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }

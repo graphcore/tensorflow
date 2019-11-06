@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -37,7 +37,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-class MaxPoolOp : public PoplibsOpDef {
+class MaxPoolOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -49,9 +49,9 @@ class MaxPoolOp : public PoplibsOpDef {
                                 pool_inst->window());
   }
 };
-REGISTER_POPLIBS_OP(Popnn, MaxPool, MaxPoolOp);
+REGISTER_POPLAR_OP(MaxPool, MaxPoolOp);
 
-class AvgPoolOp : public PoplibsOpDef {
+class AvgPoolOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -63,9 +63,9 @@ class AvgPoolOp : public PoplibsOpDef {
                                 pool_inst->window());
   }
 };
-REGISTER_POPLIBS_OP(Popnn, AvgPool, AvgPoolOp);
+REGISTER_POPLAR_OP(AvgPool, AvgPoolOp);
 
-class MaxPoolGradOp : public PoplibsOpDef {
+class MaxPoolGradOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -76,9 +76,9 @@ class MaxPoolGradOp : public PoplibsOpDef {
     return CreatePoplibsMaxPoolGrad(res, inst, tensor_map, pool_inst->window());
   }
 };
-REGISTER_POPLIBS_OP(Popnn, MaxPoolGrad, MaxPoolGradOp);
+REGISTER_POPLAR_OP(MaxPoolGrad, MaxPoolGradOp);
 
-class AvgPoolGradOp : public PoplibsOpDef {
+class AvgPoolGradOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -90,7 +90,7 @@ class AvgPoolGradOp : public PoplibsOpDef {
         res, inst, tensor_map, popnn::PoolingType::AVG, pool_inst->window());
   }
 };
-REGISTER_POPLIBS_OP(Popnn, AvgPoolGrad, AvgPoolGradOp);
+REGISTER_POPLAR_OP(AvgPoolGrad, AvgPoolGradOp);
 
 }  // namespace
 }  // namespace poplarplugin

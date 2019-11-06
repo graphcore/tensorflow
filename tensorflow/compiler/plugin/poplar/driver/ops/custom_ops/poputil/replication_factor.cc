@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -36,7 +36,7 @@ namespace pe = popops::expr;
 namespace xla {
 namespace poplarplugin {
 namespace {
-class ReplicationFactorOp : public PoplibsOpDef {
+class ReplicationFactorOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -51,9 +51,9 @@ class ReplicationFactorOp : public PoplibsOpDef {
     return poplar::program::Sequence();
   }
 };
-REGISTER_POPLIBS_OP(Poputil, ReplicationFactor, ReplicationFactorOp);
+REGISTER_POPLAR_OP(ReplicationFactor, ReplicationFactorOp);
 
-class ReplicationNormaliseOp : public PoplibsOpDef {
+class ReplicationNormaliseOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -80,7 +80,7 @@ class ReplicationNormaliseOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poputil, ReplicationNormalise, ReplicationNormaliseOp);
+REGISTER_POPLAR_OP(ReplicationNormalise, ReplicationNormaliseOp);
 
 }  // namespace
 }  // namespace poplarplugin

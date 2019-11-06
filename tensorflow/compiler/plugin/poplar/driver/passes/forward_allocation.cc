@@ -381,7 +381,7 @@ ForwardAllocation::FindInputs(HloComputation* comp) {
     if (inst->opcode() == HloOpcode::kConstant ||
         inst->opcode() == HloOpcode::kInfeed ||
         inst->opcode() == HloOpcode::kParameter ||
-        DynCast<HloRemapDeduceInstruction>(inst) != nullptr) {
+        IsPoplarInstruction(PoplarOp::RemapDeduce)(inst)) {
       FlattenInputs(inst, {inst}, input_to_deferred_allocation_path);
     }
   }

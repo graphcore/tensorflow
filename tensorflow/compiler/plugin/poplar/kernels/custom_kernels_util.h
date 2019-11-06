@@ -16,7 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_IPU_CUSOM_KERNELS_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_IPU_CUSOM_KERNELS_UTIL_H_
 
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 
 #include "include/json/json.h"
@@ -34,12 +34,8 @@ class HloInstruction;
 class Window;
 
 namespace poplarplugin {
-// Function used to get the string target for the kCustomCall
-std::string GetPoplibsCustomOpTargetString(PoplibsOp::Lib lib,
-                                           PoplibsOp::Op op);
-// Tried to convert the string target for the kCustomCall
-absl::optional<std::pair<PoplibsOp::Lib, PoplibsOp::Op>> GetPoplibsCustomOp(
-    const HloInstruction* inst);
+// Tries to convert the string target for the kCustomCall
+absl::optional<PoplarOp> GetPoplibsCustomOp(const HloInstruction* inst);
 
 namespace IPUCustomKernelsUtil {
 

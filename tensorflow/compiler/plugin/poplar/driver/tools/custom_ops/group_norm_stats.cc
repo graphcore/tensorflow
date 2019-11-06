@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/norm.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 
 namespace xla {
@@ -23,9 +23,7 @@ namespace poplarplugin {
 HloGroupNormStatsInstruction::HloGroupNormStatsInstruction(
     const Shape& shape, HloInstruction* const operand, int32 num_groups,
     float epsilon, int feature_index)
-    : HloNormInstruction(shape, {operand},
-                         GetPoplibsCustomOpTargetString(
-                             PoplibsOp::Popnn, PoplibsOp::GroupNormStatistics),
+    : HloNormInstruction(shape, {operand}, PoplarOp::GroupNormStatistics,
                          num_groups, epsilon, feature_index) {}
 
 const HloInstruction* HloGroupNormStatsInstruction::operand() const {
@@ -84,9 +82,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGroupNormStatsFactoryFunc(
 }
 
 static HloPoplarInstructionFactory group_norm_stats_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popnn,
-                                   PoplibsOp::GroupNormStatistics),
-    HloGroupNormStatsFactoryFunc);
+    PoplarOp::GroupNormStatistics, HloGroupNormStatsFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

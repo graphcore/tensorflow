@@ -1119,7 +1119,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       if (!allow_communication_ops_) {
         return true;
       }
-      if (IsInstructionType<HloIpuInterCopy>(inst)) {
+      if (IsPoplarInstruction(PoplarOp::IpuInterCopy)(inst)) {
         // For an inter IPU copy we expect that the input is a chain like:
         // Stage -> GTE -> InterIPUCopy -> NextStage
         const HloInstruction* gte = inst->operand(0);
@@ -1168,8 +1168,8 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         // Verify the stage IDs match up. We expect the stages are continuous.
         for (const HloInstruction* user : inst->users()) {
           // Look through FIFOs when doing recomputation.
-          const bool look_through = allow_recomputation_ &&
-                                    IsInstructionType<HloFifoInstruction>(user);
+          const bool look_through =
+              allow_recomputation_ && IsPoplarInstruction(PoplarOp::Fifo)(user);
           if (look_through && user->user_count() != 1) {
             return FailedPrecondition(
                 "Expected the FIFO to have a single user.");
@@ -1188,7 +1188,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
           }
         }
         return false;
-      } else if (IsInstructionType<HloFifoInstruction>(inst)) {
+      } else if (IsPoplarInstruction(PoplarOp::Fifo)(inst)) {
         // We always expect FIFO input to be a GTE.
         const HloInstruction* fifo_input = inst->operand(0);
         // We always expect the FIFO to only have a single user.
@@ -1305,7 +1305,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         return !absl::c_all_of(user->users(), [&](const HloInstruction* u) {
           return IsAnyPipelineStageOp(u) ||
                  (allow_recomputation_ &&
-                  IsInstructionType<HloFifoInstruction>(u));
+                  IsPoplarInstruction(PoplarOp::Fifo)(u));
         });
       } else {
         return true;

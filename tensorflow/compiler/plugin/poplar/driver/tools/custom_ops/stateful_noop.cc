@@ -15,15 +15,14 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloStatefulNoop::HloStatefulNoop()
     : HloPoplarInstruction(ShapeUtil::MakeTupleShape({}), {},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Poputil, PoplibsOp::StatefulNoop)) {
+                           PoplarOp::StatefulNoop) {
   set_custom_call_has_side_effect(true);
 }
 

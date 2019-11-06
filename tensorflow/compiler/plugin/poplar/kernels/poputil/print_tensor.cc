@@ -52,10 +52,8 @@ class PoputilPrintTensorOp : public XlaOpKernel, IpuOpKernel {
     auto input = ctx->Input(0);
 
     xla::XlaOp output = xla::CustomCall(
-        b,
-        GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                       PoplibsOp::PrintTensor),
-        {input}, xla::ShapeUtil::MakeTokenShape(), attribute_map_.Serialise());
+        b, PoplarOp_Name(PoplarOp::PrintTensor), {input},
+        xla::ShapeUtil::MakeTokenShape(), attribute_map_.Serialise());
   }
 
  private:

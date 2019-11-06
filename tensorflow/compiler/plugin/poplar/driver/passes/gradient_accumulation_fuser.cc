@@ -40,8 +40,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternInputs({3}),
     PatternOutputs({0}),
     Pattern({
-      {HloOpcode::kCustomCall, NodeOperands({1}), IsInstructionType<HloStatefulGradientAccumulate>},
-      {HloOpcode::kCustomCall, NodeOperands({2}), IsInstructionType<HloReplicationNormaliseInstruction>},
+      {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)},
+      {HloOpcode::kCustomCall, NodeOperands({2}), IsPoplarInstruction(PoplarOp::ReplicationNormalise)},
       {HloOpcode::kAllReduce, NodeOperands({3}), IsSupportedAllReduce},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })
@@ -52,7 +52,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternInputs({2}),
     PatternOutputs({0}),
     Pattern({
-      {HloOpcode::kCustomCall, NodeOperands({1}), IsInstructionType<HloStatefulGradientAccumulate>},
+      {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)},
       {HloOpcode::kAllReduce, NodeOperands({2}), IsSupportedAllReduce},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })
@@ -64,7 +64,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAllReduce, NodeOperands({1}), IsSupportedAllReduce},
-      {HloOpcode::kCustomCall, NodeOperands({2}), IsInstructionType<HloStatefulGradientAccumulate>},
+      {HloOpcode::kCustomCall, NodeOperands({2}), IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })
   ),
@@ -119,7 +119,7 @@ bool GradientAccumulationFuser::HandleMatch(
     // operations because we know the normalization can be delayed after the
     // accumulation.
     auto normalization = output->mutable_operand(0);
-    CHECK(IsInstructionType<HloReplicationNormaliseInstruction>(normalization));
+    CHECK(IsPoplarInstruction(PoplarOp::ReplicationNormalise)(normalization));
     normalization->ReplaceOperandWith(0, new_output);
     new_output = normalization;
   }

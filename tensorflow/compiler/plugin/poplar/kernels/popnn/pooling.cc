@@ -110,8 +110,7 @@ xla::StatusOr<xla::Window> MakeWindow(const xla::Shape& input_shape,
 // Superclass of pooling ops.
 class PoolingOp : public XlaOpKernel, IpuOpKernel {
  public:
-  PoolingOp(OpKernelConstruction* ctx, int num_spatial_dims,
-            PoplibsOp::Op op_type)
+  PoolingOp(OpKernelConstruction* ctx, int num_spatial_dims, PoplarOp op_type)
       : XlaOpKernel(ctx),
         num_spatial_dims_(num_spatial_dims),
         op_type_(op_type) {
@@ -185,9 +184,8 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
     xla::XlaOp output;
     if (reduction_dims.size()) {
       std::vector<xla::XlaOp> args = {input};
-      output = xla::CustomCall(
-          &b, GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, op_type_), args,
-          output_shape, attribute_map_.Serialise());
+      output = xla::CustomCall(&b, PoplarOp_Name(op_type_), args, output_shape,
+                               attribute_map_.Serialise());
     } else {
       // This is a no-op when there are no reducing dimensions.
       output = input;
@@ -252,13 +250,13 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
   std::vector<int64> ksize_;
   std::vector<int64> stride_;
   xla::Padding padding_;
-  PoplibsOp::Op op_type_;
+  PoplarOp op_type_;
 };
 
 class MaxPoolOp : public PoolingOp {
  public:
   MaxPoolOp(OpKernelConstruction* ctx, int num_spatial_dims)
-      : PoolingOp(ctx, num_spatial_dims, PoplibsOp::MaxPool) {}
+      : PoolingOp(ctx, num_spatial_dims, PoplarOp::MaxPool) {}
 };
 
 class MaxPool2DOp : public MaxPoolOp {
@@ -283,7 +281,7 @@ REGISTER_XLA_OP(Name("MaxPool3D").Device(DEVICE_IPU_XLA_JIT), MaxPool3DOp);
 class AvgPoolOp : public PoolingOp {
  public:
   AvgPoolOp(OpKernelConstruction* ctx, int num_spatial_dims)
-      : PoolingOp(ctx, num_spatial_dims, PoplibsOp::AvgPool) {}
+      : PoolingOp(ctx, num_spatial_dims, PoplarOp::AvgPool) {}
 };
 
 class AvgPool2DOp : public AvgPoolOp {
@@ -390,10 +388,8 @@ class MaxPoolGradOp : public XlaOpKernel, IpuOpKernel {
     if (reduction_dims.size()) {
       std::vector<xla::XlaOp> args = {input, out, output_backprop};
       input_backprop =
-          xla::CustomCall(&b,
-                          GetPoplibsCustomOpTargetString(
-                              PoplibsOp::Popnn, PoplibsOp::MaxPoolGrad),
-                          args, input_shape, attribute_map_.Serialise());
+          xla::CustomCall(&b, PoplarOp_Name(PoplarOp::MaxPoolGrad), args,
+                          input_shape, attribute_map_.Serialise());
     } else {
       // The gradient is all 1s when we don't reduce, therefore the rule gives
       // input_backprop = output_backprop.
@@ -497,10 +493,8 @@ class AvgPoolGradOp : public XlaOpKernel, IpuOpKernel {
     if (reduction_dims.size()) {
       std::vector<xla::XlaOp> args = {output_backprop};
       input_backprop =
-          xla::CustomCall(&b,
-                          GetPoplibsCustomOpTargetString(
-                              PoplibsOp::Popnn, PoplibsOp::AvgPoolGrad),
-                          args, input_shape, attribute_map_.Serialise());
+          xla::CustomCall(&b, PoplarOp_Name(PoplarOp::AvgPoolGrad), args,
+                          input_shape, attribute_map_.Serialise());
     } else {
       // The gradient is all 1s when we don't reduce, therefore the rule gives
       // input_backprop = output_backprop.

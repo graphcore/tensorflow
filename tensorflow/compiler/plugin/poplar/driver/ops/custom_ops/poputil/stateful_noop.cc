@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -31,7 +31,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class StatefulNoopOp : public PoplibsOpDef {
+class StatefulNoopOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph&, CompilerResources&,
                                              const HloInstruction*,
                                              const xla::Shape&,
@@ -40,7 +40,7 @@ class StatefulNoopOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poputil, StatefulNoop, StatefulNoopOp);
+REGISTER_POPLAR_OP(StatefulNoop, StatefulNoopOp);
 
 }  // namespace
 }  // namespace poplarplugin

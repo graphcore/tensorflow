@@ -15,16 +15,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloFifoInstruction::HloFifoInstruction(HloInstruction* operand, int64 depth)
-    : HloPoplarInstruction(
-          operand->shape(), {operand},
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::Fifo),
-          depth),
+    : HloPoplarInstruction(operand->shape(), {operand}, PoplarOp::Fifo, depth),
       depth_(depth) {
   set_custom_call_has_side_effect(true);
 }
@@ -74,9 +71,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloFifoInstructionFactoryFunc(
   return CreateFifo(call->mutable_operand(0), depth);
 }
 
-static HloPoplarInstructionFactory fifo_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil, PoplibsOp::Fifo),
-    HloFifoInstructionFactoryFunc);
+static HloPoplarInstructionFactory fifo_factory(PoplarOp::Fifo,
+                                                HloFifoInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

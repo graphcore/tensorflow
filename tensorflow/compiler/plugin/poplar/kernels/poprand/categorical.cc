@@ -147,10 +147,8 @@ class IpuStatelessCategoricalOp : public IpuCategoricalOp {
     xla::poplarplugin::IPUCustomKernelsUtil::AttributeMap attribute_map;
 
     xla::XlaOp output = xla::CustomCall(
-        ctx->builder(),
-        xla::poplarplugin::GetPoplibsCustomOpTargetString(
-            PoplibsOp::Poprand, PoplibsOp::StatelessRandomUniform),
-        {seed}, uniform_shape, attribute_map.Serialise());
+        ctx->builder(), PoplarOp_Name(PoplarOp::StatelessRandomUniform), {seed},
+        uniform_shape, attribute_map.Serialise());
 
     // We want a number in (0, 1) rather than [0, 1) or (0, 1]:
     // * log(-log(0)) is ∞.

@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -43,7 +44,7 @@ add {
 
 entry  {
   %arg0 = f16[4] parameter(0)
-  %ga = f16[4] custom-call(arg0), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga = f16[4] custom-call(arg0), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   ROOT %a1 = f16[4] all-reduce(ga), to_apply=add
 }
   )";
@@ -78,7 +79,7 @@ add {
 entry  {
   %arg0 = f16[4] parameter(0)
   %a1 = f16[4] all-reduce(arg0), to_apply=add
-  ROOT %ga = f16[4] custom-call(a1), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":10}\n"
+  ROOT %ga = f16[4] custom-call(a1), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":10}\n"
 }
   )";
 
@@ -112,8 +113,8 @@ add {
 entry  {
   %arg0 = f16[4] parameter(0)
   %a1 = f16[4] all-reduce(arg0), to_apply=add
-  %norm = f16[4] custom-call(a1), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
-  ROOT %ga = f16[4] custom-call(norm), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":10}\n"
+  %norm = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
+  ROOT %ga = f16[4] custom-call(norm), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":10}\n"
 }
   )";
 
@@ -149,7 +150,7 @@ divide {
 
 entry  {
   %arg0 = f16[4] parameter(0)
-  %ga = f16[4] custom-call(arg0), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
+  %ga = f16[4] custom-call(arg0), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
   ROOT %a1 = f16[4] all-reduce(ga), to_apply=divide
 }
   )";
@@ -180,8 +181,8 @@ add {
 entry  {
   %arg0 = f16[4] parameter(0)
   %a1 = f16[4] all-reduce(arg0), to_apply=add
-  %norm = f16[4] custom-call(a1), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
-  %ga = f16[4] custom-call(norm), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":10}\n"
+  %norm = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
+  %ga = f16[4] custom-call(norm), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":10}\n"
   ROOT %tuple = (f16[4], f16[4]) tuple(ga, norm)
 }
   )";
@@ -212,8 +213,8 @@ add {
 entry  {
   %arg0 = f16[4] parameter(0)
   %a1 = f16[4] all-reduce(arg0), to_apply=add
-  %norm = f16[4] custom-call(a1), custom_call_target="Poputil::ReplicationNormalise", backend_config="{}\n"
-  %ga = f16[4] custom-call(norm), custom_call_target="Poputil::StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":10}\n"
+  %norm = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
+  %ga = f16[4] custom-call(norm), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":10}\n"
   ROOT %tuple = (f16[4], f16[4]) tuple(ga, a1)
 }
   )";

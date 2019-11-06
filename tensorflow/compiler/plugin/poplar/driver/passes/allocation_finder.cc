@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -89,10 +90,11 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
   }
 
   Status HandleCustomCall(HloInstruction* inst) override {
-    HloCustomCallInstruction* remap = DynCast<HloCustomCallInstruction>(inst);
+    const bool is_remap_deduce =
+        IsPoplarInstruction(PoplarOp::RemapDeduce)(inst);
 
-    if (remap != nullptr) {
-      auto shapes = FlattenedXlaShape(remap->shape());
+    if (is_remap_deduce) {
+      auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocating_instructions.push_back(std::make_pair(inst, i));
       }

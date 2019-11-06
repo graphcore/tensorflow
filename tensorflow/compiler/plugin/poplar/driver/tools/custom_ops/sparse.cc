@@ -14,17 +14,14 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/sparse.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloSelectScalarFromRowsInstruction::HloSelectScalarFromRowsInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
-    : HloPoplarInstruction(
-          shape, operands,
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                         PoplibsOp::SelectScalarFromRows)) {}
+    : HloPoplarInstruction(shape, operands, PoplarOp::SelectScalarFromRows) {}
 
 absl::flat_hash_set<int64>
 HloSelectScalarFromRowsInstruction::AllocatingIndices() const {
@@ -65,10 +62,7 @@ std::unique_ptr<HloInstruction> CreateSelectScalarFromRows(
 
 HloUpdateScalarInRowsInstruction::HloUpdateScalarInRowsInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
-    : HloPoplarInstruction(
-          shape, operands,
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                         PoplibsOp::UpdateScalarInRows)) {}
+    : HloPoplarInstruction(shape, operands, PoplarOp::UpdateScalarInRows) {}
 
 absl::flat_hash_set<int64> HloUpdateScalarInRowsInstruction::AllocatingIndices()
     const {
@@ -115,8 +109,7 @@ HloSelectScalarFromRowsInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory select_scalar_from_rows_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                   PoplibsOp::SelectScalarFromRows),
+    PoplarOp::SelectScalarFromRows,
     HloSelectScalarFromRowsInstructionFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>>
@@ -126,9 +119,7 @@ HloUpdateScalarInRowsInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory update_scalar_in_rows_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                   PoplibsOp::UpdateScalarInRows),
-    HloUpdateScalarInRowsInstructionFactoryFunc);
+    PoplarOp::UpdateScalarInRows, HloUpdateScalarInRowsInstructionFactoryFunc);
 
 }  // namespace
 

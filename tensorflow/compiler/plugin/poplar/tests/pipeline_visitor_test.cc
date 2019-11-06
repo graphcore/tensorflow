@@ -107,7 +107,7 @@ _stage_0 {
   temp_0 = f32[] constant(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}", sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
 }
@@ -116,7 +116,7 @@ _stage_1 {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}", sharding={maximal device=1}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=1}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
 }
@@ -125,7 +125,7 @@ _stage_1_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(2), sharding={maximal device=1}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}", sharding={maximal device=1}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=1}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
 }
@@ -134,7 +134,7 @@ _stage_0_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}", sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   result = f32[] constant(4), sharding={maximal device=0}
   ROOT t = (f32[]) tuple(result), sharding={{maximal device=0}}
 }
@@ -266,7 +266,7 @@ _stage_0_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
@@ -388,7 +388,7 @@ _stage_0_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   param_1 = f32[] parameter(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, param_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
@@ -398,7 +398,7 @@ ENTRY pipeline {
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[] custom-call(gte_a), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
+  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
   b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -516,7 +516,7 @@ _stage_0_bw {
   add_1 = f32[2] get-tuple-element(fifo_tuple), index=2, sharding={maximal device=0}
 
   add_0 = f32[2] add(param, add_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
@@ -526,7 +526,7 @@ ENTRY pipeline {
 
   a0 = ((f32[2], f32[4], f32[2], f32[2])) call(arg), to_apply=_stage_0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = (f32[2], f32[4], f32[2], f32[2]) get-tuple-element(a0), index=0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"isInplace\":true}"
-  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(gte_a), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
+  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
   b0 = (f32[2]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[2] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -651,7 +651,7 @@ ENTRY pipeline {
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}
-  a1 = f32[] custom-call(gte_a), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
+  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
   b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -806,10 +806,10 @@ ENTRY pipeline {
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[] custom-call(gte_a), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":2}", sharding={maximal device=0}
+  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":2}", sharding={maximal device=0}
   b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  b1 = f32[] custom-call(gte_b), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":2}", sharding={maximal device=1}
+  b1 = f32[] custom-call(gte_b), custom_call_target="Fifo", backend_config="{\"depth\":2}", sharding={maximal device=1}
   c0 = (f32[]) call(gte_b), to_apply=_stage_2, sharding={{maximal device=2}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
   gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=2}, backend_config="{\"isInplace\":true}"
   d0 = (f32[]) call(gte_c), to_apply=_stage_2_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
@@ -941,7 +941,7 @@ _stage_0 {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   temp_0 = f32[] constant(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=0}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
@@ -950,7 +950,7 @@ _stage_0 {
 _stage_1 {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=1}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
@@ -959,7 +959,7 @@ _stage_1 {
 _stage_2 {
   param_0 = f32[] parameter(0), sharding={maximal device=2}
   const_1 = f32[] constant(1), sharding={maximal device=2}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=2}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=2}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=2}}
@@ -968,7 +968,7 @@ _stage_2 {
 _stage_2_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=1}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
@@ -977,7 +977,7 @@ _stage_2_bw {
 _stage_1_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=0}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
@@ -986,7 +986,7 @@ _stage_1_bw {
 _stage_0_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=1}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
   ROOT t = (f32[]) tuple(add_0), sharding={{maximal device=1}}
@@ -1165,7 +1165,7 @@ _stage_0_bw {
   param = f32[2] parameter(0), sharding={maximal device=0}
   param1 = f32[2] parameter(1), sharding={maximal device=0}
   add_0 = f32[2] add(param, param1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="Poputil::PrintTensor", backend_config="{}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}
   ", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
@@ -1175,7 +1175,7 @@ ENTRY pipeline {
 
   a0 = (f32[2]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[2] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[2] custom-call(gte_a), custom_call_target="Poputil::Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
+  a1 = f32[2] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
   b0 = (f32[2]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[2] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -1281,7 +1281,7 @@ _stage_1 {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   param_1 = f32[] parameter(1), sharding={maximal device=1}
   add = f32[] add(param_0, param_1), sharding={maximal device=1}
-  token_f = token[] custom-call(add), custom_call_target="Poputil::PrintTensor", backend_config="{}", sharding={maximal device=0}
+  token_f = token[] custom-call(add), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={maximal device=1}
 }
 

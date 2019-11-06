@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/custom_ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -40,24 +40,24 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-StatusOr<poplar::Tensor> AllocatePoplibsOpTensor(
+StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& name,
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map) {
   const HloInstruction* inst = tensor_target.tgt;
   auto custom_call = Cast<HloCustomCallInstruction>(inst);
-  TF_ASSIGN_OR_RETURN(auto op_def, PoplibsOpManager::GetOp(custom_call));
+  TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(custom_call));
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor out,
       op_def->Allocator(graph, res, name, tensor_target, tensor_map));
   return out;
 }
 
-StatusOr<poplar::program::Program> CreatePoplibsOp(
+StatusOr<poplar::program::Program> CreatePoplarOp(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {
   auto custom_call = Cast<HloCustomCallInstruction>(inst);
-  TF_ASSIGN_OR_RETURN(auto op_def, PoplibsOpManager::GetOp(custom_call));
+  TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(custom_call));
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
       op_def->Creator(graph, res, inst, output_shape, tensor_map));

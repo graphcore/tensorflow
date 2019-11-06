@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateless_random.h"
@@ -33,7 +33,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class TruncatedNormalOp : public PoplibsOpDef {
+class TruncatedNormalOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -42,9 +42,9 @@ class TruncatedNormalOp : public PoplibsOpDef {
     return TruncatedNormal(res, inst, output_shape, tensor_map);
   }
 };
-REGISTER_POPLIBS_OP(Poprand, TruncatedNormal, TruncatedNormalOp);
+REGISTER_POPLAR_OP(TruncatedNormal, TruncatedNormalOp);
 
-class StatelessRandomUniformOp : public PoplibsOpDef {
+class StatelessRandomUniformOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -82,9 +82,9 @@ class StatelessRandomUniformOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poprand, StatelessRandomUniform, StatelessRandomUniformOp);
+REGISTER_POPLAR_OP(StatelessRandomUniform, StatelessRandomUniformOp);
 
-class StatelessRandomUniformIntOp : public PoplibsOpDef {
+class StatelessRandomUniformIntOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -133,10 +133,9 @@ class StatelessRandomUniformIntOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poprand, StatelessRandomUniformInt,
-                    StatelessRandomUniformIntOp);
+REGISTER_POPLAR_OP(StatelessRandomUniformInt, StatelessRandomUniformIntOp);
 
-class StatelessRandomNormalOp : public PoplibsOpDef {
+class StatelessRandomNormalOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -175,9 +174,9 @@ class StatelessRandomNormalOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poprand, StatelessRandomNormal, StatelessRandomNormalOp);
+REGISTER_POPLAR_OP(StatelessRandomNormal, StatelessRandomNormalOp);
 
-class StatelessTruncatedNormalOp : public PoplibsOpDef {
+class StatelessTruncatedNormalOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -216,8 +215,7 @@ class StatelessTruncatedNormalOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poprand, StatelessTruncatedNormal,
-                    StatelessTruncatedNormalOp);
+REGISTER_POPLAR_OP(StatelessTruncatedNormal, StatelessTruncatedNormalOp);
 
 }  // namespace
 }  // namespace poplarplugin

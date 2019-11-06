@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/onehot.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -32,7 +32,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class OneHotOp : public PoplibsOpDef {
+class OneHotOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -50,8 +50,7 @@ class OneHotOp : public PoplibsOpDef {
 
     ArgVector off = FindInstructionInputs(tensor_map, res, inst, 2, seq, false);
 
-    const poplarplugin::HloOneHotInstruction* one_hot_op =
-        dynamic_cast<const HloOneHotInstruction*>(inst);
+    const HloOneHotInstruction* one_hot_op = Cast<HloOneHotInstruction>(inst);
     if (!one_hot_op) {
       return xla::FailedPrecondition(
           "Expected HLO instruction to be HloOneHotInstruction!");
@@ -93,7 +92,7 @@ class OneHotOp : public PoplibsOpDef {
   }
 };
 
-REGISTER_POPLIBS_OP(Popnn, OneHot, OneHotOp);
+REGISTER_POPLAR_OP(OneHot, OneHotOp);
 
 }  // namespace
 }  // namespace poplarplugin

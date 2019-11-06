@@ -15,15 +15,14 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateless_random.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
 HloStatelessRandom::HloStatelessRandom(
-    const Shape& shape, absl::Span<HloInstruction* const> operands,
-    const std::string& op_string)
-    : HloPoplarInstruction(shape, operands, op_string) {
+    const Shape& shape, absl::Span<HloInstruction* const> operands, PoplarOp op)
+    : HloPoplarInstruction(shape, operands, op) {
   set_custom_call_has_side_effect(true);
 }
 
@@ -34,38 +33,25 @@ std::vector<std::string> HloStatelessRandom::ExtraPoplarAttributesToStringImpl(
 
 HloStatelessRandomUniform::HloStatelessRandomUniform(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
-    : HloStatelessRandom(
-          shape, operands,
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                         PoplibsOp::StatelessRandomUniform)) {}
+    : HloStatelessRandom(shape, operands, PoplarOp::StatelessRandomUniform) {}
 
 HloStatelessRandomUniformInt::HloStatelessRandomUniformInt(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
-    : HloStatelessRandom(
-          shape, operands,
-          GetPoplibsCustomOpTargetString(
-              PoplibsOp::Poprand, PoplibsOp::StatelessRandomUniformInt)) {}
+    : HloStatelessRandom(shape, operands, PoplarOp::StatelessRandomUniformInt) {
+}
 
 HloStatelessRandomNormal::HloStatelessRandomNormal(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
-    : HloStatelessRandom(
-          shape, operands,
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                         PoplibsOp::StatelessRandomNormal)) {}
+    : HloStatelessRandom(shape, operands, PoplarOp::StatelessRandomNormal) {}
 
 HloStatelessTruncatedNormal::HloStatelessTruncatedNormal(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
-    : HloStatelessRandom(
-          shape, operands,
-          GetPoplibsCustomOpTargetString(
-              PoplibsOp::Poprand, PoplibsOp::StatelessTruncatedNormal)) {}
+    : HloStatelessRandom(shape, operands, PoplarOp::StatelessTruncatedNormal) {}
 
 namespace {
 
 static HloPoplarInstructionFactory stateless_random_uniform_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                   PoplibsOp::StatelessRandomUniform),
-    [](HloCustomCallInstruction* call) {
+    PoplarOp::StatelessRandomUniform, [](HloCustomCallInstruction* call) {
       std::unique_ptr<HloInstruction> inst =
           absl::make_unique<HloStatelessRandomUniform>(call->shape(),
                                                        call->operands());
@@ -73,9 +59,7 @@ static HloPoplarInstructionFactory stateless_random_uniform_factory(
     });
 
 static HloPoplarInstructionFactory stateless_random_uniform_int_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                   PoplibsOp::StatelessRandomUniformInt),
-    [](HloCustomCallInstruction* call) {
+    PoplarOp::StatelessRandomUniformInt, [](HloCustomCallInstruction* call) {
       std::unique_ptr<HloInstruction> inst =
           absl::make_unique<HloStatelessRandomUniformInt>(call->shape(),
                                                           call->operands());
@@ -83,9 +67,7 @@ static HloPoplarInstructionFactory stateless_random_uniform_int_factory(
     });
 
 static HloPoplarInstructionFactory stateless_random_normal_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                   PoplibsOp::StatelessRandomNormal),
-    [](HloCustomCallInstruction* call) {
+    PoplarOp::StatelessRandomNormal, [](HloCustomCallInstruction* call) {
       std::unique_ptr<HloInstruction> inst =
           absl::make_unique<HloStatelessRandomNormal>(call->shape(),
                                                       call->operands());
@@ -93,9 +75,7 @@ static HloPoplarInstructionFactory stateless_random_normal_factory(
     });
 
 static HloPoplarInstructionFactory stateless_truncated_normal_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                   PoplibsOp::StatelessTruncatedNormal),
-    [](HloCustomCallInstruction* call) {
+    PoplarOp::StatelessTruncatedNormal, [](HloCustomCallInstruction* call) {
       std::unique_ptr<HloInstruction> inst =
           absl::make_unique<HloStatelessTruncatedNormal>(call->shape(),
                                                          call->operands());

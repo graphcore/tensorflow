@@ -1408,7 +1408,7 @@ ENTRY cluster {
   fusion.6 = f32[1024,1024] fusion(arg3.4, convert.102), kind=kCustom, calls=_pop_op_scaled_inplace.4, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
   transpose.98 = f16[1024,1024] transpose(convert.12), dimensions={1,0}, backend_config="{\"isInplace\":true}"
   dot.99 = f16[1024,3000] dot(transpose.98, subtract.81), lhs_contracting_dims={1}, rhs_contracting_dims={0}
-  custom-call = f16[1024,3000] custom-call(tanh.20, dot.99), custom_call_target="Popnn::TanhGrad"
+  custom-call = f16[1024,3000] custom-call(tanh.20, dot.99), custom_call_target="TanhGrad"
   reduce.117.clone = f16[3000] reduce(custom-call, constant.8), dimensions={0}, to_apply=add_float_.60
   convert.121 = f32[3000] convert(reduce.117.clone)
   fusion.5 = f32[3000] fusion(arg4.5, convert.121), kind=kCustom, calls=_pop_op_scaled_inplace.3, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
@@ -1416,7 +1416,7 @@ ENTRY cluster {
   dot.133 = f16[128,3000] dot(transpose.132, custom-call), lhs_contracting_dims={1}, rhs_contracting_dims={0}
   convert.136 = f32[128,3000] convert(dot.133)
   fusion.4 = f32[128,3000] fusion(arg5.6, convert.136), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
-  custom-call.1 = f16[1024,3000] custom-call(tanh.25, subtract.81), custom_call_target="Popnn::TanhGrad"
+  custom-call.1 = f16[1024,3000] custom-call(tanh.25, subtract.81), custom_call_target="TanhGrad"
   reduce.153.clone = f16[3000] reduce(custom-call.1, constant.8), dimensions={0}, to_apply=add_float_.60
   convert.157 = f32[3000] convert(reduce.153.clone)
   fusion.3 = f32[3000] fusion(arg6.7, convert.157), kind=kCustom, calls=_pop_op_scaled_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
@@ -1552,21 +1552,21 @@ ENTRY cluster {
   arg3.4 = f16[32] parameter(3), parameter_replication={false}, control-predecessors={dot}
   add = f16[32] add(dot, arg3.4), backend_config="{\"isInplace\":true}"
   reshape.32 = f16[1,32] reshape(add), backend_config="{\"isInplace\":true}"
-  custom-call = f16[1,32] custom-call(reshape.32), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call = f16[1,32] custom-call(reshape.32), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   reshape.3 = f16[32] reshape(custom-call), backend_config="{\"isInplace\":true}"
   arg4.5 = f16[32,64] parameter(4), parameter_replication={false}
   dot.1 = f16[64] dot(reshape.3, arg4.5), lhs_contracting_dims={0}, rhs_contracting_dims={0}
   arg5.6 = f16[64] parameter(5), parameter_replication={false}, control-predecessors={dot.1}
   add.1 = f16[64] add(dot.1, arg5.6), backend_config="{\"isInplace\":true}"
   reshape.33 = f16[1,64] reshape(add.1), backend_config="{\"isInplace\":true}"
-  custom-call.1 = f16[1,64] custom-call(reshape.33), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call.1 = f16[1,64] custom-call(reshape.33), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   reshape.6 = f16[64] reshape(custom-call.1), backend_config="{\"isInplace\":true}"
   arg6.7 = f16[64,64] parameter(6), parameter_replication={false}
   dot.2 = f16[64] dot(reshape.6, arg6.7), lhs_contracting_dims={0}, rhs_contracting_dims={0}
   arg7.8 = f16[64] parameter(7), parameter_replication={false}, control-predecessors={dot.2}
   add.2 = f16[64] add(dot.2, arg7.8), backend_config="{\"isInplace\":true}"
   reshape.34 = f16[1,64] reshape(add.2), backend_config="{\"isInplace\":true}"
-  custom-call.2 = f16[1,64] custom-call(reshape.34), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call.2 = f16[1,64] custom-call(reshape.34), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   constant.3 = f16[] constant(-inf)
   reduce.30 = f16[1] reduce(custom-call.2, constant.3), dimensions={1}, to_apply=max_half_.26
   fusion.3 = f16[1,64] fusion(custom-call.2, reduce.30), kind=kCustom, calls=_pop_op_implicit_binary_inplace, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
@@ -1576,17 +1576,17 @@ ENTRY cluster {
   fusion.7 = f16[1,64] fusion(exponential.33, reduce.40.clone), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
   arg1.2 = f16[1,64] parameter(1), parameter_replication={false}
   subtract.57 = f16[1,64] subtract(fusion.7, arg1.2), backend_config="{\"isInplace\":true}"
-  custom-call.3 = f16[1,64] custom-call(custom-call.2, subtract.57), custom_call_target="Popnn::ReluGrad"
+  custom-call.3 = f16[1,64] custom-call(custom-call.2, subtract.57), custom_call_target="ReluGrad"
   reshape.11 = f16[64] reshape(custom-call.3), backend_config="{\"isInplace\":true}"
   transpose.79 = f16[64,64] transpose(arg6.7), dimensions={1,0}, backend_config="{\"isInplace\":true}"
   dot.3 = f16[64] dot(reshape.11, transpose.79), lhs_contracting_dims={0}, rhs_contracting_dims={0}
   reshape.12 = f16[1,64] reshape(dot.3), backend_config="{\"isInplace\":true}"
-  custom-call.4 = f16[1,64] custom-call(custom-call.1, reshape.12), custom_call_target="Popnn::ReluGrad"
+  custom-call.4 = f16[1,64] custom-call(custom-call.1, reshape.12), custom_call_target="ReluGrad"
   reshape.13 = f16[64] reshape(custom-call.4), backend_config="{\"isInplace\":true}"
   transpose.108 = f16[64,32] transpose(arg4.5), dimensions={1,0}, backend_config="{\"isInplace\":true}"
   dot.4 = f16[32] dot(reshape.13, transpose.108), lhs_contracting_dims={0}, rhs_contracting_dims={0}
   reshape.14 = f16[1,32] reshape(dot.4), backend_config="{\"isInplace\":true}"
-  custom-call.5 = f16[1,32] custom-call(custom-call, reshape.14), custom_call_target="Popnn::ReluGrad"
+  custom-call.5 = f16[1,32] custom-call(custom-call, reshape.14), custom_call_target="ReluGrad"
   reshape.17 = f16[32] reshape(custom-call.5), backend_config="{\"isInplace\":true}"
   dot.5 = f16[50176,32] dot(reshape, reshape.17), lhs_contracting_dims={}, rhs_contracting_dims={}
   fusion.2 = f16[50176,32] fusion(arg2.3, dot.5), kind=kCustom, calls=_pop_op_scaled_inplace.2, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
@@ -1713,19 +1713,19 @@ ENTRY cluster {
   arg2.3 = f32[4] parameter(2), parameter_replication={false}, control-predecessors={dot}
   add = f32[4] add(dot, arg2.3), backend_config="{\"isInplace\":true}"
   reshape.31 = f32[1,4] reshape(add), backend_config="{\"isInplace\":true}"
-  custom-call = f32[1,4] custom-call(reshape.31), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call = f32[1,4] custom-call(reshape.31), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   reshape.3 = f32[4] reshape(custom-call), backend_config="{\"isInplace\":true}"
   dot.1 = f32[4] dot(reshape.3, arg5.6), lhs_contracting_dims={0}, rhs_contracting_dims={0}
   arg3.4 = f32[4] parameter(3), parameter_replication={false}, control-predecessors={dot.1}
   add.1 = f32[4] add(dot.1, arg3.4), backend_config="{\"isInplace\":true}"
   reshape.32 = f32[1,4] reshape(add.1), backend_config="{\"isInplace\":true}"
-  custom-call.1 = f32[1,4] custom-call(reshape.32), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call.1 = f32[1,4] custom-call(reshape.32), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   reshape.6 = f32[4] reshape(custom-call.1), backend_config="{\"isInplace\":true}"
   dot.2 = f32[4] dot(reshape.6, arg5.6), lhs_contracting_dims={0}, rhs_contracting_dims={0}
   arg4.5 = f32[4] parameter(4), parameter_replication={false}, control-predecessors={dot.2}
   add.2 = f32[4] add(dot.2, arg4.5), backend_config="{\"isInplace\":true}"
   reshape.33 = f32[1,4] reshape(add.2), backend_config="{\"isInplace\":true}"
-  custom-call.2 = f32[1,4] custom-call(reshape.33), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call.2 = f32[1,4] custom-call(reshape.33), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   constant.44 = f32[] constant(-inf)
   reduce.49 = f32[1] reduce(custom-call.2, constant.44), dimensions={1}, to_apply=max_float_.45
   fusion.2 = f32[1,4] fusion(custom-call.2, reduce.49), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]}}"
@@ -1736,16 +1736,16 @@ ENTRY cluster {
   arg1.2 = f32[4] parameter(1), parameter_replication={false}
   reshape.9 = f32[1,4] reshape(arg1.2), inferred_dimension=0, backend_config="{\"isInplace\":true}"
   subtract.76 = f32[1,4] subtract(fusion.1, reshape.9), backend_config="{\"isInplace\":true}"
-  custom-call.3 = f32[1,4] custom-call(custom-call.2, subtract.76), custom_call_target="Popnn::ReluGrad"
+  custom-call.3 = f32[1,4] custom-call(custom-call.2, subtract.76), custom_call_target="ReluGrad"
   reshape.12 = f32[4] reshape(custom-call.3), backend_config="{\"isInplace\":true}"
   transpose.102 = f32[4,4] transpose(arg5.6), dimensions={1,0}, backend_config="{\"isInplace\":true}"
   dot.3 = f32[4] dot(reshape.12, transpose.102), lhs_contracting_dims={0}, rhs_contracting_dims={0}
   reshape.13 = f32[1,4] reshape(dot.3), backend_config="{\"isInplace\":true}"
-  custom-call.4 = f32[1,4] custom-call(custom-call.1, reshape.13), custom_call_target="Popnn::ReluGrad"
+  custom-call.4 = f32[1,4] custom-call(custom-call.1, reshape.13), custom_call_target="ReluGrad"
   reshape.14 = f32[4] reshape(custom-call.4), backend_config="{\"isInplace\":true}"
   dot.4 = f32[4] dot(reshape.14, transpose.102), lhs_contracting_dims={0}, rhs_contracting_dims={0}
   reshape.15 = f32[1,4] reshape(dot.4), backend_config="{\"isInplace\":true}"
-  custom-call.5 = f32[1,4] custom-call(custom-call, reshape.15), custom_call_target="Popnn::ReluGrad"
+  custom-call.5 = f32[1,4] custom-call(custom-call, reshape.15), custom_call_target="ReluGrad"
   reshape.27 = f32[4] reshape(custom-call.5), backend_config="{\"isInplace\":true}"
   dot.7 = f32[4,4] dot(reshape, reshape.27), lhs_contracting_dims={}, rhs_contracting_dims={}
   fusion.5 = f32[1,4] fusion(custom-call.5), kind=kCustom, calls=_pop_op_implicit_binary_inplace.4, control-predecessors={reshape.27, dot.7}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
@@ -1890,19 +1890,19 @@ ENTRY cluster {
   arg2.3 = f32[4] parameter(2), parameter_replication={false}, control-predecessors={dot}, backend_config="{}"
   add = f32[4] add(dot, arg2.3), backend_config="{\"isInplace\":true}"
   reshape.25 = f32[1,4] reshape(add), backend_config="{\"isInplace\":true}"
-  custom-call = f32[1,4] custom-call(reshape.25), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call = f32[1,4] custom-call(reshape.25), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   arg7.8 = f32[4,4] parameter(7), parameter_replication={false}, backend_config="{}"
   dot.1 = f32[4] dot(reshape, arg7.8), lhs_contracting_dims={0}, rhs_contracting_dims={0}, backend_config="{}"
   arg4.5 = f32[4] parameter(4), parameter_replication={false}, control-predecessors={dot.1}, backend_config="{}"
   add.2 = f32[4] add(dot.1, arg4.5), backend_config="{\"isInplace\":true}"
   reshape.28 = f32[1,4] reshape(add.2), backend_config="{\"isInplace\":true}"
-  custom-call.2 = f32[1,4] custom-call(reshape.28), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call.2 = f32[1,4] custom-call(reshape.28), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   arg6.7 = f32[4,4] parameter(6), parameter_replication={false}, backend_config="{}"
   dot.2 = f32[4] dot(reshape, arg6.7), lhs_contracting_dims={0}, rhs_contracting_dims={0}, backend_config="{}"
   arg3.4 = f32[4] parameter(3), parameter_replication={false}, control-predecessors={dot.2}, backend_config="{}"
   add.1 = f32[4] add(dot.2, arg3.4), backend_config="{\"isInplace\":true}"
   reshape.27 = f32[1,4] reshape(add.1), backend_config="{\"isInplace\":true}"
-  custom-call.1 = f32[1,4] custom-call(reshape.27), custom_call_target="Popnn::Relu", backend_config="{\"isInplace\":true}"
+  custom-call.1 = f32[1,4] custom-call(reshape.27), custom_call_target="Relu", backend_config="{\"isInplace\":true}"
   add.20 = f32[1,4] add(custom-call, custom-call.1), backend_config="{}"
   add.25 = f32[1,4] add(custom-call.2, add.20), backend_config="{}"
   constant.49 = f32[] constant(-inf), backend_config="{}"
@@ -1915,19 +1915,19 @@ ENTRY cluster {
   arg1.2 = f32[4] parameter(1), parameter_replication={false}, backend_config="{}"
   reshape.11 = f32[1,4] reshape(arg1.2), inferred_dimension=0, backend_config="{\"isInplace\":true}"
   subtract.81 = f32[1,4] subtract(fusion.7, reshape.11), backend_config="{\"isInplace\":true}"
-  custom-call.4 = f32[1,4] custom-call(custom-call, subtract.81), custom_call_target="Popnn::ReluGrad", backend_config="{}"
+  custom-call.4 = f32[1,4] custom-call(custom-call, subtract.81), custom_call_target="ReluGrad", backend_config="{}"
   reshape.17 = f32[4] reshape(custom-call.4), backend_config="{\"isInplace\":true}"
   dot.3 = f32[4,4] dot(reshape, reshape.17), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{}"
   fusion.4 = f32[1,4] fusion(custom-call.4), kind=kCustom, calls=_pop_op_implicit_binary_inplace.1, control-predecessors={reshape.17, dot.3}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
   reshape.30 = f32[4] reshape(fusion.4), backend_config="{\"isInplace\":true}"
   subtract.128 = f32[4] subtract(arg2.3, reshape.30), backend_config="{\"isInplace\":true}"
-  custom-call.3 = f32[1,4] custom-call(custom-call.1, subtract.81), custom_call_target="Popnn::ReluGrad", backend_config="{}"
+  custom-call.3 = f32[1,4] custom-call(custom-call.1, subtract.81), custom_call_target="ReluGrad", backend_config="{}"
   reshape.19 = f32[4] reshape(custom-call.3), backend_config="{\"isInplace\":true}"
   dot.4 = f32[4,4] dot(reshape, reshape.19), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{}"
   fusion.5 = f32[1,4] fusion(custom-call.3), kind=kCustom, calls=_pop_op_implicit_binary_inplace.2, control-predecessors={reshape.19, dot.4}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"
   reshape.29 = f32[4] reshape(fusion.5), backend_config="{\"isInplace\":true}"
   subtract.98 = f32[4] subtract(arg3.4, reshape.29), backend_config="{\"isInplace\":true}"
-  custom-call.5 = f32[1,4] custom-call(custom-call.2, subtract.81), custom_call_target="Popnn::ReluGrad", backend_config="{}"
+  custom-call.5 = f32[1,4] custom-call(custom-call.2, subtract.81), custom_call_target="ReluGrad", backend_config="{}"
   reshape.21 = f32[4] reshape(custom-call.5), backend_config="{\"isInplace\":true}"
   dot.5 = f32[4,4] dot(reshape, reshape.21), lhs_contracting_dims={}, rhs_contracting_dims={}, backend_config="{}"
   fusion.6 = f32[1,4] fusion(custom-call.5), kind=kCustom, calls=_pop_op_implicit_binary_inplace.3, control-predecessors={reshape.21, dot.5}, backend_config="{\"fusionConfig\":{\"inplaceOperands\":[\"0\"]},\"isInplace\":true}"

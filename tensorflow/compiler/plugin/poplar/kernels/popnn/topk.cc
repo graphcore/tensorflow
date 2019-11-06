@@ -122,10 +122,9 @@ class TopKOp : public XlaOpKernel, IpuOpKernel {
     if (is_just_sort) {
       output_tuple = xla::TopK(input, num_k);
     } else {
-      output_tuple = xla::CustomCall(
-          builder,
-          GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::TopK),
-          {input}, output_tuple_shape, attribute_map_.Serialise());
+      output_tuple =
+          xla::CustomCall(builder, PoplarOp_Name(PoplarOp::TopK), {input},
+                          output_tuple_shape, attribute_map_.Serialise());
     }
 
     context->SetOutput(0, xla::GetTupleElement(output_tuple, 0));

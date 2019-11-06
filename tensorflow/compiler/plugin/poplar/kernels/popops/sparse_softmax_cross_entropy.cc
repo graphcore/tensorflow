@@ -80,11 +80,9 @@ class SelectScalarFromRowsOp : public IpuOpKernel {
   xla::XlaOp GetCustomCall(xla::XlaBuilder* builder,
                            absl::Span<const xla::XlaOp> operands,
                            const xla::Shape& shape) {
-    return xla::CustomCall(
-        builder,
-        xla::poplarplugin::GetPoplibsCustomOpTargetString(
-            PoplibsOp::Popops, PoplibsOp::SelectScalarFromRows),
-        operands, shape, attribute_map_.Serialise());
+    return xla::CustomCall(builder,
+                           PoplarOp_Name(PoplarOp::SelectScalarFromRows),
+                           operands, shape, attribute_map_.Serialise());
   }
 
   TF_DISALLOW_COPY_AND_ASSIGN(SelectScalarFromRowsOp);
@@ -97,11 +95,8 @@ class UpdateScalarInRowsOp : public IpuOpKernel {
   xla::XlaOp GetCustomCall(xla::XlaBuilder* builder,
                            absl::Span<const xla::XlaOp> operands,
                            const xla::Shape& shape) {
-    return xla::CustomCall(
-        builder,
-        xla::poplarplugin::GetPoplibsCustomOpTargetString(
-            PoplibsOp::Popops, PoplibsOp::UpdateScalarInRows),
-        operands, shape, attribute_map_.Serialise());
+    return xla::CustomCall(builder, PoplarOp_Name(PoplarOp::UpdateScalarInRows),
+                           operands, shape, attribute_map_.Serialise());
   }
 
   TF_DISALLOW_COPY_AND_ASSIGN(UpdateScalarInRowsOp);

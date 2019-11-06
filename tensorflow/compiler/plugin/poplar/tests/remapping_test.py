@@ -77,7 +77,7 @@ class MappingTest(xla_test.XLATestCase):
 
       with ops.device('cpu'):
         i = array_ops.placeholder(np.int32, [8])
-        w = array_ops.placeholder(np.float32, [32 * 1024])
+        w = array_ops.placeholder(np.float32, [32, 1024])
         report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
@@ -87,11 +87,11 @@ class MappingTest(xla_test.XLATestCase):
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
       ipu.utils.configure_ipu_system(cfg)
 
-      i_h = np.arange(0, 8)
-      w_h = np.arange(32 * 1024)
+      i_h = np.arange(2, 10)
+      w_h = np.reshape(np.arange(32 * 1024), [32, 1024])
 
       result = sess.run(r, {i: i_h, w: w_h})
-      self.assertAllClose(result[0], np.take(w_h, i_h))
+      self.assertAllClose(result[0], w_h[2:10])
 
       rep = sess.run(report)
 
@@ -108,9 +108,9 @@ class MappingTest(xla_test.XLATestCase):
               for tensor in tm['mappings'][g]:
                 # Total elements > 16
                 if tensor[6] > 16:
-                  # Tiles used != 1024
-                  if len(tensor[7]) != 1024:
-                    bad_maps += [tensor[0]]
+                  for _, num_elements in tensor[7]:
+                    if num_elements > 32:
+                      bad_maps += [tensor[0]]
 
       self.assertEqual(len(bad_maps), 0)
 

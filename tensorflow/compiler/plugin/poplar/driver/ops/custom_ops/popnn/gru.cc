@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/gru.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -116,7 +116,7 @@ poplar::Tensor PackGruKernel(poplar::Tensor input_weights,
                         FlattenWeight(output_weights));
 }
 
-class GRULayerFwdOp : public PoplibsOpDef {
+class GRULayerFwdOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
                                      CompilerResources& res,
                                      const std::string& name,
@@ -243,9 +243,9 @@ class GRULayerFwdOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Popnn, GRULayerFwd, GRULayerFwdOp);
+REGISTER_POPLAR_OP(GRULayerFwd, GRULayerFwdOp);
 
-class GRULayerBwdOp : public PoplibsOpDef {
+class GRULayerBwdOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -350,7 +350,7 @@ class GRULayerBwdOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Popnn, GRULayerBwd, GRULayerBwdOp);
+REGISTER_POPLAR_OP(GRULayerBwd, GRULayerBwdOp);
 
 }  // namespace
 }  // namespace poplarplugin

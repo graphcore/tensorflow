@@ -19,7 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -36,15 +36,11 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 bool IsMultiUpdate(const HloInstruction* inst) {
-  return inst->custom_call_target() ==
-         GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                        PoplibsOp::MultiUpdate);
+  return IsPoplarInstruction(PoplarOp::MultiUpdate)(inst);
 }
 
 bool IsMultiUpdateAdd(const HloInstruction* inst) {
-  return inst->custom_call_target() ==
-         GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                        PoplibsOp::MultiUpdateAdd);
+  return IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst);
 }
 
 StatusOr<HloInstruction*> MoveInstructionDimensionToBack(

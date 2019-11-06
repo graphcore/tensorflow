@@ -131,7 +131,6 @@ int64 GetPipelineStageID(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 
-bool IsInterIpuCopy(const HloInstruction*);
 // This function returns the operand of inst at index operand_idx and if the
 // operand is an inter ipu copy then it returns the operand which is being
 // copied.

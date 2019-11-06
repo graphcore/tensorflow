@@ -16,6 +16,7 @@ limitations under the License.
 // All HloInstruction subclasses are put in this file.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/window_util.h"
@@ -45,8 +46,8 @@ std::vector<string> HloPoplarInstruction::ExtraAttributesToStringImpl(
 }
 
 HloPoplarInstructionFactory::HloPoplarInstructionFactory(
-    const std::string& name, HloPoplarInstructionFactory::FactoryType factory) {
-  GetFactoryMap()[name] = factory;
+    PoplarOp op, HloPoplarInstructionFactory::FactoryType factory) {
+  GetFactoryMap()[PoplarOp_Name(op)] = factory;
 }
 
 bool HloPoplarInstructionFactory::IsCreatable(HloCustomCallInstruction* inst) {

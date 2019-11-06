@@ -1085,8 +1085,8 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
       case HloOpcode::kCustomCall: {
         if (IsPoplibsHloCustomOp(target)) {
           TF_ASSIGN_OR_RETURN(
-              out, AllocatePoplibsOpTensor(graph, resources, debug_name,
-                                           tensor_target, shape, tensor_map));
+              out, AllocatePoplarOpTensor(graph, resources, debug_name,
+                                          tensor_target, shape, tensor_map));
         } else {
           return xla::FailedPrecondition("%s", error_msg);
         }

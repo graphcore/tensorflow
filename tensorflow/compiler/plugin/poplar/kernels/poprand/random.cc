@@ -60,10 +60,8 @@ class PopopsTruncatedNormalOp : public XlaOpKernel, IpuOpKernel {
     xla::XlaBuilder* b = ctx->builder();
 
     xla::XlaOp output =
-        xla::CustomCall(b,
-                        GetPoplibsCustomOpTargetString(
-                            PoplibsOp::Poprand, PoplibsOp::TruncatedNormal),
-                        {}, xla_shape, attribute_map_.Serialise());
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::TruncatedNormal), {},
+                        xla_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
@@ -74,7 +72,7 @@ class PopopsTruncatedNormalOp : public XlaOpKernel, IpuOpKernel {
 
 class PopopsStatelessOp : public XlaOpKernel, public IpuOpKernel {
  public:
-  explicit PopopsStatelessOp(OpKernelConstruction* ctx, PoplibsOp::Op op_type)
+  explicit PopopsStatelessOp(OpKernelConstruction* ctx, PoplarOp op_type)
       : XlaOpKernel(ctx), op_type_(op_type) {}
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -90,16 +88,15 @@ class PopopsStatelessOp : public XlaOpKernel, public IpuOpKernel {
                 errors::InvalidArgument("seed must have shape [2], not ",
                                         seed_shape.DebugString()));
 
-    xla::XlaOp output = xla::CustomCall(
-        ctx->builder(),
-        GetPoplibsCustomOpTargetString(PoplibsOp::Poprand, op_type_),
-        {ctx->Input(1)}, xla_shape, attribute_map_.Serialise());
+    xla::XlaOp output =
+        xla::CustomCall(ctx->builder(), PoplarOp_Name(op_type_),
+                        {ctx->Input(1)}, xla_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
 
  private:
-  PoplibsOp::Op op_type_;
+  PoplarOp op_type_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsStatelessOp);
 };
@@ -107,7 +104,7 @@ class PopopsStatelessOp : public XlaOpKernel, public IpuOpKernel {
 class PopopsStatelessRandomUniformOp : public PopopsStatelessOp {
  public:
   explicit PopopsStatelessRandomUniformOp(OpKernelConstruction* ctx)
-      : PopopsStatelessOp(ctx, PoplibsOp::StatelessRandomUniform) {}
+      : PopopsStatelessOp(ctx, PoplarOp::StatelessRandomUniform) {}
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsStatelessRandomUniformOp);
@@ -116,7 +113,7 @@ class PopopsStatelessRandomUniformOp : public PopopsStatelessOp {
 class PopopsStatelessRandomNormalOp : public PopopsStatelessOp {
  public:
   explicit PopopsStatelessRandomNormalOp(OpKernelConstruction* ctx)
-      : PopopsStatelessOp(ctx, PoplibsOp::StatelessRandomNormal) {}
+      : PopopsStatelessOp(ctx, PoplarOp::StatelessRandomNormal) {}
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsStatelessRandomNormalOp);
@@ -125,7 +122,7 @@ class PopopsStatelessRandomNormalOp : public PopopsStatelessOp {
 class PopopsStatelessTruncatedNormalOp : public PopopsStatelessOp {
  public:
   explicit PopopsStatelessTruncatedNormalOp(OpKernelConstruction* ctx)
-      : PopopsStatelessOp(ctx, PoplibsOp::StatelessTruncatedNormal) {}
+      : PopopsStatelessOp(ctx, PoplarOp::StatelessTruncatedNormal) {}
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PopopsStatelessTruncatedNormalOp);
@@ -159,9 +156,7 @@ class PopopsStatelessRandomUniformIntOp : public XlaOpKernel,
                                         maxval_shape.DebugString()));
 
     xla::XlaOp output = xla::CustomCall(
-        ctx->builder(),
-        GetPoplibsCustomOpTargetString(PoplibsOp::Poprand,
-                                       PoplibsOp::StatelessRandomUniformInt),
+        ctx->builder(), PoplarOp_Name(PoplarOp::StatelessRandomUniformInt),
         {ctx->Input(1), ctx->Input(2), ctx->Input(3)}, xla_shape,
         attribute_map_.Serialise());
 

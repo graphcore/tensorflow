@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -33,7 +33,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-class ReplicationIndexOp : public PoplibsOpDef {
+class ReplicationIndexOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -50,7 +50,7 @@ class ReplicationIndexOp : public PoplibsOpDef {
     return poplar::program::Sequence();
   }
 };
-REGISTER_POPLIBS_OP(Poputil, ReplicationIndex, ReplicationIndexOp);
+REGISTER_POPLAR_OP(ReplicationIndex, ReplicationIndexOp);
 
 }  // namespace
 }  // namespace poplarplugin

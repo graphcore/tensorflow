@@ -122,10 +122,8 @@ class PopfloatCastNativeToGfloatOp : public XlaOpKernel, IpuOpKernel {
 
     std::vector<xla::XlaOp> args = {input, param};
     xla::XlaOp output =
-        xla::CustomCall(&b,
-                        GetPoplibsCustomOpTargetString(
-                            PoplibsOp::Popfloat, PoplibsOp::CastNativeToGfloat),
-                        args, output_shape, attribute_map_.Serialise());
+        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::CastNativeToGfloat), args,
+                        output_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
@@ -173,10 +171,8 @@ class PopfloatCastGfloatToNativeOp : public XlaOpKernel, IpuOpKernel {
 
     std::vector<xla::XlaOp> args = {input, param};
     xla::XlaOp output =
-        xla::CustomCall(&b,
-                        GetPoplibsCustomOpTargetString(
-                            PoplibsOp::Popfloat, PoplibsOp::CastGfloatToNative),
-                        args, output_shape, attribute_map_.Serialise());
+        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::CastGfloatToNative), args,
+                        output_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
@@ -226,10 +222,8 @@ class PopfloatGfloatParams : public XlaOpKernel, IpuOpKernel {
 
     std::vector<xla::XlaOp> args = {};
     xla::XlaOp output =
-        xla::CustomCall(&b,
-                        GetPoplibsCustomOpTargetString(
-                            PoplibsOp::Popfloat, PoplibsOp::CalcGfloatParams),
-                        args, param_shape, attribute_map_.Serialise());
+        xla::CustomCall(&b, PoplarOp_Name(PoplarOp::CalcGfloatParams), args,
+                        param_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }

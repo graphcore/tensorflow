@@ -15,25 +15,22 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
-PoplibsOp_Op SwitchAllReduce(bool is_all_reduce) {
-  return is_all_reduce ? PoplibsOp::StatefulGradientAccumulateAndAllReduce
-                       : PoplibsOp::StatefulGradientAccumulate;
+PoplarOp SwitchAllReduce(bool is_all_reduce) {
+  return is_all_reduce ? PoplarOp::StatefulGradientAccumulateAndAllReduce
+                       : PoplarOp::StatefulGradientAccumulate;
 }
 }  // namespace
 
 HloStatefulGradientAccumulate::HloStatefulGradientAccumulate(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches,
     bool is_all_reduce)
-    : HloPoplarInstruction(
-          GetHloPoplarInstructionShape(operands), operands,
-          GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                         SwitchAllReduce(is_all_reduce)),
-          num_mini_batches),
+    : HloPoplarInstruction(GetHloPoplarInstructionShape(operands), operands,
+                           SwitchAllReduce(is_all_reduce), num_mini_batches),
       num_mini_batches_(num_mini_batches) {}
 
 absl::flat_hash_set<int64> HloStatefulGradientAccumulate::AllocatingIndices()
@@ -109,8 +106,7 @@ HloStatefulGradientAccumulateFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory stateful_gradient_accumulate_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Poputil,
-                                   PoplibsOp::StatefulGradientAccumulate),
+    PoplarOp::StatefulGradientAccumulate,
     HloStatefulGradientAccumulateFactoryFunc);
 
 }  // namespace

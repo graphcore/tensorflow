@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -34,7 +34,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-class UserOpImpl : public PoplibsOpDef {
+class UserOpImpl : public PoplarOpDef {
   static absl::flat_hash_set<std::string> previously_added_codelets;
 
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
@@ -42,13 +42,7 @@ class UserOpImpl : public PoplibsOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    const HloUserOpInstruction* user_op_inst =
-        DynCast<HloUserOpInstruction>(inst);
-
-    if (!user_op_inst) {
-      return xla::FailedPrecondition(
-          "Expected HLO instruction to be HloUserOpInstruction.");
-    }
+    const HloUserOpInstruction* user_op_inst = Cast<HloUserOpInstruction>(inst);
 
     const std::string& gp_path = user_op_inst->GetPath();
 
@@ -277,17 +271,7 @@ class UserOpImpl : public PoplibsOpDef {
     const HloInstruction* inst = tensor_target.tgt;
     const int64 input_index = tensor_target.input_index;
 
-    const HloUserOpInstruction* user_op =
-        dynamic_cast<const HloUserOpInstruction*>(inst);
-
-    // This should never fail.
-    assert(user_op &&
-           "Attemping to call user op allocator but op is not a user op");
-    if (!user_op) {
-      return Status{
-          tensorflow::error::Code::INTERNAL,
-          "Attemping to call user op allocator but op is not a user op"};
-    }
+    const HloUserOpInstruction* user_op = Cast<HloUserOpInstruction>(inst);
 
     // It is valid to not have an allocator function.
     void* allocator_func = user_op->GetAllocatorFunc();
@@ -306,7 +290,7 @@ class UserOpImpl : public PoplibsOpDef {
 
 absl::flat_hash_set<std::string> UserOpImpl::previously_added_codelets{};
 
-REGISTER_POPLIBS_OP(Poputil, UserOp, UserOpImpl);
+REGISTER_POPLAR_OP(UserOp, UserOpImpl);
 
 }  // namespace
 }  // namespace poplarplugin

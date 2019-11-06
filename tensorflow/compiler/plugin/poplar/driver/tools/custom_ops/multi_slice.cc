@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -26,9 +26,7 @@ namespace poplarplugin {
 HloMultiSliceInstruction::HloMultiSliceInstruction(
     const Shape& shape, HloInstruction* const input,
     HloInstruction* const indices)
-    : HloPoplarInstruction(shape, {input, indices},
-                           GetPoplibsCustomOpTargetString(
-                               PoplibsOp::Popops, PoplibsOp::MultiSlice)) {}
+    : HloPoplarInstruction(shape, {input, indices}, PoplarOp::MultiSlice) {}
 
 absl::flat_hash_set<int64> HloMultiSliceInstruction::AllocatingIndices() const {
   return {0, 1};
@@ -68,9 +66,7 @@ HloMultiUpdateInstruction::HloMultiUpdateInstruction(
     std::size_t index_vector_dim, std::size_t update_dim, bool is_update)
     : HloPoplarInstruction(
           shape, operands,
-          GetPoplibsCustomOpTargetString(
-              PoplibsOp::Popops,
-              is_update ? PoplibsOp::MultiUpdateAdd : PoplibsOp::MultiUpdate),
+          is_update ? PoplarOp::MultiUpdateAdd : PoplarOp::MultiUpdate,
           index_vector_dim, update_dim),
       index_vector_dim_(index_vector_dim),
       update_dim_(update_dim) {}
@@ -164,17 +160,13 @@ HloMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
 }
 
 static HloPoplarInstructionFactory multi_slice_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popops, PoplibsOp::MultiSlice),
-    HloMultiSliceInstructionFactoryFunc);
+    PoplarOp::MultiSlice, HloMultiSliceInstructionFactoryFunc);
 
 static HloPoplarInstructionFactory multi_update_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popops, PoplibsOp::MultiUpdate),
-    HloMultiUpdateInstructionFactoryFunc);
+    PoplarOp::MultiUpdate, HloMultiUpdateInstructionFactoryFunc);
 
 static HloPoplarInstructionFactory multi_update_add_factory(
-    GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                   PoplibsOp::MultiUpdateAdd),
-    HloMultiUpdateAddInstructionFactoryFunc);
+    PoplarOp::MultiUpdateAdd, HloMultiUpdateAddInstructionFactoryFunc);
 }  // namespace
 
 }  // namespace poplarplugin

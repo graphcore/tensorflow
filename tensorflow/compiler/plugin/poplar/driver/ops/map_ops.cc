@@ -245,7 +245,7 @@ StatusOr<poplar::program::Program> CreateCustomCallOp(
   if (IsPoplibsHloCustomOp(inst)) {
     VLOG(1) << "Processing " << inst->custom_call_target()
             << " as Poplibs call";
-    return CreatePoplibsOp(graph, res, inst, output, tensor_map);
+    return CreatePoplarOp(graph, res, inst, output, tensor_map);
   } else {
     return xla::FailedPrecondition("Unrecognised kCustomCall %s.",
                                    inst->ToString().c_str());

@@ -25,7 +25,7 @@ class HloStatelessRandom : public HloPoplarInstruction {
  public:
   explicit HloStatelessRandom(const Shape& shape,
                               absl::Span<HloInstruction* const> operands,
-                              const std::string& op_string);
+                              PoplarOp op);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
 

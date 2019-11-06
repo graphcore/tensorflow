@@ -22,10 +22,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
-
-#include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -66,7 +66,7 @@ class MultiSliceCombinerTest : public HloTestBase {
 template <typename Instruction>
 int64 GetNumInstructions(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
-    return IsInstructionType<Instruction>(inst);
+    return DynCast<Instruction>(inst);
   });
 }
 
@@ -82,8 +82,8 @@ ENTRY main {
   input = f32[100,16] parameter(0)
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="Popops::MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="Popops::MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
   ROOT t = (f32[24,16], f32[12,16]) tuple(slice1, slice2)
 }
   )";
@@ -171,9 +171,9 @@ ENTRY main {
   offsets1 = s32[24,1] parameter(1)
   offsets2 = s32[12,1] parameter(2)
   offsets3 = s32[8,1] parameter(3)
-  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="Popops::MultiSlice"
-  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="Popops::MultiSlice"
-  slice3 = f32[8,16] custom-call(input, offsets3), custom_call_target="Popops::MultiSlice"
+  slice1 = f32[24,16] custom-call(input, offsets1), custom_call_target="MultiSlice"
+  slice2 = f32[12,16] custom-call(input, offsets2), custom_call_target="MultiSlice"
+  slice3 = f32[8,16] custom-call(input, offsets3), custom_call_target="MultiSlice"
   ROOT t = (f32[24,16], f32[12,16], f32[8,16]) tuple(slice1, slice2, slice3)
 }
   )";

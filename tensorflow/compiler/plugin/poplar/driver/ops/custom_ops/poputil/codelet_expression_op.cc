@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/codelet_expression_op.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -71,7 +71,7 @@ std::stringstream GenerateVertexSource(
   return result;
 }
 
-class CodeletExpressionOpOp : public PoplibsOpDef {
+class CodeletExpressionOpOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -128,7 +128,7 @@ class CodeletExpressionOpOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poputil, CodeletExpressionOp, CodeletExpressionOpOp);
+REGISTER_POPLAR_OP(CodeletExpressionOp, CodeletExpressionOpOp);
 
 }  // namespace
 }  // namespace poplarplugin

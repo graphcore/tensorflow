@@ -36,9 +36,8 @@ namespace {
 using MultiUpdateCombinerTest = HloTestBase;
 
 int64 GetNumMultiUpdateAdds(const HloComputation* comp) {
-  return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
-    return IsInstructionType<HloMultiUpdateAddInstruction>(inst);
-  });
+  return absl::c_count_if(comp->instructions(),
+                          IsPoplarInstruction(PoplarOp::MultiUpdateAdd));
 }
 
 TEST_F(MultiUpdateCombinerTest, TestTwoLookups) {

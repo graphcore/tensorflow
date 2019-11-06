@@ -339,20 +339,20 @@ arg5.6 = f32[2]{0} parameter(5), control-predecessors={%convolution.11}, metadat
 arg4.5 = f32[2]{0} parameter(4), control-predecessors={%convolution.11}, metadata={op_name="XLA_Args"}
 batch-norm-training.13 = (f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) batch-norm-training(f32[1,4,4,2]{3,2,1,0} %convolution.11, f32[2]{0} %arg5.6, f32[2]{0} %arg4.5), epsilon=0.001, feature_index=3
 get-tuple-element.14 = f32[1,4,4,2]{3,2,1,0} get-tuple-element((f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) %batch-norm-training.13), index=0
-relu.1 = f32[1,4,4,2]{3,2,1,0} custom-call(f32[1,4,4,2]{3,2,1,0} %get-tuple-element.14), custom_call_target="Popnn::Relu", backend_config="{}"
+relu.1 = f32[1,4,4,2]{3,2,1,0} custom-call(f32[1,4,4,2]{3,2,1,0} %get-tuple-element.14), custom_call_target="Relu", backend_config="{}"
 arg3.4 = f32[1,1,2,2]{3,2,1,0} parameter(3), metadata={op_name="XLA_Args"}
 convolution.23 = f32[1,4,4,2]{3,2,1,0} convolution(f32[1,4,4,2]{3,2,1,0} %relu.1, f32[1,1,2,2]{3,2,1,0} %arg3.4), window={size=1x1}, dim_labels=b01f_01io->b01f
 arg2.3 = f32[2]{0} parameter(2), control-predecessors={%convolution.23}, metadata={op_name="XLA_Args"}
 arg1.2 = f32[2]{0} parameter(1), control-predecessors={%convolution.23}, metadata={op_name="XLA_Args"}
 batch-norm-training.25 = (f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) batch-norm-training(f32[1,4,4,2]{3,2,1,0} %convolution.23, f32[2]{0} %arg2.3, f32[2]{0} %arg1.2), epsilon=0.001, feature_index=3
 get-tuple-element.26 = f32[1,4,4,2]{3,2,1,0} get-tuple-element((f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) %batch-norm-training.25), index=0
-relu.2 = f32[1,4,4,2]{3,2,1,0} custom-call(f32[1,4,4,2]{3,2,1,0} %get-tuple-element.26),  custom_call_target="Popnn::Relu", backend_config="{}"
+relu.2 = f32[1,4,4,2]{3,2,1,0} custom-call(f32[1,4,4,2]{3,2,1,0} %get-tuple-element.26),  custom_call_target="Relu", backend_config="{}"
 constant.20 = f32[] constant(0)
 reduce.42 = f32[] reduce(f32[1,4,4,2]{3,2,1,0} %relu.2, f32[] %constant.20), dimensions={0,1,2,3}, to_apply=%Sum-reduction.38
 get-tuple-element.28 = f32[2]{0} get-tuple-element((f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) %batch-norm-training.25), index=1
 get-tuple-element.29 = f32[2]{0} get-tuple-element((f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) %batch-norm-training.25), index=2
 fusion.11 = f32[1,4,4,2]{3,2,1,0} fusion(), kind=kCustom, calls=%_pop_op_wide_const, backend_config="{}"
-relugrad.1 = f32[1,4,4,2]{3,2,1,0} custom-call(f32[1,4,4,2]{3,2,1,0} %relu.2, f32[1,4,4,2]{3,2,1,0} %fusion.11), custom_call_target="Popnn::ReluGrad", backend_config="{}"
+relugrad.1 = f32[1,4,4,2]{3,2,1,0} custom-call(f32[1,4,4,2]{3,2,1,0} %relu.2, f32[1,4,4,2]{3,2,1,0} %fusion.11), custom_call_target="ReluGrad", backend_config="{}"
 batch-norm-grad.50 = (f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) batch-norm-grad(f32[1,4,4,2]{3,2,1,0} %convolution.23, f32[2]{0} %arg2.3, f32[2]{0} %get-tuple-element.28, f32[2]{0} %get-tuple-element.29, f32[1,4,4,2]{3,2,1,0} %relugrad.1), epsilon=0.001, feature_index=3
 get-tuple-element.53 = f32[2]{0} get-tuple-element((f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) %batch-norm-grad.50), index=2
 fusion.10 = f32[2]{0} fusion(f32[2]{0} %arg1.2, f32[2]{0} %get-tuple-element.53), kind=kCustom, calls=%_pop_op_scaled_inplace.3, backend_config="{}"
@@ -363,7 +363,7 @@ fusion = f32[1,4,4,2]{3,2,1,0} fusion(f32[1,4,4,2]{3,2,1,0} %get-tuple-element.5
 fusion.6 = f32[1,1,2,2]{3,2,1,0} fusion(f32[1,1,2,2]{3,2,1,0} %arg3.4, f32[1,4,4,2]{3,2,1,0} %relu.1, f32[1,4,4,2]{3,2,1,0} %get-tuple-element.51), kind=kCustom, calls=%_pop_op_conv_scaled_inplace.1, control-predecessors={%fusion}, backend_config="{\"fusionConfig\":{\"window\":{\"dimensions\":[{\"size\":\"4\",\"stride\":\"1\",\"windowDilation\":\"1\",\"baseDilation\":\"1\"},{\"size\":\"4\",\"stride\":\"1\",\"windowDilation\":\"1\",\"baseDilation\":\"1\"}]},\"dimensionNumbers\":{\"kernelOutputFeatureDimension\":\"3\",\"kernelSpatialDimensions\":[\"1\",\"2\"],\"inputBatchDimension\":\"3\",\"outputBatchDimension\":\"2\",\"outputFeatureDimension\":\"3\",\"inputSpatialDimensions\":[\"1\",\"2\"],\"outputSpatialDimensions\":[\"0\",\"1\"]},\"featureGroupCount\":\"1\",\"batchGroupCount\":\"1\"}}"
 get-tuple-element.16 = f32[2]{0} get-tuple-element((f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) %batch-norm-training.13), index=1
 get-tuple-element.17 = f32[2]{0} get-tuple-element((f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) %batch-norm-training.13), index=2
-relugrad.2 = f32[1,4,4,2]{3,2,1,0} custom-call(f32[1,4,4,2]{3,2,1,0} %relu.1, f32[1,4,4,2]{3,2,1,0} %fusion), custom_call_target="Popnn::ReluGrad", backend_config="{}"
+relugrad.2 = f32[1,4,4,2]{3,2,1,0} custom-call(f32[1,4,4,2]{3,2,1,0} %relu.1, f32[1,4,4,2]{3,2,1,0} %fusion), custom_call_target="ReluGrad", backend_config="{}"
 batch-norm-grad.76 = (f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) batch-norm-grad(f32[1,4,4,2]{3,2,1,0} %convolution.11, f32[2]{0} %arg5.6, f32[2]{0} %get-tuple-element.16, f32[2]{0} %get-tuple-element.17, f32[1,4,4,2]{3,2,1,0} %relugrad.2), epsilon=0.001, feature_index=3
 get-tuple-element.79 = f32[2]{0} get-tuple-element((f32[1,4,4,2]{3,2,1,0}, f32[2]{0}, f32[2]{0}) %batch-norm-grad.76), index=2
 fusion.8 = f32[2]{0} fusion(f32[2]{0} %arg4.5, f32[2]{0} %get-tuple-element.79), kind=kCustom, calls=%_pop_op_scaled_inplace.1, backend_config="{}"

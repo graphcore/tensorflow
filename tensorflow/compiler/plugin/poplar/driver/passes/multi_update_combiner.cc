@@ -19,7 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/poplibs_ops.pb.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -34,18 +34,6 @@ namespace xla {
 namespace poplarplugin {
 
 namespace {
-bool IsMultiUpdate(const HloInstruction* inst) {
-  return inst->custom_call_target() ==
-         GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                        PoplibsOp::MultiUpdate);
-}
-
-bool IsMultiUpdateAdd(const HloInstruction* inst) {
-  return inst->custom_call_target() ==
-         GetPoplibsCustomOpTargetString(PoplibsOp::Popops,
-                                        PoplibsOp::MultiUpdateAdd);
-}
-
 // clang-format off
 static const std::vector<HloMatcherPattern> patterns = {
   // We can combine two multi updates into a multi update add with a scale
@@ -57,8 +45,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({1, 2})},
-      {HloOpcode::kCustomCall, NodeOperands({3, 5, 6}), IsMultiUpdate},
-      {HloOpcode::kCustomCall, NodeOperands({3, 7, 8}), IsMultiUpdate},
+      {HloOpcode::kCustomCall, NodeOperands({3, 5, 6}), IsPoplarInstruction(PoplarOp::MultiUpdate)},
+      {HloOpcode::kCustomCall, NodeOperands({3, 7, 8}), IsPoplarInstruction(PoplarOp::MultiUpdate)},
       {HloOpcode::kBroadcast, NodeOperands({4})},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
@@ -77,8 +65,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({1, 2})},
-      {HloOpcode::kCustomCall, NodeOperands({3, 5, 6}), IsMultiUpdate},
-      {HloOpcode::kCustomCall, NodeOperands({3, 7, 8, 9}), IsMultiUpdateAdd},
+      {HloOpcode::kCustomCall, NodeOperands({3, 5, 6}), IsPoplarInstruction(PoplarOp::MultiUpdate)},
+      {HloOpcode::kCustomCall, NodeOperands({3, 7, 8, 9}), IsPoplarInstruction(PoplarOp::MultiUpdateAdd)},
       {HloOpcode::kBroadcast, NodeOperands({4})},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
@@ -98,8 +86,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({1, 2})},
-      {HloOpcode::kCustomCall, NodeOperands({3, 5, 6, 9}), IsMultiUpdateAdd},
-      {HloOpcode::kCustomCall, NodeOperands({3, 7, 8}), IsMultiUpdate},
+      {HloOpcode::kCustomCall, NodeOperands({3, 5, 6, 9}), IsPoplarInstruction(PoplarOp::MultiUpdateAdd)},
+      {HloOpcode::kCustomCall, NodeOperands({3, 7, 8}), IsPoplarInstruction(PoplarOp::MultiUpdate)},
       {HloOpcode::kBroadcast, NodeOperands({4})},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
@@ -119,8 +107,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternOutputs({0}),
     Pattern({
       {HloOpcode::kAdd, NodeOperands({1, 2})},
-      {HloOpcode::kCustomCall, NodeOperands({3, 6, 7, 5}), IsMultiUpdateAdd},
-      {HloOpcode::kCustomCall, NodeOperands({3, 8, 9, 5}), IsMultiUpdateAdd},
+      {HloOpcode::kCustomCall, NodeOperands({3, 6, 7, 5}), IsPoplarInstruction(PoplarOp::MultiUpdateAdd)},
+      {HloOpcode::kCustomCall, NodeOperands({3, 8, 9, 5}), IsPoplarInstruction(PoplarOp::MultiUpdateAdd)},
       {HloOpcode::kBroadcast, NodeOperands({4})},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
       {HloOpcode::kConstant, NodeOperands({}), IsConstantOne},

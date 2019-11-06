@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/topk.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -32,7 +32,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class TopKOp : public PoplibsOpDef {
+class TopKOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -44,12 +44,8 @@ class TopKOp : public PoplibsOpDef {
     // Get the input.
     TF_ASSIGN_OR_RETURN(poplar::Tensor input,
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
-    const HloTopK* as_top_k = DynCast<HloTopK>(inst);
 
-    if (as_top_k == nullptr) {
-      return xla::FailedPrecondition("Expected HLO instruction to be HloTopK");
-    }
-
+    const HloTopK* as_top_k = Cast<HloTopK>(inst);
     int64 num_k = as_top_k->NumK();
     bool sorted = as_top_k->ShouldBeSorted();
 
@@ -89,7 +85,7 @@ class TopKOp : public PoplibsOpDef {
   }
 };
 
-REGISTER_POPLIBS_OP(Popnn, TopK, TopKOp);
+REGISTER_POPLAR_OP(TopK, TopKOp);
 
 }  // namespace
 }  // namespace poplarplugin

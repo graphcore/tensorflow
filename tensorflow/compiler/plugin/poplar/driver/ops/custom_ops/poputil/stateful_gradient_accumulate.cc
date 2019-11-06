@@ -14,9 +14,10 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplibs_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -42,7 +43,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class StatefulGradientAccumulateOp : public PoplibsOpDef {
+class StatefulGradientAccumulateOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -53,8 +54,9 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
     const HloStatefulGradientAccumulate* grad_inst =
         Cast<HloStatefulGradientAccumulate>(inst);
 
-    bool do_all_reduce =
-        DynCast<HloStatefulGradientAccumulateAndAllReduce>(inst) &&
+    const bool do_all_reduce =
+        IsPoplarInstruction(PoplarOp::StatefulGradientAccumulateAndAllReduce)(
+            inst) &&
         res.replication_factor > 1;
 
     TF_ASSIGN_OR_RETURN(
@@ -126,10 +128,9 @@ class StatefulGradientAccumulateOp : public PoplibsOpDef {
     return seq;
   }
 };
-REGISTER_POPLIBS_OP(Poputil, StatefulGradientAccumulate,
-                    StatefulGradientAccumulateOp);
-REGISTER_POPLIBS_OP(Poputil, StatefulGradientAccumulateAndAllReduce,
-                    StatefulGradientAccumulateOp);
+REGISTER_POPLAR_OP(StatefulGradientAccumulate, StatefulGradientAccumulateOp);
+REGISTER_POPLAR_OP(StatefulGradientAccumulateAndAllReduce,
+                   StatefulGradientAccumulateOp);
 
 }  // namespace
 }  // namespace poplarplugin

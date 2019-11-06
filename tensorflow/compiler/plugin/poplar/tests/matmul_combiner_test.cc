@@ -21,10 +21,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
-
-#include "tensorflow/compiler/xla/service/hlo_cse.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -64,7 +64,7 @@ class MatmulCombinerTest : public HloTestBase {
 template <typename Instruction>
 int64 GetNumInstructions(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(), [](const HloInstruction* inst) {
-    return IsInstructionType<Instruction>(inst);
+    return DynCast<Instruction>(inst);
   });
 }
 

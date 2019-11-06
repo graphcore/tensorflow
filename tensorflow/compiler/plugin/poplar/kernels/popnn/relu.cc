@@ -56,9 +56,9 @@ class PopnnReluOp : public XlaOpKernel, IpuOpKernel {
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
 
-    xla::XlaOp output = xla::CustomCall(
-        b, GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::Relu),
-        {input}, xla_shape, attribute_map_.Serialise());
+    xla::XlaOp output =
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::Relu), {input}, xla_shape,
+                        attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
@@ -85,10 +85,9 @@ class PopnnReluGradOp : public XlaOpKernel, IpuOpKernel {
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
 
-    xla::XlaOp output = xla::CustomCall(
-        b,
-        GetPoplibsCustomOpTargetString(PoplibsOp::Popnn, PoplibsOp::ReluGrad),
-        {out, outGrad}, xla_shape, attribute_map_.Serialise());
+    xla::XlaOp output =
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::ReluGrad), {out, outGrad},
+                        xla_shape, attribute_map_.Serialise());
 
     ctx->SetOutput(0, output);
   }
