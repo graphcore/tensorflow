@@ -16,9 +16,7 @@ CumsumTest.test3D # Too long
 CumsumTest.test6D # Too long
 CumprodTest.test3D # Too long
 CumprodTest.test6D # Too long
-DepthwiseConv2DTest.testDepthwiseConv2DInputGradCompare # Fails on Valid - T4475
 DeuantizedOpsTest # No bfloat16
-DepthwiseConv2DTest.testDepthwiseConv2DFilterGradCompare # Fails - T4475
 EagerFunctionTest # No registered OpKernel
 EagerTest.testAdam
 EagerTest.testAdamSparse
