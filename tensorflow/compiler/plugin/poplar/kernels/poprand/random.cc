@@ -88,6 +88,11 @@ class PopopsStatelessOp : public XlaOpKernel, public IpuOpKernel {
                 errors::InvalidArgument("seed must have shape [2], not ",
                                         seed_shape.DebugString()));
 
+    if (op_type_ == PoplarOp::StatelessRandomUniform) {
+      attribute_map_.AddAttribute("min_val", 0.0f);
+      attribute_map_.AddAttribute("max_val", 1.0f);
+    }
+
     xla::XlaOp output =
         xla::CustomCall(ctx->builder(), PoplarOp_Name(op_type_),
                         {ctx->Input(1)}, xla_shape, attribute_map_.Serialise());

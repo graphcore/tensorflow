@@ -64,8 +64,18 @@ class StatelessRandomUniformOp : public PoplarOpDef {
 
     TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
 
-    auto out = poprand::uniform(graph, &seed, 0, ref, dtype, 0.0, 1.0, seq,
-                                GetDebugName(inst));
+    const HloStatelessRandomUniform* as_stateless_random =
+        Cast<HloStatelessRandomUniform>(inst);
+
+    assert(as_stateless_random &&
+           "Expected operation to be an "
+           "xla::poplarplugin::HloStatelessRandomUniform");
+
+    double min_val = static_cast<double>(as_stateless_random->GetMin());
+    double max_val = static_cast<double>(as_stateless_random->GetMax());
+
+    auto out = poprand::uniform(graph, &seed, 0, ref, dtype, min_val, max_val,
+                                seq, GetDebugName(inst));
 
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been

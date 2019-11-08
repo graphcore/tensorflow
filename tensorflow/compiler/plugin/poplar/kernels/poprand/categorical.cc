@@ -89,7 +89,13 @@ class IpuCategoricalOp : public XlaOpKernel {
     }
     xla::PrimitiveType type;
     OP_REQUIRES_OK(ctx, DataTypeToPrimitiveType(input_type(0), &type));
-    xla::XlaOp log_uniforms = GetLogUniforms(uniform_shape, type, ctx);
+
+    xla::StatusOr<xla::XlaOp> log_uniforms_or_error =
+        GetLogUniforms(uniform_shape, type, ctx);
+
+    OP_REQUIRES_OK(ctx, log_uniforms_or_error.status());
+
+    xla::XlaOp log_uniforms = std::move(log_uniforms_or_error.ValueOrDie());
 
     auto softmax_entries =
         xla::Sub(logits, log_uniforms,
@@ -109,9 +115,9 @@ class IpuCategoricalOp : public XlaOpKernel {
     ctx->SetOutput(0, argmax);
   }
 
-  virtual xla::XlaOp GetLogUniforms(xla::Shape uniform_shape,
-                                    xla::PrimitiveType type,
-                                    XlaOpKernelContext* ctx) {
+  virtual xla::StatusOr<xla::XlaOp> GetLogUniforms(xla::Shape uniform_shape,
+                                                   xla::PrimitiveType type,
+                                                   XlaOpKernelContext* ctx) {
     xla::XlaBuilder* builder = ctx->builder();
 
     auto uniforms = xla::RngUniform(
@@ -130,6 +136,34 @@ REGISTER_XLA_OP(Name("Multinomial")
                     .CompileTimeConstantInput("num_samples"),
                 IpuCategoricalOp);
 
+template <typename T>
+struct FillAttributeMap {};
+
+template <>
+struct FillAttributeMap<float> {
+  void operator()(
+      xla::poplarplugin::IPUCustomKernelsUtil::AttributeMap& attribute_map) {
+    attribute_map.AddAttribute("min_val", std::numeric_limits<float>::min());
+    attribute_map.AddAttribute("max_val", std::nexttoward(1.0f, 0.0f));
+  }
+};
+
+template <>
+struct FillAttributeMap<Eigen::half> {
+  void operator()(
+      xla::poplarplugin::IPUCustomKernelsUtil::AttributeMap& attribute_map) {
+    const Eigen::half slightly_more_than_zero{0.0000699162483215332};
+    const Eigen::half smallest_value_less_than_one{0.99951171875};
+
+    // Generate random numbers within the range of MinVal to MaxVal instead of 0
+    // to 1.
+    attribute_map.AddAttribute("min_val",
+                               static_cast<float>(slightly_more_than_zero));
+    attribute_map.AddAttribute(
+        "max_val", static_cast<float>(smallest_value_less_than_one));
+  }
+};
+
 class IpuStatelessCategoricalOp : public IpuCategoricalOp {
  public:
   explicit IpuStatelessCategoricalOp(OpKernelConstruction* ctx)
@@ -138,13 +172,31 @@ class IpuStatelessCategoricalOp : public IpuCategoricalOp {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("T", &dtype_));
   }
 
-  xla::XlaOp GetLogUniforms(xla::Shape uniform_shape, xla::PrimitiveType type,
-                            XlaOpKernelContext* ctx) override {
+  xla::StatusOr<xla::XlaOp> GetLogUniforms(xla::Shape uniform_shape,
+                                           xla::PrimitiveType type,
+                                           XlaOpKernelContext* ctx) override {
     xla::XlaOp seed = ctx->Input(2);
 
     xla::XlaBuilder* builder = ctx->builder();
 
     xla::poplarplugin::IPUCustomKernelsUtil::AttributeMap attribute_map;
+
+    switch (type) {
+      case xla::PrimitiveType::F32: {
+        FillAttributeMap<float>{}(attribute_map);
+        break;
+      }
+      case xla::PrimitiveType::BF16: {
+        FillAttributeMap<Eigen::half>{}(attribute_map);
+        break;
+      }
+      default: {
+        const Status status{error::INTERNAL,
+                            "UNREACHABLE: Type should be checked by "
+                            "the TypeConstraint on the operation"};
+        return status;
+      }
+    }
 
     xla::XlaOp output = xla::CustomCall(
         ctx->builder(), PoplarOp_Name(PoplarOp::StatelessRandomUniform), {seed},

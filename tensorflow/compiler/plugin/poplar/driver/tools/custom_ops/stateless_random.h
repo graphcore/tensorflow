@@ -49,15 +49,24 @@ class HloStatelessRandom : public HloPoplarInstruction {
 
 class HloStatelessRandomUniform : public HloStatelessRandom {
  public:
-  explicit HloStatelessRandomUniform(
-      const Shape& shape, absl::Span<HloInstruction* const> operands);
+  explicit HloStatelessRandomUniform(const Shape& shape,
+                                     absl::Span<HloInstruction* const> operands,
+                                     float min_val, float max_val);
+
+  float GetMin() const { return min_val_; }
+
+  float GetMax() const { return max_val_; }
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       HloCloneContext*) const override {
-    return absl::make_unique<HloStatelessRandomUniform>(shape, operands);
+    return absl::make_unique<HloStatelessRandomUniform>(shape, operands,
+                                                        min_val_, max_val_);
   }
+  // The range of values to generate the random numbers within.
+  float min_val_;
+  float max_val_;
 };
 
 std::unique_ptr<HloInstruction> CreateStatelessRandomUniform(

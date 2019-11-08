@@ -32,8 +32,11 @@ std::vector<std::string> HloStatelessRandom::ExtraPoplarAttributesToStringImpl(
 }
 
 HloStatelessRandomUniform::HloStatelessRandomUniform(
-    const Shape& shape, absl::Span<HloInstruction* const> operands)
-    : HloStatelessRandom(shape, operands, PoplarOp::StatelessRandomUniform) {}
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    float min_val, float max_val)
+    : HloStatelessRandom(shape, operands, PoplarOp::StatelessRandomUniform),
+      min_val_(min_val),
+      max_val_(max_val) {}
 
 HloStatelessRandomUniformInt::HloStatelessRandomUniformInt(
     const Shape& shape, absl::Span<HloInstruction* const> operands)
@@ -51,10 +54,19 @@ HloStatelessTruncatedNormal::HloStatelessTruncatedNormal(
 namespace {
 
 static HloPoplarInstructionFactory stateless_random_uniform_factory(
-    PoplarOp::StatelessRandomUniform, [](HloCustomCallInstruction* call) {
+    PoplarOp::StatelessRandomUniform,
+    [](HloCustomCallInstruction* call)
+        -> StatusOr<std::unique_ptr<HloInstruction>> {
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+
+      TF_ASSIGN_OR_RETURN(float min_val,
+                          attribute_map.GetAttributeAsFloat("min_val"));
+      TF_ASSIGN_OR_RETURN(float max_val,
+                          attribute_map.GetAttributeAsFloat("max_val"));
+
       std::unique_ptr<HloInstruction> inst =
-          absl::make_unique<HloStatelessRandomUniform>(call->shape(),
-                                                       call->operands());
+          absl::make_unique<HloStatelessRandomUniform>(
+              call->shape(), call->operands(), min_val, max_val);
       return inst;
     });
 
