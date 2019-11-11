@@ -348,6 +348,52 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
           pipeline_depth, dataset_fn, optimizer, self, 12478, True, False)
 
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompare6(self):
+    # Stage 1 and 2 don't have a backward stage.
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        img = value / 7
+        label = value[0][0][0][0]
+        return img, label
+
+      return dataset.map(dataset_parser)
+
+    pipeline_depth = 20
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(c, img, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        return img, c, label
+
+    def stage2(x, c, label):
+      with variable_scope.variable_scope("stage2", use_resource=True):
+        with ops.control_dependencies([internal_ops.print_tensor(x)]):
+          return x * 20, c, label
+
+    def stage3(x, c, label):
+      with variable_scope.variable_scope("stage3", use_resource=True):
+        return layers.Dense(
+            2,
+            kernel_initializer=init_ops.constant_initializer(0.5),
+            bias_initializer=init_ops.constant_initializer(0.5))(x), c, label
+
+    def stage4(x, c, label):
+      with variable_scope.variable_scope("stage4", use_resource=True):
+        return math_ops.reduce_sum(x) + c + label
+
+    with ops.device('cpu'):
+      c = array_ops.placeholder(np.float32, shape=[])
+
+    with self.test_session() as sess:
+      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
+          pipeline_depth, dataset_fn, optimizer, self, 10900, True, False)
+
 
 if __name__ == "__main__":
   googletest.main()

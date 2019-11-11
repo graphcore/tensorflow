@@ -340,6 +340,7 @@ cc_library(
         "//tensorflow/core:framework_headers_lib",
         "//third_party/eigen3",
         "@com_google_protobuf//:protobuf_headers",
+        "@com_google_absl//absl/strings",
     ],
 )
 

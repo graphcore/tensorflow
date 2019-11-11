@@ -89,6 +89,9 @@ class PipelineFixer : public HloModulePass {
   // Inserts Stateful No-ops into stages to make sure DCE does not remove them.
   Status InsertStatefulNoopsIntoStages();
 
+  // Inserts dummy stages for the missing backward stages.
+  Status InsertDummyBackwardStages(HloComputation* pipeline_comp);
+
   PipelineStages stages_;
 };
 

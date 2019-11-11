@@ -65,8 +65,8 @@ struct PipelineStages {
 StatusOr<std::vector<HloInstruction*>> GetPipelines(HloModule* module);
 
 // Get the forward and backward pipeline stages from the pipeline_computation.
-StatusOr<PipelineStages> GetPipelineStages(
-    HloComputation* pipeline_computation);
+StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
+                                           bool validate_stages = true);
 
 // Get all the computations called by the pipeline stage or which are reachable
 // from it. Ignores computations which are called in the Parallel context.

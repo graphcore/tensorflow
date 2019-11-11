@@ -103,8 +103,8 @@ StatusOr<std::vector<HloInstruction*>> GetPipelines(HloModule* module) {
   return pipeline_ops;
 }
 
-StatusOr<PipelineStages> GetPipelineStages(
-    HloComputation* pipeline_computation) {
+StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
+                                           bool validate_stages) {
   PipelineStages pipeline_stages;
   // Find all the stages - note that they might not be in order as some stages
   // might have no inputs/outputs.
@@ -120,46 +120,54 @@ StatusOr<PipelineStages> GetPipelineStages(
     }
   }
   // Sort the stages and make sure the stages are continuos and starting at 0.
-  auto sort_and_check_stages = [](std::vector<HloInstruction*>& stages) {
+  auto sort_stages = [](std::vector<HloInstruction*>& stages) {
     absl::c_sort(stages,
                  [](const HloInstruction* lhs, const HloInstruction* rhs) {
                    return GetPipelineStageID(lhs) < GetPipelineStageID(rhs);
                  });
+  };
+
+  auto check_stages = [](std::vector<HloInstruction*>& stages) {
     for (int64 i = 0; i != stages.size(); ++i) {
       const int64 stage_id = GetPipelineStageID(stages[i]);
       if (stage_id != i) {
         return FailedPrecondition(
-            "Detected Pipeline Stage with id %d but expected id %s.", stage_id,
+            "Detected Pipeline Stage with id %d but expected id %d.", stage_id,
             i);
       }
     }
     return Status::OK();
   };
-  TF_RETURN_IF_ERROR(sort_and_check_stages(pipeline_stages.forward));
-  TF_RETURN_IF_ERROR(sort_and_check_stages(pipeline_stages.backward));
+  sort_stages(pipeline_stages.forward);
+  sort_stages(pipeline_stages.backward);
+  if (validate_stages) {
+    TF_RETURN_IF_ERROR(check_stages(pipeline_stages.forward));
+    TF_RETURN_IF_ERROR(check_stages(pipeline_stages.backward));
 
-  if (pipeline_stages.forward.empty()) {
-    return FailedPrecondition(
-        "Expected the pipeline to have at least one PipelineStage.");
-  }
+    if (pipeline_stages.forward.empty()) {
+      return FailedPrecondition(
+          "Expected the pipeline to have at least one PipelineStage.");
+    }
 
-  // If we have any bwd pipeline stages then we expect them to match the number
-  // of fwd stages (i.e. backprop has a stage for each forward prop).
-  if (pipeline_stages.backward.size() &&
-      pipeline_stages.forward.size() != pipeline_stages.backward.size()) {
-    return FailedPrecondition(
-        "Expected the number of PipelineStages (%d) and PipelineStageBackwards "
-        "(%d) to match.",
-        pipeline_stages.forward.size(), pipeline_stages.backward.size());
-  }
+    // If we have any bwd pipeline stages then we expect them to match the
+    // number of fwd stages (i.e. backprop has a stage for each forward prop).
+    if (pipeline_stages.backward.size() &&
+        pipeline_stages.forward.size() != pipeline_stages.backward.size()) {
+      return FailedPrecondition(
+          "Expected the number of PipelineStages (%d) and "
+          "PipelineStageBackwards "
+          "(%d) to match.",
+          pipeline_stages.forward.size(), pipeline_stages.backward.size());
+    }
 
-  // We expect the number of recomputation stages to be less than or equal to
-  // the number of forward stages.
-  if (pipeline_stages.forward.size() < pipeline_stages.recomputation.size()) {
-    return FailedPrecondition(
-        "Expected the number of PipelineStageRecomputations (%d) to be at most "
-        "%d.",
-        pipeline_stages.forward.size(), pipeline_stages.recomputation.size());
+    // We expect the number of recomputation stages to be less than or equal to
+    // the number of forward stages.
+    if (pipeline_stages.forward.size() < pipeline_stages.recomputation.size()) {
+      return FailedPrecondition(
+          "Expected the number of PipelineStageRecomputations (%d) to be at "
+          "most %d.",
+          pipeline_stages.forward.size(), pipeline_stages.recomputation.size());
+    }
   }
 
   if (pipeline_stages.backward.size() && !pipeline_stages.resource_update) {
@@ -384,6 +392,10 @@ StatusOr<HloInstruction*> ReplaceCallWith(
           new_call_computation));
   call->SetupDerivedInstruction(new_call);
   new_call->set_raw_backend_config_string(call->raw_backend_config_string());
+  if (call->has_sharding() && !new_call->has_sharding()) {
+    // Shapes were incompatible but fixing hasn't happened yet, so copy anyway.
+    new_call->set_sharding(call->sharding());
+  }
 
   VLOG(3) << "Replacing " << call->ToString() << " and computation:";
   XLA_VLOG_LINES(3, call_computation->ToString());
@@ -1022,8 +1034,8 @@ Status PipelineDataflowAnalysis::VerifyParameterUsage(
     TF_ASSIGN_OR_RETURN(StageID user_stage_id, GetStageID(user_stage));
     if (stage_id.id != user_stage_id.id) {
       return UnimplementedStrCat(
-          "The ", stage_id.ToString(),
-          " is trying to use an input which is already used by the ",
+          "The ", stage_id.ToString(), " is trying to use an input (",
+          parameter->name(), ") which is already used by the ",
           user_stage_id.ToString(),
           ". This violates the dataflow "
           " constraints because an input can only be used by a single"
