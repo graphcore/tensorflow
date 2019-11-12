@@ -409,7 +409,7 @@ void setFpBehaviour(poplar::Graph& graph,
                                       "setFpBehaviour");
   } else {
     LOG(WARNING) << "Setting IPU floating point behaviour is not supported "
-                    "on IPU__MODEL";
+                    "on IPU_MODEL";
   }
 }
 
@@ -420,11 +420,17 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
                         const poplar::Device& dev) {
   resources.main_graph = absl::make_unique<poplar::Graph>(
       dev, 0, poplar::replication_factor(resources.replication_factor));
+  const poplar::Target& target = dev.getTarget();
+
+  if (resources.replication_factor > 1) {
+    LOG(INFO)
+        << "Automatically replicating the TensorFlow model by a factor of "
+        << resources.replication_factor << ".";
+  }
   auto& main_graph = GetMasterGraph(resources);
   if (ShardingEnabled(module)) {
-    // Check that we have enough IPUs for this sharding configuration.
-    auto tiles_per_ipu = main_graph.getTarget().getTilesPerIPU();
-    auto num_ipus = main_graph.getTarget().getNumIPUs();
+    auto num_ipus = target.getNumIPUs();
+    auto tiles_per_ipu = target.getTilesPerIPU();
 
     IPUSelectionOrder order = poplar_executor->GetSelectionOrder();
     if (order == IPUSelectionOrder::AUTO) {
