@@ -656,6 +656,9 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
 Status PipelineFixer::InsertDummyBackwardStages(HloComputation* pipeline_comp) {
   TF_ASSIGN_OR_RETURN(PipelineStages stages,
                       GetPipelineStages(pipeline_comp, false));
+  if (stages.backward.empty()) {
+    return Status::OK();
+  }
 
   // Find the missing backward stages.
   std::list<int64> missing;
