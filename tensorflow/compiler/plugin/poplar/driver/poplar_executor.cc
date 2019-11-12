@@ -920,6 +920,7 @@ bool PoplarExecutor::HasPoplarDevice() {
   const bool force_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
   // If the device has not been configured via configure_ipu_system, but we have
   // requested an IPU model, then we create a CPU device.
+  std::lock_guard<std::recursive_mutex> g(mutex_);
   if (!device_open_ && force_ipu_model) {
     // Poplar CPU device
     poplar_device_ = poplar::Device::createCPUDevice();
