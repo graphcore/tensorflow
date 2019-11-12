@@ -84,7 +84,7 @@ bool IsProducerOp(const HloInstruction* inst) {
   }
 }
 
-StatusOr<std::vector<HloInstruction*>> GetPipelines(HloModule* module) {
+StatusOr<std::vector<HloInstruction*>> GetPipelines(const HloModule* module) {
   std::vector<HloInstruction*> pipeline_ops;
   for (HloComputation* comp : module->MakeNonfusionComputations()) {
     for (HloInstruction* inst : comp->instructions()) {

@@ -429,7 +429,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           570.01, 890.01, 410.01, 730.01
       ]])
       report.parse_log()
-      report.assert_pipeline_stages_on_expected_ipu(range(3))
+      report.assert_pipeline_stages_on_expected_ipu((0, 1, 3))
 
   @test_util.deprecated_graph_mode_only
   def testIllegalCapture(self):

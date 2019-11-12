@@ -62,7 +62,7 @@ struct PipelineStages {
 };
 
 // Get all the pipelines in the module.
-StatusOr<std::vector<HloInstruction*>> GetPipelines(HloModule* module);
+StatusOr<std::vector<HloInstruction*>> GetPipelines(const HloModule* module);
 
 // Get the forward and backward pipeline stages from the pipeline_computation.
 StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,

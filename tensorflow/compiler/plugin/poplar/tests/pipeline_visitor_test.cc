@@ -79,6 +79,8 @@ std::unique_ptr<CompilerResources> GetMockResources(
     resources->shard_graphs.emplace_back(
         resources->main_graph->createVirtualGraph(i * 4, (i + 1) * 4));
   }
+  resources->shard_to_ipu_id.resize(number_of_vgraphs);
+  absl::c_iota(resources->shard_to_ipu_id, 0);
 
   poplin::addCodelets(*resources->main_graph);
   popnn::addCodelets(*resources->main_graph);

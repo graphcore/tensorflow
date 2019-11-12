@@ -382,6 +382,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                            current_config_.max_scheduler_search_space_size());
   }
 
+  IPUSelectionOrder GetSelectionOrder() const {
+    return current_config_.selection_order();
+  }
+
   void AddCompileBeginEventRecord(const std::string& module_name);
 
   void AddCompileEndEventRecord(const std::string& module_name,

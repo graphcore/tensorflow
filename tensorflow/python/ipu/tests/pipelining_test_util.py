@@ -184,7 +184,10 @@ class PipelineTester(object):
                 feed_dict=dict(zip(inputs, input_values)))
     out = session.run(outfeed_op)[0]
     report.parse_log()
-    report.assert_pipeline_stages_on_expected_ipu(range(len(stages)))
+    report.assert_pipeline_stages_on_expected_ipu([
+        i - (i % 4) + ((i % 4) if (i % 4) < 2 else 5 - (i % 4))
+        for i in range(len(stages))
+    ])
     report.assert_max_tile_memory(expected_max_tile_memory, tolerance=0.2)
     return out
 

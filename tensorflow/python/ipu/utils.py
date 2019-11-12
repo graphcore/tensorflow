@@ -17,16 +17,113 @@ General utility functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from enum import Enum
+
 import time
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IPUSelectionOrder
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
 from tensorflow.python.util import deprecation
+
+
+class SelectionOrder(Enum):
+  """Depending on the communication pattern of the model, the order in
+  which the IPUs are selected and mapped to shards can impact the performance.
+
+  For example, given a model which executes on multiple IPUs:
+
+  .. code-block:: python
+
+    def sharded_graph(pa, pb, pc, pd):
+      with ipu.scopes.ipu_shard(0):
+        o1 = pa + pb
+      with ipu.scopes.ipu_shard(1):
+        o2 = o1 + pc
+      with ipu.scopes.ipu_shard(2):
+        o3 = o2 + pd
+        return o3
+
+  and a typical machine with 8 Graphcore C2 cards:
+   _______               _______
+  |       |             |       |
+  |  14   |=============|  15   |
+  |_______|             |_______|
+      ||                    ||
+   _______               _______
+  |       |             |       |
+  |  12   |=============|  13   |
+  |_______|             |_______|
+      ||                    ||
+   _______               _______
+  |       |             |       |
+  |  10   |=============|  11   |
+  |_______|             |_______|
+      ||                    ||
+   _______               _______
+  |       |             |       |
+  |   8   |=============|   9   |
+  |_______|             |_______|
+      ||                    ||
+   _______               _______
+  |       |             |       |
+  |   6   |=============|   7   |
+  |_______|             |_______|
+      ||                    ||
+   _______               _______
+  |       |             |       |
+  |   4   |=============|   5   |
+  |_______|             |_______|
+      ||                    ||
+   _______               _______
+  |       |             |       |
+  |   2   |=============|   3   |
+  |_______|             |_______|
+      ||                    ||
+   _______               _______
+  |       |             |       |
+  |   0   |=============|   1   |
+  |_______|             |_______|
+
+  (where each numbered square represents an IPU with the given device ID and the
+  == and || connections represent IPUs being directly connected via IPU-Links)
+
+  we can see that the `ipu_shard(0)` directly communicates with `ipu_shard(1)`
+  and that `ipu_shard(1)` directly communicates with `ipu_shard(2)`.
+  If the shards 0, 1, 2 were mapped to IPUs 0, 1, 2 in that order, then the
+  communication between shards 1 and 2 would not have a direct connection via an
+  IPU-Link and would have to perform a "hop" via an IPU.
+  If the shards 0, 1, 2 were mapped to IPUs 0, 1, 3 in that order, then the
+  communication between shards 1 and 2 would have a direct connection via an
+  IPU-Link which will reduce the communication cost.
+
+  This Enum class is used to control the order in which the IPUs are selected.
+  Currently, the following IPU selection orderings are supported:
+  * `AUTO`: automatically try and select the best selection given the network.
+  * `ZIGZAG`: follow the natural ordering of IPUs. In the above example, the
+    IPUs would be selected in the following order:
+    `0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15`.
+  * `SNAKE`: select IPUs such that each consecutive shard is directly
+    connected via IPU-Links to the shard before and after. In the above example,
+    the IPUs would be selected in the following order:
+    `0, 1, 3, 2, 4, 5, 7, 6, 8, 9, 11, 10, 12, 13, 15, 14`.
+  * `HOOF`: select IPUs such that each consecutive shard is directly
+    connected via IPU-Links to the shard before and after and the last and first
+    shard are on the same C2 cards. In the above example, the IPUs would be
+    selected in the following order:
+    `0, 2, 4, 6, 8, 10, 12, 14, 15, 13, 11, 9, 7, 5, 3, 1`.
+
+  The `SNAKE` and `HOOF` IPU selection orders are particularly beneficial for
+  pipelined models.
+  """
+  AUTO = IPUSelectionOrder.AUTO
+  ZIGZAG = IPUSelectionOrder.ZIGZAG
+  SNAKE = IPUSelectionOrder.SNAKE
+  HOOF = IPUSelectionOrder.HOOF
 
 
 def configure_ipu_system(config, device="cpu"):
@@ -72,7 +169,8 @@ def create_ipu_config(profiling=False,
                       max_inter_ipu_copies_buffer_size=0,
                       max_scheduler_lookahead_depth=5,
                       max_scheduler_search_space_size=64,
-                      prefetch_data_streams=True):
+                      prefetch_data_streams=True,
+                      selection_order=None):
   """Create an empty IPU session configuration structure.
 
   Args:
@@ -120,6 +218,10 @@ def create_ipu_config(profiling=False,
       when building the tree of future schedules.
     prefetch_data_streams: When set to true, the prefetching of data for data
       streams on the host will be overlapped with execution on the IPU.
+    selection_order: the order in which IPUs are selected and mapped to physical
+      IPU devices when using a multi-IPU devices (see `SelectionOrder`). When
+      not specified, then automatic selection order is used, otherwise an
+      instance of `SelectionOrder`.
 
   Returns:
     An IpuOptions configuration protobuf, suitable for passing to
@@ -131,6 +233,8 @@ def create_ipu_config(profiling=False,
 
   if profile_execution and not profiling:
     raise Exception("`profiling` is required when `profile_execution` is set")
+
+  selection_order = selection_order if selection_order else SelectionOrder.AUTO
 
   opts = IpuOptions()
   opts.ipu_model_config.enable_ipu_model = True
@@ -163,6 +267,7 @@ def create_ipu_config(profiling=False,
   opts.max_scheduler_search_space_size = max_scheduler_search_space_size
 
   opts.prefetch_data_streams = prefetch_data_streams
+  opts.selection_order = selection_order.value
   return opts
 
 

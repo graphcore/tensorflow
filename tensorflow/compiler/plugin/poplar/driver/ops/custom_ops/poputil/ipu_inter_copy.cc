@@ -91,7 +91,11 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
   // Create a concatenated and flattened tensor of the input tensors.
   auto t = FlattenAndConcatenateTensors(tensors_to_copy);
 
-  t = poputil::copyToIpu(GetMasterGraph(res), t, seq, *std::begin(dst_devices),
+  // Get the destination device id by looking through the virtual graph to IPU
+  // mapping.
+  CHECK_EQ(res.shard_to_ipu_id.size(), res.shard_graphs.size());
+  unsigned dst_device_id = res.shard_to_ipu_id[*std::begin(dst_devices)];
+  t = poputil::copyToIpu(GetMasterGraph(res), t, seq, dst_device_id,
                          GetDebugName(inst),
                          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
 

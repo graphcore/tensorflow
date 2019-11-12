@@ -50,6 +50,8 @@ struct CompilerResources {
 
   std::vector<poplar::Graph> shard_graphs;
 
+  std::vector<unsigned> shard_to_ipu_id;
+
   absl::flat_hash_map<const HloInstruction*, const popops::SlicePlan*>
       slice_plan_mappings;
 
