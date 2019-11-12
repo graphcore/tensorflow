@@ -20,12 +20,15 @@ import glob
 import six
 import numpy as np
 
+from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import model_fn as model_fn_lib
+from tensorflow.python.estimator import estimator as estimator_lib
+from tensorflow.python.framework import combinations
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -64,7 +67,7 @@ class _SessionRunCounter(session_run_hook.SessionRunHook):
     self.num_session_runs += 1
 
 
-class IPUEstimatorTest(test_util.TensorFlowTestCase):
+class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
   def testConstructor(self):
     config = ipu_run_config.RunConfig()
     estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
@@ -638,7 +641,11 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     with self.assertRaisesRegex(ValueError, "must contain eval_metric_ops"):
       estimator.evaluate(my_input_fn, steps=1)
 
-  def testPredictTensorTwoPerIteration(self):
+  @combinations.generate(
+      combinations.combine(estimator_class=[
+          estimator_lib.Estimator, ipu_estimator.IPUEstimator
+      ]))
+  def testPredictTensorTwoPerIteration(self, estimator_class):
     def my_input_fn():
       features = [[2.0], [3.0]]
       return dataset_ops.Dataset.from_tensor_slices(features)
@@ -652,7 +659,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2))
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    estimator = estimator_class(model_fn=my_model_fn, config=config)
 
     outputs = estimator.predict(input_fn=my_input_fn,
                                 yield_single_examples=True)
@@ -664,35 +671,42 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     self.assertAllEqual([2.0], next(outputs))
     self.assertAllEqual([3.0], next(outputs))
 
-  def testPredictDictOnePerIteration(self):
+  @combinations.generate(
+      combinations.combine(estimator_class=[
+          estimator_lib.Estimator, ipu_estimator.IPUEstimator
+      ]))
+  def testPredictDictOnePerIteration(self, estimator_class):
     def my_input_fn():
       feature = [2.0]
-      label = [3.0]
-      return dataset_ops.Dataset.from_tensors((feature, label))
+      return dataset_ops.Dataset.from_tensors(feature)
 
-    def my_model_fn(features, labels, mode):
+    def my_model_fn(features, mode):
       return model_fn_lib.EstimatorSpec(
           mode,
           predictions={
               "features": features,
-              "labels": labels,
+              "features2": features + features,
           },
       )
 
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=1))
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    estimator = estimator_class(model_fn=my_model_fn, config=config)
 
     output = next(estimator.predict(input_fn=my_input_fn))
     self.assertAllEqual(2.0, output["features"])
-    self.assertAllEqual(3.0, output["labels"])
+    self.assertAllEqual(4.0, output["features2"])
 
     output = next(
         estimator.predict(input_fn=my_input_fn, predict_keys=["features"]))
     self.assertAllEqual(2.0, output["features"])
     self.assertFalse("labels" in output)
 
-  def testPredictTensorBatchShouldGiveFlattenedOutput(self):
+  @combinations.generate(
+      combinations.combine(estimator_class=[
+          estimator_lib.Estimator, ipu_estimator.IPUEstimator
+      ]))
+  def testPredictTensorBatchShouldGiveFlattenedOutput(self, estimator_class):
     def my_input_fn():
       features = [
           [2.0, 3.0],
@@ -715,7 +729,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=3))
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    estimator = estimator_class(model_fn=my_model_fn, config=config)
 
     outputs = estimator.predict(input_fn=my_input_fn,
                                 yield_single_examples=True)
@@ -725,14 +739,20 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     self.assertAllEqual(1, next(outputs))
     self.assertAllEqual(1, next(outputs))
     self.assertAllEqual(0, next(outputs))
+    del outputs  # Release generator resources
 
     outputs = estimator.predict(input_fn=my_input_fn,
                                 yield_single_examples=False)
     self.assertAllEqual([1, 0], next(outputs))
     self.assertAllEqual([0, 1], next(outputs))
     self.assertAllEqual([1, 0], next(outputs))
+    del outputs  # Release generator resources
 
-  def testPredictDictBatchShouldGiveFlattenedOutput(self):
+  @combinations.generate(
+      combinations.combine(estimator_class=[
+          estimator_lib.Estimator, ipu_estimator.IPUEstimator
+      ]))
+  def testPredictDictBatchShouldGiveFlattenedOutput(self, estimator_class):
     def my_input_fn():
       features = [
           [2.0, 3.0],
@@ -754,7 +774,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=3))
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    estimator = estimator_class(model_fn=my_model_fn, config=config)
 
     outputs = estimator.predict(input_fn=my_input_fn,
                                 yield_single_examples=True)
@@ -764,12 +784,14 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     self.assertAllEqual(1, next(outputs)["predictions"])
     self.assertAllEqual(1, next(outputs)["predictions"])
     self.assertAllEqual(0, next(outputs)["predictions"])
+    del outputs  # Release generator resources
 
     outputs = estimator.predict(input_fn=my_input_fn,
                                 yield_single_examples=False)
     self.assertAllEqual([1, 0], next(outputs)["predictions"])
     self.assertAllEqual([0, 1], next(outputs)["predictions"])
     self.assertAllEqual([1, 0], next(outputs)["predictions"])
+    del outputs  # Release generator resources
 
   def testStepsMustBeMultipleOfIterationsPerLoop(self):
     config = ipu_run_config.RunConfig(
@@ -898,7 +920,11 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
 
     self.assertIsInstance(ipu_config, ipu_run_config.IPURunConfig)
 
-  def testDatasetWithDicts(self):
+  @combinations.generate(
+      combinations.combine(estimator_class=[
+          estimator_lib.Estimator, ipu_estimator.IPUEstimator
+      ]))
+  def testDatasetWithDicts(self, estimator_class):
     def my_input_fn():
       features = {
           "x0": np.array([[1.0]], dtype=np.float32),
@@ -912,8 +938,55 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
       return dataset.batch(1, drop_remainder=True)
 
     def my_model_fn(features, labels, mode):
-      loss = math_ops.reduce_sum(features["x0"] + features["x1"] +
-                                 labels["y0"] + labels["y1"],
+      if mode == model_fn_lib.ModeKeys.PREDICT:
+        self.assertIsNone(labels)
+        loss = math_ops.reduce_sum(features["x0"] + features["x1"], axis=-1)
+      else:
+        loss = math_ops.reduce_sum(features["x0"] + features["x1"] +
+                                   labels["y0"] + labels["y1"],
+                                   axis=-1)
+
+      train_op = array_ops.identity(loss)
+      predictions = loss
+      eval_metric_ops = {"mean_loss": metrics_impl.mean(loss)}
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        train_op=train_op,
+                                        predictions=predictions,
+                                        eval_metric_ops=eval_metric_ops)
+
+    estimator = estimator_class(model_fn=my_model_fn,
+                                config=ipu_run_config.RunConfig())
+
+    # train
+    estimator.train(input_fn=my_input_fn, steps=1)
+
+    # predict
+    predictions = estimator.predict(input_fn=my_input_fn,
+                                    yield_single_examples=True)
+    self.assertEqual(3.0, next(predictions))
+    del predictions  # Release generator resources
+
+    # evaluate
+    scores = estimator.evaluate(my_input_fn, steps=1)
+    self.assertAllClose(10.0, scores["loss"])
+
+  @combinations.generate(
+      combinations.combine(estimator_class=[
+          estimator_lib.Estimator, ipu_estimator.IPUEstimator
+      ]))
+  def testFlatDatasetWithDict(self, estimator_class):
+    def my_input_fn():
+      dataset = dataset_ops.Dataset.from_tensor_slices({
+          "input_ids": [[0], [1]],
+          "input_mask": [[2], [3]],
+          "labels": [[4], [5]],
+      })
+      return dataset.batch(1, drop_remainder=True)
+
+    def my_model_fn(features, mode):
+      loss = math_ops.reduce_sum(features["input_ids"] +
+                                 features["input_mask"] + features["labels"],
                                  axis=-1)
       train_op = array_ops.identity(loss)
       predictions = loss
@@ -924,21 +997,64 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                                         predictions=predictions,
                                         eval_metric_ops=eval_metric_ops)
 
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
-                                           config=ipu_run_config.RunConfig())
+    estimator = estimator_class(model_fn=my_model_fn,
+                                config=ipu_run_config.RunConfig())
 
     # train
-    estimator.train(input_fn=my_input_fn, steps=1)
+    estimator.train(input_fn=my_input_fn, steps=2)
 
     # predict
     predictions = estimator.predict(input_fn=my_input_fn)
-    self.assertEqual(10.0, next(predictions))
+    self.assertAllEqual(6.0, next(predictions))
+    self.assertAllEqual(9.0, next(predictions))
+    del predictions  # Release generator resources
 
     # evaluate
-    scores = estimator.evaluate(my_input_fn, steps=1)
-    self.assertAllClose(10.0, scores["loss"])
+    scores = estimator.evaluate(my_input_fn, steps=2)
+    self.assertAllEqual(7.5, scores["loss"])
 
-  def testPassingHooksFromModelFunction(self):
+  @combinations.generate(
+      combinations.combine(estimator_class=[
+          estimator_lib.Estimator, ipu_estimator.IPUEstimator
+      ]))
+  def testTupleDatasetWithWrongNumberOfElements(self, estimator_class):
+    def input_fn_with_one_element_tuple():
+      dataset = dataset_ops.Dataset.from_tensor_slices(([[0], [1]],))
+      return dataset.batch(1, drop_remainder=True)
+
+    def input_fn_with_three_element_tuple():
+      dataset = dataset_ops.Dataset.from_tensor_slices((
+          [[0], [1]],
+          [[2], [3]],
+          [[4], [5]],
+      ))
+      return dataset.batch(1, drop_remainder=True)
+
+    def my_model_fn(features, labels, mode):
+      loss = math_ops.reduce_sum(features + labels, axis=-1)
+      train_op = array_ops.identity(loss)
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        train_op=train_op)
+
+    estimator = estimator_class(model_fn=my_model_fn,
+                                config=ipu_run_config.RunConfig())
+
+    with self.assertRaisesRegex(
+        ValueError,
+        r"input_fn should return \(features, labels\) as a len 2 tuple."):
+      estimator.train(input_fn=input_fn_with_one_element_tuple, steps=1)
+
+    with self.assertRaisesRegex(
+        ValueError,
+        r"input_fn should return \(features, labels\) as a len 2 tuple."):
+      estimator.train(input_fn=input_fn_with_three_element_tuple, steps=1)
+
+  @combinations.generate(
+      combinations.combine(estimator_class=[
+          estimator_lib.Estimator, ipu_estimator.IPUEstimator
+      ]))
+  def testPassingHooksFromModelFunction(self, estimator_class):
     def my_input_fn():
       features = np.array([[1.0]], dtype=np.float32)
       labels = np.array([[2.0]], dtype=np.float32)
@@ -950,7 +1066,12 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     prediction_hook = _SessionRunCounter()
 
     def my_model_fn(features, labels, mode):
-      loss = features + labels
+      if mode == model_fn_lib.ModeKeys.PREDICT:
+        self.assertIsNone(labels)
+        loss = features
+      else:
+        loss = features + labels
+
       train_op = array_ops.identity(loss)
       predictions = loss
       eval_metric_ops = {"mean_loss": metrics_impl.mean(loss)}
@@ -963,8 +1084,8 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
                                         evaluation_hooks=[evaluation_hook],
                                         prediction_hooks=[prediction_hook])
 
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
-                                           config=ipu_run_config.RunConfig())
+    estimator = estimator_class(model_fn=my_model_fn,
+                                config=ipu_run_config.RunConfig())
 
     # train
     self.assertEqual(0, training_hook.num_session_runs)
@@ -977,6 +1098,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase):
     self.assertEqual(0, prediction_hook.num_session_runs)
     next(predictions)
     self.assertEqual(1, prediction_hook.num_session_runs)
+    del predictions  # Release generator resources
 
     # evaluate
     self.assertEqual(0, evaluation_hook.num_session_runs)

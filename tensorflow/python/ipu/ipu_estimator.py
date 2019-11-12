@@ -218,6 +218,29 @@ def _add_recv_at_host_ops(recv_ops_attrs):
   return tensors
 
 
+def _unpack_features_and_labels(args, kwargs):
+  if args and kwargs:
+    raise ValueError("Invalid dataset with both tuple and keywords")
+  if not args and not kwargs:
+    raise ValueError("Invalid dataset with neither tuple nor keywords")
+
+  if args:
+    if len(args) == 1:
+      features = args[0]
+      labels = None
+    elif len(args) == 2:
+      features, labels = args
+    else:
+      raise ValueError(
+          "Invalid dataset tuple, expected 1 or 2 elements, got {}".format(
+              len(args)))
+  else:
+    features = kwargs
+    labels = None
+
+  return features, labels
+
+
 class _ModelFnWrapper(object):
   def __init__(self, model_fn, config, params, infeed_queue):
     self._model_fn = model_fn
@@ -264,7 +287,8 @@ class _ModelFnWrapper(object):
     return _add_recv_at_host_ops(self._captured_host_call_args)
 
   def create_training_loop(self):
-    def training_step(total_loss, features, labels=None):
+    def training_step(total_loss, *args, **kwargs):
+      features, labels = _unpack_features_and_labels(args, kwargs)
       estimator_spec = self._call_model_fn(features, labels,
                                            model_fn_lib.ModeKeys.TRAIN)
 
@@ -300,8 +324,9 @@ class _ModelFnWrapper(object):
     def training_loop():
       if self._iterations_per_loop == 1:
         # Simplify the graph by avoiding the loop.
-        args = self._infeed_queue._dequeue()  # pylint: disable=protected-access
-        total_loss = training_step(_INITIAL_LOSS, *args)
+        inputs = self._infeed_queue._dequeue()  # pylint: disable=protected-access
+        args, kwargs = loops._body_arguments(inputs)  # pylint: disable=protected-access
+        total_loss = training_step(_INITIAL_LOSS, *args, **kwargs)
         return total_loss
 
       total_loss = loops.repeat(self._iterations_per_loop,
@@ -319,7 +344,8 @@ class _ModelFnWrapper(object):
     return training_loop
 
   def create_evaluation_loop(self, outfeed_queue):
-    def evaluation_step(total_loss, features, labels=None):
+    def evaluation_step(total_loss, *args, **kwargs):
+      features, labels = _unpack_features_and_labels(args, kwargs)
       estimator_spec = self._call_model_fn(features, labels,
                                            model_fn_lib.ModeKeys.EVAL)
 
@@ -355,7 +381,9 @@ class _ModelFnWrapper(object):
     return evaluation_loop
 
   def create_prediction_loop(self, outfeed_queue):
-    def prediction_step(features, labels=None):
+    def prediction_step(*args, **kwargs):
+      features, _ = _unpack_features_and_labels(args, kwargs)
+      labels = None  # Do not provide labels for prediction
       estimator_spec = self._call_model_fn(features, labels,
                                            model_fn_lib.ModeKeys.PREDICT)
 
