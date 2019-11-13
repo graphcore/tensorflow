@@ -12,40 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
-"""
-Optimizer wrapper for sharded graphs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-"""
+from tensorflow.python.ipu.optimizers.sharded_optimizer import *  # pylint: disable=wildcard-import,unused-wildcard-import,enable=unused-import
+from tensorflow.python.platform import tf_logging
 
-from tensorflow.python.framework import ops
-from tensorflow.python.ipu import sharding
-from tensorflow.python.training import optimizer
-
-
-class ShardedOptimizer(optimizer.Optimizer):
-  def __init__(self, optimizer):
-    """Construct a new sharded optimizer.
-
-    Args:
-      optimizer: The optimizer to wrap.
-    """
-
-    super(ShardedOptimizer, self).__init__(False, name="ShardedOptimizer")
-    self._optimizer = optimizer
-
-  def compute_gradients(self, loss, var_list=None, **kwargs):
-    kwargs['colocate_gradients_with_ops'] = True
-    ret = self._optimizer.compute_gradients(loss, var_list=var_list, **kwargs)
-    sharding.propagate_sharding(ops.get_default_graph())
-    return ret
-
-  def apply_gradients(self, grads_and_vars, global_step=None, name=None):
-    ret = self._optimizer.apply_gradients(grads_and_vars, global_step, name)
-    sharding.propagate_sharding(ops.get_default_graph())
-    return ret
-
-  def get_slot_names(self, *args, **kwargs):
-    return self._optimizer.get_slot_names(*args, **kwargs)
-
-  def variables(self):
-    return self._optimizer.variables()
+tf_logging.warning("tensorflow.python.ipu.sharded_optimizer has been moved to "
+                   "tensorflow.python.ipu.optimizers.sharded_optimizer. This "
+                   "namespace will be removed in the future.")

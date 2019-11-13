@@ -28,6 +28,9 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
+
+from tensorflow.python.ipu.optimizers import cross_replica_optimizer
+from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import metrics_impl
@@ -124,10 +127,11 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
 
       loss = losses.mean_squared_error(labels=labels, predictions=predictions)
       optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      sharded_optimizer = ipu.sharded_optimizer.ShardedOptimizer(optimizer)
-      cross_replica_optimizer = ipu.ipu_optimizer.CrossReplicaOptimizer(
-          sharded_optimizer)
-      train_op = cross_replica_optimizer.minimize(loss)
+      sharded_optimizer_obj = sharded_optimizer.ShardedOptimizer(optimizer)
+      cross_replica_optimizer_obj = \
+      cross_replica_optimizer.CrossReplicaOptimizer(
+          sharded_optimizer_obj)
+      train_op = cross_replica_optimizer_obj.minimize(loss)
 
       return model_fn_lib.EstimatorSpec(mode=mode,
                                         loss=loss,
@@ -186,10 +190,11 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
 
       loss = losses.mean_squared_error(labels=labels, predictions=predictions)
       optimizer = gradient_descent.GradientDescentOptimizer(0.1)
-      sharded_optimizer = ipu.sharded_optimizer.ShardedOptimizer(optimizer)
-      cross_replica_optimizer = ipu.ipu_optimizer.CrossReplicaOptimizer(
-          sharded_optimizer)
-      train_op = cross_replica_optimizer.minimize(loss)
+      sharded_optimizer_obj = sharded_optimizer.ShardedOptimizer(optimizer)
+      cross_replica_optimizer_obj = \
+      cross_replica_optimizer.CrossReplicaOptimizer(
+          sharded_optimizer_obj)
+      train_op = cross_replica_optimizer_obj.minimize(loss)
 
       return model_fn_lib.EstimatorSpec(mode=mode,
                                         loss=loss,
@@ -320,9 +325,9 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
         predictions = layers.Dense(units=1)(features)
 
       loss = losses.mean_squared_error(labels=labels, predictions=predictions)
-      sharded_optimizer = ipu.sharded_optimizer.ShardedOptimizer(
+      sharded_optimizer_obj = sharded_optimizer.ShardedOptimizer(
           gradient_descent.GradientDescentOptimizer(0.1))
-      train_op = sharded_optimizer.minimize(loss)
+      train_op = sharded_optimizer_obj.minimize(loss)
 
       return model_fn_lib.EstimatorSpec(mode=mode,
                                         loss=loss,

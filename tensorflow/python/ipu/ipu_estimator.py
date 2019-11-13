@@ -186,7 +186,8 @@ def _validate_replicated_training_graph():
     raise ValueError(
         ("This is not a valid replicated training graph because no {} " +
          "operations were found. Did you remember to use the " +
-         "`tensorflow.python.ipu.ipu_optimizer.CrossReplicaOptimizer`?"
+         "`tensorflow.python.ipu.optimizers.`" +
+         "`cross_replica_optimizer.CrossReplicaOptimizer`?"
          ).format(_CROSS_REPLICA_SUM_OP))
 
 

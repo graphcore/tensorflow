@@ -22,7 +22,6 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import standard_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
-from tensorflow.python.ipu import gradient_accumulation_optimizer
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -30,6 +29,7 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import pipelining_ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.compat.v1 import data as compat_v1_data
 
 

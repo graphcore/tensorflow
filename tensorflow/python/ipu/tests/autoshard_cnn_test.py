@@ -12,6 +12,7 @@ from tensorflow.python import ipu
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
+from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -97,7 +98,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
           logits=x, labels=array_ops.stop_gradient(y))
       loss = math_ops.reduce_mean(cross_entropy)
-      optim = ipu.sharded_optimizer.ShardedOptimizer(
+      optim = sharded_optimizer.ShardedOptimizer(
           gd.GradientDescentOptimizer(0.01))
       train = optim.minimize(cross_entropy)
 
@@ -129,7 +130,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
           logits=x, labels=array_ops.stop_gradient(y))
       loss = math_ops.reduce_mean(cross_entropy)
-      optim = ipu.sharded_optimizer.ShardedOptimizer(
+      optim = sharded_optimizer.ShardedOptimizer(
           gd.GradientDescentOptimizer(0.01))
       train = optim.minimize(cross_entropy)
       return [loss, train]
@@ -160,7 +161,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
       cross_entropy = nn.softmax_cross_entropy_with_logits_v2(
           logits=x, labels=array_ops.stop_gradient(y))
       loss = math_ops.reduce_mean(cross_entropy)
-      optim = ipu.sharded_optimizer.ShardedOptimizer(
+      optim = sharded_optimizer.ShardedOptimizer(
           gd.GradientDescentOptimizer(0.01))
       train = optim.minimize(cross_entropy)
       return [loss, train]
@@ -205,7 +206,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(y))
           loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = ipu.sharded_optimizer.ShardedOptimizer(
+          optim = sharded_optimizer.ShardedOptimizer(
               gd.GradientDescentOptimizer(0.01))
           train = optim.minimize(cross_entropy)
 
@@ -255,7 +256,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(y))
           loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = ipu.sharded_optimizer.ShardedOptimizer(
+          optim = sharded_optimizer.ShardedOptimizer(
               gd.GradientDescentOptimizer(0.01))
           train = optim.minimize(cross_entropy)
 
@@ -310,7 +311,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(y))
           loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = ipu.sharded_optimizer.ShardedOptimizer(
+          optim = sharded_optimizer.ShardedOptimizer(
               gd.GradientDescentOptimizer(lr))
           train = optim.minimize(cross_entropy)
 
@@ -365,7 +366,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
               logits=x, labels=array_ops.stop_gradient(y))
           loss = math_ops.reduce_mean(cross_entropy)
 
-          optim = ipu.sharded_optimizer.ShardedOptimizer(
+          optim = sharded_optimizer.ShardedOptimizer(
               gd.GradientDescentOptimizer(0.01))
           train = optim.minimize(cross_entropy)
 
@@ -420,7 +421,7 @@ class AutoshardTest(test_util.TensorFlowTestCase):
             logits=x, labels=array_ops.stop_gradient(y))
         loss = math_ops.reduce_mean(cross_entropy)
 
-      optim = ipu.sharded_optimizer.ShardedOptimizer(
+      optim = sharded_optimizer.ShardedOptimizer(
           gd.GradientDescentOptimizer(0.01))
       optim.minimize(loss)
 

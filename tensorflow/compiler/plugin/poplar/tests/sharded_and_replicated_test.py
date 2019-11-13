@@ -23,6 +23,9 @@ from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.optimizers import cross_replica_optimizer
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
+from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -107,8 +110,8 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
                 logits=x, labels=array_ops.stop_gradient(lab))
             loss = math_ops.reduce_mean(loss)
 
-          opt = ipu.ipu_optimizer.CrossReplicaOptimizer(
-              ipu.sharded_optimizer.ShardedOptimizer(
+          opt = cross_replica_optimizer.CrossReplicaOptimizer(
+              sharded_optimizer.ShardedOptimizer(
                   gradient_descent.GradientDescentOptimizer(0.000001)))
           train = opt.minimize(loss)
 
@@ -157,8 +160,10 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
                 logits=x, labels=array_ops.stop_gradient(lab))
             loss = math_ops.reduce_mean(loss)
 
-          opt = ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer(
-              ipu.sharded_optimizer.ShardedOptimizer(
+          opt = \
+          gradient_accumulation_optimizer.\
+          CrossReplicaGradientAccumulationOptimizer(
+              sharded_optimizer.ShardedOptimizer(
                   gradient_descent.GradientDescentOptimizer(0.000001)), 10)
           train = opt.minimize(loss)
 

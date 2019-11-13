@@ -10,6 +10,7 @@ import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.framework import dtypes
+from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -42,7 +43,7 @@ class WhileLoopShardedTest(xla_test.XLATestCase):
                 logits=x, labels=array_ops.stop_gradient(y))
             loss = math_ops.reduce_mean(cross_entropy)
 
-            optim = ipu.sharded_optimizer.ShardedOptimizer(
+            optim = sharded_optimizer.ShardedOptimizer(
                 gd.GradientDescentOptimizer(lr))
             train = optim.minimize(cross_entropy)
 

@@ -11,6 +11,7 @@ from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON, configure_ipu_system
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -189,7 +190,7 @@ class MultiIpuTest(xla_test.XLATestCase):
                 logits=x, labels=array_ops.stop_gradient(lab))
             loss = math_ops.reduce_mean(loss)
 
-          opt = ipu.sharded_optimizer.ShardedOptimizer(
+          opt = sharded_optimizer.ShardedOptimizer(
               gradient_descent.GradientDescentOptimizer(0.000001))
           train = opt.minimize(loss)
 

@@ -18,16 +18,13 @@
 # pylint: disable=wildcard-import,unused-import
 from tensorflow.python.ipu import autoshard
 from tensorflow.python.ipu import autoshard_cnn
-from tensorflow.python.ipu import gradient_accumulation_optimizer
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_multi_worker_strategy
-from tensorflow.python.ipu import ipu_optimizer
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
-from tensorflow.python.ipu import sharded_optimizer
 from tensorflow.python.ipu import sharding
 from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import ipu_estimator
@@ -51,5 +48,9 @@ from tensorflow.python.ipu.ops import rnn_ops_grad
 from tensorflow.python.ipu.ops import summary_ops
 
 from tensorflow.python.ipu.ops.experimental import popfloat_cast_to_gfloat
+
+from tensorflow.python.ipu.optimizers import cross_replica_optimizer
+from tensorflow.python.ipu.optimizers import sharded_optimizer
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
 # pylint: enable=wildcard-import,unused-import
