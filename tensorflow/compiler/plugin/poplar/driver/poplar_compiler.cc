@@ -420,14 +420,15 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
                         const poplar::Device& dev) {
   resources.main_graph = absl::make_unique<poplar::Graph>(
       dev, 0, poplar::replication_factor(resources.replication_factor));
-  const poplar::Target& target = dev.getTarget();
 
   if (resources.replication_factor > 1) {
     LOG(INFO)
         << "Automatically replicating the TensorFlow model by a factor of "
         << resources.replication_factor << ".";
   }
+
   auto& main_graph = GetMasterGraph(resources);
+  const poplar::Target& target = main_graph.getTarget();
   if (ShardingEnabled(module)) {
     auto num_ipus = target.getNumIPUs();
     auto tiles_per_ipu = target.getTilesPerIPU();
@@ -439,6 +440,8 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
                   : IPUSelectionOrder::ZIGZAG;
     }
 
+    VLOG(1) << "Using " << IPUSelectionOrder_Name(order)
+            << " selection order when mapping shards to IPUs.";
     for (unsigned virtual_graph_idx = 0; virtual_graph_idx < num_ipus;
          ++virtual_graph_idx) {
       unsigned ipu;
