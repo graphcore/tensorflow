@@ -604,7 +604,11 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     self.assertEqual(loss_output, [6.0, 22.0, 18.0])
 
-  def testEvaluate(self):
+  @combinations.generate(
+      combinations.combine(estimator_spec_class=[
+          model_fn_lib.EstimatorSpec, ipu_estimator.IPUEstimatorSpec
+      ]))
+  def testEvaluate(self, estimator_spec_class):
     def my_input_fn():
       features = [0., 2.]  # mean: 1
       labels = [1., 3.]  # mean: 2
@@ -616,9 +620,9 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           "feature_mean": metrics_impl.mean(features),
           "label_mean": metrics_impl.mean(labels),
       }
-      return model_fn_lib.EstimatorSpec(mode,
-                                        loss=loss,
-                                        eval_metric_ops=eval_metric_ops)
+      return estimator_spec_class(mode,
+                                  loss=loss,
+                                  eval_metric_ops=eval_metric_ops)
 
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=1))

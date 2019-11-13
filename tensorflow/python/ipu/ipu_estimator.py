@@ -71,8 +71,8 @@ _next_feed_id.feed_count = 0
 
 class IPUEstimatorSpec(
     collections.namedtuple('IPUEstimatorSpec', [
-        'mode', 'predictions', 'loss', 'train_op', 'eval_metrics', 'host_call',
-        'training_hooks', 'evaluation_hooks', 'prediction_hooks'
+        'mode', 'predictions', 'loss', 'train_op', 'eval_metric_ops',
+        'host_call', 'training_hooks', 'evaluation_hooks', 'prediction_hooks'
     ])):
   """Ops and objects returned from a `model_fn` and passed to `IPUEstimator`."""
   def __new__(cls,
@@ -80,7 +80,7 @@ class IPUEstimatorSpec(
               predictions=None,
               loss=None,
               train_op=None,
-              eval_metrics=None,
+              eval_metric_ops=None,
               host_call=None,
               training_hooks=None,
               evaluation_hooks=None,
@@ -95,10 +95,11 @@ class IPUEstimatorSpec(
         evaluation_hooks)
     prediction_hooks = model_fn_lib._validate_estimator_spec_hooks(
         prediction_hooks)
+    eval_metric_ops = model_fn_lib._validate_eval_metric_ops(eval_metric_ops)
 
     if host_call is not None:
       if not isinstance(host_call, tuple):
-        raise ValueError("`host_call` must ba a tuple")
+        raise ValueError("`host_call` must be a tuple")
       if len(host_call) != 2:
         raise ValueError("`host_call` must have two elements")
       if not isinstance(host_call[1], list):
@@ -110,7 +111,7 @@ class IPUEstimatorSpec(
                               predictions=predictions,
                               loss=loss,
                               train_op=train_op,
-                              eval_metrics=eval_metrics,
+                              eval_metric_ops=eval_metric_ops,
                               host_call=host_call,
                               training_hooks=training_hooks,
                               evaluation_hooks=evaluation_hooks,
