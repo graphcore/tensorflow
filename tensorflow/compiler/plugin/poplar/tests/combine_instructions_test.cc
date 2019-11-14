@@ -599,6 +599,69 @@ add {
   ASSERT_EQ(absl::c_count_if(seq, pred), 4);
 }
 
+TEST_F(CombineInstructionsTest, TestMultipleTypes) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  add = f32[] add(x, y)
+}
+
+%cluster_1  {
+  %arg0 = f32[4] parameter(0)
+  %arg1 = f16[4] parameter(1)
+  %arg2 = f32[4] parameter(2)
+  %arg3 = f16[4] parameter(3)
+  %arg4 = f32[4] parameter(4)
+  %arg5 = f16[4] parameter(5)
+
+
+  %a1 = f32[4] all-reduce(arg0), to_apply=add
+  %a2 = f16[4] all-reduce(arg1), to_apply=add
+  %a3 = f32[4] all-reduce(arg2), to_apply=add
+  %a4 = f16[4] all-reduce(arg3), to_apply=add
+  %a5 = f32[4] all-reduce(arg4), to_apply=add
+  %a6 = f16[4] all-reduce(arg5), to_apply=add
+  ROOT %tuple = (f32[4], f16[4], f32[4], f16[4], f32[4], f16[4]) tuple(f32[4] %a1, f16[4] %a2, f32[4] %a3, f16[4] %a4, f32[4] %a5, f16[4] %a6)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  // 6 Arguments + 2 all reduces + 2*3 GTE (one for each element of the fused
+  // all reduce) + 1 output tuple. = 15 instructions.
+  ASSERT_EQ(seq.size(), 15);
+
+  auto pred = [](const HloInstruction* inst) {
+    return inst->opcode() == HloOpcode::kAllReduce;
+  };
+
+  // All of the fp16 kernels should be fused in one and all of the floating
+  // point 32 in another, so there should only be two.
+  ASSERT_EQ(absl::c_count_if(seq, pred), 2);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

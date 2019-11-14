@@ -97,6 +97,9 @@ class ColocatorCluster {
     return out;
   }
 
+  // Return an element at a given index.
+  ClusterType Peek(std::size_t index) { return cluster_[index]; }
+
  private:
   std::vector<ClusterType> cluster_;
   const InstructionColocatorHelper* collocator_type_;

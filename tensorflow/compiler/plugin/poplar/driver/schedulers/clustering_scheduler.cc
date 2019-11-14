@@ -1,7 +1,23 @@
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 
+#include <list>
 #include <map>
 #include <queue>
+#include <set>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -171,22 +187,20 @@ class ClusteringScheduler {
         previously_clustered_node;
   };
 
+  // A helper type for our colocator queues.
+  using QueueIterator = std::list<ColocatorCluster<Cluster::Ref>>::iterator;
+
   ClusteringScheduler(HloComputation* computation,
                       const TuplePointsToAnalysis& points_to_analysis,
                       const LogicalBuffer::SizeFunction& size_function,
                       const absl::flat_hash_map<const HloComputation*, int64>&
                           memory_by_computation,
-                      const CompilerInformation& information)
+                      const CompilerInformation& info)
       : computation_(computation),
         points_to_analysis_(points_to_analysis),
         size_function_(size_function),
-        memory_by_computation_(memory_by_computation) {
-    // Create colocator queues.
-    for (auto colocator : GetAllInstructionColocatorHelpers()) {
-      colocator_queues.insert(std::make_pair(
-          colocator, ColocatorCluster<Cluster::Ref>(colocator, information)));
-    }
-  }
+        memory_by_computation_(memory_by_computation),
+        information(info) {}
 
   // Returns whether the memory used by the given buffer should be ignored by
   // the scheduling heuristic.
@@ -220,8 +234,10 @@ class ClusteringScheduler {
   std::vector<Cluster::Ref> PopFromQueue();
 
   // Pop the next instructions from a colocator queue.
-  std::vector<Cluster::Ref> PopFromColocatorQueue(
-      const InstructionColocatorHelper* colocator);
+  std::vector<Cluster::Ref> PopFromColocatorQueue(QueueIterator colocator);
+
+  // Find the colocator queue a given instruction should belong to.
+  QueueIterator FindColocatorInQueue(Cluster::Ref node);
 
   HloInstructionSequence CreateSchedule();
 
@@ -249,24 +265,34 @@ class ClusteringScheduler {
       ready_queue;
 
   // Queues for all the colocators such that the instructions which can be
-  // colocated are scheduled together.
-  std::map<const InstructionColocatorHelper*, ColocatorCluster<Cluster::Ref>,
-           InstructionColocatorHelperPtrComparator>
-      colocator_queues;
+  // colocated are scheduled together. Std::list for iterator safety.
+  std::list<ColocatorCluster<Cluster::Ref>> colocator_queues;
+
+  // Wrapper around the colocator helper comparator.
+  struct QueueColocatorHelper {
+    bool operator()(QueueIterator lhs, QueueIterator rhs) const {
+      // Each queue is a cluster of a cluster of HloInstructions so we need to
+      // peek the top of the first cluster to to see the second cluster then
+      // peek the top HloInstruction from that and sort by its unique id.
+      return lhs->Peek(0)->nodes.back()->unique_id() <
+             rhs->Peek(0)->nodes.back()->unique_id();
+    }
+  };
+
   // Indicator which shows colocation clusters that are ready to be scheduled.
-  std::set<const InstructionColocatorHelper*,
-           InstructionColocatorHelperPtrComparator>
-      colocators_ready_to_schedule;
+  std::set<QueueIterator, QueueColocatorHelper> colocators_ready_to_schedule;
+
   // Indicator which shows colocation clusters which have nodes that can be
   // scheduled.
-  std::set<const InstructionColocatorHelper*,
-           InstructionColocatorHelperPtrComparator>
-      colocators_with_nodes;
+  std::set<QueueIterator, QueueColocatorHelper> colocators_with_nodes;
 
   // Map of nodes waiting to be scheduled to their dependencies which have not
   // been scheduled.
   absl::flat_hash_map<Cluster::Ref, absl::flat_hash_set<Cluster::Ref>>
       wait_queue;
+
+  // Compiler metadata.
+  const CompilerInformation& information;
 };
 
 int64 ClusteringScheduler::GetBufferMemoryFreed(const HloInstruction* parent,
@@ -477,28 +503,35 @@ int64 ByteSizeOfIncludingTuple(const Shape& shape) {
 
 void ClusteringScheduler::AddToReady(Cluster::Ref node_to_add) {
   if (node_to_add->colocator) {
-    auto colocator = *node_to_add->colocator;
     int64 size =
         ByteSizeOfIncludingTuple((*node_to_add->nodes.begin())->shape());
+
+    QueueIterator colocator_cluster = FindColocatorInQueue(node_to_add);
     // Add the cluster so that it is colocated, making sure to indicate if the
     // cluster is ready to be scheduled.
-    if (colocator_queues.at(colocator).Add(node_to_add, size)) {
-      colocators_ready_to_schedule.insert(colocator);
+
+    if (colocator_cluster->Add(node_to_add, size)) {
+      colocators_ready_to_schedule.insert(colocator_cluster);
     }
     // Keep track of colocators with clusters.
-    colocators_with_nodes.insert(colocator);
+    colocators_with_nodes.insert(colocator_cluster);
   } else {
     ready_queue.push(node_to_add);
   }
 }
+
 std::vector<ClusteringScheduler::Cluster::Ref>
-ClusteringScheduler::PopFromColocatorQueue(
-    const InstructionColocatorHelper* colocator) {
+ClusteringScheduler::PopFromColocatorQueue(QueueIterator colocator) {
   // Once we get all the instruction, this queue is no longer ready to be
   // scheduled/has any nodes.
   colocators_with_nodes.erase(colocator);
   colocators_ready_to_schedule.erase(colocator);
-  return colocator_queues.at(colocator).GetAll();
+
+  // Get the results then remove it from the colocator queue.
+  std::vector<ClusteringScheduler::Cluster::Ref> result = colocator->GetAll();
+  colocator_queues.erase(colocator);
+
+  return result;
 }
 
 std::vector<ClusteringScheduler::Cluster::Ref>
@@ -516,6 +549,35 @@ ClusteringScheduler::PopFromQueue() {
   // Otherwise force a colocator with clusters to be scheduled.
   CHECK(colocators_with_nodes.size());
   return PopFromColocatorQueue(*std::begin(colocators_with_nodes));
+}
+
+ClusteringScheduler::QueueIterator ClusteringScheduler::FindColocatorInQueue(
+    Cluster::Ref node) {
+  QueueIterator correct_queue = colocator_queues.end();
+
+  // Iterate through all the queues and compare this node to the colocators in
+  // those queues, if we are colocatable then we return that queue.
+  for (QueueIterator itr = colocator_queues.begin();
+       itr != colocator_queues.end(); ++itr) {
+    Cluster::Ref candidate_value = itr->Peek(0);
+
+    if (candidate_value->colocator == node->colocator &&
+        CanColocate(*node->nodes.begin(), *candidate_value->nodes.begin())) {
+      correct_queue = itr;
+      break;
+    }
+  }
+
+  // If we couldn't find a queue, that is to say the node can't be colocated
+  // with any of the values in any of the queues, then we add a queue for it.
+  if (correct_queue == colocator_queues.end()) {
+    colocator_queues.push_back(
+        ColocatorCluster<Cluster::Ref>(node->colocator.value(), information));
+    // C++ list doesn't have an iterator returning back function...
+    correct_queue = --colocator_queues.end();
+  }
+
+  return correct_queue;
 }
 
 // Add a cluster node to the wait queue or if it has no dependencies, straight

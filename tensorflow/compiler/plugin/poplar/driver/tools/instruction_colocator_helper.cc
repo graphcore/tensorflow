@@ -58,6 +58,17 @@ bool InstructionColocatorHelper::CanColocate(const HloInstruction* a,
   if (!a->has_compatible_sharding(b)) {
     return false;
   }
+
+  // The two instructions must have the same element type.
+  if (a->shape().element_type() != b->shape().element_type()) {
+    return false;
+  }
+
+  // The two instructions must have the same inplaceness.
+  if (IsLoweredInplace(a) != IsLoweredInplace(b)) {
+    return false;
+  }
+
   return CanColocateExtra(a, b);
 }
 
