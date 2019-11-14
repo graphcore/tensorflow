@@ -24,9 +24,11 @@ namespace xla {
 namespace poplarplugin {
 
 // Constructor.
-HloPrintTensor::HloPrintTensor(HloInstruction* input)
+HloPrintTensor::HloPrintTensor(HloInstruction* input,
+                               const std::string& tensor_name)
     : HloPoplarInstruction(ShapeUtil::MakeTokenShape(), {input},
-                           PoplarOp::PrintTensor) {
+                           PoplarOp::PrintTensor),
+      tensor_name_(tensor_name) {
   set_custom_call_has_side_effect(true);
 }
 
@@ -42,22 +44,24 @@ uint64 HloPrintTensor::NumberOfInplaceOperands() const { return 0; }
 
 bool HloPrintTensor::IsPopOpsElementwise() const { return false; }
 
+const std::string& HloPrintTensor::TensorName() const { return tensor_name_; }
+
 // Creates an instance of a HloOneHotInstruction
-std::unique_ptr<HloInstruction> CreateHloPrintTensor(HloInstruction* input) {
-  return absl::make_unique<HloPrintTensor>(input);
+std::unique_ptr<HloInstruction> CreateHloPrintTensor(
+    HloInstruction* input, const std::string& tensor_name) {
+  return absl::make_unique<HloPrintTensor>(input, tensor_name);
 }
 
 std::unique_ptr<HloInstruction> HloPrintTensor::CloneWithNewOperandsImpl(
     const Shape&, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreateHloPrintTensor(operands[0]);
+  return CreateHloPrintTensor(operands[0], tensor_name_);
 }
 
 std::vector<std::string> HloPrintTensor::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
-  attributes.push_back("axis=" + std::to_string(axis));
-
+  attributes.push_back(absl::StrCat("tensor_name=", tensor_name_));
   return attributes;
 }
 
@@ -67,7 +71,10 @@ static HloPoplarInstructionFactory print_tensor_factory(
     PoplarOp::PrintTensor,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
-      return CreateHloPrintTensor(call->mutable_operand(0));
+      auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+      TF_ASSIGN_OR_RETURN(std::string tensor_name,
+                          attribute_map.GetAttributeAsString("tensor_name"));
+      return CreateHloPrintTensor(call->mutable_operand(0), tensor_name);
     });
 
 }  // namespace

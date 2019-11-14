@@ -21,6 +21,7 @@ namespace tensorflow {
 REGISTER_OP("IpuPrintTensor")
     .Input("input: dtype")
     .Attr("dtype: {float16, float32, int32}")
+    .Attr("tensor_name: string")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs)
     .Doc(R"doc(

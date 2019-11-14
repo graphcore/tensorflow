@@ -44,7 +44,11 @@ namespace tensorflow {
 class PoputilPrintTensorOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PoputilPrintTensorOp(OpKernelConstruction* ctx)
-      : XlaOpKernel(ctx), IpuOpKernel() {}
+      : XlaOpKernel(ctx), IpuOpKernel() {
+    std::string tensor_name;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("tensor_name", &tensor_name));
+    attribute_map_.AddAttribute("tensor_name", tensor_name);
+  }
 
   void Compile(XlaOpKernelContext* ctx) override {
     xla::XlaBuilder* b = ctx->builder();

@@ -16,9 +16,9 @@
 Graphcore utility operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
+import threading  # pylint: disable=unused-import
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.platform import tf_logging as logging
-import threading  # pylint: disable=unused-import
 
 from tensorflow.core.lib.core import error_codes_pb2  # pylint: disable=unused-import
 from tensorflow.python.util import deprecation
@@ -88,7 +88,7 @@ def fifo(x, depth, name=None):
   return gen_poputil_ops.ipu_fifo(x, depth=depth, name=name)
 
 
-def print_tensor(input, name=None):
+def print_tensor(input, name=""):
   """Print the specified input.
 
   Args:
@@ -168,4 +168,4 @@ def print_tensor(input, name=None):
 
   """
 
-  return gen_poputil_ops.ipu_print_tensor(input, name=name)
+  return gen_poputil_ops.ipu_print_tensor(input, tensor_name=name)

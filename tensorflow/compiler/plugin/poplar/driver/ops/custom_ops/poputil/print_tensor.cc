@@ -38,6 +38,7 @@ class PrintTensorOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
+    auto print_tensor_inst = Cast<HloPrintTensor>(inst);
     // Create the control program.
     poplar::program::Sequence seq;
 
@@ -45,7 +46,11 @@ class PrintTensorOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor input,
         FindInstructionInput(tensor_map, res, inst, 0, seq, false));
-    seq.add(poplar::program::PrintTensor(GetDebugName(inst), input));
+    std::string name = GetDebugName(inst);
+    if (!print_tensor_inst->TensorName().empty()) {
+      name += "/" + print_tensor_inst->TensorName();
+    }
+    seq.add(poplar::program::PrintTensor(name, input));
 
     return seq;
   }

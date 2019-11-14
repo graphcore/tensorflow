@@ -17,6 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_ONE_HOT_H_
 
 #include <memory>
+#include <string>
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
 namespace xla {
@@ -24,17 +25,18 @@ namespace poplarplugin {
 
 class HloPrintTensor : public HloPoplarInstruction {
  public:
-  explicit HloPrintTensor(HloInstruction* input);
+  explicit HloPrintTensor(HloInstruction* input,
+                          const std::string& tensor_name);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
-  int64 Axis() const { return axis; }
-
   uint64 NumberOfInplaceOperands() const override;
 
   bool IsPopOpsElementwise() const;
+
+  const std::string& TensorName() const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -44,11 +46,11 @@ class HloPrintTensor : public HloPoplarInstruction {
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
-
-  int64 axis;
+  std::string tensor_name_;
 };
 
-std::unique_ptr<HloInstruction> CreateHloPrintTensor(HloInstruction* input);
+std::unique_ptr<HloInstruction> CreateHloPrintTensor(
+    HloInstruction* input, const std::string& tensor_name);
 
 }  // namespace poplarplugin
 }  // namespace xla
