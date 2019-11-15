@@ -72,8 +72,8 @@ static HloPoplarInstructionFactory print_tensor_factory(
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
       auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-      TF_ASSIGN_OR_RETURN(std::string tensor_name,
-                          attribute_map.GetAttributeAsString("tensor_name"));
+      auto attribute = attribute_map.GetAttributeAsString("tensor_name");
+      std::string tensor_name = attribute.ok() ? attribute.ValueOrDie() : "";
       return CreateHloPrintTensor(call->mutable_operand(0), tensor_name);
     });
 
