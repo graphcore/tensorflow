@@ -460,7 +460,9 @@ def _augment_model_fn(model_fn):
     input_context = _get_input_context()
     dataset = _call_input_fn(input_fn, mode, params, config, input_context)
 
-    if not isinstance(dataset, dataset_ops.Dataset):
+    # DatasetV1 (the current alias of Dataset) inherits
+    # from DatasetV2, so this allows both.
+    if not isinstance(dataset, dataset_ops.DatasetV2):
       raise ValueError("input_fn must return Dataset")
 
     replication_factor = config.ipu_run_config.num_replicas
