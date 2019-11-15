@@ -19,6 +19,10 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_RESOURCES_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_RESOURCES_H_
 
+#include <memory>
+#include <stack>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
@@ -35,8 +39,6 @@ limitations under the License.
 #include <popops/DynamicSlice.hpp>
 #include <poprand/RandomGen.hpp>
 #include <poputil/GraphFunction.hpp>
-
-#include <memory>
 
 namespace xla {
 class HloInstruction;
@@ -96,6 +98,9 @@ struct CompilerResources {
   subcomputation_graph_caching::SubcomputationGraphCache subcomputation_cache;
 
   std::vector<poplar::Tensor> zeroed_tensors;
+
+  std::stack<std::vector<poplar::program::Sequence>>
+      pipelining_buffer_zeroing_sequences;
 
   std::string scheduler_selection;
 

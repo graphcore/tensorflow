@@ -132,14 +132,6 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulate, StatefulGradientAccumulateOp);
 REGISTER_POPLAR_OP(StatefulGradientAccumulateAndAllReduce,
                    StatefulGradientAccumulateOp);
 
-bool is_powerof2(uint32 v) { return v && ((v & (v - 1)) == 0); }
-
-uint32 find_powerof2_mask(uint32 v) {
-  assert(is_powerof2(v));
-
-  return 0xFFFFFFFF % v;
-}
-
 class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
@@ -148,17 +140,17 @@ class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     const std::string debug_name = GetDebugName(inst);
 
+    // Create a sequence for zeroing the accumulator before the pipeline is
+    // executed.
+    poplar::program::Sequence zeroing_seq;
+
+    // Create a sequence to be executed during the pipeline.
     poplar::program::Sequence seq;
     const HloPipelineStatefulGradientAccumulate* grad_inst =
         Cast<HloPipelineStatefulGradientAccumulate>(inst);
     const uint32 num_mini_batches = grad_inst->MiniBatchesToAccumulate();
     ArgVector inputs =
         FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
-
-    poplar::Tensor counter =
-        graph.addVariable(poplar::UNSIGNED_INT, {}, debug_name + "/Counter");
-    MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
-    res.zeroed_tensors.push_back(counter);
 
     // Clone the inputs into accumulators which are the outputs.
     OutVector accumulators(inputs.size());
@@ -167,45 +159,21 @@ class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
                         return graph.clone(in, debug_name + "/Accumulator");
                       });
 
-    // If counter is zero, then we need to zero the accumulators.
-    poplar::Tensor do_zeros =
-        popops::map(graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
-                    debug_name + "/IsAccumulatorZero");
-
-    poplar::program::Sequence if_zero;
-    {
-      for (poplar::Tensor& accumulator : accumulators) {
-        popops::zero(graph, accumulator, if_zero,
-                     debug_name + "/ZeroAccumulator");
-      }
-    }
-    seq.add(
-        poplar::program::If(do_zeros, if_zero, poplar::program::Sequence()));
-
-    // Add input to the accumulator.
     for (int64 i = 0; i != inputs.size(); ++i) {
+      // Add the initial zeroing.
+      popops::zero(graph, accumulators[i], zeroing_seq,
+                   debug_name + "/ZeroAccumulator");
+      // Add input to the accumulator.
       popops::addInPlace(graph, accumulators[i], inputs[i], seq,
                          debug_name + "/Accumulate");
     }
 
-    // counter = (counter + 1) % num_batches_to_accumulate
-    // A slightly faster path if the num_batches_to_accumulate is a power of
-    // two.
-    if (is_powerof2(num_mini_batches)) {
-      popops::mapInPlace(
-          graph,
-          popops::expr::BitwiseAnd(
-              popops::expr::Add(popops::expr::_1, popops::expr::Const(1)),
-              popops::expr::Const(find_powerof2_mask(num_mini_batches))),
-          {counter}, seq, debug_name + "/CounterIncreaseMask");
-    } else {
-      popops::mapInPlace(
-          graph,
-          popops::expr::Rem(
-              popops::expr::Add(popops::expr::_1, popops::expr::Const(1)),
-              popops::expr::Const(num_mini_batches)),
-          {counter}, seq, debug_name + "/CounterIncreaseMod");
+    // Add the zeroing sequence.
+    if (res.pipelining_buffer_zeroing_sequences.empty()) {
+      return FailedPrecondition(
+          "Cannot zero Pipeline's gradient accumulators.");
     }
+    res.pipelining_buffer_zeroing_sequences.top().push_back(zeroing_seq);
 
     for (int64 i = 0; i != accumulators.size(); ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, accumulators[i]));
