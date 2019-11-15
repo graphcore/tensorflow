@@ -94,19 +94,5 @@ class IpuEstimatorTest(test_util.TensorFlowTestCase):
 
     self.assertTrue(len(event_file) == 1)
 
-    compile_for_ipu_count = 0
-    for summary in summary_iterator.summary_iterator(event_file[0]):
-      for val in summary.summary.value:
-        if val.tag == "ipu_trace":
-          for evt_str in val.tensor.string_val:
-            evt = IpuTraceEvent.FromString(evt_str)
-            if (evt.type == IpuTraceEvent.COMPILE_END
-                and len(evt.compile_end.compilation_report) > 0):
-              compile_for_ipu_count += 1
-
-    # Initialization graph and main graph
-    self.assertEqual(compile_for_ipu_count, 2)
-
-
 if __name__ == "__main__":
   googletest.main()

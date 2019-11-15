@@ -236,7 +236,7 @@ message HloInstructionProto {
   bool indices_are_sorted = 67;
 
   // Frontend attributes to pass to the XLA backend.
-  xla.FrontendAttributes frontend_attributes = 67;
+  xla.FrontendAttributes frontend_attributes = 68;
 }
 
 // Serialization of HloComputation.
