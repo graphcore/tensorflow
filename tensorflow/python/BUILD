@@ -915,6 +915,7 @@ py_library(
         ":tensor_shape",
         ":util",
         "//tensorflow/core:protos_all_py",
+        "//tensorflow/python/eager:execution_callbacks",
         "@six_archive//:six",
     ],
 )
@@ -956,6 +957,30 @@ py_library(
         "//tensorflow/python/eager:monitoring",
         "//tensorflow/python/eager:tape",
         "@six_archive//:six",
+    ],
+)
+
+py_library(
+    name = "op_callbacks",
+    srcs = ["framework/op_callbacks.py"],
+    srcs_version = "PY2AND3",
+)
+
+cuda_py_test(
+    name = "op_callbacks_test",
+    srcs = ["framework/op_callbacks_test.py"],
+    additional_deps = [
+        ":client_testlib",
+        ":control_flow_ops",
+        ":framework_test_lib",
+        ":script_ops",
+        ":sparse_ops",
+        ":sparse_tensor",
+        "//third_party/py/numpy",
+        "//tensorflow/python/eager:execute",
+        "//tensorflow/python/eager:execution_callbacks",
+        "//tensorflow/python/eager:test",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -6835,6 +6860,7 @@ py_library(
     srcs_version = "PY2AND3",
     visibility = visibility + [
         "//learning/deepmind/tensorflow:__subpackages__",
+        "//third_party/car/deep_nets/tensorflow:__subpackages__",
     ],
     deps = [
         ":framework_for_generated_wrappers",

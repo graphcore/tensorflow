@@ -16,7 +16,6 @@ limitations under the License.
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "mlir/IR/Diagnostics.h"  // TF:local_config_mlir
@@ -24,6 +23,7 @@ limitations under the License.
 #include "mlir/IR/MLIRContext.h"  // TF:local_config_mlir
 #include "mlir/IR/Module.h"  // TF:local_config_mlir
 #include "mlir/Support/FileUtilities.h"  // TF:local_config_mlir
+#include "tensorflow/compiler/mlir/init_mlir.h"
 #include "tensorflow/compiler/mlir/lite/flatbuffer_translate.h"
 #include "tensorflow/compiler/mlir/lite/tf_tfl_passes.h"
 #include "tensorflow/compiler/mlir/lite/tf_tfl_translate_cl.h"
@@ -100,9 +100,8 @@ static int PrintFunctionResultMapping(const std::string &result,
 }
 
 int main(int argc, char **argv) {
-  llvm::PrettyStackTraceProgram x(argc, argv);
   // TODO(jpienaar): Revise the command line option parsing here.
-  llvm::InitLLVM y(argc, argv);
+  tensorflow::InitMlir y(&argc, &argv);
 
   // TODO(antiagainst): We are pulling in multiple transformations as follows.
   // Each transformation has its own set of command-line options; options of one
@@ -113,13 +112,8 @@ int main(int argc, char **argv) {
   // We need to disable duplicated ones to provide a cleaner command-line option
   // interface. That also means we need to relay the value set in one option to
   // all its aliases.
-
   llvm::cl::ParseCommandLineOptions(
       argc, argv, "TF GraphDef to TFLite FlatBuffer converter\n");
-
-  // TODO(ashwinm): Enable command line parsing for both sides.
-  int fake_argc = 1;
-  tensorflow::port::InitMain(argv[0], &fake_argc, &argv);
 
   MLIRContext context;
   llvm::SourceMgr source_mgr;

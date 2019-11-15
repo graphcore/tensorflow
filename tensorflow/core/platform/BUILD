@@ -23,6 +23,8 @@ load(
     "tf_logging_absl_deps",
     "tf_platform_hdrs",
     "tf_platform_srcs",
+    "tf_protobuf_deps",
+    "tf_protobuf_compiler_deps",
 )
 load(
     "//tensorflow:tensorflow.bzl",
@@ -169,6 +171,25 @@ cc_library(
 )
 
 cc_library(
+    name = "protobuf",
+    srcs = [
+        "protobuf.cc",
+        "protobuf_util.cc",
+    ],
+    hdrs = ["protobuf.h"],
+    deps = [
+        ":platform",
+        ":types",
+    ] + tf_protobuf_deps(),
+)
+
+cc_library(
+    name = "protobuf_compiler",
+    hdrs = ["protobuf_compiler.h"],
+    deps = tf_protobuf_compiler_deps(),
+)
+
+cc_library(
     name = "stacktrace",
     srcs = glob(["*/stacktrace.h"]),
     hdrs = ["stacktrace.h"],
@@ -196,6 +217,18 @@ cc_library(
     deps = [
         ":logging",
         ":macros",
+    ],
+)
+
+cc_library(
+    name = "str_util",
+    srcs = ["str_util.cc"],
+    hdrs = ["str_util.h"],
+    deps = [
+        ":logging",
+        ":stringpiece",
+        ":types",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -337,6 +370,7 @@ filegroup(
             "jpeg.h",
             "png.h",
             "stringprintf.h",
+            "str_util.h",
             "**/cuda.h",
             "**/rocm.h",
             "**/stream_executor.h",
@@ -369,6 +403,7 @@ filegroup(
             "platform_strings.cc",
             "protobuf.cc",
             "stringprintf.cc",
+            "str_util.cc",
         ],
     ),
     visibility = ["//tensorflow/core:__pkg__"],

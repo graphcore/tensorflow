@@ -1502,6 +1502,7 @@ cc_library(
     hdrs = ["fusion_queue.h"],
     deps = [
         ":hlo",
+        "@com_google_absl//absl/strings",
     ],
 )
 

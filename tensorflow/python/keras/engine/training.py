@@ -255,7 +255,6 @@ class Model(network.Network):
 
     if ((sample_weight_mode is not None)
         or (target_tensors is not None)
-        or (weighted_metrics is not None)
         or is_any_optimizer_v1
         or not ops.executing_eagerly_outside_functions()):
       # Fallback out of things that aren't supported with v2 loops
@@ -495,10 +494,7 @@ class Model(network.Network):
                        '`iter(dataset)`.')
 
     # Experiment training loop with default DS path.
-    if (context.executing_eagerly()
-        and self._experimental_run_tf_function
-        and not distributed_training_utils.is_tpu_strategy(
-            self._distribution_strategy)):
+    if context.executing_eagerly() and self._experimental_run_tf_function:
       try:
         valid_adapter = data_adapter.select_data_adapter(inputs, None)
       except ValueError as data_failure_exception:
