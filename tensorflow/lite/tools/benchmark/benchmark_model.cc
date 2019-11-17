@@ -18,12 +18,25 @@ limitations under the License.
 #include <iostream>
 #include <sstream>
 
+#include "tensorflow/lite/profiling/memory_info.h"
 #include "tensorflow/lite/profiling/time.h"
 #include "tensorflow/lite/tools/benchmark/benchmark_utils.h"
 #include "tensorflow/lite/tools/benchmark/logging.h"
 
 namespace tflite {
 namespace benchmark {
+namespace {
+using tflite::profiling::memory::MemoryUsage;
+void LogMemUsageDelta(const std::string& tag, const MemoryUsage& before,
+                      const MemoryUsage& after) {
+  const auto delta = after - before;
+  TFLITE_LOG(INFO) << "[" << tag << "] - Memory usage: max resident set size = "
+                   << delta.max_rss_kb / 1024.0
+                   << " MB, total malloc-ed size = "
+                   << delta.total_allocated_bytes / 1024.0 / 1024.0 << " MB";
+}
+}  // namespace
+
 using tensorflow::Stat;
 
 BenchmarkParams BenchmarkModel::DefaultParams() {
@@ -155,27 +168,23 @@ TfLiteStatus BenchmarkModel::Run(int argc, char** argv) {
 }
 
 TfLiteStatus BenchmarkModel::Run() {
-  TfLiteStatus validation_status = ValidateParams();
-  if (validation_status != kTfLiteOk) {
-    return validation_status;
-  }
+  TF_LITE_ENSURE_STATUS(ValidateParams());
 
   LogParams();
 
+  const auto start_mem_usage = profiling::memory::GetMemoryUsage();
   int64_t initialization_start_us = profiling::time::NowMicros();
-  TfLiteStatus init_status = Init();
-  if (init_status != kTfLiteOk) {
-    return init_status;
-  }
+  TF_LITE_ENSURE_STATUS(Init());
+  const auto init_end_mem_usage = profiling::memory::GetMemoryUsage();
   int64_t initialization_end_us = profiling::time::NowMicros();
   int64_t startup_latency_us = initialization_end_us - initialization_start_us;
   TFLITE_LOG(INFO) << "Initialized session in " << startup_latency_us / 1e3
                    << "ms";
+  LogMemUsageDelta("Init Phase", start_mem_usage, init_end_mem_usage);
 
-  TfLiteStatus status = PrepareInputData();
-  if (status != kTfLiteOk) {
-    return status;
-  }
+  TF_LITE_ENSURE_STATUS(PrepareInputData());
+
+  TfLiteStatus status = kTfLiteOk;
   uint64_t input_bytes = ComputeInputBytes();
   listeners_.OnBenchmarkStart(params_);
   Stat<int64_t> warmup_time_us =
@@ -189,6 +198,10 @@ TfLiteStatus BenchmarkModel::Run() {
   Stat<int64_t> inference_time_us =
       Run(params_.Get<int32_t>("num_runs"), params_.Get<float>("min_secs"),
           params_.Get<float>("max_secs"), REGULAR, &status);
+
+  const auto after_run_mem_usage = profiling::memory::GetMemoryUsage();
+  LogMemUsageDelta("Overall", start_mem_usage, after_run_mem_usage);
+
   listeners_.OnBenchmarkEnd(
       {startup_latency_us, input_bytes, warmup_time_us, inference_time_us});
 

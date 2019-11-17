@@ -221,6 +221,16 @@ TEST_F(XlaBuilderTest, ShapeInferenceError) {
   EXPECT_THAT(statusor.status().error_message(), HasSubstr("shape inference"));
 }
 
+TEST_F(XlaBuilderTest, DynamicDimensionReshapeToR0) {
+  XlaBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(F32, {1}), "x");
+  auto y = Parameter(&b, 1, ShapeUtil::MakeShape(S32, {}), "dyn_dim");
+  auto dx = SetDimensionSize(x, y, 0);
+  Reshape(dx, {});
+  auto statusor = BuildHloModule(&b);
+  ASSERT_TRUE(statusor.ok());
+}
+
 TEST_F(XlaBuilderTest, ParameterAlreadyRegistered) {
   XlaBuilder b_call("add");
   Parameter(&b_call, 0, ShapeUtil::MakeShape(PRED, {}), "x");
@@ -853,14 +863,14 @@ TEST_F(XlaBuilderTest, DynamicReshape) {
                                    /*target_param_index=*/{0},
                                    /*target_dim_num=*/3));
   auto gte = GetTupleElement(p0, 0);  // f32[2, 3, <=4, <=5, 6]
-  Reshape(gte, /*new_sizes=*/{6, 4, 1, 5, 2, 3});
+  Reshape(gte, /*new_sizes=*/{6, 4, 5, 2, 3});
   TF_ASSERT_OK_AND_ASSIGN(auto module, BuildHloModule(&b));
   const Shape& result_shape =
       module->entry_computation()->root_instruction()->shape();
   EXPECT_TRUE(result_shape.is_dynamic_dimension(1));
-  EXPECT_TRUE(result_shape.is_dynamic_dimension(3));
+  EXPECT_TRUE(result_shape.is_dynamic_dimension(2));
   EXPECT_TRUE(ContainersEqual(result_shape.dynamic_dimensions(),
-                              {false, true, false, true, false, false}))
+                              {false, true, true, false, false}))
       << result_shape;
 }
 
@@ -917,10 +927,7 @@ TEST_F(XlaBuilderTest, DynamicSelectNotCompatible) {
   auto gte1 = GetTupleElement(p0, 1);  // f32[4,5,<=6]
   Select(pred, gte0, gte1);
   Status status = BuildHloModule(&b).status();
-  ASSERT_IS_NOT_OK(status);
-  EXPECT_THAT(status.error_message(),
-              ::testing::HasSubstr("Operands to select must be the same shape; "
-                                   "got f32[4,<=5,6] and f32[4,5,<=6]"));
+  ASSERT_IS_OK(status);
 }
 
 TEST_F(XlaBuilderTest, DynamicTranspose) {
@@ -998,10 +1005,10 @@ void ExpectAttributesMatch(const FrontendAttributes& attr,
 }
 
 void ExpectInstructionsAttributesMatch(
-    HloModule& module, const std::vector<FrontendAttributes>& expected) {
+    const HloModule& module, const std::vector<FrontendAttributes>& expected) {
   ASSERT_EQ(module.computation_count(), 1);
   auto expected_it = expected.begin();
-  for (auto inst : module.mutable_computation(0)->instructions()) {
+  for (auto inst : module.entry_computation()->instructions()) {
     ASSERT_NE(expected_it, expected.end());
     ExpectAttributesMatch(inst->frontend_attributes(), *expected_it);
     expected_it++;
@@ -1068,7 +1075,7 @@ TEST_F(XlaBuilderTest, ComplexSetFrontendAttributes) {
   ExpectInstructionsAttributesMatch(*module, expected);
 }
 
-TEST_F(XlaBuilderTest, SetInstructionFrontendAttribute) {
+TEST_F(XlaBuilderTest, AddFrontendAttribute) {
   XlaBuilder b(TestName());
 
   ConstantR0(&b, 0);
@@ -1108,6 +1115,7 @@ TEST_F(XlaBuilderTest, SetInstructionFrontendAttribute) {
   // One attribute: { "attr_a", "a"}
   {
     auto op = ConstantR0(&b, 0);
+    (void)op;
     FrontendAttributes attributes;
     (*attributes.mutable_map())["attr_a"] = "a";
     expected.push_back(attributes);

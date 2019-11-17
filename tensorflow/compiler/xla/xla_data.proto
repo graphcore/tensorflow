@@ -586,7 +586,7 @@ message CholeskyOptions {
 // Generic map of attributes used to pass hints / configuration options from
 // the Python frontend to the XLA backend.
 message FrontendAttributes {
-  map<string,string> map = 1;
+  map<string, string> map = 1;
 }
 
 message OpSharding {

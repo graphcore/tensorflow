@@ -107,7 +107,8 @@ void XlaCompilationDevice::Compute(OpKernel* op_kernel,
 
   xla::FrontendAttributes merged_attributes = b->frontend_attributes();
   if (attributes.has_value()) {
-    merged_attributes.mutable_map()->insert(attributes.value().map().begin(), attributes.value().map().end());
+    merged_attributes.mutable_map()->insert(attributes.value().map().begin(),
+                                            attributes.value().map().end());
   }
   xla::XlaScopedFrontendAttributesAssignment assign_frontend_attributes(
       b, std::move(merged_attributes));

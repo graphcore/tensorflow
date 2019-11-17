@@ -368,7 +368,7 @@ do_external_licenses_check(){
 
   # Whitelist
   echo ${EXTRA_LICENSE_FILE}
-  grep -e "//third_party/mkl_dnn" -e "@bazel_tools//src" -e "@bazel_tools//tools/" -e "@org_tensorflow//tensorflow" -e "@com_google_absl//" -e "//external" -e "@local" -e "@com_github_googlecloudplatform_google_cloud_cpp//" -e "@embedded_jdk//" -v ${EXTRA_LICENSES_FILE} > temp.txt
+  grep -e "//third_party/mkl_dnn" -e "@bazel_tools//src" -e "@bazel_tools//tools/" -e "@org_tensorflow//tensorflow" -e "@com_google_absl//" -e "//external" -e "@local" -e "@com_github_googlecloudplatform_google_cloud_cpp//" -e "@embedded_jdk//" -e "^//$" -v ${EXTRA_LICENSES_FILE} > temp.txt
   mv temp.txt ${EXTRA_LICENSES_FILE}
 
 
@@ -602,6 +602,7 @@ do_configure_test() {
   for WITH_CUDA in 1 0
   do
     export TF_NEED_CUDA=${WITH_CUDA}
+    export CUDNN_INSTALL_PATH="/usr/local/cudnn"
     export PYTHON_BIN_PATH=$(which python)
     yes "" | ./configure
 

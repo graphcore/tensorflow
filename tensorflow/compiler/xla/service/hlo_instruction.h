@@ -91,7 +91,8 @@ class HloPrintOptions {
         canonicalize_instruction_names_(false),
         indent_amount_(0),
         is_in_nested_computation_(false),
-        print_ids_(true) {}
+        print_ids_(true),
+        canonicalize_computations_(false) {}
 
   static HloPrintOptions ShortParsable() {
     return HloPrintOptions()
@@ -124,7 +125,7 @@ class HloPrintOptions {
   // Options to produce a fingerprint of an HLO.
   static HloPrintOptions Fingerprint() {
     return HloPrintOptions()
-        .set_print_subcomputation_mode(PrintSubcomputationMode::kNameOnly)
+        .set_print_subcomputation_mode(PrintSubcomputationMode::kFullBodies)
         .set_print_metadata(false)
         .set_print_backend_config(false)
         .set_compact_operands(true)
@@ -134,7 +135,8 @@ class HloPrintOptions {
         .set_print_percent(false)
         .set_print_control_dependencies(false)
         .set_canonicalize_instruction_names(true)
-        .set_print_ids(false);
+        .set_print_ids(false)
+        .set_canonicalize_computations(true);
   }
 
   // If true, large constants will be printed out.
@@ -218,6 +220,12 @@ class HloPrintOptions {
     return *this;
   }
 
+  // If true, canonicalizes computations, sorting by computations' names.
+  HloPrintOptions& set_canonicalize_computations(bool value) {
+    canonicalize_computations_ = value;
+    return *this;
+  }
+
   // The indent of the hlo text block.
   HloPrintOptions& set_indent_amount(int value) {
     indent_amount_ = value;
@@ -228,6 +236,45 @@ class HloPrintOptions {
   // computation.
   HloPrintOptions& set_is_in_nested_computation(bool value) {
     is_in_nested_computation_ = value;
+    return *this;
+  }
+
+  // Instructions are selected for printing by a predicate function
+  // (`set_print_instructions`). We also print their surrounding instructions
+  // for ease of reading. We print `leading_and_trailing_instructions_number`
+  // instructions before and after the qualified ones inside a computation.
+  HloPrintOptions& set_leading_and_trailing_instructions_number(int value) {
+    leading_and_trailing_instructions_number_ = value;
+    return *this;
+  }
+
+  // A callback which takes an HloInstruction*, its string representation,
+  // the indentation level of the resulting block, and a
+  // bool variable indicating whether the instruction is root or not. The return
+  // value is a string which is used for this instruction during printing.
+  using FormatInstructionFunc =
+      std::function<string(const HloInstruction*, const string&, int, bool)>;
+
+  HloPrintOptions& set_format_instruction(FormatInstructionFunc callback) {
+    format_instruction_ = callback;
+    return *this;
+  }
+
+  using HloInstructionPredicate = std::function<bool(const HloInstruction*)>;
+
+  // A callback which takes an HloInstruction* and returns whether it should be
+  // printed or not.
+  HloPrintOptions& set_print_instruction(HloInstructionPredicate callback) {
+    print_instruction_ = callback;
+    return *this;
+  }
+
+  using HloComputationPredicate = std::function<bool(const HloComputation*)>;
+
+  // A callback which takes an HloComputation* and returns whether it should be
+  // printed or not.
+  HloPrintOptions& set_print_computation(HloComputationPredicate callback) {
+    print_computation_ = callback;
     return *this;
   }
 
@@ -250,8 +297,23 @@ class HloPrintOptions {
   bool canonicalize_instruction_names() const {
     return canonicalize_instruction_names_;
   }
+  bool canonicalize_computations() const { return canonicalize_computations_; }
   int indent_amount() const { return indent_amount_; }
   int is_in_nested_computation() const { return is_in_nested_computation_; }
+  int leading_and_trailing_instructions_number() const {
+    return leading_and_trailing_instructions_number_;
+  }
+  string format_instruction(const HloInstruction* instr,
+                            const string& instr_name, int indent,
+                            bool is_root) const {
+    return format_instruction_(instr, instr_name, indent, is_root);
+  }
+  bool print_instruction(const HloInstruction* instr) const {
+    return print_instruction_(instr);
+  }
+  bool print_computation(const HloComputation* comp) const {
+    return print_computation_(comp);
+  }
 
  private:
   bool print_large_constants_;
@@ -269,6 +331,20 @@ class HloPrintOptions {
   int indent_amount_;
   bool is_in_nested_computation_;
   bool print_ids_;
+  bool canonicalize_computations_;
+  int leading_and_trailing_instructions_number_ = 3;
+  FormatInstructionFunc format_instruction_ = [](const HloInstruction* instr,
+                                                 const string& instr_name,
+                                                 int indent, bool is_root) {
+    return absl::StrCat(string(2 * indent, ' '), is_root ? "ROOT " : "",
+                        instr_name);
+  };
+  HloInstructionPredicate print_instruction_ = [](const HloInstruction* instr) {
+    return true;
+  };
+  HloComputationPredicate print_computation_ = [](const HloComputation* comp) {
+    return true;
+  };
 };
 
 // For canonical string output, we need to have a canonical way to rename
@@ -563,7 +639,8 @@ class HloInstruction {
   // It is used to implement the higher-level instruction in XlaBuilder.
   static std::unique_ptr<HloInstruction> CreateAllToAll(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      const std::vector<ReplicaGroup>& replica_groups);
+      const std::vector<ReplicaGroup>& replica_groups,
+      const absl::optional<int64>& channel_id);
 
   // Creates a communitation instructions that permutes data cross replicas.
   // Data is sent/received according to the (source_replica_id,
@@ -801,7 +878,7 @@ class HloInstruction {
       HloInstruction* scatter_indices, HloInstruction* updates,
       HloComputation* update_computation,
       const ScatterDimensionNumbers& scatter_dim_numbers,
-      bool indices_are_sorted);
+      bool indices_are_sorted, bool unique_indices);
 
   // Creates a kDomain instruction which delimits an HLO domain which have
   // the provided user and operand side metadata.
@@ -871,6 +948,10 @@ class HloInstruction {
   static std::unique_ptr<HloInstruction> CreateGetDimensionSize(
       const Shape& shape, HloInstruction* operand, int64 dimension);
 
+  static std::unique_ptr<HloInstruction> CreateSetDimensionSize(
+      const Shape& shape, HloInstruction* operand, HloInstruction* val,
+      int64 dimension);
+
   static std::unique_ptr<HloInstruction> CreateAddDependency(
       HloInstruction* data_operand, HloInstruction* token_operand);
 
@@ -921,7 +1002,7 @@ class HloInstruction {
 
   // Returns true if this instruction is a user of 'instruction'.
   bool IsUserOf(const HloInstruction* instruction) const {
-    return ContainsKey(instruction->user_set_, this);
+    return ContainsKey(instruction->user_map_, this);
   }
 
   // Adds a control dependency from this instruction to the given
@@ -1332,7 +1413,8 @@ class HloInstruction {
   // Returns the indices that the given operand appear in the operand list of
   // this instruction. Note that an instruction can use the same operand
   // multiple times.
-  std::vector<int64> OperandIndices(const HloInstruction* operand) const;
+  absl::InlinedVector<int64, 4> OperandIndices(
+      const HloInstruction* operand) const;
 
   // Convenience helper for ShapeUtil::InsertedOrDeleted1SizedDimensions. If
   // this reshape merely inserts or deletes 1-sized dimensions, return the input
@@ -1631,6 +1713,9 @@ class HloInstruction {
     LOG(FATAL) << "Unimplemented method.";
   }
 
+  // Returns the unique_indices field.
+  virtual bool unique_indices() const { LOG(FATAL) << "Unimplemented method."; }
+
   // Returns data on the dimension numbers used for a convolution operation,
   // which may be a kConvolution instruction or a kCustomCall that implements a
   // convolution.
@@ -1855,11 +1940,12 @@ class HloInstruction {
   std::vector<HloInstruction*> control_predecessors_;
 
   // The users of this instruction. Users are HLOs where this instruction is an
-  // operand. The vector users_ and the set user_set_ contain identical
-  // members. The set enables fast membership testing and the vector enables
-  // fast, stable iteration.
+  // operand. The vector users_ and the map user_map_ contain identical members.
+  // The map enables fast membership testing and the vector enables fast, stable
+  // iteration. The value in the map contains the index of the instruction in
+  // the vector what enables fast removal.
   std::vector<HloInstruction*> users_;
-  absl::flat_hash_set<const HloInstruction*> user_set_;
+  absl::flat_hash_map<const HloInstruction*, int64> user_map_;
 
   // The set of control successors of this instruction.
   std::vector<HloInstruction*> control_successors_;
