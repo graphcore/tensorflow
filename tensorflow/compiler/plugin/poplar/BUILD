@@ -56,7 +56,7 @@ xla_proto_library(
     ],
     deps = [
       "//tensorflow/compiler/xla:xla_data_proto",
-      "//tensorflow/core:protos_all_cc",
+      "//tensorflow/core:protos_all",
     ],
 )
 

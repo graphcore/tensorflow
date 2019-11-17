@@ -113,7 +113,6 @@ class HloModuleConfig {
   }
   int64 replica_count() const { return replica_count_; }
 
-<<<<<<< HEAD
   // The number of arguments to the original TF operation
   void set_argument_count(int32 count) { argument_count_ = count; }
   int32 argument_count() const { return argument_count_; }

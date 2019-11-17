@@ -242,12 +242,8 @@ cc_library(
     deps = [
         ":common",
         ":frontend_attributes_util",
-<<<<<<< HEAD
-        ":host_compute_metadata_proto",
-=======
         ":host_compute_metadata_proto_cc",
         ":rearrange_function_argument",
->>>>>>> 1920c9b97c40f5d8d1ff7b6792a41c4b8a805bb7
         ":sharding_util",
         ":side_effect_util",
         ":tf2xla_util",
@@ -323,12 +319,9 @@ cc_library(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:framework",
-<<<<<<< HEAD
-=======
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
         "@com_google_absl//absl/types:optional",
->>>>>>> 1920c9b97c40f5d8d1ff7b6792a41c4b8a805bb7
     ],
 )
 
@@ -672,7 +665,6 @@ cc_library(
         ":functionalize_cond",
         ":functionalize_control_flow_util",
         ":tf2xla_util",
-        ":frontend_attributes_util",
         "//tensorflow/compiler/jit:union_find",
         "//tensorflow/compiler/tf2xla/ops:xla_ops",
         "//tensorflow/compiler/xla:status_macros",

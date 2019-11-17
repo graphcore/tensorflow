@@ -45,3 +45,6 @@ Podfile.lock
 Pods
 xcuserdata
 .linters
+
+errors.log
+tests.log
