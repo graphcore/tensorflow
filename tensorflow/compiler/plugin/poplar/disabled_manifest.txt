@@ -102,3 +102,5 @@ XlaSortOpTest.testTopK2DLarge
 XlaSortOpTest.testInTopKLarge
 XlaSortOpTest.testInTopKLarge
 MatrixDiagPartTest.testV1 # need popops::reduce(OR, int)
+SLogDetOpTest # Need to register LogMatrixDeterminant op
+TridiagonalSolveOpsTest # need to register TridiagonalSolve op

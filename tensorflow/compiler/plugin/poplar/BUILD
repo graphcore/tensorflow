@@ -2320,9 +2320,9 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
+        "//tensorflow/python:layers",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers_base",
     ],
 )
 

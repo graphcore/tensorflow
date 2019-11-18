@@ -373,6 +373,13 @@ ArrayElementwiseOpTest.PowF32s POPLAR // NaNs
 SlicingTest.TorchGatherDense POPLAR // requires bitwise reduce OR
 SlicingTest.EmptyIndexSelectNonZero POPLAR // Unusual output size
 MatrixTest.SetMatrixDiagonal_S32 POPLAR
+MatrixTest.GetMatrixDiagonal4D_S32 POPLAR
+MatrixTest.GetMatrixDiagonal4D_S64 POPLAR
 
 ExecutionTest.ScatterUpdate POPLAR // Dynamic size updates
 ExecutionTest.ScatterUpdateF32 POPLAR
+ExecutionTest.OutputMinorDimensionReshape POPLAR
+ExecutionTest.DoubleDynamicDimension POPLAR
+
+HloParserTestLong POPLAR
+HloParserTestLongProto POPLAR
