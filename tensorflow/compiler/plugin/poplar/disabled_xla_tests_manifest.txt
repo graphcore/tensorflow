@@ -24,6 +24,8 @@ ConvolutionHloTest.ConvolveF64Forward POPLAR
 ComparatorsTest.CompareLtF64 POPLAR
 ComparatorsTest.CompareGtF64 POPLAR
 ReducedPrecisionAccuracyTest POPLAR
+MathTest.BesselI0eDouble POPLAR
+MathTest.BesselI1eDouble POPLAR
 
 Bfloat16Test POPLAR // No bfloat16
 DynamicSliceTest.Int32R1BF16 POPLAR
@@ -133,6 +135,7 @@ ScalarComputationsTest.CastS64ToF32 POPLAR
 ConvertTest.ConvertR1S64ToR1F32 POPLAR
 ConvertTest.ConvertR1F32ToR1S64 POPLAR
 HloTestBase.ReduceWindowS64 POPLAR
+MatrixTest.SetMatrixDiagonal_S64 POPLAR
 
 ScalarComputationsTest.AddTwoScalarsU64      POPLAR // U64
 DynamicUpdateSliceTest.UInt64R3 POPLAR
@@ -267,6 +270,9 @@ ConstantsHloTest.BitcastOfConstant POPLAR
 
 DotOperationTest.DotOfInputTupleElem POPLAR // dot of a tuple
 
+ParametricDotTest.TestS32 POPLAR // Dot of an integer
+DotOperationTextTest.IntegerDotCodegen POPLAR
+
 GatherOperationTest.OutOfBoundsIndex POPLAR
 GatherOperationTest.OutOfBoundsUnsignedIndex POPLAR
 
@@ -365,3 +371,8 @@ ArrayElementwiseOpTest.CompareNeF32s POPLAR // NaNs
 ArrayElementwiseOpTest.PowF32s POPLAR // NaNs
 
 SlicingTest.TorchGatherDense POPLAR // requires bitwise reduce OR
+SlicingTest.EmptyIndexSelectNonZero POPLAR // Unusual output size
+MatrixTest.SetMatrixDiagonal_S32 POPLAR
+
+ExecutionTest.ScatterUpdate POPLAR // Dynamic size updates
+ExecutionTest.ScatterUpdateF32 POPLAR

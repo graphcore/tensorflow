@@ -38,6 +38,8 @@ limitations under the License.
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/platform/test_benchmark.h"
 
+#include "absl/strings/str_replace.h"
+
 namespace op = xla::testing::opcode_matchers;
 
 namespace xla {

@@ -298,13 +298,14 @@ PoplarExecutor::PoplarExecutor()
 
 PoplarExecutor::~PoplarExecutor() {}
 
-void* PoplarExecutor::Allocate(uint64 size) {
+se::DeviceMemoryBase PoplarExecutor::Allocate(
+  uint64 size, int64 memory_space) {
   TensorControl* allocated = new TensorControl(size);
   {
     std::lock_guard<std::recursive_mutex> g(mutex_);
     allocations_.push_back(allocated);
   }
-  return allocated;
+  return se::DeviceMemoryBase(allocated, size);
 }
 
 void* PoplarExecutor::GetSubBuffer(se::DeviceMemoryBase* parent,
@@ -1155,7 +1156,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   poplar_target.push_back(GetConfigHash(current_config_));
 
   // Generate compiler hashes
-  poplar_target.push_back(std::hash<string>()(tf_git_version()));
+  //poplar_target.push_back(std::hash<string>()(tf_git_version()));
   poplar_target.push_back(std::hash<string>()(poplar::packageHash()));
 
   // Get environment PoplarXlaFlags hash

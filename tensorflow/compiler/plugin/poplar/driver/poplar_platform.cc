@@ -49,7 +49,7 @@ namespace poplarplugin {
 PoplarPlatform::PoplarPlatform() : name_("Poplar") {
   VLOG(tensorflow::INFO) << "Poplar version: " << poplar::versionString()
                          << " Poplar package: " << poplar::packageHash()
-                         << " Poplar Tensorflow version: " << tf_git_version()
+                         //<< " Poplar Tensorflow version: " << tf_git_version()
                          << ")";
 }
 

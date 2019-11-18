@@ -44,8 +44,8 @@ using namespace xla::poplarplugin;
 namespace tensorflow {
 
 namespace {
-xla::StatusOr<std::vector<int64>> NumpyBroadcast(const std::vector<int64>& a,
-                                                 const std::vector<int64>& b) {
+xla::StatusOr<std::vector<int64>> NumpyBroadcast(
+    const absl::Span<const int64>& a, const absl::Span<const int64>& b) {
   std::vector<int64> result(std::max(a.size(), b.size()));
 
   auto offset = std::min(a.size(), b.size());

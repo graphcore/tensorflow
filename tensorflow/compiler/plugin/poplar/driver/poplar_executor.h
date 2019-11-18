@@ -133,7 +133,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return xla::Unimplemented("Not Implemented");
   }
 
-  void* Allocate(uint64 size) override;
+  se::DeviceMemoryBase Allocate(uint64 size, int64 memory_space) override;
   void* GetSubBuffer(se::DeviceMemoryBase* mem, uint64 offset_bytes,
                      uint64 size_bytes) override;
   void Deallocate(se::DeviceMemoryBase* mem) override;
@@ -153,27 +153,27 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                             const se::DeviceMemoryBase& host_src,
                             uint64 size) override;
 
-  bool MemZero(se::Stream* stream, se::DeviceMemoryBase* location,
-               uint64 size) override {
-    return false;
+  Status MemZero(se::Stream* stream, se::DeviceMemoryBase* location,
+                 uint64 size) override {
+    return xla::Unimplemented("Not implemented");
   }
-  bool Memset(se::Stream* stream, se::DeviceMemoryBase*, uint8,
-              uint64 size) override {
-    return false;
-  }
-  bool Memset32(se::Stream* stream, se::DeviceMemoryBase*, uint32,
+  Status Memset(se::Stream* stream, se::DeviceMemoryBase*, uint8,
                 uint64 size) override {
-    return false;
+    return xla::Unimplemented("Not implemented");
+  }
+  Status Memset32(se::Stream* stream, se::DeviceMemoryBase*, uint32,
+                  uint64 size) override {
+    return xla::Unimplemented("Not implemented");
   }
 
   bool SynchronizeAllActivity() override;
-  bool SynchronousMemZero(se::DeviceMemoryBase* location, uint64) override {
-    return false;
+  Status SynchronousMemZero(se::DeviceMemoryBase* location, uint64) override {
+    return xla::Unimplemented("Not implemented");
   }
 
-  bool SynchronousMemSet(se::DeviceMemoryBase* location, int value,
-                         uint64 size) override {
-    return false;
+  Status SynchronousMemSet(se::DeviceMemoryBase* location, int value,
+                           uint64 size) override {
+    return xla::Unimplemented("Not implemented");
   }
 
   Status SynchronousMemcpy(se::DeviceMemoryBase* pop_dst, const void* host_src,

@@ -192,8 +192,8 @@ class IPUMultiWorkerExtended(
           graph._attr_scope(disable_xla):  # pylint: disable=protected-access
         return [next_creator(*args, **kwargs)]
 
-    # For tf2: use values.create_mirrored_variable
-    return distribute_lib.create_mirrored_variable(
+    # For tf1: use distribute_lib.create_mirrored_variable
+    return values.create_mirrored_variable(
         self._container_strategy(), device_map, logical_device, _real_creator,
         IPUMirroredVariable, IPUSyncOnReadVariable, *args, **kwargs)
 

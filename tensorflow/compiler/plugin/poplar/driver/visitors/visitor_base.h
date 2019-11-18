@@ -165,6 +165,8 @@ class BaseVisitor : public DfsHloVisitor {
 
   Status HandleCopyDone(HloInstruction* hlo) override;
 
+  Status HandleSetDimensionSize(HloInstruction* hlo) override;
+
   Status Preprocess(HloInstruction* hlo) override;
 
   virtual poplar::program::Sequence GetSequence() const { return sequence; }

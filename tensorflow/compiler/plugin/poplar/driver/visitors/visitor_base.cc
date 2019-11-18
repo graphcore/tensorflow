@@ -575,6 +575,10 @@ Status BaseVisitor::HandleCopyDone(HloInstruction* inst) {
   return Unimplemented(inst);
 }
 
+Status BaseVisitor::HandleSetDimensionSize(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
 Status BaseVisitor::Preprocess(HloInstruction* inst) {
   TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
                       inst->backend_config<PoplarBackendConfig>());

@@ -516,7 +516,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
           } else {
             // Check if the operand is already an operand of the pipeline
             // stage.
-            std::vector<int64> indices = stage->OperandIndices(operand);
+            auto indices = stage->OperandIndices(operand);
             if (indices.size()) {
               // If it is, then get the parameter instruction from the new
               // computation and use it as the operand.
@@ -649,7 +649,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
       for (HloInstruction* user : itr->second) {
         // Create a separate GTE for each user to preserve the duplicate GTE
         // condition.
-        std::vector<int64> op_indices = user->OperandIndices(inst);
+        auto op_indices = user->OperandIndices(inst);
         CHECK(op_indices.size());
         for (int64 op_idx : op_indices) {
           TF_ASSIGN_OR_RETURN(HloInstruction * gte,

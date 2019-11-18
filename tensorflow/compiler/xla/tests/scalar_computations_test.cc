@@ -176,15 +176,15 @@ XLA_TEST_F(ScalarComputationsTest, MulThreeScalarsF32) {
   ComputeAndCompareR0<float>(&builder, 5.775f, {}, error_spec_);
 }
 
-XLA_TEST_F(ScalarComputationsTest, MulThreeScalarsF64) {
-  XlaBuilder builder(TestName());
-  Mul(Mul(ConstantR0<double>(&builder, 3.1415926535897932),
-          ConstantR0<double>(&builder, 2.7182818284590452)),
-      ConstantR0<double>(&builder, 0.5772156649015328));
-
-  ComputeAndCompareR0<double>(&builder, 4.929268367422896, {},
-                              ErrorSpec{0x1p-48});
-}
+//XLA_TEST_F(ScalarComputationsTest, MulThreeScalarsF64) {
+//  XlaBuilder builder(TestName());
+//  Mul(Mul(ConstantR0<double>(&builder, 3.1415926535897932),
+//          ConstantR0<double>(&builder, 2.7182818284590452)),
+//      ConstantR0<double>(&builder, 0.5772156649015328));
+//
+//  ComputeAndCompareR0<double>(&builder, 4.929268367422896, {},
+//                              ErrorSpec{0x1p-48});
+//}
 
 XLA_TEST_F(ScalarComputationsTest, MulTwoScalarsS32) {
   std::vector<int32> data = {0,

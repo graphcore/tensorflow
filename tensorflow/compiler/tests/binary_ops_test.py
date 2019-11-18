@@ -310,7 +310,7 @@ class BinaryOpsTest(xla_test.XLATestCase):
         self._testBinary(bitwise_ops.right_shift, lhs, rhs, expected=expected)
 
   def testAdd(self):
-    for dtype in self.numeric_types | {np.float64}:
+    for dtype in self.numeric_types:
       self._testBinary(
           math_ops.add,
           np.array([1, 2, 0], dtype=dtype),
@@ -336,7 +336,7 @@ class BinaryOpsTest(xla_test.XLATestCase):
                               dtype=dtype))
 
   def testMultiply(self):
-    for dtype in self.numeric_types | {np.float64}:
+    for dtype in self.numeric_types:
       self._testBinary(
           math_ops.multiply,
           np.array([1, 20], dtype=dtype),

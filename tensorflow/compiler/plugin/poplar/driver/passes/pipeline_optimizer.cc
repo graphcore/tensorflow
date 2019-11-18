@@ -175,7 +175,7 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
           continue;
         }
         // Get all the indices the bwd stages uses this GTE.
-        std::vector<int64> uses = bwd_stage->OperandIndices(gtes[output_idx]);
+        auto uses = bwd_stage->OperandIndices(gtes[output_idx]);
         for (int64 use_idx : uses) {
           TF_RETURN_IF_ERROR(bwd_stage->ReplaceOperandWith(
               use_idx, fwd_stage->mutable_operand(param_idx)));

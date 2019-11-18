@@ -332,14 +332,12 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   bool ReplaceInstructionIfSameShape(HloInstruction* old_instruction,
                                      HloInstruction* new_instruction);
 
-  // Returns whether it was possible to transform `root` to a clamp instruction.
-  // With min a minimum instruction, max a maximum instruction, min_operand a
-  // operand of min and max_operand a operand of max.
-  // Precondition: root is either a minimum or a maximum.
-  bool TransformToClampIfSameShape(HloInstruction* root, HloInstruction* min,
-                                   HloInstruction* min_operand,
-                                   HloInstruction* operand, HloInstruction* max,
-                                   HloInstruction* max_operand);
+  // Returns whether the shape of the output of the given instructions are the
+  // same for the purposes of simplification. If options_.is_layout_sensitive()
+  // is true, then this tests shape equality including layout
+  // (ShapeUtil::Equal). If options_.is_layout_sensitive() is false, then the
+  // tests shape compatibility (ShapeUtil::Compatible).
+  bool SameShape(const HloInstruction* lhs, const HloInstruction* rhs) const;
 
   // A Broadcast that feeds an element-wise operation with a unique non-scalar
   // operand can sink to after the operation.
@@ -415,6 +413,11 @@ bool AlgebraicSimplifierVisitor::Run(HloComputation* computation,
   ResetState(computation);
   TF_CHECK_OK(computation->Accept(this));
   return changed_ || changed();
+}
+
+bool AlgebraicSimplifierVisitor::SameShape(const HloInstruction* lhs,
+                                           const HloInstruction* rhs) const {
+    return ShapeUtil::Compatible(lhs->shape(), rhs->shape());
 }
 
 void AlgebraicSimplifierVisitor::ReplaceWithBitcast(HloInstruction* instruction,
@@ -1676,7 +1679,8 @@ AlgebraicSimplifierVisitor::OptimizeDotOfReorderContractingDims(
 
   // Invert reshape.
   CHECK_EQ(rhs_contracting_dims.size(), 1);
-  auto rhs_unsquished_shape_dims = constant->shape().dimensions();
+  std::vector<int64> rhs_unsquished_shape_dims =
+      SpanToVector(constant->shape().dimensions());
   auto it = rhs_unsquished_shape_dims.erase(rhs_unsquished_shape_dims.begin() +
                                             rhs_contracting_dims[0]);
   for (auto dim : lhs_contracting_dims) {
@@ -1698,7 +1702,8 @@ AlgebraicSimplifierVisitor::OptimizeDotOfReorderContractingDims(
   absl::c_iota(rhs_contracting_dims, rhs_contracting_dims[0]);
 
   // Invert transpose. First compute the shape.
-  auto rhs_transpose_shape_dims = rhs_reshape->shape().dimensions();
+  std::vector<int64> rhs_transpose_shape_dims =
+      SpanToVector(rhs_reshape->shape().dimensions());
   it = rhs_transpose_shape_dims.erase(
       rhs_transpose_shape_dims.begin() + rhs_contracting_dims[0],
       rhs_transpose_shape_dims.begin() + rhs_contracting_dims[0] +
@@ -2137,15 +2142,37 @@ Status AlgebraicSimplifierVisitor::HandleLog(HloInstruction* log) {
     return Status::OK();
   }
 
-  // ln(pow(A,B)) => B*ln(A)
+  // ln(pow(A,B)) => B*ln(abs(A))
   if (Match(log, m::Log(m::Power(m::Op(&a), m::Op(&b))))) {
+    auto abs_a = PreserveFrontendAttributesIfNeeded(
+        computation_->AddInstruction(
+            HloInstruction::CreateUnary(log->shape(), HloOpcode::kAbs, a)),
+        log);
     auto new_log = PreserveFrontendAttributesIfNeeded(
         computation_->AddInstruction(
-            HloInstruction::CreateUnary(log->shape(), HloOpcode::kLog, a)),
+            HloInstruction::CreateUnary(log->shape(), HloOpcode::kLog, abs_a)),
         log);
     return ReplaceWithNewInstruction(
         log, HloInstruction::CreateBinary(log->shape(), HloOpcode::kMultiply,
                                           new_log, b));
+  }
+
+  if (Match(log, m::Log(m::Sqrt(m::Op(&a))))) {
+    auto new_log = PreserveFrontendAttributesIfNeeded(
+      computation_->AddInstruction(
+        HloInstruction::CreateUnary(log->shape(), HloOpcode::kLog, a)), log);
+    return ReplaceWithNewInstruction(
+        log, HloInstruction::CreateBinary(log->shape(), HloOpcode::kMultiply,
+                                          new_log, MakeScalarLike(log, 0.5)));
+  }
+
+  if (Match(log, m::Log(m::Rsqrt(m::Op(&a))))) {
+    auto new_log = PreserveFrontendAttributesIfNeeded(
+      computation_->AddInstruction(
+        HloInstruction::CreateUnary(log->shape(), HloOpcode::kLog, a)), log);
+    return ReplaceWithNewInstruction(
+        log, HloInstruction::CreateBinary(log->shape(), HloOpcode::kMultiply,
+                                          new_log, MakeScalarLike(log, -0.5)));
   }
 
   return Status::OK();
@@ -2199,7 +2226,7 @@ bool OutputIsPermutationOfOperandElements(HloInstruction* instruction,
 // "operand". Precondition: "operand" is an operand of "instruction".
 bool OutputIsSubsetOfOperandElements(HloInstruction* instruction,
                                      HloInstruction* operand) {
-  std::vector<int64> operand_indices = instruction->OperandIndices(operand);
+  auto operand_indices = instruction->OperandIndices(operand);
   CHECK(!operand_indices.empty());
   if (operand_indices.size() != 1) {
     return false;
@@ -3180,6 +3207,26 @@ Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     return Status::OK();
   }
 
+  // Try to simplify concat -> slice to an operand of concat.
+  if (slice->operand(0)->opcode() == HloOpcode::kConcatenate &&
+      IsUnstridedSlice(slice)) {
+    auto concat = slice->operand(0);
+    int64 concat_dim = concat->concatenate_dimension();
+    int64 piece_start = 0;
+    for (auto piece : concat->operands()) {
+      if (!SameShape(piece, slice)) {
+        piece_start += piece->shape().dimensions(concat_dim);
+        continue;
+      }
+      if (slice->slice_starts(concat_dim) == piece_start) {
+        return ReplaceInstruction(slice, piece);
+      }
+      piece_start += piece->shape().dimensions(concat_dim);
+    }
+  }
+
+  // Do not try to reorder slices and reshapes after layout assignment as it may
+  // be invalid.
   TF_ASSIGN_OR_RETURN(replaced, TryToReorderSliceAndReshape(slice));
   if (replaced) {
     return Status::OK();
@@ -3871,21 +3918,6 @@ Status AlgebraicSimplifierVisitor::HandleConvolution(
   }
 
   return Status::OK();
-}
-
-bool AlgebraicSimplifierVisitor::TransformToClampIfSameShape(
-    HloInstruction* root, HloInstruction* min, HloInstruction* min_operand,
-    HloInstruction* operand, HloInstruction* max, HloInstruction* max_operand) {
-  // Ensure shapes of min and max operand are equal to match current shape
-  // inference.
-  if (!ShapeUtil::Compatible(min_operand->shape(), max_operand->shape())) {
-    return false;
-  }
-
-  auto clamp = HloInstruction::CreateTernary(root->shape(), HloOpcode::kClamp,
-                                             max_operand, operand, min_operand);
-  TF_CHECK_OK(ReplaceWithNewInstruction(root, std::move(clamp)));
-  return true;
 }
 
 Status AlgebraicSimplifierVisitor::HandleMap(HloInstruction* map) {

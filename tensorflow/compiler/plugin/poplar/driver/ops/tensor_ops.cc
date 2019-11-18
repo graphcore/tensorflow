@@ -68,7 +68,8 @@ struct DynamicSliceHelper {
       slice_sizes = dyn_slice->dynamic_slice_sizes();
     } else {
       auto* dyn_update_slice = Cast<HloDynamicUpdateSliceInstruction>(inst);
-      slice_sizes = dyn_update_slice->operand(1)->shape().dimensions();
+      auto dims = dyn_update_slice->operand(1)->shape().dimensions();
+      slice_sizes = std::vector<int64>(dims.begin(), dims.end());
     }
 
     Shape dynamic_slice_shape = input_shape;

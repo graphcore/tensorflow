@@ -167,11 +167,11 @@ cc_library(
 
         # Place HloPoplarInstructionFactory files below here.
         "driver/tools/conv_util.cc",
+        "driver/tools/custom_ops/arg_min_max.cc",
+        "driver/tools/custom_ops/cast_to_gfloat_hlo.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
-        "driver/tools/custom_ops/arg_min_max.cc",
-        "driver/tools/custom_ops/cast_to_gfloat_hlo.cc",
         "driver/tools/custom_ops/group_norm_infer.cc",
         "driver/tools/custom_ops/group_norm_train.cc",
         "driver/tools/custom_ops/group_norm_grad.cc",
@@ -199,6 +199,7 @@ cc_library(
         "driver/tools/custom_ops/topk.cc",
         "driver/tools/custom_ops/truncated_normal.cc",
         "driver/tools/custom_ops/user_op_hlo.cc",
+
         "driver/tools/find_all_users.cc",
         "driver/tools/hlo_hash.cc",
         "driver/tools/hlo_matcher.cc",
@@ -342,6 +343,7 @@ cc_library(
         "@com_google_protobuf//:protobuf_headers",
         "@com_google_absl//absl/strings",
     ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -2266,10 +2268,10 @@ tf_xla_py_test(
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:init_ops",
+        "//tensorflow/python:layers",
         "//tensorflow/python:nn",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
-        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -2285,8 +2287,8 @@ tf_xla_py_test(
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:layers",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -2421,9 +2423,9 @@ tf_xla_py_test(
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
+        "//tensorflow/python:layers",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -2439,8 +2441,8 @@ tf_xla_py_test(
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:layers",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
     ],
 )
 
@@ -2511,7 +2513,7 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/keras",
     ],
 )
 

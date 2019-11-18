@@ -25,7 +25,7 @@ namespace poplarplugin {
 namespace {
 template <typename Permutation, typename Dimension>
 std::vector<Permutation> LeftMatMulPermutationsInternal(
-    const std::vector<Dimension>& shape, const DotDimensionNumbers& dot_dims) {
+    const absl::Span<const Dimension>& shape, const DotDimensionNumbers& dot_dims) {
   std::vector<Permutation> permutations;
   const auto lhs_reduction_dimensions = dot_dims.lhs_contracting_dimensions();
   const auto lhs_batch_dimensions = dot_dims.lhs_batch_dimensions();
@@ -47,7 +47,7 @@ std::vector<Permutation> LeftMatMulPermutationsInternal(
 
 template <typename Permutation, typename Dimension>
 std::vector<Permutation> RightMatMulPermutationsInternal(
-    const std::vector<Dimension>& shape, const DotDimensionNumbers& dot_dims) {
+    const absl::Span<const Dimension>& shape, const DotDimensionNumbers& dot_dims) {
   std::vector<Permutation> permutations;
   const auto rhs_batch_dimensions = dot_dims.rhs_batch_dimensions();
   const auto rhs_reduction_dimensions = dot_dims.rhs_contracting_dimensions();
@@ -69,7 +69,7 @@ std::vector<Permutation> RightMatMulPermutationsInternal(
 
 template <typename Dimension>
 std::vector<Dimension> LeftMatMulPackShapeInternal(
-    const std::vector<Dimension>& shape, const DotDimensionNumbers& dot_dims) {
+    const absl::Span<const Dimension>& shape, const DotDimensionNumbers& dot_dims) {
   const auto lhs_reduction_dimensions = dot_dims.lhs_contracting_dimensions();
   const auto lhs_batch_dimensions = dot_dims.lhs_batch_dimensions();
   const auto lhs_shape_itr_begin = shape.begin();
@@ -93,7 +93,7 @@ std::vector<Dimension> LeftMatMulPackShapeInternal(
 
 template <typename Dimension>
 std::vector<Dimension> RightMatMulPackShapeInternal(
-    const std::vector<Dimension>& shape, const DotDimensionNumbers& dot_dims) {
+    const absl::Span<const Dimension>& shape, const DotDimensionNumbers& dot_dims) {
   auto rhs_batch_dimensions = dot_dims.rhs_batch_dimensions();
   auto rhs_reduction_dimensions = dot_dims.rhs_contracting_dimensions();
   const auto rhs_shape_itr_begin = shape.begin();
@@ -125,7 +125,7 @@ std::vector<int64> LeftMatMulPermutations(const Shape& shape,
 }
 
 std::vector<unsigned> LeftMatMulPermutations(
-    const std::vector<size_t>& shape, const DotDimensionNumbers& dot_dims) {
+    const absl::Span<const size_t>& shape, const DotDimensionNumbers& dot_dims) {
   return LeftMatMulPermutationsInternal<unsigned>(shape, dot_dims);
 }
 
@@ -138,7 +138,7 @@ std::vector<int64> RightMatMulPermutations(
 }
 
 std::vector<unsigned> RightMatMulPermutations(
-    const std::vector<size_t>& shape, const DotDimensionNumbers& dot_dims) {
+    const absl::Span<const size_t>& shape, const DotDimensionNumbers& dot_dims) {
   return RightMatMulPermutationsInternal<unsigned>(shape, dot_dims);
 }
 
@@ -149,7 +149,7 @@ Shape LeftMatMulPackShape(const Shape& shape,
       LeftMatMulPackShapeInternal(shape.dimensions(), dot_dims));
 }
 
-std::vector<size_t> LeftMatMulPackShape(const std::vector<size_t>& shape,
+std::vector<size_t> LeftMatMulPackShape(const absl::Span<const size_t>& shape,
                                         const DotDimensionNumbers& dot_dims) {
   return LeftMatMulPackShapeInternal(shape, dot_dims);
 }
@@ -161,7 +161,7 @@ Shape RightMatMulPackShape(const Shape& shape,
       RightMatMulPackShapeInternal(shape.dimensions(), dot_dims));
 }
 
-std::vector<size_t> RightMatMulPackShape(const std::vector<size_t>& shape,
+std::vector<size_t> RightMatMulPackShape(const absl::Span<const size_t>& shape,
                                          const DotDimensionNumbers& dot_dims) {
   return RightMatMulPackShapeInternal(shape, dot_dims);
 }

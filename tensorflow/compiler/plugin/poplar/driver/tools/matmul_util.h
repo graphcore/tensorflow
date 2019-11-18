@@ -32,7 +32,7 @@ std::vector<int64> LeftMatMulPermutations(const Shape& shape,
 // Return a permutation vector to convert the input shape into
 // [Batch..., M..., Contracting...]
 std::vector<unsigned> LeftMatMulPermutations(
-    const std::vector<size_t>& shape, const DotDimensionNumbers& dot_dims);
+    const absl::Span<const size_t>& shape, const DotDimensionNumbers& dot_dims);
 
 // Return a permutation vector to convert the input shape into
 // [Batch..., Contracting..., N...]
@@ -42,7 +42,7 @@ std::vector<int64> RightMatMulPermutations(const Shape& shape,
 // Return a permutation vector to convert the input shape into
 // [Batch..., Contracting..., N...]
 std::vector<unsigned> RightMatMulPermutations(
-    const std::vector<size_t>& shape, const DotDimensionNumbers& dot_dims);
+    const absl::Span<const size_t>& shape, const DotDimensionNumbers& dot_dims);
 
 // Collapse [Batch..., M..., Contracting...] down to a 3D shape
 // [Batch, M, Contracting]
@@ -51,7 +51,7 @@ Shape LeftMatMulPackShape(const Shape& shape,
 
 // Collapse [Batch..., M..., Contracting...] down to a 3D shape
 // [Batch, M, Contracting]
-std::vector<size_t> LeftMatMulPackShape(const std::vector<size_t>& shape,
+std::vector<size_t> LeftMatMulPackShape(const absl::Span<const size_t>& shape,
                                         const DotDimensionNumbers& dot_dims);
 
 // Collapse [Batch..., Contracting..., N...] down to a 3D shape
@@ -61,7 +61,7 @@ Shape RightMatMulPackShape(const Shape& shape,
 
 // Collapse [Batch..., Contracting..., N...] down to a 3D shape
 // [Batch, Contracting, N]
-std::vector<size_t> RightMatMulPackShape(const std::vector<size_t>& shape,
+std::vector<size_t> RightMatMulPackShape(const absl::Span<const size_t>& shape,
                                          const DotDimensionNumbers& dot_dims);
 
 // The LHS XLA shapes need to be shuffled and collapsed to [Batch, M,
