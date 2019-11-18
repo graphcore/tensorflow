@@ -65,11 +65,7 @@ ASYNC = 1
 MIRRORING_NONE = pywrap_tensorflow.TFE_MIRRORING_NONE
 MIRRORING_ALL = pywrap_tensorflow.TFE_MIRRORING_ALL
 
-# TODO(b/143164764): Currently _KEEP_ALIVE_SECS is set to a very long time
-# (i.e. 30 days) because the server may deadlock when destroying the eager
-# context. This may cause memory leak in the headless TPU case, we should change
-# it back to 600 once the deadlock is fixed.
-_KEEP_ALIVE_SECS = 2592000
+_KEEP_ALIVE_SECS = 600
 
 _python_eager_context_create_counter = monitoring.Counter(
     "/tensorflow/api/python/eager_context_create_counter",
@@ -408,6 +404,7 @@ class Context(object):
     if execution_mode is None:
       execution_mode = SYNC
     self._default_is_async = execution_mode == ASYNC
+    self._lazy_remote_inputs_copy = False
     self._server_def = server_def
     self._collective_ops_server_def = None
     self._collective_leader = None
@@ -473,8 +470,12 @@ class Context(object):
         dev_name = pywrap_tensorflow.TF_DeviceListName(device_list, i)
         self._context_devices.append(pydev.canonical_name(dev_name))
         spec = pydev.DeviceSpec.from_string(dev_name)
+        # If the job is localhost, we assume that the cluster has not yet been
+        # configured and thus clear the job, replica & task.
+        if spec.job == "localhost":
+          spec = spec.replace(job=None, replica=None, task=None)
         self._logical_devices.append(
-            LogicalDevice(name=dev_name, device_type=spec.device_type))
+            LogicalDevice(name=spec.to_string(), device_type=spec.device_type))
         dev_type = pywrap_tensorflow.TF_DeviceListType(device_list, i)
         if dev_type == "GPU":
           self._num_gpus += 1
@@ -502,6 +503,9 @@ class Context(object):
               opts, self._mirroring_policy)
         if self._default_is_async == ASYNC:
           pywrap_tensorflow.TFE_ContextOptionsSetAsync(opts, True)
+        if self._lazy_remote_inputs_copy:
+          pywrap_tensorflow.TFE_ContextOptionsSetLazyRemoteInputsCopy(
+              opts, True)
         context_handle = pywrap_tensorflow.TFE_NewContext(opts)
       finally:
         pywrap_tensorflow.TFE_DeleteContextOptions(opts)
@@ -1444,6 +1448,22 @@ class Context(object):
       if self._context_handle is not None:
         pywrap_tensorflow.TFE_ContextSetThreadLocalMirroringPolicy(
             self._handle, self._mirroring_policy)
+
+  @property
+  def lazy_remote_inputs_copy(self):
+    return self._lazy_remote_inputs_copy
+
+  @lazy_remote_inputs_copy.setter
+  def lazy_remote_inputs_copy(self, lazy_copy):
+    """Sets whether to copy remote inputs lazily for functions."""
+    if not isinstance(lazy_copy, bool):
+      raise ValueError("Expecting a boolean but got %s" % type(lazy_copy))
+
+    if self._lazy_remote_inputs_copy != lazy_copy:
+      if self._initialized:
+        raise ValueError(
+            "lazy_remote_inputs_copy should be set before being initialized.")
+      self._lazy_remote_inputs_copy = lazy_copy
 
   def enable_run_metadata(self):
     """Enables tracing of op execution via RunMetadata.

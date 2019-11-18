@@ -46,19 +46,27 @@ from tensorflow.python.ops.ragged import ragged_tensor
 from tensorflow.python.util import nest
 
 
+def _get_or_make_function(model, mode, key_fn, make_fn):
+  """Helper function for managing cached execution functions."""
+  model._init_distributed_function_cache_if_not_compiled()
+  key = key_fn(mode)
+
+  function = dist_utils.get_distributed_function(model, key)
+  if function:
+    return function
+
+  function = make_fn(model, mode)
+  dist_utils.set_distributed_function(model, key, function)
+  return function
+
+
 def _get_or_make_execution_function(model, mode):
   """Makes or reuses function to run one step of distributed model execution."""
-  model._init_distributed_function_cache_if_not_compiled()
-
-  # Use a key with 'v2' to distinguish from fall-back execution functions.
-  key = (mode, 'v2')
-  distributed_function = dist_utils.get_distributed_function(model, key)
-  if distributed_function:
-    return distributed_function
-
-  distribution_function = _make_execution_function(model, mode)
-  dist_utils.set_distributed_function(model, key, distribution_function)
-  return distribution_function
+  return _get_or_make_function(
+      model, mode,
+      # Use a key with 'v2' to distinguish from fall-back execution functions.
+      key_fn=lambda m: (m, 'v2'),
+      make_fn=_make_execution_function)
 
 
 def _make_execution_function(model, mode):
@@ -67,12 +75,12 @@ def _make_execution_function(model, mode):
 
   def distributed_function(input_iterator):
     """A single step of the distributed execution across replicas."""
-    args = _prepare_feed_values(model, input_iterator, mode)
     # Call `Model.{train,test,predict}_on_batch` on every replica passing
     # PerReplicas as arguments.  On every replica inside this call, each
     # PerReplica object will return the value for that replica.  The outputs
     # are PerReplicas too.
     strategy = distribution_strategy_context.get_strategy()
+    args = _prepare_feed_values(model, input_iterator, mode, strategy)
     outputs = strategy.experimental_run_v2(
         per_replica_function, args=args)
     # Out of PerReplica outputs reduce or pick values to return.
@@ -92,12 +100,36 @@ def _make_execution_function(model, mode):
   return execution_function
 
 
+def _get_or_make_on_batch_function(model, mode):
+  """Makes or reuses function to run one step of distributed model execution."""
+  return _get_or_make_function(
+      model, mode,
+      # Use a key with 'v2' to distinguish from fall-back execution functions.
+      key_fn=lambda m: (m, 'v2_on_batch'),
+      make_fn=_make_on_batch_function)
+
+
+def _make_on_batch_function(model, mode):
+  """Creates a function of Model.*_on_batch methods."""
+  if mode == ModeKeys.TRAIN:
+    func = training_eager.train_on_batch
+  elif mode == ModeKeys.TEST:
+    func = training_eager.test_on_batch
+  else:
+    func = model
+
+  if not model.run_eagerly:
+    func = def_function.function(func)
+
+  return func
+
+
 def _non_none_constant_value(v):
   constant_value = tensor_util.constant_value(v)
   return constant_value if constant_value is not None else v
 
 
-def _prepare_feed_values(model, inputs, mode):
+def _prepare_feed_values(model, inputs, mode, strategy):
   """Prepare feed values to the model execution function.
 
   Arguments:
@@ -106,6 +138,7 @@ def _prepare_feed_values(model, inputs, mode):
       model inputs may be lists, single values, or dicts mapping input feed
       names to values.
     mode: One of ModeKeys.TRAIN/ModeKeys.TEST/ModeKeys.PREDICT.
+    strategy: The current distribution strategy for the model.
 
   Returns:
     Feed values for the model in the given mode. This is a tuple of
@@ -114,7 +147,7 @@ def _prepare_feed_values(model, inputs, mode):
     for inputs will always be wrapped in lists.
   """
   # For predict, we need to extract the manually added batch_index first.
-  with_batch_index = mode == ModeKeys.PREDICT
+  with_batch_index = _should_add_batch_index_to_element(strategy, mode)
 
   inputs, targets, sample_weights, batch_index = _get_input_from_iterator(
       inputs, with_batch_index)
@@ -175,7 +208,10 @@ def _make_replica_execution_function(model, mode):
       del y, sample_weights
       # Note that the x and batch_index is already per-replica value.
       result = predict_on_batch(model, x)
-      return (batch_index, result)
+      if batch_index is None:
+        return result
+      else:
+        return batch_index, result
 
     func = _predict_on_batch
 
@@ -195,6 +231,9 @@ def _aggregate_predict_results(strategy, batch_outs, model):
   if not isinstance(batch_outs, list):
     batch_outs = [batch_outs]
 
+  with_batch_index = _should_add_batch_index_to_element(
+      strategy, ModeKeys.PREDICT)
+
   # batch_outs is in following structure:
   # [
   #  replica_1_batch_index, replica_2_batch_index, ...., replica_x_batch_index,
@@ -202,14 +241,19 @@ def _aggregate_predict_results(strategy, batch_outs, model):
   #  ......
   #  replica_1_output_y, replica_2_output_y, ...., replica_x_output_y,
   # ]
-  batch_index, batch_outs = batch_outs[:num_replicas], batch_outs[num_replicas:]
-  batch_index = dist_utils.concat_along_batch_dimension(batch_index)
-  # Reorder the batch_index for it to do proper gather. Eg, if the original
-  # index is [0, 2, 4, 6, 1, 3, 5, 7], then the index for gather should be
-  # [0, 4, 1, 5, 2, 6, 3, 7].
-  batch_index = np.argsort(batch_index)
-  # Only need to gather if the batch index is not sorted.
-  need_batch_index_gather = np.any(np.diff(batch_index) < 0)
+  # The replica_x_batch_index is optional and depended on teh strategy type.
+  if with_batch_index:
+    batch_index, batch_outs = (batch_outs[:num_replicas],
+                               batch_outs[num_replicas:])
+    batch_index = dist_utils.concat_along_batch_dimension(batch_index)
+    # Reorder the batch_index for it to do proper gather. Eg, if the original
+    # index is [0, 2, 4, 6, 1, 3, 5, 7], then the index for gather should be
+    # [0, 4, 1, 5, 2, 6, 3, 7].
+    batch_index = np.argsort(batch_index)
+    # Only need to gather if the batch index is not sorted.
+    need_batch_index_gather = np.any(np.diff(batch_index) < 0)
+  else:
+    need_batch_index_gather = False
 
   total_batch_outs = []
   for i in range(num_outputs):
@@ -286,13 +330,36 @@ def _add_batch_index_to_element(dataset):
   return dataset.map(lambda *inp: (math_ops.range(_get_batch_size(inp)), inp))
 
 
+def _should_add_batch_index_to_element(strategy, mode):
+  """Whether or not the batch index should be added to the input dataset.
+
+  See docstring of _add_batch_index_to_element() for more details. So far the
+  batch index is only need when using TPUStrategy with a multi-worker setting.
+  We will try to avoid adding batch index for other cases since it has the
+  performance implication.
+
+  Args:
+    strategy: the current distribution strategy for the model.
+    mode: the current mode (Training/Eval/Predict) for the model.
+  Returns:
+    Boolean, whether the batch index should be added for the input data to
+      preserve the ordering.
+  """
+  # TODO(priyag, rxsang): Come up a better way to determine when the batch index
+  # should be added.
+  return (mode == ModeKeys.PREDICT
+          and dist_utils.is_tpu_strategy(strategy)
+          and strategy.num_replicas_in_sync > 1)
+
+
 def train_on_batch(
     model,
     x,
     y=None,
     sample_weight=None,
     class_weight=None,
-    reset_metrics=True):
+    reset_metrics=True,
+    standalone=False):
   """Runs a single gradient update on a single batch of data.
 
   Arguments:
@@ -324,6 +391,8 @@ def train_on_batch(
       reset_metrics: If `True`, the metrics returned will be only for this
         batch. If `False`, the metrics will be statefully accumulated across
         batches.
+      standalone: If True, this method is not called as part of
+        Model.fit/evaluate/predict and can therefore be tf.function'd.
 
   Returns:
       Scalar training loss
@@ -348,7 +417,13 @@ def train_on_batch(
   # at this point because of the check above.  `train_on_batch` is being run
   # for each replica by `model._distribution_strategy` and the same code path
   # as Eager is expected to be taken.
-  outputs = training_eager.train_on_batch(
+
+  if standalone:
+    train_on_batch_fn = _get_or_make_on_batch_function(model, ModeKeys.TRAIN)
+  else:
+    train_on_batch_fn = training_eager.train_on_batch
+
+  outputs = train_on_batch_fn(
       model,
       x,
       y,
@@ -362,7 +437,8 @@ def train_on_batch(
   return outputs
 
 
-def test_on_batch(model, x, y=None, sample_weight=None, reset_metrics=True):
+def test_on_batch(model, x, y=None, sample_weight=None, reset_metrics=True,
+                  standalone=False):
   """Test the model on a single batch of samples.
 
   Arguments:
@@ -392,6 +468,8 @@ def test_on_batch(model, x, y=None, sample_weight=None, reset_metrics=True):
       reset_metrics: If `True`, the metrics returned will be only for this
         batch. If `False`, the metrics will be statefully accumulated across
         batches.
+      standalone: If True, this method is not called as part of
+        Model.fit/evaluate/predict and can therefore be tf.function'd.
 
   Returns:
       Scalar test loss (if the model has a single output and no metrics)
@@ -411,7 +489,13 @@ def test_on_batch(model, x, y=None, sample_weight=None, reset_metrics=True):
       x, y, sample_weight=sample_weight, extract_tensors_from_dataset=True)
 
   batch_size = array_ops.shape(nest.flatten(x, expand_composites=True)[0])[0]
-  outputs = training_eager.test_on_batch(
+
+  if standalone:
+    test_on_batch_fn = _get_or_make_on_batch_function(model, ModeKeys.TEST)
+  else:
+    test_on_batch_fn = training_eager.test_on_batch
+
+  outputs = test_on_batch_fn(
       model,
       x,
       y,
@@ -425,7 +509,7 @@ def test_on_batch(model, x, y=None, sample_weight=None, reset_metrics=True):
   return outputs
 
 
-def predict_on_batch(model, x):
+def predict_on_batch(model, x, standalone=False):
   """Returns predictions for a single batch of samples.
 
   Arguments:
@@ -436,6 +520,8 @@ def predict_on_batch(model, x):
         - A TensorFlow tensor, or a list of tensors
           (in case the model has multiple inputs).
         - A `tf.data` dataset.
+      standalone: If True, this method is not called as part of
+        Model.fit/evaluate/predict and can therefore be tf.function'd.
 
   Returns:
       Numpy array(s) of predictions.
@@ -458,5 +544,11 @@ def predict_on_batch(model, x):
     if len(inputs) == 1:
       inputs = inputs[0]
 
+  if standalone:
+    predict_on_batch_fn = _get_or_make_on_batch_function(
+        model, ModeKeys.PREDICT)
+  else:
+    predict_on_batch_fn = model
+
   with backend.eager_learning_phase_scope(0):
-    return model(inputs)  # pylint: disable=not-callable
+    return predict_on_batch_fn(inputs)  # pylint: disable=not-callable
