@@ -2525,6 +2525,8 @@ tf_xla_py_test(
     deps = [
         ":test_utils_py",
         ":ipu_ops_py",
+        ":popops_ops_py",
+        ":poputil_ops_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",

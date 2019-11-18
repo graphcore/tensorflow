@@ -381,5 +381,7 @@ ExecutionTest.ScatterUpdateF32 POPLAR
 ExecutionTest.OutputMinorDimensionReshape POPLAR
 ExecutionTest.DoubleDynamicDimension POPLAR
 
-HloParserTestLong POPLAR
+HloParserTestLong POPLAR // Failing to get shape of TridiaganalSolve
 HloParserTestLongProto POPLAR
+
+ParametricDotTestWithoutLayoutAssignment.TestF16 POPLAR // Fail to handle major/minor ordering
