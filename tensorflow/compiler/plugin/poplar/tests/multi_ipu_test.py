@@ -62,13 +62,14 @@ class MultiIpuTest(xla_test.XLATestCase):
       tiles = tm.tile_ids(mods[0])
 
       self.assertEqual(len(tiles), 3)
-      self.assertEqual(tiles, set((0, 1, 1216)))
+      self.assertEqual(tiles, set((0, 1216, 1217)))
 
       ok = [
           '__seed*',
           'add*/add*/AddTo',
           'switchControlBroadcast2/*OnTileCopy',
-          'Copy_XLA_Args/arg0.1_to_/custom-call*/*OnTileCopy',
+          'Copy_XLA_Args/arg0.1_to_/custom-call*/OnTileCopy',
+          'Copy_/custom-call_to_/custom-call*/OnTileCopy',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -172,7 +173,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       tiles = tm.tile_ids(mods[0])
 
       self.assertEqual(len(tiles), 5)
-      self.assertEqual(tiles, set((0, 1, 2, 1216, 1217)))
+      self.assertEqual(tiles, set((0, 1, 1216, 1217, 1218)))
 
   def testMultiIpuTraining(self):
     with self.session() as sess:
