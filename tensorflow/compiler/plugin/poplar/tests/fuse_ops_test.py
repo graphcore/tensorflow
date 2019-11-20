@@ -837,15 +837,16 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       self.assertAllClose(out, [1.0])
 
       report.parse_log()
+
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
           '/Zero',
-          'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
           'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
           'GradientDescent/update_vs/w/ResourceScatterAdd/custom-call*/multiUpdateAdd',
           'gradients/vs/absolute_difference/Abs_grad/Sign',
           'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
+          'gradients/vs/absolute_difference/Sub_grad/Neg/negate*/Op/Negate',
           'vs/embedding_lookup/gather.*/multiSlice',
           'vs/absolute_difference/Sub/subtract.*/AddTo',
           'vs/absolute_difference/Abs/abs.*/Op/Absolute',
