@@ -643,9 +643,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   {
     HloPassPipeline pipeline("IPU");
-    if (!poplar_executor->RetainControlDependencies()) {
-      pipeline.AddPass<DependencyReplacer>(false);
-    }
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<HloGetDimensionSizeRewriter>();
     pipeline.AddPass<CustomOpReplacer>();

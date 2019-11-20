@@ -204,10 +204,7 @@ def create_ipu_config(profiling=False,
       searches for an equivalent cached operation, and uses this  instead of
       creating a new convolution. Setting this flag forces the creation of a
       new convolution. This can improve runtime at the expense of graph size.
-    retain_control_dependencies: When set to true, control dependencies from the
-      Tensorflow graph are passed through to the backend.  This can result in a
-      different memory size due to differing constraints on the operation
-      scheduler.
+    retain_control_dependencies: Deprecated.
     max_cross_replica_sum_buffer_size: The maximum number of bytes that can be
       waiting before a cross replica sum op is scheduled.
     max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
@@ -234,6 +231,9 @@ def create_ipu_config(profiling=False,
   if profile_execution and not profiling:
     raise Exception("`profiling` is required when `profile_execution` is set")
 
+  if retain_control_dependencies:
+    raise Exception("`retain_control_dependencies` is deprecated")
+
   selection_order = selection_order if selection_order else SelectionOrder.AUTO
 
   opts = IpuOptions()
@@ -259,7 +259,6 @@ def create_ipu_config(profiling=False,
       disable_graph_convolution_caching
   opts.speed_size_config.scheduler_selection = scheduler_selection
 
-  opts.retain_control_dependencies = retain_control_dependencies
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
 

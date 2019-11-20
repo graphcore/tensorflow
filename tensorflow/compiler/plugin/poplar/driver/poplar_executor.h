@@ -353,10 +353,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.clear_matmul_pass_type();
   }
 
-  bool RetainControlDependencies() const {
-    return current_config_.retain_control_dependencies();
-  }
-
   bool EnableMultiSliceCombiner() const {
     return current_config_.enable_multi_slice_combiner();
   }

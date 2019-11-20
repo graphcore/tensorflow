@@ -50,7 +50,7 @@ XlaCompiler* XlaOpKernelContext::compiler() const {
 }
 
 // Retrieves an XlaExpression that was allocated by a previous Op.
-const XlaExpression* CastExpressionFromTensor(const Tensor& tensor) {
+static const XlaExpression* CastExpressionFromTensor(const Tensor& tensor) {
   const XlaExpression* expression =
       reinterpret_cast<const XlaExpression*>(tensor.tensor_data().data());
   CHECK(expression->kind() != XlaExpression::Kind::kInvalid)
@@ -59,7 +59,7 @@ const XlaExpression* CastExpressionFromTensor(const Tensor& tensor) {
 }
 
 // Assigns an XlaExpression to a tensor on an XLA compilation device.
-void AssignExpressionToTensor(Tensor* tensor,
+static void AssignExpressionToTensor(Tensor* tensor,
                                      const XlaExpression& value) {
   const XlaExpression* expression =
       reinterpret_cast<const XlaExpression*>(tensor->tensor_data().data());
