@@ -43,12 +43,11 @@ from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrate
 from tensorflow.python.ipu.ipu_outfeed_queue import IPUOutfeedMode
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
-from tensorflow.python.ops import variables
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import session_run_hook
+from tensorflow.python.training import training
 from tensorflow.python.training import training_util
 from tensorflow.python.util import function_utils
 
@@ -709,21 +708,11 @@ class IPUEstimator(estimator_lib.Estimator):
     # Overridden to make sure it is a resource variable and placed on the host.
     # It must be a resource variable for the _validate_global_step_not_incremented()
     # check to work, otherwise it fails too early.
-    graph = graph or ops.get_default_graph()
-    if training_util.get_global_step(graph) is not None:
-      raise ValueError('"global_step" already exists.')
-    with graph.as_default() as g, g.name_scope(None), ops.device(_HOST_DEVICE):
-      return variable_scope.get_variable(
-          ops.GraphKeys.GLOBAL_STEP,
-          shape=[],
-          dtype=dtypes.int64,
-          initializer=init_ops.zeros_initializer(),
-          trainable=False,
-          use_resource=True,
-          aggregation=variables.VariableAggregation.ONLY_FIRST_REPLICA,
-          collections=[
-              ops.GraphKeys.GLOBAL_VARIABLES, ops.GraphKeys.GLOBAL_STEP
-          ])
+    # TODO(hakons): Remove this when resource variables are the default.
+    current_scope = variable_scope.get_variable_scope()
+    with variable_scope.variable_scope(current_scope, use_resource=True), \
+        ops.device(_HOST_DEVICE):
+      return training.create_global_step()
 
   def evaluate(self,
                input_fn,
