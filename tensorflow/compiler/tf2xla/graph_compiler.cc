@@ -170,7 +170,19 @@ Status GraphCompiler::Compile() {
 
     // Set up inputs from outputs of previous nodes.
     std::vector<xla::XlaOp> dependencies;
-    for (auto* e : n->in_edges()) {
+
+    // Sort the incoming edges by the source node to get a deterministic
+    // ordering of the dependencies in the above vector.
+    // Note: Remove this (revert back to upstream) when we remove control
+    // dependency support.
+    std::vector<const Edge*> sorted_in_edges(n->in_edges().begin(),
+                                             n->in_edges().end());
+    std::sort(sorted_in_edges.begin(), sorted_in_edges.end(),
+              [](const Edge* e1, const Edge* e2) {
+                return e1->src()->id() < e2->src()->id();
+              });
+
+    for (auto* e : sorted_in_edges) {
       if (e->IsControlEdge()) {
         if (n->IsOp() && e->src()->IsOp()) {
           auto xlaop_id = control_dependency_registry[e->src()->id()];
