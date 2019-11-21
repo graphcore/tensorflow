@@ -45,6 +45,7 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.summary import summary_iterator
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import session_run_hook
+from tensorflow.python.training import training_util
 
 
 def _dummy_model_fn(features, labels, params):
@@ -76,7 +77,10 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertTrue(estimator.model_dir == "bla")
     self.assertTrue(isinstance(estimator.config, ipu_run_config.RunConfig))
 
-  def testTrain(self):
+  @combinations.generate(
+      combinations.combine(
+          dataset_class=[dataset_ops.DatasetV1, dataset_ops.DatasetV2]))
+  def testTrain(self, dataset_class):
     def my_model_fn(features, labels, mode):
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
 
@@ -92,7 +96,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                         train_op=train_op)
 
     def my_input_fn():
-      dataset = dataset_ops.Dataset.from_tensor_slices(
+      dataset = dataset_class.from_tensor_slices(
           _create_regression_dataset(num_samples=1000, num_features=5))
       dataset = dataset.batch(batch_size=2, drop_remainder=True).repeat()
       return dataset
@@ -1108,6 +1112,35 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertEqual(0, evaluation_hook.num_session_runs)
     estimator.evaluate(my_input_fn, steps=1)
     self.assertEqual(1, evaluation_hook.num_session_runs)
+
+  @combinations.generate(combinations.combine(iterations_per_loop=[1, 2]))
+  def testIncrementingGlobalStepInModelFunctionShouldRaiseError(
+      self, iterations_per_loop):
+    def my_model_fn(features, labels, mode):
+      predictions = layers.Dense(units=1)(features)
+      loss = losses.mean_squared_error(labels=labels, predictions=predictions)
+      optimizer = gradient_descent.GradientDescentOptimizer(0.1)
+      train_op = optimizer.minimize(
+          loss, global_step=training_util.get_global_step())
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        train_op=train_op)
+
+    def my_input_fn():
+      dataset = dataset_ops.Dataset.from_tensor_slices(
+          _create_regression_dataset(num_samples=2, num_features=5))
+      dataset = dataset.batch(batch_size=1, drop_remainder=True).repeat()
+      return dataset
+
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            iterations_per_loop=iterations_per_loop))
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+
+    with self.assertRaisesRegex(
+        ValueError,
+        "Illegal increment of the `global_step` variable in the `model_fn`"):
+      estimator.train(input_fn=my_input_fn, steps=iterations_per_loop)
 
 
 if __name__ == "__main__":

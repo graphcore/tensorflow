@@ -44,13 +44,16 @@ from tensorflow.python.ipu.ipu_outfeed_queue import IPUOutfeedMode
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import session_run_hook
+from tensorflow.python.training import training
 from tensorflow.python.training import training_util
 from tensorflow.python.util import function_utils
 
 _INITIAL_LOSS = 0.0
 _INPUT_FN_KEY = "input_fn"
+_ASSIGN_ADD_OP = "AssignAddVariableOp"
 _CROSS_REPLICA_SUM_OP = "IpuCrossReplicaSum"
 _HOST_DEVICE = "/device:CPU:0"
 _IPU_DEVICE = "/device:IPU:0"
@@ -180,9 +183,28 @@ def _call_input_fn(input_fn, mode, params, config, input_context):
   return input_fn(**kwargs)
 
 
+def _validate_global_step_not_incremented():
+  graph = ops.get_default_graph()
+  global_step = training_util.get_global_step(graph)
+  assert global_step is not None
+
+  def has_global_step_input(ref):
+    # Also check one level deeper since the global step handle may pass
+    # through another operation (e.g. a Switch when wrapped in loop).
+    return ref == global_step.handle or global_step.handle in ref.op.inputs
+
+  for op in graph.get_operations():
+    if op.type == _ASSIGN_ADD_OP and has_global_step_input(op.inputs[0]):
+      raise ValueError(
+          "Illegal increment of the `global_step` variable in the `model_fn`. "
+          "This is usually caused by passing it as an argument to the "
+          "`Optimizer.minimize()` function. Please remove this argument as "
+          "the IPUEstimator itself is responsible for incrementing it.")
+
+
 def _validate_replicated_training_graph():
   operations = ops.get_default_graph().get_operations()
-  if not any(o.type == _CROSS_REPLICA_SUM_OP for o in operations):
+  if not any(op.type == _CROSS_REPLICA_SUM_OP for op in operations):
     raise ValueError(
         ("This is not a valid replicated training graph because no {} " +
          "operations were found. Did you remember to use the " +
@@ -317,6 +339,8 @@ class _ModelFnWrapper(object):
       # tensor-typed train_op. Thus, we need to set it explicitly here.
       with ops.control_dependencies([train_op]):
         total_loss += math_ops.cast(loss, dtypes.float32)
+
+      _validate_global_step_not_incremented()
 
       if self._replication_factor > 1:
         _validate_replicated_training_graph()
@@ -460,7 +484,9 @@ def _augment_model_fn(model_fn):
     input_context = _get_input_context()
     dataset = _call_input_fn(input_fn, mode, params, config, input_context)
 
-    if not isinstance(dataset, dataset_ops.Dataset):
+    # DatasetV1 (the current alias of Dataset) inherits
+    # from DatasetV2, so this allows both.
+    if not isinstance(dataset, dataset_ops.DatasetV2):
       raise ValueError("input_fn must return Dataset")
 
     replication_factor = config.ipu_run_config.num_replicas
@@ -677,6 +703,16 @@ class IPUEstimator(estimator_lib.Estimator):
       raise ValueError(
           "steps ({}) must be a multiple of iterations_per_loop ({})".format(
               steps, iterations_per_loop))
+
+  def _create_global_step(self, graph):
+    # Overridden to make sure it is a resource variable and placed on the host.
+    # It must be a resource variable for the _validate_global_step_not_incremented()
+    # check to work, otherwise it fails too early.
+    # TODO(hakons): Remove this when resource variables are the default.
+    current_scope = variable_scope.get_variable_scope()
+    with variable_scope.variable_scope(current_scope, use_resource=True), \
+        ops.device(_HOST_DEVICE):
+      return training.create_global_step()
 
   def evaluate(self,
                input_fn,
