@@ -184,17 +184,9 @@ def _call_input_fn(input_fn, mode, params, config, input_context):
 
 
 def _validate_global_step_not_incremented():
-  graph = ops.get_default_graph()
-  global_step = training_util.get_global_step(graph)
-  assert global_step is not None
-
-  def has_global_step_input(ref):
-    # Also check one level deeper since the global step handle may pass
-    # through another operation (e.g. a Switch when wrapped in loop).
-    return ref == global_step.handle or global_step.handle in ref.op.inputs
-
-  for op in graph.get_operations():
-    if op.type == _ASSIGN_ADD_OP and has_global_step_input(op.inputs[0]):
+  operations = ops.get_default_graph().get_operations()
+  for op in operations:
+    if op.type == _ASSIGN_ADD_OP and "global_step" in op.inputs[0].name:
       raise ValueError(
           "Illegal increment of the `global_step` variable in the `model_fn`. "
           "This is usually caused by passing it as an argument to the "
