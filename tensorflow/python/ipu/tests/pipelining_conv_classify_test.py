@@ -148,15 +148,15 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       l = array_ops.placeholder(np.int32, shape=[1])
       evts = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                     inputs=[x, l])
-
-    tu.move_variable_initialization_to_cpu()
-    outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                      inputs=[x, l])
+
+      tu.move_variable_initialization_to_cpu()
+      outfeed_queue.dequeue()
+      tu.configure_ipu_system(pipelining=True, text_report=False)
 
       report = tu.ReportJSON(self, None)
       sess.run(variables.global_variables_initializer())
@@ -212,15 +212,15 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       l = array_ops.placeholder(np.int32, shape=[1])
       evts = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                     inputs=[x, l])
-
-    tu.move_variable_initialization_to_cpu()
-    outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                      inputs=[x, l])
+
+      tu.move_variable_initialization_to_cpu()
+      outfeed_queue.dequeue()
+      tu.configure_ipu_system(pipelining=True, text_report=False)
 
       report = tu.ReportJSON(self, None)
       sess.run(variables.global_variables_initializer())
@@ -278,15 +278,15 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       l = array_ops.placeholder(np.int32, shape=[1])
       evts = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                     inputs=[x, l])
-
-    tu.move_variable_initialization_to_cpu()
-    outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                      inputs=[x, l])
+
+      tu.move_variable_initialization_to_cpu()
+      outfeed_queue.dequeue()
+      tu.configure_ipu_system(pipelining=True, text_report=False)
 
       report = tu.ReportJSON(self, None)
       sess.run(variables.global_variables_initializer())
@@ -344,15 +344,15 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
       l = array_ops.placeholder(np.int32, shape=[1])
       evts = gen_ipu_ops.ipu_event_trace()
 
-    with ops.device("/device:IPU:0"):
-      compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
-                                                     inputs=[x, l])
-
-    tu.move_variable_initialization_to_cpu()
-    outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
-
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
+                                                      inputs=[x, l])
+
+      tu.move_variable_initialization_to_cpu()
+      outfeed_queue.dequeue()
+      tu.configure_ipu_system(pipelining=True, text_report=False)
 
       report = tu.ReportJSON(self, None)
       sess.run(variables.global_variables_initializer())
