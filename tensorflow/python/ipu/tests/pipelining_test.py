@@ -145,15 +145,16 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
-
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
-    utils.move_variable_initialization_to_cpu()
-
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       with self.assertRaisesRegexp(
@@ -264,16 +265,18 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
-
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
-    utils.move_variable_initialization_to_cpu()
-
-    outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfeed_op = outfeed_queue.dequeue()
+
       report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
@@ -327,16 +330,18 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
-
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
-    utils.move_variable_initialization_to_cpu()
-
-    outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfeed_op = outfeed_queue.dequeue()
+
       report = tu.ReportJSON(self, sess, configure_device=False)
       report.reset()
       sess.run(variables.global_variables_initializer())
@@ -389,16 +394,18 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
 
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
-
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
-    utils.move_variable_initialization_to_cpu()
-
-    outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfeed_op = outfeed_queue.dequeue()
+
       report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)

@@ -133,8 +133,8 @@ def _pipeline_stage_grad(op, *grads):
       output_shapes=func_grad_graph.output_shapes,
       stage_id=stage_id)
 
-  return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
-                                            outputs)
+  return cond_v2._pack_sequence_as(func_grad_graph.structured_outputs,
+                                   outputs)
 
 
 @ops.RegisterGradient("Pipeline")
