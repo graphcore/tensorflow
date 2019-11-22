@@ -163,13 +163,15 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       # ID used for differentiating between datasets.
       self._id = str(feed_name)
 
-      # Dataset iterator creator.
-      self._initializer = gen_pop_datastream_ops.ipu_consume_dataset(
+      self._initializer = gen_pop_datastream_ops.ipu_create_dataset_iterator(
           input_dataset=ds_variant,
           feed_id=self._id,
           replication_factor=self._replication_factor,
           device_ordinal=device_ordinal,
           **self._dataset._flat_structure)
+
+      self._deleter = gen_pop_datastream_ops.ipu_delete_dataset_iterator(
+          feed_id=self._id, device_ordinal=device_ordinal)
 
     self._dequeued = False
     self._initialized = False
@@ -223,6 +225,17 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       )
     self._initialized = True
     return self._initializer
+
+  @property
+  def deleter(self):
+    """A `tf.Operation` that can be run to delete the resources owned
+    by this IPUInfeedQueue. This allows creating a new IPUInfeedQueue
+    with the same name afterwards.
+
+    Returns:
+      A `tf.Operation` that can be run to delete this IPUInfeedQueue
+    """
+    return self._deleter
 
   def get_next(self):
     """Obsolete function."""

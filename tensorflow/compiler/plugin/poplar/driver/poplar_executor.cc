@@ -16,10 +16,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+
+#include <string.h>
+
+#include <deque>
+#include <fstream>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <poplar/DeviceManager.hpp>
+#include <poplar/IPUModel.hpp>
+#include <poplar/StreamCallback.hpp>
+#include <poplar/Tensor.hpp>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/types/optional.h"
+#include "google/protobuf/util/message_differencer.h"
 #include "include/json/json.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conversions.h"
@@ -44,20 +62,6 @@ limitations under the License.
 #include "tensorflow/core/lib/strings/proto_serialization.h"
 #include "tensorflow/core/lib/strings/stringprintf.h"
 #include "tensorflow/core/public/version.h"
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/synchronization/mutex.h"
-#include "absl/types/optional.h"
-#include "google/protobuf/util/message_differencer.h"
-
-#include <fstream>
-
-#include <string.h>
-
-#include <poplar/DeviceManager.hpp>
-#include <poplar/IPUModel.hpp>
-#include <poplar/StreamCallback.hpp>
-#include <poplar/Tensor.hpp>
 
 /*
  * TensorControl is a structure that maintains state about the location
@@ -227,17 +231,17 @@ PoplarExecutor::TensorControl::~TensorControl() { delete[] data; }
 
 PoplarExecutor::InfeedDatasetIterator::InfeedDatasetIterator(
     int64 replication_factor,
-    std::unique_ptr<tensorflow::data::IteratorBase> iterator,
-    std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx,
-    std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache,
     std::unique_ptr<tensorflow::FunctionLibraryDefinition> flib_def,
     std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime> process_flib,
+    std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache,
+    std::unique_ptr<tensorflow::data::IteratorBase> iterator,
+    std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx,
     const std::vector<xla::Shape>& shapes)
-    : iterator(std::move(iterator)),
-      iterator_ctx(std::move(iterator_ctx)),
-      handle_cache(std::move(handle_cache)),
-      flib_def(std::move(flib_def)),
+    : flib_def(std::move(flib_def)),
       process_flib(std::move(process_flib)),
+      handle_cache(std::move(handle_cache)),
+      iterator(std::move(iterator)),
+      iterator_ctx(std::move(iterator_ctx)),
       shapes(std::move(shapes)),
       tensor_queues(shapes.size()) {
   // Function applied after we evict a buffer from the queue.
@@ -287,6 +291,8 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
 
 PoplarExecutor::PoplarExecutor()
     : ordinal_(0),
+      infeeds_done_(true),
+      outfeeds_done_(true),
       current_engine_(nullptr),
       device_open_(false),
       poplar_device_hash_(0),
@@ -514,7 +520,8 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
 std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
     const InfeedInfos& infeed_infos) {
   infeed_thread_cancelled_ = false;
-  infeeds_done_ = false;
+  // Check that the infeeds are done from the previous execution.
+  CHECK(infeeds_done_.exchange(false));
 
   std::vector<InfeedDatasetIterator*> infeed_dataset_iterators;
   infeed_dataset_iterators.reserve(infeed_infos.size());
@@ -624,7 +631,8 @@ inline void AllocateTensors(std::deque<std::vector<tensorflow::Tensor>>& queue,
 std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
     const OutfeedInfos& outfeed_infos) {
   outfeed_thread_cancelled_ = false;
-  outfeeds_done_ = false;
+  // Check that the outfeeds are done from the previous execution.
+  CHECK(outfeeds_done_.exchange(false));
 
   std::vector<OutfeedContext*> outfeed_contexts;
   outfeed_contexts.reserve(outfeed_infos.size());
@@ -1904,11 +1912,11 @@ poplar::DeviceManager& PoplarExecutor::GetDeviceManager() {
 
 void PoplarExecutor::CreateInfeedDatasetIterator(
     const PoplarFeedConfig& feed_config,
-    std::unique_ptr<tensorflow::data::IteratorBase>& iterator,
-    std::unique_ptr<tensorflow::data::IteratorContext>& iterator_ctx,
-    std::unique_ptr<tensorflow::data::FunctionHandleCache>& handle_cache,
     std::unique_ptr<tensorflow::FunctionLibraryDefinition>& flib_def,
     std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime>& process_lib,
+    std::unique_ptr<tensorflow::data::FunctionHandleCache>& handle_cache,
+    std::unique_ptr<tensorflow::data::IteratorBase>& iterator,
+    std::unique_ptr<tensorflow::data::IteratorContext>& iterator_ctx,
     const std::vector<xla::Shape>& shapes) {
   auto& feed_id = feed_config.feed_id();
   if (infeed_dataset_iterators_.contains(feed_id)) {
@@ -1919,10 +1927,29 @@ void PoplarExecutor::CreateInfeedDatasetIterator(
   } else {
     infeed_dataset_iterators_[feed_id] =
         absl::make_unique<InfeedDatasetIterator>(
-            feed_config.replication_factor(), std::move(iterator),
-            std::move(iterator_ctx), std::move(handle_cache),
-            std::move(flib_def), std::move(process_lib), shapes);
+            feed_config.replication_factor(), std::move(flib_def),
+            std::move(process_lib), std::move(handle_cache),
+            std::move(iterator), std::move(iterator_ctx), shapes);
   }
+}
+
+Status PoplarExecutor::DeleteInfeedDatasetIterator(const std::string& feed_id) {
+  std::lock_guard<std::mutex> l(infeeds_mutex_);
+
+  if (!infeeds_done_) {
+    return xla::FailedPrecondition(
+        "Cannot delete infeed with id='%s' while in use", feed_id.c_str());
+  }
+
+  const auto num_erased = infeed_dataset_iterators_.erase(feed_id);
+  if (num_erased == 0) {
+    return xla::NotFound(
+        "Infeed with id='%s'. Make sure that you have run the initializer "
+        "for this infeed before attempting to delete it.",
+        feed_id.c_str());
+  }
+
+  return Status::OK();
 }
 
 std::vector<std::vector<tensorflow::Tensor>>

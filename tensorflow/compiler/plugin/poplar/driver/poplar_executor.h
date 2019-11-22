@@ -427,12 +427,15 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   static poplar::DeviceManager& GetDeviceManager();
 
   void CreateInfeedDatasetIterator(
-      const PoplarFeedConfig&, std::unique_ptr<tensorflow::data::IteratorBase>&,
-      std::unique_ptr<tensorflow::data::IteratorContext>&,
-      std::unique_ptr<tensorflow::data::FunctionHandleCache>&,
+      const PoplarFeedConfig&,
       std::unique_ptr<tensorflow::FunctionLibraryDefinition>&,
       std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime>&,
+      std::unique_ptr<tensorflow::data::FunctionHandleCache>&,
+      std::unique_ptr<tensorflow::data::IteratorBase>&,
+      std::unique_ptr<tensorflow::data::IteratorContext>&,
       const std::vector<xla::Shape>&);
+
+  Status DeleteInfeedDatasetIterator(const std::string& feed_id);
 
   // Lock the outfeed queue and dequeue all the tensors from a given feed.
   // Fails if the outfeed with the given name does not exist.
@@ -697,18 +700,23 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   struct InfeedDatasetIterator {
     InfeedDatasetIterator(
         int64 replication_factor,
-        std::unique_ptr<tensorflow::data::IteratorBase> iterator,
-        std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx,
-        std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache,
         std::unique_ptr<tensorflow::FunctionLibraryDefinition> flib_def,
         std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime> process_flib,
+        std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache,
+        std::unique_ptr<tensorflow::data::IteratorBase> iterator,
+        std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx,
         const std::vector<xla::Shape>& shapes);
 
-    std::unique_ptr<tensorflow::data::IteratorBase> iterator;
-    std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx;
-    std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache;
+    // The order of these is important since they borrow raw pointers
+    // to each other. FunctionLibraryDefinition must outlive
+    // ProcessFunctionLibraryRuntime which again must outlive
+    // data::FunctionHandleCache.
     std::unique_ptr<tensorflow::FunctionLibraryDefinition> flib_def;
     std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime> process_flib;
+    std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache;
+    std::unique_ptr<tensorflow::data::IteratorBase> iterator;
+    std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx;
+
     const std::vector<xla::Shape> shapes;
 
     std::vector<std::vector<std::unique_ptr<InfeedQueueType>>> tensor_queues;
