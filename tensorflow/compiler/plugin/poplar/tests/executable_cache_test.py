@@ -22,7 +22,7 @@ import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 
 
 @contextlib.contextmanager
-def _temporary_executable_cache_path():
+def _temporary_executable_cache():
   with tempfile.TemporaryDirectory() as temp_dir:
     # Use a nonexistent subdirectory that must be created
     cache_dir = os.path.join(temp_dir, "cache")
@@ -71,7 +71,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       with session.Session() as sess:
         return sess.run([result, compile_report], feed_dict={v: 2.0})
 
-    with _temporary_executable_cache_path():
+    with _temporary_executable_cache():
       result0, report0 = _run_in_new_process(build_and_run_model)
       result1, report1 = _run_in_new_process(build_and_run_model)
       self.assertEqual(result0, result1)
@@ -106,7 +106,7 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         sess.run(infeed_queue.initializer)
         return sess.run([result, dequeued, compile_report], {v: 0.0})
 
-    with _temporary_executable_cache_path():
+    with _temporary_executable_cache():
       result0, dequeued0, report0 = _run_in_new_process(build_and_run_model)
       result1, dequeued1, report1 = _run_in_new_process(build_and_run_model)
       self.assertAllEqual(dequeued0, dequeued1)
@@ -141,11 +141,40 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       with session.Session() as sess:
         return sess.run([send_op, recv_op, compile_report], feed_dict={v: 1.0})
 
-    with _temporary_executable_cache_path():
+    with _temporary_executable_cache():
       _, received0, report0 = _run_in_new_process(build_and_run_model)
       _, received1, report1 = _run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 1.0)
+      self.assertEqual(1, _count_ipu_compilations(report0))
+      self.assertEqual(0, _count_ipu_compilations(report1))
+
+  @test_util.deprecated_graph_mode_only
+  def test_new_graph_in_same_process(self):
+    def build_and_run_model():
+      def my_net(x):
+        return x * x
+
+      v = array_ops.placeholder(dtype=np.float32, shape=())
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
+      compile_report = ipu_compile_summary("compile_report", result)
+
+      tu.configure_ipu_system()
+      with session.Session() as sess:
+        return sess.run([result, compile_report], feed_dict={v: 2.0})
+
+    with _temporary_executable_cache():
+      # Since each Graph will have its own XLA compilation cache,
+      # the cache we test is the last-level Poplar executable cache.
+
+      with ops.Graph().as_default():
+        result0, report0 = build_and_run_model()
+
+      with ops.Graph().as_default():
+        result1, report1 = build_and_run_model()
+
+      self.assertEqual(result0, result1)
       self.assertEqual(1, _count_ipu_compilations(report0))
       self.assertEqual(0, _count_ipu_compilations(report1))
 
