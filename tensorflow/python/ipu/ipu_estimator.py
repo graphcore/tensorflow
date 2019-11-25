@@ -21,10 +21,14 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import threading
+
 import six
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
+from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
+from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.estimator import estimator as estimator_lib
@@ -61,15 +65,6 @@ _IPU_DEVICE = "/device:IPU:0"
 # Keys that cannot be used in the `params` dictionary passed to the
 # IPUEstimator
 _RESERVED_PARAMS_KEYS = [_INPUT_FN_KEY]
-
-
-def _next_feed_id():
-  result = "feed" + str(_next_feed_id.feed_count)
-  _next_feed_id.feed_count += 1
-  return result
-
-
-_next_feed_id.feed_count = 0
 
 
 class IPUEstimatorSpec(
@@ -132,12 +127,66 @@ class _IPUConfigureIPUSystemHook(session_run_hook.SessionRunHook):
     ipu_utils.configure_ipu_system(self._config, self._host_device)
 
 
-class _IPUInfeedInitializerSessionHook(session_run_hook.SessionRunHook):
+class _IPUInfeedLifecycleHook(session_run_hook.SessionRunHook):
   def __init__(self, infeed):
     self._infeed = infeed
+    self._should_delete = False
 
   def after_create_session(self, session, coord):
     session.run(self._infeed.initializer)
+    self._should_delete = True
+
+  def end(self, session):
+    session.run(self._infeed.deleter)
+    self._should_delete = False
+
+  def _run_delete_op_in_new_graph_and_session(self):
+    g = ops.Graph()
+    with g.as_default(), ops.device(_HOST_DEVICE):
+      delete_op = gen_pop_datastream_ops.ipu_delete_dataset_iterator(
+          feed_id=self._infeed._id)  # pylint: disable=protected-access
+    with session_lib.Session(graph=g) as sess:
+      sess.run(delete_op)
+
+  def __del__(self):
+    if self._should_delete:
+      # We may end up here if the session exited abnormally, such
+      # as if an exception was raised or the generator returned
+      # by `predict()` was deleted, since these scenarios will
+      # not trigger the `end()` callback above.
+      self._run_delete_op_in_new_graph_and_session()
+
+
+class _FeedIdAllocator:
+  """Allocates feed IDs with maximum reuse to minimize recompilations."""
+
+  _lock = threading.Lock()  # Protecting all class members.
+  _infeed_thread_ids = []  # All threads that have ever allocated an infeed.
+  _next_outfeed_id = 0  # The next unique outfeed ID.
+
+  @classmethod
+  def alloc_outfeed_id(cls, mode):
+    # The outfeeds are never deleted, so the IDs need to be perpetually
+    # unique within the process.
+    with cls._lock:
+      result = "ipu_estimator_outfeed_{}_{}".format(cls._next_outfeed_id, mode)
+      cls._next_outfeed_id += 1
+      return result
+
+  @classmethod
+  def alloc_infeed_id(cls, mode):
+    # The infeeds are deleted after each IPUEstimator function call,
+    # so the ID only needs to be different for function calls that can
+    # overlap (e.g. from different threads).
+    thread_id = threading.get_ident()
+
+    with cls._lock:
+      if not thread_id in cls._infeed_thread_ids:
+        cls._infeed_thread_ids.append(thread_id)
+      index = cls._infeed_thread_ids.index(thread_id)
+
+    assert index >= 0
+    return "ipu_estimator_infeed_{}_{}".format(index, mode)
 
 
 class _IPUGlobalStepCounterAndStopHook(session_run_hook.SessionRunHook):
@@ -491,11 +540,11 @@ def _augment_model_fn(model_fn):
 
     replication_factor = config.ipu_run_config.num_replicas
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
-        dataset, _next_feed_id(), replication_factor=replication_factor)
+        dataset,
+        _FeedIdAllocator.alloc_infeed_id(mode),
+        replication_factor=replication_factor)
 
-    hooks = [
-        _IPUInfeedInitializerSessionHook(infeed_queue),
-    ]
+    hooks = [_IPUInfeedLifecycleHook(infeed_queue)]
 
     if config.ipu_run_config.ipu_options is None:
       if config.ipu_run_config.compile_summary:
@@ -514,13 +563,13 @@ def _augment_model_fn(model_fn):
       loop = model_fn_wrapper.create_training_loop()
     elif mode == model_fn_lib.ModeKeys.EVAL:
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          "eval_" + _next_feed_id(),
+          _FeedIdAllocator.alloc_outfeed_id(mode),
           outfeed_mode=IPUOutfeedMode.LAST,
           replication_factor=replication_factor)
       loop = model_fn_wrapper.create_evaluation_loop(outfeed_queue)
     elif mode == model_fn_lib.ModeKeys.PREDICT:
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          "predict_" + _next_feed_id(),
+          _FeedIdAllocator.alloc_outfeed_id(mode),
           outfeed_mode=IPUOutfeedMode.ALL,
           replication_factor=replication_factor)
       loop = model_fn_wrapper.create_prediction_loop(outfeed_queue)

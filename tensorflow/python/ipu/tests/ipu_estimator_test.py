@@ -673,11 +673,13 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                 yield_single_examples=True)
     self.assertAllEqual(2.0, next(outputs))
     self.assertAllEqual(3.0, next(outputs))
+    del outputs  # Release generator resources.
 
     outputs = estimator.predict(input_fn=my_input_fn,
                                 yield_single_examples=False)
     self.assertAllEqual([2.0], next(outputs))
     self.assertAllEqual([3.0], next(outputs))
+    del outputs  # Release generator resources.
 
   @combinations.generate(
       combinations.combine(estimator_class=[
