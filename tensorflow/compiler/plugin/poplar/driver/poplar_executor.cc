@@ -202,6 +202,14 @@ int64 GetConfigHash(const IpuOptions& to_hash) {
                                              &config_proto_str);
   return std::hash<string>()(config_proto_str);
 }
+
+int64 CombinedHash(const std::vector<int64>& components) {
+  int64 hash = 42;
+  for (int64 h : components) {
+    hash = tensorflow::Hash64Combine(hash, h);
+  }
+  return hash;
+}
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -281,7 +289,7 @@ PoplarExecutor::PoplarExecutor()
     : ordinal_(0),
       current_engine_(nullptr),
       device_open_(false),
-      poplar_device_hash_(42),
+      poplar_device_hash_(0),
       hardware_configured_(false),
       infeed_thread_pool_(tensorflow::Env::Default(),
                           "poplar_infeed_thread_pool_",
@@ -1161,9 +1169,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   // Get environment PoplarXlaFlags hash
   poplar_target.push_back(PoplarXlaFlags::Get().hlo_hash);
 
-  for (int64 h : poplar_target) {
-    poplar_device_hash_ = tensorflow::Hash64Combine(poplar_device_hash_, h);
-  }
+  poplar_device_hash_ = CombinedHash(poplar_target);
 
   return Status::OK();
 }
