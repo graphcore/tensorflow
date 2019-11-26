@@ -23,6 +23,7 @@ from __future__ import print_function
 import collections
 import threading
 
+from six.moves import _thread
 import six
 
 from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
@@ -178,7 +179,7 @@ class _FeedIdAllocator:
     # The infeeds are deleted after each IPUEstimator function call,
     # so the ID only needs to be different for function calls that can
     # overlap (e.g. from different threads).
-    thread_id = threading.get_ident()
+    thread_id = _thread.get_ident()
 
     with cls._lock:
       if not thread_id in cls._infeed_thread_ids:
