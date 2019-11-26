@@ -24,6 +24,7 @@ from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import errors
+from tensorflow.python.framework import errors_impl
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
@@ -981,7 +982,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         "x0": np.ones(shape=[2], dtype=np.float32),
         "x1": np.ones(shape=[2], dtype=np.float32)
     }
-    ds = dataset_ops.Dataset.from_tensor_slices((x, ))
+    ds = dataset_ops.Dataset.from_tensor_slices((x,))
     infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
         ds, feed_name=next_feed_id())
 
@@ -1221,6 +1222,58 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
             total_outfeeds = total_outfeeds + 1
 
       self.assertEqual(total_outfeeds, 8 // b_count)
+
+  @test_util.deprecated_graph_mode_only
+  def testInfeedDeleteBeforeInitializeShouldRaiseException(self):
+    dataset = tu.create_single_increasing_dataset(10)
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "delete_name")
+    delete_op = infeed_queue.deleter
+    with session_lib.Session() as sess:
+      with self.assertRaisesRegex(errors_impl.NotFoundError,
+                                  "Infeed with id='delete_name'"):
+        sess.run(delete_op)
+
+  @test_util.deprecated_graph_mode_only
+  def testInfeedNameCanBeReusedAfterDeletion(self):
+    for _ in range(2):
+      dataset = tu.create_single_increasing_dataset(10)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "reuse_name")
+      with session_lib.Session() as sess:
+        sess.run(infeed_queue.initializer)
+        sess.run(infeed_queue.deleter)
+
+  @test_util.deprecated_graph_mode_only
+  def testInfeedRestart(self):
+    # Note: This is not something that we encourage or need to support,
+    # but it is the current behaviour that we document in this test:
+    # The infeed can be restarted by calling the `deleter` and then the
+    # `initializer` again.
+
+    def data_gen():
+      for i in range(5):
+        yield i
+
+    dataset = dataset_ops.Dataset.from_generator(data_gen, np.float32, ())
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, "reuse_name")
+    init_op = infeed_queue.initializer
+    delete_op = infeed_queue.deleter
+
+    def body(v, x):
+      v = v + x
+      return v
+
+    def my_net(v):
+      r = ipu.loops.repeat(5, body, (v), infeed_queue)
+      return r
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      [res] = ipu.ipu_compiler.compile(my_net, inputs=[0.0])
+
+    with session_lib.Session() as sess:
+      for _ in range(2):
+        sess.run(init_op)
+        self.assertEqual(sum(range(5)), sess.run(res))
+        sess.run(delete_op)
 
 
 if __name__ == "__main__":

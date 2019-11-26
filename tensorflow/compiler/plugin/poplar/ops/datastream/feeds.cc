@@ -55,7 +55,7 @@ io_batch_size: the number of tensors which should be fetched from the host
   device.
 )doc");
 
-REGISTER_OP("IPUConsumeDataset")
+REGISTER_OP("IPUCreateDatasetIterator")
     .Input("input_dataset: variant")
     .Attr("device_ordinal: int = 0")
     .Attr("feed_id: string")
@@ -63,6 +63,12 @@ REGISTER_OP("IPUConsumeDataset")
     .Attr("io_batch_size: int = 1")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
+
+REGISTER_OP("IPUDeleteDatasetIterator")
+    .Attr("device_ordinal: int = 0")
+    .Attr("feed_id: string")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs);
 
