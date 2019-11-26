@@ -351,7 +351,7 @@ HloCastGfloatToNativeInstructionFactoryFunc(HloCustomCallInstruction* call) {
   TF_ASSIGN_OR_RETURN(std::string gfloat_format_str,
                       attribute_map.GetAttributeAsString("gfloat_format"));
 
-  GFConfig::GfloatFormat gfloat_format;
+  GFConfig::GfloatFormat gfloat_format{};
   GFConfig_GfloatFormat_Parse(gfloat_format_str, &gfloat_format);
 
   return CreateCastGfloatToNative(call->shape(), call->mutable_operand(0),

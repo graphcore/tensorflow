@@ -138,12 +138,11 @@ class UserOpImpl : public PoplarOpDef {
 
         // Allocate this structure to communicate to the executor, which
         // callbacks to register to which input tensors.
-        StreamCopyInfo info{inst,
-                            stream_name,
-                            in.numElements(),
-                            graph.getTarget().getTypeSize(in.elementType()),
-                            i,
-                            functor};
+        const uint32_t num_elements = static_cast<uint32_t>(in.numElements());
+        const uint32_t type_size = static_cast<uint32_t>(
+            graph.getTarget().getTypeSize(in.elementType()));
+        StreamCopyInfo info{inst,      stream_name, num_elements,
+                            type_size, i,           functor};
         info_list.push_back(info);
 
         // Copy from the tensor into the host stream. We will later attach a
@@ -183,10 +182,12 @@ class UserOpImpl : public PoplarOpDef {
         // Allocate this structure to communicate to the executor so the
         // executor knows how much memory to allocate for the callback to write
         // into.
-        StreamCopyInfo info{
-            inst, stream_name, output_tensor.numElements(),
-            graph.getTarget().getTypeSize(output_tensor.elementType()),
-            output_index};
+        const uint32_t num_elements =
+            static_cast<uint32_t>(output_tensor.numElements());
+        const uint32_t type_size = static_cast<uint32_t>(
+            graph.getTarget().getTypeSize(output_tensor.elementType()));
+        StreamCopyInfo info{inst, stream_name, num_elements, type_size,
+                            output_index};
         info_list.push_back(std::move(info));
 
         // Store a reference to this stream copy info.
@@ -257,7 +258,7 @@ class UserOpImpl : public PoplarOpDef {
     }
 
     // Register each of the returned tuple elements (if any) as outputs.
-    for (int i = 0; i < number_of_outputs; ++i) {
+    for (uint32_t i = 0; i < number_of_outputs; ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
     }
     return seq;

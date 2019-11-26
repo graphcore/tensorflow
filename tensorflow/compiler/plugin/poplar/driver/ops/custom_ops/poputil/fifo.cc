@@ -51,7 +51,7 @@ std::map<std::size_t, poplar::Interval> GetInverseIntervalsMap(
   std::map<std::size_t, poplar::Interval> result;
 
   std::size_t offset = 0;
-  for (int64 i = 0; i != intervals.size(); ++i) {
+  for (size_t i = 0; i != intervals.size(); ++i) {
     const poplar::Interval& interval = intervals[i];
     result[interval.begin()] =
         poplar::Interval(offset, offset + interval.size());
@@ -74,7 +74,7 @@ class FifoOp : public PoplarOpDef {
 
     // A degenerate case where the fifo is just an identity op.
     if (fifo_inst->depth() < 1) {
-      for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
+      for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
         poplar::Tensor output = poputil::duplicate(
             graph, inputs[tuple_idx], seq,
             absl::StrCat(GetDebugName(inst), "/copy/", tuple_idx),
@@ -86,7 +86,7 @@ class FifoOp : public PoplarOpDef {
     // If the FIFO can only store a single buffer then skip the counter creation
     // and use copies.
     if (fifo_inst->depth() == 1) {
-      for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
+      for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
         poplar::Tensor input = inputs[tuple_idx];
         // Create the output with the same mapping as the input.
         poplar::Tensor output = graph.clone(
@@ -126,7 +126,7 @@ class FifoOp : public PoplarOpDef {
     graph.setTileMapping(counter, 0);
     res.zeroed_tensors.push_back(counter);
 
-    for (int64 tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
+    for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
       poplar::Tensor input = inputs[tuple_idx];
       // Flatten the input.
       poplar::Tensor input_flat = input.flatten();
@@ -161,7 +161,7 @@ class FifoOp : public PoplarOpDef {
 
       // Update the aliasing map and get all the intervals with no aliasing.
       std::vector<poplar::Interval> flat_dealiased_intervals;
-      for (int64 i = 0; i != flat_intervals.size(); ++i) {
+      for (size_t i = 0; i != flat_intervals.size(); ++i) {
         poplar::Interval& interval = flat_intervals[i];
         if (interval.begin() == interval_aliases[i]) {
           flat_dealiased_intervals.push_back(interval);
@@ -174,8 +174,9 @@ class FifoOp : public PoplarOpDef {
       input_flat = poplar::concat(input_flat.slices(flat_dealiased_intervals));
 
       // Create a buffer of the given depth and the same mapping as the input.
+      const size_t fifo_depth = fifo_inst->depth();
       poplar::Tensor buffer = popops::createSliceableTensorFromSlice(
-          graph, input_flat.expand({0}), {0}, {fifo_inst->depth()},
+          graph, input_flat.expand({0}), {0}, {fifo_depth},
           absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx));
 
       // Create the output with the same mapping as the input.
@@ -192,7 +193,7 @@ class FifoOp : public PoplarOpDef {
           GetInverseIntervalsMap(flat_dealiased_intervals);
 
       std::vector<poplar::Tensor> output_regions(contiguous_intervals.size());
-      for (int64 i = 0; i != contiguous_intervals.size(); ++i) {
+      for (size_t i = 0; i != contiguous_intervals.size(); ++i) {
         poplar::Interval& interval = contiguous_intervals[i];
         // First lookup the interval map to look through any aliasing.
         poplar::Interval& aliased_interval = interval_map.at(interval.begin());

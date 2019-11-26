@@ -285,7 +285,7 @@ Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(output_tensors.size(), 1);
   CHECK_EQ(output_tensors[0].size(), CountShapes(inst->shape()));
-  for (int64 i = 0; i < output_tensors[0].size(); i++) {
+  for (size_t i = 0; i < output_tensors[0].size(); i++) {
     poplar::Tensor out;
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensors[0][i]));
   }
@@ -542,7 +542,7 @@ Status BaseVisitor::HandleAddDependency(HloInstruction* inst) {
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), CountShapes(inst->operand(0)->shape()));
-  for (int64 idx = 0; idx < inputs[0].size(); idx++) {
+  for (size_t idx = 0; idx < inputs[0].size(); idx++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, idx, inputs[0][idx]));
   }
   return Status::OK();

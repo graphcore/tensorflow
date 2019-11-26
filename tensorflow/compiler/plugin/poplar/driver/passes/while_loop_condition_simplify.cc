@@ -41,7 +41,7 @@ StatusOr<bool> TrySimplifyLoopCondition(HloInstruction* while_inst) {
   std::map<int64, HloInstruction*> while_condition_GTEs;
 
   // When looking for LTs, also find the smallest constant
-  HloInstruction* smallest_lt;
+  HloInstruction* smallest_lt = nullptr;
   int64 smallest_constant_value = INT64_MAX;
 
   for (HloInstruction* inst : while_condition->MakeInstructionPostOrder()) {

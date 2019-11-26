@@ -443,7 +443,7 @@ HloMatcherPattern::VerifyAndGetGraphs() {
   // Make sure inputs are unique and that they point to a label in the pattern.
   absl::flat_hash_set<NodeId> inputs_set;
   for (auto input : inputs) {
-    if (input < 0 || input >= pattern_nodes.size()) {
+    if (input < 0 || input >= static_cast<int64>(pattern_nodes.size())) {
       throw std::invalid_argument(prefix + "Input with label " +
                                   std::to_string(input) +
                                   " does not exist in the pattern.");
@@ -470,7 +470,7 @@ HloMatcherPattern::VerifyAndGetGraphs() {
   // Make sure outputs are unique and that they point to a label in the pattern.
   absl::flat_hash_set<NodeId> outputs_set;
   for (auto output : outputs) {
-    if (output < 0 || output >= pattern_nodes.size()) {
+    if (output < 0 || output >= static_cast<int64>(pattern_nodes.size())) {
       throw std::invalid_argument(prefix + "Output with label " +
                                   std::to_string(output) +
                                   " does not exist in the pattern.");
@@ -496,7 +496,7 @@ HloMatcherPattern::VerifyAndGetGraphs() {
 
   const auto get_operands = [this, &prefix](NodeId label) {
     // Verify that the node with label is defined in the pattern.
-    if (label < 0 || label >= pattern_nodes.size()) {
+    if (label < 0 || label >= static_cast<int64>(pattern_nodes.size())) {
       throw std::invalid_argument(prefix + "Unknown node " +
                                   std::to_string(label) +
                                   " which was not defined in the pattern.");
@@ -542,7 +542,7 @@ HloMatcherPattern::VerifyAndGetGraphs() {
     }
   }
 
-  for (int64 label = 0; label < pattern_nodes.size(); label++) {
+  for (size_t label = 0; label < pattern_nodes.size(); label++) {
     if (visited.find(label) == visited.end()) {
       throw std::invalid_argument(prefix + "Node with label " +
                                   std::to_string(label) +
@@ -598,7 +598,7 @@ std::set<HloInstruction*> HloMatcher::GetAssociativeSet(HloInstruction* root) {
       for (int64 i = 0; i < current_inst->operand_count(); i++) {
         auto* operand = current_inst->mutable_operand(i);
         if (result.count(operand) == 0 && operand->user_count() == 1 &&
-            current_depth < look_through_max_depth_) {
+            current_depth < static_cast<int64>(look_through_max_depth_)) {
           to_visit.insert({operand, current_depth + 1});
         }
       }
@@ -693,7 +693,7 @@ bool HloMatcher::MatchPatternSingleOutput(HloInstruction* root,
 
   // Create lookup for input indexes to parameter number
   std::map<NodeId, int64> input_id_to_param_num;
-  for (int64 i = 0; i < pattern.GetInputs().size(); i++) {
+  for (size_t i = 0; i < pattern.GetInputs().size(); i++) {
     input_id_to_param_num[pattern.GetInputs()[i]] = i;
   }
 
@@ -756,7 +756,8 @@ bool HloMatcher::MatchPatternSingleOutput(HloInstruction* root,
 
     if (!is_input(node_num)) {
       if ((node.GetOperands().size() > 0) &&
-          (inst->operand_count() != node.GetOperands().size())) {
+          (static_cast<size_t>(inst->operand_count()) !=
+           node.GetOperands().size())) {
         return false;
       }
 
@@ -769,7 +770,7 @@ bool HloMatcher::MatchPatternSingleOutput(HloInstruction* root,
           operand = operand->mutable_operand(0);
         }
 
-        int n = node.GetOperands()[i];
+        size_t n = node.GetOperands()[i];
 
         if (n >= match.instruction_mapping.size()) {
           LOG(FATAL) << "Invalid matcher reference " << n;

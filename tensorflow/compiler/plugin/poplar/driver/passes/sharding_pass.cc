@@ -463,7 +463,7 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
         SetPipelineStageInstructionSharding(fwd_stage, fwd_stage));
   }
   // Mark backward stages with matching sharding from the forward stage.
-  for (int64 stage_id = 0; stage_id != stages.backward.size(); ++stage_id) {
+  for (size_t stage_id = 0; stage_id != stages.backward.size(); ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
     TF_RETURN_IF_ERROR(
@@ -651,7 +651,7 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
                     comp->name().c_str(), comp_params.size(), c->name().c_str(),
                     c_params.size());
               }
-              for (auto p = 0; p < c_params.size(); p++) {
+              for (size_t p = 0; p < c_params.size(); p++) {
                 SetSharding(c_params[p], comp_params[p]->sharding());
               }
             }

@@ -52,12 +52,14 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
     }
   }
 
-  if (non_broadcast_operands.size() == inst->operand_count()) {
+  if (non_broadcast_operands.size() ==
+      static_cast<size_t>(inst->operand_count())) {
     // None of the operands are broadcasting.
     return false;
   }
 
-  if (constant_broadcast_operands.size() == inst->operand_count()) {
+  if (constant_broadcast_operands.size() ==
+      static_cast<size_t>(inst->operand_count())) {
     // If all the inputs are scalar constants, then the constant
     // folding/algebraic simplifier passes should deal with this.
     return false;

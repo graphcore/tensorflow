@@ -255,7 +255,7 @@ PoplarExecutor::InfeedDatasetIterator::InfeedDatasetIterator(
   // Set up the queue per tensor per replica.
   replication_factor = std::max<int64>(replication_factor, 1);
   for (uint64 i = 0; i < shapes.size(); i++) {
-    for (uint64 replica_id = 0; replica_id < replication_factor; replica_id++) {
+    for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
       void* ptr = tensorflow::port::AlignedMalloc(sizeof(InfeedQueueType), 64);
       tensor_queues[i].emplace_back(new (ptr)
                                         InfeedQueueType(nullptr, post_apply));
@@ -271,17 +271,17 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
       tf_shapes(shapes.size()),
       callback_to_io_thread_queues(shapes.size()) {
   CHECK_EQ(shapes.size(), tf_data_types.size());
-  auto replication_factor = config.replication_factor();
+  int64 replication_factor = config.replication_factor();
   for (uint64 i = 0; i < shapes.size(); i++) {
     tf_data_types[i] = static_cast<tensorflow::DataType>(
         outfeed_info.config.tf_data_types()[i]);
     tensorflow::XLAShapeToTensorShape(shapes[i], &tf_shapes[i]);
 
     // Set up the queue per tensor per replica.
-    auto num_bytes_per_replica =
+    int64 num_bytes_per_replica =
         ShapeUtil::ByteSizeOf(shapes[i]) / replication_factor;
     num_bytes_per_replica *= outfeed_info.config.io_batch_size();
-    for (uint64 replica_id = 0; replica_id < replication_factor; replica_id++) {
+    for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
       void* ptr = tensorflow::port::AlignedMalloc(sizeof(OutfeedQueueType), 64);
       callback_to_io_thread_queues[i].emplace_back(
           new (ptr) OutfeedQueueType(num_bytes_per_replica));
@@ -461,8 +461,8 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
                  << " Did you initialize the infeed_queue?";
     }
     auto* infeed_dataset_iterator = itr->second.get();
-    auto tensor_count = infeed_dataset_iterator->shapes.size();
-    for (auto j = 0; j < tensor_count; ++j) {
+    size_t tensor_count = infeed_dataset_iterator->shapes.size();
+    for (size_t j = 0; j < tensor_count; ++j) {
       auto length = ShapeUtil::ByteSizeOf(infeed_dataset_iterator->shapes[j]);
       auto bytes_per_replica = length / current_replication_factor_;
       for (auto replica_id = 0; replica_id < current_replication_factor_;
@@ -563,7 +563,7 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
         }
 
         if (!end_of_sequence) {
-          for (auto j = 0; j < outputs.size(); ++j) {
+          for (size_t j = 0; j < outputs.size(); ++j) {
             auto& tensor = outputs[j];
             std::vector<tensorflow::Tensor> tensor_slices;
             if (current_replication_factor_ > 1) {
@@ -582,7 +582,7 @@ std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
             }
 
             // Enqueue tensors to each replica.
-            for (int64 replica_id = 0; replica_id < tensor_slices.size();
+            for (size_t replica_id = 0; replica_id < tensor_slices.size();
                  replica_id++) {
               auto& queue =
                   infeed_dataset_iterator->tensor_queues[j][replica_id];
@@ -621,7 +621,7 @@ inline void AllocateTensors(std::deque<std::vector<tensorflow::Tensor>>& queue,
   for (int c = 0; c < count; c++) {
     queue.emplace_front(types.size());
     auto& tensors = queue.front();
-    for (auto i = 0; i != types.size(); ++i) {
+    for (size_t i = 0; i != types.size(); ++i) {
       tensors[i] = tensorflow::Tensor(types[i], shapes[i]);
     }
   }
@@ -704,7 +704,7 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
         // We loop over each queue (by tuple  and replica), and dequeue the
         // block of data. This is then inserted  into the output queue as
         // appropriate.
-        for (auto tuple_idx = 0; tuple_idx < outfeed_context->shapes.size();
+        for (size_t tuple_idx = 0; tuple_idx < outfeed_context->shapes.size();
              ++tuple_idx) {
           // Dequeue tensors from each replica.
           for (int64 replica_id = 0; replica_id < replicas; replica_id++) {
@@ -713,7 +713,7 @@ std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
                     ->callback_to_io_thread_queues[tuple_idx][replica_id];
 
             // Dequeue the data and insert into the correct output queue.
-            void* src = queue->BlockFront();
+            uint8_t* src = reinterpret_cast<uint8_t*>(queue->BlockFront());
             for (int b = 0; b < io_batch_size; b++) {
               std::vector<tensorflow::Tensor>& tensors_to_write_to =
                   outfeed_context->io_thread_output_queues.at(io_batch_size -
@@ -1025,7 +1025,8 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
         } else {
           for (auto& d : device_list) {
             if (d.getTarget().getTargetType() == poplar::TargetType::IPU &&
-                d.getTarget().getNumIPUs() == device.auto_count()) {
+                static_cast<int32>(d.getTarget().getNumIPUs()) ==
+                    device.auto_count()) {
               if (d.attach()) {
                 poplar_device_ = std::move(d);
                 opened = true;
@@ -1968,7 +1969,7 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
   if (mode == xla::poplarplugin::PoplarFeedConfig::GetAll) {
     std::vector<std::vector<tensorflow::Tensor>> output(
         outfeed_context->io_thread_output_queues.size());
-    for (auto i = 0; i < output.size(); ++i) {
+    for (size_t i = 0; i < output.size(); ++i) {
       output[i] = outfeed_context->io_thread_output_queues.back();
       outfeed_context->io_thread_output_queues.pop_back();
     }

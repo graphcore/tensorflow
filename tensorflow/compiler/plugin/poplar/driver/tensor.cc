@@ -70,7 +70,6 @@ using TensorVector = std::vector<std::pair<TensorKey, poplar::Tensor>>;
 
 int64 GetNumberOfUsedTiles(poplar::Graph& graph, const poplar::Tensor& tensor) {
   const auto& mapping = graph.getTileMapping(tensor);
-  uint64 tiles_used = 0;
   return absl::c_count_if(
       mapping,
       [](const std::vector<poplar::Interval>& tile) { return tile.size(); });
@@ -225,7 +224,7 @@ std::vector<poplar::Tensor> SliceTensorIntoTensorsLike(
     poplar::Tensor tensor_to_slice,
     const std::vector<poplar::Tensor>& like_tensors) {
   std::vector<poplar::Tensor> output_tensors(like_tensors.size());
-  for (int64 i = 0; i < like_tensors.size(); ++i) {
+  for (size_t i = 0; i < like_tensors.size(); ++i) {
     auto tensor = like_tensors[i];
     auto output_tensor = tensor_to_slice.slice(0, tensor.numElements(), 0);
     tensor_to_slice = tensor_to_slice.slice(tensor.numElements(),
@@ -517,7 +516,7 @@ StatusOr<poplar::Tensor> AddDynamicSliceTensor(
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla) {
   const SliceInfo slice_info = GetSliceInfo(shape_xla, slice_shape_xla);
 
-  if (slice_info.sliced_dims.size() == shape_xla.rank()) {
+  if (slice_info.sliced_dims.size() == static_cast<size_t>(shape_xla.rank())) {
     // Use the old dynamic slice allocator when we are slicing in all
     // dimensions.
     // TODO Remove this special case once T8594 is fixed.
@@ -538,7 +537,8 @@ StatusOr<poplar::Tensor> AddDynamicUpdateSliceTensor(
     const xla::Shape& input_shape_xla, const xla::Shape& update_shape_xla) {
   const SliceInfo slice_info = GetSliceInfo(input_shape_xla, update_shape_xla);
 
-  if (slice_info.sliced_dims.size() == update_shape_xla.rank()) {
+  if (slice_info.sliced_dims.size() ==
+      static_cast<size_t>(update_shape_xla.rank())) {
     // Use the old dynamic slice allocator when we are slicing in all
     // dimensions.
     // TODO Remove this special case once T8594 is fixed.
@@ -1348,7 +1348,7 @@ StatusOr<poplar::Tensor> UnpadTensor(const PaddingConfig& cfg,
     std::vector<std::size_t> shape(out.shape());
     // Remove front and back padding first:
     size_t begin = cfg.dimensions(d).edge_padding_low();
-    if (shape[d] < cfg.dimensions(d).edge_padding_high()) {
+    if (static_cast<int64>(shape[d]) < cfg.dimensions(d).edge_padding_high()) {
       return xla::FailedPrecondition(
           "Edge %zu is larger than padded edge %zu for dimension %u",
           cfg.dimensions(d).edge_padding_high(), shape[d], d);
@@ -1658,7 +1658,7 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
       const auto* operand = inst->operand(i);
       auto indices = inst->OperandIndices(operand);
       // Add copies for  all operands indices indices - {indices[0]}.
-      for (auto i = 1; i < indices.size(); i++) {
+      for (size_t i = 1; i < indices.size(); i++) {
         tuple_repeated_use[indices[i]] = true;
       }
       // Add all the indices to the visited set.

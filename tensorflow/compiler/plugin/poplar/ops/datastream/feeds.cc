@@ -33,7 +33,7 @@ REGISTER_OP("PopDatastreamInfeedDequeue")
     .SetShapeFn([](InferenceContext* c) {
       std::vector<PartialTensorShape> shapes;
       TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &shapes));
-      for (int i = 0; i < shapes.size(); ++i) {
+      for (size_t i = 0; i < shapes.size(); ++i) {
         ShapeHandle out;
         TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(shapes[i], &out));
         c->set_output(i, out);

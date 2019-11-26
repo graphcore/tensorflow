@@ -141,7 +141,7 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
   // |________________________________|   => c_bwd = forward_pipeline_stage(gte)
   // This will avoid having FIFOs for variables.
 
-  for (int64 stage_id = 0; stage_id != stages.forward.size(); ++stage_id) {
+  for (size_t stage_id = 0; stage_id != stages.forward.size(); ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
     // Go through the inputs to the fwd stage and identify operand indices

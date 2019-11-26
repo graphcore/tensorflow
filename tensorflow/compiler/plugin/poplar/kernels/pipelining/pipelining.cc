@@ -52,7 +52,7 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
 
   std::vector<XlaCompiler::Argument> arguments(input_types.size());
   (*num_resource_args) = 0;
-  for (int i = 0; i < input_types.size(); ++i) {
+  for (size_t i = 0; i < input_types.size(); ++i) {
     XlaCompiler::Argument& arg = arguments[i];
     DataType type = ctx->input_type(i);
 
@@ -132,7 +132,7 @@ xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(
   auto builder = ctx->builder();
 
   std::vector<xla::XlaOp> inputs(input_mapping.size());
-  for (int i = 0; i < input_mapping.size(); ++i) {
+  for (size_t i = 0; i < input_mapping.size(); ++i) {
     const int arg_pos = input_mapping[i];
     switch (arguments[arg_pos].kind) {
       case XlaCompiler::Argument::kResource: {
@@ -203,7 +203,7 @@ class PipelineStageOp : public XlaOpKernel {
     // Set non resource variable outputs and make sure to set constant outputs
     // as constant.
     int non_const_outputs = 0;
-    for (int i = 0; i != output_types_.size(); ++i) {
+    for (size_t i = 0; i != output_types_.size(); ++i) {
       const XlaCompiler::OutputDescription& output = result.outputs[i];
 
       if (output.is_constant) {
@@ -214,7 +214,7 @@ class PipelineStageOp : public XlaOpKernel {
     }
 
     // Set up the modified resources.
-    for (int i = 0; i < result.resource_updates.size(); ++i) {
+    for (size_t i = 0; i < result.resource_updates.size(); ++i) {
       const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
       XlaResource* resource;
       OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
@@ -314,7 +314,7 @@ class PipelineResourceUpdateOp : public XlaOpKernel {
                      PoplarBackendConfig::CallConfig::PipelineResourceUpdate)));
 
     // We expect the resource update stage to only resource outputs.
-    for (int i = 0; i < result.resource_updates.size(); ++i) {
+    for (size_t i = 0; i < result.resource_updates.size(); ++i) {
       const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
       XlaResource* resource;
       OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
@@ -406,7 +406,7 @@ class PipelineOp : public XlaOpKernel {
       std::vector<xla::XlaOp> inner_inputs(inputs.size());
       std::vector<xla::XlaOp> inner_outputs(inputs.size());
       // First handle cases 1 and 2.
-      for (int input_idx = 0; input_idx != inputs.size(); ++input_idx) {
+      for (size_t input_idx = 0; input_idx != inputs.size(); ++input_idx) {
         auto param = xla::Parameter(cb.get(), input_idx,
                                     result.xla_input_shapes[input_idx],
                                     absl::StrCat("input/", input_idx));
@@ -417,7 +417,7 @@ class PipelineOp : public XlaOpKernel {
       auto inner_call = xla::Call(cb.get(), *result.computation, inner_inputs);
       // Now go through any resource updates and add necessary GTEs and handle
       // case 3.
-      for (int i = 0; i < result.resource_updates.size(); ++i) {
+      for (size_t i = 0; i < result.resource_updates.size(); ++i) {
         const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
         if (update.modified) {
           inner_outputs[update.input_index] =

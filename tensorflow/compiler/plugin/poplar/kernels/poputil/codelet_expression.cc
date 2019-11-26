@@ -48,7 +48,7 @@ xla::StatusOr<std::vector<int64>> NumpyBroadcast(const std::vector<int64>& a,
                                                  const std::vector<int64>& b) {
   std::vector<int64> result(std::max(a.size(), b.size()));
 
-  auto offset = std::min(a.size(), b.size());
+  size_t offset = std::min(a.size(), b.size());
   if (a.size() < b.size()) {
     std::copy(b.rbegin(), b.rbegin() + (result.size() - offset),
               result.rbegin());
@@ -57,7 +57,7 @@ xla::StatusOr<std::vector<int64>> NumpyBroadcast(const std::vector<int64>& a,
               result.rbegin());
   }
 
-  for (auto i = 0; i < offset; i++) {
+  for (size_t i = 0; i < offset; i++) {
     result[i] = std::max(a[i], b[i]);
   }
 

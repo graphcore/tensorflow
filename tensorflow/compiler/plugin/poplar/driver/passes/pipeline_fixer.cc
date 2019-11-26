@@ -165,7 +165,7 @@ Status RemovePipelineStageDeadUsers(
 
 int64 GetNextStageID(int64& current,
                      const std::vector<HloInstruction*>& stages) {
-  if ((current + 1) < stages.size()) {
+  if (static_cast<size_t>(current + 1) < stages.size()) {
     current++;
   }
   return GetPipelineStageID(stages[current]);
@@ -646,9 +646,8 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
   }
 
   // Remove unused operands.
-  TF_ASSIGN_OR_RETURN(
-      HloInstruction * new_resource_update,
-      RemoveParametersFromCall(resource_update, unused_op_indices));
+  TF_RETURN_IF_ERROR(
+      RemoveParametersFromCall(resource_update, unused_op_indices).status());
 
   return unused_op_indices.size();
 }
@@ -664,7 +663,7 @@ Status PipelineFixer::InsertDummyBackwardStages(HloComputation* pipeline_comp) {
   std::list<int64> missing;
   int64 back_idx = -1;
   int64 stage_id = GetNextStageID(back_idx, stages.backward);
-  for (int64 i = 0; i != stages.forward.size(); ++i) {
+  for (size_t i = 0; i != stages.forward.size(); ++i) {
     if (stage_id == i) {
       stage_id = GetNextStageID(back_idx, stages.backward);
     } else {

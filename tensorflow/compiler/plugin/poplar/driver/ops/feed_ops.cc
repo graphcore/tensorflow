@@ -83,7 +83,7 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
     new_shape.insert(new_shape.begin(), io_batch_size);
 
     std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
-    for (int i = 0; i < io_batch_size; ++i) {
+    for (size_t i = 0; i < io_batch_size; ++i) {
       if (res.always_rearrange_copies_on_host) {
         // When rearranging on the host, it is better to keep the layout of the
         // slices in the output tensor layout, in order to minimise on-device
@@ -218,7 +218,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
       new_shape.insert(new_shape.begin(), io_batch_size);
 
       std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
-      for (int i = 0; i < io_batch_size; ++i) {
+      for (size_t i = 0; i < io_batch_size; ++i) {
         if (res.always_rearrange_copies_on_host) {
           // When rearranging on the host it is better to have the slices of the
           // buffer laid out in the same form as the 'in' tensor so that there

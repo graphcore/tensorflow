@@ -297,7 +297,8 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("output_shapes", &tensor_shapes_));
 
     num_outputs_ = ctx->num_outputs();
-    OP_REQUIRES(ctx, ctx->num_outputs() == xla_shapes_.size(),
+    OP_REQUIRES(ctx,
+                static_cast<size_t>(ctx->num_outputs()) == xla_shapes_.size(),
                 errors::InvalidArgument(
                     "Outfeed num_outputs() != Attribute num outputs: ",
                     ctx->num_outputs(), " != ", xla_shapes_.size()));
@@ -323,7 +324,7 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
       // Allocate all the output buffers with the extra dimension for the number
       // of executions.
       std::vector<Tensor*> output_tensors;
-      for (auto i = 0; i < num_outputs_; ++i) {
+      for (size_t i = 0; i < num_outputs_; ++i) {
         // Insert an extra dimension to the shape to represent the number of
         // iterations.
         TensorShape tensor_shape = tensor_shapes_[i];
@@ -336,11 +337,11 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
       // Copy the data into the output tensors.
       // Go through all the iterations, and copy the tensors into the right
       // output slices.
-      for (auto iteration = 0; iteration < outfeed_tensors.size();
+      for (size_t iteration = 0; iteration < outfeed_tensors.size();
            ++iteration) {
         auto& tensors_for_iteration = outfeed_tensors[iteration];
         CHECK_EQ(tensors_for_iteration.size(), num_outputs_);
-        for (auto j = 0; j < num_outputs_; ++j) {
+        for (size_t j = 0; j < num_outputs_; ++j) {
           OP_REQUIRES_OK(
               ctx, batch_util::CopyElementToSlice(
                        tensors_for_iteration[j], output_tensors[j], iteration));
@@ -351,7 +352,7 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
       CHECK_EQ(config_.mode(), xla::poplarplugin::PoplarFeedConfig::GetLast);
       CHECK_EQ(outfeed_tensors.size(), 1);
       CHECK_EQ(outfeed_tensors[0].size(), num_outputs_);
-      for (auto j = 0; j < num_outputs_; ++j) {
+      for (size_t j = 0; j < num_outputs_; ++j) {
         ctx->set_output(j, outfeed_tensors[0][j]);
       }
     }

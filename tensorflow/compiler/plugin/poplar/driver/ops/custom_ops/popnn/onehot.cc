@@ -73,9 +73,6 @@ class OneHotOp : public PoplarOpDef {
     poplar::Tensor on_tensor = on[0];
     poplar::Tensor off_tensor = off[0];
 
-    bool is_input_floating_point = on_tensor.elementType() == poplar::FLOAT ||
-                                   on_tensor.elementType() == poplar::HALF;
-
     // Encode one hot returns void but stores output in "output".
     popops::encodeOneHot(graph, indices_tensor, output, seq, on_tensor,
                          off_tensor, "OneHot");

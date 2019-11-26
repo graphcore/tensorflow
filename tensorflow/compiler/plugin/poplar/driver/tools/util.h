@@ -203,7 +203,7 @@ template <typename Output, typename Input>
 std::vector<Output> InvertPermutations(const std::vector<Input>& permutations) {
   std::vector<Output> result(permutations.size());
 
-  for (Output i = 0; i < permutations.size(); ++i) {
+  for (Output i = 0; i < static_cast<Output>(permutations.size()); ++i) {
     result[permutations[i]] = i;
   }
   return result;

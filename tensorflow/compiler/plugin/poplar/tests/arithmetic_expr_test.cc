@@ -62,7 +62,7 @@ TEST_F(ArithmeticExprTest, TestArithmeticExpr) {
   auto cast1 = builder.AddInstruction(HloInstruction::CreateConvert(s2, add1));
   auto cast2 = builder.AddInstruction(HloInstruction::CreateConvert(s2, i3));
 
-  auto mul1 = builder.AddInstruction(
+  builder.AddInstruction(
       HloInstruction::CreateBinary(s2, HloOpcode::kMultiply, cast1, cast2));
 
   auto computation = builder.Build();

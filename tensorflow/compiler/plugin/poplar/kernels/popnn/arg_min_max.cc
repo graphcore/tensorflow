@@ -41,7 +41,7 @@ namespace tensorflow {
 class ArgMaxMinOp : public XlaOpKernel, IpuOpKernel {
  public:
   explicit ArgMaxMinOp(OpKernelConstruction* ctx, bool is_min)
-      : is_min_(is_min), XlaOpKernel(ctx), IpuOpKernel() {}
+      : XlaOpKernel(ctx), IpuOpKernel(), is_min_(is_min) {}
 
   void Compile(XlaOpKernelContext* ctx) override {
     TensorShape input_shape = ctx->InputShape(0);
