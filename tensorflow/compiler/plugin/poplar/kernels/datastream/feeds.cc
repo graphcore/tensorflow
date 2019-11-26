@@ -350,10 +350,19 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
     } else {
       // Just set the output data if we are getting the last element.
       CHECK_EQ(config_.mode(), xla::poplarplugin::PoplarFeedConfig::GetLast);
-      CHECK_EQ(outfeed_tensors.size(), 1);
-      CHECK_EQ(outfeed_tensors[0].size(), num_outputs_);
-      for (size_t j = 0; j < num_outputs_; ++j) {
-        ctx->set_output(j, outfeed_tensors[0][j]);
+      if (outfeed_tensors.size() == 1) {
+        CHECK_EQ(outfeed_tensors[0].size(), num_outputs_);
+        for (size_t j = 0; j < num_outputs_; ++j) {
+          ctx->set_output(j, outfeed_tensors[0][j]);
+        }
+      } else {
+        // Dequeue was called before there was any data.
+        OP_REQUIRES(ctx, false,
+                    errors::FailedPrecondition(
+                        "Trying to get the last value from an outfeed queue "
+                        "before it was executed. Make sure the outfeed dequeue "
+                        "TensorFlow operation is executed after the enqueue to "
+                        "the outfeed has completed."));
       }
     }
   }
