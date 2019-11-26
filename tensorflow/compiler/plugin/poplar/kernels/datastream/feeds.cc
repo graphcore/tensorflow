@@ -379,4 +379,38 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
 REGISTER_KERNEL_BUILDER(Name("PopDatastreamOutfeedDequeue").Device(DEVICE_CPU),
                         PopDatastreamOutfeedDequeueOp);
 
+class IPUDeleteOutfeedOp : public OpKernel {
+ public:
+  explicit IPUDeleteOutfeedOp(OpKernelConstruction* ctx)
+      : OpKernel(ctx), device_ordinal_(0) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
+    OP_REQUIRES(ctx, device_ordinal_ >= 0,
+                errors::InvalidArgument("Need device_ordinal >= 0, got ",
+                                        device_ordinal_));
+  }
+
+  ~IPUDeleteOutfeedOp() override {}
+
+  void Compute(OpKernelContext* ctx) override {
+    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+    OP_REQUIRES(ctx, platform.ok(), platform.status());
+    auto* p =
+        static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
+    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+    auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
+        stream_executor->implementation());
+
+    OP_REQUIRES_OK(ctx, poplar_executor->DeleteOutfeed(feed_id_));
+  }
+
+ private:
+  int device_ordinal_;
+  std::string feed_id_;
+  TF_DISALLOW_COPY_AND_ASSIGN(IPUDeleteOutfeedOp);
+};
+
+REGISTER_KERNEL_BUILDER(Name("IPUDeleteOutfeed").Device(DEVICE_CPU),
+                        IPUDeleteOutfeedOp);
+
 }  // namespace tensorflow

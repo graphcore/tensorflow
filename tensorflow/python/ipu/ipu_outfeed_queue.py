@@ -120,6 +120,10 @@ class IPUOutfeedQueue:
     self._structure = None
     self._device_str = '/device:IPU:{}'.format(str(device_ordinal))
 
+    with ops.device('/device:CPU:0'):
+      self._deleter = gen_pop_datastream_ops.ipu_delete_outfeed(
+          feed_id=self._feed_name, device_ordinal=device_ordinal)
+
   def enqueue(self, tensors):
     """Enqueue a tensor, tuple or a dictionary of tensors for being outfed
     from the IPU graph. This operation is placed on the IPU device.
@@ -361,6 +365,18 @@ class IPUOutfeedQueue:
           replication_factor=self._replication_factor)
 
     return self._structure.from_tensor_list(outfeed_dequeue)
+
+  @property
+  def deleter(self):
+    """A `tf.Operation` that can be run to delete the resources owned
+    by this IPUOutfeedQueue. This allows creating a new IPUOutfeedQueue
+    with the same name afterwards. The behaviour is undefined if this
+    op is executed concurrently with the dequeue op.
+
+    Returns:
+      A `tf.Operation` that can be run to delete this IPUOutfeedQueue
+    """
+    return self._deleter
 
 
 class _OutfeedStructure:

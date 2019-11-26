@@ -444,6 +444,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status RegisterOutfeeds(const OutfeedInfos& outfeed_infos);
 
+  Status DeleteOutfeed(const std::string& feed_id);
+
   tensorflow::Rendezvous* GetRendezvous();
 
   void ResetSeed(int seed);

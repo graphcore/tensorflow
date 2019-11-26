@@ -126,4 +126,11 @@ io_batch_size: the number of tensors which should be fetched from the host
   in one go.  This reduces the host->device IO, at the cost of memory on the
   device.
 )doc");
+
+REGISTER_OP("IPUDeleteOutfeed")
+    .Attr("device_ordinal: int = 0")
+    .Attr("feed_id: string")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
+
 }  // namespace tensorflow

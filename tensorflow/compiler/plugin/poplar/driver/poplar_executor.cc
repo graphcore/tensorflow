@@ -2013,6 +2013,25 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
   return Status::OK();
 }
 
+Status PoplarExecutor::DeleteOutfeed(const std::string& feed_id) {
+  std::lock_guard<std::mutex> l(outfeeds_mutex_);
+
+  if (!outfeeds_done_) {
+    return xla::FailedPrecondition(
+        "Cannot delete outfeed with id='%s' while in use", feed_id.c_str());
+  }
+
+  const auto num_erased = outfeed_contexts_.erase(feed_id);
+  if (num_erased == 0) {
+    return xla::NotFound(
+        "Outfeed with id='%s'. Make sure that you have executed the program "
+        "with this outfeed before attempting to delete it.",
+        feed_id.c_str());
+  }
+
+  return Status::OK();
+}
+
 tensorflow::Rendezvous* PoplarExecutor::GetRendezvous() {
   return rendezvous_.get();
 }

@@ -1338,6 +1338,30 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         sess.run(outfed)
         sess.run(res)
 
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedDeleteBeforeExecuteShouldRaiseException(self):
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        "delete_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+    delete_op = outfeed_queue.deleter
+    with session_lib.Session() as sess:
+      with self.assertRaisesRegex(errors_impl.NotFoundError,
+                                  "Outfeed with id='delete_name'"):
+        sess.run(delete_op)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedNameCanBeReusedAfterDeletion(self):
+    for _ in range(2):
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        enqueue = ipu.ipu_compiler.compile(outfeed_queue.enqueue, inputs=[1.0])
+      dequeue = outfeed_queue.dequeue()
+
+      with session_lib.Session() as sess:
+        sess.run(enqueue)
+        self.assertEqual(1.0, sess.run(dequeue))
+        sess.run(outfeed_queue.deleter)
+
 
 if __name__ == "__main__":
   googletest.main()
