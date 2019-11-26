@@ -922,6 +922,96 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
 
+  def testScaledAddaXbY(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        px = array_ops.placeholder(np.float16, [3])
+        py = array_ops.placeholder(np.float16, [3])
+        const_a = array_ops.constant(2.0, np.float16)
+        const_b = array_ops.constant(3.0, np.float16)
+        axby = const_a * px + const_b * py
+
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
+
+      fd = {px: [2.0, 0.5, 1.0], py: [1.0, 2.0, 3.0]}
+      result = sess.run(axby, fd)
+      self.assertAllClose(result, [7.0, 7.0, 11.0])
+
+      report.parse_log(assert_len=3)
+
+      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      report.assert_all_compute_sets_and_list(ok)
+
+  def testScaledSubtractaXbY(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        px = array_ops.placeholder(np.float16, [3])
+        py = array_ops.placeholder(np.float16, [3])
+        const_a = array_ops.constant(2.0, np.float16)
+        const_b = array_ops.constant(3.0, np.float16)
+        axby = const_a * px - const_b * py
+
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
+
+      fd = {px: [2.0, 0.5, 1.0], py: [1.0, 2.0, 3.0]}
+      result = sess.run(axby, fd)
+      self.assertAllClose(result, [1.0, -5.0, -7.0])
+
+      report.parse_log(assert_len=3)
+
+  def testScaledAddToVariableFor2Scales(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, [3])
+        pa_scale = array_ops.placeholder(np.float16, [1])
+        pb = array_ops.placeholder(np.float16, [3])
+        pb_scale = array_ops.placeholder(np.float16, [1])
+        c = pa_scale * pa + pb_scale * pb
+
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
+
+      fd = {
+          pa: [2.0, 0.5, 1.0],
+          pb: [1.0, 2.0, 3.0],
+          pa_scale: [2.0],
+          pb_scale: [3.0]
+      }
+      result = sess.run(c, fd)
+      self.assertAllClose(result, [7.0, 7.0, 11.0])
+
+      report.parse_log(assert_len=3)
+
+      ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
+      report.assert_all_compute_sets_and_list(ok)
+
+  def testScaledSubtractFromVariableFor2Scales(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, [3])
+        pa_scale = array_ops.placeholder(np.float16, [1])
+        pb = array_ops.placeholder(np.float16, [3])
+        pb_scale = array_ops.placeholder(np.float16, [1])
+        c = pa_scale * pa - pb_scale * pb
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
+
+      fd = {
+          pa: [2.0, 0.5, 1.0],
+          pb: [1.0, 2.0, 3.0],
+          pa_scale: [2.0],
+          pb_scale: [3.0]
+      }
+      result = sess.run(c, fd)
+      self.assertAllClose(result, [1.0, -5.0, -7.0])
+
+      report.parse_log(assert_len=3)
+
+      ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
+      report.assert_all_compute_sets_and_list(ok)
+
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +

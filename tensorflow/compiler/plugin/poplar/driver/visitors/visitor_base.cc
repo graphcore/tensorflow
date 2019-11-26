@@ -73,6 +73,7 @@ static std::map<std::string, CustomCallFn> custom_call_map = {
     {"zero_pad", CreateZeroPadOp},
     {"depthwise_filter", CreateDepthwiseBackpropFilter},
     {"scaled_inplace", CreateScaledInplace},
+    {"scaled_inplace_axby", CreateScaledInplaceaXbY},
     {"conv_scaled_inplace", CreateConvScaledInplace},
     {"padding_reduce_window", CreatePaddingReduceWindow},
     {"implicit_binary", CreateBinaryElementwiseOp},
