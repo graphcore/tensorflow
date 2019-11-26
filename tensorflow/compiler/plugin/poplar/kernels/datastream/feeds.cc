@@ -127,9 +127,9 @@ class PopDatastreamInfeedDequeueOp : public XlaOpKernel {
 
 REGISTER_IPU_OP("PopDatastreamInfeedDequeue", PopDatastreamInfeedDequeueOp);
 
-class IPUConsumeDatasetOp : public OpKernel {
+class IPUCreateDatasetIteratorOp : public OpKernel {
  public:
-  explicit IPUConsumeDatasetOp(OpKernelConstruction* ctx)
+  explicit IPUCreateDatasetIteratorOp(OpKernelConstruction* ctx)
       : OpKernel(ctx), device_ordinal_(0) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
     GetFeedConfig(ctx, config_);
@@ -140,7 +140,7 @@ class IPUConsumeDatasetOp : public OpKernel {
     XlaShapesFromAttr(ctx, xla_shapes_);
   }
 
-  ~IPUConsumeDatasetOp() override{};
+  ~IPUCreateDatasetIteratorOp() override {}
 
   void Compute(OpKernelContext* ctx) override {
     // Create a function library to allow Map datasets to create operations
@@ -179,18 +179,52 @@ class IPUConsumeDatasetOp : public OpKernel {
                                               "IPUDatasetIterator", &iterator));
     // Pass to the correct executor
     poplar_executor->CreateInfeedDatasetIterator(
-        config_, iterator, iter_ctx, fhc, flib_def, pflr, xla_shapes_);
+        config_, flib_def, pflr, fhc, iterator, iter_ctx, xla_shapes_);
   }
 
  private:
   int device_ordinal_;
   xla::poplarplugin::PoplarFeedConfig config_;
   std::vector<xla::Shape> xla_shapes_;
-  TF_DISALLOW_COPY_AND_ASSIGN(IPUConsumeDatasetOp);
+  TF_DISALLOW_COPY_AND_ASSIGN(IPUCreateDatasetIteratorOp);
 };
 
-REGISTER_KERNEL_BUILDER(Name("IPUConsumeDataset").Device(DEVICE_CPU),
-                        IPUConsumeDatasetOp);
+REGISTER_KERNEL_BUILDER(Name("IPUCreateDatasetIterator").Device(DEVICE_CPU),
+                        IPUCreateDatasetIteratorOp);
+
+class IPUDeleteDatasetIteratorOp : public OpKernel {
+ public:
+  explicit IPUDeleteDatasetIteratorOp(OpKernelConstruction* ctx)
+      : OpKernel(ctx), device_ordinal_(0) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
+    OP_REQUIRES(ctx, device_ordinal_ >= 0,
+                errors::InvalidArgument("Need device_ordinal >= 0, got ",
+                                        device_ordinal_));
+  }
+
+  ~IPUDeleteDatasetIteratorOp() override {}
+
+  void Compute(OpKernelContext* ctx) override {
+    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+    OP_REQUIRES(ctx, platform.ok(), platform.status());
+    auto* p =
+        static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
+    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+    auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
+        stream_executor->implementation());
+
+    OP_REQUIRES_OK(ctx, poplar_executor->DeleteInfeedDatasetIterator(feed_id_));
+  }
+
+ private:
+  int device_ordinal_;
+  std::string feed_id_;
+  TF_DISALLOW_COPY_AND_ASSIGN(IPUDeleteDatasetIteratorOp);
+};
+
+REGISTER_KERNEL_BUILDER(Name("IPUDeleteDatasetIterator").Device(DEVICE_CPU),
+                        IPUDeleteDatasetIteratorOp);
 
 class PopDatastreamOutfeedEnqueueOp : public XlaOpKernel {
  public:
