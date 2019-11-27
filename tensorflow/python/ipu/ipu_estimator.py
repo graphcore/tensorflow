@@ -51,6 +51,7 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.training import basic_session_run_hooks
 from tensorflow.python.training import session_run_hook
 from tensorflow.python.training import training
 from tensorflow.python.training import training_util
@@ -158,36 +159,58 @@ class _IPUInfeedLifecycleHook(session_run_hook.SessionRunHook):
       self._run_delete_op_in_new_graph_and_session()
 
 
+class _IPUOutfeedLifecycleHook(session_run_hook.SessionRunHook):
+  def __init__(self, outfeed):
+    self._outfeed = outfeed
+    self._should_delete = False
+
+  def after_run(self, run_context, run_values):
+    # The outfeed is allocated when the engine is executed.
+    self._should_delete = True
+
+  def _run_delete_op_in_new_graph_and_session(self):
+    g = ops.Graph()
+    with g.as_default(), ops.device(_HOST_DEVICE):
+      delete_op = gen_pop_datastream_ops.ipu_delete_outfeed(
+          feed_id=self._outfeed._feed_name)  # pylint: disable=protected-access
+    with session_lib.Session(graph=g) as sess:
+      sess.run(delete_op)
+
+  def __del__(self):
+    if self._should_delete:
+      self._run_delete_op_in_new_graph_and_session()
+
+
 class _FeedIdAllocator:
-  """Allocates feed IDs with maximum reuse to minimize recompilations."""
+  """Allocates feed IDs with maximum reuse to minimize recompilations.
+  The feeds are deleted after each IPUEstimator function call,
+  so the IDs only need to be different for function calls that can
+  overlap (e.g. from different threads)."""
 
   _lock = threading.Lock()  # Protecting all class members.
-  _infeed_thread_ids = []  # All threads that have ever allocated an infeed.
-  _next_outfeed_id = 0  # The next unique outfeed ID.
+  _thread_ids = []  # All the threads that have ever allocated an ID.
 
   @classmethod
-  def alloc_outfeed_id(cls, mode):
-    # The outfeeds are never deleted, so the IDs need to be perpetually
-    # unique within the process.
-    with cls._lock:
-      result = "ipu_estimator_outfeed_{}_{}".format(cls._next_outfeed_id, mode)
-      cls._next_outfeed_id += 1
-      return result
-
-  @classmethod
-  def alloc_infeed_id(cls, mode):
-    # The infeeds are deleted after each IPUEstimator function call,
-    # so the ID only needs to be different for function calls that can
-    # overlap (e.g. from different threads).
+  def _alloc_thread_index(cls):
     thread_id = _thread.get_ident()
 
     with cls._lock:
-      if not thread_id in cls._infeed_thread_ids:
-        cls._infeed_thread_ids.append(thread_id)
-      index = cls._infeed_thread_ids.index(thread_id)
+      if not thread_id in cls._thread_ids:
+        cls._thread_ids.append(thread_id)
+      index = cls._thread_ids.index(thread_id)
 
     assert index >= 0
-    return "ipu_estimator_infeed_{}_{}".format(index, mode)
+    return index
+
+  @classmethod
+  def alloc_infeed_id(cls, mode):
+    index = cls._alloc_thread_index()
+    return "ipu_estimator_{}_{}_infeed".format(index, mode)
+
+  @classmethod
+  def alloc_outfeed_id(cls, mode):
+    index = cls._alloc_thread_index()
+    return "ipu_estimator_{}_{}_outfeed".format(index, mode)
 
 
 class _IPUGlobalStepCounterAndStopHook(session_run_hook.SessionRunHook):
@@ -567,12 +590,14 @@ def _augment_model_fn(model_fn):
           _FeedIdAllocator.alloc_outfeed_id(mode),
           outfeed_mode=IPUOutfeedMode.LAST,
           replication_factor=replication_factor)
+      hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
       loop = model_fn_wrapper.create_evaluation_loop(outfeed_queue)
     elif mode == model_fn_lib.ModeKeys.PREDICT:
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
           _FeedIdAllocator.alloc_outfeed_id(mode),
           outfeed_mode=IPUOutfeedMode.ALL,
           replication_factor=replication_factor)
+      hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
       loop = model_fn_wrapper.create_prediction_loop(outfeed_queue)
     else:
       raise ValueError("Unknown mode: {}".format(mode))
@@ -581,7 +606,17 @@ def _augment_model_fn(model_fn):
       compiled_loop = ipu_compiler.compile(loop)
 
     if config.ipu_run_config.compile_summary:
-      ipu_ops.summary_ops.ipu_compile_summary("compile_summary", compiled_loop)
+      compile_summary_op = ipu_ops.summary_ops.ipu_compile_summary(
+          "compile_summary", compiled_loop)
+
+      # The SummarySaverHook is not added by default for evaluation,
+      # so add it here if the user requested a compile summary.
+      if mode == model_fn_lib.ModeKeys.EVAL and config.save_summary_steps:
+        hooks.append(
+            basic_session_run_hooks.SummarySaverHook(
+                save_steps=config.save_summary_steps,
+                output_dir=config.model_dir,
+                summary_op=compile_summary_op))
 
     ipu_utils.move_variable_initialization_to_cpu()
 

@@ -18,7 +18,7 @@ from tensorflow.python.estimator import model_fn
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.ops.summary_ops import ipu_compile_summary
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import metrics_impl
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
 from tensorflow.python.summary import summary_iterator
@@ -192,11 +192,20 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(1, _count_ipu_compilations(report0))
       self.assertEqual(0, _count_ipu_compilations(report1))
 
-  def test_ipu_estimator_train_twice(self):
+  def test_ipu_estimator(self):
     def my_model_fn(features, labels, mode):
-      loss = math_ops.reduce_mean(features + labels)
-      train_op = array_ops.identity(loss)
-      return model_fn.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
+      loss = features + labels
+      # Make different graphs for train and eval
+      if mode == model_fn.ModeKeys.TRAIN:
+        train_op = array_ops.identity(loss)
+        return model_fn.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
+      elif mode == model_fn.ModeKeys.EVAL:
+        eval_metric_ops = {"metric": metrics_impl.mean(features * labels)}
+        return model_fn.EstimatorSpec(mode=mode,
+                                      loss=loss,
+                                      eval_metric_ops=eval_metric_ops)
+      else:
+        raise NotImplementedError(mode)
 
     def my_input_fn():
       dataset = dataset_ops.Dataset.from_tensor_slices((
@@ -216,13 +225,28 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       estimator = ipu.ipu_estimator.IPUEstimator(model_fn=my_model_fn,
                                                  config=run_config)
 
-      self.assertEqual(0, _count_ipu_compilations_in_dir(estimator.model_dir))
+      log_dir = estimator.model_dir
+      self.assertEqual(0, _count_ipu_compilations_in_dir(log_dir))
 
+      # Compile the training graph
       estimator.train(input_fn=my_input_fn, steps=2)
-      self.assertEqual(1, _count_ipu_compilations_in_dir(estimator.model_dir))
+      self.assertEqual(1, _count_ipu_compilations_in_dir(log_dir))
 
+      # Re-use cached training graph
       estimator.train(input_fn=my_input_fn, steps=2)
-      self.assertEqual(1, _count_ipu_compilations_in_dir(estimator.model_dir))
+      self.assertEqual(1, _count_ipu_compilations_in_dir(log_dir))
+
+      # Compile the evaluation graph
+      estimator.evaluate(input_fn=my_input_fn, steps=2)
+      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+
+      # Re-use cached evaluation graph
+      estimator.evaluate(input_fn=my_input_fn, steps=2)
+      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+
+      # Re-use cached training graph
+      estimator.train(input_fn=my_input_fn, steps=2)
+      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
 
     with _temporary_executable_cache():
       _run_in_new_process(build_and_run_model)
