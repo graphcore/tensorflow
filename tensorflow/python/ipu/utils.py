@@ -120,10 +120,10 @@ class SelectionOrder(Enum):
   The `SNAKE` and `HOOF` IPU selection orders are particularly beneficial for
   pipelined models.
   """
-  AUTO = IPUSelectionOrder.AUTO
-  ZIGZAG = IPUSelectionOrder.ZIGZAG
-  SNAKE = IPUSelectionOrder.SNAKE
-  HOOF = IPUSelectionOrder.HOOF
+  AUTO = IPUSelectionOrder.Value("AUTO")
+  ZIGZAG = IPUSelectionOrder.Value("ZIGZAG")
+  SNAKE = IPUSelectionOrder.Value("SNAKE")
+  HOOF = IPUSelectionOrder.Value("HOOF")
 
 
 def configure_ipu_system(config, device="cpu"):
