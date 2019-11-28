@@ -884,7 +884,12 @@ PipelineVisitor::PipelineVisitor(
       recomputation_sequences_(stage_count),
       stage_ipu_mapping_(stage_ipu_mapping),
       inst_stage_mapping_(inst_stage_mapping),
-      stages_with_recomputation_(stages_with_recomputation) {}
+      stages_with_recomputation_(stages_with_recomputation) {
+  // Push a new vector for the zeroing sequences onto the stack.
+  res.pipelining_buffer_zeroing_sequences.push({});
+  // Push a new vector for the write undef sequences onto the stack.
+  res.pipelining_write_undef_sequences.push({});
+}
 
 PipelineVisitor::PipelineVisitor(
     const HloInstruction* pipeline, CompilerResources& res,
@@ -920,12 +925,12 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
 
   poplar::program::Program ramp_up = GetPipelineRampUpSequence();
   poplar::program::Program repeat_block = GetPipelineRepeatBlockSequence();
-
-  poplar::program::Sequence program;
-
   poplar::program::Program ramp_down =
       GetPipelineRampDownSequence(iterations % overlap_length);
 
+  poplar::program::Sequence program;
+  program.add(pipeline_tensors_zeroing_sequence_);
+  program.add(pipeline_write_undef_sequence_);
   program.add(ramp_up);
   if ((iterations / overlap_length) - 1 > 0) {
     program.add(poplar::program::Repeat((iterations / overlap_length) - 1,
@@ -1309,6 +1314,22 @@ Status PipelineVisitor::HandleOutfeed(HloInstruction* hlo) {
 Status PipelineVisitor::FinishVisit(HloInstruction* inst) {
   outputs_ = FindInstructionOutputs(tensor_map, inst);
   resources_.tensor_maps[inst->parent()->name()] = std::move(tensor_map);
+
+  // Create a sequence for all the zeroing of pipeline tensors (gradient
+  // accumulation).
+  auto& zeroing_seqs = resources_.pipelining_buffer_zeroing_sequences.top();
+  for (poplar::program::Sequence& zeroing_seq : zeroing_seqs) {
+    pipeline_tensors_zeroing_sequence_.add(zeroing_seq);
+  }
+  resources_.pipelining_buffer_zeroing_sequences.pop();
+
+  // Create a sequence for all the write undefs of pipeline tensors (FIFOs).
+  auto& write_undefs = resources_.pipelining_write_undef_sequences.top();
+  for (poplar::program::Sequence& write_undef : write_undefs) {
+    pipeline_write_undef_sequence_.add(write_undef);
+  }
+  resources_.pipelining_write_undef_sequences.pop();
+
   return Status::OK();
 }
 

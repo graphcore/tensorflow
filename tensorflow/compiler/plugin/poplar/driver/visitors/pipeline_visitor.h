@@ -123,6 +123,15 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   std::vector<poplar::program::Sequence> program_sequences_;
   std::vector<poplar::program::Sequence> recomputation_sequences_;
   poplar::program::Sequence resource_update_;
+
+  // Sequence which zeros pipeline specific tensors before the pipeline is
+  // executed.
+  poplar::program::Sequence pipeline_tensors_zeroing_sequence_;
+
+  // Sequence which write undefs pipeline specific tensors which are not fully
+  // written to before the pipeline is executed.
+  poplar::program::Sequence pipeline_write_undef_sequence_;
+
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;
   absl::flat_hash_set<int> stages_with_recomputation_;
