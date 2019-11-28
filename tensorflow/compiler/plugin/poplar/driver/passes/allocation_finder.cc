@@ -214,7 +214,7 @@ void AllocationFinder::FindConsumers(const TensorSource& src,
           break;
         }
         case HloOpcode::kScatter: {
-          if (op_index == 0 || op_index == 1 | op_index == 2) {
+          if (op_index == 0 || op_index == 1 || op_index == 2) {
             auto t = TensorTarget(user, op_index, path);
             auto i = tensor_allocation_map.find(src);
             if (i != tensor_allocation_map.end()) {

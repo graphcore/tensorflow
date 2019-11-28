@@ -690,7 +690,6 @@ StatusOr<bool> ForwardAllocation::Run(HloModule* module) {
   // Add all the non tuple ops with layouts.
   for (auto& tensor_with_layout : tensors_with_layout) {
     auto inst = tensor_with_layout.first;
-    auto tuple_index = tensor_with_layout.second;
     if (!inst->shape().IsTuple()) {
       ops_with_layout.insert(inst);
     }

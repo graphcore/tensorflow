@@ -537,6 +537,33 @@ Status DoScaledInplaceConstantOrTensor(poplar::Graph& graph,
   }
   return Status::OK();
 }
+
+template <typename T>
+Status DoScaledInplaceConstantOrTensor(poplar::Graph& graph,
+                                       poplar::Tensor& tensor_a, T scale_a,
+                                       poplar::Tensor& tensor_b, T scale_b,
+                                       poplar::program::Sequence& prog,
+                                       const HloOpcode op_type,
+                                       const std::string& name) {
+  // Call the inplace op
+  switch (op_type) {
+    case HloOpcode::kAdd: {
+      popops::scaledAddTo(graph, tensor_a, scale_a, tensor_b, scale_b, prog,
+                          name);
+      break;
+    }
+    case HloOpcode::kSubtract: {
+      popops::scaledSubtractFrom(graph, tensor_a, scale_a, tensor_b, scale_b,
+                                 prog, name);
+      break;
+    }
+    default: {
+      return xla::FailedPrecondition("Unsupported scaled inplace op: %s",
+                                     name.c_str());
+    }
+  }
+  return Status::OK();
+}
 }  // namespace
 
 Status ScaledInplaceConstantOrTensor(poplar::Graph& graph, poplar::Tensor& lhs,
@@ -555,6 +582,24 @@ Status ScaledInplaceConstantOrTensor(poplar::Graph& graph, poplar::Tensor& lhs,
                                      const std::string& name) {
   return DoScaledInplaceConstantOrTensor(graph, lhs, rhs, scale, prog, op_type,
                                          name);
+}
+
+Status ScaledInplaceConstantOrTensor(
+    poplar::Graph& graph, poplar::Tensor& tensor_a, const double scale_a,
+    poplar::Tensor& tensor_b, const double scale_b,
+    poplar::program::Sequence& prog, const HloOpcode op_type,
+    const std::string& name) {
+  return DoScaledInplaceConstantOrTensor(graph, tensor_a, scale_a, tensor_b,
+                                         scale_b, prog, op_type, name);
+}
+
+Status ScaledInplaceConstantOrTensor(
+    poplar::Graph& graph, poplar::Tensor& tensor_a, poplar::Tensor& scale_a,
+    poplar::Tensor& tensor_b, poplar::Tensor& scale_b,
+    poplar::program::Sequence& prog, const HloOpcode op_type,
+    const std::string& name) {
+  return DoScaledInplaceConstantOrTensor(graph, tensor_a, scale_a, tensor_b,
+                                         scale_b, prog, op_type, name);
 }
 
 StatusOr<poplar::program::Program> CreateScaledInplace(
@@ -594,6 +639,62 @@ StatusOr<poplar::program::Program> CreateScaledInplace(
         graph, in0, in1, scale, seq, root_inst->opcode(), GetDebugName(inst)));
   } else {
     return xla::FailedPrecondition("Unsupported use of scaled inplace op: %s",
+                                   root_inst->name().c_str());
+  }
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, in0));
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateScaledInplaceaXbY(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  poplar::program::Sequence seq;
+  TF_ASSIGN_OR_RETURN(ArgVectors inputs, FindInplaceOutputTensors(
+                                             tensor_map, res, inst, seq, true));
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor in0 = inputs[0][0];
+
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor in1,
+      FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+
+  const auto* root_inst =
+      inst->fused_instructions_computation()->root_instruction();
+
+  if (inst->operand_count() == 2) {
+    const auto* const_inst_a = root_inst->operand(0)->operand(1)->operand(0);
+    CHECK_EQ(const_inst_a->opcode(), HloOpcode::kConstant);
+    // Get the scalar multiplier
+    TF_ASSIGN_OR_RETURN(double scale_a, LiteralScalarToNativeType<double>(
+                                            const_inst_a->literal()));
+
+    const auto* const_inst_b = root_inst->operand(1)->operand(1)->operand(0);
+    CHECK_EQ(const_inst_b->opcode(), HloOpcode::kConstant);
+    // Get the scalar multiplier
+    TF_ASSIGN_OR_RETURN(double scale_b, LiteralScalarToNativeType<double>(
+                                            const_inst_b->literal()));
+
+    TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, scale_a, in1, scale_b,
+                                              seq, root_inst->opcode(),
+                                              GetDebugName(inst)));
+  } else if (inst->operand_count() == 4) {
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale_a,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, false));
+
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale_b,
+        FindInstructionInput(tensor_map, res, inst, 3, seq, false));
+
+    TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, scale_a, in1, scale_b,
+                                              seq, root_inst->opcode(),
+                                              GetDebugName(inst)));
+  } else {
+    return xla::FailedPrecondition("Unsupported, aXbY scaled inplace op: %s",
                                    root_inst->name().c_str());
   }
 

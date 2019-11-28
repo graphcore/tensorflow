@@ -32,7 +32,7 @@ Status EntryVisitor::HandleParameter(HloInstruction* inst) {
   // Go through all the shapes for inst, don't allocate any tensors which are
   // marked as deferred.
   std::vector<Shape> shapes = FlattenedXlaShape(inst->shape());
-  for (int64 i = 0; i < shapes.size(); i++) {
+  for (size_t i = 0; i < shapes.size(); i++) {
     if (CanDeferAllocation(inst, i)) {
       VLOG(1) << "Deferring allocation of " << inst->name() << " sub tensor "
               << i << ".";

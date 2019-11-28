@@ -70,7 +70,7 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
     auto operand_tensors =
         FindInstructionInputs(tensor_map, res, inst, i, seq, false);
     // Only copy the tensors where the sharding doesn't match.
-    for (int index = 0; index < src_sharding.size(); ++index) {
+    for (size_t index = 0; index < src_sharding.size(); ++index) {
       if (src_sharding[index] != dst_sharding[index]) {
         tensors_to_copy_indexes.push_back(tensors.size() + index);
         tensors_to_copy.push_back(operand_tensors[index]);
@@ -101,11 +101,11 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
 
   auto copied_tensors = SliceTensorIntoTensorsLike(t, tensors_to_copy);
   // Move the copied tensors into the right indexes.
-  for (int64 i = 0; i < tensors_to_copy_indexes.size(); ++i) {
+  for (size_t i = 0; i < tensors_to_copy_indexes.size(); ++i) {
     tensors[tensors_to_copy_indexes[i]] = copied_tensors[i];
   }
 
-  for (int64 tensor_idx = 0; tensor_idx < tensors.size(); ++tensor_idx) {
+  for (size_t tensor_idx = 0; tensor_idx < tensors.size(); ++tensor_idx) {
     TF_CHECK_OK(
         AddOutputTensor(tensor_map, inst, tensor_idx, tensors[tensor_idx]));
   }

@@ -109,7 +109,7 @@ void HloHash::SanitizeHloModuleProto(HloModuleProto* proto,
   for (auto comp_id = 0; comp_id < proto->computations().size(); comp_id++) {
     HloComputationProto* computation_proto =
         proto->mutable_computations(comp_id);
-    for (uint64 inst_id = 0; inst_id < computation_proto->instructions().size();
+    for (int inst_id = 0; inst_id < computation_proto->instructions().size();
          inst_id++) {
       HloInstructionProto* instruction_proto =
           computation_proto->mutable_instructions(inst_id);
@@ -137,7 +137,7 @@ uint64 HloHash::SanitizeHloComputationProto(HloComputationProto* proto,
   std::map<uint64, uint64> instruction_id_map;
 
   // Serialize the instructions
-  for (uint64 inst_id = 0; inst_id < proto->instructions().size(); inst_id++) {
+  for (int inst_id = 0; inst_id < proto->instructions().size(); inst_id++) {
     HloInstructionProto* instruction_proto =
         proto->mutable_instructions(inst_id);
     auto old_id = SanitizeHloInstructionProto(instruction_proto, inst_id);
@@ -145,7 +145,7 @@ uint64 HloHash::SanitizeHloComputationProto(HloComputationProto* proto,
   }
 
   // Patch up instruction IDs with the renumbered ones
-  for (uint64 id = 0; id < proto->instructions().size(); id++) {
+  for (int id = 0; id < proto->instructions().size(); id++) {
     HloInstructionProto* instruction_proto = proto->mutable_instructions(id);
     PatchInstructionReferences(instruction_proto, instruction_id_map);
   }

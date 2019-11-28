@@ -14,9 +14,14 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
+
+#include <stdlib.h>
+#include <memory>
+#include <sstream>
+#include <string>
 
 #include "include/json/json.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/util.h"
@@ -28,10 +33,6 @@ limitations under the License.
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "absl/types/any.h"
-
-#include <stdlib.h>
-#include <sstream>
-#include <string>
 
 namespace xla {
 namespace poplarplugin {
@@ -57,11 +58,16 @@ AttributeMap::AttributeMap(const HloInstruction* custom_call)
 }
 
 AttributeMap::AttributeMap(const std::string& attributes_json) {
-  Json::Reader reader;
-  bool parsed = reader.parse(attributes_json.c_str(), attributes_);
+  Json::CharReaderBuilder builder;
+  std::string errs;
+  std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+  bool parsed = reader->parse(attributes_json.c_str(),
+                              attributes_json.c_str() + attributes_json.size(),
+                              &attributes_, &errs);
   if (!parsed) {
-    LOG(FATAL) << "Could not parse the call target for custom op as JSON "
-               << attributes_json;
+    LOG(FATAL)
+        << "Could not parse the call target for custom op as JSON. Errors: "
+        << errs << " Attributes: " << attributes_json;
   }
 }
 
@@ -246,7 +252,9 @@ AttributeMap::GetAttributeFlatHashMap(const std::string& field_name) const {
                                    field_name.c_str());
   }
   absl::flat_hash_map<int64, int64> result;
-  for (int i = 0; i < keys.size(); i++) {
+  // i must be an 'int' otherwise the call to the operator [] is ambiguous
+  // between Json::Value and int
+  for (int i = 0; i < static_cast<int>(keys.size()); i++) {
     int64 key = keys[i].asInt64();
     int64 value = values[i].asInt64();
     result[key] = value;
@@ -268,8 +276,11 @@ StatusOr<Window> AttributeMap::GetAttributeAsWindow(
 }
 
 const std::string AttributeMap::Serialise() {
-  Json::FastWriter fastWriter;
-  return fastWriter.write(attributes_);
+  Json::StreamWriterBuilder builder;
+  std::stringstream ss;
+  std::unique_ptr<Json::StreamWriter> writer(builder.newStreamWriter());
+  writer->write(attributes_, &ss);
+  return ss.str();
 }
 
 }  // namespace IPUCustomKernelsUtil

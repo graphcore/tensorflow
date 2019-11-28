@@ -128,7 +128,7 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
   };
 
   auto check_stages = [](std::vector<HloInstruction*>& stages) {
-    for (int64 i = 0; i != stages.size(); ++i) {
+    for (int64 i = 0; i != static_cast<int64>(stages.size()); ++i) {
       const int64 stage_id = GetPipelineStageID(stages[i]);
       if (stage_id != i) {
         return FailedPrecondition(
@@ -643,7 +643,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   // Add GTEs for any new outputs.
   {
     auto itr = external_uses.begin();
-    for (int64 idx = 0; idx != external_uses.size(); ++idx, ++itr) {
+    for (size_t idx = 0; idx != external_uses.size(); ++idx, ++itr) {
       int64 tuple_index = old_num_outputs + idx;
       HloInstruction* inst = itr->first;
       for (HloInstruction* user : itr->second) {
@@ -875,11 +875,11 @@ PipelineDataflowAnalysis::PipelineDataflowAnalysis(
       allow_recomputation_(allow_recomputation) {
   // Put stages into lookup tables so that we can quickly get the stage id from
   // an instruction.
-  for (int64 id = 0; id != pipeline_stages_.forward.size(); ++id) {
+  for (size_t id = 0; id != pipeline_stages_.forward.size(); ++id) {
     fwd_stages_lookup_[pipeline_stages_.forward[id]] = id;
   }
 
-  for (int64 id = 0; id != pipeline_stages_.backward.size(); ++id) {
+  for (size_t id = 0; id != pipeline_stages_.backward.size(); ++id) {
     bwd_stages_lookup_[pipeline_stages_.backward[id]] = id;
   }
 
@@ -951,7 +951,8 @@ StatusOr<StageID> PipelineDataflowAnalysis::GetPreviousStageID(
       return StageID(StageType::kForward, stage_id.id - 1);
     }
     case StageType::kBackward: {
-      if (stage_id.id == pipeline_stages_.forward.size() - 1) {
+      if (stage_id.id ==
+          static_cast<int64>(pipeline_stages_.forward.size()) - 1) {
         return StageID(StageType::kForward, stage_id.id);
       } else {
         return StageID(StageType::kBackward, stage_id.id + 1);
@@ -1068,7 +1069,7 @@ Status PipelineDataflowAnalysis::VerifyInfeedUsage(
 Status PipelineDataflowAnalysis::VerifyPipelineStageOperands(
     const HloInstruction* pipeline_stage, const HloValueSet& new_inputs) {
   CHECK(IsAnyPipelineStageOp(pipeline_stage));
-  TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(pipeline_stage));
+  TF_RETURN_IF_ERROR(GetStageID(pipeline_stage).status());
   // Get all the values used by the operands of inst.
   HloValueSet operands_set = GetOperandsValueSet(pipeline_stage);
   operands_set.AssignUnionOf({&operands_set, &new_inputs});

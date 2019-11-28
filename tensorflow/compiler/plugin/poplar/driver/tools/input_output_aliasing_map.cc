@@ -1,3 +1,18 @@
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 
 #include "tensorflow/compiler/xla/service/hlo_module.h"
@@ -68,7 +83,7 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
       const uint64 input_index = resource_update_to_input_index[resource_idx];
       auto input_map_it = absl::c_find(input_mapping, input_index);
       if (input_map_it != input_mapping.end()) {
-        int64 parameter_index =
+        uint64 parameter_index =
             std::distance(input_mapping.begin(), input_map_it);
 
         if (num_streaming_inputs_ <= parameter_index) {
@@ -144,7 +159,7 @@ std::string InputOutputAliasingMap::ToString() const {
   std::stringstream ss;
   ss << "== Input information ==\n";
   ss << "Num streaming = " << num_streaming_inputs_ << "\n";
-  for (int i = 0; i < entry_input_infos_.size(); i++) {
+  for (size_t i = 0; i < entry_input_infos_.size(); i++) {
     auto& ip = entry_input_infos_[i];
     ss << " " << i << ": ";
     if (ip.IsStreaming()) {
@@ -160,7 +175,7 @@ std::string InputOutputAliasingMap::ToString() const {
   }
   ss << "== Output information ==\n";
   ss << "Num streaming = " << num_streaming_outputs_ << "\n";
-  for (int i = 0; i < entry_output_infos_.size(); i++) {
+  for (size_t i = 0; i < entry_output_infos_.size(); i++) {
     auto& op = entry_output_infos_[i];
     ss << " " << i << ": ";
     if (op.IsStreaming()) {

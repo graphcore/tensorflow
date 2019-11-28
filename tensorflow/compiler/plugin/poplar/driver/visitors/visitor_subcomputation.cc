@@ -41,7 +41,7 @@ SubComputationVisitor::SubComputationVisitor(
       used_tensors_(inputs.size()),
       allocated_tensors_(inputs.size()),
       has_allocation_target_(inputs.size()) {
-  for (int64 i = 0; i < inputs.size(); i++) {
+  for (size_t i = 0; i < inputs.size(); i++) {
     inputs_[i].resize(inputs[i].size());
     used_tensors_[i].resize(inputs[i].size());
     allocated_tensors_[i].resize(inputs[i].size());
@@ -61,7 +61,7 @@ InplaceSubComputationVisitor::InplaceSubComputationVisitor(
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
     : SubComputationVisitor(res, inputs, dependent_subcomputations),
       input_has_layout_(inputs.size()) {
-  for (int64 i = 0; i != inputs.size(); ++i) {
+  for (size_t i = 0; i != inputs.size(); ++i) {
     input_has_layout_[i].resize(inputs[i].size(), true);
   }
 }
@@ -83,7 +83,8 @@ bool SubComputationVisitor::InputIsUsedInThisSubComputation(
   }
 
   // We ignore nested tuples
-  if (shapes.size() != ShapeUtil::TupleElementCount(inst->shape())) {
+  if (static_cast<int64>(shapes.size()) !=
+      ShapeUtil::TupleElementCount(inst->shape())) {
     return true;
   }
 
@@ -120,7 +121,6 @@ Status SubComputationVisitor::HandleParameter(HloInstruction* inst) {
   auto& inputs = inputs_[param_num];
   auto& used = used_tensors_[param_num];
   auto& allocated = allocated_tensors_[param_num];
-  auto& allocated_targets = has_allocation_target_[param_num];
 
   for (unsigned int i = 0; i < shapes.size(); i++) {
     auto& t = temp_inputs_[param_num][i];
@@ -154,7 +154,6 @@ StatusOr<bool> SubComputationVisitor::HandleTensor(
   auto src = std::make_pair(inst, tuple_index);
 
   auto& inputs = inputs_[param_num];
-  auto& allocated_targets = has_allocation_target_[param_num];
 
   // If we have a deferred allocation then we can't add the output tensor yet
   // for the tensor mapping.
@@ -222,8 +221,8 @@ StatusOr<bool> InplaceSubComputationVisitor::HandleTensor(
 
 poplar::program::Sequence InplaceSubComputationVisitor::GetPreambleCopies() {
   poplar::program::Sequence seq;
-  for (int64 op_idx = 0; op_idx != temp_inputs_.size(); ++op_idx) {
-    for (int64 tuple_idx = 0; tuple_idx != temp_inputs_[op_idx].size();
+  for (size_t op_idx = 0; op_idx != temp_inputs_.size(); ++op_idx) {
+    for (size_t tuple_idx = 0; tuple_idx != temp_inputs_[op_idx].size();
          ++tuple_idx) {
       if (InputHasAllocationTarget(op_idx, tuple_idx)) {
         VLOG(1) << "Adding a copy for input tensor (" << op_idx << ", "
@@ -282,7 +281,7 @@ InplaceSubComputationVisitor::GetInplaceSubcomputationLayoutInfo(
     auto* operand = inst->operand(i);
     std::vector<xla::Shape> shapes = FlattenedXlaShape(operand->shape());
     input_has_layout[i].reserve(shapes.size());
-    for (int64 tuple_index = 0; tuple_index < shapes.size(); tuple_index++) {
+    for (size_t tuple_index = 0; tuple_index < shapes.size(); tuple_index++) {
       auto tensor_source = std::make_pair(operand, tuple_index);
       input_has_layout[i].push_back(
           res.annotations.tensors_with_layout.contains(tensor_source));
@@ -296,7 +295,7 @@ InplaceSubComputationVisitor::GetParameterNumberAndFlatIndex(
     int64 output_flat_index) {
   int64 paramter_number = 0;
   int64 flat_index = output_flat_index;
-  while (flat_index > inputs_[paramter_number].size()) {
+  while (flat_index > static_cast<int64>(inputs_[paramter_number].size())) {
     flat_index -= inputs_[paramter_number].size();
     paramter_number++;
   }
@@ -337,7 +336,7 @@ InplaceSubComputationVisitor::AddLoopInputOutputAliasingCopies(
   // Create a flat version of the loop inputs.
   ArgVector loop_inputs(num_tensors);
   auto input_itr = loop_inputs.begin();
-  for (int64 input_idx = 0; input_idx != inputs_.size(); ++input_idx) {
+  for (size_t input_idx = 0; input_idx != inputs_.size(); ++input_idx) {
     absl::c_copy(inputs_[input_idx], input_itr);
     input_itr = std::next(input_itr, inputs_[input_idx].size());
   }

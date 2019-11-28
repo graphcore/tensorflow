@@ -278,7 +278,7 @@ static std::vector<unsigned int> GetShuffleInputDimensionsForPoplar(
 static std::vector<unsigned int> GetShuffleOutputDimensionsForPoplar(
     const std::vector<unsigned int> shuffle_in) {
   std::vector<unsigned int> shuffle_out(shuffle_in.size());
-  for (int i = 0; i < shuffle_in.size(); i++) {
+  for (size_t i = 0; i < shuffle_in.size(); i++) {
     shuffle_out[shuffle_in[i]] = i;
   }
   return shuffle_out;
@@ -947,7 +947,7 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
 
     // Unconcat the result and unflatten
     auto output_tensors = SliceTensorIntoTensorsLike(out, input_tensors);
-    for (int64 i = 0; i != output_tensors.size(); ++i) {
+    for (size_t i = 0; i != output_tensors.size(); ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensors[i]));
     }
   }

@@ -177,8 +177,6 @@ class IpuStatelessCategoricalOp : public IpuCategoricalOp {
                                            XlaOpKernelContext* ctx) override {
     xla::XlaOp seed = ctx->Input(2);
 
-    xla::XlaBuilder* builder = ctx->builder();
-
     xla::poplarplugin::IPUCustomKernelsUtil::AttributeMap attribute_map;
 
     switch (type) {

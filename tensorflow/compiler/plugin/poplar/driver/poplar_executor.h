@@ -440,6 +440,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status RegisterOutfeeds(const OutfeedInfos& outfeed_infos);
 
+  Status DeleteOutfeed(const std::string& feed_id);
+
   tensorflow::Rendezvous* GetRendezvous();
 
   void ResetSeed(int seed);
@@ -730,10 +732,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         callback_to_io_thread_queues;
     std::deque<std::vector<tensorflow::Tensor>> io_thread_output_queues;
     // Mutex to prevent TF CPU op reading from the outfeed whilst we are
-    // executing.
-    // TODO T8971 - this still doesn't help when we do sess.run([graph,
-    // outfeed]) because the outfeed op can execute before the graph op.
-    std::mutex mutex;
+    // moving a tensor from the device.
+    std::recursive_mutex mutex;
   };
 
   absl::flat_hash_map<std::string, std::unique_ptr<InfeedDatasetIterator>>

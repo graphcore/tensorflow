@@ -16,6 +16,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from threading import Thread
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -1274,6 +1275,92 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         sess.run(init_op)
         self.assertEqual(sum(range(5)), sess.run(res))
         sess.run(delete_op)
+
+  @test_util.deprecated_graph_mode_only
+  def testInfeedOutfeedContinuousDequeuing(self):
+    num_iterations = 1000
+    dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    def body(x):
+      return outfeed_queue.enqueue(x)
+
+    def my_net():
+      return ipu.loops.repeat(num_iterations, body, [], infeed_queue)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    outfed = outfeed_queue.dequeue()
+
+    with session_lib.Session() as sess:
+
+      def dequeue(result):
+        while len(result) != 1000:
+          r = sess.run(outfed)
+          if r.size:
+            result.extend(list(r.flatten()))
+
+      sess.run(infeed_queue.initializer)
+      r = []
+      dequeue_thread = Thread(target=dequeue, args=[r])
+      dequeue_thread.start()
+      sess.run(res)
+      dequeue_thread.join()
+      self.assertAllClose(r, range(0, 1000))
+
+  @test_util.deprecated_graph_mode_only
+  def testInfeedOutfeedContinuousDequeuingGetLastBeforeEnqueued(self):
+    num_iterations = 1000
+    dataset = tu.create_single_increasing_dataset(num_iterations, shape=[1])
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(), outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+
+    def body(x):
+      return outfeed_queue.enqueue(x)
+
+    def my_net():
+      return ipu.loops.repeat(num_iterations, body, [], infeed_queue)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    outfed = outfeed_queue.dequeue()
+
+    with session_lib.Session() as sess:
+      sess.run(infeed_queue.initializer)
+      with self.assertRaisesRegex(errors.FailedPreconditionError,
+                                  r'Trying to get the last value from an'):
+        sess.run(outfed)
+        sess.run(res)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedDeleteBeforeExecuteShouldRaiseException(self):
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        "delete_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+    delete_op = outfeed_queue.deleter
+    with session_lib.Session() as sess:
+      with self.assertRaisesRegex(errors_impl.NotFoundError,
+                                  "Outfeed with id='delete_name'"):
+        sess.run(delete_op)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedNameCanBeReusedAfterDeletion(self):
+    for _ in range(2):
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        enqueue = ipu.ipu_compiler.compile(outfeed_queue.enqueue, inputs=[1.0])
+      dequeue = outfeed_queue.dequeue()
+
+      with session_lib.Session() as sess:
+        sess.run(enqueue)
+        self.assertEqual(1.0, sess.run(dequeue))
+        sess.run(outfeed_queue.deleter)
 
 
 if __name__ == "__main__":

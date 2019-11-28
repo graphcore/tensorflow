@@ -120,7 +120,7 @@ class PopnnLstmLayerOp : public XlaOpKernel, IpuOpKernel {
     xla::XlaBuilder& b = *ctx->builder();
 
     std::vector<xla::XlaOp> args;
-    for (unsigned idx = 0; idx < ctx->num_inputs(); idx++) {
+    for (int idx = 0; idx < ctx->num_inputs(); idx++) {
       args.push_back(ctx->Input(idx));
     }
 
@@ -188,7 +188,7 @@ class PopnnLstmLayerBackpropOp : public XlaOpKernel, IpuOpKernel {
     xla::XlaBuilder& b = *ctx->builder();
 
     std::vector<xla::XlaOp> args;
-    for (unsigned idx = 0; idx < ctx->num_inputs(); idx++) {
+    for (int idx = 0; idx < ctx->num_inputs(); idx++) {
       args.push_back(ctx->Input(idx));
     }
 

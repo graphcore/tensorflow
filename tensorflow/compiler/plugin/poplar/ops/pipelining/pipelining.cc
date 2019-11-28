@@ -24,12 +24,12 @@ namespace {
 Status SetOutputShape(shape_inference::InferenceContext* c) {
   std::vector<PartialTensorShape> output_shapes;
   TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &output_shapes));
-  if (output_shapes.size() != c->num_outputs()) {
+  if (output_shapes.size() != static_cast<size_t>(c->num_outputs())) {
     return errors::InvalidArgument(
         "`output_shapes` must be the same length as num outputs (",
         output_shapes.size(), " vs. ", c->num_outputs());
   }
-  for (int i = 0; i < output_shapes.size(); ++i) {
+  for (size_t i = 0; i < output_shapes.size(); ++i) {
     shape_inference::ShapeHandle out;
     TF_RETURN_IF_ERROR(
         c->MakeShapeFromPartialTensorShape(output_shapes[i], &out));

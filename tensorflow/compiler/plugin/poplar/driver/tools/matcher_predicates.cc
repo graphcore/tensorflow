@@ -61,11 +61,6 @@ bool CheckValidAttributes(const HloScatterInstruction* inst) {
 }
 }  // namespace
 
-static bool IsAllFloatValue(const HloInstruction* inst, const double value) {
-  return !ShapeUtil::IsZeroElementArray(inst->shape()) &&
-         inst->literal().IsAllFloat(value);
-}
-
 bool IsRandomNormal(const HloInstruction* inst) {
   return inst->opcode() == HloOpcode::kRng &&
          inst->random_distribution() == RandomDistribution::RNG_NORMAL;
@@ -154,8 +149,9 @@ bool IsConvFilterTranspose(const HloInstruction* inst) {
   }
   const ConvolutionDimensionNumbers& d(conv->convolution_dimension_numbers());
 
-  if (rev.size() != d.kernel_spatial_dimensions_size()) return false;
-  for (int64 i = 0; i < rev.size(); i++) {
+  if (rev.size() != static_cast<size_t>(d.kernel_spatial_dimensions_size()))
+    return false;
+  for (size_t i = 0; i < rev.size(); i++) {
     if (d.kernel_spatial_dimensions(i) != rev[i]) return false;
   }
 
@@ -174,7 +170,7 @@ bool IsBiasReduce(const HloInstruction* inst) {
   if (inst->shape().rank() != 1) return false;
 
   const std::vector<int64>& dims(inst->dimensions());
-  if (dims.size() != inst->operand(0)->shape().rank() - 1) {
+  if (static_cast<int64>(dims.size()) != inst->operand(0)->shape().rank() - 1) {
     return false;
   }
   return true;

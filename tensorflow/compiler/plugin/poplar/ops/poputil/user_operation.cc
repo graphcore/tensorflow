@@ -36,7 +36,7 @@ REGISTER_OP("IpuUserOp")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       std::vector<PartialTensorShape> shapes;
       TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &shapes));
-      for (int i = 0; i < shapes.size(); ++i) {
+      for (size_t i = 0; i < shapes.size(); ++i) {
         shape_inference::ShapeHandle out;
         TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(shapes[i], &out));
         c->set_output(i, out);
@@ -69,7 +69,7 @@ REGISTER_OP("IpuUserReadWriteOp")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       std::vector<PartialTensorShape> shapes;
       TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &shapes));
-      for (int i = 0; i < shapes.size(); ++i) {
+      for (size_t i = 0; i < shapes.size(); ++i) {
         shape_inference::ShapeHandle out;
         TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(shapes[i], &out));
         c->set_output(i, out);

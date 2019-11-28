@@ -34,7 +34,7 @@ std::vector<Permutation> LeftMatMulPermutationsInternal(
   permutations.reserve(shape.size());
 
   absl::c_copy(lhs_batch_dimensions, std::back_inserter(permutations));
-  for (Permutation i = 0; i < shape.size(); ++i) {
+  for (Permutation i = 0; i < static_cast<Permutation>(shape.size()); ++i) {
     if (absl::c_find(lhs_reduction_dimensions, i) ==
             lhs_reduction_dimensions.end() &&
         absl::c_find(lhs_batch_dimensions, i) == lhs_batch_dimensions.end()) {
@@ -57,7 +57,7 @@ std::vector<Permutation> RightMatMulPermutationsInternal(
 
   absl::c_copy(rhs_batch_dimensions, std::back_inserter(permutations));
   absl::c_copy(rhs_reduction_dimensions, std::back_inserter(permutations));
-  for (Permutation i = 0; i < shape.size(); ++i) {
+  for (Permutation i = 0; i < static_cast<Permutation>(shape.size()); ++i) {
     if (absl::c_find(rhs_reduction_dimensions, i) ==
             rhs_reduction_dimensions.end() &&
         absl::c_find(rhs_batch_dimensions, i) == rhs_batch_dimensions.end()) {
@@ -103,13 +103,13 @@ std::vector<Dimension> RightMatMulPackShapeInternal(
       rhs_shape_itr_a + rhs_reduction_dimensions.size();
   const auto rhs_shape_itr_end = shape.end();
 
-  const auto rhs_b =
+  const Dimension rhs_b =
       std::accumulate(rhs_shape_itr_begin, rhs_shape_itr_a,
                       static_cast<int64>(1), std::multiplies<int64>());
-  const auto rhs_k =
+  const Dimension rhs_k =
       std::accumulate(rhs_shape_itr_a, rhs_shape_itr_b, static_cast<int64>(1),
                       std::multiplies<int64>());
-  const auto rhs_n =
+  const Dimension rhs_n =
       std::accumulate(rhs_shape_itr_b, rhs_shape_itr_end, static_cast<int64>(1),
                       std::multiplies<int64>());
   return {rhs_b, rhs_k, rhs_n};

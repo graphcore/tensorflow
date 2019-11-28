@@ -78,7 +78,7 @@ struct DynamicSliceHelper {
     // For each operand find whether it is a slice dimension.
     for (uint64 dim = 0; dim != index_operands.size(); ++dim) {
       size_t slice_size = slice_sizes[dim];
-      if (input_shape.dimensions(dim) != slice_size) {
+      if (input_shape.dimensions(dim) != static_cast<int64>(slice_size)) {
         if (index_operands[dim]->opcode() == HloOpcode::kConstant) {
           constant_slice_shape.set_dimensions(dim, slice_size);
           has_constant_slice = true;
@@ -358,7 +358,8 @@ StatusOr<poplar::program::Program> CreateCopy(CompilerResources& res,
   poplar::Graph& graph = GetGraph(res, inst);
   ArgVector inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq);
 
-  for (int64 tuple_idx = 0; tuple_idx != inputs.size(); ++tuple_idx) {
+  for (int64 tuple_idx = 0; tuple_idx != static_cast<int64>(inputs.size());
+       ++tuple_idx) {
     poplar::Tensor out = poputil::duplicate(
         graph, inputs[tuple_idx], seq,
         absl::StrCat(GetDebugName(inst), "/", tuple_idx),

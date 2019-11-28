@@ -199,6 +199,43 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
+  // Scaled add/subtract to/from - X = a * X +/-  b * Y (a, b are constants)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axby"),
+    PatternMetaTarget(0),
+    PatternInputs({5, 6}),
+    PatternInplaceInputs({5}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAddOrSubtract},
+      {HloOpcode::kMultiply, NodeOperands({5, 3})},
+      {HloOpcode::kMultiply, NodeOperands({6, 4})},
+      {HloOpcode::kBroadcast, NodeOperands({7})},
+      {HloOpcode::kBroadcast, NodeOperands({8})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant},
+      {HloOpcode::kConstant, NodeOperands({}), IsScalarConstant}
+    })),
+
+  // Scaled add/subtract to/from - X = a * X +/-  b * Y (a, b are tensors)
+  HloMatcherPattern(
+    PatternType("scaled_inplace_axby"),
+    PatternMetaTarget(0),
+    PatternInputs({5, 6, 7, 8}),
+    PatternInplaceInputs({5}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 2}), IsAddOrSubtract},
+      {HloOpcode::kMultiply, NodeOperands({5, 3})},
+      {HloOpcode::kMultiply, NodeOperands({6, 4})},
+      {HloOpcode::kBroadcast, NodeOperands({7})},
+      {HloOpcode::kBroadcast, NodeOperands({8})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsScalar}
+    })),
   // Convolution followed by scaled add/subtract to - A = A +/- B * c
   HloMatcherPattern(
     PatternType("conv_scaled_inplace"),

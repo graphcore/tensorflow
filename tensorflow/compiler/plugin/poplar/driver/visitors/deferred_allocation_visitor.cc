@@ -110,7 +110,7 @@ Status DeferredAllocationVisitor::HandleGetTupleElement(HloInstruction* inst) {
   bool allocate = false;
   // First check if there are any deferred allocation - if not we can call the
   // parent class to deal with it.
-  for (int64 i = 0; i < shapes.size(); i++) {
+  for (size_t i = 0; i < shapes.size(); i++) {
     defer_any_allocations |= IsInDeferredAllocationPath(inst, i);
     allocate |= IsDeferredAllocation(inst, i);
   }
@@ -126,7 +126,7 @@ Status DeferredAllocationVisitor::HandleGetTupleElement(HloInstruction* inst) {
     // we therefore don't need to worry about copies.
     const int64 offset =
         InsertIntoTuple(inst->operand(0)->shape(), inst->tuple_index(), 0);
-    for (int64 i = 0; i < shapes.size(); i++) {
+    for (size_t i = 0; i < shapes.size(); i++) {
       if (!IsInDeferredAllocationPath(inst, i)) {
         // Get the tensor for this shape and assign it as an output.
         auto range = std::make_pair(offset + i, offset + i + 1);
@@ -179,7 +179,7 @@ Status DeferredAllocationVisitor::HandleInfeed(HloInstruction* inst) {
   }
 
   std::vector<Shape> shapes = FlattenedXlaShape(infeed->infeed_shape());
-  for (int64 i = 0; i < shapes.size(); i++) {
+  for (size_t i = 0; i < shapes.size(); i++) {
     if (CanDeferAllocation(inst, i)) {
       VLOG(1) << "Deferring allocation of " << inst->name() << " sub tensor "
               << i << ".";

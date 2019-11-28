@@ -77,7 +77,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   se::Stream* stream = run_options->stream();
 
   std::vector<se::DeviceMemoryBase> argument_buffers;
-  for (int i = 0; i < arguments.size(); ++i) {
+  for (size_t i = 0; i < arguments.size(); ++i) {
     argument_buffers.push_back(arguments[i]->buffer(/*index=*/{}));
   }
 

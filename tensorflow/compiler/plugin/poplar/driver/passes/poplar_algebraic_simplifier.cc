@@ -121,15 +121,6 @@ bool IsAllFpConstantPowerOf2(const HloInstruction* op) {
   return mantissa == 0.5 || mantissa == -0.5;
 }
 
-// Returns whether the given transpose produces a result which is bit-wise
-// identical to its operand and thus may be replaced with a bitcast.
-bool TransposeIsBitcast(const HloInstruction* transpose) {
-  CHECK_EQ(HloOpcode::kTranspose, transpose->opcode());
-  const HloInstruction* operand = transpose->operand(0);
-  return ShapeUtil::TransposeIsBitcast(operand->shape(), transpose->shape(),
-                                       transpose->dimensions());
-}
-
 // Recursive helper for method below.
 HloInstruction* BitcastingOperandOfReshapeOrCopyChainHelper(
     HloInstruction* instr, HloInstruction* operand) {
@@ -320,12 +311,6 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
         hlo);
   }
 
-  // Convenience method for replacing an instruction with a bitcast. If operand
-  // is not null, then the bitcast will use the specified operand instead of the
-  // operand of the instruction.
-  void ReplaceWithBitcast(HloInstruction* instruction,
-                          HloInstruction* operand = nullptr);
-
   // Replace old instruction with new instruction if old and new instructions
   // have the same shape. Updates uses and root instruction. Returns whether a
   // replacement was made.
@@ -418,22 +403,6 @@ bool AlgebraicSimplifierVisitor::Run(HloComputation* computation,
 bool AlgebraicSimplifierVisitor::SameShape(const HloInstruction* lhs,
                                            const HloInstruction* rhs) const {
     return ShapeUtil::Compatible(lhs->shape(), rhs->shape());
-}
-
-void AlgebraicSimplifierVisitor::ReplaceWithBitcast(HloInstruction* instruction,
-                                                    HloInstruction* operand) {
-  CHECK_EQ(1, instruction->operand_count());
-  if (operand == nullptr) {
-    operand = instruction->mutable_operand(0);
-  }
-  CHECK_EQ(ShapeUtil::ElementsIn(instruction->shape()),
-           ShapeUtil::ElementsIn(operand->shape()));
-  CHECK_EQ(ShapeUtil::ByteSizeOf(instruction->shape()),
-           ShapeUtil::ByteSizeOf(operand->shape()));
-
-  auto bitcast = computation_->AddInstruction(
-      HloInstruction::CreateBitcast(instruction->shape(), operand));
-  TF_CHECK_OK(ReplaceInstruction(instruction, bitcast));
 }
 
 bool AlgebraicSimplifierVisitor::ReplaceInstructionIfSameShape(
@@ -646,7 +615,7 @@ Status AlgebraicSimplifierVisitor::HandleConcatenate(
   }
 
   // Check if we can merge "adjacent" concatenate operations
-  for (int64 i = 0; i < operands.size(); ++i) {
+  for (size_t i = 0; i < operands.size(); ++i) {
     // Make sure the other Concatenate is along the same dimension and this
     // concatenate is its only user.
     if (operands[i]->opcode() != HloOpcode::kConcatenate ||
@@ -672,7 +641,7 @@ Status AlgebraicSimplifierVisitor::HandleConcatenate(
   // Check if we can merge "adjacent" slice operands which take slices from the
   // same other op. For simplicity we only merge unstrided slices.
   int64 concatenate_dimension = concatenate->concatenate_dimension();
-  for (int64 i = 0; i < operands.size(); ++i) {
+  for (int64 i = 0; i < static_cast<int64>(operands.size()); ++i) {
     if (operands[i]->opcode() != HloOpcode::kSlice ||
         !IsUnstridedSlice(operands[i])) {
       continue;
@@ -680,7 +649,8 @@ Status AlgebraicSimplifierVisitor::HandleConcatenate(
     int64 slice_end = operands[i]->slice_limits(concatenate_dimension);
     HloInstruction* slice_operand = operands[i]->mutable_operand(0);
     int64 j = i + 1;
-    while (j < operands.size() && operands[j]->opcode() == HloOpcode::kSlice &&
+    while (j < static_cast<int64>(operands.size()) &&
+           operands[j]->opcode() == HloOpcode::kSlice &&
            IsUnstridedSlice(operands[j]) &&
            operands[j]->operand(0) == slice_operand &&
            operands[j]->slice_starts(concatenate_dimension) == slice_end) {
@@ -689,7 +659,8 @@ Status AlgebraicSimplifierVisitor::HandleConcatenate(
       // because operands of concatenate need to have the same shape, and we
       // already checked that the slices are unstrided.
       bool same_other_starts = true;
-      for (int64 k = 0; k < operands[j]->slice_starts().size(); ++k) {
+      for (int64 k = 0;
+           k < static_cast<int64>(operands[j]->slice_starts().size()); ++k) {
         if (k == concatenate_dimension) {
           continue;
         }
@@ -724,7 +695,7 @@ Status AlgebraicSimplifierVisitor::HandleConcatenate(
         new_operands.push_back(operands[k]);
       }
       new_operands.push_back(new_slice_op);
-      for (int64 k = j; k < operands.size(); ++k) {
+      for (int64 k = j; k < static_cast<int64>(operands.size()); ++k) {
         new_operands.push_back(operands[k]);
       }
       auto replacement =
@@ -1584,7 +1555,8 @@ AlgebraicSimplifierVisitor::OptimizeDotOfReorderContractingDims(
   auto unmodified_dims = ShapeUtil::DimensionsUnmodifiedByReshape(
       reshape->operand(0)->shape(), reshape->shape());
   CHECK_EQ(lhs_contracting_dims.size(), 1);
-  if ((unmodified_dims.size() != reshape->shape().rank() - 1) ||
+  if ((static_cast<int64>(unmodified_dims.size()) !=
+       reshape->shape().rank() - 1) ||
       absl::c_any_of(unmodified_dims, [&](const std::pair<int64, int64>& p) {
         return p.second == lhs_contracting_dims[0];
       })) {
@@ -1621,7 +1593,7 @@ AlgebraicSimplifierVisitor::OptimizeDotOfReorderContractingDims(
 
   // Check that the transpose only permutes the contracting dims.
   const auto& transpose_dims = transpose->dimensions();
-  for (int64 i = 0; i < transpose_dims.size(); ++i) {
+  for (size_t i = 0; i < transpose_dims.size(); ++i) {
     if (transpose_dims[i] != i &&
         !absl::c_linear_search(lhs_contracting_dims, i)) {
       return nullptr;
@@ -3171,7 +3143,7 @@ Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     HloInstruction* operand_slice = slice->mutable_operand(0);
     std::vector<int64> new_slice_starts = slice->slice_starts();
     std::vector<int64> new_slice_limits = slice->slice_limits();
-    for (int64 i = 0; i < new_slice_starts.size(); ++i) {
+    for (size_t i = 0; i < new_slice_starts.size(); ++i) {
       new_slice_starts[i] += operand_slice->slice_starts(i);
       new_slice_limits[i] += operand_slice->slice_starts(i);
     }
@@ -3395,7 +3367,7 @@ Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
     // reduce are unmodified by the reshape. For example:
     // reduce(reshape([A,B*C], a[A,B,C]),[1]) = reduce(a[A, B, C], [1, 2])
     bool can_move_reshape_into_reduce = true;
-    for (int64 i = 0; i < arg_dim_in_output.size(); ++i) {
+    for (size_t i = 0; i < arg_dim_in_output.size(); ++i) {
       if (arg_dim_in_output[i] && !arg_dim_unmodified[i]) {
         can_move_reshape_into_reduce = false;
       }
@@ -3680,7 +3652,7 @@ bool OnlyPermutesDegenerateDims(const Shape& shape,
                                 absl::Span<const int64> perm) {
   std::vector<int64> new_permutation;
   int64 degenerate_count = 0;
-  for (int64 i = 0; i < perm.size(); ++i) {
+  for (size_t i = 0; i < perm.size(); ++i) {
     if (shape.dimensions(i) != 1) {
       new_permutation.push_back(perm[i]);
     } else {

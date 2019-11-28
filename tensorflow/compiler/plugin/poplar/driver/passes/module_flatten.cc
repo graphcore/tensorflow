@@ -136,7 +136,8 @@ StatusOr<bool> ModuleFlatten::Run(HloModule* module) {
               TF_ASSIGN_OR_RETURN(CallInliner::InlinedInstructionMap map,
                                   CallInliner::Inline(caller));
 
-              CHECK(map.size() == inlined_comp->instruction_count());
+              CHECK(map.size() ==
+                    static_cast<size_t>(inlined_comp->instruction_count()));
 
               // Remap/replace any instuctions which have been inlined
               for (auto inlined : map) {

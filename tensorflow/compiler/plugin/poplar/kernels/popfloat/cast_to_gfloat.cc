@@ -79,7 +79,7 @@ class PopfloatCastNativeToGfloatOp : public XlaOpKernel, IpuOpKernel {
     cast_op_fp_config->set_enable_nanoo(en_nanoo_);
     cast_op_fp_config->set_round_mode(round_mode_);
 
-    SRConfig::Density sr_density_;
+    SRConfig::Density sr_density_{};
     SRConfig_Density_Parse(sr_density_str_, &sr_density_);
 
     auto cast_op_sr_config = cast_op_config_.mutable_sr_config();

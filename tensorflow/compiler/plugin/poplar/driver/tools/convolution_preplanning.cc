@@ -51,7 +51,6 @@ Status ConvolutionPreplanning::Plan(const HloModule* module,
   }
 
   poplin::preplanConvolutions(preplan_convs, resources.convolution_cache);
-
   return Status::OK();
 }
 
@@ -59,20 +58,19 @@ Status ConvolutionPreplanning::StorePreplanConv(const HloInstruction* inst,
                                                 CompilerResources& resources,
                                                 int64 input_index,
                                                 int64 kernel_index) {
-  auto& target = GetGraph(resources, inst).getTarget();
+  const poplar::Target& target = GetGraph(resources, inst).getTarget();
   TF_ASSIGN_OR_RETURN(
-      poplin::ConvParams conv_params,
+      const poplin::ConvParams conv_params,
       GetConvolutionParameters(inst, input_index, kernel_index));
-  TF_ASSIGN_OR_RETURN(const std::string conv_type, GetMLTypeAsString(inst));
 
-  poplar::OptionFlags option_flags = resources.default_conv_options;
-  option_flags.set("pass", conv_type);
-
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
+  poplar::OptionFlags option_flags =
+      GetConvolutionOptionsForType(resources, conv_type);
   TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(inst, option_flags));
 
-  auto ins = option_flags_store.insert(std::make_pair(conv_type, option_flags));
+  option_flags_store.push_back(option_flags);
   preplan_convs.insert(
-      std::make_tuple(&target, conv_params, &(ins.first->second)));
+      std::make_tuple(&target, conv_params, &(option_flags_store.back())));
   return Status::OK();
 }
 

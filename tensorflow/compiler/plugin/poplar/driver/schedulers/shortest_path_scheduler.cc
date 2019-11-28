@@ -148,7 +148,6 @@ class SequenceCosts {
   void InitReadyNotReady() {
     for (auto inst_cost_pair : costs_) {
       const HloInstruction* inst = inst_cost_pair.first;
-      int64 cost = inst_cost_pair.second;
       if (inst->opcode() != HloOpcode::kParameter) {
         if (inst->operand_count() == 0 &&
             inst->control_predecessors().size() == 0) {

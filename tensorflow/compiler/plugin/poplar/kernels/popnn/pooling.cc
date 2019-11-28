@@ -118,12 +118,12 @@ class PoolingOp : public XlaOpKernel, IpuOpKernel {
       std::vector<int32> ksize_int;
       std::vector<int32> stride_int;
       OP_REQUIRES_OK(ctx, ctx->GetAttr("ksize", &ksize_int));
-      OP_REQUIRES(ctx, ksize_int.size() == num_dims(),
+      OP_REQUIRES(ctx, ksize_int.size() == static_cast<size_t>(num_dims()),
                   errors::InvalidArgument("Sliding window ksize field must "
                                           "specify ",
                                           num_dims(), " dimensions"));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("strides", &stride_int));
-      OP_REQUIRES(ctx, stride_int.size() == num_dims(),
+      OP_REQUIRES(ctx, stride_int.size() == static_cast<size_t>(num_dims()),
                   errors::InvalidArgument("Sliding window stride field must "
                                           "specify ",
                                           num_dims(), " dimensions"));
@@ -337,11 +337,11 @@ class MaxPoolGradOp : public XlaOpKernel, IpuOpKernel {
       OP_REQUIRES_OK(ctx, ctx->ConstantInputAsIntVector(4, &stride_));
     }
 
-    OP_REQUIRES(ctx, ksize_.size() == num_dims(),
+    OP_REQUIRES(ctx, ksize_.size() == static_cast<size_t>(num_dims()),
                 errors::InvalidArgument("Sliding window ksize field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
-    OP_REQUIRES(ctx, stride_.size() == num_dims(),
+    OP_REQUIRES(ctx, stride_.size() == static_cast<size_t>(num_dims()),
                 errors::InvalidArgument("Sliding window strides field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
@@ -436,12 +436,12 @@ class AvgPoolGradOp : public XlaOpKernel, IpuOpKernel {
   AvgPoolGradOp(OpKernelConstruction* ctx, int num_spatial_dims)
       : XlaOpKernel(ctx), num_spatial_dims_(num_spatial_dims) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("ksize", &ksize_));
-    OP_REQUIRES(ctx, ksize_.size() == num_dims(),
+    OP_REQUIRES(ctx, ksize_.size() == static_cast<size_t>(num_dims()),
                 errors::InvalidArgument("Sliding window ksize field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("strides", &stride_));
-    OP_REQUIRES(ctx, stride_.size() == num_dims(),
+    OP_REQUIRES(ctx, stride_.size() == static_cast<size_t>(num_dims()),
                 errors::InvalidArgument("Sliding window strides field must "
                                         "specify ",
                                         num_dims(), " dimensions"));

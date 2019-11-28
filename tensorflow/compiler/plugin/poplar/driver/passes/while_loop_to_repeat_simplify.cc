@@ -419,7 +419,6 @@ StatusOr<bool> WhileLoopToRepeatSimplify::Run(HloModule* module) {
 
         if (simplified) {
           HloInstruction* repeat_call = ConvertToRepeat(while_inst, count);
-          HloComputation* parent_computation = repeat_call->parent();
           while_inst->ReplaceAllUsesWith(repeat_call);
 
           VLOG(1) << "Simplified while loop " << while_inst->name()
