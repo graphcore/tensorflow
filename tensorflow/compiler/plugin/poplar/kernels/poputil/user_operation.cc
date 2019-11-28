@@ -143,7 +143,7 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
 
     // Create the input tuple.
     std::vector<xla::XlaOp> inputs(num_inputs);
-    for (int i = 0; i < num_inputs; ++i) {
+    for (size_t i = 0; i < num_inputs; ++i) {
       inputs[i] = context->Input(i);
     }
 
@@ -160,7 +160,7 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
                         output_tuple_shape, GetAttrMap().Serialise());
 
     // Extract each element from the output tuple.
-    for (int i = 0; i < output_shape.size(); ++i) {
+    for (size_t i = 0; i < output_shape.size(); ++i) {
       xla::XlaOp output = xla::GetTupleElement(call_output, i);
       context->SetOutput(i, output);
     }

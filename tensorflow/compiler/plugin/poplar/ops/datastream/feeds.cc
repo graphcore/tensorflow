@@ -33,7 +33,7 @@ REGISTER_OP("PopDatastreamInfeedDequeue")
     .SetShapeFn([](InferenceContext* c) {
       std::vector<PartialTensorShape> shapes;
       TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &shapes));
-      for (int i = 0; i < shapes.size(); ++i) {
+      for (size_t i = 0; i < shapes.size(); ++i) {
         ShapeHandle out;
         TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(shapes[i], &out));
         c->set_output(i, out);
@@ -126,4 +126,11 @@ io_batch_size: the number of tensors which should be fetched from the host
   in one go.  This reduces the host->device IO, at the cost of memory on the
   device.
 )doc");
+
+REGISTER_OP("IPUDeleteOutfeed")
+    .Attr("device_ordinal: int = 0")
+    .Attr("feed_id: string")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
+
 }  // namespace tensorflow

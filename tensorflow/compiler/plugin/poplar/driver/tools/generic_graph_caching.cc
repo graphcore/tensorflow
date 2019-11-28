@@ -92,7 +92,7 @@ Status GenericGraphCache::ExecuteCached(
   } else {
     // Get the allocation order.
     std::list<int64> alloc_order;
-    for (int64 sig_idx = 0; sig_idx != signature.size(); ++sig_idx) {
+    for (size_t sig_idx = 0; sig_idx != signature.size(); ++sig_idx) {
       ArgSig& sig = signature[sig_idx];
       if (sig.type == ArgType::InputArg || sig.type == ArgType::InOutArg) {
         if (layout_dependencies.contains(sig_idx)) {

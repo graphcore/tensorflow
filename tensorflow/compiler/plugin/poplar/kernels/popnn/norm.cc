@@ -87,7 +87,7 @@ class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
 
     // All the inputs are arguments.
     std::vector<xla::XlaOp> args;
-    for (unsigned idx = 0; idx < ctx->num_inputs(); idx++) {
+    for (int idx = 0; idx < ctx->num_inputs(); idx++) {
       args.push_back(ctx->Input(idx));
     }
 
@@ -183,7 +183,7 @@ class PopnnGroupNormGrad : public XlaOpKernel, IpuOpKernel {
 
     // All the inputs are arguments.
     std::vector<xla::XlaOp> args;
-    for (unsigned idx = 0; idx < ctx->num_inputs(); idx++) {
+    for (int idx = 0; idx < ctx->num_inputs(); idx++) {
       args.push_back(ctx->Input(idx));
     }
 
@@ -236,7 +236,7 @@ class PopnnGroupNormStatistics : public XlaOpKernel, IpuOpKernel {
 
     // All the inputs are arguments.
     std::vector<xla::XlaOp> args;
-    for (unsigned idx = 0; idx < ctx->num_inputs(); idx++) {
+    for (int idx = 0; idx < ctx->num_inputs(); idx++) {
       args.push_back(ctx->Input(idx));
     }
 

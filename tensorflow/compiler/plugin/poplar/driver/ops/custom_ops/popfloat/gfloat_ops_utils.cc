@@ -49,6 +49,7 @@ experimental::popfloat::RoundType GetPopfloatRoundModeType(
     case FPConfig_RoundMode_INVALID:
       return experimental::popfloat::RoundType::INV;
   }
+  LOG(FATAL) << "Unhandled RoundMode: " << round_mode;
 }
 
 // Convert GFConfig::GfloatFormat to popfloat's GfloatFormatType
@@ -76,6 +77,7 @@ experimental::popfloat::FormatType GetPopfloatFormatType(
     case GFConfig_GfloatFormat_Invalid:
       return experimental::popfloat::FormatType::INVALID_FORMAT;
   }
+  LOG(FATAL) << "Unhandled GfloatFormat : " << gfloat_format;
 }
 
 // Convert SRConfig::Density to popfloat's
@@ -106,6 +108,7 @@ experimental::popfloat::SRDensityType GetPopfloatSRDensityType(
     case SRConfig_Density_Invalid:
       return experimental::popfloat::SRDensityType::INVALID;
   }
+  LOG(FATAL) << "Unhandled Density type: " << noise_density;
 }
 experimental::popfloat::GfloatCast::RoundConfig GetPopfloatGfloatRoundConfig(
     PopfloatCastConfig cast_config, poplar::Type calc_type) {

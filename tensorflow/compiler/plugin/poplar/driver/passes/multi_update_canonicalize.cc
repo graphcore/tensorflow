@@ -46,7 +46,7 @@ bool IsMultiUpdateAdd(const HloInstruction* inst) {
 StatusOr<HloInstruction*> MoveInstructionDimensionToBack(
     HloInstruction* inst, std::size_t dim_to_move) {
   std::vector<int64> permutation(inst->shape().rank());
-  for (int64 i = 0, next_idx = 0; i != permutation.size(); ++i) {
+  for (size_t i = 0, next_idx = 0; i != permutation.size(); ++i) {
     if (i != dim_to_move) {
       permutation[next_idx++] = i;
     }
@@ -84,7 +84,7 @@ StatusOr<bool> ReplaceMultiUpdate(HloInstruction* inst) {
 
   // First check if we need to add an extra dimension for the index_vector_dim
   // so that it is no longer explicit.
-  if (indices->shape().rank() == index_vector_dim) {
+  if (static_cast<size_t>(indices->shape().rank()) == index_vector_dim) {
     Shape new_indices_shape = indices->shape();
     ShapeUtil::AppendMajorDimension(1, &new_indices_shape);
     HloInstruction* new_indices = computation->AddInstruction(
@@ -95,7 +95,7 @@ StatusOr<bool> ReplaceMultiUpdate(HloInstruction* inst) {
   }
 
   // Move index_vector_dim to the back.
-  if ((indices->shape().rank() - 1) != index_vector_dim) {
+  if ((indices->shape().rank() - 1) != static_cast<int64>(index_vector_dim)) {
     TF_ASSIGN_OR_RETURN(
         indices, MoveInstructionDimensionToBack(indices, index_vector_dim));
     index_vector_dim = indices->shape().rank() - 1;
@@ -110,7 +110,7 @@ StatusOr<bool> ReplaceMultiUpdate(HloInstruction* inst) {
   }
 
   // Move the update_dim to the back.
-  if ((updates->shape().rank() - 1) != update_dim) {
+  if ((updates->shape().rank() - 1) != static_cast<int64>(update_dim)) {
     TF_ASSIGN_OR_RETURN(updates,
                         MoveInstructionDimensionToBack(updates, update_dim));
     update_dim = updates->shape().rank() - 1;

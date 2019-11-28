@@ -48,7 +48,8 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
   bool changed = false;
   // Go through all the forward stages (apart from the last one which does not
   // need recomputation).
-  for (int64 stage_id = 0; stage_id != stages.forward.size() - 1; ++stage_id) {
+  for (int64 stage_id = 0;
+       stage_id != static_cast<int64>(stages.forward.size()) - 1; ++stage_id) {
     HloInstruction* fwd_stage = stages.forward[stage_id];
     HloInstruction* bwd_stage = stages.backward[stage_id];
     HloComputation* fwd_stage_comp = fwd_stage->to_apply();
@@ -103,7 +104,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
 
     // Replace all the non parameter inputs with FIFOs.
     auto recomp_operands = recomp_stage->operands();
-    for (int64 op_idx = 0; op_idx != recomp_operands.size(); ++op_idx) {
+    for (size_t op_idx = 0; op_idx != recomp_operands.size(); ++op_idx) {
       HloInstruction* operand = recomp_operands[op_idx];
       if (operand->opcode() == HloOpcode::kParameter) {
         continue;
@@ -126,7 +127,7 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
 
     // Wire inputs to the bwd stage which are FIFOs to use the recomp stage.
     auto bwd_operands = bwd_stage->operands();
-    for (int64 op_idx = 0; op_idx != bwd_operands.size(); ++op_idx) {
+    for (size_t op_idx = 0; op_idx != bwd_operands.size(); ++op_idx) {
       HloInstruction* operand = bwd_operands[op_idx];
       if (!IsPoplarInstruction(PoplarOp::Fifo)(operand)) {
         continue;

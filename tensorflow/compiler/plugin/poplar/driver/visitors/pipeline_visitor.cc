@@ -330,7 +330,8 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     }
   }
 
-  if (result.size() != pipeline_computation->instruction_count()) {
+  if (result.size() !=
+      static_cast<size_t>(pipeline_computation->instruction_count())) {
     LOG(FATAL) << "Could not assign all the instructions to Pipeline Stages.";
   }
   return result;
@@ -409,7 +410,7 @@ std::vector<int> CircularUnion(const std::vector<ElementType>& input,
 
   // For each possible valid rotation, check if it is non-overlapping with the
   // input rotations.
-  for (int i = 1; i < input.size(); ++i) {
+  for (size_t i = 1; i < input.size(); ++i) {
     // Take the ith rotated input.
     std::rotate_copy(input.begin(), std::next(input.begin(), i), input.end(),
                      temp_0.begin());
@@ -417,7 +418,7 @@ std::vector<int> CircularUnion(const std::vector<ElementType>& input,
     bool non_overlapping = true;
 
     // Compare against all accept rotations of the input
-    for (int k = 0; k < result.size() && non_overlapping; ++k) {
+    for (size_t k = 0; k < result.size() && non_overlapping; ++k) {
       std::rotate_copy(input.begin(), std::next(input.begin(), result[k]),
                        input.end(), temp_1.begin());
 
@@ -473,7 +474,7 @@ std::vector<std::vector<ElementType>> ConstructScheduleInternal(
     const std::vector<int>& offsets, const std::vector<ElementType>& input) {
   std::vector<std::vector<ElementType>> result(offsets.size(), input);
 
-  for (int i = 0; i < offsets.size(); ++i) {
+  for (size_t i = 0; i < offsets.size(); ++i) {
     std::rotate(result[i].begin(),
                 std::next(result[i].begin(), result[i].size() - offsets[i]),
                 result[i].end());
@@ -487,8 +488,8 @@ std::vector<std::vector<ElementType>> TransposeSchedule(
     const std::vector<std::vector<ElementType>>& input) {
   std::vector<std::vector<ElementType>> result(input[0].size());
 
-  for (int i = 0; i < input.size(); ++i) {
-    for (int k = 0; k < input[i].size(); ++k) {
+  for (size_t i = 0; i < input.size(); ++i) {
+    for (size_t k = 0; k < input[i].size(); ++k) {
       result[k].push_back(input[i][k]);
     }
   }
@@ -501,7 +502,7 @@ std::vector<std::vector<ElementType>> RotateSchedule(
     const std::vector<std::vector<ElementType>>& input) {
   std::vector<std::vector<ElementType>> result = input;
 
-  for (int i = 0; i < result.size() - 1; ++i) {
+  for (int i = 0; i < static_cast<int>(result.size()) - 1; ++i) {
     std::rotate(result[i].begin(), std::next(result[i].begin(), i + 1),
                 result[i].end());
   }
@@ -557,7 +558,7 @@ std::vector<std::vector<ElementType>> ConstructRampUpSchedule(
     ElementType empty_element = {}) {
   auto result = ConstructScheduleInternal(offsets, input);
 
-  for (int i = 0; i < offsets.size(); ++i) {
+  for (size_t i = 0; i < offsets.size(); ++i) {
     std::fill(result[i].begin(), std::next(result[i].begin(), offsets[i]),
               empty_element);
   }
@@ -588,7 +589,7 @@ std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
     ElementType empty_element = {}, const int additional_iterations = 0) {
   auto result = ConstructScheduleInternal(offsets, input);
 
-  for (int i = additional_iterations; i < offsets.size(); ++i) {
+  for (size_t i = additional_iterations; i < offsets.size(); ++i) {
     std::fill(std::next(result[i].begin(), offsets[i]), result[i].end(),
               empty_element);
   }
@@ -670,7 +671,7 @@ StatusOr<ArgVectors> GetInputs(poplar::program::Sequence& seq,
   }
   // Get all the non inplace inputs.
   if (inst_description.GetInplaceOperandIndexes().size() !=
-      inst->operand_count()) {
+      static_cast<size_t>(inst->operand_count())) {
     CHECK(IsAnyPipelineStageOp(inst));
     for (int64 op_idx : non_inplace_operand_indices) {
       inputs[op_idx] =
@@ -707,7 +708,7 @@ StatusOr<poplar::program::Sequence> AddCopiesForNonParameterInputs(
   for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
     CHECK_EQ(inst_inputs[inplace_idx].size(),
              visitor_inputs[inplace_idx].size());
-    for (int64 flat_idx = 0; flat_idx != inst_inputs[inplace_idx].size();
+    for (size_t flat_idx = 0; flat_idx != inst_inputs[inplace_idx].size();
          ++flat_idx) {
       seq.add(TensorCopyWithAliasing(graph, inst_inputs[inplace_idx][flat_idx],
                                      visitor_inputs[inplace_idx][flat_idx]));
@@ -744,7 +745,7 @@ StatusOr<std::unique_ptr<PipelineStageVisitor>> CreatePipelineStageOp(
   if (used_for_recomputation) {
     auto inst_description = HloInstructionDescription(inst);
     for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
-      for (int64 flat_idx = 0; flat_idx != inputs[inplace_idx].size();
+      for (size_t flat_idx = 0; flat_idx != inputs[inplace_idx].size();
            ++flat_idx) {
         const std::string name = absl::StrCat(GetDebugName(inst), "/clone/",
                                               inplace_idx, "/", flat_idx);
@@ -898,9 +899,9 @@ PipelineVisitor::PipelineVisitor(
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
-  const auto overlap_length = interleave_
-                                  ? CircularUnion(stage_ipu_mapping_).size()
-                                  : stage_ipu_mapping_.size();
+  const int64 overlap_length = interleave_
+                                   ? CircularUnion(stage_ipu_mapping_).size()
+                                   : stage_ipu_mapping_.size();
 
   if (iterations % overlap_length) {
     // TODO(T11404)
@@ -1238,7 +1239,7 @@ Status PipelineVisitor::HandleGetTupleElement(HloInstruction* hlo) {
 
   CHECK_EQ(output_tensors.size(), 1);
   CHECK_EQ(output_tensors[0].size(), CountShapes(hlo->shape()));
-  for (int64 i = 0; i < output_tensors[0].size(); i++) {
+  for (size_t i = 0; i < output_tensors[0].size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, hlo, i, output_tensors[0][i]));
   }
   return Status::OK();
@@ -1274,7 +1275,7 @@ Status PipelineVisitor::HandleInfeed(HloInstruction* hlo) {
   poplar::program::Sequence seq;
   std::vector<Shape> shapes = FlattenedXlaShape(infeed->infeed_shape());
   // For each shape in the infeed.
-  for (int64 i = 0; i < shapes.size(); i++) {
+  for (size_t i = 0; i < shapes.size(); i++) {
     // Create the tensor which will be the output of the infeed.
     poplar::Graph& graph = GetGraphWithOutputIndex(resources_, hlo, i);
     auto source = std::make_pair(hlo, i);

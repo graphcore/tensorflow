@@ -976,7 +976,7 @@ TEST_F(AllocationFinderTest, FindDoesntTraceThroughInvalidCalls) {
       HloInstruction::CreateParameter(0, half_shape, "input"));
   HloInstruction* op1_sub = builder_sub.AddInstruction(
       HloInstruction::CreateConstant(Literal::CreateFromShape(half_shape)));
-  HloInstruction* op2_sub = builder_sub.AddInstruction(
+  builder_sub.AddInstruction(
       HloInstruction::CreateConcatenate(input_shape, {op0_sub, op1_sub}, 3));
   auto computation_sub = builder_sub.Build();
 
@@ -1384,7 +1384,6 @@ HloModule top
   const auto* dot = call->operand(0);
   const auto* ip0 = dot->operand(0);
   const auto* ip1 = dot->operand(1);
-  const auto* ip2 = call->operand(1);
 
   CompilerAnnotations annotations(module0);
 
@@ -2101,7 +2100,6 @@ ENTRY top {
 
   const auto* root = module0->entry_computation()->root_instruction();
   const auto* bn = root->operand(0);
-  const auto* add = root->operand(1);
   const auto* conv = bn->operand(0);
   const auto* ip0 = conv->operand(0);
   const auto* ip1 = conv->operand(1);
@@ -3213,11 +3211,6 @@ ENTRY top {
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
 
-  const auto* custom_op = module0->entry_computation()->root_instruction();
-  const auto* ip0 = custom_op->operand(0);
-  const auto* ip1 = custom_op->operand(1);
-  const auto* ip2 = custom_op->operand(2);
-
   InplaceFinder inplace_finder;
   EXPECT_TRUE(inplace_finder.Run(module0).ValueOrDie());
 
@@ -3316,7 +3309,6 @@ ENTRY cast2 {
   const auto* id_conv = ig_add->operand(0);
   const auto* if_cast = ig_add->operand(1);
   const auto* ie = if_cast->operand(0);
-  const auto* ia = id_conv->operand(0);
   const auto* ic_cast = id_conv->operand(1);
   const auto* ib = ic_cast->operand(0);
 
@@ -3375,7 +3367,6 @@ ENTRY cast3 (arg0.78.22: f32[1,4,4,2], arg1: f32[1,1,2,2], arg2: f32[2], arg3: f
   const auto* p4 = cast_arg4->operand(0);
   const auto* gte = subtract->operand(0);
   const auto* bn = gte->operand(0);
-  const auto* conv = bn->operand(0);
 
   CompilerAnnotations annotations(module0);
 

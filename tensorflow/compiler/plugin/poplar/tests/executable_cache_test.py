@@ -1,9 +1,10 @@
 import contextlib
+import glob
 import multiprocessing
+import numpy as np
 import os
 import tempfile
-
-import numpy as np
+import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
@@ -13,12 +14,14 @@ from tensorflow.python import ipu
 from tensorflow.python import ops
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.estimator import model_fn
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.ops.summary_ops import ipu_compile_summary
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import metrics_impl
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
-import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
+from tensorflow.python.summary import summary_iterator
 
 
 @contextlib.contextmanager
@@ -40,10 +43,7 @@ def _run_in_new_process(fn):
   return q.get()
 
 
-def _count_ipu_compilations(summary_string):
-  summary = summary_pb2.Summary()
-  summary.ParseFromString(summary_string)
-
+def _count_ipu_compilations_in_summary(summary):
   count = 0
   for val in summary.value:
     if val.tag == "ipu_trace":
@@ -53,6 +53,20 @@ def _count_ipu_compilations(summary_string):
             and evt.compile_end.compilation_report):
           count += 1
   return count
+
+
+def _count_ipu_compilations_in_dir(model_dir):
+  count = 0
+  for event_file in glob.glob(os.path.join(model_dir, "event*")):
+    for event in summary_iterator.summary_iterator(event_file):
+      count += _count_ipu_compilations_in_summary(event.summary)
+  return count
+
+
+def _count_ipu_compilations(summary_string):
+  summary = summary_pb2.Summary()
+  summary.ParseFromString(summary_string)
+  return _count_ipu_compilations_in_summary(summary)
 
 
 class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-method
@@ -177,6 +191,65 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(result0, result1)
       self.assertEqual(1, _count_ipu_compilations(report0))
       self.assertEqual(0, _count_ipu_compilations(report1))
+
+  def test_ipu_estimator(self):
+    def my_model_fn(features, labels, mode):
+      loss = features + labels
+      # Make different graphs for train and eval
+      if mode == model_fn.ModeKeys.TRAIN:
+        train_op = array_ops.identity(loss)
+        return model_fn.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
+      elif mode == model_fn.ModeKeys.EVAL:
+        eval_metric_ops = {"metric": metrics_impl.mean(features * labels)}
+        return model_fn.EstimatorSpec(mode=mode,
+                                      loss=loss,
+                                      eval_metric_ops=eval_metric_ops)
+      else:
+        raise NotImplementedError(mode)
+
+    def my_input_fn():
+      dataset = dataset_ops.Dataset.from_tensor_slices((
+          [[0], [1]],
+          [[2], [3]],
+      ))
+      return dataset.batch(1, drop_remainder=True)
+
+    def build_and_run_model():
+      ipu_options = ipu.utils.create_ipu_config(profiling=True)
+
+      ipu_config = ipu.ipu_run_config.IPURunConfig(iterations_per_loop=2,
+                                                   ipu_options=ipu_options,
+                                                   compile_summary=True)
+
+      run_config = ipu.ipu_run_config.RunConfig(ipu_run_config=ipu_config)
+      estimator = ipu.ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                                 config=run_config)
+
+      log_dir = estimator.model_dir
+      self.assertEqual(0, _count_ipu_compilations_in_dir(log_dir))
+
+      # Compile the training graph
+      estimator.train(input_fn=my_input_fn, steps=2)
+      self.assertEqual(1, _count_ipu_compilations_in_dir(log_dir))
+
+      # Re-use cached training graph
+      estimator.train(input_fn=my_input_fn, steps=2)
+      self.assertEqual(1, _count_ipu_compilations_in_dir(log_dir))
+
+      # Compile the evaluation graph
+      estimator.evaluate(input_fn=my_input_fn, steps=2)
+      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+
+      # Re-use cached evaluation graph
+      estimator.evaluate(input_fn=my_input_fn, steps=2)
+      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+
+      # Re-use cached training graph
+      estimator.train(input_fn=my_input_fn, steps=2)
+      self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
+
+    with _temporary_executable_cache():
+      _run_in_new_process(build_and_run_model)
 
 
 if __name__ == "__main__":

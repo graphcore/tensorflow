@@ -84,7 +84,7 @@ StatusOr<bool> RootTokenReplacer::Run(HloModule* module) {
       // check if any of the tuple elments are of token shape
       // create empty tuple element and add token as control dependency
       // create new tuple with token swapped out with newly created empty tuple
-      const auto num_elements = ShapeUtil::TupleElementCount(root_shape);
+      const size_t num_elements = ShapeUtil::TupleElementCount(root_shape);
       std::vector<int> token_indices =
           GetTokenIndices(num_elements, root_shape);
       if (token_indices.empty()) {
@@ -96,9 +96,10 @@ StatusOr<bool> RootTokenReplacer::Run(HloModule* module) {
       if (all_elements_are_tokens) {
         // Output single empty tuple with control dependency added to
         // original root instruction
-        TF_ASSIGN_OR_RETURN(auto new_root, UpdateRootInstruction(
-                                               HloInstruction::CreateTuple({}),
-                                               comp, module, root));
+        TF_RETURN_IF_ERROR(
+            UpdateRootInstruction(HloInstruction::CreateTuple({}), comp, module,
+                                  root)
+                .status());
         changed = true;
       } else if (token_indices.size() > 0) {
         // Some tuple elements are tokens, remove tokens from root tuple
@@ -106,7 +107,7 @@ StatusOr<bool> RootTokenReplacer::Run(HloModule* module) {
         const auto num_elements_new_root = num_elements - token_indices.size();
         std::vector<HloInstruction*> new_root_instructions;
         new_root_instructions.reserve(num_elements_new_root);
-        for (int i = 0; i < num_elements; ++i) {
+        for (size_t i = 0; i < num_elements; ++i) {
           const auto& element_shape =
               ShapeUtil::GetTupleElementShape(root_shape, i);
           if (element_shape.IsToken()) {
@@ -116,16 +117,16 @@ StatusOr<bool> RootTokenReplacer::Run(HloModule* module) {
               HloInstruction::CreateGetTupleElement(element_shape, root, i));
           new_root_instructions.push_back(gte);
         }
-        TF_ASSIGN_OR_RETURN(auto new_root,
-                            UpdateRootInstruction(HloInstruction::CreateTuple(
-                                                      new_root_instructions),
-                                                  comp, module, root));
+        TF_RETURN_IF_ERROR(UpdateRootInstruction(HloInstruction::CreateTuple(
+                                                     new_root_instructions),
+                                                 comp, module, root)
+                               .status());
         changed = true;
       }
     } else if (root_shape.IsToken()) {
-      TF_ASSIGN_OR_RETURN(auto new_root,
-                          UpdateRootInstruction(HloInstruction::CreateTuple({}),
-                                                comp, module, root));
+      TF_RETURN_IF_ERROR(UpdateRootInstruction(HloInstruction::CreateTuple({}),
+                                               comp, module, root)
+                             .status());
       changed = true;
     }
   }

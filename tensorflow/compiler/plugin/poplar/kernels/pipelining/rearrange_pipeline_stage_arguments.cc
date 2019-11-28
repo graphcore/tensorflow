@@ -44,7 +44,7 @@ std::vector<DataType> ShuffleInputDataTypeAttribute(
     const std::vector<DataType>& in_types,
     const std::vector<int>& index_mapping) {
   std::vector<DataType> result(index_mapping.size());
-  for (int i = 0; i < in_types.size(); i++) {
+  for (size_t i = 0; i < in_types.size(); i++) {
     result[index_mapping.at(i)] = in_types[i];
   }
   return result;
@@ -59,7 +59,7 @@ Status InputTypesNeedsRearrange(const std::vector<DataType>& in_types,
                                 bool* need_rewrite, int* resource_input_count,
                                 std::vector<int>* index_mapping) {
   int first_resource_index = -1;
-  for (int i = 0; i < in_types.size(); i++) {
+  for (size_t i = 0; i < in_types.size(); i++) {
     DataType type = in_types[i];
     if (type == DT_RESOURCE) {
       first_resource_index = i;
@@ -73,7 +73,7 @@ Status InputTypesNeedsRearrange(const std::vector<DataType>& in_types,
   }
 
   *need_rewrite = false;
-  for (int i = first_resource_index + 1; i < in_types.size(); i++) {
+  for (size_t i = first_resource_index + 1; i < in_types.size(); i++) {
     if (in_types[i] != DT_RESOURCE) {
       *need_rewrite = true;
       break;
@@ -84,7 +84,7 @@ Status InputTypesNeedsRearrange(const std::vector<DataType>& in_types,
   }
 
   *resource_input_count = 0;
-  for (int i = 0; i < in_types.size(); i++) {
+  for (size_t i = 0; i < in_types.size(); i++) {
     DataType type = in_types[i];
     if (type == DT_RESOURCE) {
       ++(*resource_input_count);
@@ -93,7 +93,7 @@ Status InputTypesNeedsRearrange(const std::vector<DataType>& in_types,
   int non_resource_index = 0,
       resource_index = in_types.size() - *resource_input_count;
   index_mapping->resize(in_types.size());
-  for (int i = 0; i < in_types.size(); i++) {
+  for (size_t i = 0; i < in_types.size(); i++) {
     if (in_types[i] != DT_RESOURCE) {
       (*index_mapping)[i] = non_resource_index;
       non_resource_index++;
@@ -111,7 +111,7 @@ Status InputTypesNeedsRearrange(const std::vector<DataType>& in_types,
 void RearrangeArgNodes(
     const gtl::InlinedVector<Node*, 4>* arg_nodes,  // non-absl ok
     const std::vector<int>& index_mapping) {
-  for (int i = 0; i < arg_nodes->size(); i++) {
+  for (size_t i = 0; i < arg_nodes->size(); i++) {
     Node* n = (*arg_nodes)[i];
     int new_index = index_mapping.at(i);
     n->ClearAttr("index");
@@ -129,7 +129,7 @@ Status CalculateRetvalRearrange(
     const gtl::InlinedVector<Node*, 4>& ret_nodes,  // non-absl ok
     std::map<int, int>* retval_index_mapping,
     std::map<int, int>* resource_retval_to_arg) {
-  for (int i = 0; i < ret_nodes.size(); i++) {
+  for (size_t i = 0; i < ret_nodes.size(); i++) {
     Node* n = ret_nodes[i];
     DataType t;
     TF_RETURN_IF_ERROR(GetNodeAttr(n->def(), "T", &t));
@@ -161,7 +161,7 @@ std::vector<DataType> ShuffleOutputDataTypeAttribute(
     const std::vector<DataType>& out_types,
     const std::map<int, int>& index_mapping) {
   std::vector<DataType> result(index_mapping.size());
-  for (int i = 0; i < out_types.size(); i++) {
+  for (size_t i = 0; i < out_types.size(); i++) {
     auto iter = index_mapping.find(i);
     if (iter != index_mapping.end()) {
       result[iter->second] = out_types[i];
@@ -176,7 +176,7 @@ std::vector<DataType> ShuffleOutputDataTypeAttribute(
 void RearrangeRetvalNodes(
     const gtl::InlinedVector<Node*, 4>& ret_nodes,  // non-absl ok
     Graph* g, const std::map<int, int>& retval_index_mapping) {
-  for (int i = 0; i < ret_nodes.size(); i++) {
+  for (size_t i = 0; i < ret_nodes.size(); i++) {
     Node* n = ret_nodes[i];
     auto iter = retval_index_mapping.find(i);
     if (iter == retval_index_mapping.end()) {

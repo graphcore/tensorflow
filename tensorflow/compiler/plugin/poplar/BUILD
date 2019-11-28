@@ -2904,7 +2904,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "executable_cache_test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/executable_cache_test.py"],
     enabled_backends = ["poplar"],
     deps = [

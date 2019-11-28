@@ -297,7 +297,8 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("output_shapes", &tensor_shapes_));
 
     num_outputs_ = ctx->num_outputs();
-    OP_REQUIRES(ctx, ctx->num_outputs() == xla_shapes_.size(),
+    OP_REQUIRES(ctx,
+                static_cast<size_t>(ctx->num_outputs()) == xla_shapes_.size(),
                 errors::InvalidArgument(
                     "Outfeed num_outputs() != Attribute num outputs: ",
                     ctx->num_outputs(), " != ", xla_shapes_.size()));
@@ -323,7 +324,7 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
       // Allocate all the output buffers with the extra dimension for the number
       // of executions.
       std::vector<Tensor*> output_tensors;
-      for (auto i = 0; i < num_outputs_; ++i) {
+      for (size_t i = 0; i < num_outputs_; ++i) {
         // Insert an extra dimension to the shape to represent the number of
         // iterations.
         TensorShape tensor_shape = tensor_shapes_[i];
@@ -336,11 +337,11 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
       // Copy the data into the output tensors.
       // Go through all the iterations, and copy the tensors into the right
       // output slices.
-      for (auto iteration = 0; iteration < outfeed_tensors.size();
+      for (size_t iteration = 0; iteration < outfeed_tensors.size();
            ++iteration) {
         auto& tensors_for_iteration = outfeed_tensors[iteration];
         CHECK_EQ(tensors_for_iteration.size(), num_outputs_);
-        for (auto j = 0; j < num_outputs_; ++j) {
+        for (size_t j = 0; j < num_outputs_; ++j) {
           OP_REQUIRES_OK(
               ctx, batch_util::CopyElementToSlice(
                        tensors_for_iteration[j], output_tensors[j], iteration));
@@ -349,10 +350,19 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
     } else {
       // Just set the output data if we are getting the last element.
       CHECK_EQ(config_.mode(), xla::poplarplugin::PoplarFeedConfig::GetLast);
-      CHECK_EQ(outfeed_tensors.size(), 1);
-      CHECK_EQ(outfeed_tensors[0].size(), num_outputs_);
-      for (auto j = 0; j < num_outputs_; ++j) {
-        ctx->set_output(j, outfeed_tensors[0][j]);
+      if (outfeed_tensors.size() == 1) {
+        CHECK_EQ(outfeed_tensors[0].size(), num_outputs_);
+        for (size_t j = 0; j < num_outputs_; ++j) {
+          ctx->set_output(j, outfeed_tensors[0][j]);
+        }
+      } else {
+        // Dequeue was called before there was any data.
+        OP_REQUIRES(ctx, false,
+                    errors::FailedPrecondition(
+                        "Trying to get the last value from an outfeed queue "
+                        "before it was executed. Make sure the outfeed dequeue "
+                        "TensorFlow operation is executed after the enqueue to "
+                        "the outfeed has completed."));
       }
     }
   }
@@ -368,5 +378,39 @@ class PopDatastreamOutfeedDequeueOp : public OpKernel {
 
 REGISTER_KERNEL_BUILDER(Name("PopDatastreamOutfeedDequeue").Device(DEVICE_CPU),
                         PopDatastreamOutfeedDequeueOp);
+
+class IPUDeleteOutfeedOp : public OpKernel {
+ public:
+  explicit IPUDeleteOutfeedOp(OpKernelConstruction* ctx)
+      : OpKernel(ctx), device_ordinal_(0) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("feed_id", &feed_id_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
+    OP_REQUIRES(ctx, device_ordinal_ >= 0,
+                errors::InvalidArgument("Need device_ordinal >= 0, got ",
+                                        device_ordinal_));
+  }
+
+  ~IPUDeleteOutfeedOp() override {}
+
+  void Compute(OpKernelContext* ctx) override {
+    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+    OP_REQUIRES(ctx, platform.ok(), platform.status());
+    auto* p =
+        static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
+    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+    auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
+        stream_executor->implementation());
+
+    OP_REQUIRES_OK(ctx, poplar_executor->DeleteOutfeed(feed_id_));
+  }
+
+ private:
+  int device_ordinal_;
+  std::string feed_id_;
+  TF_DISALLOW_COPY_AND_ASSIGN(IPUDeleteOutfeedOp);
+};
+
+REGISTER_KERNEL_BUILDER(Name("IPUDeleteOutfeed").Device(DEVICE_CPU),
+                        IPUDeleteOutfeedOp);
 
 }  // namespace tensorflow

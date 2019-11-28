@@ -64,7 +64,7 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
         FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
     CHECK_EQ(inputs.size(), inst->operand_count());
     std::vector<poplar::Tensor> input_tensors(inst->operand_count());
-    for (int64 i = 0; i < inputs.size(); ++i) {
+    for (size_t i = 0; i < inputs.size(); ++i) {
       CHECK_EQ(inputs[i].size(), 1);
       input_tensors[i] = inputs[i][0];
     }
@@ -121,7 +121,7 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
     seq.add(poplar::program::If(output_grads, if_true, if_false));
     // Unconcat the result and unflatten.
     auto output_tensors = SliceTensorIntoTensorsLike(output, input_tensors);
-    for (int64 i = 0; i != output_tensors.size(); ++i) {
+    for (size_t i = 0; i != output_tensors.size(); ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensors[i]));
     }
 
@@ -146,9 +146,6 @@ class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
 
     // Create a sequence to be executed during the pipeline.
     poplar::program::Sequence seq;
-    const HloPipelineStatefulGradientAccumulate* grad_inst =
-        Cast<HloPipelineStatefulGradientAccumulate>(inst);
-    const uint32 num_mini_batches = grad_inst->MiniBatchesToAccumulate();
     ArgVector inputs =
         FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
 
@@ -159,7 +156,7 @@ class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
                         return graph.clone(in, debug_name + "/Accumulator");
                       });
 
-    for (int64 i = 0; i != inputs.size(); ++i) {
+    for (size_t i = 0; i != inputs.size(); ++i) {
       // Add the initial zeroing.
       popops::zero(graph, accumulators[i], zeroing_seq,
                    debug_name + "/ZeroAccumulator");
@@ -175,7 +172,7 @@ class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
     }
     res.pipelining_buffer_zeroing_sequences.top().push_back(zeroing_seq);
 
-    for (int64 i = 0; i != accumulators.size(); ++i) {
+    for (size_t i = 0; i != accumulators.size(); ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, accumulators[i]));
     }
 

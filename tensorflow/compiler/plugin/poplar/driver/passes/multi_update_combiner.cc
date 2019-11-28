@@ -123,7 +123,7 @@ static const std::vector<HloMatcherPattern> patterns = {
 
 uint64 GetIndexDimSize(const HloMultiUpdateInstruction* inst) {
   Shape shape = inst->operand(1)->shape();
-  return shape.rank() == inst->GetIndexVectorDimension()
+  return shape.rank() == static_cast<int64>(inst->GetIndexVectorDimension())
              ? 1
              : shape.dimensions(inst->GetIndexVectorDimension());
 }

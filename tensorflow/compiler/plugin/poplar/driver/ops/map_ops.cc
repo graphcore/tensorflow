@@ -232,7 +232,7 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
       if (inputs.size() != args[o].size()) {
         return xla::FailedPrecondition("Mismatched number of inputs.");
       }
-      for (int64 i = 0; i < inputs.size(); i++) {
+      for (size_t i = 0; i < inputs.size(); i++) {
         if (subcomp_visitor->InputIsUsed(o, i)) {
           seq.add(poplar::program::Copy(args[o][i], inputs[i]));
         }
@@ -509,7 +509,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
     seq.add(poplar::program::If(scalar_pred, seqs[0], seqs[1]));
   } else {
     std::vector<std::pair<int32, poplar::program::Program>> cases;
-    for (auto c = 0; c < seqs.size() - 1; c++) {
+    for (int64 c = 0; c < static_cast<int64>(seqs.size()) - 1; c++) {
       cases.push_back(std::make_pair(c, seqs[c]));
     }
     seq.add(poplar::program::Switch(pred, cases, seqs.back()));
