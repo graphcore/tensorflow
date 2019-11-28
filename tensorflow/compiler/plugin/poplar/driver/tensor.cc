@@ -645,13 +645,11 @@ static StatusOr<poplar::Tensor> AddConvolutionInput(
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(target, 0, 1));
 
-  auto name = StrCat(debug_name, "_input");
-  poplar::OptionFlags opts = resources.default_conv_options;
-
-  TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
-  opts.set("pass", ml_type);
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(target));
+  poplar::OptionFlags opts = GetConvolutionOptionsForType(resources, conv_type);
   TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(target, opts));
 
+  auto name = StrCat(debug_name, "_input");
   poplar::Tensor out = poplin::createInput(graph, params, name, opts,
                                            &resources.convolution_cache);
   return ShuffleConvolutionInputToTensorflow(target, out);
@@ -663,13 +661,11 @@ static StatusOr<poplar::Tensor> AddConvolutionWeights(
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(target, 0, 1));
 
-  auto name = StrCat(debug_name, "_weights");
-  poplar::OptionFlags opts = resources.default_conv_options;
-
-  TF_ASSIGN_OR_RETURN(const std::string ml_type, GetMLTypeAsString(target));
-  opts.set("pass", ml_type);
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(target));
+  poplar::OptionFlags opts = GetConvolutionOptionsForType(resources, conv_type);
   TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(target, opts));
 
+  auto name = StrCat(debug_name, "_weights");
   poplar::Tensor out = poplin::createWeights(graph, params, name, opts,
                                              &resources.convolution_cache);
 
