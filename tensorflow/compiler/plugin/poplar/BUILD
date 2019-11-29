@@ -1401,6 +1401,18 @@ xla_test(
 )
 
 xla_test(
+    name = "pipeline_sequential_visitor_test",
+    srcs = ["tests/pipeline_sequential_visitor_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "root_token_replacer_test",
     srcs = ["tests/root_token_replacer_test.cc"],
     backends = ["poplar"],
@@ -3154,6 +3166,7 @@ test_suite(
         "pipeline_optimizer_test",
         "pipeline_recomputation_test",
         "pipeline_resource_update_fixer_test",
+        "pipeline_sequential_visitor_test",
         "pipeline_util_test",
         "pipeline_visitor_test",
         "recomputation_test",

@@ -23,7 +23,7 @@ enum FrontendAttributeId {
   // executed.
   PIPELINE_REPEAT_COUNT = 5;
   // Used to select the pipeline schedule.
-  PIPELINE_INTERLEAVE = 6;
+  PIPELINE_SCHEDULE = 6;
 };
 
 enum StochasticRounding {
@@ -44,7 +44,6 @@ enum MLType {
 // Backend specific HloInstruction config
 // NEXT ID = 8
 message PoplarBackendConfig {
-
   // Instruction config for a fusion instruction
   message FusionConfig {
     // Convolutions
@@ -79,9 +78,15 @@ message PoplarBackendConfig {
     }
 
     message PipelineConfig {
+      enum Schedule {
+        Grouped = 0;
+        Interleaved = 1;
+        Sequential = 2;
+      };
+
       int64 pipeline_depth = 1;
       int64 repeat_count = 2;
-      bool interleave = 3;
+      Schedule schedule = 3;
     }
 
     message CallConfig {

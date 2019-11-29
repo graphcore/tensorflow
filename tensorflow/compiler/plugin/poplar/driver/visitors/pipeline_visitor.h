@@ -32,8 +32,8 @@ struct CompilerResources;
 class PipelineVisitor : public InplaceSubComputationVisitor {
  public:
   PipelineVisitor(
-      bool interleave, int64 stage_count,
-      const std::vector<int>& stage_ipu_mapping,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule,
+      int64 stage_count, const std::vector<int>& stage_ipu_mapping,
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
       const absl::flat_hash_set<int> stages_with_recomputation,
       CompilerResources& res, const ArgVectors& inputs,
@@ -114,7 +114,7 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   poplar::program::Sequence& GetSequenceForAliasingCopy() override;
 
  private:
-  bool interleave_;
+  PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule_;
   std::vector<poplar::program::Sequence> copy_sequences_;
   std::vector<poplar::program::Sequence> inter_ipu_copy_sequences_;
   std::vector<poplar::program::Sequence> fifo_sequences_;

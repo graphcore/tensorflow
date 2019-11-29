@@ -98,9 +98,10 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     TF_ASSIGN_OR_RETURN(PoplarBackendConfig pipeline_config,
                         pipeline_op->backend_config<PoplarBackendConfig>());
 
-    const bool interleave =
-        pipeline_config.call_config().pipeline_config().interleave();
-    const int fifo_depth_multiplier = interleave ? 1 : 2;
+    const auto schedule =
+        pipeline_config.call_config().pipeline_config().schedule();
+    TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
+                        ScheduleToFifoDepthMultiplier(schedule));
 
     // Replace all the non parameter inputs with FIFOs.
     auto recomp_operands = recomp_stage->operands();

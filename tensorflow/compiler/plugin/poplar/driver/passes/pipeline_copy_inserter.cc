@@ -170,7 +170,8 @@ StatusOr<bool> InsertIntraIPUCopiesBetweenStages(HloInstruction* pipeline_op,
 
   // If we are interleaving pipeline stages, we don't need to insert copies
   // between stages.
-  if (backend_config.call_config().pipeline_config().interleave()) {
+  if (backend_config.call_config().pipeline_config().schedule() ==
+      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved) {
     return false;
   }
 

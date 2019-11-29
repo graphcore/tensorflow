@@ -809,6 +809,20 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
   return new_call;
 }
 
+StatusOr<int> ScheduleToFifoDepthMultiplier(
+    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule) {
+  switch (schedule) {
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
+      return 2;
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+      return 1;
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Sequential:
+      return 0;
+    default:
+      return FailedPrecondition("Unknown pipeline schedule.");
+  }
+}
+
 Status RemoveOutputsFromCall(HloInstruction* call,
                              const std::set<int64>& outputs_to_remove) {
   // Nothing to remove.

@@ -98,13 +98,14 @@ std::function<bool(const HloInstruction*)> IsIpuInterCopyInstruction() {
   };
 }
 
-bool GetPipelineInterleaveMode(const HloInstruction* pipeline) {
+PoplarBackendConfig::CallConfig::PipelineConfig::Schedule GetPipelineSchedule(
+    const HloInstruction* pipeline) {
   // Cannot reasonably return StatusOr because this is called inside a
   // constructor.
   auto backend_config =
       pipeline->backend_config<PoplarBackendConfig>().ValueOrDie();
 
-  return backend_config.call_config().pipeline_config().interleave();
+  return backend_config.call_config().pipeline_config().schedule();
 }
 
 /**
@@ -456,6 +457,37 @@ std::vector<int> AllUnion(const std::vector<ElementType>& input) {
   absl::c_iota(result, 0);
 
   return result;
+}
+
+/**
+ * Create indices for the simple sharded case.
+ *
+ * @param input The sequence of input elements.
+ *
+ * @returns a "list" of indices {0}.
+ */
+template <typename ElementType>
+std::vector<int> NoUnion(const std::vector<ElementType>& input) {
+  std::vector<int> result(1);
+
+  // This is trivially just a single offset.
+  absl::c_iota(result, 0);
+
+  return result;
+}
+
+template <typename ElementType>
+std::vector<int> ScheduleOffsets(
+    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule,
+    const std::vector<ElementType>& input) {
+  switch (schedule) {
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
+      return AllUnion(input);
+    case PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved:
+      return CircularUnion(input);
+    default:
+      return NoUnion(input);
+  }
 }
 
 /**
@@ -867,14 +899,14 @@ StatusOr<poplar::program::Sequence> CreatePipelineResourceUpdateOp(
 }  // namespace
 
 PipelineVisitor::PipelineVisitor(
-    bool interleave, int64 stage_count,
-    const std::vector<int>& stage_ipu_mapping,
+    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule,
+    int64 stage_count, const std::vector<int>& stage_ipu_mapping,
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     const absl::flat_hash_set<int> stages_with_recomputation,
     CompilerResources& res, const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
     : InplaceSubComputationVisitor(res, inputs, dependent_subcomputations),
-      interleave_(interleave),
+      schedule_(schedule),
       copy_sequences_(stage_count),
       inter_ipu_copy_sequences_(stage_count),
       fifo_sequences_(stage_count),
@@ -895,7 +927,7 @@ PipelineVisitor::PipelineVisitor(
     const HloInstruction* pipeline, CompilerResources& res,
     const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
-    : PipelineVisitor(GetPipelineInterleaveMode(pipeline),
+    : PipelineVisitor(GetPipelineSchedule(pipeline),
                       GetPipelineStageCount(pipeline),
                       GetPipelineStageDeviceMapping(pipeline),
                       GetPipelineInstStageMapping(pipeline),
@@ -904,9 +936,8 @@ PipelineVisitor::PipelineVisitor(
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
-  const int64 overlap_length = interleave_
-                                   ? CircularUnion(stage_ipu_mapping_).size()
-                                   : stage_ipu_mapping_.size();
+  const int64 overlap_length =
+      ScheduleOffsets(schedule_, stage_ipu_mapping_).size();
 
   if (iterations % overlap_length) {
     // TODO(T11404)
@@ -946,14 +977,10 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
 
 // Collect the pipeline stage programs and call CreateRampSequences
 poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
-  std::vector<int> offsets;
+  std::vector<int> offsets = ScheduleOffsets(schedule_, stage_ipu_mapping_);
 
-  if (interleave_) {
-    // Find the set of non-overlapping program offsets.
-    offsets = CircularUnion(stage_ipu_mapping_);
-  } else {
-    offsets = AllUnion(stage_ipu_mapping_);
-  }
+  const bool is_grouped =
+      schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
@@ -964,9 +991,9 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
   auto recomputation_sequences =
       ConstructRampUpSchedule(offsets, recomputation_sequences_);
   auto copy_sequences =
-      ConstructSchedule(offsets, copy_sequences_, interleave_);
+      ConstructSchedule(offsets, copy_sequences_, !is_grouped);
   auto inter_ipu_copy_sequences =
-      ConstructSchedule(offsets, inter_ipu_copy_sequences_, interleave_);
+      ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
   auto outfeed_sequences = ConstructRampUpSchedule(offsets, outfeed_sequences_);
 
   // Concatenate the programs in the correct order.
@@ -1002,14 +1029,10 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
 poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
     int additional_iterations) const {
   // Find the set of non-overlapping program offsets.
-  std::vector<int> offsets;
+  std::vector<int> offsets = ScheduleOffsets(schedule_, stage_ipu_mapping_);
 
-  if (interleave_) {
-    // Find the set of non-overlapping program offsets.
-    offsets = CircularUnion(stage_ipu_mapping_);
-  } else {
-    offsets = AllUnion(stage_ipu_mapping_);
-  }
+  const bool is_grouped =
+      schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
@@ -1019,13 +1042,13 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
   auto program_sequences = ConstructRampDownSchedule(
       offsets, program_sequences_, {}, additional_iterations);
   auto fifo_sequences =
-      ConstructSchedule(offsets, fifo_sequences_, interleave_);
+      ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
   auto recomputation_sequences =
-      ConstructSchedule(offsets, recomputation_sequences_, interleave_);
+      ConstructSchedule(offsets, recomputation_sequences_, !is_grouped);
   auto copy_sequences =
-      ConstructSchedule(offsets, copy_sequences_, interleave_);
+      ConstructSchedule(offsets, copy_sequences_, !is_grouped);
   auto inter_ipu_copy_sequences =
-      ConstructSchedule(offsets, inter_ipu_copy_sequences_, interleave_);
+      ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
   auto outfeed_sequences = ConstructRampDownSchedule(
       offsets, outfeed_sequences_, {}, additional_iterations);
 
@@ -1062,32 +1085,28 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
 poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
     const {
   // Find the set of non-overlapping program offsets.
-  std::vector<int> offsets;
+  std::vector<int> offsets = ScheduleOffsets(schedule_, stage_ipu_mapping_);
 
-  if (interleave_) {
-    // Find the set of non-overlapping program offsets.
-    offsets = CircularUnion(stage_ipu_mapping_);
-  } else {
-    offsets = AllUnion(stage_ipu_mapping_);
-  }
+  const bool is_grouped =
+      schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
 
   // Build schedules for the compute and copy programs.
   // Each schedule is 2D, where each column represents a time-slice and each row
   // represents the "mini-batch",
   auto fifo_sequences =
-      ConstructSchedule(offsets, fifo_sequences_, interleave_);
+      ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
   auto infeed_sequences =
-      ConstructSchedule(offsets, infeed_sequences_, interleave_);
+      ConstructSchedule(offsets, infeed_sequences_, !is_grouped);
   auto program_sequences =
-      ConstructSchedule(offsets, program_sequences_, interleave_);
+      ConstructSchedule(offsets, program_sequences_, !is_grouped);
   auto recomputation_sequences =
-      ConstructSchedule(offsets, recomputation_sequences_, interleave_);
+      ConstructSchedule(offsets, recomputation_sequences_, !is_grouped);
   auto copy_sequences =
-      ConstructSchedule(offsets, copy_sequences_, interleave_);
+      ConstructSchedule(offsets, copy_sequences_, !is_grouped);
   auto inter_ipu_copy_sequences =
-      ConstructSchedule(offsets, inter_ipu_copy_sequences_, interleave_);
+      ConstructSchedule(offsets, inter_ipu_copy_sequences_, !is_grouped);
   auto outfeed_sequences =
-      ConstructSchedule(offsets, outfeed_sequences_, interleave_);
+      ConstructSchedule(offsets, outfeed_sequences_, !is_grouped);
 
   // Concatenate the programs in the correct order.
   // We always execute in following order - infeeds, fwd/bwd stages, fifos,
@@ -1107,7 +1126,7 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
   infeed_sequences.insert(infeed_sequences.end(), outfeed_sequences.begin(),
                           outfeed_sequences.end());
 
-  if (!interleave_) {
+  if (is_grouped) {
     for (auto& seq : infeed_sequences) {
       seq.resize(1);
     }
@@ -1121,7 +1140,7 @@ poplar::program::Program PipelineVisitor::GetPipelineRepeatBlockSequence()
     repeat_block.add(seq);
   }
 
-  if (interleave_) {
+  if (!is_grouped) {
     return repeat_block;
   } else {
     return poplar::program::Repeat(offsets.size(), repeat_block);

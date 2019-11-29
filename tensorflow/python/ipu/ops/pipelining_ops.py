@@ -22,7 +22,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from enum import Enum
+from enum import IntEnum
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pipelining_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
@@ -38,9 +38,11 @@ from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
 
 
-class PipelineSchedule(Enum):
+class PipelineSchedule(IntEnum):
   Grouped = 0
   Interleaved = 1
+  # Useful for debugging, but no performance improvement is expected with this schedule over sharding.
+  Sequential = 2
 
 
 class OptimizerFunctionOutput:
@@ -433,7 +435,7 @@ def pipeline(computational_stages,
           output_shapes=func_graph.output_shapes,
           pipeline_depth=pipeline_depth,
           repeat_count=repeat_count,
-          interleave=pipeline_schedule == PipelineSchedule.Interleaved)
+          schedule=int(PipelineSchedule.Interleaved))
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %
