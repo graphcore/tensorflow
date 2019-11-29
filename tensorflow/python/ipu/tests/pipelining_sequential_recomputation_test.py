@@ -92,7 +92,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 14770, True,
+          pipeline_depth, dataset_fn, optimizer, self, 10579, True,
           pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
@@ -302,7 +302,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 15986, True,
+          pipeline_depth, dataset_fn, optimizer, self, 10760, True,
           pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
@@ -351,7 +351,7 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
     with self.test_session() as sess:
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 12478, True,
+          pipeline_depth, dataset_fn, optimizer, self, 9096, True,
           pipelining_ops.PipelineSchedule.Sequential)
 
 

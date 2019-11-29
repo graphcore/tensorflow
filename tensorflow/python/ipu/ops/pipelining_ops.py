@@ -435,7 +435,7 @@ def pipeline(computational_stages,
           output_shapes=func_graph.output_shapes,
           pipeline_depth=pipeline_depth,
           repeat_count=repeat_count,
-          schedule=int(PipelineSchedule.Interleaved))
+          schedule=int(pipeline_schedule))
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %
