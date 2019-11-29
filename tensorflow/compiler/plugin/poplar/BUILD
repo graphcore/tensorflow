@@ -3111,6 +3111,17 @@ py_test(
     ],
 )
 
+py_test(
+    name = "ipu_pipeline_estimator_example",
+    size = "large",
+    srcs = ["docs/ipu_pipeline_estimator_example.py"],
+    args = ["--iterations-per-loop=1", "--training-steps=1"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 tf_xla_py_test(
     name = "tutorial_basic",
     size = "small",
@@ -3370,6 +3381,7 @@ test_suite(
     tests = [
         "distributed_training_example",
         "ipu_estimator_example",
+        "ipu_pipeline_estimator_example",
         "logging_example_1",
         "perf_training_example",
         "tutorial_basic",

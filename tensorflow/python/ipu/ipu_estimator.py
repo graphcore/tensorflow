@@ -20,6 +20,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import abc
 import collections
 import threading
 
@@ -45,7 +46,6 @@ from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import ops as ipu_ops
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategy
-from tensorflow.python.ipu.ipu_outfeed_queue import IPUOutfeedMode
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
@@ -357,12 +357,51 @@ def _extract_metric_values(eval_dict):
   return metric_values
 
 
-class _ModelFnWrapper(object):
-  def __init__(self, model_fn, config, params, infeed_queue):
+@six.add_metaclass(abc.ABCMeta)
+class _ModelFnWrapperBase(object):
+  """Interface for wrapping the user-provided `model_fn` in a loop."""
+  @abc.abstractproperty
+  def captured_hooks(self):
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def create_training_loop(self):
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def get_training_loss_and_op(self, compiled_training_loop):
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def create_evaluation_loop(self):
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def get_evaluation_loss_and_metrics(self, compiled_evaluation_loop):
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def create_prediction_loop(self):
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def get_predictions(self, compiled_prediction_loop):
+    raise NotImplementedError()
+
+  # TODO(hakons): This works in Python >= 3.3
+  # @staticmethod
+  # @abc.abstractmethod
+  # def get_outfeed_mode(mode):
+  #   raise NotImplementedError()
+
+
+class _ModelFnWrapper(_ModelFnWrapperBase):
+  def __init__(self, model_fn, config, params, infeed_queue, outfeed_queue):
     self._model_fn = model_fn
     self._config = config
     self._params = params
     self._infeed_queue = infeed_queue
+    self._outfeed_queue = outfeed_queue
     self._iterations_per_loop = config.ipu_run_config.iterations_per_loop
     self._replication_factor = config.ipu_run_config.num_replicas
     self._num_shards = config.ipu_run_config.num_shards
@@ -370,6 +409,15 @@ class _ModelFnWrapper(object):
     self._captured_hooks = []
     self._captured_host_call_fn = None
     self._captured_host_call_args = None
+
+  @staticmethod
+  def get_outfeed_mode(mode):
+    if mode == model_fn_lib.ModeKeys.PREDICT:
+      return ipu_outfeed_queue.IPUOutfeedMode.ALL
+    if mode == model_fn_lib.ModeKeys.EVAL:
+      return ipu_outfeed_queue.IPUOutfeedMode.LAST
+    # No outfeed for training
+    return None
 
   def _loop_replica_mean(self, loop_sum):
     if self._replication_factor == 1:
@@ -394,12 +442,7 @@ class _ModelFnWrapper(object):
       self._captured_host_call_fn, tensors = host_call
       self._captured_host_call_args = _add_send_to_host_ops(tensors)
 
-  @property
-  def captured_host_call_fn(self):
-    return self._captured_host_call_fn
-
-  @property
-  def captured_host_call_args(self):
+  def _received_host_call_args(self):
     return _add_recv_at_host_ops(self._captured_host_call_args)
 
   def create_training_loop(self):
@@ -453,7 +496,6 @@ class _ModelFnWrapper(object):
                                 infeed_queue=self._infeed_queue)
 
       if self._captured_host_call_fn is not None:
-        # TODO(hakons): Could use outfeed queue to implement this.
         raise ValueError(
             "host_call is not allowed for iterations_per_loop > 1")
 
@@ -461,7 +503,23 @@ class _ModelFnWrapper(object):
 
     return training_loop
 
-  def create_evaluation_loop(self, outfeed_queue):
+  def get_training_loss_and_op(self, compiled_training_loop):
+    loss = compiled_training_loop[0]
+
+    if self._captured_host_call_fn is None:
+      train_op = loss
+    else:
+      # The base class will run both `train_op` and `loss`.
+      # Let `train_op` be the return value from the host call.
+      # If there is a dependency on the `loss` calculated on
+      # the IPU, they will be sequenced. Otherwise they might
+      # run in parallel on the IPU and CPU.
+      train_op = _call_host_fn(self._captured_host_call_fn,
+                               self._received_host_call_args())
+
+    return loss, train_op
+
+  def create_evaluation_loop(self):
     def evaluation_step(total_loss, *args, **kwargs):
       features, labels = _unpack_features_and_labels(args, kwargs)
       estimator_spec = self._call_model_fn(features, labels,
@@ -484,7 +542,7 @@ class _ModelFnWrapper(object):
         autoshard.automatic_sharding(self._num_shards, features, loss)
 
       total_loss += math_ops.cast(loss, dtypes.float32)
-      outfeed = outfeed_queue.enqueue(metric_values)
+      outfeed = self._outfeed_queue.enqueue(metric_values)
       return total_loss, outfeed
 
     def evaluation_loop():
@@ -496,7 +554,22 @@ class _ModelFnWrapper(object):
 
     return evaluation_loop
 
-  def create_prediction_loop(self, outfeed_queue):
+  def get_evaluation_loss_and_metrics(self, compiled_evaluation_loop):
+    loss = compiled_evaluation_loop[0]
+
+    metrics = self._outfeed_queue.dequeue()
+    metric_ops = {}
+    for metric_name, metric_tensor in six.iteritems(metrics):
+      # For replicated graphs the tensor will have an additional replica
+      # dimension, so we reduce over this dimension (if it exists).
+      # TODO(hakons): mean is not always correct, e.g. for root_mean_squared_error
+      # Use no-op as the update_op since updating is done inside the loop.
+      metric_ops[metric_name] = (math_ops.reduce_mean(metric_tensor),
+                                 control_flow_ops.no_op())
+
+    return loss, metric_ops
+
+  def create_prediction_loop(self):
     def prediction_step(*args, **kwargs):
       features, _ = _unpack_features_and_labels(args, kwargs)
       labels = None  # Do not provide labels for prediction
@@ -510,7 +583,7 @@ class _ModelFnWrapper(object):
 
       self._capture_hooks(estimator_spec.prediction_hooks)
 
-      outfeed = outfeed_queue.enqueue(predictions)
+      outfeed = self._outfeed_queue.enqueue(predictions)
       return outfeed
 
     def prediction_loop():
@@ -519,6 +592,11 @@ class _ModelFnWrapper(object):
                           infeed_queue=self._infeed_queue)
 
     return prediction_loop
+
+  def get_predictions(self, compiled_prediction_loop):
+    with ops.control_dependencies([compiled_prediction_loop]):
+      predictions = self._outfeed_queue.dequeue()
+    return predictions
 
   def _call_model_fn(self, features, labels, mode):
     model_fn_args = function_utils.fn_args(self._model_fn)
@@ -566,8 +644,10 @@ def _get_input_context():
   return None
 
 
-def _augment_model_fn(model_fn):
-  """Returns a new model_fn, which wraps the IPU support."""
+def _augment_model_fn(model_fn, wrapper_class):
+  """Wraps the `model_fn`, feeds it with queues, and returns a new
+  `model_fn` that returns a regular `EstimatorSpec`. This `model_fn` wraps
+  all the IPU support and can be passed to the regular `Estimator` class."""
   def _model_fn(features, labels, mode, config, params):
     del features, labels  # We call the input_fn directly from here instead
     input_fn = params[_INPUT_FN_KEY]
@@ -579,13 +659,24 @@ def _augment_model_fn(model_fn):
     if not isinstance(dataset, dataset_ops.DatasetV2):
       raise ValueError("input_fn must return Dataset")
 
+    hooks = []
     replication_factor = config.ipu_run_config.num_replicas
+
     infeed_queue = ipu_infeed_queue.IPUInfeedQueue(
         dataset,
         _FeedIdAllocator.alloc_infeed_id(mode),
         replication_factor=replication_factor)
+    hooks.append(_IPUInfeedLifecycleHook(infeed_queue))
 
-    hooks = [_IPUInfeedLifecycleHook(infeed_queue)]
+    outfeed_mode = wrapper_class.get_outfeed_mode(mode)
+    if outfeed_mode is None:
+      outfeed_queue = None
+    else:
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
+          _FeedIdAllocator.alloc_outfeed_id(mode),
+          outfeed_mode=outfeed_mode,
+          replication_factor=replication_factor)
+      hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
 
     if config.ipu_run_config.ipu_options is None:
       if config.ipu_run_config.compile_summary:
@@ -598,24 +689,15 @@ def _augment_model_fn(model_fn):
       hooks.append(
           _IPUConfigureIPUSystemHook(ipu_options, host_device=_HOST_DEVICE))
 
-    model_fn_wrapper = _ModelFnWrapper(model_fn, config, params, infeed_queue)
+    wrapped_model_fn = wrapper_class(model_fn, config, params, infeed_queue,
+                                     outfeed_queue)
 
     if mode == model_fn_lib.ModeKeys.TRAIN:
-      loop = model_fn_wrapper.create_training_loop()
+      loop = wrapped_model_fn.create_training_loop()
     elif mode == model_fn_lib.ModeKeys.EVAL:
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          _FeedIdAllocator.alloc_outfeed_id(mode),
-          outfeed_mode=IPUOutfeedMode.LAST,
-          replication_factor=replication_factor)
-      hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
-      loop = model_fn_wrapper.create_evaluation_loop(outfeed_queue)
+      loop = wrapped_model_fn.create_evaluation_loop()
     elif mode == model_fn_lib.ModeKeys.PREDICT:
-      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
-          _FeedIdAllocator.alloc_outfeed_id(mode),
-          outfeed_mode=IPUOutfeedMode.ALL,
-          replication_factor=replication_factor)
-      hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
-      loop = model_fn_wrapper.create_prediction_loop(outfeed_queue)
+      loop = wrapped_model_fn.create_prediction_loop()
     else:
       raise ValueError("Unknown mode: {}".format(mode))
 
@@ -637,87 +719,33 @@ def _augment_model_fn(model_fn):
 
     ipu_utils.move_variable_initialization_to_cpu()
 
-    hooks.extend(model_fn_wrapper.captured_hooks)
-
-    loss = None
-    train_op = None
-    predictions = None
-    eval_metric_ops = {}
+    hooks.extend(wrapped_model_fn.captured_hooks)
 
     if mode == model_fn_lib.ModeKeys.TRAIN:
-      loss = compiled_loop[0]
-      if model_fn_wrapper.captured_host_call_fn is None:
-        train_op = loss
-      else:
-        # The base class will run both `train_op` and `loss`.
-        # Let `train_op` be the return value from the host call.
-        # If there is a dependency on the `loss` calculated on
-        # the IPU, they will be sequenced. Otherwise they might
-        # run in parallel on the IPU and CPU.
-        train_op = _call_host_fn(model_fn_wrapper.captured_host_call_fn,
-                                 model_fn_wrapper.captured_host_call_args)
+      loss, train_op = wrapped_model_fn.get_training_loss_and_op(compiled_loop)
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        train_op=train_op,
+                                        training_hooks=hooks)
     elif mode == model_fn_lib.ModeKeys.PREDICT:
-      with ops.control_dependencies([compiled_loop]):
-        predictions = outfeed_queue.dequeue()
+      predictions = wrapped_model_fn.get_predictions(compiled_loop)
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        predictions=predictions,
+                                        prediction_hooks=hooks)
     elif mode == model_fn_lib.ModeKeys.EVAL:
-      loss = compiled_loop[0]
-      dequeue_op = outfeed_queue.dequeue()
-      for metric_name, metric_tensor in six.iteritems(dequeue_op):
-        # TODO(hakons): mean is not always correct, e.g. for root_mean_squared_error
-        cross_replica_metric = math_ops.reduce_mean(metric_tensor)
-        # No op as update-op since updating is done inside the loop
-        eval_metric_ops[metric_name] = (cross_replica_metric,
-                                        control_flow_ops.no_op())
-
-    return model_fn_lib.EstimatorSpec(mode=mode,
-                                      loss=loss,
-                                      train_op=train_op,
-                                      training_hooks=hooks,
-                                      evaluation_hooks=hooks,
-                                      prediction_hooks=hooks,
-                                      eval_metric_ops=eval_metric_ops,
-                                      predictions=predictions)
+      loss, eval_metric_ops = wrapped_model_fn.get_evaluation_loss_and_metrics(
+          compiled_loop)
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        eval_metric_ops=eval_metric_ops,
+                                        evaluation_hooks=hooks)
+    else:
+      raise ValueError("Unknown mode: {}".format(mode))
 
   return _model_fn
 
 
-class IPUEstimator(estimator_lib.Estimator):
-  """Estimator with IPU support.
-
-  IPUEstimator handles many of the details of running on IPUs, such as
-  placement of operations and tensors, graph compilation and usage of
-  data feeds. It also provides a simple way to use multiple IPUs in the
-  form of either data parallelism or model parallelism.
-
-  For efficiency, it supports compiling a graph that contains multiple
-  iterations of the training/prediction/evaluation loop, which will be
-  fully executed on the IPU before yielding back to the TensorFlow
-  Python runtime on the CPU.
-
-  See https://tensorflow.org/guide/estimators for general information
-  about estimators.
-
-  Args:
-    model_fn: The model function. Refer to
-      https://www.tensorflow.org/guide/custom_estimators#write_a_model_function
-      for details on how to write this function.
-    model_dir: Directory to save model parameters, graph and etc. This can
-      also be used to load checkpoints from the directory into an estimator to
-      continue training a previously saved model. If `PathLike` object, the
-      path will be resolved. If `None`, the model_dir in `config` will be used
-      if set. If both are set, they must be same. If both are `None`, a
-      temporary directory will be used.
-    config: `tf.ipu.ipu_run_config.RunConfig` configuration object.
-    params: `dict` of hyper parameters that will be passed into `model_fn`.
-            Keys are names of parameters, values are basic python types.
-    warm_start_from: Optional string filepath to a checkpoint or SavedModel to
-                     warm-start from, or a `tf.estimator.WarmStartSettings`
-                     object to fully configure warm-starting.  If the string
-                     filepath is provided instead of a
-                     `tf.estimator.WarmStartSettings`, then all variables are
-                     warm-started, and it is assumed that vocabularies
-                     and `tf.Tensor` names are unchanged.
-  """
+class _IPUEstimatorBase(estimator_lib.Estimator):
   def __init__(self,
                model_fn,
                model_dir=None,
@@ -731,22 +759,17 @@ class IPUEstimator(estimator_lib.Estimator):
       raise ValueError(
           "`config` must be provided with type `ipu_run_config.RunConfig`")
 
-    # Verifies the model_fn signature according to Estimator framework.
-    estimator_lib._verify_model_fn_args(model_fn, params)  # pylint: disable=protected-access
-
     if params is not None and not isinstance(params, dict):
       raise ValueError('`params` is expected to be of type `dict`')
     if params is not None and any(k in params for k in _RESERVED_PARAMS_KEYS):
       raise ValueError('{} are reserved keys but existed in params {}.'.format(
           _RESERVED_PARAMS_KEYS, params))
 
-    model_function = _augment_model_fn(model_fn)
-
-    super(IPUEstimator, self).__init__(model_fn=model_function,
-                                       model_dir=model_dir,
-                                       config=config,
-                                       params=params,
-                                       warm_start_from=warm_start_from)
+    super(_IPUEstimatorBase, self).__init__(model_fn=model_fn,
+                                            model_dir=model_dir,
+                                            config=config,
+                                            params=params,
+                                            warm_start_from=warm_start_from)
 
   def train(self,
             input_fn,
@@ -784,11 +807,12 @@ class IPUEstimator(estimator_lib.Estimator):
     """
     self._validate_steps(steps)
     self._params[_INPUT_FN_KEY] = input_fn
-    return super(IPUEstimator, self).train(input_fn=input_fn,
-                                           hooks=hooks,
-                                           steps=steps,
-                                           max_steps=max_steps,
-                                           saving_listeners=saving_listeners)
+    return super(_IPUEstimatorBase,
+                 self).train(input_fn=input_fn,
+                             hooks=hooks,
+                             steps=steps,
+                             max_steps=max_steps,
+                             saving_listeners=saving_listeners)
 
   def _convert_train_steps_to_hooks(self, steps, max_steps):
     return [
@@ -866,11 +890,12 @@ class IPUEstimator(estimator_lib.Estimator):
 
     self._validate_steps(steps)
     self._params[_INPUT_FN_KEY] = input_fn
-    return super(IPUEstimator, self).evaluate(input_fn=input_fn,
-                                              hooks=hooks,
-                                              steps=steps,
-                                              checkpoint_path=checkpoint_path,
-                                              name=name)
+    return super(_IPUEstimatorBase,
+                 self).evaluate(input_fn=input_fn,
+                                hooks=hooks,
+                                steps=steps,
+                                checkpoint_path=checkpoint_path,
+                                name=name)
 
   def predict(self,
               input_fn,
@@ -917,7 +942,7 @@ class IPUEstimator(estimator_lib.Estimator):
     """
 
     self._params[_INPUT_FN_KEY] = input_fn
-    predictions = super(IPUEstimator, self).predict(
+    predictions = super(_IPUEstimatorBase, self).predict(
         input_fn=input_fn,
         predict_keys=predict_keys,
         hooks=hooks,
@@ -940,3 +965,58 @@ class IPUEstimator(estimator_lib.Estimator):
       else:
         for prediction in nested_predictions:
           yield prediction
+
+
+class IPUEstimator(_IPUEstimatorBase):
+  """Estimator with IPU support.
+
+  IPUEstimator handles many of the details of running on IPUs, such as
+  placement of operations and tensors, graph compilation and usage of
+  data feeds. It also provides a simple way to use multiple IPUs in the
+  form of either data parallelism or model parallelism.
+
+  For efficiency, it supports compiling a graph that contains multiple
+  iterations of the training/prediction/evaluation loop, which will be
+  fully executed on the IPU before yielding back to the TensorFlow
+  Python runtime on the CPU.
+
+  See https://tensorflow.org/guide/estimators for general information
+  about estimators.
+
+  Args:
+    model_fn: The model function. Refer to
+      https://www.tensorflow.org/guide/custom_estimators#write_a_model_function
+      for details on how to write this function.
+    model_dir: Directory to save model parameters, graph and etc. This can
+      also be used to load checkpoints from the directory into an estimator to
+      continue training a previously saved model. If `PathLike` object, the
+      path will be resolved. If `None`, the model_dir in `config` will be used
+      if set. If both are set, they must be same. If both are `None`, a
+      temporary directory will be used.
+    config: `tf.ipu.ipu_run_config.RunConfig` configuration object.
+    params: `dict` of hyper parameters that will be passed into `model_fn`.
+            Keys are names of parameters, values are basic python types.
+    warm_start_from: Optional string filepath to a checkpoint or SavedModel to
+                     warm-start from, or a `tf.estimator.WarmStartSettings`
+                     object to fully configure warm-starting.  If the string
+                     filepath is provided instead of a
+                     `tf.estimator.WarmStartSettings`, then all variables are
+                     warm-started, and it is assumed that vocabularies
+                     and `tf.Tensor` names are unchanged.
+  """
+  def __init__(self,
+               model_fn,
+               model_dir=None,
+               config=None,
+               params=None,
+               warm_start_from=None):
+    # Verifies the model_fn signature according to Estimator framework.
+    estimator_lib._verify_model_fn_args(model_fn, params)  # pylint: disable=protected-access
+
+    model_function = _augment_model_fn(model_fn, _ModelFnWrapper)
+
+    super(IPUEstimator, self).__init__(model_fn=model_function,
+                                       model_dir=model_dir,
+                                       config=config,
+                                       params=params,
+                                       warm_start_from=warm_start_from)
