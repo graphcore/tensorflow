@@ -546,7 +546,7 @@ def create_single_increasing_dataset(value,
                                      shape=None,
                                      dtype=np.float32,
                                      repeat=True):
-  shape = shape if shape else [1, 32, 32, 4]
+  shape = shape if shape is not None else [1, 32, 32, 4]
   return create_multi_increasing_dataset(value,
                                          shapes=[shape],
                                          dtypes=[dtype],
