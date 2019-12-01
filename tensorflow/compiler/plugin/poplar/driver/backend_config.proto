@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "tensorflow/compiler/xla/xla_data.proto";
+import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
 
 package xla.poplarplugin;
 
@@ -24,6 +25,8 @@ enum FrontendAttributeId {
   PIPELINE_REPEAT_COUNT = 5;
   // Used to select the pipeline schedule.
   PIPELINE_SCHEDULE = 6;
+  // Used to configure the pipeline lowering to Poplar.
+  PIPELINE_POPLAR_CONFIG = 7;
 };
 
 enum StochasticRounding {
@@ -42,7 +45,7 @@ enum MLType {
 };
 
 // Backend specific HloInstruction config
-// NEXT ID = 8
+// NEXT ID = 10
 message PoplarBackendConfig {
   // Instruction config for a fusion instruction
   message FusionConfig {
@@ -116,4 +119,10 @@ message PoplarBackendConfig {
   MLType ml_type = 6;
 
   PrimitiveType partials_type = 7;
+
+  // Flags to be used by the convolution.
+  repeated PoplarOptionFlag convolution_options = 8;
+
+  // Flags to be used by the matmul.
+  repeated PoplarOptionFlag matmul_options = 9;
 };

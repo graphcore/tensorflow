@@ -200,7 +200,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
     # Wrong type:
     with self.assertRaisesRegex(
-        ValueError, 'device_mapping argument needs to be a list or a tuple'):
+        TypeError, 'device_mapping argument needs to be a list or a tuple'):
       pipelining_ops.pipeline(
           [stage1, stage2, stage3],
           3,

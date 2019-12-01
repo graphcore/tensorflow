@@ -57,9 +57,8 @@ using BwdWeightGraphCache =
 StatusOr<poplar::Tensor> DoCachedConvolution(
     poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& in,
     const poplar::Tensor& weights, const poplin::ConvParams& params,
-    const MLType& conv_type, bool transpose_and_flip_weights,
-    const uint64 device_id, poplar::program::Sequence& prog,
-    const std::string& debug_prefix);
+    const HloInstruction* inst, bool transpose_and_flip_weights,
+    poplar::program::Sequence& prog);
 }  // namespace conv_graph_caching
 }  // namespace poplarplugin
 }  // namespace xla

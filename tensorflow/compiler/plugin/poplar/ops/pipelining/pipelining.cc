@@ -49,6 +49,7 @@ REGISTER_OP("Pipeline")
     .Attr("repeat_count: int >= 1")
     .Attr("schedule: int")
     .Attr("output_shapes: list(shape) >= 0")
+    .Attr("pipeline_poplar_config: string")
     .SetIsStateful()
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       return SetOutputShape(c);

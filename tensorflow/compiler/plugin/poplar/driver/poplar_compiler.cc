@@ -493,7 +493,7 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     VLOG(1) << "Shards have been mapped to the following IPUs:";
     int64 next_shard_id = 0;
     for (unsigned hw_id : resources.shard_to_ipu_id) {
-      VLOG(1) << "  * Shard" << next_shard_id++ << " mapped to IPU " << hw_id;
+      VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
     }
   }
   main_graph.addCodelets(GetPathToGraphProgFile("tf.gp"));

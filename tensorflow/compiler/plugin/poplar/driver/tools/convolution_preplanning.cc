@@ -63,10 +63,8 @@ Status ConvolutionPreplanning::StorePreplanConv(const HloInstruction* inst,
       const poplin::ConvParams conv_params,
       GetConvolutionParameters(inst, input_index, kernel_index));
 
-  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
-  poplar::OptionFlags option_flags =
-      GetConvolutionOptionsForType(resources, conv_type);
-  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(inst, option_flags));
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags option_flags,
+                      GetConvolutionOptionsForInst(inst, resources));
 
   option_flags_store.push_back(option_flags);
   preplan_convs.insert(
