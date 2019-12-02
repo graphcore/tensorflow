@@ -1362,6 +1362,36 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         self.assertEqual(1.0, sess.run(dequeue))
         sess.run(outfeed_queue.deleter)
 
+  @test_util.deprecated_graph_mode_only
+  def testInfeedOutfeedScalarPrefetchAndBuffer(self):
+    number_of_batches = 4
+    num_iterations = 100
+
+    dataset = tu.create_single_increasing_dataset(num_iterations, shape=[])
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+        dataset, next_feed_id(), data_to_prefetch=number_of_batches)
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+        next_feed_id(), io_batch_size=number_of_batches)
+
+    def body(a):
+      outfeed = outfeed_queue.enqueue(a)
+      return outfeed
+
+    def my_net():
+      r = ipu.loops.repeat(num_iterations, body, infeed_queue=infeed_queue)
+      return r
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      res = ipu.ipu_compiler.compile(my_net)
+
+    outfeed = outfeed_queue.dequeue()
+    with session_lib.Session() as sess:
+      sess.run(infeed_queue.initializer)
+      sess.run(res)
+      outfed = sess.run(outfeed)
+      self.assertAllClose(outfed, range(num_iterations))
+
 
 if __name__ == "__main__":
   googletest.main()

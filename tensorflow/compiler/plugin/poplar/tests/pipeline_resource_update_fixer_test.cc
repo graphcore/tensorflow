@@ -377,7 +377,7 @@ ENTRY cluster {
   arg6.7 = f32[2]{0} parameter(6), parameter_replication={false}
   arg5.6 = f32[1,1,2,2]{3,2,1,0} parameter(5), parameter_replication={false}
   arg3.4 = f32[2]{0} parameter(3), parameter_replication={false}
-  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"interleave\":true}}}"
+  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":1}}}"
   get-tuple-element.269 = f32[2]{0} get-tuple-element(call.267), index=1
   get-tuple-element.273 = f32[2]{0} get-tuple-element(call.267), index=5
   get-tuple-element.268 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=0
@@ -734,7 +734,7 @@ ENTRY cluster {
   arg6.7 = f32[2]{0} parameter(6), parameter_replication={false}
   arg5.6 = f32[1,1,2,2]{3,2,1,0} parameter(5), parameter_replication={false}
   arg3.4 = f32[2]{0} parameter(3), parameter_replication={false}
-  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"interleave\":true}}}"
+  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":1}}}"
   get-tuple-element.269 = f32[2]{0} get-tuple-element(call.267), index=1
   get-tuple-element.273 = f32[2]{0} get-tuple-element(call.267), index=5
   get-tuple-element.268 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=0

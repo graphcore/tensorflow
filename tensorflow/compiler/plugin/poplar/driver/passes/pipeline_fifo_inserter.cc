@@ -41,8 +41,9 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig config,
                       pipeline_op->backend_config<PoplarBackendConfig>());
 
-  const bool interleave = config.call_config().pipeline_config().interleave();
-  const int fifo_depth_multiplier = interleave ? 1 : 2;
+  const auto schedule = config.call_config().pipeline_config().schedule();
+  TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
+                      ScheduleToFifoDepthMultiplier(schedule));
 
   for (HloInstruction* stage : stages.backward) {
     TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));

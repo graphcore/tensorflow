@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package xla.poplarplugin;
 
+import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
+
 enum IPUSelectionOrder {
   AUTO = 0;
   ZIGZAG = 1;
@@ -11,11 +13,6 @@ enum IPUSelectionOrder {
 
 // NEXT ID 20
 message IpuOptions {
-  // Structure for setting an idividual Poplar OptionFlag for OptionFlags
-  message PoplarOptionFlag {
-    string option = 1;
-    string value = 2;
-  };
 
   // Options controlling the software IPU model (see IPUModel in poplar)
   message IpuModelConfig {

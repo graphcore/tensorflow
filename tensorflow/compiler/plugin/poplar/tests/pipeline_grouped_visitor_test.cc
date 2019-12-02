@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -69,6 +70,7 @@ std::unique_ptr<CompilerResources> GetMockResources(poplar::Device& device,
       poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
       false, false, merge_infeeds, 1, 0, 0, 1, 64, module,
       IpuOptions::FloatingPointBehaviour(), false, "", false);
+  resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
       device, 0, poplar::replication_factor(1));
 
@@ -193,8 +195,9 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(false, stage_count, {0, 1, 1, 0}, stage_assignments,
-                          {}, *resources, {{placeholder}});
+  PipelineVisitor visitor(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
+      {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -340,8 +343,9 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(false, stage_count, {0, 1, 1, 0}, stage_assignments,
-                          {}, *resources, {{placeholder}});
+  PipelineVisitor visitor(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
+      {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -466,8 +470,9 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(false, stage_count, {0, 1, 1, 0}, stage_assignments,
-                          {}, *resources, {{placeholder}});
+  PipelineVisitor visitor(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
+      {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -597,8 +602,9 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {2});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(false, stage_count, {0, 1, 1, 0}, stage_assignments,
-                          {}, *resources, {{placeholder}});
+  PipelineVisitor visitor(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
+      {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -722,8 +728,9 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(false, stage_count, {0, 1, 1, 0}, stage_assignments,
-                          {}, *resources, {{placeholder}});
+  PipelineVisitor visitor(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
+      {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -902,8 +909,9 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(false, stage_count, {0, 1, 2, 1, 0, 1},
-                          stage_assignments, {}, *resources, {{placeholder}});
+  PipelineVisitor visitor(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
+      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -1075,8 +1083,9 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(false, stage_count, {0, 1, 2, 1, 0, 1},
-                          stage_assignments, {}, *resources, {{placeholder}});
+  PipelineVisitor visitor(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
+      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -1266,8 +1275,9 @@ ENTRY pipeline {
   auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
   resources->main_graph->setTileMapping(placeholder, 0);
 
-  PipelineVisitor visitor(false, stage_count, {0, 1, 1, 0}, stage_assignments,
-                          {}, *resources, {{placeholder}});
+  PipelineVisitor visitor(
+      PoplarBackendConfig::CallConfig::PipelineConfig::Grouped, stage_count,
+      {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program

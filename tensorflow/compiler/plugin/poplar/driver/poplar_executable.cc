@@ -184,7 +184,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   // Load the poplar compilation options from the serialized executable
   poplar::OptionFlags opts;
   for (const auto& flag : proto.option_flags()) {
-    opts.set(flag.key(), flag.value());
+    opts.set(flag.option(), flag.value());
   }
 
   // Load the executable
@@ -255,7 +255,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   // write the compilation options into the serialized executable
   for (const auto flag : opts) {
     auto* poplar_opt = proto.add_option_flags();
-    poplar_opt->set_key(flag.first);
+    poplar_opt->set_option(flag.first);
     poplar_opt->set_value(flag.second);
   }
 

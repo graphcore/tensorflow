@@ -37,10 +37,36 @@ genrule(
 )
 
 tf_proto_library(
+    name = "option_flag",
+    srcs = [
+      "driver/option_flag.proto",
+    ],
+    cc_api_version = 2,
+    make_default_target_header_only = True,
+    j2objc_api_version = 1,
+)
+
+tf_proto_library(
+    name = "pipeline_config",
+    srcs = [
+      "driver/pipeline_config.proto",
+    ],
+    protodeps = [
+        ":option_flag",
+    ],
+    cc_api_version = 2,
+    make_default_target_header_only = True,
+    j2objc_api_version = 1,
+)
+
+tf_proto_library(
     name = "config_protos",
     srcs = [
       "driver/config.proto",
       "driver/trace.proto",
+    ],
+    protodeps = [
+        ":option_flag",
     ],
     cc_api_version = 2,
     make_default_target_header_only = True,
@@ -55,6 +81,8 @@ xla_proto_library(
       "driver/poplar_feed_config.proto",
     ],
     deps = [
+      ":option_flag_cc",
+      ":pipeline_config_cc",
       "//tensorflow/compiler/xla:xla_data_proto",
       "//tensorflow/core:protos_all",
     ],
@@ -68,6 +96,8 @@ tf_proto_library_py(
       "driver/poplar_feed_config.proto",
     ],
     deps = [
+      ":option_flag_py",
+      ":pipeline_config_py",
       "//tensorflow/compiler/xla:xla_data_proto_py",
       "//tensorflow/core:protos_all_py",
     ],
@@ -327,6 +357,8 @@ cc_library(
         ":backend_protos",
         ":custom_kernels_util",
         ":config_protos_cc_impl",
+        ":option_flag_cc_impl",
+        ":pipeline_config_cc_impl",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:call_inliner",
         "//tensorflow/compiler/xla/service:flatten_call_graph",
@@ -507,6 +539,8 @@ cc_library(
         ":custom_kernels_util",
         ":optimizers",
         ":config_protos_cc_impl",
+        ":option_flag_cc_impl",
+        ":pipeline_config_cc_impl",
         "//tensorflow/compiler/xla/service/cpu:cpu_runtime",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
@@ -1393,6 +1427,18 @@ xla_test(
 xla_test(
     name = "pipeline_grouped_visitor_test",
     srcs = ["tests/pipeline_grouped_visitor_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "pipeline_sequential_visitor_test",
+    srcs = ["tests/pipeline_sequential_visitor_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -3158,6 +3204,7 @@ test_suite(
         "pipeline_optimizer_test",
         "pipeline_recomputation_test",
         "pipeline_resource_update_fixer_test",
+        "pipeline_sequential_visitor_test",
         "pipeline_util_test",
         "pipeline_visitor_test",
         "recomputation_test",

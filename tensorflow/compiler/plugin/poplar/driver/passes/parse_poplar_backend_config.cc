@@ -72,11 +72,12 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
               pipeline_config->set_repeat_count(repeat_count);
 
               // Get the interleave flag.
-              TF_ASSIGN_OR_RETURN(
-                  std::string interleave_str,
-                  GetAttribute(attributes, PIPELINE_INTERLEAVE));
-              bool interleave = std::stol(interleave_str) == 1;
-              pipeline_config->set_interleave(interleave);
+              TF_ASSIGN_OR_RETURN(std::string schedule_str,
+                                  GetAttribute(attributes, PIPELINE_SCHEDULE));
+              auto schedule = static_cast<
+                  PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>(
+                  std::stoi(schedule_str));
+              pipeline_config->set_schedule({schedule});
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:

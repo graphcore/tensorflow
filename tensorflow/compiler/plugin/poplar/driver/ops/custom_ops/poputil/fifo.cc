@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
@@ -32,6 +33,7 @@ limitations under the License.
 
 #include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
+#include <popops/Zero.hpp>
 #include <poputil/Util.hpp>
 
 namespace xla {
@@ -44,6 +46,27 @@ uint32 find_powerof2_mask(uint32 v) {
   assert(is_powerof2(v));
 
   return 0xFFFFFFFF % v;
+}
+
+bool IsFifoInPipeline(const HloInstruction* inst, CallGraph* call_graph) {
+  auto call_sites = call_graph->GetNode(inst->parent()).caller_callsites();
+  return call_sites.size() == 1 && IsPipelineOp(call_sites[0].instruction());
+}
+
+Status AddWriteUndefToFIFOBuffer(const HloInstruction* inst,
+                                 const poplar::Tensor& buffer,
+                                 CompilerResources& res) {
+  if (IsFifoInPipeline(inst, res.module_call_graph.get())) {
+    // We need to write undef the FIFO buffer otherwise it will be marked as
+    // always live in Poplar as we never write to it fully in the pipeline.
+    if (res.pipelining_write_undef_sequences.empty()) {
+      return FailedPrecondition("Cannot WriteUndef a FIFO buffer.");
+    }
+    poplar::program::Sequence seq;
+    seq.add(poplar::program::WriteUndef(buffer));
+    res.pipelining_write_undef_sequences.top().push_back(seq);
+  }
+  return Status::OK();
 }
 
 std::map<std::size_t, poplar::Interval> GetInverseIntervalsMap(
@@ -68,6 +91,7 @@ class FifoOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     auto fifo_inst = Cast<HloFifoInstruction>(inst);
     poplar::program::Sequence seq;
+    const std::string debug_name = GetDebugName(inst);
 
     ArgVector inputs =
         FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
@@ -77,7 +101,7 @@ class FifoOp : public PoplarOpDef {
       for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
         poplar::Tensor output = poputil::duplicate(
             graph, inputs[tuple_idx], seq,
-            absl::StrCat(GetDebugName(inst), "/copy/", tuple_idx),
+            absl::StrCat(debug_name, "/copy/", tuple_idx),
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
       }
@@ -89,9 +113,9 @@ class FifoOp : public PoplarOpDef {
       for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
         poplar::Tensor input = inputs[tuple_idx];
         // Create the output with the same mapping as the input.
-        poplar::Tensor output = graph.clone(
-            input, absl::StrCat(GetDebugName(inst), "/out/", tuple_idx),
-            poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        poplar::Tensor output =
+            graph.clone(input, absl::StrCat(debug_name, "/out/", tuple_idx),
+                        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
         // Flatten inputs and outputs.
         poplar::Tensor input_flat = input.flatten();
@@ -109,8 +133,9 @@ class FifoOp : public PoplarOpDef {
         // Create a buffer of the given depth and the same mapping as the
         // input.
         poplar::Tensor buffer = graph.clone(
-            input_flat, absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx),
+            input_flat, absl::StrCat(debug_name, "/buffer/", tuple_idx),
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+        TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(inst, buffer, res));
         // Copy the content of the buffer to the output.
         seq.add(poplar::program::Copy(buffer, output_flat));
 
@@ -121,8 +146,8 @@ class FifoOp : public PoplarOpDef {
     }
 
     // Keep track of where in the buffer we are.
-    auto counter = graph.addVariable(poplar::UNSIGNED_INT, {},
-                                     GetDebugName(inst) + "/counter");
+    auto counter =
+        graph.addVariable(poplar::UNSIGNED_INT, {}, debug_name + "/counter");
     graph.setTileMapping(counter, 0);
     res.zeroed_tensors.push_back(counter);
 
@@ -177,13 +202,14 @@ class FifoOp : public PoplarOpDef {
       const size_t fifo_depth = fifo_inst->depth();
       poplar::Tensor buffer = popops::createSliceableTensorFromSlice(
           graph, input_flat.expand({0}), {0}, {fifo_depth},
-          absl::StrCat(GetDebugName(inst), "/buffer/", tuple_idx));
+          absl::StrCat(debug_name, "/buffer/", tuple_idx));
+      TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(inst, buffer, res));
 
       // Create the output with the same mapping as the input.
       poplar::Tensor output_flat =
-          popops::dynamicSlice(
-              graph, buffer, counter.reshape({1}), {0}, {1}, seq,
-              absl::StrCat(GetDebugName(inst), "/pop/", tuple_idx))
+          popops::dynamicSlice(graph, buffer, counter.reshape({1}), {0}, {1},
+                               seq,
+                               absl::StrCat(debug_name, "/pop/", tuple_idx))
               .squeeze({0});
 
       // Reconstruct the output tensor from the intervals.
@@ -210,9 +236,9 @@ class FifoOp : public PoplarOpDef {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
 
       // Update the buffer with the new value.
-      popops::dynamicUpdate(
-          graph, buffer, input_flat.expand({0}), counter.reshape({1}), {0}, {1},
-          seq, absl::StrCat(GetDebugName(inst), "/push/", tuple_idx));
+      popops::dynamicUpdate(graph, buffer, input_flat.expand({0}),
+                            counter.reshape({1}), {0}, {1}, seq,
+                            absl::StrCat(debug_name, "/push/", tuple_idx));
     }
 
     // A slightly faster path if the depth is a power of two
@@ -223,14 +249,14 @@ class FifoOp : public PoplarOpDef {
           popops::expr::BitwiseAnd(
               popops::expr::Add(popops::expr::_1, popops::expr::Const(1)),
               popops::expr::Const(find_powerof2_mask(fifo_inst->depth()))),
-          {counter}, seq, GetDebugName(inst) + "/counter_inc_mask");
+          {counter}, seq, debug_name + "/counter_inc_mask");
     } else {
       popops::mapInPlace(
           graph,
           popops::expr::Rem(
               popops::expr::Add(popops::expr::_1, popops::expr::Const(1)),
               popops::expr::Const(fifo_inst->depth())),
-          {counter}, seq, GetDebugName(inst) + "/counter_inc_mod");
+          {counter}, seq, debug_name + "/counter_inc_mod");
     }
     return seq;
   }

@@ -63,7 +63,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class PipelineVisitorTest : public HloTestBase {};
+class PipelineSeqVisitorTest : public HloTestBase {};
 
 std::unique_ptr<CompilerResources> GetMockResources(
     poplar::Device& device, HloModule* module, bool merge_infeeds,
@@ -102,7 +102,7 @@ poplar::Device createIpuModel(int IPUCount = 1, int IPUTileCount = 1216) {
 
 // This tests that the print tensor statements get printed in the expected
 // order, given a pipeline poplar control program.
-TEST_F(PipelineVisitorTest, TestPipelineVisitorOrder) {
+TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorOrder) {
   const string& hlo_string = R"(
 HloModule module
 
@@ -198,7 +198,7 @@ ENTRY pipeline {
   resources->main_graph->setTileMapping(placeholder, 0);
 
   PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -221,16 +221,16 @@ ENTRY pipeline {
   const std::string expected = R"(/custom-call: 1
 /custom-call.1: 2
 /custom-call.2: 4
-/custom-call: 1
 /custom-call.3: 5
+/custom-call: 1
 /custom-call.1: 2
-/custom-call: 1
 /custom-call.2: 4
+/custom-call.3: 5
+/custom-call: 1
 /custom-call.1: 2
-/custom-call.3: 5
 /custom-call.2: 4
-/custom-call: 1
 /custom-call.3: 5
+/custom-call: 1
 /custom-call.1: 2
 /custom-call.2: 4
 /custom-call.3: 5
@@ -241,7 +241,7 @@ ENTRY pipeline {
 
 // This tests that the output value has the expected value, given a pipeline
 // poplar control program.
-TEST_F(PipelineVisitorTest, TestPipelineVisitorValue) {
+TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorValue) {
   const string& hlo_string = R"(
 HloModule module
 
@@ -271,8 +271,7 @@ _stage_0_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
 
@@ -331,7 +330,7 @@ ENTRY pipeline {
   resources->main_graph->setTileMapping(placeholder, 0);
 
   PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -364,7 +363,7 @@ ENTRY pipeline {
 
 // This tests that the output value has the expected value, given a pipeline
 // poplar control program with a fifo.
-TEST_F(PipelineVisitorTest, TestPipelineVisitorFifoValue) {
+TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorFifoValue) {
   const string& hlo_string = R"(
 HloModule module
 
@@ -394,8 +393,7 @@ _stage_0_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   param_1 = f32[] parameter(1), sharding={maximal device=0}
   add_0 = f32[] add(param_0, param_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
 
@@ -404,7 +402,7 @@ ENTRY pipeline {
 
   a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
+  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":0}", sharding={maximal device=0}
   b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -457,7 +455,7 @@ ENTRY pipeline {
   resources->main_graph->setTileMapping(placeholder, 0);
 
   PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -488,7 +486,7 @@ ENTRY pipeline {
 
 // This tests that the output value has the expected value, given a pipeline
 // poplar control program with a fifo and tuples.
-TEST_F(PipelineVisitorTest, TestPipelineVisitorFifoValueTuples) {
+TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorFifoValueTuples) {
   const string& hlo_string = R"(
 HloModule module
 
@@ -523,8 +521,7 @@ _stage_0_bw {
   add_1 = f32[2] get-tuple-element(fifo_tuple), index=2, sharding={maximal device=0}
 
   add_0 = f32[2] add(param, add_1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
 
@@ -533,7 +530,7 @@ ENTRY pipeline {
 
   a0 = ((f32[2], f32[4], f32[2], f32[2])) call(arg), to_apply=_stage_0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = (f32[2], f32[4], f32[2], f32[2]) get-tuple-element(a0), index=0, sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}, backend_config="{\"isInplace\":true}"
-  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
+  a1 = (f32[2], f32[4], f32[2], f32[2]) custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":0}", sharding={{maximal device=0},{maximal device=0},{maximal device=0},{maximal device=0}}
   b0 = (f32[2]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[2] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -586,7 +583,7 @@ ENTRY pipeline {
   resources->main_graph->setTileMapping(placeholder, 0);
 
   PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -619,331 +616,8 @@ ENTRY pipeline {
   ASSERT_EQ(expected, ss.str());
 }
 
-// This tests that poplar OnTileExecute programs overlap sufficiently for a
-// pipeline computation.
-TEST_F(PipelineVisitorTest, TestPipelineVisitorFifoOverlap) {
-  const string& hlo_string = R"(
-HloModule module
-
-_stage_0 {
-  param_0 = f32[] parameter(0), sharding={maximal device=0}
-  temp_0 = f32[] constant(0), sharding={maximal device=0}
-  const_1 = f32[] constant(1), sharding={maximal device=0}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
-}
-
-_stage_1 {
-  param_0 = f32[] parameter(0), sharding={maximal device=1}
-  const_1 = f32[] constant(1), sharding={maximal device=1}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
-}
-
-_stage_1_bw {
-  param_0 = f32[] parameter(0), sharding={maximal device=1}
-  const_1 = f32[] constant(1), sharding={maximal device=1}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
-}
-
-_stage_0_bw {
-  param_0 = f32[] parameter(0), sharding={maximal device=0}
-  param_1 = f32[] parameter(1), sharding={maximal device=0}
-  add_0 = f32[] add(param_0, param_1), sharding={maximal device=0}
-  ROOT t = (f32[]) tuple(add_0), sharding={{maximal device=0}}
-}
-
-ENTRY pipeline {
-  arg = f32[] parameter(0), sharding={maximal device=0}
-
-  a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}
-  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
-  b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}
-  c0 = (f32[]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=1}
-  ROOT d = (f32[]) call(gte_c, a1), to_apply=_stage_0_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-}
-)";
-  auto device = createIpuModel(2, 4);
-
-  std::unique_ptr<HloModule> module =
-      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
-  auto resources = GetMockResources(device, module.get(), false, 2);
-
-  CustomOpReplacer replacer;
-  EXPECT_TRUE(replacer.Run(module.get()).ValueOrDie());
-
-  InterIpuCopyInserter inserter;
-  EXPECT_TRUE(inserter.Run(module.get()).ValueOrDie());
-
-  HloTrivialScheduler scheduler;
-  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
-
-  auto entry_computation = module->entry_computation();
-
-  // Count the number of stages
-  const auto stage_count = absl::c_count_if(
-      entry_computation->instructions(), [](const HloInstruction* hlo) {
-        return hlo->opcode() == HloOpcode::kCall;
-      });
-
-  // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
-      {entry_computation->GetInstructionWithName("arg"), 0},
-      {entry_computation->GetInstructionWithName("a0"), 0},
-      {entry_computation->GetInstructionWithName("gte_a"), 0},
-      {entry_computation->GetInstructionWithName("b0"), 1},
-      {entry_computation->GetInstructionWithName("gte_b"), 1},
-      {entry_computation->GetInstructionWithName("c0"), 2},
-      {entry_computation->GetInstructionWithName("gte_c"), 2},
-      {entry_computation->GetInstructionWithName("d"), 3},
-      // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call"), 0},
-      // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.1"), 2},
-      // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
-  };
-
-  auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
-  resources->main_graph->setTileMapping(placeholder, 0);
-
-  PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
-  TF_EXPECT_OK(entry_computation->Accept(&visitor));
-
-  // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(6).ValueOrDie();
-
-  // Build and run the graph
-  poplar::Engine engine(*resources->main_graph, program);
-  engine.enableExecutionProfiling();
-
-  device.attach();
-  engine.load(device);
-  engine.run(0);
-  device.detach();
-
-  // Get the execution steps
-  auto exec_profile = engine.getExecutionProfile();
-  auto steps = exec_profile["simulation"]["steps"].asVector();
-
-  // Only consider the on tile execute steps
-  auto is_on_tile_exec_pred = [](const poplar::ProfileValue& step) -> bool {
-    return step["type"].asString() == "OnTileExecute";
-  };
-  auto itr =
-      std::stable_partition(steps.begin(), steps.end(), is_on_tile_exec_pred);
-
-  // And only consider the computation steps
-  auto is_add_pred = [](const poplar::ProfileValue& step) -> bool {
-    return step.asMap().count("name") == 1 &&
-           absl::StrContains(step["name"].asString(), "add") &&
-           !absl::StrContains(step["name"].asString(), "Copy");
-  };
-  itr = std::stable_partition(steps.begin(), itr, is_add_pred);
-  steps.erase(itr, steps.end());
-
-  // Compute the total number of cycles that were overlapped
-  auto overlapped_cycles = [](int accum,
-                              const poplar::ProfileValue& step) -> int {
-    return accum + step["cyclesOverlapped"].asInt();
-  };
-  int total_overlapped_cycles =
-      std::accumulate(steps.begin(), steps.end(), 0, overlapped_cycles);
-
-  // Check we overlapped enough cycles. This value was determined empirically
-  ASSERT_GT(total_overlapped_cycles, 1500);
-}
-
-// This tests that poplar OnTileExecute programs overlap sufficiently for a
-// pipeline computation.
-TEST_F(PipelineVisitorTest, TestPipelineVisitorRevisitIPU) {
-  const string& hlo_string = R"(
-HloModule module
-
-_stage_0 {
-  param_0 = f32[] parameter(0), sharding={maximal device=0}
-  temp_0 = f32[] constant(0), sharding={maximal device=0}
-  const_1 = f32[] constant(1), sharding={maximal device=0}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
-}
-
-_stage_1 {
-  param_0 = f32[] parameter(0), sharding={maximal device=1}
-  const_1 = f32[] constant(1), sharding={maximal device=1}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
-}
-
-_stage_2 {
-  param_0 = f32[] parameter(0), sharding={maximal device=2}
-  const_1 = f32[] constant(1), sharding={maximal device=2}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=2}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=2}}
-}
-
-_stage_2_bw {
-  param_0 = f32[] parameter(0), sharding={maximal device=1}
-  const_1 = f32[] constant(1), sharding={maximal device=1}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
-}
-
-_stage_1_bw {
-  param_0 = f32[] parameter(0), sharding={maximal device=0}
-  param_1 = f32[] parameter(1), sharding={maximal device=0}
-  const_1 = f32[] constant(1), sharding={maximal device=0}
-  add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
-  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
-}
-
-_stage_0_bw {
-  param_0 = f32[] parameter(0), sharding={maximal device=1}
-  param_1 = f32[] parameter(1), sharding={maximal device=1}
-  add_0 = f32[] add(param_0, param_1), sharding={maximal device=1}
-  ROOT t = (f32[]) tuple(add_0), sharding={{maximal device=1}}
-}
-
-ENTRY pipeline {
-  arg = f32[] parameter(0), sharding={maximal device=0}
-
-  a0 = (f32[]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-  gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":2}", sharding={maximal device=0}
-  b0 = (f32[]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  b1 = f32[] custom-call(gte_b), custom_call_target="Fifo", backend_config="{\"depth\":2}", sharding={maximal device=1}
-  c0 = (f32[]) call(gte_b), to_apply=_stage_2, sharding={{maximal device=2}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
-  gte_c = f32[] get-tuple-element(c0), index=0, sharding={maximal device=2}, backend_config="{\"isInplace\":true}"
-  d0 = (f32[]) call(gte_c), to_apply=_stage_2_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
-  gte_d = f32[] get-tuple-element(d0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
-  e0 = (f32[]) call(gte_d, b1), to_apply=_stage_1_bw, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
-  gte_e = f32[] get-tuple-element(e0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  ROOT d = (f32[]) call(gte_e, a1), to_apply=_stage_0_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
-}
-)";
-  auto device = createIpuModel(4, 4);
-
-  std::unique_ptr<HloModule> module =
-      ParseAndReturnVerifiedModule(hlo_string).ConsumeValueOrDie();
-  auto resources = GetMockResources(device, module.get(), false, 4);
-
-  CustomOpReplacer replacer;
-  EXPECT_TRUE(replacer.Run(module.get()).ValueOrDie());
-
-  InterIpuCopyInserter inserter;
-  EXPECT_TRUE(inserter.Run(module.get()).ValueOrDie());
-
-  HloTrivialScheduler scheduler;
-  EXPECT_TRUE(scheduler.Run(module.get()).ValueOrDie());
-
-  auto entry_computation = module->entry_computation();
-
-  // Count the number of stages
-  const auto stage_count = absl::c_count_if(
-      entry_computation->instructions(), [](const HloInstruction* hlo) {
-        return hlo->opcode() == HloOpcode::kCall;
-      });
-
-  // Assign each instruction in the pipeline to a stage
-  const absl::flat_hash_map<const HloInstruction*, int> stage_assignments = {
-      {entry_computation->GetInstructionWithName("arg"), 0},
-      {entry_computation->GetInstructionWithName("a0"), 0},
-      {entry_computation->GetInstructionWithName("gte_a"), 0},
-      {entry_computation->GetInstructionWithName("b0"), 1},
-      {entry_computation->GetInstructionWithName("gte_b"), 1},
-      {entry_computation->GetInstructionWithName("c0"), 2},
-      {entry_computation->GetInstructionWithName("gte_c"), 2},
-      {entry_computation->GetInstructionWithName("d0"), 3},
-      {entry_computation->GetInstructionWithName("gte_d"), 3},
-      {entry_computation->GetInstructionWithName("e0"), 4},
-      {entry_computation->GetInstructionWithName("gte_e"), 4},
-      {entry_computation->GetInstructionWithName("d"), 5},
-      // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call"), 0},
-      // FIFO after stage 0
-      {entry_computation->GetInstructionWithName("custom-call.1"), 1},
-      // Inter-ipu-copy between stage 0 and 1
-      {entry_computation->GetInstructionWithName("custom-call.2"), 0},
-      // Inter-ipu-copy between stage 1 and 2
-      {entry_computation->GetInstructionWithName("custom-call.3"), 1},
-      // Inter-ipu-copy between stage 2 and 3
-      {entry_computation->GetInstructionWithName("custom-call.4"), 2},
-      // Inter-ipu-copy between stage 3 and 4
-      {entry_computation->GetInstructionWithName("custom-call.5"), 3},
-      // Inter-ipu-copy between stage 1 and 4
-      {entry_computation->GetInstructionWithName("custom-call.6"), 1},
-      // Inter-ipu-copy between stage 4 and 5
-      {entry_computation->GetInstructionWithName("custom-call.7"), 4},
-      // Inter-ipu-copy between stage 0 and 5
-      {entry_computation->GetInstructionWithName("custom-call.8"), 0},
-  };
-
-  auto placeholder = resources->main_graph->addVariable(poplar::FLOAT, {});
-  resources->main_graph->setTileMapping(placeholder, 0);
-
-  PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, *resources, {{placeholder}});
-  TF_EXPECT_OK(entry_computation->Accept(&visitor));
-
-  // Get the pipeline program
-  auto program = visitor.GetPipelineSequence(6).ValueOrDie();
-
-  // Build and run the graph
-  poplar::Engine engine(*resources->main_graph, program);
-  engine.enableExecutionProfiling();
-
-  device.attach();
-  engine.load(device);
-  engine.run(0);
-  device.detach();
-
-  // Get the execution steps
-  auto exec_profile = engine.getExecutionProfile();
-  auto steps = exec_profile["simulation"]["steps"].asVector();
-
-  // Only consider the on tile execute steps
-  auto is_on_tile_exec_pred = [](const poplar::ProfileValue& step) -> bool {
-    return step["type"].asString() == "OnTileExecute";
-  };
-  auto itr =
-      std::stable_partition(steps.begin(), steps.end(), is_on_tile_exec_pred);
-
-  // And only consider the computation steps
-  auto is_add_pred = [](const poplar::ProfileValue& step) -> bool {
-    return step.asMap().count("name") == 1 &&
-           absl::StrContains(step["name"].asString(), "add") &&
-           !absl::StrContains(step["name"].asString(), "Copy");
-  };
-  itr = std::stable_partition(steps.begin(), itr, is_add_pred);
-  steps.erase(itr, steps.end());
-
-  // Compute the total number of cycles that were overlapped
-  auto overlapped_cycles = [](int accum,
-                              const poplar::ProfileValue& step) -> int {
-    return accum + step["cyclesOverlapped"].asInt();
-  };
-  int total_overlapped_cycles =
-      std::accumulate(steps.begin(), steps.end(), 0, overlapped_cycles);
-
-  // Check we overlapped enough cycles. This value was determined empirically
-  ASSERT_GT(total_overlapped_cycles, 2000);
-}
-
 // Tests that poplar revisits IPUs in the expected order.
-// We expect the schedule to look like
-// ||A|A| | |E|E||A|A| | |E|E||A| | | |E| ||
-// || |B|B|D|D|F||F|B|B|D|D|F||F|B| |D| |F||
-// || | |C|C| | || | |C|C| | || | |C| | | ||
-// ||  RAMP-UP  ||   REPEAT  || RAMP-DOWN ||
-TEST_F(PipelineVisitorTest, TestPipelineVisitorRevisitIPUOrder) {
+TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorRevisitIPUOrder) {
   const string& hlo_string = R"(
 HloModule module
 
@@ -951,8 +625,7 @@ _stage_0 {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   temp_0 = f32[] constant(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
-  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=0}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
 }
@@ -960,8 +633,7 @@ _stage_0 {
 _stage_1 {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=1}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=1}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
 }
@@ -969,8 +641,7 @@ _stage_1 {
 _stage_2 {
   param_0 = f32[] parameter(0), sharding={maximal device=2}
   const_1 = f32[] constant(1), sharding={maximal device=2}
-  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=2}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=2}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=2}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=2}}
 }
@@ -978,8 +649,7 @@ _stage_2 {
 _stage_2_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=1}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=1}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=1}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
 }
@@ -987,8 +657,7 @@ _stage_2_bw {
 _stage_1_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=0}
   const_1 = f32[] constant(1), sharding={maximal device=0}
-  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=0}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   add_1 = f32[] add(param_0, const_1), sharding={maximal device=0}
   ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=0}}
 }
@@ -996,8 +665,7 @@ _stage_1_bw {
 _stage_0_bw {
   param_0 = f32[] parameter(0), sharding={maximal device=1}
   const_1 = f32[] constant(1), sharding={maximal device=1}
-  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=1}
+  token_f = token[] custom-call(param_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=1}
   add_0 = f32[] add(param_0, const_1), sharding={maximal device=1}
   ROOT t = (f32[]) tuple(add_0), sharding={{maximal device=1}}
 }
@@ -1071,7 +739,7 @@ ENTRY pipeline {
   resources->main_graph->setTileMapping(placeholder, 0);
 
   PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 2, 1, 0, 1}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -1092,50 +760,50 @@ ENTRY pipeline {
 
   const std::string expected = R"(/custom-call: 0
 /custom-call.1: 1
-/custom-call: 0
 /custom-call.2: 2
-/custom-call.1: 1
 /custom-call.3: 3
-/custom-call.2: 2
 /custom-call.4: 4
-/custom-call.3: 3
 /custom-call.5: 5
-/custom-call.4: 4
 /custom-call: 0
-/custom-call.5: 5
 /custom-call.1: 1
-/custom-call: 0
 /custom-call.2: 2
-/custom-call.1: 1
 /custom-call.3: 3
-/custom-call.2: 2
 /custom-call.4: 4
-/custom-call.3: 3
 /custom-call.5: 5
-/custom-call.4: 4
 /custom-call: 0
-/custom-call.5: 5
 /custom-call.1: 1
-/custom-call: 0
 /custom-call.2: 2
-/custom-call.1: 1
 /custom-call.3: 3
-/custom-call.2: 2
 /custom-call.4: 4
-/custom-call.3: 3
 /custom-call.5: 5
-/custom-call.4: 4
 /custom-call: 0
-/custom-call.5: 5
 /custom-call.1: 1
-/custom-call: 0
 /custom-call.2: 2
-/custom-call.1: 1
 /custom-call.3: 3
-/custom-call.2: 2
 /custom-call.4: 4
-/custom-call.3: 3
 /custom-call.5: 5
+/custom-call: 0
+/custom-call.1: 1
+/custom-call.2: 2
+/custom-call.3: 3
+/custom-call.4: 4
+/custom-call.5: 5
+/custom-call: 0
+/custom-call.1: 1
+/custom-call.2: 2
+/custom-call.3: 3
+/custom-call.4: 4
+/custom-call.5: 5
+/custom-call: 0
+/custom-call.1: 1
+/custom-call.2: 2
+/custom-call.3: 3
+/custom-call.4: 4
+/custom-call.5: 5
+/custom-call: 0
+/custom-call.1: 1
+/custom-call.2: 2
+/custom-call.3: 3
 /custom-call.4: 4
 /custom-call.5: 5
 )";
@@ -1146,7 +814,7 @@ ENTRY pipeline {
 // This tests that the output value has the expected value, given a pipeline
 // poplar control program with a fifo and tuples.
 // Also make sure that aliasing is preserved by the FIFO.
-TEST_F(PipelineVisitorTest, TestPipelineVisitorFifoValueBroadcastTuples) {
+TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorFifoValueBroadcastTuples) {
   const string& hlo_string = R"(
 HloModule module
 
@@ -1176,8 +844,7 @@ _stage_0_bw {
   param = f32[2] parameter(0), sharding={maximal device=0}
   param1 = f32[2] parameter(1), sharding={maximal device=0}
   add_0 = f32[2] add(param, param1), sharding={maximal device=0}
-  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}
-  ", sharding={maximal device=0}
+  token_f = token[] custom-call(add_0), custom_call_target="PrintTensor", backend_config="{}", sharding={maximal device=0}
   ROOT t = () tuple(), sharding={{maximal device=0}}
 }
 
@@ -1186,7 +853,7 @@ ENTRY pipeline {
 
   a0 = (f32[2]) call(arg), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   gte_a = f32[2] get-tuple-element(a0), index=0, sharding={maximal device=0}, backend_config="{\"isInplace\":true}"
-  a1 = f32[2] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":1}", sharding={maximal device=0}
+  a1 = f32[2] custom-call(gte_a), custom_call_target="Fifo", backend_config="{\"depth\":0}", sharding={maximal device=0}
   b0 = (f32[2]) call(gte_a), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
   gte_b = f32[2] get-tuple-element(b0), index=0, sharding={maximal device=1}, backend_config="{\"isInplace\":true}"
   c0 = (f32[2]) call(gte_b), to_apply=_stage_1_bw, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
@@ -1239,7 +906,7 @@ ENTRY pipeline {
   resources->main_graph->setTileMapping(placeholder, 0);
 
   PipelineVisitor visitor(
-      PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
+      PoplarBackendConfig::CallConfig::PipelineConfig::Sequential, stage_count,
       {0, 1, 1, 0}, stage_assignments, {}, *resources, {{placeholder}});
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
@@ -1279,7 +946,7 @@ ENTRY pipeline {
   ASSERT_EQ(expected, ss.str());
 }
 
-TEST_F(PipelineVisitorTest, TestPipelineVisitorMergedCopies) {
+TEST_F(PipelineSeqVisitorTest, TestPipelineVisitorMergedCopies) {
   const string& hlo_string = R"(
 HloModule module
 

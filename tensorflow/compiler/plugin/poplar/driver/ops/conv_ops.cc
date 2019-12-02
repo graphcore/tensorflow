@@ -1,3 +1,17 @@
+/* Copyright 2017-2019 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
 #include <algorithm>
 
 #include "absl/strings/str_cat.h"
@@ -99,13 +113,9 @@ StatusOr<poplar::program::Program> CreateConv2D(CompilerResources& res,
 
   kernel = AddGroupsDimensionToWeights(params, kernel, false);
 
-  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
-
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor out,
-      conv_graph_caching::DoCachedConvolution(
-          graph, res, in, kernel, params, conv_type, false,
-          GetSingleShardingDeviceId(inst), prog, GetDebugName(inst)));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor out,
+                      conv_graph_caching::DoCachedConvolution(
+                          graph, res, in, kernel, params, inst, false, prog));
 
   out = ShuffleConvolutionOutputToTensorflow(inst, out);
 
@@ -138,13 +148,9 @@ StatusOr<poplar::program::Program> Create2DConvWithReverse(
 
   kernel = AddGroupsDimensionToWeights(params, kernel, true);
 
-  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
-
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor out,
-      conv_graph_caching::DoCachedConvolution(
-          graph, res, in, kernel, params, conv_type, true,
-          GetSingleShardingDeviceId(inst), prog, GetDebugName(inst)));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor out,
+                      conv_graph_caching::DoCachedConvolution(
+                          graph, res, in, kernel, params, inst, true, prog));
 
   out = ShuffleConvolutionOutputToTensorflow(inst, out);
 
@@ -183,13 +189,9 @@ StatusOr<poplar::program::Program> CreateDepthwiseBackpropFilter(
 
   kernel = AddGroupsDimensionToWeights(params, kernel, false);
 
-  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
-
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor out,
-      conv_graph_caching::DoCachedConvolution(
-          graph, res, in, kernel, params, conv_type, false,
-          GetSingleShardingDeviceId(inst), prog, GetDebugName(inst)));
+  TF_ASSIGN_OR_RETURN(poplar::Tensor out,
+                      conv_graph_caching::DoCachedConvolution(
+                          graph, res, in, kernel, params, inst, false, prog));
 
   // Move 'G' parts of the B back to I
   out = out.reshapePartial(1, 2, {n_g, out.dim(1) / n_g});
@@ -233,10 +235,10 @@ StatusOr<poplar::program::Program> CreateConvScaledInplace(
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(inst, 1, 2));
 
-  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
-  auto opts = GetConvolutionOptionsForType(res, conv_type);
-  const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
+  TF_ASSIGN_OR_RETURN(poplar::OptionFlags opts,
+                      GetConvolutionOptionsForInst(inst, res));
 
+  const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
   // Get the root of the fusion - it indicates whether this is add or
   // subtract.
   const auto* root_inst =
