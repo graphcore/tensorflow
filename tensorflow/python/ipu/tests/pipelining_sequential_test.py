@@ -177,57 +177,58 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithDeviceMapping(self):
-    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
-    dataset = dataset.batch(batch_size=2, drop_remainder=True)
-
-    def dataset_parser(value):
-      a = value
-      b = (value + 10.) / 2.0
-      return {"a": a, "b": b}
-
-    dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed4")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed4")
-    device_mapping = [2, 0, 1]
-
-    def stage1(c, **kwargs):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(2,
-                          1,
-                          use_bias=True,
-                          kernel_initializer=init_ops.ones_initializer(),
-                          name='conv1')(kwargs["a"])
-        return y + kwargs["b"], c
-
-    def stage2(x, c):
-      return math_ops.reduce_sum(x) + c
-
-    def stage3(x):
-      return x
-
-    def my_net(c):
-      return pipelining_ops.pipeline(
-          [stage1, stage2, stage3],
-          12,
-          inputs=[c],
-          infeed_queue=infeed_queue,
-          outfeed_queue=outfeed_queue,
-          device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
-
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
-
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
-
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
-    utils.move_variable_initialization_to_cpu()
-
-    outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
+      dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        a = value
+        b = (value + 10.) / 2.0
+        return {"a": a, "b": b}
+
+      dataset = dataset.map(dataset_parser)
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed4")
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed4")
+      device_mapping = [2, 0, 1]
+
+      def stage1(c, **kwargs):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(kwargs["a"])
+          return y + kwargs["b"], c
+
+      def stage2(x, c):
+        return math_ops.reduce_sum(x) + c
+
+      def stage3(x):
+        return x
+
+      def my_net(c):
+        return pipelining_ops.pipeline(
+            [stage1, stage2, stage3],
+            12,
+            inputs=[c],
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            device_mapping=device_mapping,
+            pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
+
+      with ops.device('cpu'):
+        c = array_ops.placeholder(np.float32, shape=[])
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfeed_op = outfeed_queue.dequeue()
+
       report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
@@ -242,59 +243,60 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithDeviceMappingSameIpu(self):
-    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
-    dataset = dataset.batch(batch_size=2, drop_remainder=True)
-
-    def dataset_parser(value):
-      a = value
-      b = (value + 10.) / 2.0
-      return {"a": a, "b": b}
-
-    dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed5")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed5")
-    device_mapping = [2, 2, 2]
-
-    def stage1(c, **kwargs):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(2,
-                          1,
-                          use_bias=True,
-                          kernel_initializer=init_ops.ones_initializer(),
-                          name='conv1')(kwargs["a"])
-        return y + kwargs["b"], c
-
-    def stage2(x, c):
-      internal_ops.print_tensor(c, "stage2_c")
-      return math_ops.reduce_sum(x) + c
-
-    def stage3(x):
-      internal_ops.print_tensor(x, "stage3_x")
-      return x
-
-    def my_net(c):
-      return pipelining_ops.pipeline(
-          [stage1, stage2, stage3],
-          12,
-          inputs=[c],
-          infeed_queue=infeed_queue,
-          outfeed_queue=outfeed_queue,
-          device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
-
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
-
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
-
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
-    utils.move_variable_initialization_to_cpu()
-
-    outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
+      dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        a = value
+        b = (value + 10.) / 2.0
+        return {"a": a, "b": b}
+
+      dataset = dataset.map(dataset_parser)
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed5")
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed5")
+      device_mapping = [2, 2, 2]
+
+      def stage1(c, **kwargs):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(kwargs["a"])
+          return y + kwargs["b"], c
+
+      def stage2(x, c):
+        internal_ops.print_tensor(c, "stage2_c")
+        return math_ops.reduce_sum(x) + c
+
+      def stage3(x):
+        internal_ops.print_tensor(x, "stage3_x")
+        return x
+
+      def my_net(c):
+        return pipelining_ops.pipeline(
+            [stage1, stage2, stage3],
+            12,
+            inputs=[c],
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            device_mapping=device_mapping,
+            pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
+
+      with ops.device('cpu'):
+        c = array_ops.placeholder(np.float32, shape=[])
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfeed_op = outfeed_queue.dequeue()
+
       report = tu.ReportJSON(self, sess, configure_device=False)
       report.reset()
       sess.run(variables.global_variables_initializer())
@@ -310,55 +312,56 @@ class PipeliningSeqTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithInfeedsKwargs(self):
-    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
-    dataset = dataset.batch(batch_size=2, drop_remainder=True)
-
-    def dataset_parser(value):
-      a = value
-      b = (value + 10.) / 2.0
-      return {"a": a, "b": b}
-
-    dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed6")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed6")
-
-    def stage1(c, **kwargs):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(2,
-                          1,
-                          use_bias=True,
-                          kernel_initializer=init_ops.ones_initializer(),
-                          name='conv1')(kwargs["a"])
-        return y + kwargs["b"], c
-
-    def stage2(x, c):
-      return math_ops.reduce_sum(x) + c
-
-    def stage3(x):
-      return x
-
-    def my_net(c):
-      return pipelining_ops.pipeline(
-          [stage1, stage2, stage3],
-          12,
-          inputs=[c],
-          infeed_queue=infeed_queue,
-          outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
-
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
-
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
-
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
-    utils.move_variable_initialization_to_cpu()
-
-    outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
+      dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        a = value
+        b = (value + 10.) / 2.0
+        return {"a": a, "b": b}
+
+      dataset = dataset.map(dataset_parser)
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed6")
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed6")
+
+      def stage1(c, **kwargs):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          y = layers.Conv2D(2,
+                            1,
+                            use_bias=True,
+                            kernel_initializer=init_ops.ones_initializer(),
+                            name='conv1')(kwargs["a"])
+          return y + kwargs["b"], c
+
+      def stage2(x, c):
+        return math_ops.reduce_sum(x) + c
+
+      def stage3(x):
+        return x
+
+      def my_net(c):
+        return pipelining_ops.pipeline(
+            [stage1, stage2, stage3],
+            12,
+            inputs=[c],
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
+
+      with ops.device('cpu'):
+        c = array_ops.placeholder(np.float32, shape=[])
+
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net, inputs=[c])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfeed_op = outfeed_queue.dequeue()
+
       report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)

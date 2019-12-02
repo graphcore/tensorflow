@@ -73,35 +73,35 @@ tf_proto_library(
     j2objc_api_version = 1,
 )
 
-xla_proto_library(
+tf_proto_library(
     name = "backend_protos",
     srcs = [
       "driver/backend_config.proto",
       "driver/poplar_executable.proto",
       "driver/poplar_feed_config.proto",
     ],
-    deps = [
-      ":option_flag_cc",
-      ":pipeline_config_cc",
+    protodeps = [
+      ":option_flag",
+      ":pipeline_config",
       "//tensorflow/compiler/xla:xla_data_proto",
       "//tensorflow/core:protos_all",
     ],
 )
 
-tf_proto_library_py(
-    name = "backend_protos", # bzl adds a _py suffix
-    srcs = [
-      "driver/backend_config.proto",
-      "driver/poplar_executable.proto",
-      "driver/poplar_feed_config.proto",
-    ],
-    deps = [
-      ":option_flag_py",
-      ":pipeline_config_py",
-      "//tensorflow/compiler/xla:xla_data_proto_py",
-      "//tensorflow/core:protos_all_py",
-    ],
-)
+#tf_proto_library_py(
+#    name = "backend_protos", # bzl adds a _py suffix
+#    srcs = [
+#      "driver/backend_config.proto",
+#      "driver/poplar_executable.proto",
+#      "driver/poplar_feed_config.proto",
+#    ],
+#    deps = [
+#      ":option_flag_py",
+#      ":pipeline_config_py",
+#      "//tensorflow/compiler/xla:xla_data_proto_py",
+#      "//tensorflow/core:protos_all_py",
+#    ],
+#)
 
 tf_proto_library(
     name = "ops",
