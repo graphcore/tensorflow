@@ -538,7 +538,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 20
+    pipeline_depth = 24
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -577,8 +577,15 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 14172)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        14172,
+        schedule=pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -677,8 +684,15 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
-        dataset_fn, optimizer, self, 22738)
+        [stage1, stage2, stage3],
+        lambda: [], [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        22738,
+        schedule=pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -697,7 +711,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
 
       return dataset.map(dataset_parser)
 
-    pipeline_depth = 20
+    pipeline_depth = 24
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
@@ -729,8 +743,15 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 13821)
+        [stage1, stage2, stage3, stage4],
+        lambda: [], [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        13821,
+        schedule=pipelining_ops.PipelineSchedule.Grouped)
 
 
 if __name__ == "__main__":

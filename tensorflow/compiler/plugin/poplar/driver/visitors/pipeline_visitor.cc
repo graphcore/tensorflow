@@ -821,15 +821,11 @@ StatusOr<std::unique_ptr<PipelineStageVisitor>> CreatePipelineStageOp(
   seq.add(visitor->GetSequence());
   // Set the outputs.
   const OutVector& pipeline_outputs = visitor->outputs();
-  TF_ASSIGN_OR_RETURN(const std::vector<bool> add_output_copies,
-                      visitor->GetOutputCopies(inst, used_for_recomputation));
-  CHECK_EQ(pipeline_outputs.size(), add_output_copies.size());
   for (size_t i = 0; i < pipeline_outputs.size(); i++) {
-    poplar::Tensor output = pipeline_outputs[i];
-    if (add_output_copies[i]) {
-      output = poputil::duplicate(
-          graph, output, seq, absl::StrCat(GetDebugName(inst), "/output/", i));
-    }
+    auto output = poputil::duplicate(
+        graph, pipeline_outputs[i], seq,
+        absl::StrCat(GetDebugName(inst), "/output/", i),
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
   }
 
