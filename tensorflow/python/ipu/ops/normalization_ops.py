@@ -247,7 +247,7 @@ def group_norm(inputs,
   """
   return _group_norm_impl(inputs, groups, channels_axis, reduction_axes,
                           center, scale, epsilon, param_initializers, reuse,
-                          variables_collections, training, trainable,
+                          variables_collections, training, trainable, scope,
                           "GroupNorm")
 
 
