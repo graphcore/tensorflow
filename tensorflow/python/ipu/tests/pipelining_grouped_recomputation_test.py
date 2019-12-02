@@ -32,6 +32,7 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
@@ -41,6 +42,10 @@ disable_v2_behavior()
 class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
+
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -199,6 +204,12 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
+    else:
+      self.skipTest("FIXME: T13754")
+
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(10, shape=[4])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -249,6 +260,9 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
     # Stage3 has a stateful op there it cannot be recomputed.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])

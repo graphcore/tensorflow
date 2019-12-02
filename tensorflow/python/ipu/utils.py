@@ -149,6 +149,25 @@ def configure_ipu_system(config, device="cpu"):
     sess.run(cfg_op)
 
 
+def running_on_ipu_model(device="cpu"):
+  """ Check if XLA is configured to run on the ipu model.
+
+  Args:
+    device: The CPU device which is local to the IPU hardware
+
+  Returns:
+    True if XLA is configured to run on the ipu model.
+    False if XLA is configured to run on real hardware.
+  """
+  g = ops.Graph()
+  with g.as_default():
+    with ops.device(device):
+      op = gen_ipu_ops.ipu_model_used()
+
+  with session_lib.Session(graph=g) as sess:
+    return sess.run(op)
+
+
 @deprecation.deprecated_args(None, "Use set_optimization_options() instead.",
                              "max_cross_replica_sum_buffer_size",
                              "max_inter_ipu_copies_buffer_size")
@@ -307,8 +326,6 @@ def set_optimization_options(opts,
   opts.enable_matmul_combiner = combine_matmuls
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
-  return opts
-
   return opts
 
 

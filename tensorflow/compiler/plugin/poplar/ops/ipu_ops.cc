@@ -32,4 +32,11 @@ REGISTER_OP("IpuEventTrace")
     .Output("out: string")
     .SetIsStateful()
     .Doc("Fetch IPU trace events.");
+
+REGISTER_OP("IpuModelUsed")
+    .Output("out: bool")
+    .SetIsStateful()
+    .Doc(
+        "Return true if running on the model or false if real hardware is"
+        " used.");
 }  // namespace tensorflow

@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 
 #include "tensorflow/core/framework/node_def_util.h"
@@ -127,4 +128,23 @@ class IpuResetSeedOp : public OpKernel {
 REGISTER_KERNEL_BUILDER(Name("IpuResetSeed").Device(DEVICE_CPU),
                         IpuResetSeedOp);
 
+class IpuModelUsedOp : public OpKernel {
+ public:
+  explicit IpuModelUsedOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
+  ~IpuModelUsedOp() override{};
+
+  void Compute(OpKernelContext* ctx) override {
+    Tensor* output_tensor = nullptr;
+    OP_REQUIRES_OK(
+        ctx, ctx->allocate_output("out", TensorShape({1}), &output_tensor));
+    auto output_flat = output_tensor->flat<bool>();
+    output_flat(0) = xp::PoplarXlaFlags::Get().use_ipu_model;
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(IpuModelUsedOp);
+};
+
+REGISTER_KERNEL_BUILDER(Name("IpuModelUsed").Device(DEVICE_CPU),
+                        IpuModelUsedOp);
 }  // namespace tensorflow
