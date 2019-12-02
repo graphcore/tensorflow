@@ -18,6 +18,8 @@ limitations under the License.
 #include <map>
 #include <set>
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 
 #include "tensorflow/compiler/xla/statusor.h"
@@ -149,6 +151,10 @@ StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
 // Removes parameters from the call, and any operands which now have no users.
 StatusOr<HloInstruction*> RemoveParametersFromCall(
     HloInstruction* call, const std::set<int64>& parameters_to_remove);
+
+// Compute the fifo depth multiplier for the given schedule.
+StatusOr<int> ScheduleToFifoDepthMultiplier(
+    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule);
 
 // Removes outputs from the call, and GTEs which are not used by anything.
 Status RemoveOutputsFromCall(HloInstruction* call,

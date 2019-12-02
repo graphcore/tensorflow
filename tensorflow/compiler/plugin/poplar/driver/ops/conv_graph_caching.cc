@@ -18,6 +18,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/conv_graph_caching.h"
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/graph_caching_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -104,12 +106,15 @@ ConvolutionCacheKey GetConvolutionCacheKey(const poplin::ConvParams& params,
 StatusOr<poplar::Tensor> DoCachedConvolution(
     poplar::Graph& graph, CompilerResources& res, const poplar::Tensor& in,
     const poplar::Tensor& input_weights, const poplin::ConvParams& params,
-    const MLType& input_conv_type, bool input_transpose_and_flip_weights,
-    const uint64 device_id, poplar::program::Sequence& prog,
-    const std::string& debug_prefix) {
+    const HloInstruction* inst, bool input_transpose_and_flip_weights,
+    poplar::program::Sequence& prog) {
+  TF_ASSIGN_OR_RETURN(const MLType input_conv_type, GetMLType(inst));
+  const uint64 device_id = GetSingleShardingDeviceId(inst);
+  const std::string debug_prefix = GetDebugName(inst);
+
   // If this is a pass bwd convolution, turn it into a
-  // weightsTransposeChansFlipXY and a fwd pass convolution - this allows us to
-  // reuse the graph for the convolution and save code space.
+  // weightsTransposeChansFlipXY and a fwd pass convolution - this allows us
+  // to reuse the graph for the convolution and save code space.
   MLType conv_type = input_conv_type;
   poplar::Tensor weights = input_weights;
   bool transpose_and_flip_weights = input_transpose_and_flip_weights;
@@ -119,7 +124,8 @@ StatusOr<poplar::Tensor> DoCachedConvolution(
       !res.disable_graph_convolution_caching && transpose_and_flip_weights) {
     conv_type = MLType::TRAINING_FWD;
     transpose_and_flip_weights = false;
-    auto fwd_opts = GetConvolutionOptionsForType(res, conv_type);
+    TF_ASSIGN_OR_RETURN(const poplar::OptionFlags fwd_opts,
+                        GetConvolutionOptionsForInst(inst, res, conv_type));
     auto bwd_weights = poplin::createWeights(graph, params, "bwd_weights",
                                              fwd_opts, &res.convolution_cache);
     CreateCachedBwdWeights(graph, res, weights, bwd_weights, device_id, prog,
@@ -136,7 +142,8 @@ StatusOr<poplar::Tensor> DoCachedConvolution(
     auto& f = it->second;
     return f(args, prog);
   }
-  auto opts = GetConvolutionOptionsForType(res, conv_type);
+  TF_ASSIGN_OR_RETURN(const poplar::OptionFlags opts,
+                      GetConvolutionOptionsForInst(inst, res, conv_type));
 
   if (VLOG_IS_ON(2)) {
     std::stringstream stream;

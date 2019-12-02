@@ -24,9 +24,7 @@ from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import init_ops
-from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
@@ -46,7 +44,7 @@ from tensorflow.compat.v1 import disable_v2_behavior
 disable_v2_behavior()
 
 
-class PipeliningGroupedTest(test_util.TensorFlowTestCase):
+class PipeliningSeqTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testPipelineNoOutfeedInference(self):
     def stage1(x):
@@ -63,7 +61,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           [stage1, stage2],
           10,
           inputs=[x],
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -99,7 +97,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           10,
           inputs=[x],
           optimizer_function=optimizer_function,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -108,63 +106,6 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
       with self.assertRaisesRegex(ValueError,
                                   'The last computational stage has tensor'):
         ipu_compiler.compile(my_net, inputs=[x])
-
-  @test_util.deprecated_graph_mode_only
-  def testPipelineIterationsNotMultiple(self):
-    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
-    dataset = dataset.batch(batch_size=2, drop_remainder=True)
-
-    def dataset_parser(value):
-      a = value
-      b = (value + 10.) / 2.0
-      return {"a": a, "b": b}
-
-    dataset = dataset.map(dataset_parser)
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed1")
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed1")
-
-    def stage1(c, **kwargs):
-      with variable_scope.variable_scope("vs", use_resource=True):
-        y = layers.Conv2D(2,
-                          1,
-                          use_bias=True,
-                          kernel_initializer=init_ops.ones_initializer(),
-                          name='conv1')(kwargs["a"])
-        return y + kwargs["b"], c
-
-    def stage2(x, c):
-      return math_ops.reduce_sum(x) + c
-
-    def stage3(x):
-      return x
-
-    def my_net(c):
-      return pipelining_ops.pipeline(
-          [stage1, stage2, stage3],
-          10,
-          inputs=[c],
-          infeed_queue=infeed_queue,
-          outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
-
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
-
-    with ops.device("/device:IPU:0"):
-      r = ipu_compiler.compile(my_net, inputs=[c])
-
-    cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-    cfg = utils.auto_select_ipus(cfg, 4)
-    utils.configure_ipu_system(cfg)
-    utils.move_variable_initialization_to_cpu()
-
-    with tu.ipu_session() as sess:
-      sess.run(variables.global_variables_initializer())
-      sess.run(infeed_queue.initializer)
-      with self.assertRaisesRegex(
-          errors.FailedPreconditionError,
-          'The pipeline depth of the pipeline must be a multiple of 3'):
-        sess.run(r, {c: 10.01})
 
   @test_util.deprecated_graph_mode_only
   def testPipelineInvalidDeviceMapping(self):
@@ -208,7 +149,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=1,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     # Too many values:
     with self.assertRaisesRegex(ValueError,
@@ -220,7 +161,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=list(range(4)),
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     # Not enough values:
     with self.assertRaisesRegex(ValueError,
@@ -232,7 +173,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=tuple(range(1)),
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithDeviceMapping(self):
@@ -272,7 +213,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -339,7 +280,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
           device_mapping=device_mapping,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -403,7 +344,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           inputs=[c],
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -449,7 +390,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           10,
           inputs=[x],
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -469,7 +410,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           [stage1],
           10,
           inputs=[x],
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -500,7 +441,7 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
           12,
           inputs=[x, y],
           outfeed_queue=outfeed_queue,
-          pipeline_schedule=pipelining_ops.PipelineSchedule.Grouped)
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Sequential)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])

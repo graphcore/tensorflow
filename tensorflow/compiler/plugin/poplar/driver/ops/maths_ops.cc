@@ -717,11 +717,10 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
 
   const DotDimensionNumbers dot_dims = inst->dot_dimension_numbers();
   TF_ASSIGN_OR_RETURN(const std::string dot_type_s, GetMLTypeAsString(inst));
-  TF_ASSIGN_OR_RETURN(const MLType dot_type, GetMLType(inst));
-  const std::string debug_prefix = GetDebugName(inst);
+  TF_ASSIGN_OR_RETURN(const poplar::OptionFlags opts,
+                      GetMatMulOptionsForInst(inst, res));
 
-  auto opts = GetMatMulOptionsForType(res, dot_type);
-  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(inst, opts));
+  const std::string debug_prefix = GetDebugName(inst);
 
   // Created a cached dot.
   using namespace poputil::graphfn;

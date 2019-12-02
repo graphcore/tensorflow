@@ -113,11 +113,14 @@ bool IsReducableArtithmetic(const HloComputation*);
 
 StatusOr<bool> IsParallelMap(const HloInstruction*, const HloComputation*);
 
-poplar::OptionFlags GetConvolutionOptionsForType(CompilerResources& res,
-                                                 const MLType conv_type);
+StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res);
 
-poplar::OptionFlags GetMatMulOptionsForType(CompilerResources& res,
-                                            const MLType conv_type);
+StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res, const MLType conv_type);
+
+StatusOr<poplar::OptionFlags> GetMatMulOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res);
 
 poplar::program::Sequence ZeroTensors(CompilerResources& res);
 

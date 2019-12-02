@@ -260,21 +260,48 @@ void DumpIfPoplarOutOfMemoryAllocationException(
   }
 }
 
-poplar::OptionFlags GetConvolutionOptionsForType(CompilerResources& res,
-                                                 const MLType conv_type) {
+StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res) {
+  TF_ASSIGN_OR_RETURN(const MLType conv_type, GetMLType(inst));
+  return GetConvolutionOptionsForInst(inst, res, conv_type);
+}
+
+StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res,
+    const MLType conv_type) {
   poplar::OptionFlags opts = res.default_conv_options;
+  // Set the pass type.
   opts.set("pass", MLType_Name(conv_type));
+
+  // Set the options from the backend config.
+  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  for (const auto& opt : poplar_backend_config.convolution_options()) {
+    opts.set(opt.option(), opt.value());
+  }
+  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(poplar_backend_config, opts));
   return opts;
 }
 
-poplar::OptionFlags GetMatMulOptionsForType(CompilerResources& res,
-                                            const MLType mm_type) {
+StatusOr<poplar::OptionFlags> GetMatMulOptionsForInst(
+    const HloInstruction* inst, CompilerResources& res) {
   poplar::OptionFlags opts = res.default_matmul_options;
   if (!res.clear_matmul_pass_type) {
-    opts.set("fullyConnectedPass", MLType_Name(mm_type));
+    // Set the pass type.
+    TF_ASSIGN_OR_RETURN(const MLType ml_type, GetMLType(inst));
+    opts.set("fullyConnectedPass", MLType_Name(ml_type));
   }
+
+  // Set the options from the backend config.
+  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  for (const auto& opt : poplar_backend_config.matmul_options()) {
+    opts.set(opt.option(), opt.value());
+  }
+  TF_RETURN_IF_ERROR(SetPartialsTypeIfPresent(poplar_backend_config, opts));
   return opts;
 }
+
 Status SetPartialsTypeIfPresent(
     const PoplarBackendConfig& poplar_backend_config,
     poplar::OptionFlags& option_flags) {

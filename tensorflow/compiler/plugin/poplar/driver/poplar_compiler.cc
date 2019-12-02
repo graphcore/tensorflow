@@ -92,6 +92,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/cholesky_expander.h"
 #include "tensorflow/compiler/xla/service/computation_placer.h"
 #include "tensorflow/compiler/xla/service/dynamic_index_splitter.h"
@@ -492,7 +493,7 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     VLOG(1) << "Shards have been mapped to the following IPUs:";
     int64 next_shard_id = 0;
     for (unsigned hw_id : resources.shard_to_ipu_id) {
-      VLOG(1) << "  * Shard" << next_shard_id++ << " mapped to IPU " << hw_id;
+      VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
     }
   }
   main_graph.addCodelets(GetPathToGraphProgFile("tf.gp"));
@@ -786,6 +787,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     const auto& annotations = resources.annotations;
     XLA_VLOG_LINES(2, annotations.input_output_aliasing_map.ToString());
   }
+
+  // Create a call graph of the final compiled module which can be used by the
+  // lowering.
+  resources.module_call_graph = CallGraph::Build(module.get());
 
   std::unique_ptr<poplar::Engine> engine;
   std::vector<poplar::program::Program> progs;

@@ -42,6 +42,7 @@ limitations under the License.
 
 namespace xla {
 class HloInstruction;
+class CallGraph;
 
 namespace poplarplugin {
 
@@ -102,9 +103,14 @@ struct CompilerResources {
   std::stack<std::vector<poplar::program::Sequence>>
       pipelining_buffer_zeroing_sequences;
 
+  std::stack<std::vector<poplar::program::Sequence>>
+      pipelining_write_undef_sequences;
+
   std::string scheduler_selection;
 
   bool recomputation_enabled;
+
+  std::unique_ptr<CallGraph> module_call_graph;
 
   CompilerResources(
       const poplar::OptionFlags& conv_options,

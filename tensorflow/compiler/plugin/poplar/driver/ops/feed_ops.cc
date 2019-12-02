@@ -78,9 +78,17 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
   };
 
   if (io_batch_size != 1) {
+    // If the tensor is a scalar then we need to make sure the buffer is created
+    // with the right shape.
+    const bool is_scalar = tensor.rank() == 0;
+
     // Extend the old shape to add a new dimension for the batches of memory.
-    std::vector<size_t> new_shape = tensor.shape();
-    new_shape.insert(new_shape.begin(), io_batch_size);
+    std::vector<size_t> buffer_shape = tensor.shape();
+    buffer_shape.insert(buffer_shape.begin(), io_batch_size);
+
+    // Buffer slice shape - depends on whether the tensor is scalar.
+    std::vector<size_t> slice_shape =
+        is_scalar ? std::vector<size_t>({1}) : tensor.shape();
 
     std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
     for (size_t i = 0; i < io_batch_size; ++i) {
@@ -88,20 +96,20 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
         // When rearranging on the host, it is better to keep the layout of the
         // slices in the output tensor layout, in order to minimise on-device
         // rearrangement.
-        cloned_tensors[i] = graph.clone(tensor);
+        cloned_tensors[i] = graph.clone(tensor).reshape(slice_shape);
       } else {
         // When rearranging on the device, it is better to rearrange after the
         // dynamic slice, so that the rearrangement only takes place on the
         // slice, not the whole incoming pegged_memory buffer.
         cloned_tensors[i] =
-            graph.addVariable(tensor.elementType(), tensor.shape(),
+            graph.addVariable(tensor.elementType(), slice_shape,
                               poplar::VariableMappingMethod::LINEAR);
       }
     }
     // Concatenate all the cloned tensors then reshape to make sure we are
     // in the shape [io_batch_size][original_shape].
     poplar::Tensor pegged_memory =
-        poplar::concat(cloned_tensors).reshape(new_shape);
+        poplar::concat(cloned_tensors).reshape(buffer_shape);
 
     // A counter for tracking the number of entries in the buffer
     poplar::Tensor counter = graph.addVariable(
@@ -140,7 +148,7 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
     poplar::Tensor slice = popops::dynamicSlice(
         graph, pegged_memory, counter.reshape({1}), {0}, {1}, seq,
         GetDebugName(inst) + "/Slice/" + std::to_string(tuple_index));
-    seq.add(poplar::program::Copy(slice, tensor));
+    seq.add(poplar::program::Copy(slice, tensor.reshape(slice_shape)));
 
     // Increment the counter by one.
     popops::mapInPlace(
@@ -211,11 +219,19 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
 
       seq.add(poplar::program::Copy(in, fifo, false));
     } else {
-      // Batch multiple writes, and then write as a block
+      // Batch multiple writes, and then write as a block.
+
+      // If the tensor is a scalar then we need to make sure the buffer is
+      // created with the right shape.
+      const bool is_scalar = in.rank() == 0;
 
       // Extend the old shape to add a new dimension for the batches of memory
-      std::vector<size_t> new_shape = in.shape();
-      new_shape.insert(new_shape.begin(), io_batch_size);
+      std::vector<size_t> buffer_shape = in.shape();
+      buffer_shape.insert(buffer_shape.begin(), io_batch_size);
+
+      // Buffer slice shape - depends on whether the tensor is scalar.
+      std::vector<size_t> slice_shape =
+          is_scalar ? std::vector<size_t>({1}) : in.shape();
 
       std::vector<poplar::Tensor> cloned_tensors(io_batch_size);
       for (size_t i = 0; i < io_batch_size; ++i) {
@@ -223,18 +239,18 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
           // When rearranging on the host it is better to have the slices of the
           // buffer laid out in the same form as the 'in' tensor so that there
           // is no cost of rearrangement.
-          cloned_tensors[i] = graph.clone(in);
+          cloned_tensors[i] = graph.clone(in).reshape(slice_shape);
         } else {
           // When the data is rearranged on the device, it is beter to have the
           // slices arranged in the standard order of the host buffer, and then
           // to have the rearragement done only once, during the dynamicUpdate.
           cloned_tensors[i] =
-              graph.addVariable(in.elementType(), in.shape(),
+              graph.addVariable(in.elementType(), slice_shape,
                                 poplar::VariableMappingMethod::LINEAR);
         }
       }
       poplar::Tensor batched =
-          poplar::concat(cloned_tensors).reshape(new_shape);
+          poplar::concat(cloned_tensors).reshape(buffer_shape);
 
       //  A counter for counting slots
       poplar::Tensor counter = graph.addVariable(

@@ -22,8 +22,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from enum import Enum
+from enum import IntEnum
 
+from google.protobuf import json_format
+
+from tensorflow.compiler.plugin.poplar.driver import pipeline_config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_pipelining_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -38,9 +41,11 @@ from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import optimizer
 
 
-class PipelineSchedule(Enum):
+class PipelineSchedule(IntEnum):
   Grouped = 0
   Interleaved = 1
+  # Useful for debugging, but no performance improvement is expected with this schedule over sharding.
+  Sequential = 2
 
 
 class OptimizerFunctionOutput:
@@ -83,6 +88,50 @@ class OptimizerFunctionOutput:
     self._loss = value
 
 
+class PipelineStageOptions:
+  """
+  A helper class which can be used to configure Poplar compilation options (such
+  as 'availableMemoryProportion') inside a pipeline forward, backward and weight
+  update stage. This will override the global options set by
+  `ipu.utils.set_convolution_options` and `ipu.utils.set_matmul_options`.
+  """
+  def __init__(self, convolution_options=None, matmul_options=None):
+    """Creates an PipelineStageOptions object.
+
+    Args:
+      convolution_options: If provided, a dictionary of Poplar option flags for
+        all the convolution operations in the stage.
+      matmul_options: If provided, a dictionary of Poplar option flags for
+        all the matmul operations in the stage.
+       loss: The loss which is passed to the optimizer.
+    """
+
+    convolution_options = convolution_options if convolution_options else {}
+    if not isinstance(convolution_options, dict):
+      raise TypeError(
+          "PipelineStageOptions.convolution_options must be dictionary.")
+
+    matmul_options = matmul_options if matmul_options else {}
+    if not isinstance(matmul_options, dict):
+      raise TypeError(
+          "PipelineStageOptions.matmul_options must be dictionary.")
+
+    # Add the values from the dicts into the proto.
+    self._proto = pipeline_config_pb2.PipelineStagePoplarConfig()
+    for (option_name, value) in convolution_options.items():
+      opt = self._proto.convolution_options.add()
+      opt.option = option_name
+      opt.value = value
+
+    for (option_name, value) in matmul_options.items():
+      opt = self._proto.matmul_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  def get_proto(self):
+    return self._proto
+
+
 def pipeline(computational_stages,
              pipeline_depth,
              repeat_count=1,
@@ -92,6 +141,9 @@ def pipeline(computational_stages,
              optimizer_function=None,
              device_mapping=None,
              pipeline_schedule=None,
+             forward_propagation_stages_poplar_options=None,
+             backward_propagation_stages_poplar_options=None,
+             weight_update_poplar_options=None,
              continuous_weight_updates=False,
              name=None):
   """
@@ -276,6 +328,17 @@ def pipeline(computational_stages,
     device_mapping: optional stage to ipu mapping override.
     pipeline_schedule: Which scheduling algorithm to use for pipeline lowering.
       Defaults to `PipelineSchedule.Interleaved`.
+    forward_propagation_stages_poplar_options: If provided, a list of length
+      equal to the number of computational stages. Each element is a
+      PipelineStageOptions object which allows for fine grain control of the
+      Poplar options for a given forward propagation computational stage.
+    backward_propagation_stages_poplar_options: If provided, a list of length
+      equal to the number of computational stages. Each element is a
+      PipelineStageOptions object which allows for fine grain control of the
+      Poplar options for a given backward propagation computational stage.
+    weight_update_poplar_options: If provided, a PipelineStageOptions object
+      which allows for fine grain control of the Poplar options for the weight
+      update stage.
     continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training, this
       option will apply the gradients to the resource variables immediately,
       rather than accumulating the gradients and applying them at the end of
@@ -304,7 +367,7 @@ def pipeline(computational_stages,
       range(0, len(computational_stages)))
 
   if not isinstance(computational_stages, (list, tuple)):
-    raise ValueError(
+    raise TypeError(
         "computational_stages argument needs to be a list or a tuple.")
 
   if infeed_queue:
@@ -322,7 +385,7 @@ def pipeline(computational_stages,
     raise ValueError("Pipeline requires at least two computational stages.")
 
   if not isinstance(device_mapping, (list, tuple)):
-    raise ValueError("device_mapping argument needs to be a list or a tuple.")
+    raise TypeError("device_mapping argument needs to be a list or a tuple.")
 
   if len(device_mapping) != len(computational_stages):
     raise ValueError(
@@ -333,8 +396,61 @@ def pipeline(computational_stages,
     pipeline_schedule = PipelineSchedule.Interleaved
 
   if not isinstance(pipeline_schedule, PipelineSchedule):
-    raise ValueError("The given pipeline_schedule is not a member of the "
-                     "PipelineSchedule enumeration.")
+    raise TypeError("The given pipeline_schedule is not a member of the "
+                    "PipelineSchedule enumeration.")
+
+  # Function for setting up and validating the per stage Poplar options.
+  def validate_stage_options_and_populate_proto(stages_poplar_options,
+                                                proto_list, name):
+    if stages_poplar_options is None:
+      stages_poplar_options = [
+          PipelineStageOptions() for i in range(len(computational_stages))
+      ]
+
+    if not isinstance(stages_poplar_options, (list, tuple)):
+      raise TypeError(
+          "%s must be a list or a tuple of PipelineStageOptions objects." %
+          (name))
+
+    if len(stages_poplar_options) != len(computational_stages):
+      raise ValueError(
+          "%s must be a list or a tuple of PipelineStageOptions objects of "
+          "length %d (same number as the number of computational stages) but "
+          "is %d." %
+          (name, len(computational_stages), len(stages_poplar_options)))
+
+    for stage_options in stages_poplar_options:
+      if not isinstance(stage_options, PipelineStageOptions):
+        raise TypeError(
+            "Expected all elements of %s to be of type PipelineStageOptions, "
+            "but got %s instead." % (name, str(stage_options)))
+
+    for stage_options in stages_poplar_options:
+      proto_list.append(stage_options.get_proto())
+
+  pipeline_poplar_config = pipeline_config_pb2.PipelinePoplarConfig()
+
+  validate_stage_options_and_populate_proto(
+      forward_propagation_stages_poplar_options,
+      pipeline_poplar_config.forward_stages,
+      "forward_propagation_stages_poplar_options")
+
+  if optimizer_function:
+    validate_stage_options_and_populate_proto(
+        backward_propagation_stages_poplar_options,
+        pipeline_poplar_config.backward_stages,
+        "backward_propagation_stages_poplar_options")
+
+    if weight_update_poplar_options is None:
+      weight_update_poplar_options = PipelineStageOptions()
+
+    if not isinstance(weight_update_poplar_options, PipelineStageOptions):
+      raise TypeError(
+          "weight_update_poplar_options to be of type PipelineStageOptions, "
+          "but got %s instead." % (str(weight_update_poplar_options)))
+
+    pipeline_poplar_config.resource_update.CopyFrom(
+        weight_update_poplar_options.get_proto())
 
   control_outputs = []
 
@@ -433,7 +549,9 @@ def pipeline(computational_stages,
           output_shapes=func_graph.output_shapes,
           pipeline_depth=pipeline_depth,
           repeat_count=repeat_count,
-          interleave=pipeline_schedule == PipelineSchedule.Interleaved)
+          schedule=int(pipeline_schedule),
+          pipeline_poplar_config=json_format.MessageToJson(
+              pipeline_poplar_config))
     if not isinstance(output, ops.Operation):
       raise ValueError(
           "Expected the pipeline to output a tf.Operation, got %s instead." %

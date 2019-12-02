@@ -93,8 +93,8 @@ py_library(
         "ops/summary_ops.py",
         "optimizers/cross_replica_optimizer.py",
         "optimizers/gradient_accumulation_optimizer.py",
-        "optimizers/map_gradient_optimizer.py",        
-        "optimizers/sharded_optimizer.py",        
+        "optimizers/map_gradient_optimizer.py",
+        "optimizers/sharded_optimizer.py",
         "scopes.py",
         "sharded_optimizer.py",
         "sharding.py",
@@ -548,6 +548,42 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "pipelining_sequential_recomputation_test",
+    size = "large",
+    srcs = ["tests/pipelining_sequential_recomputation_test.py"],
+    shard_count = 16,
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
+    name = "pipelining_sequential_test",
+    size = "large",
+    srcs = ["tests/pipelining_sequential_test.py"],
+    shard_count = 16,
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
     name = "pipelining_conv_classify_test",
     size = "large",
     srcs = ["tests/pipelining_conv_classify_test.py"],
@@ -584,6 +620,8 @@ test_suite(
         "pipelining_grouped_recomputation_test",
         "pipelining_grouped_test",
         "pipelining_recomputation_test",
+        "pipelining_sequential_recomputation_test",
+        "pipelining_sequential_test",
         "pipelining_test",
         "pop_datastream_test",
         "popnn_normalization_test",

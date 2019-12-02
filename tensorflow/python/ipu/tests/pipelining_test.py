@@ -66,7 +66,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
     with ops.device("/device:IPU:0"):
-      with self.assertRaisesRegexp(
+      with self.assertRaisesRegex(
           ValueError, 'The last computational stage has tensor outputs'):
         ipu_compiler.compile(my_net, inputs=[x])
 
@@ -156,7 +156,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     with tu.ipu_session() as sess:
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
-      with self.assertRaisesRegexp(
+      with self.assertRaisesRegex(
           errors.FailedPreconditionError,
           'The pipeline depth of the pipeline must be a multiple of 3'):
         sess.run(r, {c: 10.01})
@@ -194,8 +194,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       c = array_ops.placeholder(np.float32, shape=[])
 
     # Wrong type:
-    with self.assertRaisesRegexp(
-        ValueError, 'device_mapping argument needs to be a list or a tuple'):
+    with self.assertRaisesRegex(
+        TypeError, 'device_mapping argument needs to be a list or a tuple'):
       pipelining_ops.pipeline([stage1, stage2, stage3],
                               3,
                               inputs=[c],
@@ -204,8 +204,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                               device_mapping=1)
 
     # Too many values:
-    with self.assertRaisesRegexp(ValueError,
-                                 'Each stage must be mapped to an IPU'):
+    with self.assertRaisesRegex(ValueError,
+                                'Each stage must be mapped to an IPU'):
       pipelining_ops.pipeline([stage1, stage2, stage3],
                               3,
                               inputs=[c],
@@ -214,8 +214,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                               device_mapping=list(range(4)))
 
     # Not enough values:
-    with self.assertRaisesRegexp(ValueError,
-                                 'Each stage must be mapped to an IPU'):
+    with self.assertRaisesRegex(ValueError,
+                                'Each stage must be mapped to an IPU'):
       pipelining_ops.pipeline([stage1, stage2, stage3],
                               3,
                               inputs=[c],
@@ -435,7 +435,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       y = array_ops.placeholder(np.float32, shape=[])
 
     with ops.device("/device:IPU:0"):
-      with self.assertRaisesRegexp(ValueError, 'Trying to capture the tensor'):
+      with self.assertRaisesRegex(ValueError, 'Trying to capture the tensor'):
         ipu_compiler.compile(model_pipeline, inputs=[x])
 
   @test_util.deprecated_graph_mode_only
@@ -450,8 +450,8 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
 
     with ops.device("/device:IPU:0"):
-      with self.assertRaisesRegexp(ValueError,
-                                   'Pipeline requires at least two'):
+      with self.assertRaisesRegex(ValueError,
+                                  'Pipeline requires at least two'):
         ipu_compiler.compile(my_net, inputs=[x])
 
   @test_util.deprecated_graph_mode_only
@@ -793,6 +793,107 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
           sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
           pipeline_depth, dataset_fn, optimizer, self, 12600)
+
+  @test_util.deprecated_graph_mode_only
+  def testStageOptionsNotEnough(self):
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed8")
+
+    with ops.device('cpu'):
+      y = array_ops.placeholder(np.float32, shape=[])
+
+    def stage1(x):
+      return x * y
+
+    def stage2(x):
+      return x
+
+    def model_pipeline(x):
+      return pipelining_ops.pipeline(
+          [stage1, stage2],
+          10,
+          inputs=[x],
+          outfeed_queue=outfeed_queue,
+          forward_propagation_stages_poplar_options=[
+              pipelining_ops.PipelineStageOptions()
+          ])
+
+    with ops.device('cpu'):
+      x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
+      y = array_ops.placeholder(np.float32, shape=[])
+
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(
+          ValueError,
+          'forward_propagation_stages_poplar_options must be a list or a tuple'
+      ):
+        ipu_compiler.compile(model_pipeline, inputs=[x])
+
+  @test_util.deprecated_graph_mode_only
+  def testStageOptionsWUWrongType(self):
+    dataset = tu.create_single_increasing_dataset(5, shape=[4, 4, 2])
+    dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+    def dataset_parser(value):
+      a = value
+      b = (value + 10.) / 2.0
+      idx = value[0][0][0][0]
+      return {"a": a, "b": b, "idx": idx}
+
+    dataset = dataset.map(dataset_parser)
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed10")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed10")
+
+    def stage1(c, **kwargs):
+      y = layers.Conv2D(2,
+                        1,
+                        use_bias=True,
+                        kernel_initializer=init_ops.ones_initializer(),
+                        name='conv1')(kwargs["a"])
+      y = normalization_ops.group_norm(y)
+      return y + kwargs["b"], c, kwargs["idx"]
+
+    def stage2(x, c, idx):
+      return x, c, idx
+
+    def stage3(x, c, idx):
+      return layers.Dense(
+          2,
+          kernel_initializer=init_ops.ones_initializer(),
+          bias_initializer=init_ops.ones_initializer())(x), c, idx
+
+    def stage4(x, c, idx):
+      return math_ops.reduce_sum(
+          layers.Dense(
+              2,
+              kernel_initializer=init_ops.ones_initializer(),
+              bias_initializer=init_ops.ones_initializer())(x)) + c, idx
+
+    def optimizer_function(loss, _):
+      def func(grad, _):
+        return clip_ops.clip_by_value(grad, -1., 1.)
+
+      opt = map_gradient_optimizer.MapGradientOptimizer(
+          gradient_descent.GradientDescentOptimizer(0.01), func)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    def my_net(c):
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3, stage4],
+          12,
+          inputs=[c],
+          optimizer_function=optimizer_function,
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          weight_update_poplar_options={"dead": "beaf"})
+
+    with ops.device('cpu'):
+      c = array_ops.placeholder(np.float32, shape=[])
+
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(
+          TypeError,
+          'weight_update_poplar_options to be of type PipelineStageOptions'):
+        ipu_compiler.compile(my_net, inputs=[c])
 
 
 if __name__ == "__main__":

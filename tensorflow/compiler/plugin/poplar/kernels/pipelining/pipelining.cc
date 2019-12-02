@@ -353,7 +353,9 @@ class PipelineOp : public XlaOpKernel {
                     "Expected PipelineStage to have no explicit outputs."));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("interleave", &interleave_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
+    OP_REQUIRES_OK(
+        ctx, ctx->GetAttr("pipeline_poplar_config", &pipeline_poplar_config_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -448,8 +450,14 @@ class PipelineOp : public XlaOpKernel {
     // Set the interleave flag.
     OP_REQUIRES_OK(ctx,
                    builder->SetInstructionFrontendAttribute(
-                       outputs, FrontendAttributeId_Name(PIPELINE_INTERLEAVE),
-                       std::to_string(interleave_)));
+                       outputs, FrontendAttributeId_Name(PIPELINE_SCHEDULE),
+                       std::to_string(schedule_)));
+    // Set the config field.
+    OP_REQUIRES_OK(
+        ctx, builder->SetInstructionFrontendAttribute(
+                 outputs, FrontendAttributeId_Name(PIPELINE_POPLAR_CONFIG),
+                 pipeline_poplar_config_));
+
     // A pipeline has no explicit outputs, only updates of resource variables.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
       XlaResource* resource;
@@ -475,7 +483,8 @@ class PipelineOp : public XlaOpKernel {
   DataTypeVector input_types_;
   int64 pipeline_depth_;
   int64 repeat_count_;
-  bool interleave_;
+  int64 schedule_;
+  std::string pipeline_poplar_config_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

@@ -304,7 +304,9 @@ namespace {
 PoplarBackendConfig ParsePoplarBackendConfig(const HloInstruction* inst) {
   auto status_or = inst->backend_config<PoplarBackendConfig>();
   if (!status_or.ok()) {
-    LOG(FATAL) << "Could not parse the PoplarBackendConfig";
+    LOG(FATAL)
+        << "Could not parse the PoplarBackendConfig for HloInstruction ''"
+        << inst->name() << "'";
   }
   return status_or.ValueOrDie();
 }

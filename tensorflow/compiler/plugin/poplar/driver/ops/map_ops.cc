@@ -99,28 +99,17 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
                    .sequence(pipeline_computation)
                    .instructions();
 
-  // Push a new vector for the zeroing sequences onto the stack.
-  res.pipelining_buffer_zeroing_sequences.push({});
   TF_RETURN_IF_ERROR(pipeline_computation->AcceptOrdered(&visitor, order));
 
   // Make sure that inputs/outputs alias each other.
   TF_ASSIGN_OR_RETURN(auto pipeline_state,
                       visitor.AddLoopInputOutputAliasingCopies(
                           graph, pipeline_computation, GetDebugName(inst)));
-  // Create the zeroing sequence.
-  poplar::program::Sequence gradient_accumulation_zeroing_seq;
-  auto& zeroing_seqs = res.pipelining_buffer_zeroing_sequences.top();
-  for (poplar::program::Sequence& zeroing_seq : zeroing_seqs) {
-    gradient_accumulation_zeroing_seq.add(zeroing_seq);
-  }
-  res.pipelining_buffer_zeroing_sequences.pop();
 
   // Get the pipeline sequence.
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,
                       visitor.GetPipelineSequence(pipeline_depth));
-  seq.add(poplar::program::Repeat(
-      repeat_count, poplar::program::Sequence(gradient_accumulation_zeroing_seq,
-                                              pipeline_prog)));
+  seq.add(poplar::program::Repeat(repeat_count, pipeline_prog));
 
   for (size_t i = 0; i < pipeline_state.size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_state[i]));
