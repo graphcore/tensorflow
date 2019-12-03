@@ -26,7 +26,6 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import init_ops
-from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
@@ -644,13 +643,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                          bias_initializer=init_ops.constant_initializer(0.5))
             (x)) + c + label
 
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 15500)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 15500)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -748,13 +747,16 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-          sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 22700)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
+        dataset_fn, optimizer, self, 22700)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
+
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(10, shape=[4])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -797,10 +799,9 @@ class PipeliningTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 12600)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 12600)
 
   @test_util.deprecated_graph_mode_only
   def testStageOptionsNotEnough(self):

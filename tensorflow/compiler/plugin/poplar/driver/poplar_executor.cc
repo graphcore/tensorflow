@@ -962,16 +962,17 @@ bool PoplarExecutor::HasPoplarDevice() {
 Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   if (!DeviceConfigurationsEqual(cfg, current_config_) &&
       hardware_configured_) {
+    XLA_VLOG_LINES(1, "Current config: " + current_config_.DebugString() +
+                          "\nNew config: " + cfg.DebugString());
     return InternalError("IPU system configuration can only be set once.");
   }
 
   current_config_ = cfg;
   try {
     if (device_open_) {
-      VLOG(1) << "Detaching ordinal " << ordinal_
-              << " from poplar device: type " << GetDeviceTargetName();
-      poplar_device_.detach();
-      device_open_ = false;
+      VLOG(1) << "Poplar device: type " << GetDeviceTargetName() << " ordinal "
+              << ordinal_ << " is already configured: skipping configuration.";
+      return Status::OK();
     }
 
     option_flags_ = poplar::OptionFlags();

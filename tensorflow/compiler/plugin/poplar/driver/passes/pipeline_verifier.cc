@@ -37,6 +37,10 @@ namespace {
 // pipeline sharding.
 Status HasCompatiblePipelineSharding(const HloSharding& expected,
                                      const HloInstruction* inst) {
+  if (!inst->has_sharding()) {
+    return InternalErrorStrCat("Expected for ", inst->ToString(),
+                               " to have sharding information");
+  }
   auto optional_sharding = inst->sharding().ExtractSingleSharding();
   if (!optional_sharding) {
     return InternalErrorStrCat("Expected the sharding for ", inst->ToString(),
@@ -111,6 +115,10 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
     }
     // Verify sharding for the stages.
     if (IsAnyPipelineStageOp(inst)) {
+      if (!inst->has_sharding()) {
+        return InternalErrorStrCat("Expected for ", inst->ToString(),
+                                   " to have sharding information");
+      }
       const HloSharding expected_sharding =
           *inst->sharding().ExtractSingleSharding();
       // Check that the sharding of all operands matches the output sharding.
@@ -162,6 +170,10 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
   // Verify that the input/output have the same sharding.
   std::vector<HloSharding> input_sharding;
   for (const HloInstruction* operand : pipeline_op->operands()) {
+    if (!operand->has_sharding()) {
+      return InternalErrorStrCat("Expected for ", operand->ToString(),
+                                 " to have sharding information");
+    }
     const HloSharding& sharding = operand->sharding();
     if (sharding.IsTuple()) {
       absl::c_copy(sharding.tuple_elements(),
@@ -171,6 +183,10 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
     }
   }
 
+  if (!pipeline_op->has_sharding()) {
+    return InternalErrorStrCat("Expected for ", pipeline_op->ToString(),
+                               " to have sharding information");
+  }
   if (input_sharding != pipeline_op->sharding().tuple_elements()) {
     return InternalErrorStrCat(
         "Expected the sharding of inputs and outputs of pipeline ",

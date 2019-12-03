@@ -339,7 +339,7 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
 }
 
 /**
- * Get the pipeline stages which have recomputation.
+ * Get the pipeline stages which have stateless recomputation.
  *
  * @param pipeline The outer pipeline instruction.
  *
@@ -347,16 +347,24 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
  *
  * @note Assumes the pipeline is correctly constructed.
  */
-absl::flat_hash_set<int> GetPipelineStagesWithRecomputation(
+absl::flat_hash_set<int> GetPipelineStagesWithStatelessRecomputation(
     const HloInstruction* pipeline) {
   HloComputation* pipeline_computation = pipeline->to_apply();
   // Cannot reasonably return StatusOr because this is called inside a
   // constructor.
   auto stages = GetPipelineStages(pipeline_computation).ValueOrDie();
-  absl::flat_hash_set<int> result;
-  absl::c_transform(
-      stages.recomputation, std::inserter(result, result.begin()),
-      [](const std::pair<int64, HloInstruction*>& pair) { return pair.first; });
+  absl::flat_hash_set<int> result, tmp;
+  absl::c_transform(stages.recomputation, std::inserter(tmp, tmp.begin()),
+                    [&stages](const std::pair<int64, HloInstruction*>& pair) {
+                      // Recomputation stages for stages containing stateful ops
+                      // have a different number of operands
+                      return (pair.second->operand_count() ==
+                              stages.forward[pair.first]->operand_count())
+                                 ? pair.first
+                                 : -1;
+                    });
+  // Remove the -1s introduced by the previous transform.
+  absl::c_remove_copy(tmp, std::inserter(result, result.begin()), -1);
   return result;
 }
 
@@ -716,7 +724,7 @@ StatusOr<ArgVectors> GetInputs(poplar::program::Sequence& seq,
 /**
  * When recomputation is enabled, copies need to be inserted for all the non
  * parameter inputs as we are re-using the forward stage Poplar Sequence/visitor
- * for both the forward and recomputation stage. Note that we do not to add
+ * for both the forward and recomputation stages. Note that we do not add
  * copies for parameters as these are always the same/are not modified. Note
  * that since we are adding these copies, the FIFO instructions can be executed
  * after the PipelineStage and before the PipelineStageRecomputation since the
@@ -738,12 +746,17 @@ StatusOr<poplar::program::Sequence> AddCopiesForNonParameterInputs(
   // add copies from the instruction input tensors to the visitor input tensors
   // (preserving the aliasing).
   for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
-    CHECK_EQ(inst_inputs[inplace_idx].size(),
-             visitor_inputs[inplace_idx].size());
-    for (size_t flat_idx = 0; flat_idx != inst_inputs[inplace_idx].size();
-         ++flat_idx) {
-      seq.add(TensorCopyWithAliasing(graph, inst_inputs[inplace_idx][flat_idx],
-                                     visitor_inputs[inplace_idx][flat_idx]));
+    // If inplace_idx is out of bounds then it's a state and therefore no copy
+    // is needed.
+    if (inplace_idx < visitor_inputs.size()) {
+      CHECK_EQ(inst_inputs[inplace_idx].size(),
+               visitor_inputs[inplace_idx].size());
+      for (size_t flat_idx = 0; flat_idx != inst_inputs[inplace_idx].size();
+           ++flat_idx) {
+        seq.add(TensorCopyWithAliasing(graph,
+                                       inst_inputs[inplace_idx][flat_idx],
+                                       visitor_inputs[inplace_idx][flat_idx]));
+      }
     }
   }
   return seq;
@@ -808,15 +821,11 @@ StatusOr<std::unique_ptr<PipelineStageVisitor>> CreatePipelineStageOp(
   seq.add(visitor->GetSequence());
   // Set the outputs.
   const OutVector& pipeline_outputs = visitor->outputs();
-  TF_ASSIGN_OR_RETURN(const std::vector<bool> add_output_copies,
-                      visitor->GetOutputCopies(inst, used_for_recomputation));
-  CHECK_EQ(pipeline_outputs.size(), add_output_copies.size());
   for (size_t i = 0; i < pipeline_outputs.size(); i++) {
-    poplar::Tensor output = pipeline_outputs[i];
-    if (add_output_copies[i]) {
-      output = poputil::duplicate(
-          graph, output, seq, absl::StrCat(GetDebugName(inst), "/output/", i));
-    }
+    auto output = poputil::duplicate(
+        graph, pipeline_outputs[i], seq,
+        absl::StrCat(GetDebugName(inst), "/output/", i),
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
   }
 
@@ -824,8 +833,9 @@ StatusOr<std::unique_ptr<PipelineStageVisitor>> CreatePipelineStageOp(
 }
 
 /**
- * Loweres a PipelineStageRecomputation into Poplar by reusing the sequence from
- * the corresponding PipelineStage visitor.
+ * Lowers a PipelineStageRecomputation into Poplar by reusing the sequence from
+ * the corresponding PipelineStage visitor if possible, otherwise create a new
+ * sequence.
  *
  * @param res The compiler resources.
  * @param inst The PipelineStageRecomputation instruction which is being
@@ -844,20 +854,44 @@ StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
   // Get the inputs for the pipeline stage.
   TF_ASSIGN_OR_RETURN(auto inputs, GetInputs(seq, res, inst, tensor_map));
 
-  // Add copies for the visitor inputs so that we can reuse the visitor program.
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Sequence copy_sequences,
-      AddCopiesForNonParameterInputs(inst, graph, inputs,
-                                     forward_stage_visitor->inputs()));
-  seq.add(copy_sequences);
+  // If the number of inputs of the recomputation doesn't match the number of
+  // inputs of the forward stage then this is a stateful recomputation and we
+  // need to create a new sequence.
+  if (forward_stage_visitor->inputs().size() != inputs.size()) {
+    PipelineStageVisitor visitor(res, inputs);
+    HloComputation* stage_computation = inst->to_apply();
+    auto order = stage_computation->parent()
+                     ->schedule()
+                     .sequence(stage_computation)
+                     .instructions();
+    TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(&visitor, order));
 
-  // Get the sequence for the stage.
-  seq.add(forward_stage_visitor->GetSequence());
+    // Get the sequence for the stage.
+    seq.add(visitor.GetSequence());
 
-  // Set the outputs.
-  const OutVector& pipeline_outputs = forward_stage_visitor->outputs();
-  for (size_t i = 0; i < pipeline_outputs.size(); i++) {
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
+    // Set the outputs.
+    const OutVector& pipeline_outputs = visitor.outputs();
+    for (size_t i = 0; i < pipeline_outputs.size(); i++) {
+      poplar::Tensor output = pipeline_outputs[i];
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
+    }
+  } else {
+    // Add copies for the visitor inputs so that we can reuse the visitor
+    // program.
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence copy_sequences,
+        AddCopiesForNonParameterInputs(inst, graph, inputs,
+                                       forward_stage_visitor->inputs()));
+    seq.add(copy_sequences);
+
+    // Get the sequence for the stage.
+    seq.add(forward_stage_visitor->GetSequence());
+
+    // Set the outputs.
+    const OutVector& pipeline_outputs = forward_stage_visitor->outputs();
+    for (size_t i = 0; i < pipeline_outputs.size(); i++) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
+    }
   }
   return seq;
 }
@@ -931,8 +965,8 @@ PipelineVisitor::PipelineVisitor(
                       GetPipelineStageCount(pipeline),
                       GetPipelineStageDeviceMapping(pipeline),
                       GetPipelineInstStageMapping(pipeline),
-                      GetPipelineStagesWithRecomputation(pipeline), res, inputs,
-                      dependent_subcomputations) {}
+                      GetPipelineStagesWithStatelessRecomputation(pipeline),
+                      res, inputs, dependent_subcomputations) {}
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {

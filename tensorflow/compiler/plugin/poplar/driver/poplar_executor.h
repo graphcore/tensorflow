@@ -343,6 +343,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                : false;
   }
 
+  bool StatefulRecomputationEnabled() const {
+    // Re-computation of stateful operations is disabled by default unless the
+    // user has specifically told us to do it.
+    return current_config_.speed_size_config().has_allow_recompute()
+               ? current_config_.speed_size_config().allow_stateful_recompute()
+               : false;
+  }
+
   poplar::OptionFlags GetConvolutionOptions() const { return conv_options_; }
 
   poplar::OptionFlags GetMatMulOptions() const { return matmul_options_; }

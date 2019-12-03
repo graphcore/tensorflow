@@ -416,11 +416,15 @@ void setFpBehaviour(poplar::Graph& graph,
 
 void PrintHelpString() { LOG(INFO) << PoplarXlaFlags::GetFlagUsageString(); }
 
-void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
-                        PoplarExecutor* poplar_executor,
-                        const poplar::Device& dev) {
-  resources.main_graph = absl::make_unique<poplar::Graph>(
-      dev, 0, poplar::replication_factor(resources.replication_factor));
+Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
+                          PoplarExecutor* poplar_executor,
+                          const poplar::Device& dev) {
+  try {
+    resources.main_graph = absl::make_unique<poplar::Graph>(
+        dev, 0, poplar::replication_factor(resources.replication_factor));
+  } catch (const std::exception& e) {
+    return PoplarExceptionToTensorflowStatus("[Create Graph] ", e);
+  }
 
   if (resources.replication_factor > 1) {
     LOG(INFO)
@@ -502,6 +506,8 @@ void CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   popops::addCodelets(main_graph);
   poprand::addCodelets(main_graph);
   experimental::popfloat::addCodelets(main_graph);
+
+  return Status::OK();
 }
 
 StatusOr<std::vector<IpuSchedulerAlgorithm>> GetSchedulerList(
@@ -724,7 +730,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ExpressionOutliner>();
     pipeline.AddPass<PipelineCopyInserter>();
     pipeline.AddPass<PipelineRecomputation>(
-        poplar_executor->RecomputationEnabled());
+        poplar_executor->RecomputationEnabled(),
+        poplar_executor->StatefulRecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     // Beyond this point non of the passes in the pipeline are allowed to modify
     // the instructions in the HloModule.
@@ -817,7 +824,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     VLOG(1) << "Skip engine compilation - all outputs are inputs.";
   } else {
     // Only create the graphs if we are compiling.
-    CreatePoplarGraphs(resources, module.get(), poplar_executor, poplar_device);
+    TF_RETURN_IF_ERROR(CreatePoplarGraphs(resources, module.get(),
+                                          poplar_executor, poplar_device));
     auto& main_graph = GetMasterGraph(resources);
 
     EmbeddingPlansPreplanning embeddings_preplanning;
