@@ -26,12 +26,14 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
@@ -41,6 +43,10 @@ disable_v2_behavior()
 class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
+
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -86,14 +92,14 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
                          bias_initializer=init_ops.constant_initializer(0.5))
             (x)) + c + label
 
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 14770, True,
-          pipelining_ops.PipelineSchedule.Grouped)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 14770, True,
+        pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -191,14 +197,19 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-          sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 23984, True,
-          pipelining_ops.PipelineSchedule.Grouped)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
+        dataset_fn, optimizer, self, 23984, True,
+        pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
+    else:
+      self.skipTest("FIXME: T13754")
+
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(10, shape=[4])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -241,14 +252,16 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 13681, True,
-          pipelining_ops.PipelineSchedule.Grouped)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 13681, True,
+        pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
     # Stage3 has a stateful op there it cannot be recomputed.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
@@ -296,14 +309,14 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
                          bias_initializer=init_ops.constant_initializer(0.5))
             (x)) + c + label
 
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 15986, True,
-          pipelining_ops.PipelineSchedule.Grouped)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 20354, True,
+        pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare5(self):
@@ -345,61 +358,145 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
       with variable_scope.variable_scope("stage4", use_resource=True):
         return math_ops.reduce_sum(x) + c + label
 
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 12478, True,
-          pipelining_ops.PipelineSchedule.Grouped)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 15628, True,
+        pipelining_ops.PipelineSchedule.Grouped)
 
-  # @test_util.deprecated_graph_mode_only
-  # def testPipelineCompare6(self):
-  #   # Stage 1 and 2 don't have a backward stage.
-  #   def dataset_fn():
-  #     dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
-  #     dataset = dataset.batch(batch_size=2, drop_remainder=True)
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompare6(self):
+    if not utils.running_on_ipu_model():
+      self.skipTest("Real HW uses a different random number generator "
+                    "therefore the final result does not match the hardcoded "
+                    "expected values.")
+    # Stage2 has a stateful op whose state will be stored and the rest of the stage should be recomputed..
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
 
-  #     def dataset_parser(value):
-  #       img = value / 7
-  #       label = value[0][0][0][0]
-  #       return img, label
+      def dataset_parser(value):
+        img = value / 7
+        label = value[0][0][0][0]
+        return img, label
 
-  #     return dataset.map(dataset_parser)
+      return dataset.map(dataset_parser)
 
-  #   pipeline_depth = 16
-  #   repeat_count = 2
-  #   optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+    pipeline_depth = 16
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
-  #   def stage1(c, img, label):
-  #     with variable_scope.variable_scope("stage1", use_resource=True):
-  #       return img, c, label
+    def stage1(c, img, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        y = layers.Conv2D(
+            2,
+            1,
+            use_bias=True,
+            kernel_initializer=init_ops.constant_initializer(0.5),
+            bias_initializer=init_ops.constant_initializer(0.5),
+            name='conv1')(img)
+        return y, c, label
 
-  #   def stage2(x, c, label):
-  #     with variable_scope.variable_scope("stage2", use_resource=True):
-  #       with ops.control_dependencies([internal_ops.print_tensor(x)]):
-  #         return x * 20, c, label
+    def stage2(x, c, label):
+      with variable_scope.variable_scope("stage2", use_resource=True):
+        rng = random_ops.random_uniform(x.shape, seed=1)
+        y = layers.Conv2D(
+            2,
+            1,
+            use_bias=True,
+            kernel_initializer=init_ops.constant_initializer(0.5),
+            bias_initializer=init_ops.constant_initializer(0.5),
+            name='conv1')(rng)
+        return x + y, c, label
 
-  #   def stage3(x, c, label):
-  #     with variable_scope.variable_scope("stage3", use_resource=True):
-  #       return layers.Dense(
-  #           2,
-  #           kernel_initializer=init_ops.constant_initializer(0.5),
-  #           bias_initializer=init_ops.constant_initializer(0.5))(x), c, label
+    def stage3(x, c, label):
+      with variable_scope.variable_scope("stage3", use_resource=True):
+        return layers.Dense(
+            2,
+            kernel_initializer=init_ops.constant_initializer(0.5),
+            bias_initializer=init_ops.constant_initializer(0.5))(x), c, label
 
-  #   def stage4(x, c, label):
-  #     with variable_scope.variable_scope("stage4", use_resource=True):
-  #       return math_ops.reduce_sum(x) + c + label
+    def stage4(x, c, label):
+      with variable_scope.variable_scope("stage4", use_resource=True):
+        return math_ops.reduce_sum(
+            layers.Dense(2,
+                         kernel_initializer=init_ops.constant_initializer(0.5),
+                         bias_initializer=init_ops.constant_initializer(0.5))
+            (x)) + c + label
 
-  #   with ops.device('cpu'):
-  #     c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-  #   with self.test_session() as sess:
-  #     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-  #         sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-  #         pipeline_depth, dataset_fn, optimizer, self, 10900, True,
-  #         pipelining_ops.PipelineSchedule.Grouped)
+    pipeline_losses = pipelining_test_util.PipelineTester.pipeline_on_ipu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 15590, True,
+        pipelining_ops.PipelineSchedule.Grouped)
+    reference = [
+        1.8066731e+02, 2.0095316e+02, 2.2123869e+02, 2.0952458e+02,
+        1.9081035e+02, 2.1109593e+02, 2.3138173e+02, 1.8066731e+02,
+        2.0095316e+02, 2.2123869e+02, 2.0952458e+02, 1.9081035e+02,
+        2.1109593e+02, 2.3138173e+02, 1.8066731e+02, 2.0095316e+02,
+        -4.5780856e+05, -4.3724769e+05, -4.1669391e+05, -4.4410366e+05,
+        -4.7151353e+05, -4.0298897e+05, -4.3039888e+05, -4.5780856e+05,
+        -4.3724769e+05, -4.1669391e+05, -4.4410366e+05, -4.7151353e+05,
+        -4.0298897e+05, -4.3039888e+05, -4.5780856e+05, -4.3724769e+05
+    ]
+
+    self.assertAllClose(pipeline_losses, reference)
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompare7(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
+    # Stage 1 and 2 don't have a backward stage.
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        img = value / 7
+        label = value[0][0][0][0]
+        return img, label
+
+      return dataset.map(dataset_parser)
+
+    pipeline_depth = 16
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(c, img, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        return img, c, label
+
+    def stage2(x, c, label):
+      with variable_scope.variable_scope("stage2", use_resource=True):
+        with ops.control_dependencies([internal_ops.print_tensor(x)]):
+          return x * 20, c, label
+
+    def stage3(x, c, label):
+      with variable_scope.variable_scope("stage3", use_resource=True):
+        return layers.Dense(
+            2,
+            kernel_initializer=init_ops.constant_initializer(0.5),
+            bias_initializer=init_ops.constant_initializer(0.5))(x), c, label
+
+    def stage4(x, c, label):
+      with variable_scope.variable_scope("stage4", use_resource=True):
+        return math_ops.reduce_sum(x) + c + label
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 14502, True,
+        pipelining_ops.PipelineSchedule.Grouped)
 
 
 if __name__ == "__main__":
