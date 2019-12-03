@@ -1039,7 +1039,7 @@ ENTRY e {
   HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
   auto fifo = stages.backward[0]->operand(1);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
 
@@ -1051,13 +1051,13 @@ ENTRY e {
 
   // Check the FIFO for in place parameter.
   fifo = stages.recomputation.at(0)->operand(1);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[0]));
 
   // Check the FIFO for statetful op.
   fifo = stages.recomputation.at(0)->operand(2);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors().size(), 0);
 }
 
@@ -1137,7 +1137,7 @@ ENTRY e {
   HloComputation* pipeline_comp = FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_comp));
   auto fifo = stages.backward[0]->operand(1);
-  EXPECT_TRUE(IsInstructionType<HloFifoInstruction>(fifo));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
 

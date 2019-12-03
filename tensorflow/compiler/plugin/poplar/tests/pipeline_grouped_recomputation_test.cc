@@ -952,7 +952,7 @@ ENTRY e {
   EXPECT_THAT(fifo->control_successors(),
               ::testing::ElementsAre(stages.forward[1]));
 
-  PipelineRecomputation recomputation(true);
+  PipelineRecomputation recomputation(true, true);
   TF_ASSERT_OK_AND_ASSIGN(changed, recomputation.Run(module.get()));
   EXPECT_TRUE(changed);
   TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_comp));
