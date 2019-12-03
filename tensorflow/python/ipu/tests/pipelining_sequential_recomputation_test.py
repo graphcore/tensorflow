@@ -32,6 +32,7 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import pipelining_ops
+from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.tests import pipelining_test_util
 from tensorflow.compat.v1 import disable_v2_behavior
 
@@ -86,14 +87,14 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
                          bias_initializer=init_ops.constant_initializer(0.5))
             (x)) + c + label
 
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 10579, True,
-          pipelining_ops.PipelineSchedule.Sequential)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 10579, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -191,14 +192,17 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-          sess, [stage1, stage2, stage3], [], [], repeat_count, pipeline_depth,
-          dataset_fn, optimizer, self, 23984, True,
-          pipelining_ops.PipelineSchedule.Sequential)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
+        dataset_fn, optimizer, self, 23984, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
+
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(10, shape=[4])
       dataset = dataset.batch(batch_size=2, drop_remainder=True)
@@ -241,14 +245,16 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [], [], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 13681, True,
-          pipelining_ops.PipelineSchedule.Sequential)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 13681, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
+    if utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
     # Stage3 has a stateful op there it cannot be recomputed.
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
@@ -296,14 +302,14 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
                          bias_initializer=init_ops.constant_initializer(0.5))
             (x)) + c + label
 
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 10760, True,
-          pipelining_ops.PipelineSchedule.Sequential)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 10760, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare5(self):
@@ -345,14 +351,14 @@ class PipeliningSeqRecomputationTest(test_util.TensorFlowTestCase):
       with variable_scope.variable_scope("stage4", use_resource=True):
         return math_ops.reduce_sum(x) + c + label
 
-    with ops.device('cpu'):
-      c = array_ops.placeholder(np.float32, shape=[])
+    def inputs_fn():
+      with ops.device('cpu'):
+        return [array_ops.placeholder(np.float32, shape=[])]
 
-    with self.test_session() as sess:
-      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-          sess, [stage1, stage2, stage3, stage4], [c], [10.01], repeat_count,
-          pipeline_depth, dataset_fn, optimizer, self, 9096, True,
-          pipelining_ops.PipelineSchedule.Sequential)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
+        pipeline_depth, dataset_fn, optimizer, self, 9096, True,
+        pipelining_ops.PipelineSchedule.Sequential)
 
 
 if __name__ == "__main__":
