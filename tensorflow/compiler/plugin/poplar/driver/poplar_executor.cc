@@ -224,10 +224,12 @@ PoplarExecutor::TensorControl::TensorControl(size_t size_) {
   output_handle.clear();
   output_convertor = nullptr;
   converted_data.clear();
-  data = new char[size_];
+  data = static_cast<char*>(tensorflow::port::AlignedMalloc(size_, 64));
 }
 
-PoplarExecutor::TensorControl::~TensorControl() { delete[] data; }
+PoplarExecutor::TensorControl::~TensorControl() {
+  tensorflow::port::AlignedFree(data);
+}
 
 PoplarExecutor::InfeedDatasetIterator::InfeedDatasetIterator(
     int64 replication_factor,
@@ -421,27 +423,35 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
 
 class NullPrefetchCallback : public poplar::StreamCallback {
  public:
-  explicit NullPrefetchCallback(uint64 num_bytes) : num_bytes_(num_bytes) {
+  explicit NullPrefetchCallback(InfeedAllocator* allocator, uint64 num_bytes)
+      : num_bytes_(num_bytes), allocator_(allocator) {
     for (auto& buffer : buffers_) {
-      buffer = std::vector<unsigned char>(num_bytes, 0x02);
+      buffer = static_cast<uint8*>(allocator_->AllocateRaw(64, num_bytes));
+    }
+  }
+
+  ~NullPrefetchCallback() {
+    for (auto& buffer : buffers_) {
+      allocator_->DeallocateRaw(buffer);
     }
   }
 
   poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
-    std::memcpy(dest, buffers_[index_].data(), num_bytes_);
+    std::memcpy(dest, buffers_[index_], num_bytes_);
     return poplar::StreamCallback::Result::Success;
   }
 
   void fetch(void* dest) noexcept override {
     // This case shouldn't be hit, if poplar prefetches the data.
-    std::memcpy(dest, buffers_[index_].data(), num_bytes_);
+    std::memcpy(dest, buffers_[index_], num_bytes_);
   }
 
   void complete() noexcept override { index_ = (index_ + 1) % 16; }
 
  private:
   int index_ = 0;
-  std::vector<unsigned char> buffers_[16];
+  uint8* buffers_[16];
+  InfeedAllocator* allocator_;
   const uint64 num_bytes_;
 };
 }  // namespace
@@ -470,8 +480,8 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
         auto& queue = infeed_dataset_iterator->tensor_queues[j][replica_id];
         std::unique_ptr<poplar::StreamCallback> infeed_callback;
         if (PoplarXlaFlags::Get().null_data_feed) {
-          infeed_callback =
-              absl::make_unique<NullPrefetchCallback>(bytes_per_replica);
+          infeed_callback = absl::make_unique<NullPrefetchCallback>(
+              GetInfeedAllocator(), bytes_per_replica);
         } else {
           infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
               queue.get(), bytes_per_replica);
@@ -1972,6 +1982,10 @@ Status PoplarExecutor::DeleteInfeedDatasetIterator(const std::string& feed_id) {
   }
 
   return Status::OK();
+}
+
+InfeedAllocator* PoplarExecutor::GetInfeedAllocator() {
+  return &infeed_allocator;
 }
 
 std::vector<std::vector<tensorflow::Tensor>>
