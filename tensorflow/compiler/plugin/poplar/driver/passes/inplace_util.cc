@@ -575,6 +575,8 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kIsFinite:
     case HloOpcode::kOutfeed:
     case HloOpcode::kParameter:
+    case HloOpcode::kRecv:
+    case HloOpcode::kRecvDone:
     case HloOpcode::kReduce:
     case HloOpcode::kReducePrecision:
     case HloOpcode::kReduceWindow:
@@ -592,8 +594,6 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kBitcast:
     case HloOpcode::kCollectivePermute:
     case HloOpcode::kFft:
-    case HloOpcode::kRecv:
-    case HloOpcode::kRecvDone:
     case HloOpcode::kTrace:
     default: {
       LOG(FATAL) << "Unrecognized op " << inst->opcode()

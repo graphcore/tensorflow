@@ -418,6 +418,18 @@ Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
   return Status::OK();
 }
 
+Status FullVisitor::HandleRecv(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+  return Status::OK();
+}
+
+Status FullVisitor::HandleRecvDone(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+  TF_ASSIGN_OR_RETURN(auto prog, CreateRecvDone(resources_, inst, tensor_map));
+  sequence.add(prog);
+  return Status::OK();
+}
+
 Status FullVisitor::HandleSend(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   return Status::OK();

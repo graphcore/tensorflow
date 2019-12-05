@@ -48,6 +48,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_dependency_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
@@ -724,6 +725,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<PipelineResourceUpdateFixer>();
     // Passes below this point need to respect control dependencies.
     pipeline.AddPass<DependencyReplacer>(true);
+    pipeline.AddPass<HostComputeDependencyInserter>();
     pipeline.AddPass<ShardingPass>();
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>();
@@ -912,7 +914,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
               cache_filename, exec, resources.annotations.infeed_infos,
               resources.annotations.outfeed_infos,
-              resources.annotations.send_infos, replication_factor,
+              resources.annotations.send_infos,
+              resources.annotations.recv_infos, replication_factor,
               poplar_executor->GetReportFlags()));
         }
       }
@@ -979,7 +982,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(resources.annotations.outfeed_infos),
       std::move(resources.annotations.stream_infos),
       std::move(resources.annotations.stream_meta_infos),
-      std::move(resources.annotations.send_infos));
+      std::move(resources.annotations.send_infos),
+      std::move(resources.annotations.recv_infos));
 
   executable.reset(poplar_executable);
 
