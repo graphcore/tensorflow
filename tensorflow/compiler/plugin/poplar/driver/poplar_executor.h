@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_transfer_manager.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/seed_generator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_outfeed_queue.h"
@@ -441,6 +442,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status DeleteInfeedDatasetIterator(const std::string& feed_id);
 
+  InfeedAllocator* GetInfeedAllocator();
+
   // Lock the outfeed queue and dequeue all the tensors from a given feed.
   // Fails if the outfeed with the given name does not exist.
   std::vector<std::vector<tensorflow::Tensor>> GetTensorsFromOutfeed(
@@ -743,6 +746,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     // moving a tensor from the device.
     std::recursive_mutex mutex;
   };
+
+  // Allocator that should be used for infeeds.
+  InfeedAllocator infeed_allocator;
 
   absl::flat_hash_map<std::string, std::unique_ptr<InfeedDatasetIterator>>
       infeed_dataset_iterators_;

@@ -176,7 +176,8 @@ def partials_type(override_type):
   xla_type = types.MAP_DTYPE_TO_RECORD[str(
       np.dtype(override_type))].primitive_type
   if xla_type not in [xla_data_pb2.F16, xla_data_pb2.F32]:
-    raise ValueError("Only support float16, float32, provided %s" % dtype)
+    raise ValueError("Only support float16, float32, provided %s" %
+                     np.dtype(override_type))
   with frontend_attribute(
       backend_config_pb2.FrontendAttributeId.Name(
           backend_config_pb2.PARTIALS_TYPE),

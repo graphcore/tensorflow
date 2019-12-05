@@ -995,6 +995,13 @@ stage_0_bwd {
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0_grad, in1_grad)
 }
 
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,2] parameter(1)
+  arg2 = f32[1,4,4,2] parameter(2)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2)
+}
+
 pipeline {
   after-all = token[] after-all()
   infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576"
@@ -1012,7 +1019,11 @@ pipeline {
   stage_1_bwd_2 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=1
   stage_0_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_bwd_1, stage_0_0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2)
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
+  gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2)
 }
 
 ENTRY e {
@@ -1093,6 +1104,13 @@ stage_0_bwd {
   ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(in0_grad, in1_grad)
 }
 
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,2] parameter(1)
+  arg2 = f32[1,4,4,2] parameter(2)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2)
+}
+
 pipeline {
   after-all = token[] after-all()
   infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576"
@@ -1110,7 +1128,11 @@ pipeline {
   stage_1_bwd_2 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=1
   stage_0_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_bwd_1, stage_0_0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2)
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
+  gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2)
 }
 
 ENTRY e {

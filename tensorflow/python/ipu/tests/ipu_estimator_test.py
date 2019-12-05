@@ -1144,6 +1144,37 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         "Illegal increment of the `global_step` variable in the `model_fn`"):
       estimator.train(input_fn=my_input_fn, steps=iterations_per_loop)
 
+  @combinations.generate(combinations.combine(iterations_per_loop=[1, 2]))
+  def testReadGlobalStepInModelFunction(self, iterations_per_loop):
+    def my_model_fn(features, mode):
+      loss = math_ops.reduce_sum(features)
+      global_step = training_util.get_global_step()
+      eval_metric_ops = {
+          "mean_global_step": metrics_impl.mean(global_step)
+      }
+      return model_fn_lib.EstimatorSpec(mode=mode,
+                                        loss=loss,
+                                        eval_metric_ops=eval_metric_ops)
+
+    def my_input_fn():
+      features = [0, 0, 0, 0]
+      return dataset_ops.Dataset.from_tensor_slices(features)
+
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            iterations_per_loop=iterations_per_loop))
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+
+    num_steps = 4
+    metrics = estimator.evaluate(input_fn=my_input_fn, steps=num_steps)
+
+    # The global step is cached and only incremented on the host
+    # after the loop has completed. So the resolution of the observed
+    # global step will be `iterations_per_loop`.
+    sample_period = iterations_per_loop
+    sampled = [(i // sample_period) * sample_period for i in range(num_steps)]
+    self.assertEqual(np.mean(sampled), metrics["mean_global_step"])
+
 
 if __name__ == "__main__":
   googletest.main()

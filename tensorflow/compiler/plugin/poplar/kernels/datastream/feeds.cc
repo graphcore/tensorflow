@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_transfer_manager.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -167,6 +168,13 @@ class IPUCreateDatasetIteratorOp : public OpKernel {
     params.cancellation_manager = poplar_executor->cancellation_manager();
     params.function_handle_cache = fhc.get();
     params.flr = flr;
+    // Use the infeed specific allocator.
+    xla::poplarplugin::InfeedAllocator* allocator =
+        poplar_executor->GetInfeedAllocator();
+    params.allocator_getter = [allocator](AllocatorAttributes) {
+      return allocator;
+    };
+
     auto iter_ctx = absl::make_unique<IteratorContext>(params);
 
     // Create a dataset

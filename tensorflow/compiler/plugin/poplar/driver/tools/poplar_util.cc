@@ -120,8 +120,9 @@ Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
   return Status::OK();
 }
 
-Status PoplarExceptionToTensorflowStatus(const std::string& prefix,
+Status PoplarExceptionToTensorflowStatus(const std::string& origin,
                                          const std::exception& e) {
+  const std::string prefix = "[Error]" + origin;
   /* NOTE: Reduce this list if/when Poplar errors are subclassed */
   try {
     std::rethrow_exception(std::current_exception());

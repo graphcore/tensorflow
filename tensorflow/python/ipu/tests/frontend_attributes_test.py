@@ -321,6 +321,13 @@ class FrontendAttributesTest(test_util.TensorFlowTestCase):
         report.parse_log()
         report.assert_vertices_contain_list([expected_output])
 
+  @test_util.deprecated_graph_mode_only
+  def testUnsupportedPartialsType(self):
+    with self.assertRaisesRegex(
+        ValueError, "Only support float16, float32, provided float64"):
+      with ipu.scopes.partials_type(np.float64):
+        pass
+
 
 if __name__ == "__main__":
   googletest.main()
