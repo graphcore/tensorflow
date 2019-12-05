@@ -224,10 +224,12 @@ PoplarExecutor::TensorControl::TensorControl(size_t size_) {
   output_handle.clear();
   output_convertor = nullptr;
   converted_data.clear();
-  data = new char[size_];
+  data = static_cast<char*>(tensorflow::port::AlignedMalloc(size_, 64));
 }
 
-PoplarExecutor::TensorControl::~TensorControl() { delete[] data; }
+PoplarExecutor::TensorControl::~TensorControl() {
+  tensorflow::port::AlignedFree(data);
+}
 
 PoplarExecutor::InfeedDatasetIterator::InfeedDatasetIterator(
     int64 replication_factor,
@@ -421,27 +423,35 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
 
 class NullPrefetchCallback : public poplar::StreamCallback {
  public:
-  explicit NullPrefetchCallback(uint64 num_bytes) : num_bytes_(num_bytes) {
+  explicit NullPrefetchCallback(InfeedAllocator* allocator, uint64 num_bytes)
+      : num_bytes_(num_bytes), allocator_(allocator) {
     for (auto& buffer : buffers_) {
-      buffer = std::vector<unsigned char>(num_bytes, 0x02);
+      buffer = static_cast<uint8*>(allocator_->AllocateRaw(64, num_bytes));
+    }
+  }
+
+  ~NullPrefetchCallback() {
+    for (auto& buffer : buffers_) {
+      allocator_->DeallocateRaw(buffer);
     }
   }
 
   poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
-    std::memcpy(dest, buffers_[index_].data(), num_bytes_);
+    std::memcpy(dest, buffers_[index_], num_bytes_);
     return poplar::StreamCallback::Result::Success;
   }
 
   void fetch(void* dest) noexcept override {
     // This case shouldn't be hit, if poplar prefetches the data.
-    std::memcpy(dest, buffers_[index_].data(), num_bytes_);
+    std::memcpy(dest, buffers_[index_], num_bytes_);
   }
 
   void complete() noexcept override { index_ = (index_ + 1) % 16; }
 
  private:
   int index_ = 0;
-  std::vector<unsigned char> buffers_[16];
+  uint8* buffers_[16];
+  InfeedAllocator* allocator_;
   const uint64 num_bytes_;
 };
 }  // namespace
@@ -470,8 +480,8 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
         auto& queue = infeed_dataset_iterator->tensor_queues[j][replica_id];
         std::unique_ptr<poplar::StreamCallback> infeed_callback;
         if (PoplarXlaFlags::Get().null_data_feed) {
-          infeed_callback =
-              absl::make_unique<NullPrefetchCallback>(bytes_per_replica);
+          infeed_callback = absl::make_unique<NullPrefetchCallback>(
+              GetInfeedAllocator(), bytes_per_replica);
         } else {
           infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
               queue.get(), bytes_per_replica);
@@ -965,80 +975,52 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
                           "\nNew config: " + cfg.DebugString());
     return InternalError("IPU system configuration can only be set once.");
   }
-
-  current_config_ = cfg;
   try {
     if (device_open_) {
-      VLOG(1) << "Poplar device: type " << GetDeviceTargetName() << " ordinal "
-              << ordinal_ << " is already configured: skipping configuration.";
-      return Status::OK();
-    }
-
-    option_flags_ = poplar::OptionFlags();
-    option_flags_.set("target.workerStackSizeInBytes", "0x200");
-
-    bool opened = false;
-
-    bool have_ipu_hardware = false;
-
-    if (current_config_.device_config_size() > 0) {
-      hardware_configured_ = true;
-    }
-
-    const bool force_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
-
-    if (!force_ipu_model) {
-      auto device_list = GetDeviceManager().getDevices();
-      for (const auto& d : device_list) {
-        if (d.getTarget().getTargetType() == poplar::TargetType::IPU) {
-          have_ipu_hardware = true;
-          break;
-        }
+      if (DeviceConfigurationsEqual(current_config_, IpuOptions())) {
+        // If there is no config associated to the open device then it is a CPU
+        // device: dettach from it and initialize a Poplar device instead.
+        VLOG(1) << "Detaching from " << GetDeviceTargetName() << " ordinal "
+                << ordinal_;
+        poplar_device_.detach();
+        device_open_ = false;
+      } else {
+        VLOG(1) << "Poplar device: type " << GetDeviceTargetName()
+                << " ordinal " << ordinal_
+                << " is already configured: staying attached to it.";
       }
     }
+    current_config_ = cfg;
+    if (!device_open_) {
+      bool opened = false;
 
-    if (have_ipu_hardware) {
-      // Hardware devices
-      auto device_list = GetDeviceManager().getDevices();
+      bool have_ipu_hardware = false;
 
-      if (current_config_.device_config_size() == 0) {
-        // Default case - 1 single TF device with one single IPU
-        for (auto& d : device_list) {
-          if (d.getTarget().getTargetType() == poplar::TargetType::IPU &&
-              d.getTarget().getNumIPUs() == 1) {
-            if (d.attach()) {
-              poplar_device_ = std::move(d);
-              opened = true;
-              break;
-            }
+      if (current_config_.device_config_size() > 0) {
+        hardware_configured_ = true;
+      }
+
+      const bool force_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
+
+      if (!force_ipu_model) {
+        auto device_list = GetDeviceManager().getDevices();
+        for (const auto& d : device_list) {
+          if (d.getTarget().getTargetType() == poplar::TargetType::IPU) {
+            have_ipu_hardware = true;
+            break;
           }
         }
-      } else {
-        // User has specified a configuration
-        if (ordinal_ >= current_config_.device_config_size()) {
-          return InternalError(
-              "Device ordinal %d not in device configuration list.", ordinal_);
-        }
+      }
 
-        auto device = current_config_.device_config(ordinal_);
+      if (have_ipu_hardware) {
+        // Hardware devices
+        auto device_list = GetDeviceManager().getDevices();
 
-        if (device.selection_case() ==
-            IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
-          const int32 cfg_index = device.cfg_index();
-
-          poplar_device_ = std::move(device_list.at(cfg_index));
-          if (poplar_device_.attach()) {
-            opened = true;
-          } else {
-            return InternalError(
-                "Could not attach to requested device configuration index %d",
-                cfg_index);
-          }
-        } else {
+        if (current_config_.device_config_size() == 0) {
+          // Default case - 1 single TF device with one single IPU
           for (auto& d : device_list) {
             if (d.getTarget().getTargetType() == poplar::TargetType::IPU &&
-                static_cast<int32>(d.getTarget().getNumIPUs()) ==
-                    device.auto_count()) {
+                d.getTarget().getNumIPUs() == 1) {
               if (d.attach()) {
                 poplar_device_ = std::move(d);
                 opened = true;
@@ -1046,65 +1028,102 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
               }
             }
           }
-        }
-      }
+        } else {
+          // User has specified a configuration
+          if (ordinal_ >= current_config_.device_config_size()) {
+            return InternalError(
+                "Device ordinal %d not in device configuration list.",
+                ordinal_);
+          }
 
-      if (opened) {
-        unsigned mj, mn, pt;
-        poplar_device_.getDriverVersion(mj, mn, pt);
-        VLOG(1) << "Poplar driver: " << mj << "." << mn << "." << pt;
-
-        const auto& ids = poplar_device_.getDriverIDs();
-        LOG(INFO) << "Device /device:IPU:" << ordinal_ << " attached to IPU"
-                  << (ids.size() > 1 ? "s" : "") << ": "
-                  << absl::StrJoin(ids, ",");
-
-        if (current_config_.profiling().enable_execution_trace()) {
-          // Enable getting the cycle counts for each compute set on hardware
-          // when asking for an execution trace
-          option_flags_.set("debug.instrument", "true");
-        }
-      }
-    } else if (force_ipu_model) {
-      if (current_config_.ipu_model_config().enable_ipu_model()) {
-        // Poplar IPU Model device
-
-        int num_ipus = 1;
-        if (current_config_.device_config_size() > 0) {
           auto device = current_config_.device_config(ordinal_);
 
           if (device.selection_case() ==
               IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
-            return InvalidArgument(
-                "Must specify the number of IPUs using auto_count");
+            const int32 cfg_index = device.cfg_index();
+
+            poplar_device_ = std::move(device_list.at(cfg_index));
+            if (poplar_device_.attach()) {
+              opened = true;
+            } else {
+              return InternalError(
+                  "Could not attach to requested device configuration index %d",
+                  cfg_index);
+            }
+          } else {
+            for (auto& d : device_list) {
+              if (d.getTarget().getTargetType() == poplar::TargetType::IPU &&
+                  static_cast<int32>(d.getTarget().getNumIPUs()) ==
+                      device.auto_count()) {
+                if (d.attach()) {
+                  poplar_device_ = std::move(d);
+                  opened = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (opened) {
+          unsigned mj, mn, pt;
+          poplar_device_.getDriverVersion(mj, mn, pt);
+          VLOG(1) << "Poplar driver: " << mj << "." << mn << "." << pt;
+
+          const auto& ids = poplar_device_.getDriverIDs();
+          LOG(INFO) << "Device /device:IPU:" << ordinal_ << " attached to IPU"
+                    << (ids.size() > 1 ? "s" : "") << ": "
+                    << absl::StrJoin(ids, ",");
+        }
+      } else if (force_ipu_model) {
+        if (current_config_.ipu_model_config().enable_ipu_model()) {
+          // Poplar IPU Model device
+
+          int num_ipus = 1;
+          if (current_config_.device_config_size() > 0) {
+            auto device = current_config_.device_config(ordinal_);
+
+            if (device.selection_case() ==
+                IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
+              return InvalidArgument(
+                  "Must specify the number of IPUs using auto_count");
+            }
+
+            num_ipus = device.auto_count();
           }
 
-          num_ipus = device.auto_count();
-        }
+          poplar::IPUModel model;
+          model.numIPUs = num_ipus;
 
-        poplar::IPUModel model;
-        model.numIPUs = num_ipus;
-
-        model.compileIPUCode =
-            current_config_.ipu_model_config().compile_ipu_code();
-        poplar_device_ = model.createDevice();
-        if (poplar_device_.attach()) {
-          opened = true;
+          model.compileIPUCode =
+              current_config_.ipu_model_config().compile_ipu_code();
+          poplar_device_ = model.createDevice();
+          if (poplar_device_.attach()) {
+            opened = true;
+          }
         }
       }
-    }
 
-    if (!opened) {
-      return xla::ResourceExhausted(
-          "Unable to acquire poplar device type for ordinal %d", ordinal_);
+      if (!opened) {
+        return xla::ResourceExhausted(
+            "Unable to acquire poplar device type for ordinal %d", ordinal_);
+      }
+      VLOG(1) << "Opened Poplar device type " << GetDeviceTargetName();
+      device_open_ = true;
     }
   } catch (poplar::poplar_error e) {
     return xla::InternalError("Unable to open poplar device for ordinal %d: %s",
                               ordinal_, e.what());
   }
+  option_flags_ = poplar::OptionFlags();
+  option_flags_.set("target.workerStackSizeInBytes", "0x200");
 
-  VLOG(1) << "Opened Poplar device type " << GetDeviceTargetName();
-  device_open_ = true;
+  if (!current_config_.ipu_model_config().enable_ipu_model() &&
+      current_config_.profiling().enable_execution_trace()) {
+    // Enable getting the cycle counts for each compute set on hardware
+    // when asking for an execution trace
+    option_flags_.set("debug.instrument", "true");
+  }
 
   // By setting stream options before user options we make sure the user can
   // override this default behaviour.
@@ -1963,6 +1982,10 @@ Status PoplarExecutor::DeleteInfeedDatasetIterator(const std::string& feed_id) {
   }
 
   return Status::OK();
+}
+
+InfeedAllocator* PoplarExecutor::GetInfeedAllocator() {
+  return &infeed_allocator;
 }
 
 std::vector<std::vector<tensorflow::Tensor>>
