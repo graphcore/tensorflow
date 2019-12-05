@@ -163,7 +163,9 @@ std::string GetPathToGraphProgFile(std::string filename) {
   // This is for unit tests
   {
     char buf[256];
-    getcwd(buf, 255);
+    if (!getcwd(buf, 255)) {
+      return "";
+    }
     std::string path(buf);
     path = path + "/tensorflow/compiler/plugin/poplar/" + filename;
     if (access(path.c_str(), R_OK) != -1) {
@@ -331,8 +333,8 @@ bool AreAllOutputsParameters(const HloModule* module,
 
   // Check that all the parameters are in a standard layout format.
   const ComputationLayout layout = module->entry_computation_layout();
-  for (auto param_number : output_paramater_numbers) {
-    if (param_number < layout.parameter_count()) {
+  for (uint64 param_number : output_paramater_numbers) {
+    if (param_number < static_cast<uint64>(layout.parameter_count())) {
       auto parameter_shape = layout.parameter_layout(param_number).shape();
       const bool parameter_has_standard_layout = absl::c_all_of(
           FlattenedXlaShape(parameter_shape), [](const Shape& shape) {

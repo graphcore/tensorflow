@@ -50,7 +50,6 @@ ENTRY %cluster_1  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   ConstantNaN constant_nan;
   EXPECT_TRUE(constant_nan.Run(module).ValueOrDie());
@@ -77,7 +76,6 @@ ENTRY %cluster_2  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   ConstantNaN constant_nan;
 
@@ -101,7 +99,6 @@ ENTRY %cluster_3  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   ConstantNaN constant_nan;
   EXPECT_IS_NOT_OK(constant_nan.Run(module));
@@ -124,7 +121,6 @@ ENTRY %cluster_4  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   ConstantNaN constant_nan;
 

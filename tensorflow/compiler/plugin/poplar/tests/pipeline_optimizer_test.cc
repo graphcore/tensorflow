@@ -278,6 +278,7 @@ ENTRY e {
       0);
   PipelineOptimizer optimizer;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
+  EXPECT_TRUE(changed);
   TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_computation));
   pipeline_stage_0_bwd = stages.backward[0];
   EXPECT_THAT(pipeline_stage_0_bwd->operand_count(), 3);
@@ -345,6 +346,7 @@ ENTRY cluster {
 
   PipelineOptimizer optimizer;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
+  EXPECT_TRUE(changed);
   TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_computation));
   stage_1 = stages.forward[1];
   outfeed = find_outfeed(stage_1);
