@@ -80,6 +80,7 @@ py_library(
         "ipu_outfeed_queue.py",
         "ipu_run_config.py",
         "loops.py",
+        "ops/all_to_all_op.py",
         "ops/cross_replica_ops.py",
         "ops/custom_ops.py",
         "ops/embedding_ops.py",

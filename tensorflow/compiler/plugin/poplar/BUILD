@@ -197,6 +197,7 @@ cc_library(
 
         # Place HloPoplarInstructionFactory files below here.
         "driver/tools/conv_util.cc",
+        "driver/tools/custom_ops/all_gather.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
@@ -299,6 +300,7 @@ cc_library(
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
         "driver/tools/conv_util.h",
+        "driver/tools/custom_ops/all_gather.h",
         "driver/tools/custom_ops/arg_min_max.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
@@ -433,6 +435,7 @@ cc_library(
         "driver/ops/custom_ops/popnn/sigmoid.cc",
         "driver/ops/custom_ops/popnn/tanh.cc",
         "driver/ops/custom_ops/popnn/topk.cc",
+        "driver/ops/custom_ops/popops/all_gather.cc",
         "driver/ops/custom_ops/popops/select_scalars.cc",
         "driver/ops/custom_ops/popops/multi_slice.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
@@ -619,6 +622,7 @@ cc_library(
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
         "kernels/popops/all_reduce.cc",
+        "kernels/popops/all_to_all.cc",
         "kernels/popops/multi_slice.cc",
         "kernels/popops/sparse_softmax_cross_entropy.cc",
         "kernels/poputil/codelet_expression.cc",
@@ -699,7 +703,8 @@ tf_custom_op_py_library(
 cc_library(
     name = "popops_ops",
     srcs = [
-        "ops/popops/cross_replica_sum.cc",
+        "ops/popops/cross_replica_sum.cc",        
+        "ops/popops/all_to_all.cc",
         "ops/popops/multi_slice.cc",
     ],
     deps = ["//tensorflow/core:framework"],
