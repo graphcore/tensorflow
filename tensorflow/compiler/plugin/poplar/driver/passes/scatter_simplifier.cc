@@ -87,7 +87,7 @@ StatusOr<bool> ScatterSimplifier::Run(HloModule* module) {
   } else {
     VLOG(2) << "There were no changes.";
   }
-  return true;
+  return changed;
 }
 
 }  // namespace poplarplugin

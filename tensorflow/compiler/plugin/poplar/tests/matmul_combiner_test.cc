@@ -128,7 +128,7 @@ ENTRY main {
   CompilerAnnotations annotations(module);
 
   ScatterSimplifier sc;
-  EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_FALSE(sc.Run(module).ValueOrDie());
 
   EXPECT_EQ(GetNumMatmul(module->entry_computation()), 2);
   EXPECT_EQ(GetNumSlice(module->entry_computation()), 0);
@@ -224,7 +224,7 @@ ENTRY main {
   CompilerAnnotations annotations(module);
 
   ScatterSimplifier sc;
-  EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_FALSE(sc.Run(module).ValueOrDie());
 
   EXPECT_EQ(GetNumMatmul(module->entry_computation()), 2);
   EXPECT_EQ(GetNumSlice(module->entry_computation()), 0);
@@ -321,7 +321,7 @@ ENTRY main {
   CompilerAnnotations annotations(module);
 
   ScatterSimplifier sc;
-  EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_FALSE(sc.Run(module).ValueOrDie());
 
   EXPECT_EQ(GetNumMatmul(module->entry_computation()), 2);
   EXPECT_EQ(GetNumSlice(module->entry_computation()), 0);
