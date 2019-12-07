@@ -339,6 +339,24 @@ def _unpack_features_and_labels(args, kwargs):
   return features, labels
 
 
+def _extract_metric_values(eval_dict):
+  metric_values = {}
+
+  # Sort metrics lexicographically so graph is identical every time.
+  for name, (value_tensor, update_op) in sorted(six.iteritems(eval_dict)):
+    # We cannot depend on the `value_tensor` as it is unspecified whether it
+    # is evaluated before or after the `update_op`. For example there are no
+    # control dependencies between the `assign_add()` update ops and the tensor
+    # in `metrics_impl.mean()`. There does however seem to be a guarantee that
+    # the `update_op` returns the updated value, so we will just ignore the
+    # `value_tensor` and use the result of the `update_op` instead.
+    del value_tensor
+    model_fn_lib._check_is_tensor(update_op, "update_op")  # pylint: disable=protected-access
+    metric_values[name] = update_op
+
+  return metric_values
+
+
 class _ModelFnWrapper(object):
   def __init__(self, model_fn, config, params, infeed_queue):
     self._model_fn = model_fn
@@ -409,7 +427,7 @@ class _ModelFnWrapper(object):
       # training_step will be run by xla.compile(). xla.compile() only supports
       # tensor output while train_op can be either an operation or a tensor.
       # Even though xla.compile() automatically adds operation-typed train_op as
-      # control dependency of other tensor outputs, it doesn"t do so for
+      # control dependency of other tensor outputs, it doesn't do so for
       # tensor-typed train_op. Thus, we need to set it explicitly here.
       with ops.control_dependencies([train_op]):
         total_loss += math_ops.cast(loss, dtypes.float32)
@@ -460,16 +478,14 @@ class _ModelFnWrapper(object):
 
       self._capture_hooks(estimator_spec.evaluation_hooks)
 
-      update_op, value_ops = estimator_lib._extract_metric_update_ops(  # pylint: disable=protected-access
-          eval_metric_ops)
+      metric_values = _extract_metric_values(eval_metric_ops)
 
       if self._autosharding:
         autoshard.automatic_sharding(self._num_shards, features, loss)
 
-      with ops.control_dependencies([update_op, loss]):
-        total_loss += math_ops.cast(loss, dtypes.float32)
-        outfeed = outfeed_queue.enqueue(value_ops)
-        return total_loss, outfeed
+      total_loss += math_ops.cast(loss, dtypes.float32)
+      outfeed = outfeed_queue.enqueue(metric_values)
+      return total_loss, outfeed
 
     def evaluation_loop():
       total_loss = loops.repeat(self._iterations_per_loop,
