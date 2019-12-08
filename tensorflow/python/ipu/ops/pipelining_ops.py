@@ -44,7 +44,8 @@ from tensorflow.python.training import optimizer
 class PipelineSchedule(IntEnum):
   Grouped = 0
   Interleaved = 1
-  # Useful for debugging, but no performance improvement is expected with this schedule over sharding.
+  # Useful for debugging, but no performance improvement is expected with this
+  # schedule over sharding.
   Sequential = 2
 
 
@@ -327,7 +328,7 @@ def pipeline(computational_stages,
       training.
     device_mapping: optional stage to ipu mapping override.
     pipeline_schedule: Which scheduling algorithm to use for pipeline lowering.
-      Defaults to `PipelineSchedule.Interleaved`.
+      Defaults to `PipelineSchedule.Grouped`.
     forward_propagation_stages_poplar_options: If provided, a list of length
       equal to the number of computational stages. Each element is a
       PipelineStageOptions object which allows for fine grain control of the
@@ -393,7 +394,7 @@ def pipeline(computational_stages,
         (len(device_mapping), len(computational_stages)))
 
   if pipeline_schedule is None:
-    pipeline_schedule = PipelineSchedule.Interleaved
+    pipeline_schedule = PipelineSchedule.Grouped
 
   if not isinstance(pipeline_schedule, PipelineSchedule):
     raise TypeError("The given pipeline_schedule is not a member of the "
