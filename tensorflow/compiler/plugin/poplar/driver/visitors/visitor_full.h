@@ -86,6 +86,10 @@ class FullVisitor : public BaseVisitor {
 
   Status HandleOutfeed(HloInstruction* inst) override;
 
+  Status HandleRecv(HloInstruction* inst) override;
+
+  Status HandleRecvDone(HloInstruction* inst) override;
+
   Status HandleSend(HloInstruction* inst) override;
 
   Status HandleSendDone(HloInstruction* inst) override;

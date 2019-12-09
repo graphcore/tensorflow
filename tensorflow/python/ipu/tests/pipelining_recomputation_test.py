@@ -97,8 +97,16 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 14374, True)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        14374,
+        True,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -197,8 +205,16 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
-        dataset_fn, optimizer, self, 22906, True)
+        [stage1, stage2, stage3],
+        lambda: [], [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        22906,
+        True,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -249,8 +265,16 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 13821, True)
+        [stage1, stage2, stage3, stage4],
+        lambda: [], [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        13821,
+        True,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare4(self):
@@ -309,8 +333,16 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 19542, True)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        19542,
+        True,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare5(self):
@@ -355,8 +387,16 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 13590, True)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        13590,
+        True,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare6(self):

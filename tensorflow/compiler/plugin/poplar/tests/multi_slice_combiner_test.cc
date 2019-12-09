@@ -97,7 +97,7 @@ ENTRY main {
   CompilerAnnotations annotations(module);
 
   ScatterSimplifier sc;
-  EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_FALSE(sc.Run(module).ValueOrDie());
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiSlice(module->entry_computation()), 2);
@@ -187,7 +187,7 @@ ENTRY main {
   CompilerAnnotations annotations(module);
 
   ScatterSimplifier sc;
-  EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_FALSE(sc.Run(module).ValueOrDie());
   CustomOpReplacer custom_op_replacer;
   EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiSlice(module->entry_computation()), 3);

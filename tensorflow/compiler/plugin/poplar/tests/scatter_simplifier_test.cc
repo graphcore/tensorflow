@@ -148,7 +148,7 @@ main {
 
   CompilerAnnotations annotations(module);
   ScatterSimplifier sc;
-  EXPECT_TRUE(sc.Run(module).ValueOrDie());
+  EXPECT_FALSE(sc.Run(module).ValueOrDie());
   EXPECT_EQ(GetNumMultiUpdates(module->entry_computation()), 0);
 }
 

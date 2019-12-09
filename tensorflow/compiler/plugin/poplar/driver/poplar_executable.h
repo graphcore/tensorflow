@@ -53,7 +53,8 @@ class PoplarExecutable : public Executable {
                    std::vector<uint64> remaped_output,
                    uint32 replication_factor_, const InfeedInfos& infeed_infos,
                    const OutfeedInfos& outfeed_infos, StreamInfos&& stream_info,
-                   StreamMetaInfos&& stream_meta_info, SendInfos&& send_infos);
+                   StreamMetaInfos&& stream_meta_info,
+                   SendRecvInfos&& send_infos, SendRecvInfos&& recv_infos);
 
   ~PoplarExecutable() override;
 
@@ -88,7 +89,9 @@ class PoplarExecutable : public Executable {
     return stream_meta_infos_;
   }
 
-  const SendInfos& GetSendInfos() const { return send_infos_; }
+  const SendRecvInfos& GetSendInfos() const { return send_infos_; }
+
+  const SendRecvInfos& GetRecvInfos() const { return recv_infos_; }
 
   const uint32 GetReplicationFactor() const { return replication_factor_; }
 
@@ -109,8 +112,9 @@ class PoplarExecutable : public Executable {
   static Status Serialize(const std::string& filename,
                           const poplar::Executable& executable,
                           const InfeedInfos& infeeds,
-                          const OutfeedInfos& outfeeds, const SendInfos& sends,
-                          uint32 replication_count,
+                          const OutfeedInfos& outfeeds,
+                          const SendRecvInfos& sends,
+                          const SendRecvInfos& recvs, uint32 replication_count,
                           const poplar::OptionFlags& opts);
 
  private:
@@ -131,7 +135,8 @@ class PoplarExecutable : public Executable {
   OutfeedInfos outfeed_infos_;
   StreamInfos stream_infos_;
   StreamMetaInfos stream_meta_infos_;
-  SendInfos send_infos_;
+  SendRecvInfos send_infos_;
+  SendRecvInfos recv_infos_;
   bool loaded_from_cache_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutable);

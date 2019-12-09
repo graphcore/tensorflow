@@ -472,6 +472,31 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
           'Current program has been created with replication_factor 2'):
         sess.run(res)
 
+  def testReplicatedGraphWithOutsideCompilationScope(self):
+    with self.session() as sess:
+
+      def my_net():
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
+          x = ipu.replication_ops.replication_index()
+          with ipu.scopes.outside_compilation_scope():
+            # This receives the data from the first replica,
+            # and then broadcasts the result to all replicas.
+            # So both replicas should receive 0 + 1 = 1 from
+            # the host computation.
+            x += 1
+          return ipu.ops.cross_replica_ops.cross_replica_sum(x)
+
+      [res] = ipu.ipu_compiler.compile(my_net, inputs=[])
+
+      cfg = ipu.utils.create_ipu_config(
+          profiling=False, max_cross_replica_sum_buffer_size=10000)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Both replicas should receive 1.
+      self.assertEqual(2, sess.run(res))
+
 
 if __name__ == "__main__":
   googletest.main()

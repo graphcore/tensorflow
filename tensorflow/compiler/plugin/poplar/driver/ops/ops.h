@@ -324,6 +324,10 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map);
 
+StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateSort(CompilerResources& res,
                                               const HloInstruction* inst,
                                               TensorMap& tensor_map);
@@ -408,6 +412,10 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
                                                 int64 tuple_index,
                                                 const xla::Shape& output_shape,
                                                 poplar::Tensor tensor);
+
+StatusOr<poplar::program::Program> CreateRecvDone(CompilerResources& res,
+                                                  const HloInstruction* inst,
+                                                  TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateSendDone(CompilerResources& res,
                                                   const HloInstruction* inst,

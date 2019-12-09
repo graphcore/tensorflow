@@ -41,7 +41,7 @@ PoplarExecutable::PoplarExecutable(
     std::vector<uint64> remaped_output, uint32 replication_factor,
     const InfeedInfos& infeed_infos, const OutfeedInfos& outfeed_infos,
     StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info,
-    SendInfos&& send_infos)
+    SendRecvInfos&& send_infos, SendRecvInfos&& recv_infos)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       poplar_engine_(std::move(engine)),
@@ -57,6 +57,7 @@ PoplarExecutable::PoplarExecutable(
       stream_infos_(std::move(stream_infos)),
       stream_meta_infos_(std::move(stream_meta_info)),
       send_infos_(std::move(send_infos)),
+      recv_infos_(std::move(recv_infos)),
       loaded_from_cache_(false) {}
 
 PoplarExecutable::~PoplarExecutable() {
@@ -175,10 +176,16 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
                           Shape(outfeed.shape()));
   }
 
-  SendInfos sends;
+  SendRecvInfos sends;
   for (const auto& send : proto.sends()) {
     sends.emplace_back(send.stream_handle(), send.rendezvous_key(),
                        Shape(send.shape()));
+  }
+
+  SendRecvInfos recvs;
+  for (const auto& recv : proto.recvs()) {
+    recvs.emplace_back(recv.stream_handle(), recv.rendezvous_key(),
+                       Shape(recv.shape()));
   }
 
   // Load the poplar compilation options from the serialized executable
@@ -204,7 +211,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       std::move(hlo_module), std::move(profile_printer),
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
       {}, false, {}, replication_factor, std::move(infeeds),
-      std::move(outfeeds), {}, {}, std::move(sends));
+      std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs));
 
   executable->loaded_from_cache_ = true;
 
@@ -214,8 +221,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 /*static*/ Status PoplarExecutable::Serialize(
     const std::string& filename, const poplar::Executable& executable,
     const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
-    const SendInfos& sends, uint32 replication_count,
-    const poplar::OptionFlags& opts) {
+    const SendRecvInfos& sends, const SendRecvInfos& recvs,
+    uint32 replication_count, const poplar::OptionFlags& opts) {
   PoplarExecutableProto proto;
 
   // Write poplar executable to a file
@@ -250,6 +257,13 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     send_proto->set_stream_handle(send.stream_handle);
     send_proto->set_rendezvous_key(send.rendezvous_key);
     *(send_proto->mutable_shape()) = send.shape.ToProto();
+  }
+
+  for (const auto& recv : recvs) {
+    auto* recv_proto = proto.add_recvs();
+    recv_proto->set_stream_handle(recv.stream_handle);
+    recv_proto->set_rendezvous_key(recv.rendezvous_key);
+    *(recv_proto->mutable_shape()) = recv.shape.ToProto();
   }
 
   // write the compilation options into the serialized executable
