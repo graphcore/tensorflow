@@ -80,7 +80,7 @@ def _update_urls(ctx, original_urls):
     mirror = _get_env_var(ctx, "HTTP_MIRROR")
     if mirror:
         url = original_urls[0]
-        roots = ["mirror.tensorflow.org", "mirror.bazel.build"]
+        roots = ["mirror.tensorflow.org", "mirror.bazel.build", "download.tensorflow.org"]
         for r in roots:
             index = url.find(r)
             if index >= 0:

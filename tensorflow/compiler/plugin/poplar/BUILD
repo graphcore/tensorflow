@@ -161,6 +161,7 @@ cc_library(
         "driver/passes/fuse_wide_const.cc",
         "driver/passes/gradient_accumulation_fuser.cc",
         "driver/passes/hlo_computation_name_uniquify.cc",
+        "driver/passes/host_compute_dependency_inserter.cc",
         "driver/passes/inplace_finder.cc",
         "driver/passes/inplace_util.cc",
         "driver/passes/inter_ipu_copy_inserter.cc",
@@ -199,6 +200,7 @@ cc_library(
         "driver/tools/conv_util.cc",
         "driver/tools/custom_ops/arg_min_max.cc",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.cc",
+        "driver/tools/custom_ops/all_gather.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
@@ -270,6 +272,7 @@ cc_library(
         "driver/passes/fuse_wide_const.h",
         "driver/passes/gradient_accumulation_fuser.h",
         "driver/passes/hlo_computation_name_uniquify.h",
+        "driver/passes/host_compute_dependency_inserter.h",
         "driver/passes/inplace_finder.h",
         "driver/passes/inplace_util.h",
         "driver/passes/inter_ipu_copy_inserter.h",
@@ -300,6 +303,7 @@ cc_library(
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
         "driver/tools/conv_util.h",
+        "driver/tools/custom_ops/all_gather.h",
         "driver/tools/custom_ops/arg_min_max.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
@@ -435,6 +439,7 @@ cc_library(
         "driver/ops/custom_ops/popnn/sigmoid.cc",
         "driver/ops/custom_ops/popnn/tanh.cc",
         "driver/ops/custom_ops/popnn/topk.cc",
+        "driver/ops/custom_ops/popops/all_gather.cc",
         "driver/ops/custom_ops/popops/select_scalars.cc",
         "driver/ops/custom_ops/popops/multi_slice.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
@@ -452,7 +457,6 @@ cc_library(
         "driver/ops/custom_ops/poputil/user_op.cc",
         "driver/ops/cast_to_gfloat_ops.cc",
         "driver/ops/feed_ops.cc",
-        "driver/ops/send_ops.cc",
         "driver/ops/graph_caching_util.cc",
         "driver/ops/gather_ops.cc",
         "driver/ops/map_ops.cc",
@@ -461,6 +465,7 @@ cc_library(
         "driver/ops/norm_ops.cc",
         "driver/ops/random_ops.cc",
         "driver/ops/reduction_ops.cc",
+        "driver/ops/sendrecv_ops.cc",
         "driver/ops/sort_ops.cc",
         "driver/ops/tensor_ops.cc",
         "driver/poplar_compiler.cc",
@@ -577,6 +582,28 @@ cc_library(
 )
 
 cc_library(
+    name = "graph_optimizer_passes",
+    srcs = [
+        "graph_optimizer_passes/extract_outside_compilation_pass.cc",
+        "graph_optimizer_passes/graph_optimizer_pass_registration.cc",
+        "graph_optimizer_passes/static_shape_inference_pass.cc",
+    ],
+    hdrs = [
+        "graph_optimizer_passes/extract_outside_compilation_pass.h",
+        "graph_optimizer_passes/static_shape_inference_pass.h",
+    ],
+    deps = [
+        "//tensorflow/compiler/jit:compilation_passes",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:graph",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:lib_internal",
+        "//tensorflow/core:protos_all_cc",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
     name = "rearrange_pipeline_stage_arguments",
     srcs = [
         "kernels/pipelining/rearrange_pipeline_stage_arguments.cc",
@@ -604,6 +631,7 @@ cc_library(
     name = "kernels",
     srcs = [
         "kernels/datastream/feeds.cc",
+        "kernels/host_compute_kernels.cc",
         "kernels/ipu_kernels.cc",
         "kernels/pipelining/pipelining.cc",
         "kernels/popfloat/cast_to_gfloat.cc",
@@ -621,6 +649,7 @@ cc_library(
         "kernels/poprand/dropout_xla.cc",
         "kernels/poprand/random.cc",
         "kernels/popops/all_reduce.cc",
+        "kernels/popops/all_to_all.cc",
         "kernels/popops/multi_slice.cc",
         "kernels/popops/sparse_softmax_cross_entropy.cc",
         "kernels/poputil/codelet_expression.cc",
@@ -701,7 +730,8 @@ tf_custom_op_py_library(
 cc_library(
     name = "popops_ops",
     srcs = [
-        "ops/popops/cross_replica_sum.cc",
+        "ops/popops/cross_replica_sum.cc",        
+        "ops/popops/all_to_all.cc",
         "ops/popops/multi_slice.cc",
     ],
     deps = ["//tensorflow/core:framework"],
@@ -826,6 +856,13 @@ cc_library(
     alwayslink = True,
 )
 
+cc_library(
+    name = "host_compute_ops",
+    srcs = ["ops/host_compute_ops.cc"],
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
 tf_gen_op_wrapper_py(
     name = "sendrecv_ops_wrapper_py",
     out = "ops/gen_sendrecv_ops.py",
@@ -872,6 +909,8 @@ cc_library(
         ":driver",
         ":kernels",
         ":poplar_backend",
+        ":graph_optimizer_passes",
+        ":host_compute_ops",
         ":ipu_ops",
         ":pipelining_ops",
         ":popnn_ops",
@@ -1329,6 +1368,19 @@ xla_test(
 xla_test(
     name = "dependency_replacer_test",
     srcs = ["tests/dependency_replacer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "host_compute_dependency_inserter_test",
+    srcs = ["tests/host_compute_dependency_inserter_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     size = "small",
@@ -2409,6 +2461,23 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "outside_compilation_scope_test",
+    size = "medium",
+    srcs = ["tests/outside_compilation_scope_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
+tf_xla_py_test(
     name = "update_op_dependencies_test",
     size = "medium",
     srcs = ["tests/update_op_dependencies_test.py"],
@@ -3170,6 +3239,7 @@ test_suite(
         "graph_compile_io_map_test",
         "group_norm_test",
         "gru_test",
+        "host_compute_dependency_inserter_test",
         "hlo_computation_name_uniquify_test",
         "hlo_hash_test",
         "hlo_matcher_test",
@@ -3197,6 +3267,7 @@ test_suite(
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
         "not_supported_scatter_expander_test",
+        "outside_compilation_scope_test",
         "pipeline_copy_inserter_test",
         "pipeline_feed_hoisting_test",
         "pipeline_fifo_inserter_test",
@@ -3213,6 +3284,7 @@ test_suite(
         "reduce_test",
         "remapping_test",
         "root_token_replacer_test",
+        "sendrecv_ops_test",
         "scatter_simplifier_test",
         "scheduler_tree_test",
         "sharded_inplace_test",

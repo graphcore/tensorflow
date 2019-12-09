@@ -30,6 +30,7 @@ from tensorflow.python.ipu import utils
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import vertex_edsl
 
+from tensorflow.python.ipu.ops import all_to_all_op
 from tensorflow.python.ipu.ops import custom_ops
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ipu.ops import embedding_ops

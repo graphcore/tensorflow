@@ -19,13 +19,12 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 
 namespace xla {
 using FlattenedInstMap = absl::flat_hash_map<HloInstruction*, HloInstruction*>;
@@ -45,13 +44,13 @@ struct FeedInfo {
   Shape shape;
 };
 
-struct SendInfo {
-  SendInfo(const std::string& stream_handle, const std::string& rendezvous_key,
-           const Shape& shape)
+struct SendRecvInfo {
+  SendRecvInfo(const std::string& stream_handle,
+               const std::string& rendezvous_key, const Shape& shape)
       : stream_handle(stream_handle),
         rendezvous_key(rendezvous_key),
         shape(shape) {}
-  SendInfo() = delete;
+  SendRecvInfo() = delete;
 
   std::string stream_handle;
   std::string rendezvous_key;
@@ -60,7 +59,7 @@ struct SendInfo {
 
 using OutfeedInfos = std::vector<FeedInfo>;
 using InfeedInfos = std::vector<FeedInfo>;
-using SendInfos = std::vector<SendInfo>;
+using SendRecvInfos = std::vector<SendRecvInfo>;
 
 // We use this structure to communicate data about the DataStreams between the
 // UserOp custom operation and the PoplarExecutable so it can link the streams
@@ -152,7 +151,8 @@ struct CompilerAnnotations {
 
   StreamMetaInfos stream_meta_infos;
 
-  SendInfos send_infos;
+  SendRecvInfos send_infos;
+  SendRecvInfos recv_infos;
 
   TensorsWithLayouts tensors_with_layout;
 

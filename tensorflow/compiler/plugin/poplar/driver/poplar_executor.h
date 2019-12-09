@@ -617,9 +617,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Convers the data into the right host format
   static void PostProcessBuffer(TensorControl* tc);
 
-  // Connect buffers sent by send operations in the engine to the receive
-  // operations using the rendezvous mechanism.
-  Status ConnectSendCallbacksToRendezvous(const SendInfos& send_infos);
+  // Connect stream callbacks from Send/Recv operations in the engine
+  // to the corresponding host graph operations using the rendezvous mechanism.
+  Status ConnectSendCallbacksToRendezvous(const SendRecvInfos& send_infos);
+  Status ConnectRecvCallbacksToRendezvous(const SendRecvInfos& recv_infos);
 
   // Connect buffers provided by infeed transfer manager to Poplar
   // HostToDevice FIFO

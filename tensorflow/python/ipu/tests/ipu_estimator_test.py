@@ -26,9 +26,10 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python.data.ops import dataset_ops
-from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.estimator import estimator as estimator_lib
+from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import combinations
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -636,6 +637,35 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertEqual(2., scores["label_mean"])
     self.assertEqual(3., scores[model_fn_lib.LOSS_METRIC_KEY])
 
+  @combinations.generate(
+      combinations.combine(estimator_spec_class=[
+          model_fn_lib.EstimatorSpec, ipu_estimator.IPUEstimatorSpec
+      ]))
+  def testEvaluateBinaryClassificationMetrics(self, estimator_spec_class):
+    def my_input_fn():
+      features = [0, 0, 0, 1]
+      labels = [0, 1, 0, 1]
+      return dataset_ops.Dataset.from_tensor_slices((features, labels))
+
+    def my_model_fn(features, labels, mode):
+      loss = constant_op.constant(0.0)
+      eval_metric_ops = {
+          "accuracy": metrics_impl.accuracy(labels, features),
+          "precision": metrics_impl.precision(labels, features),
+          "recall": metrics_impl.recall(labels, features),
+      }
+      return estimator_spec_class(mode,
+                                  loss=loss,
+                                  eval_metric_ops=eval_metric_ops)
+
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=1))
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    scores = estimator.evaluate(my_input_fn, steps=4)
+    self.assertEqual(0.75, scores["accuracy"])
+    self.assertEqual(1.0, scores["precision"])
+    self.assertEqual(0.5, scores["recall"])
+
   def testEvaluateMissingEvalMetrics(self):
     def my_input_fn():
       return dataset_ops.Dataset.from_tensors(([], []))
@@ -1149,9 +1179,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     def my_model_fn(features, mode):
       loss = math_ops.reduce_sum(features)
       global_step = training_util.get_global_step()
-      eval_metric_ops = {
-          "mean_global_step": metrics_impl.mean(global_step)
-      }
+      eval_metric_ops = {"mean_global_step": metrics_impl.mean(global_step)}
       return model_fn_lib.EstimatorSpec(mode=mode,
                                         loss=loss,
                                         eval_metric_ops=eval_metric_ops)

@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poplar/Graph.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
@@ -20,8 +22,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/core/framework/rendezvous.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <poplar/Graph.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -39,6 +39,43 @@ StatusOr<string> FindAttribute(const FrontendAttributes& attributes,
 }
 
 }  // namespace
+
+StatusOr<poplar::program::Program> CreateRecvDone(CompilerResources& res,
+                                                  const HloInstruction* inst,
+                                                  TensorMap& tensor_map) {
+  poplar::program::Sequence seq;
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  const auto* recv_done = Cast<HloRecvDoneInstruction>(inst);
+
+  TF_ASSIGN_OR_RETURN(
+      const string rendezvous_key,
+      FindAttribute(recv_done->frontend_attributes(), "rendezvous_key"));
+
+  const xla::Shape recv_shape =
+      ShapeUtil::GetTupleElementShape(recv_done->shape(), 0);
+
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor tensor,
+      AddTensor(graph, TensorSource{inst, 0}, recv_shape, res, tensor_map));
+
+  // Use the rendezvous key also for the Poplar stream handle.
+  const poplar::DataStream stream = graph.addHostToDeviceFIFO(
+      rendezvous_key, tensor.elementType(), tensor.numElements(),
+      poplar::ReplicatedStreamMode::BROADCAST);
+
+  // Add an internal sync which essentially functions as a compiler
+  // barrier that avoids merging of host syncs and then reordering
+  // of the Send/Recv stream copies (which would cause a deadlock).
+  seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL));
+  seq.add(poplar::program::Copy(stream, tensor));
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, tensor));
+
+  res.annotations.recv_infos.emplace_back(stream.handle(), rendezvous_key,
+                                          recv_shape);
+  return seq;
+}
 
 StatusOr<poplar::program::Program> CreateSendDone(CompilerResources& res,
                                                   const HloInstruction* inst,
