@@ -135,11 +135,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return x
 
     def my_net(c):
-      return pipelining_ops.pipeline([stage1, stage2, stage3],
-                                     10,
-                                     inputs=[c],
-                                     infeed_queue=infeed_queue,
-                                     outfeed_queue=outfeed_queue)
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          10,
+          inputs=[c],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -195,32 +197,38 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     # Wrong type:
     with self.assertRaisesRegex(
         TypeError, 'device_mapping argument needs to be a list or a tuple'):
-      pipelining_ops.pipeline([stage1, stage2, stage3],
-                              3,
-                              inputs=[c],
-                              infeed_queue=infeed_queue,
-                              outfeed_queue=outfeed_queue,
-                              device_mapping=1)
+      pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          3,
+          inputs=[c],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          device_mapping=1,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     # Too many values:
     with self.assertRaisesRegex(ValueError,
                                 'Each stage must be mapped to an IPU'):
-      pipelining_ops.pipeline([stage1, stage2, stage3],
-                              3,
-                              inputs=[c],
-                              infeed_queue=infeed_queue,
-                              outfeed_queue=outfeed_queue,
-                              device_mapping=list(range(4)))
+      pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          3,
+          inputs=[c],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          device_mapping=list(range(4)),
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     # Not enough values:
     with self.assertRaisesRegex(ValueError,
                                 'Each stage must be mapped to an IPU'):
-      pipelining_ops.pipeline([stage1, stage2, stage3],
-                              3,
-                              inputs=[c],
-                              infeed_queue=infeed_queue,
-                              outfeed_queue=outfeed_queue,
-                              device_mapping=tuple(range(1)))
+      pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          3,
+          inputs=[c],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          device_mapping=tuple(range(1)),
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineWithDeviceMapping(self):
@@ -253,12 +261,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return x
 
     def my_net(c):
-      return pipelining_ops.pipeline([stage1, stage2, stage3],
-                                     12,
-                                     inputs=[c],
-                                     infeed_queue=infeed_queue,
-                                     outfeed_queue=outfeed_queue,
-                                     device_mapping=device_mapping)
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          12,
+          inputs=[c],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          device_mapping=device_mapping,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -316,12 +326,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return x
 
     def my_net(c):
-      return pipelining_ops.pipeline([stage1, stage2, stage3],
-                                     12,
-                                     inputs=[c],
-                                     infeed_queue=infeed_queue,
-                                     outfeed_queue=outfeed_queue,
-                                     device_mapping=device_mapping)
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          12,
+          inputs=[c],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          device_mapping=device_mapping,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -379,11 +391,13 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return x
 
     def my_net(c):
-      return pipelining_ops.pipeline([stage1, stage2, stage3],
-                                     12,
-                                     inputs=[c],
-                                     infeed_queue=infeed_queue,
-                                     outfeed_queue=outfeed_queue)
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          12,
+          inputs=[c],
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -424,10 +438,12 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return x
 
     def model_pipeline(x):
-      return pipelining_ops.pipeline([stage1, stage2],
-                                     10,
-                                     inputs=[x],
-                                     outfeed_queue=outfeed_queue)
+      return pipelining_ops.pipeline(
+          [stage1, stage2],
+          10,
+          inputs=[x],
+          outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -443,7 +459,11 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return x
 
     def my_net(x):
-      return pipelining_ops.pipeline([stage1], 10, inputs=[x])
+      return pipelining_ops.pipeline(
+          [stage1],
+          10,
+          inputs=[x],
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -469,10 +489,12 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return x2, y2
 
     def model_pipeline(x, y):
-      return pipelining_ops.pipeline([stage1, stage2, stage3],
-                                     12,
-                                     inputs=[x, y],
-                                     outfeed_queue=outfeed_queue)
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3],
+          12,
+          inputs=[x, y],
+          outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
@@ -548,12 +570,14 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
     def my_net(c):
-      return pipelining_ops.pipeline([stage1, stage2, stage3, stage4],
-                                     12,
-                                     inputs=[c],
-                                     optimizer_function=optimizer_function,
-                                     infeed_queue=infeed_queue,
-                                     outfeed_queue=outfeed_queue)
+      return pipelining_ops.pipeline(
+          [stage1, stage2, stage3, stage4],
+          12,
+          inputs=[c],
+          optimizer_function=optimizer_function,
+          infeed_queue=infeed_queue,
+          outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
     with ops.device('cpu'):
       c = array_ops.placeholder(np.float32, shape=[])
@@ -640,8 +664,15 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         return [array_ops.placeholder(np.float32, shape=[])]
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 15500)
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        15500,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare2(self):
@@ -740,8 +771,15 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
-        [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
-        dataset_fn, optimizer, self, 22700)
+        [stage1, stage2, stage3],
+        lambda: [], [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        22700,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare3(self):
@@ -792,8 +830,15 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         return loss
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4], lambda: [], [], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 12600)
+        [stage1, stage2, stage3, stage4],
+        lambda: [], [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        12600,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
   def testStageOptionsNotEnough(self):
@@ -814,6 +859,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           10,
           inputs=[x],
           outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
           forward_propagation_stages_poplar_options=[
               pipelining_ops.PipelineStageOptions()
           ])
@@ -885,6 +931,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           optimizer_function=optimizer_function,
           infeed_queue=infeed_queue,
           outfeed_queue=outfeed_queue,
+          pipeline_schedule=pipelining_ops.PipelineSchedule.Interleaved,
           weight_update_poplar_options={"dead": "beaf"})
 
     with ops.device('cpu'):

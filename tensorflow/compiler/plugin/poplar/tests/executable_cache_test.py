@@ -251,6 +251,33 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
     with _temporary_executable_cache():
       _run_in_new_process(build_and_run_model)
 
+  @test_util.deprecated_graph_mode_only
+  def test_model_with_outside_compilation_scope(self):
+    def build_and_run_model():
+      def my_net(x):
+        y = x * x
+        with ipu.scopes.outside_compilation_scope():
+          z = y * 2.0
+        return z + 2.0
+
+      v = array_ops.placeholder(np.float32, shape=())
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
+
+      compile_report = ipu_compile_summary("compile_report", result)
+
+      tu.configure_ipu_system()
+      with session.Session() as sess:
+        return sess.run([result, compile_report], feed_dict={v: 1.0})
+
+    with _temporary_executable_cache():
+      received0, report0 = _run_in_new_process(build_and_run_model)
+      received1, report1 = _run_in_new_process(build_and_run_model)
+      self.assertEqual(received0, received1)
+      self.assertEqual(received0, 4.0)
+      self.assertEqual(1, _count_ipu_compilations(report0))
+      self.assertEqual(0, _count_ipu_compilations(report1))
+
 
 if __name__ == "__main__":
   googletest.main()

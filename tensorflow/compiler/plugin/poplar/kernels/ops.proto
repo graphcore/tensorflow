@@ -50,4 +50,5 @@ enum PoplarOp {
   MultiUpdate = 46;
   MultiUpdateAdd = 47;
   PipelineStatefulGradientAccumulate = 48;
+  AllGather = 49;
 }

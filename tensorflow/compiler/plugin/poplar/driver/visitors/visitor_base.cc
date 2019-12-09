@@ -520,7 +520,14 @@ Status BaseVisitor::HandleScatter(HloInstruction* inst) {
 }
 
 Status BaseVisitor::HandleAllToAll(HloInstruction* inst) {
-  return Unimplemented(inst);
+  VLOG(1) << "Processing " << inst->name();
+
+  TF_ASSIGN_OR_RETURN(
+      auto seq, CreateReplicatedAllToAll(resources_, inst, GetOutputShape(inst),
+                                         tensor_map));
+
+  sequence.add(seq);
+  return Status::OK();
 }
 
 Status BaseVisitor::HandleCollectivePermute(HloInstruction* inst) {

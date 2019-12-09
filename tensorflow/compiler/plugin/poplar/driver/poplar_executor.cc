@@ -340,8 +340,8 @@ void PoplarExecutor::Deallocate(se::DeviceMemoryBase* mem) {
 }
 
 Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
-    const SendInfos& send_infos) {
-  for (const SendInfo& send : send_infos) {
+    const SendRecvInfos& send_infos) {
+  for (const SendRecvInfo& send : send_infos) {
     VLOG(1) << "Connecting Poplar stream to rendezvous key '"
             << send.rendezvous_key << "' with shape " << send.shape;
 
@@ -356,9 +356,9 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
     TF_RETURN_IF_ERROR(
         tensorflow::Rendezvous::ParseKey(send.rendezvous_key, &key));
 
-    // We allow capturing a raw pointer in the lambda as `this` which holds
-    // a refcount of it should outlive the engine.
-    tensorflow::Rendezvous* rendezvous = rendezvous_.get();
+    // We allow capturing a raw pointer to the rendezvous in the lambda as
+    // `this` which holds a refcount of it should outlive the engine.
+    auto* rendezvous = GetRendezvous();
 
     // Accept the output from the first replica.
     current_engine_->connectStreamToCallback(
@@ -386,6 +386,37 @@ Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
       current_engine_->connectStreamToCallback(send.stream_handle, replica_id,
                                                [](void*) {});
     }
+  }
+
+  return Status::OK();
+}
+
+Status PoplarExecutor::ConnectRecvCallbacksToRendezvous(
+    const SendRecvInfos& recv_infos) {
+  for (const SendRecvInfo& recv : recv_infos) {
+    VLOG(1) << "Connecting Poplar stream to rendezvous key '"
+            << recv.rendezvous_key << "' with shape " << recv.shape;
+
+    // We allow capturing a raw pointer to the rendezvous in the lambda as
+    // `this` which holds a refcount of it should outlive the engine.
+    auto* rendezvous = GetRendezvous();
+
+    tensorflow::Rendezvous::ParsedKey key;
+    TF_RETURN_IF_ERROR(
+        tensorflow::Rendezvous::ParseKey(recv.rendezvous_key, &key));
+
+    // This stream has ReplicatedStreamMode::BROADCAST, so every replica
+    // will receive the same data sent here.
+    current_engine_->connectStreamToCallback(
+        recv.stream_handle, [rendezvous, key](void* dst) {
+          tensorflow::Tensor tensor;
+          bool is_dead = false;
+          rendezvous->Recv(key, tensorflow::Rendezvous::Args{}, &tensor,
+                           &is_dead);
+          CHECK(!is_dead);
+          auto* src = tensorflow::DMAHelper::buffer(&tensor);
+          std::memcpy(dst, src->data(), src->size());
+        });
   }
 
   return Status::OK();
@@ -2240,6 +2271,9 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 
       TF_RETURN_IF_ERROR(
           ConnectSendCallbacksToRendezvous(executable.GetSendInfos()));
+
+      TF_RETURN_IF_ERROR(
+          ConnectRecvCallbacksToRendezvous(executable.GetRecvInfos()));
 
       const auto& infeed_infos = executable.GetInfeedInfos();
       if (!infeed_infos.empty()) {

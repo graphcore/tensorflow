@@ -109,6 +109,11 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
     return Status::OK();
   }
 
+  Status HandleRecvDone(HloInstruction* inst) override {
+    allocating_instructions.push_back(std::make_pair(inst, 0));
+    return Status::OK();
+  }
+
   Status HandleReduceWindow(HloInstruction* inst) override {
     allocating_instructions.push_back(std::make_pair(inst, 0));
     return Status::OK();

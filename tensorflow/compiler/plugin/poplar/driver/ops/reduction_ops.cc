@@ -955,5 +955,51 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
   return seq;
 }
 
+StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
+    CompilerResources& res, const HloInstruction* inst, const xla::Shape&,
+    TensorMap& tensor_map) {
+  poplar::program::Sequence seq;
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  // Re-concat the incoming tensor slices.
+  std::vector<poplar::Tensor> incoming_slices(inst->operand_count());
+  for (int i = 0; i < inst->operand_count(); ++i) {
+    TF_ASSIGN_OR_RETURN(poplar::Tensor input,
+                        FindInstructionInput(tensor_map, res, inst, i, seq));
+    incoming_slices[i] = input;
+  }
+
+  // Create a single tensor target.
+  poplar::Tensor target_input = poplar::concat(incoming_slices);
+
+  // Reshape it to be in the shape [num_splits][split_shape]
+  std::vector<std::size_t> sub_tensor_shape = target_input[0].shape();
+  sub_tensor_shape.insert(sub_tensor_shape.begin(), inst->operand_count());
+
+  target_input = target_input.reshape(sub_tensor_shape);
+
+  poplar::Tensor output_tensor;
+
+  // If we aren't part of a replicated graph, then just duplicate the tensor.
+  if (res.replication_factor < 2) {
+    output_tensor = poputil::duplicate(
+        graph, target_input, seq, GetDebugName(inst),
+        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+  } else {
+    // Perfom the actual Replica->Replica exchange version.
+    output_tensor = popops::allToAllPersonalizedExchange(
+        graph, target_input, seq, GetDebugName(inst));
+  }
+
+  for (int i = 0; i < inst->operand_count(); ++i) {
+    // Add each slice of the tensor as an output and expand to be
+    // [1][output_shape] to match what XLA expects.
+    TF_CHECK_OK(
+        AddOutputTensor(tensor_map, inst, i, output_tensor[i].expand({0})));
+  }
+
+  return seq;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

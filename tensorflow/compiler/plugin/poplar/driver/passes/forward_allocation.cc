@@ -17,6 +17,13 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
+
+#include <limits>
+#include <vector>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
@@ -25,17 +32,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_reachability.h"
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/types/optional.h"
-
-#include <limits>
-#include <vector>
 
 namespace xla {
 namespace poplarplugin {
@@ -349,10 +348,10 @@ void ForwardAllocation::FlattenInputs(
   }
 }
 
-// Inputs to the graph are non-tuple tensors which originate from parameters or
-// infeeds. To find such tensors we traverse through GetTupleElement
-// instructions, keeping track of this path. For example, given following HLO
-// computation:
+// Inputs to the graph are non-tuple tensors which originate from constants,
+// infeeds, parameters or recvs. To find such tensors we traverse through
+// GetTupleElement instructions, keeping track of this path. For example, given
+// following HLO computation:
 // clang-format off
 //%comp (arg0: (f32[1,4,4,2], f32[1,1,2,2], (f32[1,2], f32[1,2]), f32[2], f32[2])) -> f32[1,4,4,2] {
 // %arg0 = (f32[1,4,4,2], f32[1,1,2,2], (f32[1,2], f32[1,2]), f32[2], f32[2]) parameter(0)
@@ -381,6 +380,7 @@ ForwardAllocation::FindInputs(HloComputation* comp) {
     if (inst->opcode() == HloOpcode::kConstant ||
         inst->opcode() == HloOpcode::kInfeed ||
         inst->opcode() == HloOpcode::kParameter ||
+        inst->opcode() == HloOpcode::kRecvDone ||
         IsPoplarInstruction(PoplarOp::RemapDeduce)(inst)) {
       FlattenInputs(inst, {inst}, input_to_deferred_allocation_path);
     }
@@ -503,14 +503,15 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
   const auto get_source_consumers = [is_layout_producer, layout_producing_ops,
                                      alloc_dependencies,
                                      g](HloInstruction* inst) {
-    return g.FindConsumers(inst,
-                           [is_layout_producer, layout_producing_ops,
-                            alloc_dependencies](HloInstruction* inst) {
-                             return !is_layout_producer(inst) &&
-                                    !alloc_dependencies.contains(inst) &&
-                                    !layout_producing_ops.contains(inst);
-                           },
-                           true);
+    return g.FindConsumers(
+        inst,
+        [is_layout_producer, layout_producing_ops,
+         alloc_dependencies](HloInstruction* inst) {
+          return !is_layout_producer(inst) &&
+                 !alloc_dependencies.contains(inst) &&
+                 !layout_producing_ops.contains(inst);
+        },
+        true);
   };
   const MetaGraph<HloInstruction*> source_consumers(source_ops,
                                                     get_source_consumers);
@@ -620,7 +621,8 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
 
   // Get everything that depends on a source op
   const auto get_source_consumers = [g](HloInstruction* inst) {
-    return g.FindConsumers(inst, [](HloInstruction*) { return true; }, true);
+    return g.FindConsumers(
+        inst, [](HloInstruction*) { return true; }, true);
   };
   const MetaGraph<HloInstruction*> source_consumers(source_ops,
                                                     get_source_consumers);

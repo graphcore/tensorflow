@@ -74,6 +74,39 @@ def ipu_scope(device):
 
 
 @tf_contextlib.contextmanager
+def outside_compilation_scope(name="outside"):
+  """Provides a scope for placing operations on the host, outside the current
+  compilation scope. The operations will be placed on the default host device.
+  This allows for offloading computations from the IPU to the host, which can
+  be useful for operations that are not supported or suitable for execution on
+  the IPU.
+
+  Example:
+
+  .. code-block:: python
+
+    def my_net(a):
+      with ipu_scope("/device:IPU:0"):
+        b = a * a
+        with outside_compilation_scope():
+          c = b + 2  # Placed on the host.
+        d = b + c
+        return d
+
+  Args:
+    name: A unique name for the outside compilation scope.
+
+  Returns:
+    A context
+  """
+  attrs = {
+      "_xla_outside_compilation": attr_value_pb2.AttrValue(s=name.encode())
+  }
+  with ops.get_default_graph()._attr_scope(attrs):  # pylint: disable=protected-access
+    yield
+
+
+@tf_contextlib.contextmanager
 def ipu_shard(index):
   """Control sharding for a set of operations.
 
