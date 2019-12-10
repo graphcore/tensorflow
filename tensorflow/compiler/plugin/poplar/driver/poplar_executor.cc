@@ -533,8 +533,14 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
   }
 
   for (const auto& outfeed_info : outfeed_infos) {
-    auto* outfeed_context =
-        outfeed_contexts_.at(outfeed_info.config.feed_id()).get();
+    const auto& outfeed_id = outfeed_info.config.feed_id();
+    auto itr = outfeed_contexts_.find(outfeed_id);
+    if (itr == outfeed_contexts_.end()) {
+      LOG(FATAL) << "Outfeed with id='" << outfeed_id
+                 << "' is not registered, but is required by the engine.";
+    }
+
+    auto* outfeed_context = itr->second.get();
     auto tensor_count = outfeed_context->shapes.size();
     for (unsigned j = 0; j < tensor_count; ++j) {
       size_t length = ShapeUtil::ByteSizeOf(outfeed_context->shapes[j]);
