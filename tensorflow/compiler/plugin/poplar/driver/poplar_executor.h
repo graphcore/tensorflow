@@ -370,6 +370,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.enable_multi_slice_combiner();
   }
 
+  bool EnableGatherSimplifier() const {
+    return current_config_.enable_gather_simplifier();
+  }
+
   bool EnableMatmulCombiner() const {
     return current_config_.enable_matmul_combiner();
   }
