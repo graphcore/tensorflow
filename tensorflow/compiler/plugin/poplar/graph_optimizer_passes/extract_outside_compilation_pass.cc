@@ -118,8 +118,8 @@ Status ExtractOutsideCompilationPass::Run(
   TF_RET_CHECK(flib_def != nullptr);
 
   auto pflr = absl::make_unique<ProcessFunctionLibraryRuntime>(
-      nullptr, options.session_options->env, TF_GRAPH_DEF_VERSION, flib_def,
-      OptimizerOptions());
+      nullptr, options.session_options->env, nullptr, TF_GRAPH_DEF_VERSION,
+      flib_def, OptimizerOptions());
 
   Graph* graph = options.graph->get();
 
