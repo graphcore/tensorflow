@@ -260,6 +260,7 @@ def create_ipu_config(profiling=False,
   opts.ipu_model_config.compile_ipu_code = True
   opts.enable_multi_slice_combiner = False
   opts.enable_matmul_combiner = False
+  opts.enable_gather_simplifier = False
 
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
   opts.profiling.enable_compilation_trace = profiling
@@ -294,7 +295,8 @@ def set_optimization_options(opts,
                              combine_embedding_lookups=False,
                              combine_matmuls=False,
                              max_cross_replica_sum_buffer_size=0,
-                             max_inter_ipu_copies_buffer_size=0):
+                             max_inter_ipu_copies_buffer_size=0,
+                             gather_simplifier=False):
   """Set the IPU options related to performance / optimizations.
 
   .. code-block:: python
@@ -317,6 +319,8 @@ def set_optimization_options(opts,
       waiting before a cross replica sum op is scheduled.
     max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
       waiting before a inter IPU copy between IPUs is scheduled.
+    gather_simplifier: Will enable more aggressive optimisation
+      for embedding lookups.
 
   Returns:
     The IpuOptions configuration protobuf.
@@ -326,6 +330,8 @@ def set_optimization_options(opts,
   opts.enable_matmul_combiner = combine_matmuls
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+  opts.enable_gather_simplifier = gather_simplifier
+
   return opts
 
 
