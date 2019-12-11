@@ -59,6 +59,72 @@ bool CheckValidAttributes(const HloScatterInstruction* inst) {
          update_window_dims.size() == 1 &&
          update_window_dims[0] == (updates_shape.rank() - 1);
 }
+
+bool CheckValidAttributesForGather(const HloGatherInstruction* inst) {
+  const Shape operand_shape = inst->operand(0)->shape();
+  const Shape start_indices = inst->operand(1)->shape();
+  const auto dim_numbers = inst->gather_dimension_numbers();
+  const auto offset_dims = dim_numbers.offset_dims();
+  const auto collapsed_slice_dims = dim_numbers.collapsed_slice_dims();
+  const auto start_index_map = dim_numbers.start_index_map();
+  const auto index_vector_dim = dim_numbers.index_vector_dim();
+  const auto slice_sizes = inst->gather_slice_sizes();
+
+  const uint64 index_dim_size =
+      start_indices.rank() == index_vector_dim
+          ? 1
+          : start_indices.dimensions(index_vector_dim);
+
+  // Currently we only allow operand rank 2.
+  if (operand_shape.rank() != 2) {
+    return false;
+  }
+
+  // For this case vector of collapsed dimensions should have size 1.
+  if (collapsed_slice_dims.size() != 1) {
+    return false;
+  }
+
+  // Allow collapsed axis to be only 0 as multiSlice
+  // would not handle 1 at the moment. Next task also allow 1
+  // and do multiSlice(transpose(operand)).
+  int collapsed_slice_dim = collapsed_slice_dims[0];
+  if (collapsed_slice_dim != 0) {
+    return false;
+  }
+
+  // Non collapsed axis is orthogonal to collapsed one, can be 0 or 1.
+  int non_collapsed_dim = 1 - collapsed_slice_dim;
+
+  // Non collapsed axis of operand shape should be same as
+  // non collapsed axis of slice sizes.
+  if (operand_shape.dimensions(non_collapsed_dim) !=
+      slice_sizes[non_collapsed_dim]) {
+    return false;
+  }
+
+  // Collapsed axis of slice sizes must have dimension 1.
+  if (slice_sizes[collapsed_slice_dim] != 1) {
+    return false;
+  }
+
+  // Size of offset dims must be 1.
+  if (offset_dims.size() != 1) {
+    return false;
+  }
+
+  // Offset axis must be same as non collapsed axis.
+  if (offset_dims[0] != non_collapsed_dim) {
+    return false;
+  }
+
+  if (index_dim_size != 1) {
+    return false;
+  }
+
+  return true;
+}
+
 }  // namespace
 
 bool IsRandomNormal(const HloInstruction* inst) {
@@ -359,6 +425,14 @@ bool IsMultiUpdateAddScatter(const HloInstruction* inst) {
     const HloInstruction* root = inst->to_apply()->root_instruction();
     return Match(root, m::Add(m::Parameter(0), m::Parameter(1))) &&
            CheckValidAttributes(scatter);
+  }
+  return false;
+}
+
+bool IsMultiSliceGather(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kGather) {
+    const HloGatherInstruction* gather = Cast<HloGatherInstruction>(inst);
+    return CheckValidAttributesForGather(gather);
   }
   return false;
 }

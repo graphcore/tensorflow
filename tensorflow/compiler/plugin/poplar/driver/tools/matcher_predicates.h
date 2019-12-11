@@ -65,6 +65,7 @@ bool IsNonLinearity(const xla::HloInstruction*);
 bool IsSupportedAllReduce(const HloInstruction*);
 bool IsMultiUpdateScatter(const HloInstruction*);
 bool IsMultiUpdateAddScatter(const HloInstruction*);
+bool IsMultiSliceGather(const HloInstruction*);
 /**
  * Construct a unary predicate which checks if a given HloInstruction is a
  * custom Poplibs instruction of a specified type.

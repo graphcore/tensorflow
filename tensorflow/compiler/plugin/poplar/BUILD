@@ -159,6 +159,7 @@ cc_library(
         "driver/passes/fuse_ops_early.cc",
         "driver/passes/fuse_ops_late.cc",
         "driver/passes/fuse_wide_const.cc",
+        "driver/passes/gather_simplifier.cc",
         "driver/passes/gradient_accumulation_fuser.cc",
         "driver/passes/hlo_computation_name_uniquify.cc",
         "driver/passes/host_compute_dependency_inserter.cc",
@@ -270,6 +271,7 @@ cc_library(
         "driver/passes/fuse_ops_early.h",
         "driver/passes/fuse_ops_late.h",
         "driver/passes/fuse_wide_const.h",
+        "driver/passes/gather_simplifier.h",
         "driver/passes/gradient_accumulation_fuser.h",
         "driver/passes/hlo_computation_name_uniquify.h",
         "driver/passes/host_compute_dependency_inserter.h",
@@ -2001,6 +2003,21 @@ xla_test(
 )
 
 xla_test(
+    name = "gather_simplifier_test",
+    srcs = ["tests/gather_simplifier_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "small",
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "multi_update_canonicalize_test",
     srcs = ["tests/multi_update_canonicalize_test.cc"],
     backends = ["poplar"],
@@ -2372,6 +2389,7 @@ tf_xla_py_test(
         "//tensorflow/python:nn",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
+        "//tensorflow/python/keras:layers_base",        
     ],
 )
 
@@ -2389,6 +2407,25 @@ tf_xla_py_test(
         "//tensorflow/python:math_ops",
         "//tensorflow/python:layers",
         "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base", 
+    ],
+)
+
+tf_xla_py_test(
+    name = "gather_simplifier_embedding_lookup_test",
+    size = "medium",
+    srcs = ["tests/gather_simplifier_embedding_lookup_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+        "//tensorflow/python/ipu:ipu_lib",    
     ],
 )
 
@@ -3235,6 +3272,7 @@ test_suite(
         "fuse_ops_test",
         "fuse_wide_const_test",
         "fused_batch_norm_test",
+        "gather_simplifier_embedding_lookup_test",
         "gradient_accumulation_fuser_test",
         "graph_compile_io_map_test",
         "group_norm_test",
