@@ -151,4 +151,7 @@ message IpuOptions {
 
   // Which selection order to use when creating the virtual graphs.
   IPUSelectionOrder selection_order = 19;
+
+  // Whether to converts gathers into multiSlice operations.
+  bool enable_gather_simplifier = 20;
 };
