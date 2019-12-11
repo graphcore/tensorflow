@@ -27,15 +27,31 @@ limitations under the License.
 #include "tensorflow/core/public/session_options.h"
 
 tensorflow::string FLAGS_graphdef;
+tensorflow::string FLAGS_ret_val_input_name;
 int FLAGS_count = 1000;
 
 namespace tensorflow {
 namespace data {
 namespace standalone {
 
+static void BuildRetvalNode(GraphDef& graph_def) {
+  const char* const kRetValOp = "_Retval";
+  NodeDef* ret_def = graph_def.add_node();
+  ret_def->set_op(kRetValOp);
+  ret_def->set_name("dataset");
+
+  std::string* input_string = ret_def->add_input();
+  *input_string = FLAGS_ret_val_input_name;
+
+  AddNodeAttr("T", DT_VARIANT, ret_def);
+  AddNodeAttr("index", 0, ret_def);
+}
+
 static void RunInputPipeline(const std::string& graph_as_string) {
   GraphDef graph_def;
   protobuf::TextFormat::ParseFromString(graph_as_string, &graph_def);
+
+  BuildRetvalNode(graph_def);
 
   std::unique_ptr<Dataset> dataset;
   Status s = Dataset::FromGraph({}, graph_def, &dataset);
@@ -90,6 +106,9 @@ int main(int argc, char** argv) {
           "Tensorflow Graphdef file containing the input pipeline"),
       tensorflow::Flag("count", &FLAGS_count,
                        "Number of samples per displayed line"),
+      tensorflow::Flag("output_node", &FLAGS_ret_val_input_name,
+                       "Name of the last operation in the input pipeline, to "
+                       "be added as input to a _Retval operation"),
   };
 
   // Parse the command line for the flags.
@@ -97,6 +116,12 @@ int main(int argc, char** argv) {
   bool parse_ok = tensorflow::Flags::Parse(&argc, argv, flag_list);
   if (!parse_ok || FLAGS_graphdef.empty()) {
     std::printf("Graph option not provided by the user!\n%s", usage.c_str());
+    return 2;
+  }
+
+  if (FLAGS_ret_val_input_name.empty()) {
+    std::printf("Name of node to attach return val to not found in input!\n%s",
+                usage.c_str());
     return 2;
   }
 
