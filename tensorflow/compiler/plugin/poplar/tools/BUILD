@@ -32,5 +32,6 @@ tf_cc_binary(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:session_options",
+        "//tensorflow/core:all_kernels",
     ],
 )

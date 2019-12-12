@@ -748,7 +748,7 @@ StatusOr<poplar::program::Sequence> AddCopiesForNonParameterInputs(
   for (int64 inplace_idx : inst_description.GetInplaceOperandIndexes()) {
     // If inplace_idx is out of bounds then it's a state and therefore no copy
     // is needed.
-    if (inplace_idx < visitor_inputs.size()) {
+    if (inplace_idx < static_cast<int64>(visitor_inputs.size())) {
       CHECK_EQ(inst_inputs[inplace_idx].size(),
                visitor_inputs[inplace_idx].size());
       for (size_t flat_idx = 0; flat_idx != inst_inputs[inplace_idx].size();

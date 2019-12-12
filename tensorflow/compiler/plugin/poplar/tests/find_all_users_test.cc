@@ -520,7 +520,6 @@ body {
   auto* comp = module->entry_computation();
   auto* p0 = comp->GetInstructionWithName("a0");
   auto* p1 = comp->GetInstructionWithName("a1");
-  auto* s0 = comp->GetInstructionWithName("s0");
   auto* s1 = comp->GetInstructionWithName("s1");
 
   auto* w_comp = comp->GetInstructionWithName("w0")->while_body();
@@ -576,7 +575,6 @@ ENTRY in {
   auto* module = module_or_status.ValueOrDie().get();
   auto* comp = module->entry_computation();
   auto* p0 = comp->GetInstructionWithName("p0");
-  auto* s0 = comp->GetInstructionWithName("s0");
   auto* s1 = comp->GetInstructionWithName("s1");
 
   auto* r_comp = comp->GetInstructionWithName("r0")->to_apply();

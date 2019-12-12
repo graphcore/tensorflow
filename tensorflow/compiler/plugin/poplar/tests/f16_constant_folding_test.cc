@@ -50,7 +50,6 @@ ENTRY %cluster_1  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   F16ConstantFolding f16constant_folding;
   EXPECT_TRUE(f16constant_folding.Run(module).ValueOrDie());
@@ -91,7 +90,6 @@ ENTRY %cluster_2  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   F16ConstantFolding f16constant_folding;
   EXPECT_TRUE(f16constant_folding.Run(module).ValueOrDie());
@@ -130,7 +128,6 @@ ENTRY %cluster_3  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   F16ConstantFolding f16constant_folding;
   EXPECT_TRUE(f16constant_folding.Run(module).ValueOrDie());
@@ -167,7 +164,6 @@ ENTRY %cluster_4  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   F16ConstantFolding f16constant_folding;
   EXPECT_TRUE(f16constant_folding.Run(module).ValueOrDie());
@@ -207,7 +203,6 @@ ENTRY %cluster_5  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   F16ConstantFolding f16constant_folding;
   EXPECT_TRUE(f16constant_folding.Run(module).ValueOrDie());
@@ -243,7 +238,6 @@ ENTRY %cluster_6  {
   EXPECT_TRUE(module_or_status.ok());
 
   auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
 
   F16ConstantFolding f16constant_folding;
   EXPECT_TRUE(f16constant_folding.Run(module).ValueOrDie());

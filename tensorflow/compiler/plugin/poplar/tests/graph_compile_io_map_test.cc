@@ -526,8 +526,6 @@ main {
   stream.Init();
 
   IpuOptions opts;
-  auto* p = static_cast<PoplarPlatform*>(platform);
-
   PoplarCompiler compiler;
 
   auto module_post_passes =

@@ -76,10 +76,19 @@ def _apply_delete(ctx, paths):
     cmd = _wrap_bash_cmd(ctx, ["rm", "-rf"] + [ctx.path(path) for path in paths])
     _execute_and_check_ret_code(ctx, cmd)
 
-def _update_urls(ctx, original_urls):
-    mirror = _get_env_var(ctx, "HTTP_MIRROR")
-    if mirror:
-        url = original_urls[0]
+def _archive_name(url):
+    index = url.rfind("/")
+    if index < 0:
+        fail("Couldn't find the beginning of the archive name in "+url)
+    return url[index:]
+
+def _download_dependency(ctx):
+    mirror = _get_env_var(ctx, "HTTP_MIRROR") or ""
+    create_mirror_script = _get_env_var(ctx, "CREATE_MIRROR")
+    archive_path = ""
+    url = ctx.attr.urls[0]
+    archive_name = ctx.path("./"+_archive_name(url))
+    if mirror or create_mirror_script:
         roots = ["mirror.tensorflow.org", "mirror.bazel.build", "download.tensorflow.org"]
         for r in roots:
             index = url.find(r)
@@ -88,14 +97,30 @@ def _update_urls(ctx, original_urls):
                 break
         if index < 0:
             fail("Couldn't substitute the mirror's url in " + url)
-        if _get_env_var(ctx, "ENABLE_MIRROR_FALLBACK"):
-            urls = [ mirror + url[index:] ] + original_urls
+        archive_path = url[index:]
+        new_url = mirror + url[index:]
+        if create_mirror_script:
+            # Stick to the original public urls
+            urls = ctx.attr.urls;
+        elif _get_env_var(ctx, "ENABLE_MIRROR_FALLBACK"):
+            urls = [ new_url ] + ctx.attr.urls
         else:
-            urls = [ mirror + url[index:] ]
+            urls = [ new_url ]
     else:
         urls = ctx.attr.urls;
 
-    return urls
+    ctx.download(
+        urls,
+        archive_name,
+        ctx.attr.sha256,
+    )
+
+    if create_mirror_script:
+        cmd = _wrap_bash_cmd(ctx, [create_mirror_script, archive_path,
+                                   archive_name, mirror])
+        _execute_and_check_ret_code(ctx, cmd)
+    return archive_name
+
 
 def _tf_http_archive(ctx):
     if ("mirror.tensorflow.org" not in ctx.attr.urls[0] and
@@ -110,12 +135,10 @@ def _tf_http_archive(ctx):
 
     use_syslib = _use_system_lib(ctx, ctx.attr.name)
     if not use_syslib:
-        urls = _update_urls(ctx, ctx.attr.urls)
-        ctx.download_and_extract(
-            urls,
+        archive = _download_dependency(ctx)
+        ctx.extract(
+            archive,
             "",
-            ctx.attr.sha256,
-            ctx.attr.type,
             ctx.attr.strip_prefix,
         )
         if ctx.attr.delete:
@@ -190,13 +213,10 @@ def _third_party_http_archive(ctx):
         ctx.symlink(Label(ctx.attr.system_build_file), buildfile_path)
 
     else:
-        urls = _update_urls(ctx, ctx.attr.urls)
-
-        ctx.download_and_extract(
-            urls,
+        archive = _download_dependency(ctx)
+        ctx.extract(
+            archive,
             "",
-            ctx.attr.sha256,
-            ctx.attr.type,
             ctx.attr.strip_prefix,
         )
         if ctx.attr.delete:

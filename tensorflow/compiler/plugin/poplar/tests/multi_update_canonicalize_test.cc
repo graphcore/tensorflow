@@ -32,11 +32,6 @@ namespace {
 
 using MultiUpdateCanonicalizeTest = HloTestBase;
 
-int64 GetNumMultiUpdates(const HloComputation* comp) {
-  return absl::c_count_if(comp->instructions(),
-                          IsPoplarInstruction(PoplarOp::MultiUpdate));
-}
-
 int64 GetNumMultiUpdateAdds(const HloComputation* comp) {
   return absl::c_count_if(comp->instructions(),
                           IsPoplarInstruction(PoplarOp::MultiUpdateAdd));
@@ -54,8 +49,8 @@ scatter-combiner {
 main {
   arg0 = s32[15] parameter(0)
   arg1 = f32[15,10] parameter(1)
-	zero = f32[] constant(0)
-	big_zero = f32[2000,10] broadcast(zero), dimensions={}
+  zero = f32[] constant(0)
+  big_zero = f32[2000,10] broadcast(zero), dimensions={}
   ROOT s1 = f32[2000,10] scatter(big_zero, arg0, arg1), update_window_dims={1}, inserted_window_dims={0}, scatter_dims_to_operand_dims={0}, index_vector_dim=1, to_apply=scatter-combiner
 }
   )";
@@ -90,8 +85,8 @@ scatter-combiner {
 main {
   arg0 = s32[15,1] parameter(0)
   arg1 = f32[15,10] parameter(1)
-	zero = f32[] constant(0)
-	big_zero = f32[2000,10] broadcast(zero), dimensions={}
+  zero = f32[] constant(0)
+  big_zero = f32[2000,10] broadcast(zero), dimensions={}
   ROOT s1 = f32[2000,10] scatter(big_zero, arg0, arg1), update_window_dims={1}, inserted_window_dims={0}, scatter_dims_to_operand_dims={0}, index_vector_dim=1, to_apply=scatter-combiner
 }
   )";

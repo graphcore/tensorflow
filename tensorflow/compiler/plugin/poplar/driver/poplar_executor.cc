@@ -483,8 +483,8 @@ class NullPrefetchCallback : public poplar::StreamCallback {
  private:
   int index_ = 0;
   uint8* buffers_[16];
-  InfeedAllocator* allocator_;
   const uint64 num_bytes_;
+  InfeedAllocator* allocator_;
 };
 }  // namespace
 
