@@ -943,6 +943,106 @@ class PipeliningTest(test_util.TensorFlowTestCase):
           'weight_update_poplar_options to be of type PipelineStageOptions'):
         ipu_compiler.compile(my_net, inputs=[c])
 
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedLossRequiresOutfeedAndOptimizerFunction(self):
+    def identity(x):
+      return x
+
+    def optimizer_function(loss):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    with ops.device("/device:IPU:0"):
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed11")
+      with self.assertRaisesRegex(ValueError,
+                                  "An optimizer_function must be provided"):
+        pipelining_ops.pipeline([identity, identity, identity, identity],
+                                pipeline_depth=4,
+                                inputs=[1.0],
+                                outfeed_queue=outfeed_queue,
+                                outfeed_loss=True)
+
+      with self.assertRaisesRegex(ValueError,
+                                  "An outfeed_queue must be provided"):
+        pipelining_ops.pipeline([identity, identity, identity, identity],
+                                pipeline_depth=4,
+                                inputs=[1.0],
+                                optimizer_function=optimizer_function,
+                                outfeed_loss=True)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedLoss(self):
+    def stage1(x):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        w = variable_scope.get_variable(name="w", initializer=1.0)
+        return w * x
+
+    def identity(x):
+      return x
+
+    def optimizer_function(x):
+      opt = gradient_descent.GradientDescentOptimizer(0.01)
+      loss = x + 1.0
+      return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed12")
+
+    def my_net(x):
+      return pipelining_ops.pipeline([stage1, identity, identity, identity],
+                                     pipeline_depth=8,
+                                     inputs=[x],
+                                     outfeed_queue=outfeed_queue,
+                                     optimizer_function=optimizer_function,
+                                     outfeed_loss=True)
+
+    with ops.device("/device:IPU:0"):
+      pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
+
+    cfg = utils.create_ipu_config()
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
+    outfed = outfeed_queue.dequeue()
+
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      sess.run(pipeline)
+      self.assertAllEqual(np.ones(8), sess.run(outfed))
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedDict(self):
+    def identity(x):
+      return x
+
+    def dictstage(x):
+      return {"x": x}
+
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed13")
+
+    def my_net(x):
+      return pipelining_ops.pipeline([identity, identity, identity, dictstage],
+                                     pipeline_depth=8,
+                                     inputs=[x],
+                                     outfeed_queue=outfeed_queue)
+
+    with ops.device("/device:IPU:0"):
+      pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
+
+    cfg = utils.create_ipu_config()
+    cfg = utils.auto_select_ipus(cfg, 4)
+    utils.configure_ipu_system(cfg)
+    utils.move_variable_initialization_to_cpu()
+
+    outfed = outfeed_queue.dequeue()
+
+    with tu.ipu_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      sess.run(pipeline)
+      got = sess.run(outfed)
+      self.assertIsInstance(got, dict)
+      self.assertAllEqual(np.ones(8), got["x"])
+
 
 if __name__ == "__main__":
   googletest.main()
