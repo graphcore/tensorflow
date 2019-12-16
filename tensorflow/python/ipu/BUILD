@@ -313,24 +313,6 @@ tf_py_test(
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/contrib/compiler:xla",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:platform",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:variables",
-    ],
-)
-
-tf_py_test(
-    name = "ipu_pipeline_estimator_test",
-    size = "large",
-    shard_count = 8,
-    srcs = ["tests/ipu_pipeline_estimator_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow:tensorflow_py",
-        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
