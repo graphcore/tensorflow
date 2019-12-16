@@ -2283,6 +2283,22 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "serialization_test",
+    size = "large",
+    srcs = ["tests/serialization_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:constant_op",
+        "//tensorflow/python:nn_ops",
+    ],
+)
+
+tf_xla_py_test(
     name = "conv3d_test",
     size = "large",
     srcs = ["tests/conv3d_test.py"],

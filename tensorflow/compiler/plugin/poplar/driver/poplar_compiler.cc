@@ -928,6 +928,17 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
               poplar_executor->GetReportFlags()));
         }
       }
+      if (poplar_executor->EnableSerialization()) {
+        std::string filename =
+            poplar_executor->SerializedExecutableFilename(*module);
+        TF_RETURN_IF_ERROR(
+            poplar_executor->CreateSerializedExecutableDirIfMissing());
+        TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
+            filename, exec, resources.annotations.infeed_infos,
+            resources.annotations.outfeed_infos,
+            resources.annotations.send_infos, resources.annotations.recv_infos,
+            replication_factor, poplar_executor->GetReportFlags()));
+      }
 
       engine.reset(new poplar::Engine(std::move(exec), opts));
 

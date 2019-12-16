@@ -294,6 +294,30 @@ def create_ipu_config(profiling=False,
   return opts
 
 
+def set_serialization_options(opts, output_folder=""):
+  """ Enable / disable the serialization to disk of the compiled executables.
+
+  .. code-block:: python
+
+      # Create a device that will save to disk all the compiled executables.
+      opts = create_ipu_config()
+      opts = set_serialization_options(opts,
+                                      output_folder="/tmp/my_network")
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    output_folder: Where to save the compiled executables.
+                   Set to "" to disable serialization.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.serialization_folder = output_folder
+  return opts
+
+
 def set_optimization_options(opts,
                              combine_embedding_lookups=False,
                              combine_matmuls=False,
