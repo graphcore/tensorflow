@@ -33,9 +33,8 @@ TEST_F(RootTokenReplacerTest, TestTokenControlDependencyAdded) {
   auto input1_literal = xla::LiteralUtil::CreateR1<float>({1.1f, 1.1f});
   auto shape = input1_literal.shape();
 
-  auto i1 =
-      builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "i1"));
-  auto i2 = builder.AddInstruction(HloInstruction::CreateToken());
+  builder.AddInstruction(HloInstruction::CreateParameter(0, shape, "i1"));
+  builder.AddInstruction(HloInstruction::CreateToken());
   auto computation = builder.Build();
   auto hlo_module = CreateNewVerifiedModule();
   hlo_module->AddEntryComputation(std::move(computation));
@@ -136,8 +135,7 @@ TEST_F(RootTokenReplacerTest, TestNestedTupleFailure) {
 
   auto i1 = builder.AddInstruction(HloInstruction::CreateToken());
   auto inner_tuple = builder.AddInstruction(HloInstruction::CreateTuple({i1}));
-  auto tuple =
-      builder.AddInstruction(HloInstruction::CreateTuple({inner_tuple}));
+  builder.AddInstruction(HloInstruction::CreateTuple({inner_tuple}));
 
   auto computation = builder.Build();
   hlo_module->AddEntryComputation(std::move(computation));
@@ -163,7 +161,7 @@ TEST_F(RootTokenReplacerTest, TokenInWhileLoop) {
         HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32>(10)));
     auto c1 = builder_cond.AddInstruction(HloInstruction::CreateGetTupleElement(
         ShapeUtil::MakeShape(S32, {}), tuple, 0));
-    auto lt1 = builder_cond.AddInstruction(HloInstruction::CreateCompare(
+    builder_cond.AddInstruction(HloInstruction::CreateCompare(
         ShapeUtil::MakeShape(PRED, {}), c1, limit0, ComparisonDirection::kLt));
 
     comp_cond = hlo_module->AddEmbeddedComputation(builder_cond.Build());
@@ -192,7 +190,7 @@ TEST_F(RootTokenReplacerTest, TokenInWhileLoop) {
       HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32>(0)));
 
   auto init = builder_main.AddInstruction(HloInstruction::CreateTuple({c}));
-  auto main = builder_main.AddInstruction(
+  builder_main.AddInstruction(
       HloInstruction::CreateWhile(tuple_shape, comp_cond, comp_body, init));
   hlo_module->AddEntryComputation(builder_main.Build());
 

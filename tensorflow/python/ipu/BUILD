@@ -78,6 +78,7 @@ py_library(
         "ipu_multi_worker_strategy.py",
         "ipu_optimizer.py",
         "ipu_outfeed_queue.py",
+        "ipu_pipeline_estimator.py",
         "ipu_run_config.py",
         "loops.py",
         "ops/all_to_all_op.py",
@@ -290,6 +291,24 @@ tf_py_test(
     size = "large",
     shard_count = 2,
     srcs = ["tests/ipu_estimator_replicated_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
+    name = "ipu_pipeline_estimator_test",
+    size = "large",
+    shard_count = 8,
+    srcs = ["tests/ipu_pipeline_estimator_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
@@ -616,6 +635,7 @@ test_suite(
         "ipu_compiler_test",
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",
+        "ipu_pipeline_estimator_test",
         "map_gradient_optimizer_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",

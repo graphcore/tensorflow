@@ -662,7 +662,7 @@ Status PipelineFixer::InsertDummyBackwardStages(HloComputation* pipeline_comp) {
   // Find the missing backward stages.
   std::list<int64> missing;
   int64 back_idx = -1;
-  int64 stage_id = GetNextStageID(back_idx, stages.backward);
+  size_t stage_id = GetNextStageID(back_idx, stages.backward);
   for (size_t i = 0; i != stages.forward.size(); ++i) {
     if (stage_id == i) {
       stage_id = GetNextStageID(back_idx, stages.backward);

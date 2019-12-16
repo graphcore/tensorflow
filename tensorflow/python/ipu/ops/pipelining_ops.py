@@ -146,6 +146,7 @@ def pipeline(computational_stages,
              backward_propagation_stages_poplar_options=None,
              weight_update_poplar_options=None,
              continuous_weight_updates=False,
+             outfeed_loss=False,
              name=None):
   """
   Sets up a series of computational stages, where the outputs of one stage are
@@ -323,7 +324,7 @@ def pipeline(computational_stages,
       be accessed on the host.
     optimizer_function: optional Python function which takes the output of the
       last computational stage as parameters and returns an instance of
-      `pipelining_ops.OptimizationFunctionOutput` in order to generate the
+      `pipelining_ops.OptimizerFunctionOutput` in order to generate the
       back-propagation and weight-update parts of the model suitable for
       training.
     device_mapping: optional stage to ipu mapping override.
@@ -344,6 +345,9 @@ def pipeline(computational_stages,
       option will apply the gradients to the resource variables immediately,
       rather than accumulating the gradients and applying them at the end of
       each execution of the pipeline.
+    outfeed_loss: If True, the loss given by the `optimizer_function` will
+      be enqueued on the outfeed, instead of the outputs from the last
+      computational stage.
     name: name of this pipeline.
 
   Returns:
@@ -453,6 +457,10 @@ def pipeline(computational_stages,
     pipeline_poplar_config.resource_update.CopyFrom(
         weight_update_poplar_options.get_proto())
 
+  if outfeed_loss and not optimizer_function:
+    raise ValueError(
+        "An optimizer_function must be provided when outfeed_loss is True")
+
   control_outputs = []
 
   def _pipeline(*args):
@@ -475,20 +483,25 @@ def pipeline(computational_stages,
 
     if optimizer_function:
       outputs = _convert_to_list(outputs)
-      # Enqueue any output tensors to the outfeed.
-      if outputs:
-        # Enqueue the outfeed.
+
+      # Get the output from the optimizer function
+      opt_fn = optimizer_function(*outputs)
+      loss = opt_fn.loss
+      opt = opt_fn.opt
+
+      # Enqueue loss or any output tensors to the outfeed.
+      if outfeed_loss:
+        if not outfeed_queue:
+          raise ValueError(
+              "An outfeed_queue must be provided when outfeed_loss is True")
+        control_outputs.append(outfeed_queue.enqueue(opt_fn.loss))
+      elif outputs:
         if not outfeed_queue:
           raise ValueError(
               "The last computational stage has tensor outputs: %s, but no"
               " outfeed_queue has been provided." %
               (', '.join(str(t) for t in outputs)))
         control_outputs.append(outfeed_queue.enqueue(outputs))
-
-      # Get the output from the optimizer function
-      opt_fn = optimizer_function(*outputs)
-      loss = opt_fn.loss
-      opt = opt_fn.opt
 
       # Call the compute gradients function - this will be automatically put
       # into pipeline stages.
@@ -617,7 +630,8 @@ def _pipeline_stage(func,
       outputs = func(*args, **kwargs)
       # Check if there are output tensors - if there are then enqueue them.
       if not isinstance(outputs, ops.Operation):
-        outputs = _convert_to_list(outputs)
+        if not isinstance(outputs, dict):
+          outputs = _convert_to_list(outputs)
         outputs = outfeed_queue.enqueue(outputs)
       control_outputs.append(outputs)
 
