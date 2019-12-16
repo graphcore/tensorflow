@@ -32,6 +32,9 @@ def model_fn(mode, params):
     partial = MaxPooling2D(pool_size=(2, 2))(partial)
     partial = Dropout(0.25)(partial, training=is_training)
 
+    return partial, labels
+
+  def stage2(partial, labels):
     partial = Conv2D(64, (3, 3), padding="same")(partial)
     partial = Activation("relu")(partial)
     partial = Conv2D(64, (3, 3))(partial)
@@ -39,9 +42,6 @@ def model_fn(mode, params):
     partial = MaxPooling2D(pool_size=(2, 2))(partial)
     partial = Dropout(0.25)(partial, training=is_training)
 
-    return partial, labels
-
-  def stage2(partial, labels):
     partial = Flatten()(partial)
     partial = Dense(512)(partial)
     partial = Activation("relu")(partial)
@@ -166,9 +166,10 @@ def create_ipu_estimator(args):
 def train(ipu_estimator, args, x_train, y_train):
   """Train a model on IPU and save checkpoints to the given `args.model_dir`."""
   def input_fn():
-    # If using Dataset.from_tensor_slices, the data will be embedded
+    # If using Dataset.from_tensor_slices(), the data will be embedded
     # into the graph as constants, which makes the training graph very
-    # large and impractical. So use Dataset.from_generator here instead.
+    # large and impractical. So use Dataset.from_generator() here instead,
+    # but add prefetching and caching to improve performance.
 
     def generator():
       return zip(x_train, y_train)
@@ -177,6 +178,7 @@ def train(ipu_estimator, args, x_train, y_train):
     shapes = (x_train.shape[1:], y_train.shape[1:])
 
     dataset = tf.data.Dataset.from_generator(generator, types, shapes)
+    dataset = dataset.prefetch(len(x_train)).cache()
     dataset = dataset.repeat()
     dataset = dataset.shuffle(len(x_train))
     dataset = dataset.batch(args.batch_size, drop_remainder=True)
