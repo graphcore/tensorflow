@@ -311,7 +311,7 @@ tf_py_test(
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:platform",
