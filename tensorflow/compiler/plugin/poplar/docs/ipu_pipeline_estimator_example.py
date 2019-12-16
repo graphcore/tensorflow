@@ -7,7 +7,6 @@ import time
 
 import tensorflow.compat.v1 as tf
 
-from tensorflow.keras import Sequential
 from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.layers import Conv2D, MaxPooling2D
 from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten
@@ -18,48 +17,68 @@ tf.disable_v2_behavior()
 NUM_CLASSES = 10
 
 
-def model_fn(features, labels, mode, params):
-  """A simple CNN based on https://keras.io/examples/cifar10_cnn/"""
+def model_fn(mode, params):
+  """A simple CNN based on https://keras.io/examples/cifar10_cnn/ split
+  into two pipeline stages placed on different IPUs."""
 
-  model = Sequential()
-  model.add(Conv2D(32, (3, 3), padding="same"))
-  model.add(Activation("relu"))
-  model.add(Conv2D(32, (3, 3)))
-  model.add(Activation("relu"))
-  model.add(MaxPooling2D(pool_size=(2, 2)))
-  model.add(Dropout(0.25))
+  # Tell the dropout layers whether we are training to avoid a placeholder.
+  is_training = mode == tf.estimator.ModeKeys.TRAIN
 
-  model.add(Conv2D(64, (3, 3), padding="same"))
-  model.add(Activation("relu"))
-  model.add(Conv2D(64, (3, 3)))
-  model.add(Activation("relu"))
-  model.add(MaxPooling2D(pool_size=(2, 2)))
-  model.add(Dropout(0.25))
+  def stage1(features, labels):
+    partial = Conv2D(32, (3, 3), padding="same")(features)
+    partial = Activation("relu")(partial)
+    partial = Conv2D(32, (3, 3))(partial)
+    partial = Activation("relu")(partial)
+    partial = MaxPooling2D(pool_size=(2, 2))(partial)
+    partial = Dropout(0.25)(partial, training=is_training)
 
-  model.add(Flatten())
-  model.add(Dense(512))
-  model.add(Activation("relu"))
-  model.add(Dropout(0.5))
-  model.add(Dense(NUM_CLASSES))
+    partial = Conv2D(64, (3, 3), padding="same")(partial)
+    partial = Activation("relu")(partial)
+    partial = Conv2D(64, (3, 3))(partial)
+    partial = Activation("relu")(partial)
+    partial = MaxPooling2D(pool_size=(2, 2))(partial)
+    partial = Dropout(0.25)(partial, training=is_training)
 
-  logits = model(features, training=mode == tf.estimator.ModeKeys.TRAIN)
+    return partial, labels
 
-  loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
+  def stage2(partial, labels):
+    partial = Flatten()(partial)
+    partial = Dense(512)(partial)
+    partial = Activation("relu")(partial)
+    partial = Dropout(0.5)(partial, training=is_training)
+    logits = Dense(NUM_CLASSES)(partial)
 
-  if mode == tf.estimator.ModeKeys.EVAL:
-    predictions = tf.argmax(input=logits, axis=-1)
-    eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(labels=labels,
-                                        predictions=predictions),
-    }
-    return tf.estimator.EstimatorSpec(mode,
-                                      loss=loss,
-                                      eval_metric_ops=eval_metric_ops)
-  if mode == tf.estimator.ModeKeys.TRAIN:
+    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
+
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      # This return value is passed to the `optimizer_function`.
+      return loss
+
+    if mode == tf.estimator.ModeKeys.EVAL:
+      predictions = tf.argmax(input=logits, axis=1, output_type=tf.int32)
+      # These return values are passed to the `eval_metrics_fn`.
+      return loss, predictions, labels
+
+    raise NotImplementedError(mode)
+
+  def optimizer_function(loss):
     optimizer = tf.train.GradientDescentOptimizer(params["learning_rate"])
-    train_op = optimizer.minimize(loss=loss)
-    return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
-  raise NotImplementedError(mode)
+    return ipu.ops.pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
+
+  def eval_metrics_fn(loss, predictions, labels):
+    # This is executed on the host.
+    return {
+        "loss": loss,
+        "accuracy": tf.metrics.accuracy(predictions=predictions,
+                                        labels=labels),
+    }
+
+  return ipu.ipu_pipeline_estimator.IPUPipelineEstimatorSpec(
+      mode,
+      computational_stages=[stage1, stage2],
+      optimizer_function=optimizer_function,
+      eval_metrics_fn=eval_metrics_fn,
+      pipeline_depth=params["pipeline_depth"])
 
 
 def parse_args():
@@ -72,14 +91,20 @@ def parse_args():
 
   parser.add_argument("--batch-size",
                       type=int,
-                      default=32,
+                      default=16,
                       help="The batch size.")
+
+  parser.add_argument(
+      "--pipeline-depth",
+      type=int,
+      default=4,
+      help="The the number of batches that will be pipelined together.")
 
   parser.add_argument(
       "--iterations-per-loop",
       type=int,
       default=100,
-      help="The number of iterations (batches) per loop on IPU.")
+      help="The number of iterations (pipelines executions) per loop on IPU.")
 
   parser.add_argument("--log-interval",
                       type=int,
@@ -93,7 +118,7 @@ def parse_args():
 
   parser.add_argument("--training-steps",
                       type=int,
-                      default=200000,
+                      default=100000,
                       help="Total number of training steps.")
 
   parser.add_argument(
@@ -110,14 +135,13 @@ def parse_args():
 
 
 def create_ipu_estimator(args):
-  ipu_options = ipu.utils.create_ipu_config(
-      profiling=False,
-      use_poplar_text_report=False,
-  )
+  num_ipus_in_pipeline = 2
 
-  ipu.utils.auto_select_ipus(ipu_options, num_ipus=1)
+  ipu_options = ipu.utils.create_ipu_config()
+  ipu.utils.auto_select_ipus(ipu_options, num_ipus_in_pipeline)
 
   ipu_run_config = ipu.ipu_run_config.IPURunConfig(
+      num_shards=num_ipus_in_pipeline,
       iterations_per_loop=args.iterations_per_loop,
       ipu_options=ipu_options,
   )
@@ -129,10 +153,13 @@ def create_ipu_estimator(args):
       model_dir=args.model_dir,
   )
 
-  return ipu.ipu_estimator.IPUEstimator(
+  return ipu.ipu_pipeline_estimator.IPUPipelineEstimator(
       config=config,
       model_fn=model_fn,
-      params={"learning_rate": args.learning_rate},
+      params={
+          "learning_rate": args.learning_rate,
+          "pipeline_depth": args.pipeline_depth,
+      },
   )
 
 
@@ -164,7 +191,8 @@ def train(ipu_estimator, args, x_train, y_train):
   t1 = time.time()
 
   duration_seconds = t1 - t0
-  images_per_second = args.training_steps * args.batch_size / duration_seconds
+  images_per_step = args.batch_size * args.pipeline_depth
+  images_per_second = args.training_steps * images_per_step / duration_seconds
   print("Took {:.2f} minutes, i.e. {:.0f} images per second".format(
       duration_seconds / 60, images_per_second))
 
@@ -184,8 +212,9 @@ def test(ipu_estimator, args, x_test, y_test):
 
   num_test_examples = len(x_test)
 
-  test_batch_size = calc_batch_size(num_test_examples,
-                                    args.iterations_per_loop, args.batch_size)
+  batches_per_loop = args.pipeline_depth * args.iterations_per_loop
+  test_batch_size = calc_batch_size(num_test_examples, batches_per_loop,
+                                    args.batch_size)
 
   if test_batch_size != args.batch_size:
     print("Test batch size changed to {}.".format(test_batch_size))
@@ -195,7 +224,7 @@ def test(ipu_estimator, args, x_test, y_test):
     dataset = dataset.batch(test_batch_size, drop_remainder=True)
     return dataset
 
-  num_steps = num_test_examples // test_batch_size
+  num_steps = num_test_examples // (test_batch_size * args.pipeline_depth)
   metrics = ipu_estimator.evaluate(input_fn=input_fn, steps=num_steps)
   test_loss = metrics["loss"]
   test_accuracy = metrics["accuracy"]
@@ -209,10 +238,12 @@ def main():
   train_data, test_data = cifar10.load_data()
 
   num_test_examples = len(test_data[0])
-  if num_test_examples % args.iterations_per_loop != 0:
-    raise ValueError(("iterations_per_loop ({}) must evenly " +
-                      "divide the number of test examples ({})").format(
-                          args.iterations_per_loop, num_test_examples))
+  batches_per_loop = args.pipeline_depth * args.iterations_per_loop
+  if num_test_examples % batches_per_loop != 0:
+    raise ValueError(("pipeline_depth * iterations_per_loop ({} * {}) must " +
+                      "evenly divide the number of test examples ({})").format(
+                          args.pipeline_depth, args.iterations_per_loop,
+                          num_test_examples))
 
   ipu_estimator = create_ipu_estimator(args)
 

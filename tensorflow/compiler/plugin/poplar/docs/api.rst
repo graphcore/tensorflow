@@ -24,12 +24,21 @@ Python API
   :noindex:
 
 .. automodule:: tensorflow.python.ipu.ipu_estimator
+.. autoclass:: IPUEstimator
   :members:
-  :noindex:
+  :inherited-members:
+.. autoclass:: IPUEstimatorSpec
+  :members: __new__
+
+.. automodule:: tensorflow.python.ipu.ipu_pipeline_estimator
+.. autoclass:: IPUPipelineEstimator
+  :members:
+  :inherited-members:
+.. autoclass:: IPUPipelineEstimatorSpec
+  :members: __new__
 
 .. automodule:: tensorflow.python.ipu.ipu_run_config
   :members:
-  :noindex:
 
 .. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
   :members: IPUMultiWorkerStrategy
@@ -58,6 +67,10 @@ Python API
 .. automodule:: tensorflow.python.ipu.ops.normalization_ops
   :members:
   :noindex:
+
+.. automodule:: tensorflow.python.ipu.ops.pipelining_ops
+  :members:
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.ops.rnn_ops
   :members:
