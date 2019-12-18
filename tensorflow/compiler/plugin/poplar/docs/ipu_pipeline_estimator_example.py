@@ -12,8 +12,6 @@ from tensorflow.keras.layers import Conv2D, MaxPooling2D
 from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten
 from tensorflow.python import ipu
 
-tf.disable_v2_behavior()
-
 NUM_CLASSES = 10
 
 
