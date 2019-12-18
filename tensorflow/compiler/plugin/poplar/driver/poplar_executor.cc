@@ -165,6 +165,24 @@ void ResetXfeedManager(int device_ordinal) {
 }
 
 namespace {
+Status CreateDirIfMissing(const std::string& path) {
+  CHECK(!path.empty());
+  auto* env = tensorflow::Env::Default();
+
+  // Two threads could race to observe the absence of the directory and
+  // simultaneously try to create it, causing the "losing" thread to get a
+  // "directory already exists" error.  We can work around this by checking
+  // again whether the dir exists.
+  if (!env->IsDirectory(path).ok()) {
+    const auto status = env->RecursivelyCreateDir(path);
+    if (!status.ok() && !env->IsDirectory(path).ok()) {
+      return status;
+    }
+  }
+
+  return Status::OK();
+}
+
 Shape GetOutfeedShape(const Shape& output_shape,
                       const uint32 replication_factor) {
   if (replication_factor > 1) {
@@ -1256,29 +1274,31 @@ bool PoplarExecutor::HaveExecutableCache() const {
 }
 
 Status PoplarExecutor::CreateExecutableCacheDirIfMissing() const {
-  const auto& path = PoplarXlaFlags::Get().executable_cache_path;
-  CHECK(!path.empty());
-  auto* env = tensorflow::Env::Default();
+  return CreateDirIfMissing(PoplarXlaFlags::Get().executable_cache_path);
+}
 
-  // Two threads could race to observe the absence of the directory and
-  // simultaneously try to create it, causing the "losing" thread to get a
-  // "directory already exists" error.  We can work around this by checking
-  // again whether the dir exists.
-  if (!env->IsDirectory(path).ok()) {
-    const auto status = env->RecursivelyCreateDir(path);
-    if (!status.ok() && !env->IsDirectory(path).ok()) {
-      return status;
-    }
-  }
+std::string PoplarExecutor::SerializedExecutableFilename(
+    const HloModule& module) const {
+  uint64 hash = HashModuleAndDevice(module);
 
-  return Status::OK();
+  std::string filename = tensorflow::strings::Printf("%0llx.ipu_bin", hash);
+
+  return tensorflow::io::JoinPath(SerializationFolder(), filename);
+}
+
+Status PoplarExecutor::CreateSerializedExecutableDirIfMissing() const {
+  return CreateDirIfMissing(SerializationFolder());
+}
+
+uint64 PoplarExecutor::HashModuleAndDevice(const HloModule& module) const {
+  HloHash module_hash(&module);
+  uint64 hash = module_hash.GetHash();
+  return tensorflow::Hash64Combine(hash, poplar_device_hash_);
 }
 
 std::string PoplarExecutor::CachedExecutableFilename(
     const HloModule& module) const {
-  HloHash module_hash(&module);
-  uint64 hash = module_hash.GetHash();
-  hash = tensorflow::Hash64Combine(hash, poplar_device_hash_);
+  uint64 hash = HashModuleAndDevice(module);
 
   std::string filename = tensorflow::strings::Printf("%0llx.xla_engine", hash);
 

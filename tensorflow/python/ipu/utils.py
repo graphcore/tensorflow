@@ -49,45 +49,48 @@ class SelectionOrder(Enum):
         return o3
 
   and a typical machine with 8 Graphcore C2 cards:
-   _______               _______
-  |       |             |       |
-  |  14   |=============|  15   |
-  |_______|             |_______|
-      ||                    ||
-   _______               _______
-  |       |             |       |
-  |  12   |=============|  13   |
-  |_______|             |_______|
-      ||                    ||
-   _______               _______
-  |       |             |       |
-  |  10   |=============|  11   |
-  |_______|             |_______|
-      ||                    ||
-   _______               _______
-  |       |             |       |
-  |   8   |=============|   9   |
-  |_______|             |_______|
-      ||                    ||
-   _______               _______
-  |       |             |       |
-  |   6   |=============|   7   |
-  |_______|             |_______|
-      ||                    ||
-   _______               _______
-  |       |             |       |
-  |   4   |=============|   5   |
-  |_______|             |_______|
-      ||                    ||
-   _______               _______
-  |       |             |       |
-  |   2   |=============|   3   |
-  |_______|             |_______|
-      ||                    ||
-   _______               _______
-  |       |             |       |
-  |   0   |=============|   1   |
-  |_______|             |_______|
+
+  .. code-block:: none
+
+     _______               _______
+    |       |             |       |
+    |  14   |=============|  15   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |  12   |=============|  13   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |  10   |=============|  11   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   8   |=============|   9   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   6   |=============|   7   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   4   |=============|   5   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   2   |=============|   3   |
+    |_______|             |_______|
+        ||                    ||
+     _______               _______
+    |       |             |       |
+    |   0   |=============|   1   |
+    |_______|             |_______|
 
   (where each numbered square represents an IPU with the given device ID and the
   == and || connections represent IPUs being directly connected via IPU-Links)
@@ -288,6 +291,30 @@ def create_ipu_config(profiling=False,
 
   opts.prefetch_data_streams = prefetch_data_streams
   opts.selection_order = selection_order.value
+  return opts
+
+
+def set_serialization_options(opts, output_folder=""):
+  """ Enable / disable the serialization to disk of the compiled executables.
+
+  .. code-block:: python
+
+      # Create a device that will save to disk all the compiled executables.
+      opts = create_ipu_config()
+      opts = set_serialization_options(opts,
+                                      output_folder="/tmp/my_network")
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    output_folder: Where to save the compiled executables.
+                   Set to "" to disable serialization.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.serialization_folder = output_folder
   return opts
 
 

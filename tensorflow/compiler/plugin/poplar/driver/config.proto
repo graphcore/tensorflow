@@ -11,7 +11,7 @@ enum IPUSelectionOrder {
   HOOF = 3;
 }
 
-// NEXT ID 20
+// NEXT ID 22
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -154,4 +154,7 @@ message IpuOptions {
 
   // Whether to converts gathers into multiSlice operations.
   bool enable_gather_simplifier = 20;
+
+  // Where to save the compiled executable.
+  string serialization_folder = 21;
 };

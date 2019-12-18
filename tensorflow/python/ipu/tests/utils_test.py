@@ -124,6 +124,11 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertTrue(cfg.compilation_options[1].option, "C")
     self.assertTrue(cfg.compilation_options[1].value, "D")
 
+    cfg = ipu.utils.create_ipu_config()
+    folder_name = "/tmp/my_folder"
+    cfg = ipu.utils.set_serialization_options(cfg, folder_name)
+    self.assertTrue(cfg.serialization_folder, folder_name)
+
     with self.assertRaises(Exception):
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.select_ipus(cfg, [4, 4])
