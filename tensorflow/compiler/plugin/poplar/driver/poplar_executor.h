@@ -374,6 +374,14 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.enable_matmul_combiner();
   }
 
+  bool EnableSerialization() const {
+    return !current_config_.serialization_folder().empty();
+  }
+
+  const std::string& SerializationFolder() const {
+    return current_config_.serialization_folder();
+  }
+
   int64 GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }
@@ -425,7 +433,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status CreateExecutableCacheDirIfMissing() const;
 
+  Status CreateSerializedExecutableDirIfMissing() const;
+
   std::string CachedExecutableFilename(const HloModule& module) const;
+
+  std::string SerializedExecutableFilename(const HloModule& module) const;
 
   bool HaveCachedExecutable(const std::string& filename) const;
 
@@ -465,6 +477,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   static std::string GetCycleCounterStream();
 
  private:
+  uint64 HashModuleAndDevice(const HloModule& module) const;
+
   struct TensorControl {
     size_t size = 0;
     unsigned int ref_count = 0;

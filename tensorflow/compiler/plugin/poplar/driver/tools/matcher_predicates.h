@@ -44,6 +44,7 @@ bool Is1DVector(const HloInstruction*);
 bool IsExpandingReshape(const HloInstruction*);
 bool IsF16(const HloInstruction*);
 bool IsF32(const HloInstruction*);
+bool IsF16OrF32(const HloInstruction*);
 bool IsF32ToF16Convert(const HloInstruction*);
 bool IsF16ToF32Convert(const HloInstruction*);
 bool IsPopOpsConvolution(const HloInstruction*);

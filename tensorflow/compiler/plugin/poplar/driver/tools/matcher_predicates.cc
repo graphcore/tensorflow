@@ -266,6 +266,10 @@ bool IsF32(const HloInstruction* inst) {
   return inst->shape().element_type() == PrimitiveType::F32;
 }
 
+bool IsF16OrF32(const HloInstruction* inst) {
+  return IsF16(inst) || IsF32(inst);
+}
+
 bool IsF32ToF16Convert(const HloInstruction* inst) {
   return IsF16(inst) && IsF32(inst->operand(0));
 }

@@ -142,6 +142,7 @@ cc_library(
 cc_library(
     name = "optimizers",
     srcs = [
+        "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
         "driver/passes/casts_elimination.cc",
         "driver/passes/combine_instructions.cc",
@@ -254,6 +255,7 @@ cc_library(
     hdrs = [
         "driver/compiler_annotations.h",
         "driver/compiler_information.h",
+        "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
         "driver/passes/casts_elimination.h",
         "driver/passes/combine_instructions.h",
@@ -1672,6 +1674,41 @@ xla_test(
         ":libuser_op_test.so",
     ],
 )
+xla_test(
+    name = "all_gather_replacer_test",
+    srcs = ["tests/all_gather_replacer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    size = "medium",
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla:array3d",
+        "//tensorflow/compiler/xla:literal",
+        "//tensorflow/compiler/xla:reference_util",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:status_macros",
+        "//tensorflow/compiler/xla:statusor",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla/client:global_data",
+        "//tensorflow/compiler/xla/client:local_client",
+        "//tensorflow/compiler/xla/client:xla_builder",
+        "//tensorflow/compiler/xla/client:xla_computation",
+        "//tensorflow/compiler/xla/client/lib:arithmetic",
+        "//tensorflow/compiler/xla/client/lib:math",
+        "//tensorflow/compiler/xla/service:hlo",
+        "//tensorflow/compiler/xla/tests:client_library_test_base",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:literal_test_util",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test",
+        "@com_google_absl//absl/strings",
+    ],
+)
 
 xla_test(
     name = "matmul_combiner_test",
@@ -2235,6 +2272,22 @@ tf_xla_py_test(
     name = "conv_test",
     size = "large",
     srcs = ["tests/conv_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        ":ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:constant_op",
+        "//tensorflow/python:nn_ops",
+    ],
+)
+
+tf_xla_py_test(
+    name = "serialization_test",
+    size = "large",
+    srcs = ["tests/serialization_test.py"],
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",

@@ -30,6 +30,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/casts_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
@@ -657,6 +658,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<HloGetDimensionSizeRewriter>();
     pipeline.AddPass<CustomOpReplacer>();
+    pipeline.AddPass<AllToAllFinder>(resources.annotations,
+                                     resources.replication_factor);
     pipeline.AddPass<ParsePoplarBackendConfig>();
     pipeline.AddPass<PipelineFixer>();
     pipeline.AddPass<ReplicationFactorToConstant>(resources.replication_factor);
@@ -921,6 +924,17 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
               resources.annotations.recv_infos, replication_factor,
               poplar_executor->GetReportFlags()));
         }
+      }
+      if (poplar_executor->EnableSerialization()) {
+        std::string filename =
+            poplar_executor->SerializedExecutableFilename(*module);
+        TF_RETURN_IF_ERROR(
+            poplar_executor->CreateSerializedExecutableDirIfMissing());
+        TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
+            filename, exec, resources.annotations.infeed_infos,
+            resources.annotations.outfeed_infos,
+            resources.annotations.send_infos, resources.annotations.recv_infos,
+            replication_factor, poplar_executor->GetReportFlags()));
       }
 
       engine.reset(new poplar::Engine(std::move(exec), opts));

@@ -39,7 +39,8 @@ def configure_ipu_system(compilation_trace=True,
                          max_cross_replica_sum_buffer_size=0,
                          max_inter_ipu_copies_buffer_size=0,
                          merge_infeed_io_copies=False,
-                         always_rearrange_copies_on_the_host=False):
+                         always_rearrange_copies_on_the_host=False,
+                         serialization_folder=""):
   opts = IpuOptions()
   opts.profiling.enable_ipu_trace_events = (compilation_trace or io_trace
                                             or execution_trace
@@ -59,6 +60,7 @@ def configure_ipu_system(compilation_trace=True,
   opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
   opts.speed_size_config.always_rearrange_copies_on_the_host = \
       always_rearrange_copies_on_the_host
+  opts.serialization_folder = serialization_folder
 
   # yapf: disable
   assert not (pipelining and device_count_override
@@ -213,7 +215,8 @@ class ReportJSON(object):
                max_cross_replica_sum_buffer_size=0,
                max_inter_ipu_copies_buffer_size=0,
                merge_infeed_io_copies=False,
-               always_rearrange_copies_on_the_host=False):
+               always_rearrange_copies_on_the_host=False,
+               serialization_folder=""):
     self.test = test
     self.sess = sess
     # If no session is passed to the constructor then assume
@@ -236,7 +239,8 @@ class ReportJSON(object):
             max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size,
             merge_infeed_io_copies=merge_infeed_io_copies,
             always_rearrange_copies_on_the_host=
-            always_rearrange_copies_on_the_host)
+            always_rearrange_copies_on_the_host,
+            serialization_folder=serialization_folder)
 
   def reset(self):
     assert self.sess, "A valid session must be passed to the constructor" \
