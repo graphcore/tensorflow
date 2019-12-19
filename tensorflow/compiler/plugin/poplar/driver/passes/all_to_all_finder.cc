@@ -100,7 +100,9 @@ static HloInstruction* AddAllGatherAndReshape(HloComputation* comp,
                                               HloInstruction* original,
                                               uint32 replication_factor) {
   // Extend the old shape to include the replication factor.
-  std::vector<int64> new_update_dims = original->shape().dimensions();
+  auto original_dims = original->shape().dimensions();
+  std::vector<int64> new_update_dims(original_dims.begin(),
+                                     original_dims.end());
   new_update_dims.insert(new_update_dims.begin(), replication_factor);
 
   // Create the new update output shape.
