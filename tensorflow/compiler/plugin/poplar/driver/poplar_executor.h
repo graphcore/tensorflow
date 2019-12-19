@@ -57,6 +57,8 @@ limitations under the License.
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/lib/io/path.h"
 
+#include "absl/types/optional.h"
+
 #include <condition_variable>
 #include <list>
 #include <mutex>
@@ -274,11 +276,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   std::string GetDeviceTargetName() const;
 
   Status ConfigurePoplarDevice(const IpuOptions&);
+  Status AttachToPoplarDevice();
 
-  bool HasPoplarDevice();
+  bool PoplarDeviceIsAttached() const;
+  bool HasPoplarTarget() const;
 
-  // Requires HasPoplarDevice() to return true.
-  const poplar::Device& GetPoplarDevice() { return poplar_device_; };
+  const poplar::Target& GetOrCreatePoplarTarget();
 
   const poplar::OptionFlags& GetOptionsFlags() const { return option_flags_; }
 
@@ -482,6 +485,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
  private:
   uint64 HashModuleAndDevice(const HloModule& module) const;
+  Status CreatePoplarTarget(const IpuOptions& cfg);
 
   struct TensorControl {
     size_t size = 0;
@@ -674,8 +678,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   int ordinal_;
 
-  std::recursive_mutex mutex_;
-
   std::mutex infeeds_mutex_;
 
   std::condition_variable infeeds_cond_var_;
@@ -698,9 +700,27 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   int64 current_replication_factor_;
 
-  bool device_open_;
+  bool device_attached_;
 
-  poplar::Device poplar_device_;
+  class IPUConfig {
+   public:
+    bool DeviceConfigured() const;
+    bool TargetConfigured() const;
+    const poplar::Target& Target();
+    const poplar::Target& TargetOrDie() const;
+    const poplar::Device& Device() const;
+    void SetDevice(poplar::Device&& device);
+    void SetDeviceAndTarget(poplar::Device&& device);
+    void SetTarget(const poplar::Target& target);
+    void ClearDevice();
+    std::recursive_mutex& Mutex();
+
+   private:
+    absl::optional<poplar::Device> device_;
+    absl::optional<poplar::Target> target_;
+    std::recursive_mutex mutex_;
+  };
+  IPUConfig ipu_;
 
   int64 poplar_device_hash_;
 
@@ -718,8 +738,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   ArgsHandleMap args_map_;
   OutputsHandleMap outputs_map_;
-
-  bool hardware_configured_;
 
   IpuOptions current_config_;
 

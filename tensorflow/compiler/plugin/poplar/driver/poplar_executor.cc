@@ -232,6 +232,24 @@ int64 CombinedHash(const std::vector<int64>& components) {
   }
   return hash;
 }
+
+bool UseIpuHardware() {
+  const bool force_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
+  if (!force_ipu_model) {
+    auto device_list = PoplarExecutor::GetDeviceManager().getDevices();
+    for (const auto& d : device_list) {
+      if (d.getTarget().getTargetType() == poplar::TargetType::IPU) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+poplar::Target CreateIpuTarget(uint num_ipus) {
+  return poplar::Target::createIPUTarget(num_ipus, "ipu1");
+}
+
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -314,9 +332,8 @@ PoplarExecutor::PoplarExecutor()
       infeeds_done_(true),
       outfeeds_done_(true),
       current_engine_(nullptr),
-      device_open_(false),
+      device_attached_(false),
       poplar_device_hash_(0),
-      hardware_configured_(false),
       infeed_thread_pool_(tensorflow::Env::Default(),
                           "poplar_infeed_thread_pool_",
                           PoplarExecutor::NUM_THREADS),
@@ -335,7 +352,7 @@ PoplarExecutor::~PoplarExecutor() {}
 void* PoplarExecutor::Allocate(uint64 size) {
   TensorControl* allocated = new TensorControl(size);
   {
-    std::lock_guard<std::recursive_mutex> g(mutex_);
+    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     allocations_.push_back(allocated);
   }
   return allocated;
@@ -350,7 +367,7 @@ void* PoplarExecutor::GetSubBuffer(se::DeviceMemoryBase* parent,
 void PoplarExecutor::Deallocate(se::DeviceMemoryBase* mem) {
   TensorControl* tc = reinterpret_cast<TensorControl*>(mem->opaque());
   {
-    std::lock_guard<std::recursive_mutex> g(mutex_);
+    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     if (tc->ref_count > 0) {
       tc->ref_count--;
     }
@@ -860,7 +877,7 @@ void PoplarExecutor::StopIOThreads(const InfeedInfos& infeed_infos,
 }
 
 void PoplarExecutor::DeferredDeallocation() {
-  std::lock_guard<std::recursive_mutex> g(mutex_);
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
 
   const auto new_end =
       std::partition(allocations_.begin(), allocations_.end(),
@@ -894,7 +911,7 @@ Status PoplarExecutor::SynchronousMemcpy(se::DeviceMemoryBase* pop_dst,
   TensorControl* tc = reinterpret_cast<TensorControl*>(pop_dst->opaque());
   memcpy(tc->data, host_src, size);
   {
-    std::lock_guard<std::recursive_mutex> g(mutex_);
+    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     tc->on_device = false;
     tc->input_handle.clear();
   }
@@ -907,7 +924,7 @@ Status PoplarExecutor::SynchronousMemcpy(void* host_dst,
   const TensorControl* tc =
       reinterpret_cast<const TensorControl*>(pop_src.opaque());
   {
-    std::lock_guard<std::recursive_mutex> g(mutex_);
+    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     if (tc->on_device == true && !tc->output_handle.empty()) {
       TF_RETURN_IF_ERROR(MoveDeviceToHost());
     }
@@ -922,14 +939,14 @@ Status PoplarExecutor::SynchronousMemcpyDeviceToDevice(
   const TensorControl* src_tc =
       reinterpret_cast<const TensorControl*>(src.opaque());
   {
-    std::lock_guard<std::recursive_mutex> g(mutex_);
+    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     if (src_tc->on_device == true && !src_tc->output_handle.empty()) {
       TF_RETURN_IF_ERROR(MoveDeviceToHost());
     }
   }
   memcpy(dst_tc->data, src_tc->data, size);
   {
-    std::lock_guard<std::recursive_mutex> g(mutex_);
+    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     dst_tc->on_device = false;
     dst_tc->input_handle.clear();
   }
@@ -979,12 +996,12 @@ bool PoplarExecutor::StopTimer(se::Stream* stream, se::Timer* timer) {
 
 Status PoplarExecutor::BlockHostUntilDone(se::Stream* stream) {
   AsPoplarStream(stream)->BlockUntilDone();
-  std::lock_guard<std::recursive_mutex> g(mutex_);
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   return Status::OK();
 }
 
 bool PoplarExecutor::SynchronizeAllActivity() {
-  std::lock_guard<std::recursive_mutex> g(mutex_);
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   return true;
 }
 
@@ -999,8 +1016,55 @@ PoplarExecutor::CreateDeviceDescription() const {
   return InternalError("Failed to create device description.");
 }
 
+bool PoplarExecutor::IPUConfig::DeviceConfigured() const {
+  return device_.has_value();
+}
+
+bool PoplarExecutor::IPUConfig::TargetConfigured() const {
+  return target_.has_value();
+}
+
+void PoplarExecutor::IPUConfig::ClearDevice() { device_.reset(); }
+
+std::recursive_mutex& PoplarExecutor::IPUConfig::Mutex() { return mutex_; }
+
+const poplar::Target& PoplarExecutor::IPUConfig::Target() {
+  if (!target_ && PoplarXlaFlags::Get().use_ipu_model) {
+    // If the device has not been configured via configure_ipu_system, but we
+    // have requested an IPU model, then we create a CPU device.
+    std::lock_guard<std::recursive_mutex> g(mutex_);
+    // Poplar CPU device
+    device_ = poplar::Device::createCPUDevice();
+    target_ = device_->getTarget();
+  }
+  return TargetOrDie();
+}
+
+const poplar::Target& PoplarExecutor::IPUConfig::TargetOrDie() const {
+  CHECK(target_);
+  return *target_;
+}
+
+const poplar::Device& PoplarExecutor::IPUConfig::Device() const {
+  CHECK(device_);
+  return *device_;
+}
+
+void PoplarExecutor::IPUConfig::SetDevice(poplar::Device&& device) {
+  device_ = std::move(device);
+}
+
+void PoplarExecutor::IPUConfig::SetDeviceAndTarget(poplar::Device&& device) {
+  device_ = std::move(device);
+  target_ = device_->getTarget();
+}
+
+void PoplarExecutor::IPUConfig::SetTarget(const poplar::Target& target) {
+  target_ = target;
+}
+
 std::string PoplarExecutor::GetDeviceTargetName() const {
-  return poplar::toString(poplar_device_.getTarget().getTargetType());
+  return poplar::toString(ipu_.TargetOrDie().getTargetType());
 }
 
 static bool DeviceConfigurationsEqual(const IpuOptions& a,
@@ -1008,168 +1072,191 @@ static bool DeviceConfigurationsEqual(const IpuOptions& a,
   return google::protobuf::util::MessageDifferencer::Equivalent(a, b);
 }
 
-bool PoplarExecutor::HasPoplarDevice() {
-  const bool force_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
-  // If the device has not been configured via configure_ipu_system, but we have
-  // requested an IPU model, then we create a CPU device.
-  std::lock_guard<std::recursive_mutex> g(mutex_);
-  if (!device_open_ && force_ipu_model) {
+const poplar::Target& PoplarExecutor::GetOrCreatePoplarTarget() {
+  if (!ipu_.TargetConfigured() && PoplarXlaFlags::Get().use_ipu_model) {
+    // If the device has not been configured via configure_ipu_system, but we
+    // have requested an IPU model, then we create a CPU device.
+    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     // Poplar CPU device
-    poplar_device_ = poplar::Device::createCPUDevice();
-    if (poplar_device_.attach()) {
-      device_open_ = true;
-    }
+    ipu_.SetDeviceAndTarget(poplar::Device::createCPUDevice());
   }
-  return device_open_;
+
+  return ipu_.Target();
 }
 
-Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
-  if (!DeviceConfigurationsEqual(cfg, current_config_) &&
-      hardware_configured_) {
-    XLA_VLOG_LINES(1, "Current config: " + current_config_.DebugString() +
-                          "\nNew config: " + cfg.DebugString());
-    return InternalError("IPU system configuration can only be set once.");
+bool PoplarExecutor::HasPoplarTarget() const {
+  // Target is configured, or the model will be used.
+  // (In which case it will be lazy-initialized in GetOrCreatePoplarTarget().
+  return PoplarXlaFlags::Get().use_ipu_model || ipu_.TargetConfigured();
+}
+
+bool PoplarExecutor::PoplarDeviceIsAttached() const { return device_attached_; }
+
+Status PoplarExecutor::AttachToPoplarDevice() {
+  const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
+  const bool use_ipu_hardware = UseIpuHardware();
+  if (device_attached_) {
+    return InternalError("Already attached to device");
   }
+
   try {
-    if (device_open_) {
-      if (DeviceConfigurationsEqual(current_config_, IpuOptions())) {
-        // If there is no config associated to the open device then it is a CPU
-        // device: dettach from it and initialize a Poplar device instead.
-        VLOG(1) << "Detaching from " << GetDeviceTargetName() << " ordinal "
-                << ordinal_;
-        poplar_device_.detach();
-        device_open_ = false;
-      } else {
-        VLOG(1) << "Poplar device: type " << GetDeviceTargetName()
-                << " ordinal " << ordinal_
-                << " is already configured: staying attached to it.";
+    if (!ipu_.TargetConfigured()) {
+      if (!use_ipu_model) {
+        return InvalidArgument("Device not configured and IPU model disabled.");
       }
+      GetOrCreatePoplarTarget();
     }
-    current_config_ = cfg;
-    if (!device_open_) {
-      bool opened = false;
-
-      bool have_ipu_hardware = false;
-
-      if (current_config_.device_config_size() > 0) {
-        hardware_configured_ = true;
+    if (ipu_.DeviceConfigured()) {
+      // Device was selected when the target was created: attach or fail.
+      if (!ipu_.Device().attach()) {
+        if (use_ipu_model) {
+          return xla::ResourceExhausted(
+              "Unable to acquire poplar device model for ordinal %d", ordinal_);
+        } else {
+          const int32 cfg_index =
+              current_config_.device_config(ordinal_).cfg_index();
+          return xla::ResourceExhausted(
+              "Could not attach to requested device configuration index %d",
+              cfg_index);
+        }
       }
-
-      const bool force_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
-
-      if (!force_ipu_model) {
-        auto device_list = GetDeviceManager().getDevices();
-        for (const auto& d : device_list) {
-          if (d.getTarget().getTargetType() == poplar::TargetType::IPU) {
-            have_ipu_hardware = true;
+    } else {
+      // Poplar device would already be set if we were using the model.
+      CHECK(use_ipu_hardware);
+      // Hardware devices
+      auto device_list = GetDeviceManager().getDevices();
+      bool found_match = false;
+      for (auto& d : device_list) {
+        if (d.getTarget().getTargetType() ==
+                GetOrCreatePoplarTarget().getTargetType() &&
+            d.getTarget().getNumIPUs() ==
+                GetOrCreatePoplarTarget().getNumIPUs()) {
+          found_match = true;
+          // Try to attach to that device.
+          if (d.attach()) {
+            ipu_.SetDevice(std::move(d));
             break;
           }
         }
       }
-
-      if (have_ipu_hardware) {
-        // Hardware devices
-        auto device_list = GetDeviceManager().getDevices();
-
-        if (current_config_.device_config_size() == 0) {
-          // Default case - 1 single TF device with one single IPU
-          for (auto& d : device_list) {
-            if (d.getTarget().getTargetType() == poplar::TargetType::IPU &&
-                d.getTarget().getNumIPUs() == 1) {
-              if (d.attach()) {
-                poplar_device_ = std::move(d);
-                opened = true;
-                break;
-              }
-            }
-          }
+      if (!ipu_.DeviceConfigured()) {
+        if (found_match) {
+          return xla::ResourceExhausted(
+              "Failed to attach to any of the device(s) with matching configs "
+              "for ordinal %d",
+              ordinal_);
         } else {
-          // User has specified a configuration
-          if (ordinal_ >= current_config_.device_config_size()) {
-            return InternalError(
-                "Device ordinal %d not in device configuration list.",
-                ordinal_);
-          }
-
-          auto device = current_config_.device_config(ordinal_);
-
-          if (device.selection_case() ==
-              IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
-            const int32 cfg_index = device.cfg_index();
-
-            poplar_device_ = std::move(device_list.at(cfg_index));
-            if (poplar_device_.attach()) {
-              opened = true;
-            } else {
-              return InternalError(
-                  "Could not attach to requested device configuration index %d",
-                  cfg_index);
-            }
-          } else {
-            for (auto& d : device_list) {
-              if (d.getTarget().getTargetType() == poplar::TargetType::IPU &&
-                  static_cast<int32>(d.getTarget().getNumIPUs()) ==
-                      device.auto_count()) {
-                if (d.attach()) {
-                  poplar_device_ = std::move(d);
-                  opened = true;
-                  break;
-                }
-              }
-            }
-          }
-        }
-
-        if (opened) {
-          unsigned mj, mn, pt;
-          poplar_device_.getDriverVersion(mj, mn, pt);
-          VLOG(1) << "Poplar driver: " << mj << "." << mn << "." << pt;
-
-          const auto& ids = poplar_device_.getDriverIDs();
-          LOG(INFO) << "Device /device:IPU:" << ordinal_ << " attached to IPU"
-                    << (ids.size() > 1 ? "s" : "") << ": "
-                    << absl::StrJoin(ids, ",");
-        }
-      } else if (force_ipu_model) {
-        if (current_config_.ipu_model_config().enable_ipu_model()) {
-          // Poplar IPU Model device
-
-          int num_ipus = 1;
-          if (current_config_.device_config_size() > 0) {
-            auto device = current_config_.device_config(ordinal_);
-
-            if (device.selection_case() ==
-                IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
-              return InvalidArgument(
-                  "Must specify the number of IPUs using auto_count");
-            }
-
-            num_ipus = device.auto_count();
-          }
-
-          poplar::IPUModel model;
-          model.numIPUs = num_ipus;
-
-          model.compileIPUCode =
-              current_config_.ipu_model_config().compile_ipu_code();
-          poplar_device_ = model.createDevice();
-          if (poplar_device_.attach()) {
-            opened = true;
-          }
+          return InvalidArgument(
+              "No device matches the requested configuration");
         }
       }
-
-      if (!opened) {
-        return xla::ResourceExhausted(
-            "Unable to acquire poplar device type for ordinal %d", ordinal_);
-      }
-      VLOG(1) << "Opened Poplar device type " << GetDeviceTargetName();
-      device_open_ = true;
     }
+
+    // If real HW only
+    if (!use_ipu_model) {
+      unsigned mj, mn, pt;
+      ipu_.Device().getDriverVersion(mj, mn, pt);
+      VLOG(1) << "Poplar driver: " << mj << "." << mn << "." << pt;
+
+      const auto& ids = ipu_.Device().getDriverIDs();
+      LOG(INFO) << "Device /device:IPU:" << ordinal_ << " attached to IPU"
+                << (ids.size() > 1 ? "s" : "") << ": "
+                << absl::StrJoin(ids, ",");
+    }
+
+    VLOG(1) << "Opened Poplar device type " << GetDeviceTargetName();
+    device_attached_ = true;
   } catch (poplar::poplar_error e) {
     return xla::InternalError("Unable to open poplar device for ordinal %d: %s",
                               ordinal_, e.what());
   }
+
+  return Status::OK();
+}
+
+Status PoplarExecutor::CreatePoplarTarget(const IpuOptions& cfg) {
+  bool has_user_config = (current_config_.device_config_size() > 0);
+  const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
+  const bool use_ipu_hardware = UseIpuHardware();
+
+  if (use_ipu_hardware) {
+    if (!has_user_config) {
+      // Default case - 1 single TF device with one single IPU
+      ipu_.SetTarget(CreateIpuTarget(1));
+    } else {
+      // User has specified a configuration
+      if (ordinal_ >= current_config_.device_config_size()) {
+        return InternalError(
+            "Device ordinal %d not in device configuration list.", ordinal_);
+      }
+
+      auto device_config = current_config_.device_config(ordinal_);
+      if (device_config.selection_case() ==
+          IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
+        // The config specifies the index of the device to use.
+        const int32 cfg_index = device_config.cfg_index();
+
+        auto device_list = GetDeviceManager().getDevices();
+        ipu_.SetDeviceAndTarget(std::move(device_list.at(cfg_index)));
+      } else {
+        // The config only specifies a number of IPUs.
+        ipu_.SetTarget(CreateIpuTarget(device_config.auto_count()));
+      }
+    }
+  } else if (use_ipu_model) {
+    if (current_config_.ipu_model_config().enable_ipu_model()) {
+      int num_ipus = 1;
+      if (has_user_config) {
+        auto device_config = current_config_.device_config(ordinal_);
+
+        if (device_config.selection_case() ==
+            IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
+          return InvalidArgument(
+              "Must specify the number of IPUs using auto_count, not an "
+              "index.");
+        }
+
+        num_ipus = device_config.auto_count();
+      }
+      poplar::IPUModel model;
+      model.numIPUs = num_ipus;
+
+      model.compileIPUCode =
+          current_config_.ipu_model_config().compile_ipu_code();
+      ipu_.SetDeviceAndTarget(model.createDevice());
+    }
+  }
+  return Status::OK();
+}
+
+Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
+  bool has_user_config = (current_config_.device_config_size() > 0);
+  if (!DeviceConfigurationsEqual(cfg, current_config_) && has_user_config) {
+    XLA_VLOG_LINES(1, "Current config: " + current_config_.DebugString() +
+                          "\nNew config: " + cfg.DebugString());
+    return InternalError("IPU system configuration can only be set once.");
+  }
+  if (device_attached_) {
+    if (DeviceConfigurationsEqual(current_config_, IpuOptions())) {
+      // If there is no config associated to the open device then it is a CPU
+      // device: dettach from it and initialize a Poplar device instead.
+      VLOG(1) << "Detaching from " << GetDeviceTargetName() << " ordinal "
+              << ordinal_;
+      ipu_.Device().detach();
+      ipu_.ClearDevice();
+      device_attached_ = false;
+    } else {
+      VLOG(1) << "Poplar device: type " << GetDeviceTargetName() << " ordinal "
+              << ordinal_ << " is already configured: staying attached to it.";
+    }
+  }
+  current_config_ = cfg;
+
+  if (!device_attached_) {
+    TF_RETURN_IF_ERROR(CreatePoplarTarget(cfg));
+    TF_RETURN_IF_ERROR(AttachToPoplarDevice());
+  }
+
   option_flags_ = poplar::OptionFlags();
   option_flags_.set("target.workerStackSizeInBytes", "0x200");
 
@@ -1244,27 +1331,26 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   }
 
   // Generate Target hash
-  std::vector<int64> poplar_target;
-  const auto& target = poplar_device_.getTarget();
-  poplar_target.push_back(target.getNumTiles());
-  poplar_target.push_back(target.getDataPathWidth());
-  poplar_target.push_back(target.getBytesPerTile());
-  poplar_target.push_back(target.getNumWorkerContexts());
-  poplar_target.push_back(target.getTilesPerIPU());
-  poplar_target.push_back(target.getNumIPUs());
-  poplar_target.push_back((unsigned)target.getTargetType());
+  std::vector<int64> target_hash;
+  target_hash.push_back(ipu_.Target().getNumTiles());
+  target_hash.push_back(ipu_.Target().getDataPathWidth());
+  target_hash.push_back(ipu_.Target().getBytesPerTile());
+  target_hash.push_back(ipu_.Target().getNumWorkerContexts());
+  target_hash.push_back(ipu_.Target().getTilesPerIPU());
+  target_hash.push_back(ipu_.Target().getNumIPUs());
+  target_hash.push_back((unsigned)ipu_.Target().getTargetType());
 
   // Generate Options hash
-  poplar_target.push_back(GetConfigHash(current_config_));
+  target_hash.push_back(GetConfigHash(current_config_));
 
   // Generate compiler hashes
-  poplar_target.push_back(std::hash<string>()(tf_git_version()));
-  poplar_target.push_back(std::hash<string>()(poplar::packageHash()));
+  target_hash.push_back(std::hash<string>()(tf_git_version()));
+  target_hash.push_back(std::hash<string>()(poplar::packageHash()));
 
   // Get environment PoplarXlaFlags hash
-  poplar_target.push_back(PoplarXlaFlags::Get().hlo_hash);
+  target_hash.push_back(PoplarXlaFlags::Get().hlo_hash);
 
-  poplar_device_hash_ = CombinedHash(poplar_target);
+  poplar_device_hash_ = CombinedHash(target_hash);
 
   return Status::OK();
 }
@@ -1436,7 +1522,7 @@ void PoplarExecutor::AddExecuteEventRecord(const std::string& module_name,
 
 Status PoplarExecutor::GetCompilerEvents(
     std::list<tensorflow::IpuTraceEvent>& out) {
-  std::lock_guard<std::recursive_mutex> g(mutex_);
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   out.splice(out.end(), std::move(reports_));
   reports_.clear();
   return Status::OK();
@@ -1981,7 +2067,7 @@ void PoplarExecutor::PostProcessStreamedVariablesDeviceToHost() {
 
 void PoplarExecutor::AboutToFreeEngine(poplar::Engine* engine) {
   if (current_engine_ != nullptr) {
-    std::lock_guard<std::recursive_mutex> g(mutex_);
+    std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
     if (engine == current_engine_) {
       auto status = MoveDeviceToHost();
       if (!status.ok()) {
@@ -2163,7 +2249,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     perftools::gputools::StreamExecutor* executor,
     xla::poplarplugin::PoplarExecutable& executable,
     se::DeviceMemoryAllocator* allocator, const Args& args) {
-  std::lock_guard<std::recursive_mutex> g(mutex_);
+  std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
   const auto& input_output_aliasing_map =
       executable.GetInputOutputAliasingMap();
   const auto& output_shape = executable.result_shape();
@@ -2206,7 +2292,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 
     if (engine_changed) {
       try {
-        engine->load(poplar_device_);
+        engine->load(ipu_.Device());
 
         current_engine_ = engine;
         current_replication_factor_ = executable.GetReplicationFactor();
