@@ -1219,7 +1219,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
                       std::to_string(max_compilation_threads));
   }
 
-  if (!PoplarXlaFlags::Get().save_oom_profiler.empty()) {
+  if (CompilerReportingEnabled()) {
     option_flags_.set("debug.allowOutOfMemory", "true");
   }
 

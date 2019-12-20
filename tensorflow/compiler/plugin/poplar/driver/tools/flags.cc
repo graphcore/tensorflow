@@ -60,9 +60,6 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
        "The maximum number of threads Poplar should use during compilation of "
        "the graph. Negative value allows Poplar to pick the number of threads "
        "automatically. (int=-1)"},
-      {"save_oom_profiler",
-       "Path to a file where the profiling information is saved to when an Out "
-       "Of Memory error occurs. (path)"},
       {"save_vertex_graph",
        "Path to a directory where the Poplar vertex graphs should be saved to. "
        "(path)"},
@@ -89,6 +86,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
   struct DeprecatedFlags {
     bool add_all_reduce_copies = false;
     bool force_replicated_mode = false;
+    std::string save_oom_profiler = "";
   };
 
   DeprecatedFlags deprecated_flags;
@@ -107,7 +105,6 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(log_cycle_count)
     ADD_FLAG(while_loop_brute_force_max_trip_count)
     ADD_FLAG(max_compilation_threads)
-    ADD_FLAG(save_oom_profiler)
     ADD_FLAG(save_vertex_graph)
     ADD_FLAG(save_interval_report)
     ADD_FLAG(executable_cache_path)
@@ -121,6 +118,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     // Deprecated flags.
     ADD_DEPRECATED_FLAG(add_all_reduce_copies)
     ADD_DEPRECATED_FLAG(force_replicated_mode)
+    ADD_DEPRECATED_FLAG(save_oom_profiler)
 
 // clang-format on
 #undef ADD_FLAG
@@ -149,6 +147,15 @@ PoplarXlaFlags::PoplarXlaFlags() {
     LOG(INFO)
         << "The TensorFlow Poplar flag \"force_replicated_mode\" is "
            "deprecated, has no effect and it will be removed in the future.";
+  }
+
+  if (!deprecated_flags.save_oom_profiler.empty()) {
+    LOG(INFO)
+        << "The TensorFlow Poplar flag \"save_oom_profiler\" is "
+           "deprecated, has no effect and it will be removed in the future. "
+           "Out of memory report will be saved in report directory if "
+           "profiler is enabled. Name of the report file is: "
+           "GC_TensorFlow_ + xla module name.";
   }
 
   // Hash all the flags which affect the graph generation and compilation only.

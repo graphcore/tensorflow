@@ -101,7 +101,9 @@ void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
 poplar::OptionFlags GetReplicateAllReduceOptions();
 
 // Try and dump the profiler report to a file if a OOM exception occurs.
-void DumpIfPoplarOutOfMemoryAllocationException(const PoplarExecutor*);
+void DumpIfPoplarOutOfMemoryAllocationException(
+    const PoplarExecutor*, const std::string& module_name,
+    const poplar::graph_memory_allocation_error& p_e);
 
 /* Optimization tests */
 
