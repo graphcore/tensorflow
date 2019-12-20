@@ -412,9 +412,10 @@ struct ConvNormMatcher : public Matcher {
       HloInstruction* convolution) const final {
     // Start with the convolution.
 
-    // We expect the convolution to have two outputs, Conv->Norm and
+    // We expect a convolution with two outputs, Conv->Norm and
     // Conv->NormGrad.
-    if (convolution->user_count() != 2) {
+    if (convolution->opcode() != HloOpcode::kConvolution ||
+        convolution->user_count() != 2) {
       return nullptr;
     }
 

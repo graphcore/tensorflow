@@ -79,9 +79,9 @@ class IPUInfeedQueue:
           return array_ops.identity(loss)
 
       loss = 0.0
-      return = tf.conrib.ipu.loops.repeat(10000, body, [loss], infeed_queue)
+      return = tf.python.ipu.loops.repeat(10000, body, [loss], infeed_queue)
 
-    with ipu.ops.ipu_scope("/device:IPU:0"):
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu_compiler.compile(my_net, inputs=[])
 
     with tf.Session() as sess:
