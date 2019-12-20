@@ -456,6 +456,53 @@ TEST_F(NormInputRecomputationTest, RecomputeReluOff) {
   ASSERT_FALSE(RecomputeInstructions(false).Run(module).ValueOrDie());
 }
 
+TEST_F(NormInputRecomputationTest, RecomputeF16WithCast) {
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  std::string module_string = R"(
+   HloModule top
+
+   _pop_op_wide_const () -> f16[32,32,32,1] {
+     singleconst = f16[] constant(1)
+     ROOT broadcastconst = f16[32,32,32,1] broadcast(f16[] singleconst), dimensions={}
+   }
+
+   ENTRY top (arg0: f16[32,32,32,3], arg1: f16[1,1,3,1], arg2: f32[1], arg3: f16[1]) -> (f16[32,32,32,1]) {
+     arg0 = f16[32,32,32,3] parameter(0)
+     arg1 = f16[1,1,3,1] parameter(1)
+     arg2 = f32[1] parameter(2)
+     arg3 = f16[1] parameter(3)
+     gamma16 = f16[1] convert(f32[1] %arg2), metadata={op_type="Cast" op_name="gamma_cast"}
+     convolution = f16[32,32,32,1]{3,2,1,0} convolution(f16[32,32,32,3]{3,2,1,0} %arg0, f16[1,1,3,1]{3,2,1,0} %arg1), window={size=1x1}, dim_labels=b01f_01io->b01f
+     batch-norm-training = (f16[32,32,32,1], f16[1], f16[1]) batch-norm-training(f16[32,32,32,1] %convolution, f16[1] %gamma16, f16[1] %arg3), epsilon=0.001, feature_index=3
+     gte0 = f16[32,32,32,1] get-tuple-element((f16[32,32,32,1], f16[1], f16[1]) %batch-norm-training), index=0
+     relu = f16[32,32,32,1] custom-call(f16[32,32,32,1] %gte0), custom_call_target="Relu", backend_config="{}"
+     gte1 = f16[1] get-tuple-element((f16[32,32,32,1], f16[1], f16[1]) %batch-norm-training), index=1
+     gte2 = f16[1] get-tuple-element((f16[32,32,32,1], f16[1], f16[1]) %batch-norm-training), index=2
+     zeros = f16[32,32,32,1] fusion(), kind=kCustom, calls=%_pop_op_wide_const, backend_config="{}"
+     relugrad = f16[32,32,32,1] custom-call(f16[32,32,32,1] relu, f16[32,32,32,1] %zeros), custom_call_target="ReluGrad", backend_config="{}"
+     batch-norm-grad = (f16[32,32,32,1], f16[1], f16[1]) batch-norm-grad(f16[32,32,32,1] %convolution, f16[1] %gamma16, f16[1] %gte1, f16[1] %gte2, f16[32,32,32,1] %relugrad), epsilon=0.001, feature_index=3
+     gte-grad0 = f16[32,32,32,1] get-tuple-element((f16[32,32,32,1], f16[1], f16[1]) %batch-norm-grad), index=0
+   ROOT %tuple = (f16[32,32,32,1]) tuple(f16[32,32,32,1] %gte-grad0), metadata={op_name="XLA_Retvals"}}
+  )";
+  auto module_or_status = ParseAndReturnVerifiedModule(module_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
+
+  EXPECT_TRUE(flatten.Run(module).ValueOrDie());
+  auto res = classifier.Run(module);
+
+  EXPECT_TRUE(res.ok());
+  EXPECT_TRUE(res.ValueOrDie());
+
+  ASSERT_TRUE(RecomputeInstructions(true).Run(module).ValueOrDie());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

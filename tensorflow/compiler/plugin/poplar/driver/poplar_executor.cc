@@ -1356,6 +1356,8 @@ void PoplarExecutor::AddCompileEndEventRecord(
         ReportDirectory(),
         module_name + ".compile_report." + report_file_extension);
 
+    CreateDirIfMissing(ReportDirectory());
+
     TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
     TF_CHECK_OK(file->Append(rep));
     TF_CHECK_OK(file->Close());
