@@ -146,7 +146,7 @@ class IPUOutfeedQueue:
          r = loops.repeat(20, body, (v))
          return r
 
-       with ipu.ops.ipu_scope("/device:IPU:0"):
+       with ipu.scopes.ipu_scope("/device:IPU:0"):
          res = ipu_compiler.compile(my_net, inputs=[v])
 
        ...
@@ -168,7 +168,7 @@ class IPUOutfeedQueue:
          r = loops.repeat(20, body, (v))
          return r
 
-       with ipu.ops.ipu_scope("/device:IPU:0"):
+       with ipu.scopes.ipu_scope("/device:IPU:0"):
          res = ipu_compiler.compile(my_net, inputs=[v])
 
        ...
@@ -191,7 +191,7 @@ class IPUOutfeedQueue:
          r = loops.repeat(20, body, (v))
          return r
 
-       with ipu.ops.ipu_scope("/device:IPU:0"):
+       with ipu.scopes.ipu_scope("/device:IPU:0"):
          res = ipu_compiler.compile(my_net, inputs=[v])
 
        ...
@@ -241,7 +241,7 @@ class IPUOutfeedQueue:
           r = loops.repeat(20, body, (input))
           return r
 
-        with ipu.ops.ipu_scope("/device:IPU:0"):
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
           res = ipu_compiler.compile(my_net, inputs=[v])
 
         with ops.device('cpu'):
@@ -281,7 +281,7 @@ class IPUOutfeedQueue:
           r = loops.repeat(20, body, (input))
           return r
 
-        with ipu.ops.ipu_scope("/device:IPU:0"):
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
           res = ipu_compiler.compile(my_net, inputs=[v])
 
         with ops.device('cpu'):
@@ -325,7 +325,7 @@ class IPUOutfeedQueue:
           r = loops.repeat(40, body, (input))
           return r
 
-        with ipu.ops.ipu_scope("/device:IPU:0"):
+        with ipu.scopes.ipu_scope("/device:IPU:0"):
           res = ipu_compiler.compile(my_net, inputs=[v])
 
         with ops.device('cpu'):
