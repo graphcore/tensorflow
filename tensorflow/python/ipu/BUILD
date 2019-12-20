@@ -71,6 +71,7 @@ py_library(
         "__init__.py",
         "autoshard.py",
         "autoshard_cnn.py",
+        "function.py",
         "gradient_accumulation_optimizer.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
@@ -224,6 +225,25 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
 )
+
+
+tf_py_test(
+    name = "function_test",
+    size = "small",
+    srcs = ["tests/function_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+)
+
 
 tf_py_test(
     name = "random_constant_matmul_test",
@@ -627,6 +647,7 @@ test_suite(
         "estimator_test",
         "fifo_test",
         "frontend_attributes_test",
+        "function_test",
         "infeed_outfeed_test",
         "ipu_compiler_test",
         "ipu_estimator_test",

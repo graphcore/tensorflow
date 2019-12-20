@@ -261,6 +261,9 @@ class ReportJSON(object):
     self.instruction_info = {}
     events_types = collections.defaultdict(int)
     for e in events:
+      if isinstance(e, ops.Tensor):
+        e = e.numpy()
+      assert isinstance(e, (bytes, str))
       evt = IpuTraceEvent.FromString(e)
       events_types[evt.type] += 1
       try:
