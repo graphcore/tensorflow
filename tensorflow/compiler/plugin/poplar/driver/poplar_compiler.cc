@@ -422,11 +422,13 @@ void setFpBehaviour(poplar::Graph& graph,
 void PrintHelpString() { LOG(INFO) << PoplarXlaFlags::GetFlagUsageString(); }
 
 Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
-                          PoplarExecutor* poplar_executor,
-                          const poplar::Device& dev) {
+                          PoplarExecutor* poplar_executor) {
   try {
+    const poplar::Target& poplar_target =
+        poplar_executor->GetOrCreatePoplarTarget();
     resources.main_graph = absl::make_unique<poplar::Graph>(
-        dev, 0, poplar::replication_factor(resources.replication_factor));
+        poplar_target, 0,
+        poplar::replication_factor(resources.replication_factor));
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Create Graph] ", e);
   }
@@ -606,13 +608,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
   }
 
-  if (!poplar_executor->HasPoplarDevice()) {
+  if (!poplar_executor->HasPoplarTarget()) {
     return xla::FailedPrecondition(
-        "No device has been configured. Did you configure the IPU devices by "
+        "No device target has been configured. Did you configure the IPU "
+        "devices by "
         "running `tensorflow.python.ipu.configure_ipu_system(ipu_options)`?");
   }
-  const poplar::Device& poplar_device = poplar_executor->GetPoplarDevice();
-
   std::lock_guard<std::mutex> g(static_mu_);
 
   uint64 start_micros = tensorflow::Env::Default()->NowMicros();
@@ -621,7 +622,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   // Given device with `num_ipus` IPU chips, we get the number of shards
   // `num_shards` and the replication factor is `num_ipus`/`num_shards` (and
   // we also make sure `num_ipus` % `num_shards` == 0).
-  const auto num_ipus = poplar_device.getTarget().getNumIPUs();
+  const auto num_ipus = poplar_executor->GetOrCreatePoplarTarget().getNumIPUs();
   const auto num_shards = NumIPUsInShards(module.get());
   const auto replication_factor = num_ipus / num_shards;
 
@@ -838,8 +839,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     VLOG(1) << "Skip engine compilation - all outputs are inputs.";
   } else {
     // Only create the graphs if we are compiling.
-    TF_RETURN_IF_ERROR(CreatePoplarGraphs(resources, module.get(),
-                                          poplar_executor, poplar_device));
+    TF_RETURN_IF_ERROR(
+        CreatePoplarGraphs(resources, module.get(), poplar_executor));
     auto& main_graph = GetMasterGraph(resources);
 
     EmbeddingPlansPreplanning embeddings_preplanning;
@@ -944,7 +945,14 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     } catch (const std::exception& e) {
       if (poplar_executor->CompilerReportingEnabled()) {
-        DumpIfPoplarOutOfMemoryAllocationException(poplar_executor);
+        // Catch all exceptions but only do the profile printing if it is of
+        // graph_memory_allocation_error type.
+        const poplar::graph_memory_allocation_error* p_e_ptr =
+            dynamic_cast<const poplar::graph_memory_allocation_error*>(&e);
+        if (p_e_ptr) {
+          DumpIfPoplarOutOfMemoryAllocationException(poplar_executor,
+                                                     module->name(), *p_e_ptr);
+        }
       }
       return PoplarExceptionToTensorflowStatus("[Compile engine] ", e);
     }
