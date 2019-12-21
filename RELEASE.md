@@ -4,23 +4,31 @@ TensorFlow 2.1 will be the last TF release supporting Python 2. Python 2 support
 
 ## Major Features and Improvements
 * The `tensorflow` pip package now includes GPU support by default (same as `tensorflow-gpu`) for both Linux and Windows. This runs on machines with and without NVIDIA GPUs. `tensorflow-gpu` is still available, and CPU-only packages can be downloaded at `tensorflow-cpu` for users who are concerned about package size.
+* **Windows users:** Officially-released `tensorflow` Pip packages are now built with Visual Studio 2019 version 16.4 in order to take advantage of the new `/d2ReducedOptimizeHugeFunctions` compiler flag. To use these new packages, you must install "Microsoft Visual C++ Redistributable for Visual Studio 2015, 2017 and 2019", available from Microsoft's website [here](https://support.microsoft.com/help/2977003/the-latest-supported-visual-c-downloads).
+  * This does not change the minimum required version for building TensorFlow from source on Windows, but builds enabling `EIGEN_STRONG_INLINE` can take over 48 hours to compile without this flag. Refer to `configure.py` for more information about `EIGEN_STRONG_INLINE` and `/d2ReducedOptimizeHugeFunctions`.
+  * If either of the required DLLs, `msvcp140.dll` (old) or `msvcp140_1.dll` (new), are missing on your machine, `import tensorflow` will print a warning message.
 * The `tensorflow` pip package is built with CUDA 10.1 and cuDNN 7.6.
 * `tf.keras`
-  * `Model.fit_generator`, `Model.evaluate_generator`, `Model.predict_generator`, `Model.train_on_batch`, `Model.test_on_batch`, and `Model.predict_on_batch` methods now respect the `run_eagerly` property, and will correctly run using tf.function by default.
-  * `Model.fit_generator`, `Model.evaluate_generator`, and `Model.predict_generator` are deprecated endpoints. They are subsumed by `Model.fit`, `Model.evaluate`, and `Model.predict` which now support generators and Sequences.
-  * Keras `.compile` `.fit` `.evaluate` and `.predict` are allowed to be outside of the DistributionStrategy scope, as long as the model was constructed inside of a scope.
-  * Keras `model.load_weights` now accepts `skip_mismatch` as an argument. This was available in external Keras, and has now been copied over to `tf.keras`.
+  * Experimental support for mixed precision is available on GPUs and Cloud TPUs. See [usage guide](https://www.tensorflow.org/guide/keras/mixed_precision).
   * Introduced the `TextVectorization` layer, which takes as input raw strings and takes care of text standardization, tokenization, n-gram generation, and vocabulary indexing. See this [end-to-end text classification example](https://colab.research.google.com/drive/1RvCnR7h0_l4Ekn5vINWToI9TNJdpUZB3). 
-  * Experimental support for Keras `.compile`, `.fit`, `.evaluate`, and `.predict` is available for Cloud TPU Pods.
+  * Keras `.compile` `.fit` `.evaluate` and `.predict` are allowed to be outside of the DistributionStrategy scope, as long as the model was constructed inside of a scope.
+  * Experimental support for Keras `.compile`, `.fit`, `.evaluate`, and `.predict` is available for Cloud TPUs, Cloud TPU, for all types of Keras models (sequential, functional and subclassing models).
   * Automatic outside compilation is now enabled for Cloud TPUs. This allows `tf.summary` to be used more conveniently with Cloud TPUs.
   * Dynamic batch sizes with DistributionStrategy and Keras are supported on Cloud TPUs.
-  * Experimental support for mixed precision is available on GPUs and Cloud TPUs.
+  * Support for `.fit`, `.evaluate`, `.predict` on TPU using numpy data, in addition to `tf.data.Dataset`.
   * Keras reference implementations for many popular models are available in the TensorFlow [Model Garden](https://github.com/tensorflow/models/tree/master/official).
 * `tf.data`
-  * Changes rebatching for `tf.data datasets` + distribution strategies for better performance.   Note that the dataset also behaves slightly differently, in that the rebatched dataset cardinality will always be a multiple of the number of replicas.
+  * Changes rebatching for `tf.data datasets` + DistributionStrategy for better performance. Note that the dataset also behaves slightly differently, in that the rebatched dataset cardinality will always be a multiple of the number of replicas.
+  * `tf.data.Dataset` now supports automatic data distribution and sharding in distributed environments, including on TPU pods.
+  * Distribution policies for `tf.data.Dataset` can now be tuned with 1. `tf.data.experimental.AutoShardPolicy(OFF, AUTO, FILE, DATA)` 2. `tf.data.experimental.ExternalStatePolicy(WARN, IGNORE, FAIL)`
+* `tf.debugging`
+  * Add `tf.debugging.enable_check_numerics()` and `tf.debugging.disable_check_numerics()` to help debugging the root causes of issues involving infinities and `NaN`s.
+* `tf.distribute`
+  * Custom training loop support on TPUs and TPU pods is avaiable through `strategy.experimental_distribute_dataset`, `strategy.experimental_distribute_datasets_from_function`, `strategy.experimental_run_v2`, `strategy.reduce`.
+  * Support for a global distribution strategy through `tf.distribute.experimental_set_strategy(),` in addition to `strategy.scope()`.
 * `TensorRT`
   * [TensorRT 6.0](https://developer.nvidia.com/tensorrt#tensorrt-whats-new) is now supported and enabled by default. This adds support for more TensorFlow ops including Conv3D, Conv3DBackpropInputV2, AvgPool3D, MaxPool3D, ResizeBilinear, and ResizeNearestNeighbor. In addition, the TensorFlow-TensorRT python conversion API is exported as `tf.experimental.tensorrt.Converter`.
-  * Environment variable `TF_DETERMINISTIC_OPS` added. When set to "true" or "1", this environment variable makes `tf.nn.bias_add` operate deterministically (i.e. reproducibly) when XLA JIT compilation is *not* enabled. It also makes cuDNN convolution and max-pooling operate deterministically. This makes Keras Conv*D and MaxPool*D layers operate deterministically in both the forward and backward directions when running on a CUDA-enabled GPU.
+* Environment variable `TF_DETERMINISTIC_OPS` has been added. When set to "true" or "1", this environment variable makes `tf.nn.bias_add` operate deterministically (i.e. reproducibly), but currently only when XLA JIT compilation is *not* enabled. Setting `TF_DETERMINISTIC_OPS` to "true" or "1" also makes cuDNN convolution and max-pooling operate deterministically. This makes Keras Conv\*D and MaxPool\*D layers operate deterministically in both the forward and backward directions when running on a CUDA-enabled GPU.
 
 ## Known issues
 Because of [issues with building on windows](https://github.com/tensorflow/tensorflow/issues/10521), we turned off eigen strong inlining for the Windows builds. Windows binaries are expected to be slightly slower until the build issues are resolved. 
@@ -36,7 +44,7 @@ Because of [issues with building on windows](https://github.com/tensorflow/tenso
 
 ## Bug Fixes and Other Changes
 * `tf.data`
-  * Fixes concurrency issue with `tf.data.experimental.parallel_interleave` with sloppy=True.
+  * Fixes concurrency issue with `tf.data.experimental.parallel_interleave` with `sloppy=True`.
   * Add `tf.data.experimental.dense_to_ragged_batch()`.
   * Extend `tf.data` parsing ops to support `RaggedTensors`.
 * `tf.distribute`
@@ -45,9 +53,11 @@ Because of [issues with building on windows](https://github.com/tensorflow/tenso
   * Added option in `tf.estimator.CheckpointSaverHook` to not save the `GraphDef`.
   * Moving the checkpoint reader from swig to pybind11.
 * `tf.keras`
-  * Export depthwise_conv2d in `tf.keras.backend`.
+  * Export `depthwise_conv2d` in `tf.keras.backend`.
   * In Keras Layers and Models, Variables in `trainable_weights`, `non_trainable_weights`, and `weights` are explicitly deduplicated.
-  * Fix the incorrect stateful behavior of Keras convolutional layers.
+  * Keras `model.load_weights` now accepts `skip_mismatch` as an argument. This was available in external Keras, and has now been copied over to `tf.keras`.
+  * Fix the input shape caching behavior of Keras convolutional layers.
+  * `Model.fit_generator`, `Model.evaluate_generator`, `Model.predict_generator`, `Model.train_on_batch`, `Model.test_on_batch`, and `Model.predict_on_batch` methods now respect the `run_eagerly` property, and will correctly run using `tf.function` by default. Note that `Model.fit_generator`, `Model.evaluate_generator`, and `Model.predict_generator` are deprecated endpoints. They are subsumed by `Model.fit`, `Model.evaluate`, and `Model.predict` which now support generators and Sequences.
 * `tf.lite`
   * Legalization for `NMS` ops in TFLite.
   * add `narrow_range` and `axis` to `quantize_v2` and `dequantize` ops. 
@@ -56,6 +66,8 @@ Because of [issues with building on windows](https://github.com/tensorflow/tenso
   * Refactors `NNAPI` Delegate to support detailed reason why an operation is not accelerated.
   * Converts hardswish subgraphs into atomic ops.
 * Other
+  * Critical stability updates for TPUs, especially in cases where the XLA compiler produces compilation errors.
+  * TPUs can now be re-initialized multiple times, using `tf.tpu.experimental.initialize_tpu_system`. 
   * Add `RaggedTensor.merge_dims()`.
   * Added new `uniform_row_length` row-partitioning tensor to `RaggedTensor`.
   * Add `shape` arg to `RaggedTensor.to_tensor`; Improve speed of `RaggedTensor.to_tensor`.
@@ -66,7 +78,6 @@ Because of [issues with building on windows](https://github.com/tensorflow/tenso
   * Add preliminary support for sparse CSR matrices.
   * Tensor equality with `None` now behaves as expected.
   * Make calls to `tf.function(f)()`, `tf.function(f).get_concrete_function` and `tf.function(f).get_initialization_function` thread-safe.
-  * Add `tf.debugging.enable_check_numerics()` and `tf.debugging.disable_check_numerics()` to facilitate debugging of numeric instability (`Infinity`s and `NaN`s) under eager mode and `tf.function`s.
   * Extend `tf.identity` to work with CompositeTensors (such as SparseTensor)
   * Added more `dtypes` and zero-sized inputs to `Einsum` Op and improved its performance
   * Enable multi-worker `NCCL` `all-reduce` inside functions executing eagerly.
@@ -178,7 +189,7 @@ This enables writing forward compatible code: by explicitly importing either `te
 
 This release contains contributions from many people at Google, as well as:
 
-a6802739, Aaron Ma, Abdullah Selek, Abolfazl Shahbazi, Ag Ramesh, Albert Z. Guo, Albin Joy, Alex Itkes, Alex Sergeev, Alexander Pivovarov, Alexey Romanov, alhkad, Amit Srivastava, amoitra, Andrew Lihonosov, Andrii Prymostka, Anuj Rawat, Astropeak, Ayush Agrawal, Bairen Yi, Bas Aarts, Bastian Eichenberger, Ben Barsdell, Benjamin Peterson, bhack, Bharat Raghunathan, Bhavani Subramanian, Bryan Cutler, candy.dc, Cao Zongyan, Captain-Pool, Casper Da Costa-Luis, Chen Guoyin, Cheng Chang, chengchingwen, Chong Yan, Choong Yin Thong, Christopher Yeh, Clayne Robison, Coady, Patrick, Dan Ganea, David Norman, Denis Khalikov, Deven Desai, Diego Caballero, Duncan Dean, Duncan Riach, Dwight J Lyle, Eamon Ito-Fisher, eashtian3, EFanZh, ejot, Elroy Ashtian Jr, Eric Schweitz, Fangjun Kuang, Fei Hu, fo40225, formath, Fred Reiss, Frederic Bastien, Fredrik Knutsson, G. Hussain Chinoy, Gabriel, gehring, George Grzegorz Pawelczak, Gianluca Varisco, Gleb Popov, Greg Peatfield, Guillaume Klein, Gurpreet Singh, Gustavo Lima Chaves, haison, Haraldur TóMas HallgríMsson, HarikrishnanBalagopal, HåKon Sandsmark, I-Hong, Ilham Firdausi Putra, Imran Salam, Jason Zaman, Jason Zavaglia, jayhpark530, jefby, Jeff Daily, Jeffrey Poznanovic, Jekyll Lai, Jeroen BéDorf, Jerry Shih, jerryyin, jiakai, JiangXIAO, Joe Bowser, Joel Shapiro, Johan Gunnarsson, Jojimon Varghese, Joon, Josh Beal, Julian Niedermeier, Jun Wan, Junqin Zhang, Junyuan Xie, Justin Tunis, Kaixi Hou, Karl Lessard, Karthik Muthuraman, Kbhute-Ibm, khanhlvg, Koock Yoon, kstuedem, Kyuwon Kim, Lakshay Tokas, leike666666, leonard951, Leslie-Fang, Leslie-Fang-Intel, Li, Guizi, Lukas Folle, Lukas Geiger, Mahmoud Abuzaina, Manraj Singh Grover, Margaret Maynard-Reid, Mark Ryan, Matt Conley, Matthew Bentham, Matthew Denton, mbhuiyan, mdfaijul, Mei Jie, merturl, MichaelKonobeev, Michal W. Tarnowski, minds, mpppk, musikisomorphie, Nagy Mostafa, Nayana Thorat, Neil, Niels Ole Salscheider, Niklas SilfverströM, Niranjan Hasabnis, ocjosen, olramde, Pariksheet Pinjari, Patrick J. Lopresti, Patrik Gustavsson, per1234, PeterLee, Phan Van Nguyen Duc, Phillip Kravtsov, Pooya Davoodi, Pranav Marathe, Putra Manggala, Qingqing Cao, Rajeshwar Reddy T, Ramon ViñAs, Rasmus Diederichsen, Reuben Morais, richardbrks, robert, RonLek, Ryan Jiang, saishruthi, Saket Khandelwal, Saleem Abdulrasool, Sami Kama, Sana-Damani, Sergii Khomenko, Severen Redwood, Shubham Goyal, Sigrid Keydana, Siju Samuel, sleighsoft, smilu97, Son Tran, Srini511, srinivasan.narayanamoorthy, Sumesh Udayakumaran, Sungmann Cho, Tae-Hwan Jung, Taehoon Lee, Takeshi Watanabe, TengLu, terryky, TheMindVirus, ThisIsIsaac, Till Hoffmann, Timothy Liu, Tomer Gafner, Tongxuan Liu, Trent Lo, Trevor Morris, Uday Bondhugula, Vasileios Lioutas, vbvg2008, Vishnuvardhan Janapati, Vivek Suryamurthy, Wei Wang, Wen-Heng (Jack) Chung, wenxizhu, William D. Irons, winstonq, wyzhao, Xiaoming (Jason) Cui, Xinan Jiang, Xinping Wang, Yann-Yy, Yasir Modak, Yong Tang, Yongfeng Gu, Yuchen Ying, Yuxin Wu, zyeric, 王振华 (Zhenhua Wang)
+a6802739, Aaron Ma, Abdullah Selek, Abolfazl Shahbazi, Ag Ramesh, Albert Z. Guo, Albin Joy, Alex Itkes, Alex Sergeev, Alexander Pivovarov, Alexey Romanov, alhkad, Amit Srivastava, amoitra, Andrew Lihonosov, Andrii Prymostka, Anuj Rawat, Astropeak, Ayush Agrawal, Bairen Yi, Bas Aarts, Bastian Eichenberger, Ben Barsdell, Benjamin Peterson, bhack, Bharat Raghunathan, Bhavani Subramanian, Bryan Cutler, candy.dc, Cao Zongyan, Captain-Pool, Casper Da Costa-Luis, Chen Guoyin, Cheng Chang, chengchingwen, Chong Yan, Choong Yin Thong, Christopher Yeh, Clayne Robison, Coady, Patrick, Dan Ganea, David Norman, Denis Khalikov, Deven Desai, Diego Caballero, Duncan Dean, Duncan Riach, Dwight J Lyle, Eamon Ito-Fisher, eashtian3, EFanZh, ejot, Elroy Ashtian Jr, Eric Schweitz, Fangjun Kuang, Fei Hu, fo40225, formath, Fred Reiss, Frederic Bastien, Fredrik Knutsson, G. Hussain Chinoy, Gabriel, gehring, George Grzegorz Pawelczak, Gianluca Varisco, Gleb Popov, Greg Peatfield, Guillaume Klein, Gurpreet Singh, Gustavo Lima Chaves, haison, Haraldur TóMas HallgríMsson, HarikrishnanBalagopal, HåKon Sandsmark, I-Hong, Ilham Firdausi Putra, Imran Salam, Jason Zaman, Jason Zavaglia, jayhpark530, jefby, Jeff Daily, Jeffrey Poznanovic, Jekyll Lai, Jeroen BéDorf, Jerry Shih, jerryyin, jiakai, JiangXIAO, Joe Bowser, Joel Shapiro, Johan Gunnarsson, Jojimon Varghese, Joon, Josh Beal, Julian Niedermeier, Jun Wan, Junqin Zhang, Junyuan Xie, Justin Tunis, Kaixi Hou, Karl Lessard, Karthik Muthuraman, Kbhute-Ibm, khanhlvg, Koock Yoon, kstuedem, Kyuwon Kim, Lakshay Tokas, leike666666, leonard951, Leslie-Fang, Leslie-Fang-Intel, Li, Guizi, Lukas Folle, Lukas Geiger, Mahmoud Abuzaina, Manraj Singh Grover, Margaret Maynard-Reid, Mark Ryan, Matt Conley, Matthew Bentham, Matthew Denton, mbhuiyan, mdfaijul, Mei Jie, merturl, MichaelKonobeev, Michal W. Tarnowski, Milan Straka, minds, mpppk, musikisomorphie, Nagy Mostafa, Nayana Thorat, Neil, Niels Ole Salscheider, Niklas SilfverströM, Niranjan Hasabnis, ocjosen, olramde, Pariksheet Pinjari, Patrick J. Lopresti, Patrik Gustavsson, per1234, PeterLee, Phan Van Nguyen Duc, Phillip Kravtsov, Pooya Davoodi, Pranav Marathe, Putra Manggala, Qingqing Cao, Rajeshwar Reddy T, Ramon ViñAs, Rasmus Diederichsen, Reuben Morais, richardbrks, robert, RonLek, Ryan Jiang, saishruthi, Saket Khandelwal, Saleem Abdulrasool, Sami Kama, Sana-Damani, Sergii Khomenko, Severen Redwood, Shubham Goyal, Sigrid Keydana, Siju Samuel, sleighsoft, smilu97, Son Tran, Srini511, srinivasan.narayanamoorthy, Sumesh Udayakumaran, Sungmann Cho, Tae-Hwan Jung, Taehoon Lee, Takeshi Watanabe, TengLu, terryky, TheMindVirus, ThisIsIsaac, Till Hoffmann, Timothy Liu, Tomer Gafner, Tongxuan Liu, Trent Lo, Trevor Morris, Uday Bondhugula, Vasileios Lioutas, vbvg2008, Vishnuvardhan Janapati, Vivek Suryamurthy, Wei Wang, Wen-Heng (Jack) Chung, wenxizhu, William D. Irons, winstonq, wyzhao, Xiaoming (Jason) Cui, Xinan Jiang, Xinping Wang, Yann-Yy, Yasir Modak, Yong Tang, Yongfeng Gu, Yuchen Ying, Yuxin Wu, zyeric, 王振华 (Zhenhua Wang)
 
 # Release 2.0.0
 
