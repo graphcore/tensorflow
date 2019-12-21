@@ -60,10 +60,6 @@ class PoplarXlaFlags {
   // graph.
   int64 max_compilation_threads = -1;
 
-  // Path to a file where the profiling information is saved to when an Out Of
-  // Memory occurs.
-  std::string save_oom_profiler = "";
-
   // Path to a directory where the Poplar vertex graph should be saved to.
   std::string save_vertex_graph = "";
 
