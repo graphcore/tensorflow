@@ -621,6 +621,54 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       ])
 
   @test_util.deprecated_graph_mode_only
+  def testPipelineWithStagesNoVariables(self):
+    dataset = tu.create_single_increasing_dataset(5, shape=[1])
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed11")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed11")
+
+    def stage1(features):
+      partial = features * features
+      return partial
+
+    def stage2(partial):
+      prediction = partial + partial
+      return prediction
+
+    def stage3(partial):
+      return partial
+
+    def model():
+      with variable_scope.variable_scope("vs", use_resource=True):
+        pipeline_op = pipelining_ops.pipeline(
+            computational_stages=[stage1, stage2, stage3],
+            pipeline_depth=6,
+            repeat_count=1,
+            inputs=[],
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            name="Pipeline")
+      return pipeline_op
+
+    with tu.ipu_session() as sess:
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(model, inputs=[])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      tu.move_variable_initialization_to_cpu()
+      outfeed_op = outfeed_queue.dequeue()
+
+      sess.run(variables.global_variables_initializer())
+      sess.run(infeed_queue.initializer)
+      # Run the pipeline.
+      sess.run(r)
+      results = sess.run(outfeed_op)
+      self.assertAllClose(results[0], [[0.], [2.], [8.], [18.], [32.], [0.]])
+
+  @test_util.deprecated_graph_mode_only
   def testPipelineCompare1(self):
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
