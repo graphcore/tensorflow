@@ -10,6 +10,8 @@ package(
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
 
 # Needed so we can build the custom op.
+load("@local_config_poplar//poplar:build_defs.bzl", "poplar_lib_directory")
+load("@local_config_poplar//poplar:build_defs.bzl", "poplibs_lib_directory")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
 load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
@@ -406,25 +408,42 @@ py_test(
 )
 
 cc_binary(
-    name = "libadd_incrementing_custom.so",
-    srcs = ["tests/add_incrementing_custom.cc"],
-    copts = ["-fexceptions"],
+	  name = "libadd_incrementing_custom.so",
+	  srcs = ["tests/add_incrementing_custom.cc"],
+ 	  copts = ["-fexceptions"],
+	  nocopts = "-fno-exceptions",
     deps = [
-        "@local_config_poplar//poplar:poplar_lib",
+        "@local_config_poplar//poplar:poplar_headers",
+    ],
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
     ],
     linkshared = True,
+    data = [
+        "@local_config_poplar//poplar:poplar_lib",
+    ],
 )
 
 cc_binary(
-    name = "libadd_incrementing_custom_with_metadata.so",
-    srcs = ["tests/add_incrementing_custom_with_metadata.cc"],
-    copts = ["-fexceptions"],
+	  name = "libadd_incrementing_custom_with_metadata.so",
+	  srcs = ["tests/add_incrementing_custom_with_metadata.cc"],
+ 	  copts = ["-fexceptions"],
+	  nocopts = "-fno-exceptions",
     deps = [
-        "@local_config_poplar//poplar:poplar_lib",
+        "@local_config_poplar//poplar:poplar_headers",
+    ],
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
     ],
     linkshared = True,
+    data = [
+        "@local_config_poplar//poplar:poplar_lib",
+    ],
 )
-
 tf_py_test(
     name = "user_ops_test",
     size = "small",
