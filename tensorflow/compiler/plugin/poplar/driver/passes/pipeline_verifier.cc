@@ -167,30 +167,35 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
     }
   }
 
-  // Verify that the input/output have the same sharding.
-  std::vector<HloSharding> input_sharding;
-  for (const HloInstruction* operand : pipeline_op->operands()) {
-    if (!operand->has_sharding()) {
-      return InternalErrorStrCat("Expected for ", operand->ToString(),
+  // We only check sharding if there are inputs/outputs to the pipeline.
+  const bool check_sharding = pipeline_op->operand_count() ||
+                              !ShapeUtil::IsEmptyTuple(pipeline_op->shape());
+  if (check_sharding) {
+    // Verify that the input/output have the same sharding.
+    std::vector<HloSharding> input_sharding;
+    for (const HloInstruction* operand : pipeline_op->operands()) {
+      if (!operand->has_sharding()) {
+        return InternalErrorStrCat("Expected for ", operand->ToString(),
+                                   " to have sharding information");
+      }
+      const HloSharding& sharding = operand->sharding();
+      if (sharding.IsTuple()) {
+        absl::c_copy(sharding.tuple_elements(),
+                     std::back_inserter(input_sharding));
+      } else {
+        input_sharding.push_back(sharding);
+      }
+    }
+
+    if (!pipeline_op->has_sharding()) {
+      return InternalErrorStrCat("Expected for ", pipeline_op->ToString(),
                                  " to have sharding information");
     }
-    const HloSharding& sharding = operand->sharding();
-    if (sharding.IsTuple()) {
-      absl::c_copy(sharding.tuple_elements(),
-                   std::back_inserter(input_sharding));
-    } else {
-      input_sharding.push_back(sharding);
+    if (input_sharding != pipeline_op->sharding().tuple_elements()) {
+      return InternalErrorStrCat(
+          "Expected the sharding of inputs and outputs of pipeline ",
+          pipeline_op->name(), " to match.");
     }
-  }
-
-  if (!pipeline_op->has_sharding()) {
-    return InternalErrorStrCat("Expected for ", pipeline_op->ToString(),
-                               " to have sharding information");
-  }
-  if (input_sharding != pipeline_op->sharding().tuple_elements()) {
-    return InternalErrorStrCat(
-        "Expected the sharding of inputs and outputs of pipeline ",
-        pipeline_op->name(), " to match.");
   }
 
   return Status::OK();
