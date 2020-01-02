@@ -7,22 +7,31 @@ filegroup(
     srcs = ["bin/popc"],
 )
 
+cc_library(
+  name = "poplar_headers",
+  hdrs = glob(["**/*.hpp"]),
+  includes = ["include"],
+)
+
 filegroup(
-  name = "poplar_lib",
+  name = "poplar_codelets",
+  srcs = glob(["**/*gp"]),
+)
+
+filegroup(
+  name = "poplar_libs",
   srcs = glob([
+    "lib/libpopfloat.*",
     "lib/libpoplar.*",
     "lib/libpoplin.*",
     "lib/libpopnn.*",
     "lib/libpopops.*",
     "lib/libpoprand.*",
-    "lib/libpopfloat.*",
+    "lib/libpopsolver.*",
     "lib/libpoputil.*",
-    "lib/libpoplibs_support.*",
   ]),
+  data = [
+      "@local_config_poplar//poplar:poplar_codelets",
+  ],
 )
 
-cc_library(
-  name = "poplar_headers",
-  hdrs = glob(["**/*.h"]),
-  includes = ["include"],
-)
