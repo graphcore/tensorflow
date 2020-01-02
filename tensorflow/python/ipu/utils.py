@@ -22,7 +22,7 @@ from enum import Enum
 import time
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IPUSelectionOrder
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IPUSelectionOrder, DeviceConnectionType
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
@@ -264,6 +264,8 @@ def create_ipu_config(profiling=False,
   opts.enable_multi_slice_combiner = False
   opts.enable_matmul_combiner = False
   opts.enable_gather_simplifier = False
+  opts.device_connection_type = DeviceConnectionType.ALWAYS
+  opts.ipu_version = 1
 
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
   opts.profiling.enable_compilation_trace = profiling
@@ -866,6 +868,34 @@ def select_ipus(opts, indices):
     dev = opts.device_config.add()
     dev.cfg_index = i
 
+  return opts
+
+
+def set_ipu_connection_type(opts, connection_type=None, ipu_version=1):
+  """ Configure when to attach to the device.
+
+  .. code-block:: python
+
+      # Compile without attaching to the device.
+      opts = create_ipu_config()
+      opts = set_ipu_connection_type(opts,
+                                     DeviceConnectionType.ON_DEMAND))
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    connection_type: One of `DeviceConnectionType`.
+                     Defaults to `DeviceConnectionType.ALWAYS` if None.
+
+    ipu_version: Version of the IPU hardware used.
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+
+  opts.device_connection_type = connection_type or DeviceConnectionType.ALWAYS
+  opts.ipu_version = ipu_version
   return opts
 
 

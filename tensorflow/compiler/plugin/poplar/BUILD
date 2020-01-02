@@ -3121,6 +3121,19 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "device_connection_test",
+    size = "medium",
+    srcs = ["tests/device_connection_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "logging_example_1",
     size = "small",
     srcs = ["docs/logging_example_1.py"],

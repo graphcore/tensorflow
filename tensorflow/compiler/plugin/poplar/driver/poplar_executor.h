@@ -320,6 +320,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   const IpuOptions::FloatingPointBehaviour& FloatingPointBehaviour() const {
     return current_config_.floating_point_behaviour();
   }
+  DeviceConnectionType ConnectionType() const {
+    return current_config_.device_connection_type();
+  }
 
   bool AlwaysRearrangeCopiesOnTheHost() const {
     return current_config_.speed_size_config()
@@ -485,7 +488,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
  private:
   uint64 HashModuleAndDevice(const HloModule& module) const;
-  Status CreatePoplarTarget(const IpuOptions& cfg);
+  Status CreatePoplarTarget();
 
   struct TensorControl {
     size_t size = 0;
