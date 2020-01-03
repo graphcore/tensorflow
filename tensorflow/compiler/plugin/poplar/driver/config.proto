@@ -11,7 +11,17 @@ enum IPUSelectionOrder {
   HOOF = 3;
 }
 
-// NEXT ID 22
+// When to attach to the device.
+enum DeviceConnectionType {
+  // Attach when configuring the device.
+  ALWAYS = 0;
+  // Defer connection to when the IPU is needed. (i.e when running an executable).
+  ON_DEMAND = 1;
+  // Never attach to the device. (Device can only be used for compilation).
+  NEVER = 2;
+}
+
+// NEXT ID 24
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -157,4 +167,10 @@ message IpuOptions {
 
   // Where to save the compiled executable.
   string serialization_folder = 21;
+
+  // When to attach to the device.
+  DeviceConnectionType device_connection_type = 22;
+
+  // Version of the IPU hardware used.
+  int64 ipu_version = 23;
 };

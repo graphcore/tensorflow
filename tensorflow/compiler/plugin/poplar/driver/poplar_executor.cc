@@ -246,8 +246,9 @@ bool UseIpuHardware() {
   return false;
 }
 
-poplar::Target CreateIpuTarget(uint num_ipus) {
-  return poplar::Target::createIPUTarget(num_ipus, "ipu1");
+poplar::Target CreateIpuTarget(uint num_ipus, int64 ipu_version) {
+  return poplar::Target::createIPUTarget(num_ipus,
+                                         "ipu" + std::to_string(ipu_version));
 }
 
 }  // namespace
@@ -1175,7 +1176,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
   return Status::OK();
 }
 
-Status PoplarExecutor::CreatePoplarTarget(const IpuOptions& cfg) {
+Status PoplarExecutor::CreatePoplarTarget() {
   bool has_user_config = (current_config_.device_config_size() > 0);
   const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
   const bool use_ipu_hardware = UseIpuHardware();
@@ -1183,7 +1184,7 @@ Status PoplarExecutor::CreatePoplarTarget(const IpuOptions& cfg) {
   if (use_ipu_hardware) {
     if (!has_user_config) {
       // Default case - 1 single TF device with one single IPU
-      ipu_.SetTarget(CreateIpuTarget(1));
+      ipu_.SetTarget(CreateIpuTarget(1, 1));
     } else {
       // User has specified a configuration
       if (ordinal_ >= current_config_.device_config_size()) {
@@ -1201,7 +1202,8 @@ Status PoplarExecutor::CreatePoplarTarget(const IpuOptions& cfg) {
         ipu_.SetDeviceAndTarget(std::move(device_list.at(cfg_index)));
       } else {
         // The config only specifies a number of IPUs.
-        ipu_.SetTarget(CreateIpuTarget(device_config.auto_count()));
+        ipu_.SetTarget(CreateIpuTarget(device_config.auto_count(),
+                                       current_config_.ipu_version()));
       }
     }
   } else if (use_ipu_model) {
@@ -1226,6 +1228,10 @@ Status PoplarExecutor::CreatePoplarTarget(const IpuOptions& cfg) {
           current_config_.ipu_model_config().compile_ipu_code();
       ipu_.SetDeviceAndTarget(model.createDevice());
     }
+  } else {
+    return InvalidArgument(
+        "Target configuration failed: model disabled and no hardware IPU "
+        "found. (Are you sure you enabled the Poplar driver ?)");
   }
   return Status::OK();
 }
@@ -1254,8 +1260,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   current_config_ = cfg;
 
   if (!device_attached_) {
-    TF_RETURN_IF_ERROR(CreatePoplarTarget(cfg));
-    TF_RETURN_IF_ERROR(AttachToPoplarDevice());
+    TF_RETURN_IF_ERROR(CreatePoplarTarget());
+    if (cfg.device_connection_type() == DeviceConnectionType::ALWAYS) {
+      TF_RETURN_IF_ERROR(AttachToPoplarDevice());
+    }
   }
 
   option_flags_ = poplar::OptionFlags();
