@@ -5,12 +5,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import json
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -30,14 +28,12 @@ class MappingTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         i = array_ops.placeholder(np.int32, [8])
         w = array_ops.placeholder(np.float32, [32 * 1024])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess)
+      report.reset()
 
       i_h = np.arange(0, 8)
       w_h = np.arange(32 * 1024)
@@ -45,26 +41,18 @@ class MappingTest(xla_test.XLATestCase):
       result = sess.run(r, {i: i_h, w: w_h})
       self.assertAllClose(result[0], np.take(w_h, i_h))
 
-      rep = sess.run(report)
+      report.parse_log()
+      tm = report.get_tensor_map()
 
-      events = ipu.utils.extract_all_events(rep)
+      bad_maps = []
+      for tensor in tm.all_tensors():
+        # Total elements > 16
+        if tensor.num_elements > 16:
+          # Tiles used != 1024
+          if len(tensor.tiles) != 1024:
+            bad_maps += [tensor.inst]
 
-      for e in events:
-        if e.type == IpuTraceEvent.COMPILE_END:
-          j = e.compile_end.tensor_map.decode('utf-8')
-          if len(j) > 0:
-            tm = json.loads(e.compile_end.tensor_map.decode('utf-8'))
-
-            bad_maps = []
-            for g in tm['mappings']:
-              for tensor in tm['mappings'][g]:
-                # Total elements > 16
-                if tensor[6] > 16:
-                  # Tiles used != 1024
-                  if len(tensor[7]) != 1024:
-                    bad_maps += [tensor[0]]
-
-      self.assertEqual(len(bad_maps), 0)
+      self.assertFalse(bad_maps)
 
   def testRemapDeduce(self):
     with self.session() as sess:
@@ -78,14 +66,12 @@ class MappingTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         i = array_ops.placeholder(np.int32, [8])
         w = array_ops.placeholder(np.float32, [32, 1024])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess)
+      report.reset()
 
       i_h = np.arange(2, 10)
       w_h = np.reshape(np.arange(32 * 1024), [32, 1024])
@@ -93,26 +79,17 @@ class MappingTest(xla_test.XLATestCase):
       result = sess.run(r, {i: i_h, w: w_h})
       self.assertAllClose(result[0], w_h[2:10])
 
-      rep = sess.run(report)
+      report.parse_log()
+      tm = report.get_tensor_map()
 
-      events = ipu.utils.extract_all_events(rep)
-
-      for e in events:
-        if e.type == IpuTraceEvent.COMPILE_END:
-          j = e.compile_end.tensor_map.decode('utf-8')
-          if len(j) > 0:
-            tm = json.loads(e.compile_end.tensor_map.decode('utf-8'))
-
-            bad_maps = []
-            for g in tm['mappings']:
-              for tensor in tm['mappings'][g]:
-                # Total elements > 16
-                if tensor[6] > 16:
-                  for _, num_elements in tensor[7]:
-                    if num_elements > 32:
-                      bad_maps += [tensor[0]]
-
-      self.assertEqual(len(bad_maps), 0)
+      bad_maps = []
+      for tensor in tm.all_tensors():
+        # Total elements > 16
+        if tensor.num_elements > 16:
+          for tile in tensor.tiles:
+            if tile.num_elements > 32:
+              bad_maps += [tensor.inst]
+      self.assertFalse(bad_maps)
 
 
 if __name__ == "__main__":

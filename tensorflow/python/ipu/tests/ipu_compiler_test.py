@@ -35,7 +35,7 @@ class IpuCompilerTest(test_util.TensorFlowTestCase):
 
     with ops.device("/device:CPU:0"):
       a = array_ops.placeholder(np.float32, shape=[1])
-      with self.assertRaisesRegexp(Exception, "not placed on an IPU"):
+      with self.assertRaisesRegex(Exception, "not placed on an IPU"):
         ipu_compiler.compile(my_net, inputs=[a])
 
   @test_util.deprecated_graph_mode_only
@@ -58,7 +58,7 @@ class IpuCompilerTest(test_util.TensorFlowTestCase):
 
       with ops.device("/device:CPU:0"):
         a = array_ops.placeholder(np.float32, shape=[1])
-        with self.assertRaisesRegexp(Exception, "not placed on an IPU"):
+        with self.assertRaisesRegex(Exception, "not placed on an IPU"):
           ipu_compiler.compile(my_net, inputs=[a])
 
 

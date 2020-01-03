@@ -77,8 +77,8 @@ class TestDeviceConnection(xla_test.XLATestCase):  # pylint: disable=abstract-me
         _ConfigureSystem(connection_type)
         train = ipu.ipu_compiler.compile(lambda: (loss, train), [])
 
-        with self.assertRaisesRegexp(Exception,
-                                     "configured for compilation only"):
+        with self.assertRaisesRegex(Exception,
+                                    "configured for compilation only"):
           sess.run(variables.global_variables_initializer())
 
     p0 = Process(BuildAndRunModelOffline)
@@ -110,7 +110,7 @@ class TestDeviceConnection(xla_test.XLATestCase):  # pylint: disable=abstract-me
         else:
           time.sleep(1)  # Make sure the first process goes first.
           # IPU already in use by other process: configuration should fail.
-          with self.assertRaisesRegexp(Exception, "Could not attach"):
+          with self.assertRaisesRegex(Exception, "Could not attach"):
             _ConfigureSystem(connection_type)
 
     p0 = Process(BuildAndRunModelAlways, True)
@@ -144,7 +144,7 @@ class TestDeviceConnection(xla_test.XLATestCase):  # pylint: disable=abstract-me
           _ConfigureSystem(connection_type)
           # Compilation should succeed as it doesn't require the device.
           train = ipu.ipu_compiler.compile(lambda: (loss, train), [])
-          with self.assertRaisesRegexp(Exception, "Could not attach"):
+          with self.assertRaisesRegex(Exception, "Could not attach"):
             sess.run(variables.global_variables_initializer())
 
     p0 = Process(BuildAndRunModelOnDemand, True)

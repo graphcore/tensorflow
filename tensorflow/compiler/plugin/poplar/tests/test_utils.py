@@ -144,6 +144,9 @@ class TensorMap(object):
       self.tile = tile
       self.num_elements = num_elements
 
+    def __eq__(self, other):
+      return self.tile == other.tile and self.num_elements == other.num_elements
+
   class Tensor(object):
     def __init__(self, inst, index, shape, dtype, has_constant, has_aliases,
                  num_elements, tiles):
@@ -179,6 +182,11 @@ class TensorMap(object):
                              num_elements=js_tensor[6],
                              tiles=tiles))
       self.mappings[comp] = tensors
+
+  def all_tensors(self):
+    for _, tensors in self.mappings.items():
+      for tensor in tensors:
+        yield tensor
 
   def tile_ids(self, computation=None):
     if isinstance(computation, list):
@@ -370,6 +378,9 @@ class ReportJSON(object):
         self.events.get(IpuTraceEvent.COMPILE_END,
                         {}).get("computeSets", {}).get("names", {}))
 
+  def assert_contains_one_compile_event(self):
+    self.test.assertTrue(IpuTraceEvent.COMPILE_END in self.events)
+
   def get_tensor_map(self):
     return self.tensor_map
 
@@ -482,14 +493,6 @@ class ReportJSON(object):
   def assert_compute_sets_matches(self, expr, num_matches, msg=None):
     self.test.assertEqual(count_matches_in_list(self.get_compute_sets(), expr),
                           num_matches, msg)
-
-
-def extract_all_events(events):
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    result += [evt]
-  return result
 
 
 def extract_all_compile_end_events(events):

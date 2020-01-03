@@ -8,7 +8,7 @@ from __future__ import print_function
 import os
 from absl.testing import parameterized
 import numpy as np
-import test_utils as tu
+from test_utils import ReportJSON
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
@@ -16,7 +16,6 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 TYPES = (np.float16, np.float32, np.int32)
 TESTCASES = [{"testcase_name": np.dtype(x).name, "dtype": x} for x in TYPES]
@@ -39,17 +38,15 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
     def model(a):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [3, 5, 2])
-      report = gen_ipu_ops.ipu_event_trace()
-
-    with ops.device("/device:IPU:0"):
-      out = model(pa)
-
-    tu.configure_ipu_system()
-
     with self.session() as sess:
-      sess.run(report)
+      report = ReportJSON(self, sess, io_trace=False)
+      report.reset()
+
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(dtype, [3, 5, 2])
+
+      with ops.device("/device:IPU:0"):
+        out = model(pa)
 
       input = _get_random_input(dtype, (3, 5, 2))
 
@@ -57,23 +54,22 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input, axis=0))
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
+      report.parse_log(assert_len=3)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxHalf(self, dtype):
     def model(a):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [3, 5, 2])
-
-    with ops.device("/device:IPU:0"):
-      out = model(pa)
-
-    tu.configure_ipu_system()
-
     with self.session() as sess:
+      ReportJSON(self, sess, io_trace=False)
+
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(dtype, [3, 5, 2])
+
+      with ops.device("/device:IPU:0"):
+        out = model(pa)
+
       input = _get_random_input(dtype, (3, 5, 2))
 
       fd = {pa: input}
@@ -85,17 +81,17 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
     def model(a, axis):
       return math_ops.argmax(a, axis=axis, output_type=dtypes.int32)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
-      p_axis = array_ops.placeholder(np.int32, shape=())
-
-    with ops.device("/device:IPU:0"):
-      out = model(pa, p_axis)
-
-    tu.configure_ipu_system()
-
     for axis in range(6):
       with self.session() as sess:
+        ReportJSON(self, sess, io_trace=False)
+
+        with ops.device('cpu'):
+          pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
+          p_axis = array_ops.placeholder(np.int32, shape=())
+
+        with ops.device("/device:IPU:0"):
+          out = model(pa, p_axis)
+
         input = _get_random_input(dtype, (1, 2, 3, 4, 5, 6))
 
         fd = {pa: input, p_axis: axis}
@@ -107,17 +103,16 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
     def model(a):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [3, 5, 2])
-      report = gen_ipu_ops.ipu_event_trace()
-
-    with ops.device("/device:IPU:0"):
-      out = model(pa)
-
-    tu.configure_ipu_system()
-
     with self.session() as sess:
-      sess.run(report)
+      report = ReportJSON(self, sess, io_trace=False)
+
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(dtype, [3, 5, 2])
+
+      with ops.device("/device:IPU:0"):
+        out = model(pa)
+
+      report.reset()
 
       input = _get_random_input(dtype, (3, 5, 2))
 
@@ -125,23 +120,22 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmin(input, axis=0))
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
+      report.parse_log(assert_len=3)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinHalf(self, dtype):
     def model(a):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [3, 5, 2])
-
-    with ops.device("/device:IPU:0"):
-      out = model(pa)
-
-    tu.configure_ipu_system()
-
     with self.session() as sess:
+      ReportJSON(self, sess, io_trace=False)
+
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(dtype, [3, 5, 2])
+
+      with ops.device("/device:IPU:0"):
+        out = model(pa)
+
       input = _get_random_input(dtype, (3, 5, 2))
 
       fd = {pa: input}
@@ -153,17 +147,17 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
     def model(a, axis):
       return math_ops.argmin(a, axis=axis, output_type=dtypes.int32)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
-      p_axis = array_ops.placeholder(np.int32, shape=())
-
-    with ops.device("/device:IPU:0"):
-      out = model(pa, p_axis)
-
-    tu.configure_ipu_system()
-
     for axis in range(6):
       with self.session() as sess:
+        ReportJSON(self, sess, io_trace=False)
+
+        with ops.device('cpu'):
+          pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
+          p_axis = array_ops.placeholder(np.int32, shape=())
+
+        with ops.device("/device:IPU:0"):
+          out = model(pa, p_axis)
+
         input = _get_random_input(dtype, (1, 2, 3, 4, 5, 6))
 
         fd = {pa: input, p_axis: axis}
@@ -175,17 +169,15 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
     def model(a):
       return math_ops.argmax(a, axis=-1, output_type=dtypes.int32)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [3, 5, 2])
-      report = gen_ipu_ops.ipu_event_trace()
-
-    with ops.device("/device:IPU:0"):
-      out = model(pa)
-
-    tu.configure_ipu_system()
-
     with self.session() as sess:
-      sess.run(report)
+      report = ReportJSON(self, sess, io_trace=False)
+      report.reset()
+
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(dtype, [3, 5, 2])
+
+      with ops.device("/device:IPU:0"):
+        out = model(pa)
 
       input = _get_random_input(dtype, (3, 5, 2))
 
@@ -193,25 +185,22 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input, axis=-1))
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
+      report.parse_log(assert_len=3)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxVector(self, dtype):
     def model(a):
       return math_ops.argmax(a, axis=0, output_type=dtypes.int32)
 
-    with ops.device('cpu'):
-      pa = array_ops.placeholder(dtype, [3])
-      report = gen_ipu_ops.ipu_event_trace()
-
-    with ops.device("/device:IPU:0"):
-      out = model(pa)
-
-    tu.configure_ipu_system()
-
     with self.session() as sess:
-      sess.run(report)
+      report = ReportJSON(self, sess, io_trace=False)
+      report.reset()
+
+      with ops.device('cpu'):
+        pa = array_ops.placeholder(dtype, [3])
+
+      with ops.device("/device:IPU:0"):
+        out = model(pa)
 
       input = _get_random_input(dtype, (3))
 
@@ -219,8 +208,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input))
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
+      report.parse_log(assert_len=3)
 
 
 if __name__ == "__main__":
