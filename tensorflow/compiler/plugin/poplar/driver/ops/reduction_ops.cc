@@ -966,7 +966,7 @@ StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
   for (int i = 0; i < inst->operand_count(); ++i) {
     TF_ASSIGN_OR_RETURN(poplar::Tensor input,
                         FindInstructionInput(tensor_map, res, inst, i, seq));
-    incoming_slices[i] = input;
+    incoming_slices[i] = input.expand({0});
   }
 
   // Create a single tensor target.
@@ -994,8 +994,7 @@ StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
   for (int i = 0; i < inst->operand_count(); ++i) {
     // Add each slice of the tensor as an output and expand to be
     // [1][output_shape] to match what XLA expects.
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, i, output_tensor[i].expand({0})));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensor[i]));
   }
 
   return seq;
