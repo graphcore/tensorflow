@@ -4,6 +4,8 @@ package(default_visibility = ["//visibility:public"])
 
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
+load("@local_config_poplar//poplar:build_defs.bzl", "poplar_lib_directory")
+load("@local_config_poplar//poplar:build_defs.bzl", "poplibs_lib_directory")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
 load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
 load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
@@ -23,21 +25,6 @@ genrule(
     outs = ["tf.gp"],
     tools = ["@local_config_poplar//poplar:popc"],
     cmd = "$(location @local_config_poplar//poplar:popc) -DNDEBUG -O3 -I . -o $@ $<",
-)
-
-# IMPORTANT: codelets files must be in the same directory as the the Poplar
-# libraries at runtime which is why "filegroup" is
-# used instead of glob directly in the "srcs" of cc_library.
-cc_library(
-  name = "poplar_driver_lib",
-  srcs = ["@local_config_poplar//poplar:poplar_libs"],
-  deps = [
-      "@local_config_poplar//poplar:poplar_headers",
-  ],
-  data = [
-      "@local_config_poplar//poplar:poplar_codelets",
-      "@local_config_poplar//poplar:poplar_libs",
-  ],
 )
 
 # Rule for generating the custom codelet example
@@ -745,7 +732,7 @@ tf_custom_op_py_library(
 cc_library(
     name = "popops_ops",
     srcs = [
-        "ops/popops/cross_replica_sum.cc",
+        "ops/popops/cross_replica_sum.cc",        
         "ops/popops/all_to_all.cc",
         "ops/popops/multi_slice.cc",
     ],
@@ -942,24 +929,38 @@ cc_library(
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core/kernels:constant_op",
         "//tensorflow/core/kernels:no_op",
-        ":poplar_driver_lib",
+    ],
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
     ],
     data = [
         ":tf_graph_program",
         ":config_protos_py",
+        "@local_config_poplar//poplar:poplar_lib",
     ],
     linkstatic=1,
     alwayslink = True,
 )
 
 cc_binary(
-    name = "libuser_op_test.so",
-    srcs = ["tests/user_op_test_target.cc"],
-    copts = ["-fexceptions"],
+	  name = "libuser_op_test.so",
+	  srcs = ["tests/user_op_test_target.cc"],
+ 	  copts = ["-fexceptions"],
+	  nocopts = "-fno-exceptions",
     deps = [
-        ":poplar_driver_lib",
+        "@local_config_poplar//poplar:poplar_headers",
+    ],
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
     ],
     linkshared = True,
+    data = [
+        "@local_config_poplar//poplar:poplar_lib",
+    ],
 )
 
 cc_library(
@@ -3255,11 +3256,22 @@ tf_xla_py_test(
 )
 
 cc_binary(
-    name = "libcustom_rotate_op.so",
-    srcs = ["docs/custom_rotate_op.cc"],
-    copts = ["-fexceptions"],
-    deps = [ ":poplar_driver_lib" ],
+	  name = "libcustom_rotate_op.so",
+	  srcs = ["docs/custom_rotate_op.cc"],
+ 	  copts = ["-fexceptions"],
+	  nocopts = "-fno-exceptions",
+    deps = [
+        "@local_config_poplar//poplar:poplar_headers",
+    ],
+    linkopts = [
+        "$(locations @local_config_poplar//poplar:poplar_lib)",
+        "-Wl,-rpath," + poplar_lib_directory(),
+        "-Wl,-rpath," + poplibs_lib_directory(),
+    ],
     linkshared = True,
+    data = [
+        "@local_config_poplar//poplar:poplar_lib",
+    ],
 )
 
 tf_xla_py_test(
