@@ -5,7 +5,7 @@ from __future__ import print_function
 import tempfile
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, DeviceConnectionType
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python import ipu
@@ -128,6 +128,10 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     folder_name = "/tmp/my_folder"
     cfg = ipu.utils.set_serialization_options(cfg, folder_name)
     self.assertTrue(cfg.serialization_folder, folder_name)
+
+    cfg = ipu.utils.create_ipu_config()
+    cfg = ipu.utils.set_ipu_connection_type(cfg, DeviceConnectionType.NEVER)
+    self.assertTrue(cfg.device_connection_type, DeviceConnectionType.NEVER)
 
     with self.assertRaises(Exception):
       cfg = ipu.utils.create_ipu_config()
