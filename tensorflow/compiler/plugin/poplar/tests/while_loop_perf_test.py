@@ -9,7 +9,7 @@ import os
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
@@ -45,27 +45,23 @@ class WhileLoopPerfTest(xla_test.XLATestCase):
 
       with ops.device('cpu'):
         v = array_ops.placeholder(np.int32, [500])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess)
+      report.reset()
 
       result = sess.run(r, {v: np.zeros([500], np.int32)})
       self.assertAllClose(result[0], np.broadcast_to(45, [500]))
 
-      rep = sess.run(report)
+      report.parse_log()
 
       # Check that there is only one real compile
-      reps = ipu.utils.extract_compile_reports(rep)
-      self.assertEqual(len(reps), 1)
+      report.assert_contains_one_compile_event()
 
       # Check that there is only one execute
-      reps = ipu.utils.extract_execute_reports(rep)
-      self.assertEqual(len(reps), 1)
+      report.assert_num_execution_reports_equal(1)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,6 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 
 
@@ -39,14 +38,12 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
 
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
-        report = gen_ipu_ops.ipu_event_trace()
 
       tu.configure_ipu_system(execution_trace=False)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
 
-      sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)
       self.assertAllEqual(y[1], [20])
@@ -74,14 +71,12 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
 
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
-        report = gen_ipu_ops.ipu_event_trace()
 
       tu.configure_ipu_system(execution_trace=False)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
 
-      sess.run(report)
       y = sess.run(r, {y: [10]})
       self.assertEqual(y[0], 10)
       # Note that num_mini_batches doesn't divide the number of iterations.

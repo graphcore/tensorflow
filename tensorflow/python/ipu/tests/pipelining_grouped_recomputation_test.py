@@ -207,8 +207,6 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
     if utils.running_on_ipu_model():
       self.skipTest("Replicated top level graphs are not supported on the "
                     "IPU_MODEL target")
-    else:
-      self.skipTest("FIXME: T13754")
 
     def dataset_fn():
       dataset = tu.create_single_increasing_dataset(10, shape=[4])

@@ -2142,6 +2142,7 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
@@ -3319,6 +3320,7 @@ test_suite(
         "64_bit_test",
         "allocation_finder_test",
         "arithmetic_expr_test",
+        "arg_min_max_test",
         "batch_norm_test",
         "bias_apply_graph_caching_test",
         "case_test",

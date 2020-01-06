@@ -5,12 +5,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import json
 import numpy as np
 
 from tensorflow.compiler.tests import xla_test
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -28,14 +26,12 @@ class MappingTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         i = array_ops.placeholder(np.int32, [256])
         w = array_ops.placeholder(np.float32, [1024, 8])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[w, i])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess)
+      report.reset()
 
       i_h = np.arange(0, 3 * 256, 3)
       w_h = np.arange(8192).reshape(1024, 8)
@@ -44,26 +40,16 @@ class MappingTest(xla_test.XLATestCase):
       result = sess.run(r, {i: i_h, w: w_h})
       self.assertAllClose(result[0], expect)
 
-      rep = sess.run(report)
+      report.parse_log()
+      tm = report.get_tensor_map()
 
-      events = ipu.utils.extract_all_events(rep)
+      bad_maps = []
+      for tensor in tm.all_tensors():
+        if tensor.num_elements > 16:
+          if len(tensor.tiles) == 1 and tensor.has_contant:
+            bad_maps += [tensor.inst]
 
-      for e in events:
-        if e.type == IpuTraceEvent.COMPILE_END:
-          j = e.compile_end.tensor_map.decode('utf-8')
-          if len(j) > 0:
-            tm = json.loads(e.compile_end.tensor_map.decode('utf-8'))
-
-            bad_maps = []
-            for g in tm['mappings']:
-              for tensor in tm['mappings'][g]:
-                # Total elements > 16
-                if tensor[6] > 16:
-                  # Tiles used == 1 and is_constant == 0
-                  if len(tensor[7]) == 1 and tensor[4] == 0:
-                    bad_maps += [tensor[0]]
-
-      self.assertEqual(bad_maps, [])
+      self.assertFalse(bad_maps)
 
   def testMappingJson(self):
     with self.session() as sess:
@@ -79,14 +65,12 @@ class MappingTest(xla_test.XLATestCase):
         a = array_ops.placeholder(np.float32, [])
         b = array_ops.placeholder(np.float32, [8192])
         c = array_ops.placeholder(np.float32, [512])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[a, b, c])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess)
+      report.reset()
 
       fd = {a: 1.0, b: np.ones([8192]), c: np.ones([512])}
       result = sess.run(r, fd)
@@ -94,55 +78,53 @@ class MappingTest(xla_test.XLATestCase):
       expected = [2] * 256 + [3] * 512 + [2] * 256
       self.assertAllClose(result[0], expected)
 
-      rep = sess.run(report)
+      report.parse_log()
+      tm = report.get_tensor_map()
 
-      events = ipu.utils.extract_all_events(rep)
+      # There are two fusions in the graph, zero pad and implicit
+      # broadcast add. We work out which one's which by looking at
+      # layouts.
+      fusion_0_layout = []
+      fusion_1_layout = []
+      slice_layout = []
+      add_layout = []
+      for tensor in tm.all_tensors():
+        if tensor.inst.startswith('fusion.'):
+          fusion_1_layout = tensor
+        elif tensor.inst.startswith('fusion'):
+          fusion_0_layout = tensor
+        elif tensor.inst.startswith('slice'):
+          slice_layout = tensor
+        elif tensor.inst.startswith('add'):
+          add_layout = tensor
 
-      for e in events:
-        if e.type == IpuTraceEvent.COMPILE_END:
-          j = e.compile_end.tensor_map.decode('utf-8')
-          if len(j) > 0:
-            tm = json.loads(e.compile_end.tensor_map.decode('utf-8'))
-            # There are two fusions in the graph, zero pad and implicit
-            # broadcast add. We work out which one's which by looking at
-            # layouts.
-            fusion_0_layout = []
-            fusion_1_layout = []
-            slice_layout = []
-            add_layout = []
-            for g in tm['mappings']:
-              for tensor in tm['mappings'][g]:
-                if tensor[0].startswith('fusion.'):
-                  fusion_1_layout = tensor
-                elif tensor[0].startswith('fusion'):
-                  fusion_0_layout = tensor
-                elif tensor[0].startswith('slice'):
-                  slice_layout = tensor
-                elif tensor[0].startswith('add'):
-                  add_layout = tensor
+      # The slice contains 4 elements on 256 tiles
+      self.assertEqual(len(slice_layout.tiles), 256)
+      for tile_idx, tile in enumerate(slice_layout.tiles):
+        self.assertEqual(tile.tile, tile_idx)
+        self.assertEqual(tile.num_elements, 4)
 
-            # The slice contains 4 elements on 256 tiles
-            self.assertEqual(len(slice_layout[7]), 256)
-            for tile in range(256):
-              self.assertEqual(slice_layout[7][tile], [tile, 4])
+      # The broadcast add will have the same layout as the slice as it
+      # should be done inplace.
+      if slice_layout.tiles == fusion_1_layout.tiles:
+        pad_layout = fusion_0_layout
+      else:
+        self.assertEqual(slice_layout.tiles, fusion_0_layout.tiles)
+        pad_layout = fusion_1_layout
 
-            # The broadcast add will have the same layout as the slice as it
-            # should be done inplace.
-            if slice_layout[7] == fusion_1_layout[7]:
-              pad_layout = fusion_0_layout
-            else:
-              self.assertEqual(slice_layout[7], fusion_0_layout[7])
-              pad_layout = fusion_1_layout
+      # The pad contains 512 elements on tile 0,
+      # and one region with 32 elements on tiles 256-271
+      self.assertEqual(len(pad_layout.tiles), 17)
+      for tile_idx, tile in enumerate(pad_layout.tiles):
+        if tile_idx == 0:
+          self.assertEqual(tile.tile, tile_idx)
+          self.assertEqual(tile.num_elements, 512)
+        else:
+          self.assertEqual(tile.tile, 256 + tile_idx)
+          self.assertEqual(tile.num_elements, 32)
 
-            # The pad contains 512 elements on tile 0,
-            # and one region with 32 elements on tiles 256-271
-            self.assertEqual(len(pad_layout[7]), 17)
-            self.assertEqual(pad_layout[7][0], [0, 512])
-            for idx in range(1, 16):
-              self.assertEqual(pad_layout[7][idx], [256 + idx, 32])
-
-            # The add is done inplace
-            self.assertEqual(slice_layout[7], add_layout[7])
+      # The add is done inplace
+      self.assertEqual(slice_layout.tiles, add_layout.tiles)
 
   def testInplaceReadWrite(self):
     with self.session() as sess:
@@ -156,14 +138,12 @@ class MappingTest(xla_test.XLATestCase):
         x = array_ops.placeholder(np.int32, [100])
         y = array_ops.placeholder(np.int32, [100])
         a = array_ops.placeholder(np.int32, [100])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_net, inputs=[x, y, a])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess)
+      report.reset()
 
       i_x = np.full(100, 1)
       i_y = np.full(100, 2)
@@ -175,25 +155,17 @@ class MappingTest(xla_test.XLATestCase):
       self.assertAllClose(result_c, expect_c)
       self.assertAllClose(result_z, expect_z)
 
-      rep = sess.run(report)
+      report.parse_log()
+      tm = report.get_tensor_map()
 
-      events = ipu.utils.extract_all_events(rep)
+      bad_maps = []
+      for tensor in tm.all_tensors():
+        # Number of elements in tensor 100.
+        # Number of used tiles should be larger than 1
+        if tensor.num_elements != 100 or len(tensor.tiles) <= 1:
+          bad_maps += [tensor.inst]
 
-      for e in events:
-        if e.type == IpuTraceEvent.COMPILE_END:
-          j = e.compile_end.tensor_map.decode('utf-8')
-          if len(j) > 0:
-            tm = json.loads(e.compile_end.tensor_map.decode('utf-8'))
-
-            bad_maps = []
-            for g in tm['mappings']:
-              for tensor in tm['mappings'][g]:
-                # Number of elements in tensor 100.
-                # Number of used tiles should be larger than 1
-                if tensor[6] != 100 or len(tensor[7]) <= 1:
-                  bad_maps += [tensor[0]]
-
-      self.assertEqual(bad_maps, [])
+      self.assertFalse(bad_maps)
 
 
 if __name__ == "__main__":
