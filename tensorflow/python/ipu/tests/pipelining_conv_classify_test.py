@@ -19,7 +19,6 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.keras import layers
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -146,7 +145,6 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       l = array_ops.placeholder(np.int32, shape=[1])
-      evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
       compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
@@ -154,16 +152,14 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
     tu.move_variable_initialization_to_cpu()
     outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, None)
+      report = tu.ReportJSON(self, sess, pipelining=True)
       sess.run(variables.global_variables_initializer())
-      sess.run(evts)
+      report.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      log = sess.run(evts)
-      report.parse_events(log)
+      report.parse_log()
 
       # 1 conv in each of 2 stages = 2
       self.assertAllEqual(report.get_ml_type_counts(), [0, 2, 1, 2])
@@ -210,7 +206,6 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       l = array_ops.placeholder(np.int32, shape=[1])
-      evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
       compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
@@ -218,16 +213,14 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
     tu.move_variable_initialization_to_cpu()
     outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, None)
+      report = tu.ReportJSON(self, sess, pipelining=True)
       sess.run(variables.global_variables_initializer())
-      sess.run(evts)
+      report.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      log = sess.run(evts)
-      report.parse_events(log)
+      report.parse_log()
 
       # 1 conv in stage1, 2 conv in stage2, 1 matmul in stage3 = 4
       self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 3, 4])
@@ -276,7 +269,6 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 224])
       l = array_ops.placeholder(np.int32, shape=[1])
-      evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
       compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
@@ -284,16 +276,14 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
     tu.move_variable_initialization_to_cpu()
     outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, None)
+      report = tu.ReportJSON(self, sess, pipelining=True)
       sess.run(variables.global_variables_initializer())
-      sess.run(evts)
+      report.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      log = sess.run(evts)
-      report.parse_events(log)
+      report.parse_log()
 
       # 2x matmul in 2 stages = 4 (4x updates, 3x grads)
       self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 3, 4])
@@ -342,7 +332,6 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 224])
       l = array_ops.placeholder(np.int32, shape=[1])
-      evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
       compiled_model_pipeline = ipu_compiler.compile(model_pipeline,
@@ -350,16 +339,14 @@ class PipeliningConvClassifyTest(test_util.TensorFlowTestCase):
 
     tu.move_variable_initialization_to_cpu()
     outfeed_queue.dequeue()
-    tu.configure_ipu_system(pipelining=True, text_report=False)
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, None)
+      report = tu.ReportJSON(self, sess, pipelining=True)
       sess.run(variables.global_variables_initializer())
-      sess.run(evts)
+      report.reset()
       sess.run(compiled_model_pipeline, {x: np.ones(x.shape), l: [1]})
-      log = sess.run(evts)
-      report.parse_events(log)
+      report.parse_log()
 
       # 2x matmul in 2 stages = 4 (4x updates, 2x grads)
       self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 2, 4])

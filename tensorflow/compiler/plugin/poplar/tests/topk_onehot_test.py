@@ -14,7 +14,6 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 
 
 class OneHotTopK(xla_test.XLATestCase):
@@ -39,7 +38,6 @@ class OneHotTopK(xla_test.XLATestCase):
 
         with ops.device('cpu'):
           pa = array_ops.placeholder(np.int32, inputs["shape"], name="a")
-          report = gen_ipu_ops.ipu_event_trace()
 
         # Check if we should be running on IPU or cpu.
         device = "cpu:0" if cpuRun else "/device:IPU:0"
@@ -47,9 +45,7 @@ class OneHotTopK(xla_test.XLATestCase):
         with ops.device(device):
           out = model(pa)
 
-        tu.configure_ipu_system()
-
-        sess.run(report)
+        tu.ReportJSON(self, sess, io_trace=False)
 
         in_data = np.array(inputs["in_values"])
 
@@ -207,19 +203,17 @@ class OneHotTopK(xla_test.XLATestCase):
       topn = 24
 
       def model(a):
-        values, indices = nn.top_k(a, topn)
+        _, indices = nn.top_k(a, topn)
         return indices
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(np.float32, [n_categories], name="a")
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ops.device("/device:IPU:0"):
         out = model(pa)
 
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       input = np.random.random(n_categories)
       expected = (-input).argsort()[:topn]
@@ -228,8 +222,7 @@ class OneHotTopK(xla_test.XLATestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, expected)
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
+      report.parse_log(assert_len=3)
 
   def testInTopK(self):
     with self.session() as sess:
@@ -244,14 +237,12 @@ class OneHotTopK(xla_test.XLATestCase):
       with ops.device('cpu'):
         pa = array_ops.placeholder(np.float32, [batchsize, n_categories])
         pb = array_ops.placeholder(np.int32, [batchsize])
-        report = gen_ipu_ops.ipu_event_trace()
 
       with ops.device("/device:IPU:0"):
         out = model(pa, pb)
 
-      tu.configure_ipu_system()
-
-      sess.run(report)
+      report = tu.ReportJSON(self, sess, io_trace=False)
+      report.reset()
 
       input = np.random.rand(batchsize, n_categories)
       input = input / np.sqrt(np.sum(input**2))
@@ -263,8 +254,7 @@ class OneHotTopK(xla_test.XLATestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, [True, True, True, True])
 
-      result = sess.run(report)
-      self.assertTrue(len(result) == 3)
+      report.parse_log(assert_len=3)
 
 
 if __name__ == "__main__":
