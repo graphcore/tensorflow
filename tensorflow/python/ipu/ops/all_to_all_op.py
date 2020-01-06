@@ -42,7 +42,7 @@ def all_to_all(x,
   return gen_popops_ops.ipu_all_to_all(x,
                                        split_dimension=split_dimension,
                                        concat_dimension=concat_dimension,
-                                       replication_factor=replication_factor,
+                                       number_of_replicas=replication_factor,
                                        name=name)
 
 
