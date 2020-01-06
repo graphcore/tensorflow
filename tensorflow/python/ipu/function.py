@@ -30,7 +30,7 @@ class IpuFunction():
 
   def __call__(self, *args, **kwds):
     with ops.device(self._device):
-      return self._call(*args, *kwds)
+      return self._call(*args, **kwds)
 
 
 def function(func=None,

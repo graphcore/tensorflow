@@ -66,7 +66,7 @@ class FunctionTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     ipu.utils.configure_ipu_system(cfg)
 
-    result = my_func(constant_op.constant(1), 2, 3)
+    result = my_func(constant_op.constant(1), 2, c=3)
 
     self.assertAllEqual(6, result.numpy())
 
