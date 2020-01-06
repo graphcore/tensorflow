@@ -1,6 +1,14 @@
 # Copyright 2017 Graphcore Ltd
 
 def _poplar_autoconf_impl(repository_ctx):
+  if not "TF_POPLAR_SANDBOX" in repository_ctx.os.environ and \
+    not "TF_POPLAR_BASE" in repository_ctx.os.environ:
+    # No Poplar
+    repository_ctx.template("poplar/BUILD",
+        Label("//third_party/ipus/poplar_lib:BUILD_nopoplar.tpl"), {})
+    repository_ctx.template("poplar/build_defs.bzl",
+        Label("//third_party/ipus/poplar_lib:build_defs_nopoplar.tpl"), {})
+    return
 
   # Tensorflow build tag
   tf_poplar_build_tag = "UNKNOWN"
@@ -24,23 +32,12 @@ def _poplar_autoconf_impl(repository_ctx):
     if not repository_ctx.path(poplar_base + "/bin").exists:
       fail("Cannot find poplar bin path.")
 
-    repository_ctx.symlink(poplar_base + "/include", "poplar/include")
-    repository_ctx.symlink(poplar_base + "/lib", "poplar/lib")
-    repository_ctx.symlink(poplar_base + "/bin", "poplar/bin")
-
-    repository_ctx.template("poplar/BUILD",
-        Label("//third_party/ipus/poplar_lib:BUILD_poplar.tpl"), {})
-    repository_ctx.template("poplar/build_defs.bzl",
-        Label("//third_party/ipus/poplar_lib:build_defs_poplar.tpl"),
-        { "POPLAR_LIB_DIRECTORY" : poplar_base + "/lib",
-          "POPLIBS_LIB_DIRECTORY" : poplar_base + "/lib",
-          "TF_POPLAR_BUILD_TAG" : tf_poplar_build_tag })
-
-    return
+    repository_ctx.symlink(poplar_base + "/include", "poplar/poplar/include")
+    repository_ctx.symlink(poplar_base + "/lib", "poplar/lib/poplar")
+    repository_ctx.symlink(poplar_base + "/bin", "poplar/poplar/bin")
 
   # Poplar sandbox
-  if "TF_POPLAR_SANDBOX" in repository_ctx.os.environ:
-
+  else:
     poplar_base = repository_ctx.os.environ["TF_POPLAR_SANDBOX"].strip()
 
     if poplar_base == "":
@@ -53,31 +50,22 @@ def _poplar_autoconf_impl(repository_ctx):
       fail("Cannot find poplibs/include path.")
 
     repository_ctx.symlink(poplar_base + "/poplar/include", "poplar/poplar/include")
-    repository_ctx.symlink(poplar_base + "/poplar/lib", "poplar/poplar/lib")
-    repository_ctx.symlink(poplar_base + "/poplar/bin", "poplar/poplar/bin")
     repository_ctx.symlink(poplar_base + "/poplibs/include", "poplar/poplibs/include")
-    repository_ctx.symlink(poplar_base + "/poplibs/lib", "poplar/poplibs/lib")
+    repository_ctx.symlink(poplar_base + "/poplar/bin", "poplar/poplar/bin")
+    repository_ctx.symlink(poplar_base + "/poplibs/lib", "poplar/lib/poplibs")
+    repository_ctx.symlink(poplar_base + "/poplar/lib", "poplar/lib/poplar")
+    repository_ctx.symlink(poplar_base + "/tbb/lib", "poplar/lib/tbb")
 
-    repository_ctx.template("poplar/BUILD",
-        Label("//third_party/ipus/poplar_lib:BUILD_poplar_sandbox.tpl"), {})
-    repository_ctx.template("poplar/build_defs.bzl",
-        Label("//third_party/ipus/poplar_lib:build_defs_poplar.tpl"),
-        { "POPLAR_LIB_DIRECTORY" : poplar_base + "/poplar/lib",
-	        "POPLIBS_LIB_DIRECTORY" : poplar_base + "/poplibs/lib",
-	        "TF_POPLAR_BUILD_TAG" : tf_poplar_build_tag })
-
-    return
-
-
-  # No Poplar
   repository_ctx.template("poplar/BUILD",
-      Label("//third_party/ipus/poplar_lib:BUILD_nopoplar.tpl"), {})
+      Label("//third_party/ipus/poplar_lib:BUILD_poplar.tpl"), {})
   repository_ctx.template("poplar/build_defs.bzl",
-      Label("//third_party/ipus/poplar_lib:build_defs_nopoplar.tpl"), {})
+      Label("//third_party/ipus/poplar_lib:build_defs_poplar.tpl"),
+      { "TF_POPLAR_BUILD_TAG" : tf_poplar_build_tag })
 
 
 poplar_configure = repository_rule(
   implementation = _poplar_autoconf_impl,
   local = True,
+  environ = [ "TF_POPLAR_BASE", "TF_POPLAR_SANDBOX", "TF_POPLAR_BUILD_TAG"],
 )
 
