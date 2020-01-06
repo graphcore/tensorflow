@@ -35,7 +35,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ok = [
           '__seed*', 'host-exchange-local-copy-',
           'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
-          'Sum/reduce*/ReduceStage*/IntermediateToIntermediate/Reduce',
           'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'Sum/reduce*/ReduceFinalStage/Cast'
       ]
