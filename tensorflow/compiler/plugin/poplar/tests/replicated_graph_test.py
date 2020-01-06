@@ -436,7 +436,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       ipu.utils.configure_ipu_system(cfg)
 
       sess.run(infeed_queue.initializer)
-      with self.assertRaisesRegexp(
+      with self.assertRaisesRegex(
           errors.FailedPreconditionError,
           'Current program has been created with replication_factor 2'):
         sess.run(res)
@@ -467,7 +467,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      with self.assertRaisesRegexp(
+      with self.assertRaisesRegex(
           errors.FailedPreconditionError,
           'Current program has been created with replication_factor 2'):
         sess.run(res)

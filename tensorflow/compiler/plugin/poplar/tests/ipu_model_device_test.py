@@ -12,6 +12,7 @@ import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
@@ -105,24 +106,21 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       self.assertEqual(len(rep), 6)
 
   def testEngineCompilationOptions(self):
-    try:
-      with self.session() as sess:
-        with ops.device("/device:IPU:0"):
-          pa = array_ops.placeholder(np.float32, [480], name="a")
-          pb = array_ops.placeholder(np.float32, [480], name="b")
-          output = pa + pb
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float32, [480], name="a")
+        pb = array_ops.placeholder(np.float32, [480], name="b")
+        output = pa + pb
 
-        tu.configure_ipu_system(True,
-                                True,
-                                True,
-                                engine_opts={"some_option": "some_value"})
+      tu.configure_ipu_system(True,
+                              True,
+                              True,
+                              engine_opts={"some_option": "some_value"})
 
-        fd = {pa: np.zeros([480]), pb: np.zeros([480])}
+      fd = {pa: np.zeros([480]), pb: np.zeros([480])}
+      with self.assertRaisesRegex(errors.InvalidArgumentError,
+                                  "Unrecognised option"):
         sess.run(output, fd)
-
-        self.assertTrue(False)
-    except errors.InvalidArgumentError:
-      pass
 
   def testNamedOperations(self):
     with self.session() as sess:
@@ -279,7 +277,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
 
       rep = sess.run(report, fd)
-      evts = tu.extract_all_events(rep)
+      evts = ipu.utils.extract_all_events(rep)
       self.assertEqual(len(evts), 3)  # begin, end, execute
 
       self.assertEqual(evts[1].compile_end.compilation_report[0],
@@ -308,7 +306,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
 
       rep = sess.run(report, fd)
-      evts = tu.extract_all_events(rep)
+      evts = ipu.utils.extract_all_events(rep)
       self.assertEqual(len(evts), 3)  # compile begin, compile end, execute
 
       for e in evts:

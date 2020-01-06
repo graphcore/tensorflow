@@ -41,8 +41,8 @@ class PopnnGroupNormTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testInvalidGroupSize(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(5, 2, 10, 10))
-    with self.assertRaisesRegexp(ValueError,
-                                 'Invalid groups 10 for 2 channels.'):
+    with self.assertRaisesRegex(ValueError,
+                                'Invalid groups 10 for 2 channels.'):
       normalization_ops.group_norm(inputs,
                                    groups=10,
                                    reduction_axes=[-2, -1],
@@ -51,7 +51,7 @@ class PopnnGroupNormTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testBadCommensurateGroup(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(5, 4, 10, 10))
-    with self.assertRaisesRegexp(
+    with self.assertRaisesRegex(
         ValueError, '4 channels is not commensurate with '
         '3 groups.'):
       normalization_ops.group_norm(inputs,
@@ -62,26 +62,26 @@ class PopnnGroupNormTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
-    with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
+    with self.assertRaisesRegex(ValueError, 'Axis is out of bounds.'):
       normalization_ops.group_norm(inputs, channels_axis=5)
-    with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
+    with self.assertRaisesRegex(ValueError, 'Axis is out of bounds.'):
       normalization_ops.group_norm(inputs, reduction_axes=[1, 5])
 
   @test_util.deprecated_graph_mode_only
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.group_norm(inputs,
                                    channels_axis=-1,
                                    reduction_axes=[-1])
     # Specify axis with positive values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.group_norm(inputs,
                                    channels_axis=1,
                                    reduction_axes=[1, 3])
     # Specify axis with mixed positive and negative values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.group_norm(inputs,
                                    channels_axis=-1,
                                    reduction_axes=[3])
@@ -89,19 +89,19 @@ class PopnnGroupNormTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
-    with self.assertRaisesRegexp(ValueError, 'undefined rank'):
+    with self.assertRaisesRegex(ValueError, 'undefined rank'):
       normalization_ops.group_norm(inputs)
 
   @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
-    with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
+    with self.assertRaisesRegex(ValueError, 'undefined dimensions'):
       normalization_ops.group_norm(inputs)
 
   @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
-    with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
+    with self.assertRaisesRegex(ValueError, 'undefined channel dimension'):
       normalization_ops.group_norm(inputs,
                                    channels_axis=-1,
                                    reduction_axes=[-3, -2])
@@ -317,26 +317,26 @@ class PopnnInstanceNormTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
-    with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
+    with self.assertRaisesRegex(ValueError, 'Axis is out of bounds.'):
       normalization_ops.instance_norm(inputs, channels_axis=5)
-    with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
+    with self.assertRaisesRegex(ValueError, 'Axis is out of bounds.'):
       normalization_ops.instance_norm(inputs, reduction_axes=[1, 5])
 
   @test_util.deprecated_graph_mode_only
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.instance_norm(inputs,
                                       channels_axis=-1,
                                       reduction_axes=[-1])
     # Specify axis with positive values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.instance_norm(inputs,
                                       channels_axis=1,
                                       reduction_axes=[1, 3])
     # Specify axis with mixed positive and negative values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.instance_norm(inputs,
                                       channels_axis=-1,
                                       reduction_axes=[3])
@@ -344,19 +344,19 @@ class PopnnInstanceNormTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
-    with self.assertRaisesRegexp(ValueError, 'undefined rank'):
+    with self.assertRaisesRegex(ValueError, 'undefined rank'):
       normalization_ops.instance_norm(inputs)
 
   @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
-    with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
+    with self.assertRaisesRegex(ValueError, 'undefined dimensions'):
       normalization_ops.instance_norm(inputs)
 
   @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
-    with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
+    with self.assertRaisesRegex(ValueError, 'undefined channel dimension'):
       normalization_ops.instance_norm(inputs,
                                       channels_axis=-1,
                                       reduction_axes=[-3, -2])
@@ -542,26 +542,26 @@ class PopnnLayerNormTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testAxisIsBad(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 2, 4, 5))
-    with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
+    with self.assertRaisesRegex(ValueError, 'Axis is out of bounds.'):
       normalization_ops.layer_norm(inputs, channels_axis=5)
-    with self.assertRaisesRegexp(ValueError, 'Axis is out of bounds.'):
+    with self.assertRaisesRegex(ValueError, 'Axis is out of bounds.'):
       normalization_ops.layer_norm(inputs, reduction_axes=[1, 5])
 
   @test_util.deprecated_graph_mode_only
   def testNotMutuallyExclusiveAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(10, 32, 32, 32))
     # Specify axis with negative values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.layer_norm(inputs,
                                    channels_axis=-1,
                                    reduction_axes=[-1])
     # Specify axis with positive values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.layer_norm(inputs,
                                    channels_axis=1,
                                    reduction_axes=[1, 3])
     # Specify axis with mixed positive and negative values.
-    with self.assertRaisesRegexp(ValueError, 'mutually exclusive'):
+    with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
       normalization_ops.layer_norm(inputs,
                                    channels_axis=-1,
                                    reduction_axes=[3])
@@ -569,19 +569,19 @@ class PopnnLayerNormTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testUnknownShape(self):
     inputs = array_ops.placeholder(dtypes.float32)
-    with self.assertRaisesRegexp(ValueError, 'undefined rank'):
+    with self.assertRaisesRegex(ValueError, 'undefined rank'):
       normalization_ops.layer_norm(inputs)
 
   @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedReductionAxes(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 32, None, 4))
-    with self.assertRaisesRegexp(ValueError, 'undefined dimensions'):
+    with self.assertRaisesRegex(ValueError, 'undefined dimensions'):
       normalization_ops.layer_norm(inputs)
 
   @test_util.deprecated_graph_mode_only
   def testParamsShapeNotFullyDefinedChannelsAxis(self):
     inputs = array_ops.placeholder(dtypes.float32, shape=(1, 3, 4, None))
-    with self.assertRaisesRegexp(ValueError, 'undefined channel dimension'):
+    with self.assertRaisesRegex(ValueError, 'undefined channel dimension'):
       normalization_ops.layer_norm(inputs,
                                    channels_axis=-1,
                                    reduction_axes=[-3, -2])

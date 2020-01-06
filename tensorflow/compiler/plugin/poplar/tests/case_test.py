@@ -7,8 +7,7 @@ from __future__ import print_function
 
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.eager import function as eager_function
@@ -57,15 +56,12 @@ class CaseTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.int32, [], name="a")
         pb = array_ops.placeholder(np.float32, [2], name="b")
         pc = array_ops.placeholder(np.float32, [2], name="c")
-        report = gen_ipu_ops.ipu_event_trace()
 
       out = ipu.ipu_compiler.compile(my_graph, [pa, pb, pc])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess)
 
-      sess.run(report)
+      report.reset()
 
       result = sess.run(out, {pa: 0, pb: [0., 1.], pc: [1., 5.]})
       self.assertAllClose(result[0], [1., 6.])
@@ -79,15 +75,8 @@ class CaseTest(xla_test.XLATestCase):
       result = sess.run(out, {pa: 10, pb: [0., 1.], pc: [1., 5.]})
       self.assertAllClose(result[0], [0., 5.])
 
-      rep = sess.run(report)
-      evts = ipu.utils.extract_all_events(rep)
-
-      num_compiles = 0
-      for evt in evts:
-        if evt.type == IpuTraceEvent.COMPILE_END:
-          num_compiles = num_compiles + 1
-
-      self.assertEqual(num_compiles, 1)
+      report.parse_log()
+      report.assert_contains_one_compile_event()
 
   def testCaseVariables(self):
     with self.session() as sess:
@@ -127,17 +116,14 @@ class CaseTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         pa = array_ops.placeholder(np.int32, [], name="a")
         pb = array_ops.placeholder(np.float32, [2], name="b")
-        report = gen_ipu_ops.ipu_event_trace()
 
       out = ipu.ipu_compiler.compile(my_graph, [pa, pb])
 
-      cfg = ipu.utils.create_ipu_config(profiling=True)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      report = ReportJSON(self, sess)
 
       sess.run(variables_lib.global_variables_initializer())
 
-      sess.run(report)
+      report.reset()
 
       result = sess.run(out, {pa: 0, pb: [0., 1.]})
       self.assertAllClose(result[0], [1., 6.])
@@ -151,15 +137,8 @@ class CaseTest(xla_test.XLATestCase):
       result = sess.run(out, {pa: 10, pb: [0., 1.]})
       self.assertAllClose(result[0], [0., 5.])
 
-      rep = sess.run(report)
-      evts = ipu.utils.extract_all_events(rep)
-
-      num_compiles = 0
-      for evt in evts:
-        if evt.type == IpuTraceEvent.COMPILE_END:
-          num_compiles = num_compiles + 1
-
-      self.assertEqual(num_compiles, 1)
+      report.parse_log()
+      report.assert_contains_one_compile_event()
 
 
 if __name__ == "__main__":

@@ -22,7 +22,6 @@ import numpy as np
 
 from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python.data.ops import dataset_ops
@@ -498,27 +497,22 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
           for evt_str in val.tensor.string_val:
             evt = IpuTraceEvent.FromString(evt_str)
 
-            if (evt.type == IpuTraceEvent.COMPILE_END
-                and len(evt.compile_end.compilation_report) > 0):
+            if evt.type == IpuTraceEvent.COMPILE_END and \
+                evt.compile_end.compilation_report:
               compile_for_ipu_count += 1
 
     self.assertEqual(compile_for_ipu_count, 1)
 
   def testEventDecode(self):
     class EventTraceHook(session_run_hook.SessionRunHook):
-      def __init__(self):
-        self._event_op = None
-        self._events = None
+      def __init__(self, report):
+        self._report = report
 
       def begin(self):
-        self._event_op = gen_ipu_ops.ipu_event_trace()
+        self._report.create_ipu_event_trace()
 
       def after_run(self, run_context, run_values):
-        self._events = run_context.session.run(self._event_op)
-
-      @property
-      def events(self):
-        return self._events
+        self._report.parse_log(session=run_context.session)
 
     def my_model_fn(features, labels, mode):
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
@@ -540,10 +534,13 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       dataset = dataset.batch(batch_size=2, drop_remainder=True).repeat()
       return dataset
 
-    ipu_options = ipu_utils.create_ipu_config(profiling=True)
+    report = tu.ReportJSON(self,
+                           estimator_hook=True,
+                           compile_ipu_code=True,
+                           execution_trace=False)
 
     ipu_config = ipu_run_config.IPURunConfig(iterations_per_loop=2,
-                                             ipu_options=ipu_options,
+                                             ipu_options=report.ipu_config,
                                              compile_summary=True)
 
     run_config = ipu_run_config.RunConfig(ipu_run_config=ipu_config,
@@ -552,12 +549,11 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
                                            config=run_config)
 
-    event_trace_hook = EventTraceHook()
+    event_trace_hook = EventTraceHook(report)
     hooks = [event_trace_hook]
     estimator.train(input_fn=my_input_fn, steps=4, hooks=hooks)
 
-    events = event_trace_hook.events
-    self.assertEqual(len(events), 3)
+    report.assert_num_events(3)
 
   def testLossAveraging(self):
     def my_model_fn(features, labels, mode):

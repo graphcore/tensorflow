@@ -16,11 +16,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 import numpy as np
 
 from tensorflow.keras import layers
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import ops
@@ -48,8 +46,10 @@ next_feed_id.feed_count = 0
 
 
 def _get_variable(name, shape, init):
-  return variable_scope.get_variable(
-      name, shape, initializer=init, dtype=np.float16)
+  return variable_scope.get_variable(name,
+                                     shape,
+                                     initializer=init,
+                                     dtype=np.float16)
 
 
 def block(name, first_stride, out_filters, count, x):
@@ -67,11 +67,12 @@ def block(name, first_stride, out_filters, count, x):
       x = conv(x, 3, 1, out_filters)
 
       # shortcut
-      if (stride != 1):
-        sc = array_ops.strided_slice(
-            sc, [0, 0, 0, 0], sc.shape, strides=[1, stride, stride, 1])
+      if stride != 1:
+        sc = array_ops.strided_slice(sc, [0, 0, 0, 0],
+                                     sc.shape,
+                                     strides=[1, stride, stride, 1])
       pad = int(x.shape[3] - shape_in[3])
-      if (pad != 0):
+      if pad != 0:
         sc = array_ops.pad(sc, paddings=[[0, 0], [0, 0], [0, 0], [0, pad]])
 
       x = nn.relu(x + sc)
@@ -80,10 +81,9 @@ def block(name, first_stride, out_filters, count, x):
 
 
 def fc(x, num_units_out):
-  return layers.Dense(
-      num_units_out,
-      kernel_initializer=init_ops.constant_initializer(0.1),
-      bias_initializer=init_ops.constant_initializer(0.0))(x)
+  return layers.Dense(num_units_out,
+                      kernel_initializer=init_ops.constant_initializer(0.1),
+                      bias_initializer=init_ops.constant_initializer(0.0))(x)
 
 
 def max_pool(x, ksize=3, stride=2):
@@ -91,13 +91,12 @@ def max_pool(x, ksize=3, stride=2):
 
 
 def conv(x, ksize, stride, filters_out):
-  return layers.Conv2D(
-      filters_out,
-      ksize,
-      stride,
-      'SAME',
-      kernel_initializer=init_ops.constant_initializer(0.1),
-      bias_initializer=init_ops.constant_initializer(0.0))(x)
+  return layers.Conv2D(filters_out,
+                       ksize,
+                       stride,
+                       'SAME',
+                       kernel_initializer=init_ops.constant_initializer(0.1),
+                       bias_initializer=init_ops.constant_initializer(0.0))(x)
 
 
 class MlTypeClassifyTest(xla_test.XLATestCase):
@@ -122,7 +121,6 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       l = array_ops.placeholder(np.int32, shape=[1])
-      evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
       output = ipu_compiler.compile(graph, inputs=[x, l])
@@ -132,12 +130,12 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, None)
+      report = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      sess.run(evts)
+      report.reset()
       sess.run(output, {x: np.ones(x.shape), l: [1]})
-      log = sess.run(evts)
-      report.parse_events(log)
+
+      report.parse_log()
 
       # 2 convs, one grad, 2 updates
       self.assertAllEqual(report.get_ml_type_counts(), [0, 2, 1, 2])
@@ -164,7 +162,6 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 4, 4, 2])
       l = array_ops.placeholder(np.int32, shape=[1])
-      evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
       output = ipu_compiler.compile(graph, inputs=[x, l])
@@ -174,12 +171,11 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, None)
+      report = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      sess.run(evts)
+      report.reset()
       sess.run(output, {x: np.ones(x.shape), l: [1]})
-      log = sess.run(evts)
-      report.parse_events(log)
+      report.parse_log()
 
       # 3 convs, 1 matmul = 4
       self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 3, 4])
@@ -208,7 +204,6 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 224])
       l = array_ops.placeholder(np.int32, shape=[1])
-      evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
       output = ipu_compiler.compile(graph, inputs=[x, l])
@@ -218,12 +213,11 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, None)
+      report = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      sess.run(evts)
+      report.reset()
       sess.run(output, {x: np.ones(x.shape), l: [1]})
-      log = sess.run(evts)
-      report.parse_events(log)
+      report.parse_log()
 
       # 4x updates, 3x grads
       self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 3, 4])
@@ -254,7 +248,6 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
     with ops.device('cpu'):
       x = array_ops.placeholder(np.float32, shape=[1, 224])
       l = array_ops.placeholder(np.int32, shape=[1])
-      evts = gen_ipu_ops.ipu_event_trace()
 
     with ops.device("/device:IPU:0"):
       output = ipu_compiler.compile(graph, inputs=[x, l])
@@ -264,12 +257,11 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
 
     with tu.ipu_session() as sess:
 
-      report = tu.ReportJSON(self, None)
+      report = tu.ReportJSON(self, sess)
       sess.run(variables.global_variables_initializer())
-      sess.run(evts)
+      report.reset()
       sess.run(output, {x: np.ones(x.shape), l: [1]})
-      log = sess.run(evts)
-      report.parse_events(log)
+      report.parse_log()
 
       # 4x updates, 2x grads
       self.assertAllEqual(report.get_ml_type_counts(), [0, 4, 2, 4])

@@ -40,7 +40,8 @@ def configure_ipu_system(compilation_trace=True,
                          max_inter_ipu_copies_buffer_size=0,
                          merge_infeed_io_copies=False,
                          always_rearrange_copies_on_the_host=False,
-                         serialization_folder=""):
+                         serialization_folder="",
+                         only_create_config=False):
   opts = IpuOptions()
   opts.profiling.enable_ipu_trace_events = (compilation_trace or io_trace
                                             or execution_trace
@@ -89,12 +90,15 @@ def configure_ipu_system(compilation_trace=True,
     dev = opts.device_config.add()
     dev.auto_count = device_count
 
-  g = ops.Graph()
-  with g.as_default():
-    cfg_op = gen_ipu_ops.ipu_configure_hardware(opts.SerializeToString())
+  if not only_create_config:
+    g = ops.Graph()
+    with g.as_default():
+      cfg_op = gen_ipu_ops.ipu_configure_hardware(opts.SerializeToString())
 
-  with session_lib.Session(graph=g) as sess:
-    sess.run(cfg_op)
+    with session_lib.Session(graph=g) as sess:
+      sess.run(cfg_op)
+
+  return opts
 
 
 @contextlib.contextmanager
@@ -144,6 +148,9 @@ class TensorMap(object):
       self.tile = tile
       self.num_elements = num_elements
 
+    def __eq__(self, other):
+      return self.tile == other.tile and self.num_elements == other.num_elements
+
   class Tensor(object):
     def __init__(self, inst, index, shape, dtype, has_constant, has_aliases,
                  num_elements, tiles):
@@ -179,6 +186,11 @@ class TensorMap(object):
                              num_elements=js_tensor[6],
                              tiles=tiles))
       self.mappings[comp] = tensors
+
+  def all_tensors(self):
+    for _, tensors in self.mappings.items():
+      for tensor in tensors:
+        yield tensor
 
   def tile_ids(self, computation=None):
     if isinstance(computation, list):
@@ -216,46 +228,61 @@ class ReportJSON(object):
                max_inter_ipu_copies_buffer_size=0,
                merge_infeed_io_copies=False,
                always_rearrange_copies_on_the_host=False,
-               serialization_folder=""):
+               serialization_folder="",
+               estimator_hook=False):
+    self.report = None
     self.test = test
     self.sess = sess
     # If no session is passed to the constructor then assume
     # the events will be provided by the user.
     if sess:
-      with ops.device('cpu'):
-        self.report = gen_ipu_ops.ipu_event_trace()
-      if configure_device:
-        configure_ipu_system(
-            compilation_trace,
-            io_trace,
-            execution_trace=execution_trace,
-            text_report=False,
-            compile_ipu_code=compile_ipu_code,
-            device_count_override=device_count_override,
-            sharded=sharded,
-            pipelining=pipelining,
-            replicated=replicated,
-            max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
-            max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size,
-            merge_infeed_io_copies=merge_infeed_io_copies,
-            always_rearrange_copies_on_the_host=
-            always_rearrange_copies_on_the_host,
-            serialization_folder=serialization_folder)
+      self.create_ipu_event_trace()
+    if (sess or estimator_hook) and configure_device:
+      self.ipu_config = configure_ipu_system(
+          compilation_trace,
+          io_trace,
+          execution_trace=execution_trace,
+          text_report=False,
+          compile_ipu_code=compile_ipu_code,
+          device_count_override=device_count_override,
+          sharded=sharded,
+          pipelining=pipelining,
+          replicated=replicated,
+          max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
+          max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size,
+          merge_infeed_io_copies=merge_infeed_io_copies,
+          always_rearrange_copies_on_the_host=
+          always_rearrange_copies_on_the_host,
+          serialization_folder=serialization_folder,
+          only_create_config=estimator_hook)
+
+  def create_ipu_event_trace(self):
+    with ops.device('cpu'):
+      self.report = gen_ipu_ops.ipu_event_trace()
 
   def reset(self):
     assert self.sess, "A valid session must be passed to the constructor" \
     " to use this method"
     self.sess.run(self.report)
 
-  def parse_log(self, assert_len=None, assert_msg=""):
-    assert self.sess, "A valid session must be passed to the constructor" \
-    " to use this method"
-    events = self.sess.run(self.report)
+  def parse_log(self, assert_len=None, assert_msg="", session=None):
+    assert self.sess or session, "A valid session must be passed to either" \
+    " the constructor or this method to be able to retrieve the log"
+    assert self.report is not None, "No ipu_event_trace() has been created"
+
+    if session:
+      events = session.run(self.report)
+    else:
+      events = self.sess.run(self.report)
     return self.parse_events(events, assert_len, assert_msg)
 
+  def assert_num_events(self, num_expected, assert_msg=""):
+    self.test.assertEqual(num_expected, self.num_events, assert_msg)
+
   def parse_events(self, events, assert_len=None, assert_msg=""):
+    self.num_events = len(events)
     if assert_len:
-      self.test.assertEqual(assert_len, len(events), assert_msg)
+      self.assert_num_events(assert_len, assert_msg)
     self.events = {}
     self.tensor_map = None
     self.instruction_info = {}
@@ -332,6 +359,9 @@ class ReportJSON(object):
           count_matches_in_list(self.get_device_to_host_event_names(), name),
           1, msg)
 
+  def assert_num_execution_reports_equal(self, num):
+    self.test.assertEqual(len(self.get_execution_reports()), num)
+
   def get_each_tile_memory(self):
     return self.events[IpuTraceEvent.COMPILE_END]["memory"]["byTile"]["total"]
 
@@ -369,6 +399,9 @@ class ReportJSON(object):
     self.test.assertFalse(
         self.events.get(IpuTraceEvent.COMPILE_END,
                         {}).get("computeSets", {}).get("names", {}))
+
+  def assert_contains_one_compile_event(self):
+    self.test.assertTrue(IpuTraceEvent.COMPILE_END in self.events)
 
   def get_tensor_map(self):
     return self.tensor_map
@@ -482,33 +515,6 @@ class ReportJSON(object):
   def assert_compute_sets_matches(self, expr, num_matches, msg=None):
     self.test.assertEqual(count_matches_in_list(self.get_compute_sets(), expr),
                           num_matches, msg)
-
-
-def extract_all_events(events):
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    result += [evt]
-  return result
-
-
-def extract_all_compile_end_events(events):
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    if evt.type == IpuTraceEvent.COMPILE_END:
-      if evt.compile_end.compilation_report:
-        result += [evt]
-  return result
-
-
-def extract_all_execute_events(events):
-  result = []
-  for e in events:
-    evt = IpuTraceEvent.FromString(e)
-    if evt.type == IpuTraceEvent.EXECUTE:
-      result += [evt]
-  return result
 
 
 def create_multi_increasing_dataset(value,
