@@ -274,6 +274,14 @@ class ReportJSON(object):
       self.sess.run(self.report)
 
   def parse_log(self, assert_len=None, assert_msg="", session=None):
+    events = self.get_event_trace(session)
+    return self.parse_events(events, assert_len, assert_msg)
+
+  def get_ipu_events(self, session=None):
+    events = self.get_event_trace(session)
+    return self.get_events_from_log(events)
+
+  def get_event_trace(self, session=None):
     if self.eager_mode:
       assert session is None, "Sessions can't be used in eager mode"
       self.create_ipu_event_trace()
@@ -287,22 +295,32 @@ class ReportJSON(object):
         events = session.run(self.report)
       else:
         events = self.sess.run(self.report)
-    return self.parse_events(events, assert_len, assert_msg)
+    return events
 
   def assert_num_events(self, num_expected, assert_msg=""):
     self.test.assertEqual(num_expected, self.num_events, assert_msg)
+
+  def get_events_from_log(self, log):
+    events_types = collections.defaultdict(int)
+    events = []
+    for e in log:
+      if isinstance(e, ops.Tensor):
+        e = e.numpy()
+      assert isinstance(e, (bytes, str))
+      evt = IpuTraceEvent.FromString(e)
+      events_types[evt.type] += 1
+      events.append(evt)
+    return events_types, events
 
   def parse_events(self, events, assert_len=None, assert_msg=""):
     self.num_events = len(events)
     if assert_len:
       self.assert_num_events(assert_len, assert_msg)
-    self.events = {}
+    events_types, trace_events = self.get_events_from_log(events)
     self.tensor_map = None
+    self.events = {}
     self.instruction_info = {}
-    events_types = collections.defaultdict(int)
-    for e in events:
-      evt = IpuTraceEvent.FromString(e)
-      events_types[evt.type] += 1
+    for evt in trace_events:
       try:
         if evt.type == IpuTraceEvent.COMPILE_BEGIN:
           pass
