@@ -42,10 +42,33 @@ from tensorflow.python.training import optimizer
 
 
 class PipelineSchedule(IntEnum):
+  """
+  The PipelineSchedule describes how stages are interleaved on the IPUs
+  servicing the pipeline.  The forward and backward passes of each stage
+  will execute on the same IPUs.  So, in the core of the pipeline there is a
+  choice as to whether to run the forward stages together, or the backward
+  stages and the forward stages together.
+
+  Attributes:
+    Grouped: This groups the forward passes on multiple IPUs.  This requires
+      more memory since activations need to be stored until the backward
+      stages run together. However, since forward passes tend to be smaller
+      than backward passes, Grouped tends to improve the speed of the
+      execution, as different IPUs don't spend so much time waiting for each
+      other.
+
+    Interleaved: This schedules the backward passes whenever the forward
+      passes have just generated some activations.  Consequently fewer
+      activations are required to be stored between the forward and backward
+      pipeline stages, so less memory is required.  However, since forward
+      and backward stages tend to be very different in terms of execution
+      cycles, the overall performance of the pipeline tends to be slower.
+
+    Sequential: This is a debug mode, where the pipeline is scheduled in
+      the same way as if it were a sharded model.
+  """
   Grouped = 0
   Interleaved = 1
-  # Useful for debugging, but no performance improvement is expected with this
-  # schedule over sharding.
   Sequential = 2
 
 
@@ -151,38 +174,42 @@ def pipeline(computational_stages,
   """
   Sets up a series of computational stages, where the outputs of one stage are
   the inputs to the next one. These stages are then executed in parallel across
-  multiple IPUs. This approach can be used to split the model where layer(s) are
-  executed on different IPUs.
+  multiple IPUs. This approach can be used to split the model where layer(s)
+  are executed on different IPUs.
 
-  The first stage takes the `inputs` and the `infeed_queue` (if provided) as its
-  inputs. If the `infeed_queue` is provided, it is automatically dequeued
+  The first stage takes the `inputs` and the `infeed_queue` (if provided) as
+  its inputs. If the `infeed_queue` is provided, it is automatically dequeued
   (similar to the ipu.loops API) therefore care needs to be taken to make sure
   the signature of the first pipeline stage matches both the arguments from
   `inputs` and the `infeed_queue`, otherwise an error is thrown.
 
-  All tensors which are used in the pipeline which are not TensorFlow Variables
-  need to be explicitly passed as inputs to the pipeline. If an input does not
-  change its value during the execution of the pipeline op (for example
-  hyperparameters such as learning rate), it needs to be passed as part of
-  `inputs`. Alternatively, if these values change during execution (for example
-  the model processes different batches of data) the input should be passed
-  through the `infeed_queue` (see ipu.ipu_infeed_queue.IPUInfeedQueue`).
+  All tensors which are used in the pipeline which are not TensorFlow
+  Variables need to be explicitly passed as inputs to the pipeline. If an
+  input does not change its value during the execution of the pipeline op
+  (for example hyperparameters such as learning rate), it needs to be passed
+  as part of `inputs`. Alternatively, if these values change during execution
+  (for example the model processes different batches of data) the input should
+  be passed through the `infeed_queue` (see
+  `ipu.ipu_infeed_queue.IPUInfeedQueue`).
 
   When training a model, an optional `optimizer_function` function can be
   provided. This function takes all the outputs from the last computational
-  stage as inputs and it returns an instance of `OptimizerFunctionOutput` which
-  ais used to generate the backwards pass of the model using the TensorFlow
+  stage as inputs, and returns an instance of `OptimizerFunctionOutput` that
+  is used to generate the backwards pass of the model using the TensorFlow
   Optimizer API. This will internally create corresponding backpropagation
   pipeline stages for each pipeline stage and colocate them such that the
-  activations and weights required for the gradient calculation and application
-  stay on the device in order to minimise the number of copies between IPUs.
-  Note that the gradients, which are caluclated by the `compute_gradients`
-  function, will be automatically accumulated during the execution of the
+  activations and weights required for the gradient calculation and
+  application stay on the device in order to minimise the number of copies
+  between IPUs.
+
+  Note that the gradients, which are calculated by the `compute_gradients`
+  function, will be accumulated automatically during the execution of the
   pipeline, unless `continuous_weight_updates` is enabled.
 
   If the last computational stage has any outputs, then an `outfeed_queue`
-  (see `ipu.ipu_outfeed_queue.IPUOutfeedQueue`) is required and all the outputs
-  from the last computational stage are enqueued to the `outfeed_queue`.
+  (see `ipu.ipu_outfeed_queue.IPUOutfeedQueue`) is required and all the
+  outputs from the last computational stage are enqueued to the
+  `outfeed_queue`.
 
   Note that pipelining also supports recomputation, to enable it, use the
   `tensorflow.ipu.utils.set_recomputation_options()` function when configuring
@@ -237,12 +264,14 @@ def pipeline(computational_stages,
 
   In this set up, the model is split across two IPUs. By default the first two
   layers would be executed on the first IPU and the third layer and the
-  probabilities and classes on the second IPU but here `device_mapping` is used
-  to override the default IPU allocation and instead the first two layers will
-  be executed on the fourth IPU and the third layer and the probabilities and
-  classed on the second IPU.
+  probabilities and classes on the second IPU but here `device_mapping` is
+  used to override the default IPU allocation and instead the first two layers
+  will be executed on the fourth IPU and the third layer and the probabilities
+  and classed on the second IPU.
+
   This creates a pipeline of depth 250 (specified by the `pipeline_depth`),
   which means each pipeline stage is executed 250 times.
+
   This pipeline is then executed 2 times (specified by the `repeat_count`)
   The results of the pipeline (probabilities and classes) are returned to the
   host by the outfeed queue.
@@ -302,8 +331,8 @@ def pipeline(computational_stages,
       losses = sess.run(outfeed_op)
 
   Here the `tf.train.GradientDescentOptimizer` generates the pipeline stages
-  which calculate the gradients and apply them to the weights. Note how the loss
-  is returned to the host by the outfeed queue.
+  which calculate the gradients and apply them to the weights. Note how the
+  loss is returned to the host by the outfeed queue.
 
   Note that modifying tf.Variable values in a pipeline stage and/or during the
   gradient calculation will result in undefined behavior. These variables can
@@ -312,39 +341,39 @@ def pipeline(computational_stages,
 
   Args:
     computational_stages: a list of python functions, where each function
-      represents a computational pipeline stage. The function takes the outputs
-      of the previous pipeline state as its inputs.
+      represents a computational pipeline stage. The function takes the
+      outputs of the previous pipeline state as its inputs.
     pipeline_depth: the number of times each pipeline stage will be executed.
     repeat_count: the number of times the pipeline will be executed.
     inputs: arguments passed to the first pipeline stage.
-    infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued and passed
-      as an input in the first pipeline stage.
-    outfeed_queue: IPUOutfeedQueue, required if the last computational stage has
-      any outputs. The outputs of these are enqueued to this queue and they can
-      be accessed on the host.
+    infeed_queue: optional IPUInfeedQueue, if passed, it is dequeued and
+      passed as an input in the first pipeline stage.
+    outfeed_queue: IPUOutfeedQueue, required if the last computational stage
+      has any outputs. The outputs of these are enqueued to this queue and
+      they can be accessed on the host.
     optimizer_function: optional Python function which takes the output of the
       last computational stage as parameters and returns an instance of
       `pipelining_ops.OptimizerFunctionOutput` in order to generate the
       back-propagation and weight-update parts of the model suitable for
       training.
     device_mapping: optional stage to ipu mapping override.
-    pipeline_schedule: Which scheduling algorithm to use for pipeline lowering.
-      Defaults to `PipelineSchedule.Grouped`.
+    pipeline_schedule: Which scheduling algorithm to use for pipeline
+      lowering. Defaults to `PipelineSchedule.Grouped`.
     forward_propagation_stages_poplar_options: If provided, a list of length
       equal to the number of computational stages. Each element is a
       PipelineStageOptions object which allows for fine grain control of the
       Poplar options for a given forward propagation computational stage.
     backward_propagation_stages_poplar_options: If provided, a list of length
       equal to the number of computational stages. Each element is a
-      PipelineStageOptions object which allows for fine grain control of the
+      PipelineStageOptions object which allows for fine grained control of the
       Poplar options for a given backward propagation computational stage.
     weight_update_poplar_options: If provided, a PipelineStageOptions object
-      which allows for fine grain control of the Poplar options for the weight
-      update stage.
-    continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training, this
-      option will apply the gradients to the resource variables immediately,
-      rather than accumulating the gradients and applying them at the end of
-      each execution of the pipeline.
+      which allows for fine grained control of the Poplar options for the
+      weight update stage.
+    continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training,
+      this option will apply the gradients to the resource variables
+      immediately, rather than accumulating the gradients and applying them
+      at the end of each execution of the pipeline.
     outfeed_loss: If True, the loss given by the `optimizer_function` will
       be enqueued on the outfeed, instead of the outputs from the last
       computational stage.
