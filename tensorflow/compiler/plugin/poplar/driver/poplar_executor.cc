@@ -495,6 +495,7 @@ class NullPrefetchCallback : public poplar::StreamCallback {
       : num_bytes_(num_bytes), allocator_(allocator) {
     for (auto& buffer : buffers_) {
       buffer = static_cast<uint8*>(allocator_->AllocateRaw(64, num_bytes));
+      std::memset(buffer, 0x2, num_bytes);
     }
   }
 
