@@ -174,7 +174,7 @@ backward passes are interleaved, so that fewer activations need to be stored.
 Sharded scheduling
 __________________
 
-.. figure:: figures/sharded_pipeline.svg
+.. figure:: figures/sharded_pipeline.png
     :width: 500px
     :alt: Sharded pipeline schedule illustration
     :align: center
@@ -182,7 +182,7 @@ __________________
 Interleaved scheduling
 ______________________
 
-.. figure:: figures/interleaved_pipeline.svg
+.. figure:: figures/interleaved_pipeline.png
     :width: 500px
     :alt: Interleaved pipeline schedule illustration
     :align: center
@@ -190,7 +190,7 @@ ______________________
 Grouped scheduling
 __________________
 
-.. figure:: figures/grouped_pipeline.svg
+.. figure:: figures/grouped_pipeline.png
     :width: 500px
     :alt: Grouped pipeline schedule illustration
     :align: center
