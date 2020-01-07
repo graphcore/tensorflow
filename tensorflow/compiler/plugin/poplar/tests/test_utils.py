@@ -229,15 +229,20 @@ class ReportJSON(object):
                merge_infeed_io_copies=False,
                always_rearrange_copies_on_the_host=False,
                serialization_folder="",
-               estimator_hook=False):
+               estimator_hook=False,
+               eager_mode=False):
     self.report = None
     self.test = test
     self.sess = sess
+    self.eager_mode = eager_mode
+
+    assert not eager_mode or not sess, "Sessions can't be used in eager mode"
+
     # If no session is passed to the constructor then assume
     # the events will be provided by the user.
     if sess:
       self.create_ipu_event_trace()
-    if (sess or estimator_hook) and configure_device:
+    if (sess or estimator_hook or eager_mode) and configure_device:
       self.ipu_config = configure_ipu_system(
           compilation_trace,
           io_trace,
@@ -261,19 +266,27 @@ class ReportJSON(object):
       self.report = gen_ipu_ops.ipu_event_trace()
 
   def reset(self):
-    assert self.sess, "A valid session must be passed to the constructor" \
-    " to use this method"
-    self.sess.run(self.report)
+    if self.eager_mode:
+      self.create_ipu_event_trace()
+    else:
+      assert self.sess, "A valid session must be passed to the constructor" \
+      " to use this method"
+      self.sess.run(self.report)
 
   def parse_log(self, assert_len=None, assert_msg="", session=None):
-    assert self.sess or session, "A valid session must be passed to either" \
-    " the constructor or this method to be able to retrieve the log"
-    assert self.report is not None, "No ipu_event_trace() has been created"
-
-    if session:
-      events = session.run(self.report)
+    if self.eager_mode:
+      assert session is None, "Sessions can't be used in eager mode"
+      self.create_ipu_event_trace()
+      events = self.report
     else:
-      events = self.sess.run(self.report)
+      assert self.sess or session, "A valid session must be passed to either" \
+      " the constructor or this method to be able to retrieve the log"
+      assert self.report is not None, "No ipu_event_trace() has been created"
+
+      if session:
+        events = session.run(self.report)
+      else:
+        events = self.sess.run(self.report)
     return self.parse_events(events, assert_len, assert_msg)
 
   def assert_num_events(self, num_expected, assert_msg=""):

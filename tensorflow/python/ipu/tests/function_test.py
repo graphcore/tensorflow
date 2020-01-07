@@ -19,8 +19,6 @@ from __future__ import print_function
 
 import os
 
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import constant_op
@@ -37,21 +35,14 @@ class FunctionTest(test_util.TensorFlowTestCase):
     def my_func(a, b, c):
       return a + b + c
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
+    r = tu.ReportJSON(self, eager_mode=True)
 
     result = my_func(constant_op.constant(1), constant_op.constant(2),
                      constant_op.constant(3))
-
     self.assertAllEqual(6, result.numpy())
 
-    r = tu.ReportJSON(self)
-    rep = gen_ipu_ops.ipu_event_trace()
-    types = r.parse_events(rep)
-
-    assert types[IpuTraceEvent.COMPILE_BEGIN] == 1
-    assert types[IpuTraceEvent.COMPILE_END] == 1
+    r.parse_log(assert_len=4)
+    r.assert_contains_one_compile_event()
 
     cs = ['add/*/AddTo', 'add_1/*/AddTo', '__seed']
     r.assert_compute_sets_contain_list(cs)
@@ -62,20 +53,13 @@ class FunctionTest(test_util.TensorFlowTestCase):
     def my_func(a, b, c):
       return a + b + c
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
+    r = tu.ReportJSON(self, eager_mode=True)
 
     result = my_func(constant_op.constant(1), 2, c=3)
-
     self.assertAllEqual(6, result.numpy())
 
-    r = tu.ReportJSON(self)
-    rep = gen_ipu_ops.ipu_event_trace()
-    types = r.parse_events(rep)
-
-    assert types[IpuTraceEvent.COMPILE_BEGIN] == 1
-    assert types[IpuTraceEvent.COMPILE_END] == 1
+    r.parse_log(assert_len=4)
+    r.assert_contains_one_compile_event()
 
     cs = ['add_1/*/AddTo', '__seed']
     r.assert_compute_sets_contain_list(cs)
@@ -86,9 +70,7 @@ class FunctionTest(test_util.TensorFlowTestCase):
     def my_func(a):
       return dct_ops.dct(a)
 
-    cfg = ipu.utils.create_ipu_config(profiling=True)
-    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-    ipu.utils.configure_ipu_system(cfg)
+    tu.ReportJSON(self, eager_mode=True)
 
     with self.assertRaises(errors.InvalidArgumentError):
       my_func(constant_op.constant([1., 2., 1., 4., 1., 6.]))
