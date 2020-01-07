@@ -4,25 +4,29 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "popc",
-    srcs = ["bin/popc"],
-)
-
-filegroup(
-  name = "poplar_lib",
-  srcs = glob([
-    "lib/libpoplar.*",
-    "lib/libpoplin.*",
-    "lib/libpopnn.*",
-    "lib/libpopops.*",
-    "lib/libpoprand.*",
-    "lib/libpopfloat.*",
-    "lib/libpoputil.*",
-    "lib/libpoplibs_support.*",
-  ]),
+    srcs = ["poplar/bin/popc"],
 )
 
 cc_library(
   name = "poplar_headers",
-  hdrs = glob(["**/*.h"]),
-  includes = ["include"],
+  hdrs = glob(["**/*.hpp"]),
+  includes = ["poplar/include", "poplibs/include"],
 )
+
+cc_library(
+  name = "poplar_libs",
+  srcs = glob([
+    "lib/**/libpoplar.*",
+    "lib/**/libpoplin*",
+    "lib/**/libpopnn*",
+    "lib/**/libpopops*",
+    "lib/**/libpoprand*",
+    "lib/**/libpopfloat*",
+    "lib/**/libpopsys*",
+    "lib/**/libpopsolver*",
+    "lib/**/libpoputil*",
+    "lib/**/libtbb.*",
+  ]),
+  deps = [":poplar_headers"],
+)
+
