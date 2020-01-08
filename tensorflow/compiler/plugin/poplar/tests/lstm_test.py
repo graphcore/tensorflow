@@ -168,7 +168,7 @@ class LSTMTest(xla_test.XLATestCase):
     self.assertAllClose(popnn_out, ref_out)
 
   def testLSTMLayerInference(self):
-    tu.configure_ipu_system(True, True, True)
+    tu.ReportJSON(self, eager_mode=True)
     np.random.seed(0)
     # Run with all-0 weights
     weight0 = 1.
@@ -277,7 +277,7 @@ class LSTMTest(xla_test.XLATestCase):
     self.assertAllClose(popnn_losses, ref_losses)
 
   def testLSTMLayerTraining(self):
-    tu.configure_ipu_system(True, True, True)
+    tu.ReportJSON(self, eager_mode=True)
     np.random.seed(42)
 
     # Run with random weights

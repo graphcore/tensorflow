@@ -8,7 +8,7 @@ import numpy as np
 from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON, configure_ipu_system
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.python import ipu
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.optimizers import sharded_optimizer

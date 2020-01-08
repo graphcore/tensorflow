@@ -7,12 +7,12 @@ import numpy as np
 
 from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import combinations
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -46,7 +46,9 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
             send_device_incarnation=0,
             recv_device="/device:CPU:0")
 
-      tu.configure_ipu_system()
+      opts = utils.create_ipu_config()
+      utils.configure_ipu_system(opts)
+
       sent, received = sess.run([send_op, recv_op], feed_dict={inputs: 1})
 
       self.assertIsNone(sent)  # Send op has no output
@@ -87,7 +89,8 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
                                                    send_device_incarnation=0,
                                                    recv_device="/device:CPU:0")
 
-      tu.configure_ipu_system()
+      opts = utils.create_ipu_config()
+      utils.configure_ipu_system(opts)
 
       # Test it a couple of times to verify the communication channel is reusable.
       for i in range(2):
@@ -132,7 +135,9 @@ class IpuSendRecvOpsTest(xla_test.XLATestCase, parameterized.TestCase):  # pylin
                                                 send_device_incarnation=0,
                                                 recv_device="/device:CPU:0"))
 
-      tu.configure_ipu_system()
+      opts = utils.create_ipu_config()
+      utils.configure_ipu_system(opts)
+
       received_values, device_value = sess.run(
           [received, device_out], feed_dict={inputs: np.ones((N, N))})
 

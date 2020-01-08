@@ -22,7 +22,7 @@ from enum import Enum
 import time
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IPUSelectionOrder, DeviceConnectionType
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IPUSelectionOrder, DeviceConnectionType, IpuOptionsCreator
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
@@ -259,6 +259,9 @@ def create_ipu_config(profiling=False,
   selection_order = selection_order if selection_order else SelectionOrder.AUTO
 
   opts = IpuOptions()
+
+  # Default initialize IpuOptions() attributes here.
+  opts.creator_id = IpuOptionsCreator.IPU_UTILS
   opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = True
   opts.enable_multi_slice_combiner = False
@@ -266,7 +269,10 @@ def create_ipu_config(profiling=False,
   opts.enable_gather_simplifier = False
   opts.device_connection_type = DeviceConnectionType.ALWAYS
   opts.ipu_version = 1
+  opts.speed_size_config.allow_recompute = False
+  opts.speed_size_config.allow_stateful_recompute = False
 
+  # Configure IpuOptions according to the passed arguments.
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
   opts.profiling.enable_compilation_trace = profiling
   opts.profiling.enable_io_trace = profiling
@@ -578,7 +584,6 @@ def set_recomputation_options(opts,
 
   opts.speed_size_config.allow_recompute = allow_recompute
   opts.speed_size_config.allow_stateful_recompute = allow_stateful_recompute
-  opts.speed_size_config.has_allow_recompute = True
 
   return opts
 

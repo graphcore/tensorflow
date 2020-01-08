@@ -12,7 +12,7 @@ import test_utils as tu
 from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
-from tensorflow.python import ipu
+from tensorflow.python.ipu import utils
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
@@ -28,7 +28,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [2, 2], name="b")
         output = pa + pb
 
-      tu.configure_ipu_system()
+      opts = utils.create_ipu_config(profiling=True)
+      utils.configure_ipu_system(opts)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       result = sess.run(output, fd)
@@ -45,7 +46,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([output]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(False, False, False)
+      opts = utils.create_ipu_config(profiling=False)
+      utils.configure_ipu_system(opts)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -65,7 +67,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([output]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(text_report=False)
+      r = tu.ReportJSON(self, sess)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -73,11 +75,11 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       result, rep = sess.run([output, report], fd)
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
 
-      r = tu.ReportJSON(self)
-      types = r.parse_events(rep, assert_len=3)
+      types = r.parse_events(rep, assert_len=4)
       self.assertEqual(1, types[IpuTraceEvent.COMPILE_BEGIN])
       self.assertEqual(1, types[IpuTraceEvent.COMPILE_END])
       self.assertEqual(1, types[IpuTraceEvent.EXECUTE])
+      self.assertEqual(1, types[IpuTraceEvent.LOAD_ENGINE])
 
   def testIpuModelDeviceWithMultipleReport(self):
     with self.session() as sess:
@@ -91,7 +93,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.control_dependencies([out1, out2]):
           report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system()
+      opts = utils.create_ipu_config(profiling=True, profile_execution=True)
+      utils.configure_ipu_system(opts)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -102,8 +105,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       result, rep = sess.run([out2, report], fd)
       self.assertAllClose(result, [[1., 0.], [-2., -2.]])
 
-      # 2x compile_begin, 2x compile_end, 2x load engine
-      self.assertEqual(len(rep), 6)
+      # 2x engine, 2x compile_begin, 2x compile_end, 2x load engine
+      self.assertEqual(len(rep), 8)
 
   def testEngineCompilationOptions(self):
     with self.session() as sess:
@@ -112,10 +115,9 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [480], name="b")
         output = pa + pb
 
-      tu.configure_ipu_system(True,
-                              True,
-                              True,
-                              engine_opts={"some_option": "some_value"})
+      opts = utils.create_ipu_config()
+      opts = utils.set_compilation_options(opts, {"some_option": "some_value"})
+      utils.configure_ipu_system(opts)
 
       fd = {pa: np.zeros([480]), pb: np.zeros([480])}
       with self.assertRaisesRegex(errors.InvalidArgumentError,
@@ -130,20 +132,15 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         with ops.name_scope('my_ops'):
           out = math_ops.add(pa, pb, 'my_add_op')
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(text_report=False)
+      r = tu.ReportJSON(self, sess)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      sess.run(report, fd)
+      r.reset()
 
       result = sess.run(out, fd)
       self.assertAllClose(result, [[1., 2.], [6., 8.]])
 
-      rep = sess.run(report, fd)
-      r = tu.ReportJSON(self)
-      r.parse_events(rep)
+      r.parse_log()
 
       ok = ['__seed*', 'my_ops/my_add_op/add']
       r.assert_all_compute_sets_and_list(ok)
@@ -155,13 +152,10 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [2, 2], name="b")
         out = math_ops.add(pa, pb)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(compilation_trace=False, text_report=False)
+      r = tu.ReportJSON(self, sess)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      sess.run(report, fd)
+      r.reset()
 
       sess.run(out, fd)
       sess.run(out, fd)
@@ -169,9 +163,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
       sess.run(out, fd)
 
-      rep = sess.run(report, fd)
-      r = tu.ReportJSON(self)
-      types = r.parse_events(rep)
+      types = r.parse_log()
       self.assertEqual(types[IpuTraceEvent.EXECUTE], 5)
       self.assertEqual(
           len(r.get_execution_reports()), 1,
@@ -187,9 +179,11 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(compilation_trace=False,
-                              report_every_nth_execution=2,
-                              text_report=False)
+      opts = utils.create_ipu_config(profiling=True,
+                                     profile_execution=True,
+                                     report_every_nth_execution=2,
+                                     use_poplar_text_report=False)
+      utils.configure_ipu_system(opts)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -218,9 +212,11 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(compilation_trace=False,
-                              report_every_nth_execution=1,
-                              text_report=False)
+      opts = utils.create_ipu_config(profiling=True,
+                                     profile_execution=True,
+                                     report_every_nth_execution=1,
+                                     use_poplar_text_report=False)
+      utils.configure_ipu_system(opts)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -245,19 +241,14 @@ class IpuIpuModelTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [2, 2], name="b")
         out = math_ops.add(pa, pb)
 
-      with ops.device('cpu'):
-        report = gen_ipu_ops.ipu_event_trace()
-
-      tu.configure_ipu_system(text_report=False)
+      r = tu.ReportJSON(self, sess)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
-      sess.run(report, fd)
+      r.reset()
 
       sess.run(out, fd)
 
-      rep = sess.run(report, fd)
-      r = tu.ReportJSON(self)
-      r.parse_events(rep, assert_len=3, assert_msg="begin, end, execute")
+      r.parse_log(assert_len=4, assert_msg="engine, begin, end, execute")
 
   def testCborReport(self):
     with self.session() as sess:
@@ -269,7 +260,11 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(text_report=False, cbor_report=True)
+      opts = utils.create_ipu_config(profiling=True,
+                                     profile_execution=True,
+                                     use_poplar_text_report=False,
+                                     use_poplar_cbor_report=True)
+      utils.configure_ipu_system(opts)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -277,12 +272,12 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
 
       rep = sess.run(report, fd)
-      evts = ipu.utils.extract_all_events(rep)
-      self.assertEqual(len(evts), 3)  # begin, end, execute
+      evts = utils.extract_all_events(rep)
+      self.assertEqual(len(evts), 4)  # engine, begin, end, execute
 
       self.assertEqual(evts[1].compile_end.compilation_report[0],
                        bytes(bytearray([217]))[0])
-      self.assertEqual(evts[2].execute.execution_report[0],
+      self.assertEqual(evts[3].execute.execution_report[0],
                        bytes(bytearray([217]))[0])
 
   def testIpuEventsWithoutPoplarReporting(self):
@@ -295,10 +290,8 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         report = gen_ipu_ops.ipu_event_trace()
 
-      tu.configure_ipu_system(enable_ipu_events=True,
-                              compilation_trace=False,
-                              io_trace=False,
-                              execution_trace=False)
+      opts = utils.create_ipu_config(profiling=False, enable_ipu_events=True)
+      utils.configure_ipu_system(opts)
 
       fd = {pa: [[1., 1.], [2., 3.]], pb: [[0., 1.], [4., 5.]]}
       sess.run(report, fd)
@@ -306,7 +299,7 @@ class IpuIpuModelTest(xla_test.XLATestCase):
       sess.run(out, fd)
 
       rep = sess.run(report, fd)
-      evts = ipu.utils.extract_all_events(rep)
+      evts = utils.extract_all_events(rep)
       self.assertEqual(len(evts), 3)  # compile begin, compile end, execute
 
       for e in evts:

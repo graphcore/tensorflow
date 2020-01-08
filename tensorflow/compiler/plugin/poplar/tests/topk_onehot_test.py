@@ -45,7 +45,7 @@ class OneHotTopK(xla_test.XLATestCase):
         with ops.device(device):
           out = model(pa)
 
-        tu.ReportJSON(self, sess, io_trace=False)
+        tu.ReportJSON(self, sess)
 
         in_data = np.array(inputs["in_values"])
 
@@ -212,7 +212,7 @@ class OneHotTopK(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         out = model(pa)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       input = np.random.random(n_categories)
@@ -222,7 +222,7 @@ class OneHotTopK(xla_test.XLATestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, expected)
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
   def testInTopK(self):
     with self.session() as sess:
@@ -241,7 +241,7 @@ class OneHotTopK(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         out = model(pa, pb)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       input = np.random.rand(batchsize, n_categories)
@@ -254,7 +254,7 @@ class OneHotTopK(xla_test.XLATestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, [True, True, True, True])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
 
 if __name__ == "__main__":

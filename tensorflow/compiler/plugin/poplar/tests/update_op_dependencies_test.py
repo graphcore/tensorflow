@@ -25,14 +25,14 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         pd = array_ops.placeholder(np.float32, [])
         e = pa + pb - pc + pd
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       report.reset()
       fd = {pa: 1, pb: 2, pc: 3, pd: 4}
       result = sess.run(e, fd)
       self.assertAllClose(result, 4)
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = [
           '__seed*', 'add/add.*/AddTo', 'sub/subtract.*/AddTo',
@@ -51,7 +51,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         d = pa + pb
         e = c / d
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {
@@ -62,8 +62,9 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       np_result = np.transpose(data_a) / (data_a + data_b)
       self.assertAllClose(result, np_result)
 
-      report.parse_log(assert_len=3,
-                       assert_msg="compile_begin, compile_end, execute")
+      report.parse_log(
+          assert_len=4,
+          assert_msg="engine, compile_begin, compile_end, execute")
 
       ok = [
           '__seed*', 'host-exchange-local-copy-',
@@ -86,7 +87,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         c = a * pb + pc
         d = b / c
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
       fd = {
           pa: data_a,
@@ -98,8 +99,9 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       result = sess.run(d, fd)
       self.assertAllClose(result, np_result)
 
-      report.parse_log(assert_len=3,
-                       assert_msg="compile_begin, compile_end, execute")
+      report.parse_log(
+          assert_len=4,
+          assert_msg="engine, compile_begin, compile_end, execute")
 
       ok = [
           '__seed*', 'Copy_XLA_Args/arg0.*_to_transpose/transpose'
@@ -122,7 +124,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
         g = array_ops.slice(pa, [1], [2])
         h = f + g
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
       fd = {
           pa: [1, 2, 3],
@@ -132,8 +134,9 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       result = sess.run(h, fd)
       self.assertAllClose(result, [5, 7])
 
-      report.parse_log(assert_len=3,
-                       assert_msg="compile_begin, compile_end, execute")
+      report.parse_log(
+          assert_len=4,
+          assert_msg="engine, compile_begin, compile_end, execute")
 
       ok = [
           '__seed*', 'Copy_XLA_Args/arg*_to_Slice*/slice*.clone',
@@ -162,7 +165,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         x = array_ops.placeholder(np.float32, [4])
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[x])
@@ -172,7 +175,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       self.assertAllClose(x, np.full([4], np.tanh(2)))
       self.assertAllClose(y, np.full([4], np.tanh(2)))
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = [
           '__seed*', 'Copy_*_to_*', 'Tanh/tanh*/Op/Tanh',

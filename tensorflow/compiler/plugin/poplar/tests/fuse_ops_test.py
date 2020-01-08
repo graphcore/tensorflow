@@ -36,7 +36,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = math_ops.sigmoid(pa)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       report.reset()
 
@@ -44,7 +44,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.002473, 0.5, 0.997527])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'Sigmoid/custom-call/Nonlinearity']
       report.assert_all_compute_sets_and_list(ok)
@@ -55,7 +55,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = math_ops.sigmoid(pa) + pa
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       report.reset()
 
@@ -63,7 +63,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, [-5.997527, 0.5, 6.997527])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       # pylint: disable=line-too-long
       ok = [
@@ -81,14 +81,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [3], name="in")
         c = gen_math_ops.sigmoid_grad(pa, pb)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [-1.0, 1.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [2.0, 0.25, 0.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'SigmoidGrad/custom-call/NonLinearityGrad']
       report.assert_all_compute_sets_and_list(ok)
@@ -99,14 +99,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = nn_ops.relu(pa)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [-6.0, 0.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, 0.0, 6.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'Relu/custom-call/Nonlinearity']
       report.assert_all_compute_sets_and_list(ok)
@@ -117,14 +117,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float32, [3], name="a")
         c = nn_ops.relu(pa) + pa
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [1, -2, 1]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [2, -2, 2])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       # pylint: disable=line-too-long
       ok = [
@@ -142,7 +142,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         b = array_ops.concat([pa, pa], axis=0)
         c = nn_ops.relu(b)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [-2, -1, 0, 1, 2]}
@@ -168,14 +168,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float32, [3], name="in")
         c = gen_nn_ops.relu_grad(pa, pb)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [-1.0, 1.0, 6.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, 0.5, 1.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'ReluGrad/custom-call/NonLinearityGrad']
       report.assert_all_compute_sets_and_list(ok)
@@ -191,7 +191,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
                         padding='SAME',
                         name="max")
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {
@@ -200,7 +200,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, np.ones([1, 1, 5, 5]))
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'max/custom-call*/maxPool5x5']
       report.assert_all_compute_sets_and_list(ok)
@@ -226,7 +226,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
                                      data_format='NCHW',
                                      padding='SAME')
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fe = {
@@ -239,7 +239,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           input_grad, [[[[0.], [0.], [0.], [0.]], [[0.], [0.1], [0.], [0.1]],
                         [[0.], [0.], [0.], [0.]], [[0.], [0.1], [0.], [0.1]]]])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = [
           '__seed*', 'Copy_*', 'MaxPool/custom-call*/maxPool2x2/',
@@ -255,14 +255,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         const = array_ops.constant(2.0, np.float16)
         c = pa + pb * const
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [4.0, 4.5, 7.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
       report.assert_all_compute_sets_and_list(ok)
@@ -277,14 +277,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         # still should match as it will be reordered
         c = pa - const * pb
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, -3.5, -5.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
       report.assert_all_compute_sets_and_list(ok)
@@ -297,14 +297,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pc = array_ops.placeholder(np.float16, [1])
         c = pa + pb * pc
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0], pc: [2.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [4.0, 4.5, 7.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
       report.assert_all_compute_sets_and_list(ok)
@@ -317,14 +317,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pc = array_ops.placeholder(np.float16, [1])
         c = pa - pc * pb
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 2.0, 3.0], pc: [2.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [0.0, -3.5, -5.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
       report.assert_all_compute_sets_and_list(ok)
@@ -610,7 +610,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(0.1)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
       report.reset()
@@ -649,7 +649,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         optimizer = gradient_descent.GradientDescentOptimizer(lr)
         train = optimizer.minimize(loss)
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       sess.run(variables.global_variables_initializer())
       report.reset()
@@ -702,7 +702,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         y1 = array_ops.placeholder(np.int32, shape=[10])
         y2 = array_ops.placeholder(np.int32, shape=[10])
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2])
@@ -716,7 +716,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       })
       self.assertAllClose(out, [-4000.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=6)
 
       ok = [
           '__seed*',
@@ -764,7 +764,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         y2 = array_ops.placeholder(np.int32, shape=[10])
         lr = array_ops.placeholder(np.float32, shape=[])
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2, lr])
@@ -820,7 +820,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         la = array_ops.placeholder(np.float32, shape=[10, 200])
         lr = array_ops.placeholder(np.float32, shape=[])
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y, la, lr])
@@ -886,7 +886,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         la = array_ops.placeholder(np.float32, shape=[10, 400])
         lr = array_ops.placeholder(np.float32, shape=[])
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(network, inputs=[x, y1, y2, la, lr])
@@ -932,14 +932,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         const_b = array_ops.constant(3.0, np.float16)
         axby = const_a * px + const_b * py
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {px: [2.0, 0.5, 1.0], py: [1.0, 2.0, 3.0]}
       result = sess.run(axby, fd)
       self.assertAllClose(result, [7.0, 7.0, 11.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
       report.assert_all_compute_sets_and_list(ok)
@@ -953,14 +953,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         const_b = array_ops.constant(3.0, np.float16)
         axby = const_a * px - const_b * py
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {px: [2.0, 0.5, 1.0], py: [1.0, 2.0, 3.0]}
       result = sess.run(axby, fd)
       self.assertAllClose(result, [1.0, -5.0, -7.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
   def testScaledAddToVariableFor2Scales(self):
     with self.session() as sess:
@@ -971,7 +971,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pb_scale = array_ops.placeholder(np.float16, [1])
         c = pa_scale * pa + pb_scale * pb
 
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {
@@ -983,7 +983,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, [7.0, 7.0, 11.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'add/fusion/AddTo']
       report.assert_all_compute_sets_and_list(ok)
@@ -996,7 +996,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pb = array_ops.placeholder(np.float16, [3])
         pb_scale = array_ops.placeholder(np.float16, [1])
         c = pa_scale * pa - pb_scale * pb
-      report = tu.ReportJSON(self, sess, io_trace=False)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       fd = {
@@ -1008,7 +1008,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, [1.0, -5.0, -7.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
       report.assert_all_compute_sets_and_list(ok)
