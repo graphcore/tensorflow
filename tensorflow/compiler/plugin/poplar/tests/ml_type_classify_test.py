@@ -126,7 +126,6 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
       output = ipu_compiler.compile(graph, inputs=[x, l])
 
     tu.move_variable_initialization_to_cpu()
-    tu.configure_ipu_system(text_report=False)
 
     with tu.ipu_session() as sess:
 
@@ -167,7 +166,6 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
       output = ipu_compiler.compile(graph, inputs=[x, l])
 
     tu.move_variable_initialization_to_cpu()
-    tu.configure_ipu_system(text_report=False)
 
     with tu.ipu_session() as sess:
 
@@ -209,7 +207,6 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
       output = ipu_compiler.compile(graph, inputs=[x, l])
 
     tu.move_variable_initialization_to_cpu()
-    tu.configure_ipu_system(text_report=False)
 
     with tu.ipu_session() as sess:
 
@@ -253,7 +250,6 @@ class MlTypeClassifyTest(xla_test.XLATestCase):
       output = ipu_compiler.compile(graph, inputs=[x, l])
 
     tu.move_variable_initialization_to_cpu()
-    tu.configure_ipu_system(text_report=False)
 
     with tu.ipu_session() as sess:
 

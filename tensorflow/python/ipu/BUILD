@@ -63,6 +63,19 @@ py_library(
 )
 
 py_library(
+    name = "utils",
+    srcs_version = "PY2AND3",
+    srcs = [
+        "utils.py"
+    ],
+    deps = [
+        "//tensorflow/compiler/xla:xla_data_proto_py",
+        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
+        "//tensorflow/python/distribute:values",
+    ],
+)
+
+py_library(
     name = "ipu_lib",
     srcs_version = "PY2AND3",
     srcs = [
@@ -99,10 +112,10 @@ py_library(
         "sharded_optimizer.py",
         "sharding.py",
         "sharding_utils.py",
-        "utils.py",
         "vertex_edsl.py",
     ],
     deps = [
+        ":utils",
         ":ipu_ops_lib",
         ":ipu_grad_ops_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",

@@ -9,9 +9,8 @@ import random
 import shutil
 import glob
 
-from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
-from tensorflow.python import ipu
+from tensorflow.python.ipu import summary_ops
+from tensorflow.python.ipu import utils
 from tensorflow.python.platform import googletest
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import estimator
@@ -25,7 +24,6 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
-from tensorflow.python.summary import summary_iterator
 from tensorflow.python.training import training_util
 
 
@@ -49,7 +47,7 @@ def model_fn(features, labels, mode):
       else:
         train = None
 
-  ipu.summary_ops.ipu_compile_summary("compile_summary", [train, loss])
+  summary_ops.ipu_compile_summary("compile_summary", [train, loss])
 
   return model_fn_lib.EstimatorSpec(mode=mode,
                                     predictions=x,
@@ -80,7 +78,8 @@ class IpuEstimatorTest(test_util.TensorFlowTestCase):
 
     shutil.rmtree("testlogs", True)
 
-    tu.configure_ipu_system()
+    opts = utils.create_ipu_config()
+    utils.configure_ipu_system(opts)
 
     run_cfg = run_config.RunConfig()
 
@@ -93,6 +92,7 @@ class IpuEstimatorTest(test_util.TensorFlowTestCase):
     event_file = glob.glob("testlogs/event*")
 
     self.assertTrue(len(event_file) == 1)
+
 
 if __name__ == "__main__":
   googletest.main()

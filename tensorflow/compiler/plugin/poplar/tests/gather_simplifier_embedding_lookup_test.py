@@ -64,10 +64,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase):
               np.random.randint(low=100, high=200, size=w_0 * w_1), (w_0, w_1))
           cpu_take = array_ops.gather(w_i, y_i)
 
-          report = tu.ReportJSON(self,
-                                 sess=sess,
-                                 io_trace=False,
-                                 configure_device=False)
+          report = tu.ReportJSON(self, sess=sess, configure_device=False)
 
         with ops.device("/device:IPU:0"):
           r = xla.compile(network, inputs=[w, y])

@@ -124,6 +124,11 @@ PoplarPlatform::DescriptionForDevice(int ordinal) const {
 }
 
 Status PoplarPlatform::ConfigurePoplarDevices(const IpuOptions& opts) {
+  if (opts.creator_id() != IpuOptionsCreator::IPU_UTILS) {
+    return InvalidArgument(
+        "Badly initialized IpuOptions object: did you create it using "
+        "tensorflow.python.ipu.utils.create_ipu_config() ?");
+  }
   int num_devices = opts.device_config().size();
   int max_devices = VisibleDeviceCount();
 

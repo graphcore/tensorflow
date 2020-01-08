@@ -58,6 +58,13 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue(len(s) > 100)
 
   @test_util.deprecated_graph_mode_only
+  def testBypassUtilsCreator(self):
+    cfg = IpuOptions()
+    with self.assertRaisesRegex(Exception,
+                                "Badly initialized IpuOptions object"):
+      ipu.utils.configure_ipu_system(cfg)
+
+  @test_util.deprecated_graph_mode_only
   def testCreateConfig(self):
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, [1, 1])
@@ -91,9 +98,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
         cfg, report_options={"reportOption1": "false"})
     self.assertTrue(cfg.profiling.options)
 
-    self.assertFalse(cfg.speed_size_config.has_allow_recompute)
+    self.assertFalse(cfg.speed_size_config.allow_recompute)
     cfg = ipu.utils.set_recomputation_options(cfg)
-    self.assertTrue(cfg.speed_size_config.has_allow_recompute)
+    self.assertTrue(cfg.speed_size_config.allow_recompute)
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, [4, 4])
