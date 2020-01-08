@@ -71,6 +71,7 @@ py_library(
         "autoshard_cnn.py",
         "function.py",
         "gradient_accumulation_optimizer.py",
+        "keras/sequential.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
         "ipu_infeed_queue.py",
@@ -177,6 +178,18 @@ tf_py_test(
     srcs = ["tests/embedding_lookup_test.py"],
     additional_deps = [
         ":ipu_grad_ops_lib",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+)
+
+tf_py_test(
+    name = "sequential_test",
+    size = "medium",
+    srcs = ["tests/keras/sequential_test.py"],
+    additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
@@ -645,6 +658,7 @@ test_suite(
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
+        "sequential_test",
         "user_ops_test",
         "utils_test",
     ],

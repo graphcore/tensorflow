@@ -32,6 +32,7 @@ from tensorflow.python.ipu import ipu_pipeline_estimator
 from tensorflow.python.ipu import vertex_edsl
 
 from tensorflow.python.ipu.function import function
+from tensorflow.python.ipu.keras.sequential import Sequential
 
 from tensorflow.python.ipu.ops import all_to_all_op
 from tensorflow.python.ipu.ops import custom_ops
