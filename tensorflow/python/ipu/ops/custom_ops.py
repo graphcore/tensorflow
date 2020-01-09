@@ -12,22 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+"""
+Custom operations.
+~~~~~~~~~~~~~~~~~~
+"""
+
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.ipu.vertex_edsl import PlaceholderVertexExpr
 from tensorflow.python.ipu.vertex_edsl import DefaultNameSource
 
 
 def codelet_expression_op(vertex_expression, *args):
+  """Add a custom fused elementwise expression operation to the graph.
+
+  Note that no autograd is done on this fused operation because the autograd
+  code does not understand the internal structure of the fused codelet.
+
+  Args:
+    vertex_expression: A python function that defines the codelet expression.
+    args: Tensor inputs to the expression.
+
+  Returns:
+   The Tensor which is a result of applying the elementwise operation
   """
-    Add a custom fused elementwise expression operation to the graph.
-
-    Note that no autograd is done on this fused operation because the autograd
-    code does not understand the internal structure of the fused codelet.
-
-    :param vertex_expression: an vertex expression instance
-    :param args: The arguments to the operation as a vector of Tensors
-    :return: The Tensor which is a result of applying the elementwise operation
-    """
   dtype = args[0].dtype
   placeholders = map(lambda x: PlaceholderVertexExpr("in" + str(x), None),
                      range(0, len(args)))
@@ -40,73 +47,106 @@ def codelet_expression_op(vertex_expression, *args):
 
 def precompiled_user_op(inputs,
                         library_path,
-                        gp_path=None,
+                        gp_path="",
                         outs=None,
-                        name=None,
-                        op_name=None):
-  """
-      Call the poplar function located in the shared library at 'library_path'
-      as part of the normal tensorflow execution with the given 'inputs'. The
-      shape and type of the output should be specified by 'outs' if it is None it
-      will default to no output. 'outs' should be a dictionary with two elements
-      like so:
+                        name="UserOp",
+                        op_name="Build",
+                        separate_gradients=False):
+  """Call the poplar function located in the shared library at 'library_path'
+  as part of the normal tensorflow execution with the given 'inputs'.
 
-      outs = {
-            "output_types": [my_types_as_a_list],
-            "output_shapes": [my_shapes_as_a_list],
-        }
-    """
+  The shape and type of the output should be specified by 'outs'. If it is None
+  it will default to no output. 'outs' should be a dictionary with two
+  elements like so:
+
+  outs = {
+    "output_types": [my_types_as_a_list],
+    "output_shapes": [my_shapes_as_a_list],
+  }
+
+  Args:
+    inputs: The tensor inputs to the operation.
+    library_path: The path to the shared object that contains the functions
+      to build the Poplar operation in the graph.
+    gp_path: The path to the precompiled codelet file.
+    outs: A dictionary describing the output tensor shapes and types.
+    name: The name of the operation.
+    op_name: The prefix of the functions inside the shard object file. This
+      defaults to 'Build'.
+    separate_gradients:  When set to true, multiple gradient ops will be
+      generated, one for each input.  When false, a single gradient op will be
+      generated, which should produce the partial derivatives for all inputs.
+
+  Returns:
+    The array of tensor outputs.
+
+  """
 
   if outs is None:
     outs = {
         "output_types": [],
         "output_shapes": [],
     }
-  gp_path = gp_path if gp_path else ""
-  name = name if name else "UserOp"
-  op_name = op_name if op_name else "Build"
 
   return gen_poputil_ops.ipu_user_op(inputs,
                                      library_path=library_path,
                                      gp_path=gp_path,
                                      op_name=op_name,
                                      name=name,
-                                     separate_gradients=False,
+                                     separate_gradients=separate_gradients,
                                      is_gradient=False,
-                                     gradients=[],
+                                     partial_derivative_index=0,
                                      **outs)
 
 
 def cpu_user_operation(inputs,
                        library_path,
                        outs=None,
-                       name=None,
-                       op_name=None):
-  """
-      Call the CPU function located in the shared library at 'library_path'
-      as part of the normal tensorflow execution with the given 'inputs' 
-      copied from the IPU to the CPU. The shape and type of the output should
-      be specified by 'outs' if it is None it will default to no output. 
-      'outs' should be a dictionary with two elements like so:
+                       name="UserOp",
+                       op_name="Callback",
+                       separate_gradients=False):
+  """Call the CPU function located in the shared library at 'library_path'
+    as part of the normal tensorflow execution with the given 'inputs'
+    copied from the IPU to the CPU, and the outputs are copied back to the
+    IPU afterwards,
 
-      outs = {
-            "output_types": [my_types_as_a_list],
-            "output_shapes": [my_shapes_as_a_list],
-        }
-    """
+    The shape and type of the outputs should be specified by 'outs'. If it is
+    None it will default to no output.  'outs' should be a dictionary with
+    two elements like so:
+
+    outs = {
+      "output_types": [my_types_as_a_list],
+      "output_shapes": [my_shapes_as_a_list],
+    }
+
+  Args:
+    inputs: The tensor inputs to the operation.
+    library_path: The path to the shared object that contains the functions
+      to execute the operation.
+    outs: A dictionary describing the output tensor shapes and types.
+    name: The name of the operation.
+    op_name: The prefix of the functions inside the shard object file. This
+      defaults to 'Callback'.
+    separate_gradients:  When set to true, multiple gradient ops will be
+      generated, one for each input.  When false, a single gradient op will be
+      generated, which should produce the partial derivatives for all inputs.
+
+  Returns:
+    The array of tensor outputs.
+  """
 
   if outs is None:
     outs = {
         "output_types": [],
         "output_shapes": [],
     }
-  name = name if name else "UserOp"
-  op_name = op_name if op_name else "Callback"
-  return gen_poputil_ops.ipu_user_read_write_op(inputs,
-                                                library_path=library_path,
-                                                op_name=op_name,
-                                                name=name,
-                                                separate_gradients=False,
-                                                is_gradient=False,
-                                                gradients=[],
-                                                **outs)
+
+  return gen_poputil_ops.ipu_user_read_write_op(
+      inputs,
+      library_path=library_path,
+      op_name=op_name,
+      name=name,
+      separate_gradients=separate_gradients,
+      is_gradient=False,
+      partial_derivative_index=0,
+      **outs)

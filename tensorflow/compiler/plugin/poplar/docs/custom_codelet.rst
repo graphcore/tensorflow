@@ -58,14 +58,20 @@ inputs as arguments, as well as the gradient outputs.
 
   extern "C"
   poplar::program::Program Build_grad(
-      poplar::Graph& graph, const std::vector<poplar::Tensor>& gradients,
+      poplar::Graph& graph, int input_grad_index,
+      const std::vector<poplar::Tensor>& gradients,
       const std::vector<poplar::Tensor>& fwd_outputs,
       const std::vector<poplar::Tensor>& fwd_inputs,
-      std::vector<poplar::Tensor>& outputs, const std::string& debug_prefix)
+      std::vector<poplar::Tensor>& outputs,
+      const std::string& debug_prefix)
 
 The arguments are:
 
 :graph: the poplar graph into which to add tensors and vertices.
+:input_grad_index: The index of the input for this this operation is producing
+                   the partial derivative.  If the gradient operation
+                   calculates all of the partial derivatives, then this input
+                   should be ignored.
 :gradients: the inputs to the gradient op, from the previous gradient op
             or loss.
 :fwd_outputs: the tensors which are the outputs of the forward operation.
@@ -151,6 +157,28 @@ The arguments are:
 :shape: the shape of the tensor.
 :type: the Poplar data type for the tensor.
 
+
+Gradient operations
+~~~~~~~~~~~~~~~~~~~
+
+As described above, when the gradient of the forward operation is generated,
+either a single op, or multiple operations can be inserted into the graph.
+
+The parameter `separate_gradients` on the `precompiled_user_op` function
+allows the developer to select which of the two options are required.  The
+compiled code must match this setting however.
+
+If the `separate_gradients` parameter is set to False, then the compiled
+function for generaing the gradient operation should fill in one output
+for each of the inputs of the forward pass function.  Each output should be
+the partial derivative with respect to one of the inputs.
+
+If the `separate_gradients` parameter is True, then the gradient operation
+building function should produce an operation with a single output, which is
+the partial differential with respect to only one of the forward pass inputs.
+
+The specific input will be given by the `input_grad_index` input of the call
+to the sharded object `Build_grad` function.
 
 Example
 ~~~~~~~

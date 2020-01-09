@@ -26,20 +26,6 @@ from tensorflow.python.util import deprecation
 from tensorflow.python.ipu import custom_ops
 
 
-@deprecation.deprecated(
-    None,
-    "This function has been moved to the tensorflow.python.ipu.custom_ops"
-    "namespace.")
-def precompiled_user_op(inputs,
-                        library_path,
-                        gp_path=None,
-                        outs=None,
-                        name=None,
-                        op_name=None):
-  return custom_ops.precompiled_user_op(inputs, library_path, gp_path, outs,
-                                        name, op_name)
-
-
 def remap(x, name=None):
   """Clone and map the input linearly across the IPU.
 

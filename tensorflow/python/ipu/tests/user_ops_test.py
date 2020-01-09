@@ -23,6 +23,7 @@ import numpy as np
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
@@ -31,33 +32,42 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 
 
+def count_grad_ops(graph):
+  num_grad_ops = 0
+  for op in graph.get_operations():
+    if op.type == "IpuUserOp" and op.get_attr("is_gradient"):
+      num_grad_ops = num_grad_ops + 1
+  return num_grad_ops
+
+
 class UserProvidedOpsTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testUserOp(self):
-
-    cwd = os.getcwd()
-    outputs = {
-        "output_types": [dtypes.float32, dtypes.float32, dtypes.float32],
-        "output_shapes": [
-            tensor_shape.TensorShape([20]),
-            tensor_shape.TensorShape([5, 2]),
-            tensor_shape.TensorShape([10])
-        ],
-    }
-    lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
-
-    def my_net(x, y, z):
-      x = ipu.custom_ops.precompiled_user_op([x, y, z], lib_path, outs=outputs)
-      return x
-
-    with ipu.scopes.ipu_scope('/device:IPU:0'):
-      x = array_ops.placeholder(np.float32, shape=[20])
-      y = array_ops.placeholder(np.float32, shape=[5, 2])
-      z = array_ops.placeholder(np.float32, shape=[10])
-
-      model = ipu.ipu_compiler.compile(my_net, inputs=[x, y, z])
-
     with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32, dtypes.float32, dtypes.float32],
+          "output_shapes": [
+              tensor_shape.TensorShape([20]),
+              tensor_shape.TensorShape([5, 2]),
+              tensor_shape.TensorShape([10])
+          ],
+      }
+      lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
+
+      def my_net(x, y, z):
+        x = ipu.custom_ops.precompiled_user_op([x, y, z],
+                                               lib_path,
+                                               outs=outputs)
+        return x
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[20])
+        y = array_ops.placeholder(np.float32, shape=[5, 2])
+        z = array_ops.placeholder(np.float32, shape=[10])
+
+        model = ipu.ipu_compiler.compile(my_net, inputs=[x, y, z])
+
       sess.run(variables.global_variables_initializer())
       res = sess.run(model, {
           x: np.ones([20]),
@@ -71,37 +81,38 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testUserOpBackwards(self):
+    with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32, dtypes.float32, dtypes.float32],
+          "output_shapes": [
+              tensor_shape.TensorShape([20]),
+              tensor_shape.TensorShape([5, 2]),
+              tensor_shape.TensorShape([10])
+          ],
+      }
+      lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
 
-    cwd = os.getcwd()
-    outputs = {
-        "output_types": [dtypes.float32, dtypes.float32, dtypes.float32],
-        "output_shapes": [
-            tensor_shape.TensorShape([20]),
-            tensor_shape.TensorShape([5, 2]),
-            tensor_shape.TensorShape([10])
-        ],
-    }
-    lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
-
-    def my_net(x, y, z):
-      output = ipu.internal_ops.precompiled_user_op([x, y, z],
+      def my_net(x, y, z):
+        output = ipu.custom_ops.precompiled_user_op([x, y, z],
                                                     lib_path,
                                                     outs=outputs)
 
-      opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
+        opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
 
-      gradients = opt.compute_gradients(output[2], [x, y, z])
+        gradients = opt.compute_gradients(output[2], [x, y, z])
 
-      return [output, gradients]
+        return [output, gradients]
 
-    with ipu.scopes.ipu_scope('/device:IPU:0'):
-      x = array_ops.placeholder(np.float32, shape=[20])
-      y = array_ops.placeholder(np.float32, shape=[5, 2])
-      z = array_ops.placeholder(np.float32, shape=[10])
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[20])
+        y = array_ops.placeholder(np.float32, shape=[5, 2])
+        z = array_ops.placeholder(np.float32, shape=[10])
 
-      model = ipu.ipu_compiler.compile(my_net, inputs=[x, y, z])
+        model = ipu.ipu_compiler.compile(my_net, inputs=[x, y, z])
 
-    with tu.ipu_session() as sess:
+      self.assertAllEqual(count_grad_ops(ops.get_default_graph()), 1)
+
       sess.run(variables.global_variables_initializer())
       res = sess.run(model, {
           x: np.ones([20]),
@@ -117,46 +128,51 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
       gradients = res[1]
 
-      # Our gradient function is the same as the above but a multiply instead. Since the "loss" is
-      # just output[3], input[3] is the only one which will actually have a gradient. (Which will be 3).
+      # Our gradient function is the same as the above but a multiply instead.
+      # Since the "loss" is just output[3], input[3] is the only one which
+      # will actually have a gradient. (Which will be 3).
       self.assertAllEqual(np.zeros([20]), gradients[0][0])
       self.assertAllEqual(np.zeros([5, 2]), gradients[1][0])
       self.assertAllEqual(np.full([10], 3.0), gradients[2][0])
 
-  # We test this one with a different SO to implicitly test what happens if we don't have metadata in the above tests.
   @test_util.deprecated_graph_mode_only
-  def testUserOpMetadata(self):
-
-    cwd = os.getcwd()
-    outputs = {
-        "output_types": [dtypes.float32, dtypes.float32, dtypes.float32],
-        "output_shapes": [
-            tensor_shape.TensorShape([20]),
-            tensor_shape.TensorShape([5, 2]),
-            tensor_shape.TensorShape([10])
-        ],
-    }
-    lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom_with_metadata.so"
-
-    def my_net(x, y, z):
-      output = ipu.internal_ops.precompiled_user_op([x, y, z],
-                                                    lib_path,
-                                                    outs=outputs)
-
-      opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
-
-      gradients = opt.compute_gradients(output[2], [x, y, z])
-
-      return [output, gradients]
-
-    with ipu.scopes.ipu_scope('/device:IPU:0'):
-      x = array_ops.placeholder(np.float32, shape=[20])
-      y = array_ops.placeholder(np.float32, shape=[5, 2])
-      z = array_ops.placeholder(np.float32, shape=[10])
-
-      model = ipu.ipu_compiler.compile(my_net, inputs=[x, y, z])
-
+  def testUserOpBackwardsSeparateOps(self):
     with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32, dtypes.float32, dtypes.float32],
+          "output_shapes": [
+              tensor_shape.TensorShape([20]),
+              tensor_shape.TensorShape([5, 2]),
+              tensor_shape.TensorShape([10])
+          ],
+      }
+
+      lib_path = os.path.join(
+          cwd,
+          "tensorflow/python/ipu/libadd_incrementing_custom_with_metadata.so")
+
+      def my_net(x, y, z):
+        output = ipu.custom_ops.precompiled_user_op([x, y, z],
+                                                    lib_path,
+                                                    op_name="SepGrad",
+                                                    separate_gradients=True,
+                                                    outs=outputs)
+        opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
+
+        gradients = opt.compute_gradients(output[2], [x, y, z])
+
+        return [output, gradients]
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[20])
+        y = array_ops.placeholder(np.float32, shape=[5, 2])
+        z = array_ops.placeholder(np.float32, shape=[10])
+
+        model = ipu.ipu_compiler.compile(my_net, inputs=[x, y, z])
+
+      self.assertAllEqual(count_grad_ops(ops.get_default_graph()), 3)
+
       sess.run(variables.global_variables_initializer())
       res = sess.run(model, {
           x: np.ones([20]),
@@ -172,38 +188,98 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
       gradients = res[1]
 
-      # Our gradient function is the same as the above but a multiply instead. Since the "loss" is
-      # just output[3], input[3] is the only one which will actually have a gradient. (Which will be 3).
+      # The grad function adds index+1 to the value of the partial derivative
+      # index. Since the "loss" is just output[2], input[2] is the only one
+      # which will actually have a gradient. (Which will be 1*3 = 3).
+      self.assertAllEqual(np.zeros([20]), gradients[0][0])
+      self.assertAllEqual(np.zeros([5, 2]), gradients[1][0])
+      self.assertAllEqual(np.full([10], 3.0), gradients[2][0])
+
+  # We test this one with a different SO to implicitly test what happens if
+  # we don't have metadata in the above tests.
+  @test_util.deprecated_graph_mode_only
+  def testUserOpMetadata(self):
+    with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32, dtypes.float32, dtypes.float32],
+          "output_shapes": [
+              tensor_shape.TensorShape([20]),
+              tensor_shape.TensorShape([5, 2]),
+              tensor_shape.TensorShape([10])
+          ],
+      }
+
+      lib_path = os.path.join(
+          cwd,
+          "tensorflow/python/ipu/libadd_incrementing_custom_with_metadata.so")
+
+      def my_net(x, y, z):
+        output = ipu.custom_ops.precompiled_user_op([x, y, z],
+                                                    lib_path,
+                                                    outs=outputs)
+
+        opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
+
+        gradients = opt.compute_gradients(output[2], [x, y, z])
+
+        return [output, gradients]
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[20])
+        y = array_ops.placeholder(np.float32, shape=[5, 2])
+        z = array_ops.placeholder(np.float32, shape=[10])
+
+        model = ipu.ipu_compiler.compile(my_net, inputs=[x, y, z])
+
+      sess.run(variables.global_variables_initializer())
+      res = sess.run(model, {
+          x: np.ones([20]),
+          y: np.ones([5, 2]),
+          z: np.ones([10])
+      })
+
+      inputs = res[0]
+
+      self.assertAllEqual(np.full([20], 2.0), inputs[0])
+      self.assertAllEqual(np.full([5, 2], 3.0), inputs[1])
+      self.assertAllEqual(np.full([10], 4.0), inputs[2])
+
+      gradients = res[1]
+
+      # Our gradient function is the same as the above but a multiply
+      # instead. Since the "loss" is just output[3], input[3] is the only
+      # one which will actually have a gradient. (Which will be 3).
       self.assertAllEqual(np.zeros([20]), gradients[0][0])
       self.assertAllEqual(np.zeros([5, 2]), gradients[1][0])
       self.assertAllEqual(np.full([10], 3.0), gradients[2][0])
 
   @test_util.deprecated_graph_mode_only
   def testUserOpCPU(self):
-    cwd = os.getcwd()
-    outputs = {
-        "output_types": [dtypes.float32, dtypes.int32, dtypes.float32],
-        "output_shapes": [
-            tensor_shape.TensorShape([20]),
-            tensor_shape.TensorShape([10, 10, 10]),
-            tensor_shape.TensorShape([1]),
-        ],
-    }
-    lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
-
-    def my_net(x, y):
-      output = ipu.custom_ops.cpu_user_operation([x, y],
-                                                 lib_path,
-                                                 outs=outputs)
-      return output
-
-    with ipu.scopes.ipu_scope('/device:IPU:0'):
-      x = array_ops.placeholder(np.float32, shape=[20])
-      y = array_ops.placeholder(np.int32, shape=[10, 10, 10])
-
-      model = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
-
     with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32, dtypes.int32, dtypes.float32],
+          "output_shapes": [
+              tensor_shape.TensorShape([20]),
+              tensor_shape.TensorShape([10, 10, 10]),
+              tensor_shape.TensorShape([1]),
+          ],
+      }
+      lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
+
+      def my_net(x, y):
+        output = ipu.custom_ops.cpu_user_operation([x, y],
+                                                   lib_path,
+                                                   outs=outputs)
+        return output
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[20])
+        y = array_ops.placeholder(np.int32, shape=[10, 10, 10])
+
+        model = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
+
       sess.run(variables.global_variables_initializer())
       res = sess.run(
           model, {

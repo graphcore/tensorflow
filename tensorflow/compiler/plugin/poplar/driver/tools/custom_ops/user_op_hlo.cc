@@ -25,15 +25,18 @@ namespace poplarplugin {
 HloUserOpInstruction::HloUserOpInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& path, void* fn_ptr, void* metadata_fn_ptr,
-    void* allocator_function_ptr, bool is_gradient, bool is_user_read_write)
+    void* allocator_function_ptr, bool is_gradient,
+    int partial_derivative_index, bool is_user_read_write)
     : HloPoplarInstruction(shape, inputs, PoplarOp::UserOp, fn_ptr,
                            metadata_fn_ptr, allocator_function_ptr, path,
-                           is_gradient),
+                           is_gradient, partial_derivative_index,
+                           is_user_read_write),
       function_ptr_(fn_ptr),
       metadata_function_ptr_(metadata_fn_ptr),
       allocator_function_ptr_(allocator_function_ptr),
-      gp_path(path),
+      gp_path_(path),
       is_gradient_(is_gradient),
+      partial_derivative_index_(partial_derivative_index),
       is_user_read_write_(is_user_read_write) {
   set_custom_call_has_side_effect(true);
   num_inputs_ = inputs.size();
@@ -100,7 +103,11 @@ std::vector<string> HloUserOpInstruction::ExtraPoplarAttributesToStringImpl(
       absl::StrCat("metadata_.num_inplace_=", metadata_.num_inplace_));
 
   attributes.push_back(absl::StrCat("num_inputs_=", num_inputs_));
-  attributes.push_back(absl::StrCat("gp_path=", gp_path));
+  attributes.push_back(absl::StrCat("gp_path=", gp_path_));
+  attributes.push_back(
+      absl::StrCat("partial_derivative_index=", partial_derivative_index_));
+  attributes.push_back(
+      absl::StrCat("is_user_read_write=", is_user_read_write_));
 
   return attributes;
 }
@@ -110,16 +117,19 @@ std::unique_ptr<HloInstruction> HloUserOpInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return CreateUserOp(new_operands, shape, GetPath(), function_ptr_,
                       metadata_function_ptr_, allocator_function_ptr_,
-                      is_gradient_, is_user_read_write_);
+                      partial_derivative_index_, is_gradient_,
+                      is_user_read_write_);
 }
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& gp_path, void* function_ptr, void* metadata_function_ptr,
-    void* allocator_function_ptr, bool is_gradient, bool is_user_read_write) {
+    void* allocator_function_ptr, bool is_gradient,
+    int partial_derivative_index, bool is_user_read_write) {
   return absl::make_unique<HloUserOpInstruction>(
       inputs, shape, gp_path, function_ptr, metadata_function_ptr,
-      allocator_function_ptr, is_gradient, is_user_read_write);
+      allocator_function_ptr, is_gradient, partial_derivative_index,
+      is_user_read_write);
 }
 
 namespace {
@@ -152,13 +162,17 @@ static HloPoplarInstructionFactory user_op_factory(
                           attribute_map.GetAttributeAsBool("is_gradient"));
 
       TF_ASSIGN_OR_RETURN(
+          int partial_derivative_index,
+          attribute_map.GetAttributeAsInt("partial_derivative_index"));
+
+      TF_ASSIGN_OR_RETURN(
           bool is_user_read_write,
           attribute_map.GetAttributeAsBool("is_user_read_write"));
 
       return CreateUserOp(call->operands(), call->shape(), gp_path,
                           operation_fn_ptr, metadata_function_ptr,
                           allocator_function_ptr, is_gradient,
-                          is_user_read_write);
+                          partial_derivative_index, is_user_read_write);
     });
 }  // namespace
 
