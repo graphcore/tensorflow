@@ -11,7 +11,6 @@ import fnmatch
 import json as js
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
@@ -20,85 +19,18 @@ from tensorflow.python.client import session as session_lib
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ipu import utils
 
 
-def configure_ipu_system(compilation_trace=True,
-                         io_trace=False,
-                         execution_trace=True,
-                         report_every_nth_execution=0,
-                         text_report=True,
-                         cbor_report=False,
-                         sharded=False,
-                         pipelining=False,
-                         replicated=False,
-                         compile_ipu_code=False,
-                         enable_ipu_events=False,
-                         prefetch_data_streams=True,
-                         engine_opts=None,
-                         device_count_override=None,
-                         max_cross_replica_sum_buffer_size=0,
-                         max_inter_ipu_copies_buffer_size=0,
-                         merge_infeed_io_copies=False,
-                         always_rearrange_copies_on_the_host=False,
-                         serialization_folder="",
-                         only_create_config=False):
-  opts = IpuOptions()
-  opts.profiling.enable_ipu_trace_events = (compilation_trace or io_trace
-                                            or execution_trace
-                                            or enable_ipu_events)
-  opts.profiling.enable_compilation_trace = compilation_trace
-  opts.profiling.enable_io_trace = io_trace
-  opts.profiling.enable_execution_trace = execution_trace
-  opts.profiling.enable_poplar_reports_text = text_report
-  opts.profiling.enable_poplar_reports_cbor = cbor_report
-  opts.profiling.report_every_nth_execution = report_every_nth_execution
-  opts.profiling.max_report_size = 0x10000000  # 256MB
-  opts.ipu_model_config.enable_ipu_model = True
-  opts.ipu_model_config.compile_ipu_code = compile_ipu_code
-  opts.prefetch_data_streams = prefetch_data_streams
-  opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
-  opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
-  opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
-  opts.speed_size_config.always_rearrange_copies_on_the_host = \
-      always_rearrange_copies_on_the_host
-  opts.serialization_folder = serialization_folder
-
-  # yapf: disable
-  assert not (pipelining and device_count_override
-             ), "Can't have both pipelining enabled and device_count_override"
-  assert not (sharded and device_count_override
-             ), "Can't have both sharded enabled and device_count_override"
-  # yapf: enable
-
-  if engine_opts:
-    for o in engine_opts.items():
-      opt = opts.compilation_options.add()
-      opt.option = o[0]
-      opt.value = o[1]
-
-  # When sharded or pipelining we use two devices.
-  if device_count_override:
-    device_count = device_count_override
-  elif sharded:
+def compute_device_count(pipelining=False, sharded=False, replicated=False):
+  if sharded:
     device_count = 2 * (2 if replicated else 1)
   elif pipelining:
     device_count = 4 * (2 if replicated else 1)
   else:
     device_count = 2 if replicated else 0
 
-  if device_count:
-    dev = opts.device_config.add()
-    dev.auto_count = device_count
-
-  if not only_create_config:
-    g = ops.Graph()
-    with g.as_default():
-      cfg_op = gen_ipu_ops.ipu_configure_hardware(opts.SerializeToString())
-
-    with session_lib.Session(graph=g) as sess:
-      sess.run(cfg_op)
-
-  return opts
+  return device_count
 
 
 @contextlib.contextmanager
@@ -215,12 +147,11 @@ class ReportJSON(object):
   def __init__(self,
                test,
                sess=None,
-               io_trace=True,
+               profiling=True,
                compile_ipu_code=False,
                device_count_override=None,
                execution_trace=True,
                sharded=False,
-               compilation_trace=True,
                pipelining=False,
                configure_device=True,
                replicated=False,
@@ -243,23 +174,38 @@ class ReportJSON(object):
     if sess:
       self.create_ipu_event_trace()
     if (sess or estimator_hook or eager_mode) and configure_device:
-      self.ipu_config = configure_ipu_system(
-          compilation_trace,
-          io_trace,
-          execution_trace=execution_trace,
-          text_report=False,
-          compile_ipu_code=compile_ipu_code,
-          device_count_override=device_count_override,
-          sharded=sharded,
-          pipelining=pipelining,
-          replicated=replicated,
-          max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
-          max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size,
-          merge_infeed_io_copies=merge_infeed_io_copies,
+      # yapf: disable
+      assert not (pipelining and device_count_override
+                 ), "Can't have both pipelining enabled and device_count_override"
+      assert not (sharded and device_count_override
+                 ), "Can't have both sharded enabled and device_count_override"
+      # yapf: enable
+
+      opts = utils.create_ipu_config(
+          profiling=profiling,
+          use_poplar_text_report=False,
+          use_poplar_cbor_report=False,
+          profile_execution=execution_trace,
           always_rearrange_copies_on_the_host=
           always_rearrange_copies_on_the_host,
-          serialization_folder=serialization_folder,
-          only_create_config=estimator_hook)
+          merge_infeed_io_copies=merge_infeed_io_copies)
+
+      opts = utils.set_optimization_options(
+          opts,
+          max_cross_replica_sum_buffer_size=max_cross_replica_sum_buffer_size,
+          max_inter_ipu_copies_buffer_size=max_inter_ipu_copies_buffer_size)
+
+      device_count = device_count_override or compute_device_count(
+          pipelining, sharded, replicated)
+      if device_count:
+        opts = utils.auto_select_ipus(opts, device_count)
+
+      opts = utils.set_serialization_options(opts, serialization_folder)
+      opts = utils.set_ipu_model_options(opts, compile_ipu_code)
+
+      if not estimator_hook:
+        utils.configure_ipu_system(opts)
+      self.ipu_config = opts
 
   def create_ipu_event_trace(self):
     with ops.device('cpu'):
@@ -274,6 +220,14 @@ class ReportJSON(object):
       self.sess.run(self.report)
 
   def parse_log(self, assert_len=None, assert_msg="", session=None):
+    events = self.get_event_trace(session)
+    return self.parse_events(events, assert_len, assert_msg)
+
+  def get_ipu_events(self, session=None):
+    events = self.get_event_trace(session)
+    return self.get_events_from_log(events)
+
+  def get_event_trace(self, session=None):
     if self.eager_mode:
       assert session is None, "Sessions can't be used in eager mode"
       self.create_ipu_event_trace()
@@ -287,25 +241,32 @@ class ReportJSON(object):
         events = session.run(self.report)
       else:
         events = self.sess.run(self.report)
-    return self.parse_events(events, assert_len, assert_msg)
+    return events
 
   def assert_num_events(self, num_expected, assert_msg=""):
     self.test.assertEqual(num_expected, self.num_events, assert_msg)
 
-  def parse_events(self, events, assert_len=None, assert_msg=""):
-    self.num_events = len(events)
-    if assert_len:
-      self.assert_num_events(assert_len, assert_msg)
-    self.events = {}
-    self.tensor_map = None
-    self.instruction_info = {}
+  def get_events_from_log(self, log):
     events_types = collections.defaultdict(int)
-    for e in events:
+    events = []
+    for e in log:
       if isinstance(e, ops.Tensor):
         e = e.numpy()
       assert isinstance(e, (bytes, str))
       evt = IpuTraceEvent.FromString(e)
       events_types[evt.type] += 1
+      events.append(evt)
+    return events_types, events
+
+  def parse_events(self, events, assert_len=None, assert_msg=""):
+    self.num_events = len(events)
+    if assert_len:
+      self.assert_num_events(assert_len, assert_msg)
+    events_types, trace_events = self.get_events_from_log(events)
+    self.tensor_map = None
+    self.events = {}
+    self.instruction_info = {}
+    for evt in trace_events:
       try:
         if evt.type == IpuTraceEvent.COMPILE_BEGIN:
           pass

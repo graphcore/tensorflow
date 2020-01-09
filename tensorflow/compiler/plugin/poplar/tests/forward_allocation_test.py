@@ -17,11 +17,11 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import utils
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
@@ -46,7 +46,8 @@ class ForwardAllocationTest(xla_test.XLATestCase):
                             kernel_initializer=init_ops.ones_initializer())(x)
         res = gen_array_ops.reshape(y, [32]) + z
 
-      tu.configure_ipu_system(True, True, True)
+      opts = utils.create_ipu_config()
+      utils.configure_ipu_system(opts)
 
       sess.run(variables.global_variables_initializer())
 
@@ -74,7 +75,8 @@ class ForwardAllocationTest(xla_test.XLATestCase):
                             kernel_initializer=init_ops.ones_initializer())(x)
         res = array_ops.transpose(y, [1, 2, 3, 0]) + z
 
-      tu.configure_ipu_system(True, True, True)
+      opts = utils.create_ipu_config()
+      utils.configure_ipu_system(opts)
 
       sess.run(variables.global_variables_initializer())
 
@@ -103,7 +105,8 @@ class ForwardAllocationTest(xla_test.XLATestCase):
                             kernel_initializer=init_ops.ones_initializer())(x)
         res = y + z * s
 
-      tu.configure_ipu_system(True, True, True)
+      opts = utils.create_ipu_config()
+      utils.configure_ipu_system(opts)
 
       sess.run(variables.global_variables_initializer())
 
@@ -130,7 +133,8 @@ class ForwardAllocationTest(xla_test.XLATestCase):
         with variable_scope.variable_scope("vs", use_resource=True):
           res = nn.conv1d(data, kernel, stride=1, padding="VALID")
 
-      tu.configure_ipu_system(True, True, True)
+      opts = utils.create_ipu_config()
+      utils.configure_ipu_system(opts)
 
       sess.run(variables.global_variables_initializer())
 

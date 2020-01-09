@@ -330,17 +330,9 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
 
 PoplarExecutor::PoplarExecutor()
     : ordinal_(0),
-      infeeds_done_(true),
-      outfeeds_done_(true),
       current_engine_(nullptr),
       device_attached_(false),
       poplar_device_hash_(0),
-      infeed_thread_pool_(tensorflow::Env::Default(),
-                          "poplar_infeed_thread_pool_",
-                          PoplarExecutor::NUM_THREADS),
-      outfeed_thread_pool_(tensorflow::Env::Default(),
-                           "poplar_outfeed_thread_pool_",
-                           PoplarExecutor::NUM_THREADS),
       has_cycle_counter_(false),
       rendezvous_(tensorflow::NewLocalRendezvous()) {
   // TODO should this use the time/ms?
@@ -602,99 +594,74 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
   }
 }
 
-std::function<void()> PoplarExecutor::CreateInfeedIOThreadFunction(
-    const InfeedInfos& infeed_infos) {
-  infeed_thread_cancelled_ = false;
-  // Check that the infeeds are done from the previous execution.
-  CHECK(infeeds_done_.exchange(false));
-
-  std::vector<InfeedDatasetIterator*> infeed_dataset_iterators;
-  infeed_dataset_iterators.reserve(infeed_infos.size());
-  for (const auto& infeed_info : infeed_infos) {
-    auto itr = infeed_dataset_iterators_.find(infeed_info.config.feed_id());
-    if (itr == infeed_dataset_iterators_.end()) {
-      LOG(FATAL)
-          << "Trying to access an infeed context which has not been created."
-          << " Did you initialize the infeed_queue?";
-    }
-    infeed_dataset_iterators.push_back(itr->second.get());
+IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
+    const FeedInfo& infeed_info) {
+  // Find the iterator.
+  auto itr = infeed_dataset_iterators_.find(infeed_info.config.feed_id());
+  if (itr == infeed_dataset_iterators_.end()) {
+    LOG(FATAL)
+        << "Trying to access an infeed context which has not been created."
+        << " Did you initialize the infeed_queue?";
   }
+  InfeedDatasetIterator* infeed_dataset_iterator = itr->second.get();
 
-  return [this, infeed_dataset_iterators]() {
-    while (!infeed_thread_cancelled_) {
-      for (auto& infeed_dataset_iterator : infeed_dataset_iterators) {
-        // We do not call GetNext if queues are full.
-        // We make an assumption that all tensors from each queue for each
-        // replica for an infeed are dequeued every iteration - we therefore
-        // only need to check if the first queue is full to know whether all the
-        // queues are full.
-        if (infeed_dataset_iterator->tensor_queues[0][0]->IsFull()) {
-          VLOG(1) << "Infeed queue is full.";
-          continue;
-        }
+  return [this, infeed_dataset_iterator](std::atomic<bool>& cancelled) {
+    while (!cancelled) {
+      // We do not call GetNext if queues are full.
+      // We make an assumption that all tensors from each queue for each
+      // replica for an infeed are dequeued every iteration - we therefore
+      // only need to check if the first queue is full to know whether all the
+      // queues are full.
+      if (infeed_dataset_iterator->tensor_queues[0][0]->IsFull()) {
+        VLOG(1) << "Infeed queue is full.";
+        continue;
+      }
 
-        const bool was_empty =
-            infeed_dataset_iterator->tensor_queues[0][0]->IsEmpty();
+      if (infeed_dataset_iterator->tensor_queues[0][0]->IsEmpty()) {
+        VLOG(1) << "Infeed queue is empty.";
+      }
 
-        bool end_of_sequence = false;
-        std::vector<tensorflow::Tensor> outputs;
-        auto status = infeed_dataset_iterator->iterator->GetNext(
-            infeed_dataset_iterator->iterator_ctx.get(), &outputs,
-            &end_of_sequence);
+      bool end_of_sequence = false;
+      std::vector<tensorflow::Tensor> outputs;
+      TF_RETURN_IF_ERROR(infeed_dataset_iterator->iterator->GetNext(
+          infeed_dataset_iterator->iterator_ctx.get(), &outputs,
+          &end_of_sequence));
 
-        if (!status.ok()) {
-          infeed_thread_cancelled_ = true;
-          continue;
-        }
+      if (end_of_sequence) {
+        return tensorflow::errors::OutOfRange(
+            "The dataset iterator has reached the end of the dataset.");
+      }
 
-        if (!end_of_sequence) {
-          for (size_t j = 0; j < outputs.size(); ++j) {
-            auto& tensor = outputs[j];
-            std::vector<tensorflow::Tensor> tensor_slices;
-            if (current_replication_factor_ > 1) {
-              // For replicated graphs, slice the input tensor and enqueue
-              // it separately for each replica.
-              CHECK_EQ(tensor.dim_size(0), current_replication_factor_);
-              tensor_slices.reserve(current_replication_factor_);
-              for (auto replica_id = 0;
-                   replica_id < current_replication_factor_; ++replica_id) {
-                // Note that the tensor_slice shares the date buffer with the
-                // tensor which works with ref counting.
-                tensor_slices.push_back(tensor.SubSlice(replica_id));
-              }
-            } else {
-              tensor_slices = {tensor};
-            }
-
-            // Enqueue tensors to each replica.
-            for (size_t replica_id = 0; replica_id < tensor_slices.size();
-                 replica_id++) {
-              auto& queue =
-                  infeed_dataset_iterator->tensor_queues[j][replica_id];
-              auto* tb =
-                  tensorflow::DMAHelper::buffer(&tensor_slices[replica_id]);
-              tb->Ref();
-              queue->BlockPush(tb);
-              queue->AdvanceWritePosition();
-            }
-          }
-
-          if (was_empty) {
-            VLOG(1) << "Infeed queue is empty.";
+      for (size_t j = 0; j < outputs.size(); ++j) {
+        auto& tensor = outputs[j];
+        std::vector<tensorflow::Tensor> tensor_slices;
+        if (current_replication_factor_ > 1) {
+          // For replicated graphs, slice the input tensor and enqueue
+          // it separately for each replica.
+          CHECK_EQ(tensor.dim_size(0), current_replication_factor_);
+          tensor_slices.reserve(current_replication_factor_);
+          for (auto replica_id = 0; replica_id < current_replication_factor_;
+               ++replica_id) {
+            // Note that the tensor_slice shares the date buffer with the
+            // tensor which works with ref counting.
+            tensor_slices.push_back(tensor.SubSlice(replica_id));
           }
         } else {
-          infeed_thread_cancelled_ = true;
-          LOG(INFO)
-              << "The dataset iterator has reached the end of the dataset.";
+          tensor_slices = {tensor};
+        }
+
+        // Enqueue tensors to each replica.
+        for (size_t replica_id = 0; replica_id < tensor_slices.size();
+             replica_id++) {
+          auto& queue = infeed_dataset_iterator->tensor_queues[j][replica_id];
+          auto* tb = tensorflow::DMAHelper::buffer(&tensor_slices[replica_id]);
+          tb->Ref();
+          queue->BlockPush(tb);
+          queue->AdvanceWritePosition();
         }
       }
     }
-    // Notify the main thread that infeeds are done.
-    {
-      std::lock_guard<std::mutex> l(infeeds_mutex_);
-      infeeds_done_ = true;
-    }
-    infeeds_cond_var_.notify_one();
+    return Status::OK();
   };
 }
 
@@ -713,170 +680,138 @@ inline void AllocateTensors(std::deque<std::vector<tensorflow::Tensor>>& queue,
 }
 }  // namespace
 
-std::function<void()> PoplarExecutor::CreateOutfeedIOThreadFunction(
-    const OutfeedInfos& outfeed_infos) {
-  outfeed_thread_cancelled_ = false;
-  // Check that the outfeeds are done from the previous execution.
-  CHECK(outfeeds_done_.exchange(false));
-
-  std::vector<OutfeedContext*> outfeed_contexts;
-  outfeed_contexts.reserve(outfeed_infos.size());
-  for (const auto& outfeed_info : outfeed_infos) {
-    auto itr = outfeed_contexts_.find(outfeed_info.config.feed_id());
-    if (itr == outfeed_contexts_.end()) {
-      LOG(FATAL)
-          << "Trying to access an outfeed context which has not been created.";
-    }
-    outfeed_contexts.push_back(itr->second.get());
+IOFunction PoplarExecutor::CreateOutfeedIOThreadFunction(
+    const FeedInfo& outfeed_info) {
+  auto itr = outfeed_contexts_.find(outfeed_info.config.feed_id());
+  if (itr == outfeed_contexts_.end()) {
+    LOG(FATAL)
+        << "Trying to access an outfeed context which has not been created.";
   }
+  OutfeedContext* outfeed_context = itr->second.get();
 
-  return [this, outfeed_infos, outfeed_contexts]() {
+  return [this, outfeed_context](std::atomic<bool>& cancelled) {
     int replicas = current_replication_factor_;
     replicas = std::max(replicas, 1);
 
-    // Lock all the outfeed queues which are of the GetLast type so that the CPU
+    // Lock the outfeed queues if it is of the GetLast type so that the CPU
     // OP does not try to dequeue the outfeed during the execution.
-    for (auto& outfeed_context : outfeed_contexts) {
-      if (outfeed_context->config.mode() == PoplarFeedConfig::GetLast) {
-        outfeed_context->mutex.lock();
-      }
+    if (outfeed_context->config.mode() == PoplarFeedConfig::GetLast) {
+      outfeed_context->mutex.lock();
     }
 
     // Continue while the thread has not been cancelled, and if it has been
     // cancelled allow for up to two extra runs.
     uint32 all_queues_empty_for = 0;
-    while (!outfeed_thread_cancelled_ || all_queues_empty_for != 2) {
+    while (!cancelled || all_queues_empty_for != 2) {
       bool all_queues_empty = true;
-      for (auto& outfeed_context : outfeed_contexts) {
-        int io_batch_size = outfeed_context->config.io_batch_size();
-        for (auto& tensor_queues :
-             outfeed_context->callback_to_io_thread_queues) {
-          for (auto& replica_queue : tensor_queues) {
-            all_queues_empty &= !replica_queue->HasItemsWaiting();
-          }
+      int io_batch_size = outfeed_context->config.io_batch_size();
+      for (auto& tensor_queues :
+           outfeed_context->callback_to_io_thread_queues) {
+        for (auto& replica_queue : tensor_queues) {
+          all_queues_empty &= !replica_queue->HasItemsWaiting();
+        }
+      }
+
+      // Track empty queues when we are trying to exit
+      if (all_queues_empty && cancelled) {
+        all_queues_empty_for++;
+      }
+
+      // Continue if all the outfeed queues are empty.
+      if (all_queues_empty) {
+        continue;
+      }
+
+      // Lock the outfeed queue so that the CPU OP does not try to dequeue
+      // whilst moving data off the device.
+      {
+        std::lock_guard<std::recursive_mutex> guard(outfeed_context->mutex);
+        // Allocate the tensors before dequeuing.
+        bool allocate_tensors = true;
+        if (outfeed_context->config.mode() == PoplarFeedConfig::GetLast) {
+          // For the get last we only allocate tensors once.
+          allocate_tensors = outfeed_context->io_thread_output_queues.empty();
         }
 
-        // Track empty queues when we are trying to exit
-        if (all_queues_empty && outfeed_thread_cancelled_) {
-          all_queues_empty_for++;
+        if (allocate_tensors) {
+          AllocateTensors(outfeed_context->io_thread_output_queues,
+                          outfeed_context->tf_data_types,
+                          outfeed_context->tf_shapes, io_batch_size);
         }
 
-        // Continue if all the outfeed queues are empty.
-        if (all_queues_empty) {
-          continue;
-        }
+        // We need to copy along 3 axis.  There are multiple queues from
+        // the IPU, one  per tuple and per replica.  In each queue there
+        // is a block of data containing one or more tensors.  There is a
+        // single queue out of the executor, consisting of a vector of
+        // Tensors, one per tuple entry.  If there are multiple replicas
+        // then the outer dimension of the Tensors has the same value as the
+        // replica count, and the output from each replica is concatenated
+        // into that Tensor.
+        //
+        // We loop over each queue (by tuple  and replica), and dequeue the
+        // block of data. This is then inserted  into the output queue as
+        // appropriate.
+        for (size_t tuple_idx = 0; tuple_idx < outfeed_context->shapes.size();
+             ++tuple_idx) {
+          // Dequeue tensors from each replica.
+          for (int64 replica_id = 0; replica_id < replicas; replica_id++) {
+            auto& queue =
+                outfeed_context
+                    ->callback_to_io_thread_queues[tuple_idx][replica_id];
 
-        // Lock the outfeed queue so that the CPU OP does not try to dequeue
-        // whilst moving data off the device.
-        {
-          std::lock_guard<std::recursive_mutex> guard(outfeed_context->mutex);
-          // Allocate the tensors before dequeuing.
-          bool allocate_tensors = true;
-          if (outfeed_context->config.mode() == PoplarFeedConfig::GetLast) {
-            // For the get last we only allocate tensors once.
-            allocate_tensors = outfeed_context->io_thread_output_queues.empty();
-          }
+            // Dequeue the data and insert into the correct output queue.
+            uint8_t* src = reinterpret_cast<uint8_t*>(queue->BlockFront());
+            for (int b = 0; b < io_batch_size; b++) {
+              std::vector<tensorflow::Tensor>& tensors_to_write_to =
+                  outfeed_context->io_thread_output_queues.at(io_batch_size -
+                                                              b - 1);
 
-          if (allocate_tensors) {
-            AllocateTensors(outfeed_context->io_thread_output_queues,
-                            outfeed_context->tf_data_types,
-                            outfeed_context->tf_shapes, io_batch_size);
-          }
+              auto& tensor = tensors_to_write_to[tuple_idx];
 
-          // We need to copy along 3 axis.  There are multiple queues from
-          // the IPU, one  per tuple and per replica.  In each queue there
-          // is a block of data containing one or more tensors.  There is a
-          // single queue out of the executor, consisting of a vector of
-          // Tensors, one per tuple entry.  If there are multiple replicas
-          // then the outer dimension of the Tensors has the same value as the
-          // replica count, and the output from each replica is concatenated
-          // into that Tensor.
-          //
-          // We loop over each queue (by tuple  and replica), and dequeue the
-          // block of data. This is then inserted  into the output queue as
-          // appropriate.
-          for (size_t tuple_idx = 0; tuple_idx < outfeed_context->shapes.size();
-               ++tuple_idx) {
-            // Dequeue tensors from each replica.
-            for (int64 replica_id = 0; replica_id < replicas; replica_id++) {
-              auto& queue =
-                  outfeed_context
-                      ->callback_to_io_thread_queues[tuple_idx][replica_id];
+              // When there are mutiple replicas, insert the data into a slice
+              // out of dinension 0.  Otherwise just use the whole tensor.
+              auto output_tensor =
+                  (replicas == 1 ? tensor : tensor.SubSlice(replica_id));
+              auto* tb = tensorflow::DMAHelper::buffer(&output_tensor);
 
-              // Dequeue the data and insert into the correct output queue.
-              uint8_t* src = reinterpret_cast<uint8_t*>(queue->BlockFront());
-              for (int b = 0; b < io_batch_size; b++) {
-                std::vector<tensorflow::Tensor>& tensors_to_write_to =
-                    outfeed_context->io_thread_output_queues.at(io_batch_size -
-                                                                b - 1);
-
-                auto& tensor = tensors_to_write_to[tuple_idx];
-
-                // When there are mutiple replicas, insert the data into a slice
-                // out of dinension 0.  Otherwise just use the whole tensor.
-                auto output_tensor =
-                    (replicas == 1 ? tensor : tensor.SubSlice(replica_id));
-                auto* tb = tensorflow::DMAHelper::buffer(&output_tensor);
-
-                std::memcpy(tb->data(), src, output_tensor.AllocatedBytes());
-                src += output_tensor.AllocatedBytes();
-              }
-              queue->FinishedFront();
+              std::memcpy(tb->data(), src, output_tensor.AllocatedBytes());
+              src += output_tensor.AllocatedBytes();
             }
+            queue->FinishedFront();
           }
         }
       }
     }
 
-    // Notify the main thread that outfeeds are done.
-    {
-      std::lock_guard<std::mutex> l(outfeeds_mutex_);
-      outfeeds_done_ = true;
+    // Unlock all the outfeed if it is of the GetLast type.
+    if (outfeed_context->config.mode() == PoplarFeedConfig::GetLast) {
+      outfeed_context->mutex.unlock();
     }
-    outfeeds_cond_var_.notify_one();
-
-    // Unlock all the outfeed queues which are of the GetLast type.
-    for (auto& outfeed_context : outfeed_contexts) {
-      if (outfeed_context->config.mode() == PoplarFeedConfig::GetLast) {
-        outfeed_context->mutex.unlock();
-      }
-    }
+    return Status::OK();
   };
 }
 
 void PoplarExecutor::LaunchIOThreads(const InfeedInfos& infeed_infos,
                                      const OutfeedInfos& outfeed_infos) {
-  if (infeed_infos.size()) {
-    std::function<void()> infeed_thread_io_fn =
-        CreateInfeedIOThreadFunction(infeed_infos);
-    infeed_thread_pool_.Schedule(infeed_thread_io_fn);
+  CHECK_EQ(io_threads_.size(), 0);
+  // Start all the infeeds.
+  for (const FeedInfo& info : infeed_infos) {
+    IOFunction fn = CreateInfeedIOThreadFunction(info);
+    io_threads_.emplace_back(
+        absl::make_unique<IOThread>(info.config.feed_id(), std::move(fn)));
   }
 
-  if (outfeed_infos.size()) {
-    std::function<void()> outfeed_thread_io_fn =
-        CreateOutfeedIOThreadFunction(outfeed_infos);
-    outfeed_thread_pool_.Schedule(outfeed_thread_io_fn);
+  // Start all the outfeeds.
+  for (const FeedInfo& info : outfeed_infos) {
+    IOFunction fn = CreateOutfeedIOThreadFunction(info);
+    io_threads_.emplace_back(
+        absl::make_unique<IOThread>(info.config.feed_id(), std::move(fn)));
   }
 }
 
-void PoplarExecutor::StopIOThreads(const InfeedInfos& infeed_infos,
-                                   const OutfeedInfos& outfeed_infos) {
-  infeed_thread_cancelled_ = true;
-  outfeed_thread_cancelled_ = true;
-
-  if (infeed_infos.size()) {
-    // Block until the infeed thread has finished.
-    std::unique_lock<std::mutex> l(infeeds_mutex_);
-    infeeds_cond_var_.wait(l,
-                           [this] { return std::atomic_load(&infeeds_done_); });
-  }
-
-  if (outfeed_infos.size()) {
-    // Block until the outfeed thread has finished.
-    std::unique_lock<std::mutex> l(outfeeds_mutex_);
-    outfeeds_cond_var_.wait(
-        l, [this] { return std::atomic_load(&outfeeds_done_); });
-  }
+void PoplarExecutor::StopIOThreads() {
+  // Blocks the thread until all the threads have stopped and joined back.
+  io_threads_.clear();
 }
 
 void PoplarExecutor::DeferredDeallocation() {
@@ -1017,6 +952,31 @@ PoplarExecutor::CreateDeviceDescription() const {
     return p->DescriptionForDevice(0);
   }
   return InternalError("Failed to create device description.");
+}
+
+PoplarExecutor::IOThread::IOThread(const std::string& name, IOFunction fn,
+                                   const tensorflow::ThreadOptions& options)
+    : cancelled_(false) {
+  thread_.reset(tensorflow::Env::Default()->StartThread(
+      options, name, [options, name, f = std::move(fn), this]() {
+        // StartThread currently ignores `options`.
+        // Explicitly set the NUMA node if one was requested.
+        if (options.numa_node != tensorflow::port::kNUMANoAffinity) {
+          tensorflow::port::NUMASetThreadNodeAffinity(options.numa_node);
+        }
+        auto status = f(cancelled_);
+        if (!status.ok()) {
+          LOG(INFO) << "Thread " << name
+                    << " has finished with status: " << status.ToString();
+        }
+        cancelled_ = true;
+      }));
+}
+
+PoplarExecutor::IOThread::~IOThread() {
+  // Cancel the thread.
+  cancelled_ = true;
+  // The destructor of `thread_` will now block until the thread has joined.
 }
 
 bool PoplarExecutor::IPUConfig::DeviceConfigured() const {
@@ -2121,9 +2081,9 @@ void PoplarExecutor::CreateInfeedDatasetIterator(
 }
 
 Status PoplarExecutor::DeleteInfeedDatasetIterator(const std::string& feed_id) {
-  std::lock_guard<std::mutex> l(infeeds_mutex_);
+  std::lock_guard<std::recursive_mutex> l(ipu_.Mutex());
 
-  if (!infeeds_done_) {
+  if (io_threads_.size()) {
     return xla::FailedPrecondition(
         "Cannot delete infeed with id='%s' while in use", feed_id.c_str());
   }
@@ -2193,9 +2153,9 @@ Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
 }
 
 Status PoplarExecutor::DeleteOutfeed(const std::string& feed_id) {
-  std::lock_guard<std::mutex> l(outfeeds_mutex_);
+  std::lock_guard<std::recursive_mutex> l(ipu_.Mutex());
 
-  if (!outfeeds_done_) {
+  if (io_threads_.size()) {
     return xla::FailedPrecondition(
         "Cannot delete outfeed with id='%s' while in use", feed_id.c_str());
   }
@@ -2472,13 +2432,9 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
           }
         }
       }
-      // Launch the IO threads when we are not using synthetic data and have
-      // infeeds/outfeeds.
-      bool io_threads_running = false;
-      if (!UseSyntheticData() &&
-          (!infeed_infos.empty() || !outfeed_infos.empty())) {
+      // Launch the IO threads when we are not using synthetic data.
+      if (!UseSyntheticData()) {
         LaunchIOThreads(infeed_infos, outfeed_infos);
-        io_threads_running = true;
       }
 
       // Before executing the main program, prepare the random seeds for each
@@ -2489,8 +2445,9 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       current_engine_->enableExecutionProfiling();
       current_engine_->run(PoplarProgramType::MAIN_SEQUENCE);
 
-      if (io_threads_running) {
-        StopIOThreads(infeed_infos, outfeed_infos);
+      // Stop the IO threads when we are not using synthetic data.
+      if (!UseSyntheticData()) {
+        StopIOThreads();
       }
 
       // We need to call post process to make sure all the data is in the

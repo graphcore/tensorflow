@@ -116,6 +116,9 @@ using ConversionList = std::vector<ConversionFn>;
 using InfeedQueueType = SPSCQueue<tensorflow::TensorBuffer*, 2048>;
 using OutfeedQueueType = SPSCOutfeedQueue<2048>;
 
+// An IO thread signature.
+using IOFunction = std::function<Status(std::atomic<bool>&)>;
+
 class PoplarExecutor : public se::internal::StreamExecutorInterface {
  public:
   explicit PoplarExecutor();
@@ -343,19 +346,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   }
 
   bool RecomputationEnabled() const {
-    // Re-computation of non linearities is enabled by default unless the user
-    // has specifically told us not to do it.
-    return current_config_.speed_size_config().has_allow_recompute()
-               ? current_config_.speed_size_config().allow_recompute()
-               : false;
+    return current_config_.speed_size_config().allow_recompute();
   }
 
   bool StatefulRecomputationEnabled() const {
-    // Re-computation of stateful operations is disabled by default unless the
-    // user has specifically told us to do it.
-    return current_config_.speed_size_config().has_allow_recompute()
-               ? current_config_.speed_size_config().allow_stateful_recompute()
-               : false;
+    return current_config_.speed_size_config().allow_stateful_recompute();
   }
 
   poplar::OptionFlags GetConvolutionOptions() const { return conv_options_; }
@@ -655,19 +650,16 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // deviceToHostFIFO()
   void ConnectOutfeedToStreamCallback(const OutfeedInfos& outfeed_infos);
 
-  std::function<void()> CreateInfeedIOThreadFunction(
-      const InfeedInfos& infeed_infos);
-  std::function<void()> CreateOutfeedIOThreadFunction(
-      const OutfeedInfos& outfeed_infos);
+  IOFunction CreateInfeedIOThreadFunction(const FeedInfo& infeed_info);
+  IOFunction CreateOutfeedIOThreadFunction(const FeedInfo& outfeed_info);
 
-  // Creates and launches the threads which send/recieve data from the Poplar
+  // Creates and launches the threads which send/receive data from the Poplar
   // stream callbacks.
   void LaunchIOThreads(const InfeedInfos& infeed_infos,
                        const OutfeedInfos& outfeed_infos);
 
-  // Sets cancellation flags and notifies the threads running to stop.
-  void StopIOThreads(const InfeedInfos& infeed_infos,
-                     const OutfeedInfos& outfeed_infos);
+  // Blocks until all the IOThreads stop.
+  void StopIOThreads();
 
   void DeferredDeallocation();
 
@@ -677,21 +669,26 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   int ordinal_;
 
-  std::mutex infeeds_mutex_;
+  class IOThread {
+   public:
+    // A structure used to run an IO thread which reads from a data source. The
+    // `fn` takes a `cancelled` parameter which indicates whether the thread
+    // should stop.
+    // Destroying this object cancels the thread and blocks until the thread
+    // has completed and joined.
+    IOThread(const std::string& name, IOFunction fn,
+             const tensorflow::ThreadOptions& options = {});
+    ~IOThread();
 
-  std::condition_variable infeeds_cond_var_;
+   private:
+    // Warning: The `cancelled_` member must outlive the `thread_` member.
+    std::atomic<bool> cancelled_;
+    std::unique_ptr<tensorflow::Thread> thread_;
 
-  std::mutex outfeeds_mutex_;
+    TF_DISALLOW_COPY_AND_ASSIGN(IOThread);
+  };
 
-  std::condition_variable outfeeds_cond_var_;
-
-  std::atomic<bool> infeed_thread_cancelled_;
-
-  std::atomic<bool> infeeds_done_;
-
-  std::atomic<bool> outfeed_thread_cancelled_;
-
-  std::atomic<bool> outfeeds_done_;
+  std::vector<std::unique_ptr<IOThread>> io_threads_;
 
   std::unique_ptr<tensorflow::CancellationManager> cm_;
 
@@ -741,10 +738,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   IpuOptions current_config_;
 
   std::list<tensorflow::IpuTraceEvent> reports_;
-
-  static const int NUM_THREADS = 1;
-  tensorflow::thread::ThreadPool infeed_thread_pool_;
-  tensorflow::thread::ThreadPool outfeed_thread_pool_;
 
   struct InfeedDatasetIterator {
     InfeedDatasetIterator(

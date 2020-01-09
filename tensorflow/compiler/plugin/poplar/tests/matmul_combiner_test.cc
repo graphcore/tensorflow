@@ -48,6 +48,7 @@ se::Platform* GetTestPlatform() {
   auto* p = static_cast<xp::PoplarPlatform*>(platform.ValueOrDie());
 
   xla::poplarplugin::IpuOptions options;
+  options.set_creator_id(IpuOptionsCreator::IPU_UTILS);
   options.set_enable_matmul_combiner(true);
   options.mutable_ipu_model_config()->set_enable_ipu_model(true);
 

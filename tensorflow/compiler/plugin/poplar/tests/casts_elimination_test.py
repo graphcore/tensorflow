@@ -21,7 +21,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         pa = array_ops.placeholder(np.float16, [4096], name="a")
         output = math_ops.reduce_sum(pa, axis=[0])
 
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: np.ones([4096])}
@@ -48,7 +48,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         b = math_ops.cast(pa, np.float16)
         c = math_ops.cast(b, np.float32)
 
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0]}
@@ -65,7 +65,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         a = gen_array_ops.reshape(pa, [4, 3])
         a = math_ops.reduce_sum(a, axis=(1))
 
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: np.ones([3, 4])}
@@ -93,7 +93,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         b = math_ops.cast(b, np.float16)
         c = a + b
 
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0], pb: [1.0, 1.0, 2.0]}
@@ -115,7 +115,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         b = math_ops.cast(pa, np.float32)
         c = math_ops.cast(b, np.float16)
 
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0]}
@@ -134,14 +134,14 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
         b = b + const
         c = math_ops.cast(b, np.float16)
 
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       fd = {pa: [2.0, 0.5, 1.0]}
       result = sess.run(c, fd)
       self.assertAllClose(result, [3.0, 1.5, 2.0])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Cast/convert.*/Cast',

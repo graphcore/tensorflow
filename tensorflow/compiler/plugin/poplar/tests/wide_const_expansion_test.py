@@ -78,13 +78,13 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
 
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       y = sess.run(r, {y: [10]})
       self.assertAllClose(y[0], [19])
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
       ok = [
           '__seed*', 'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice',

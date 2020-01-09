@@ -39,7 +39,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       with ops.device('cpu'):
@@ -54,7 +54,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input, axis=0))
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxHalf(self, dtype):
@@ -62,7 +62,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmax(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      ReportJSON(self, sess, io_trace=False)
+      ReportJSON(self, sess)
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
@@ -83,7 +83,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
     for axis in range(6):
       with self.session() as sess:
-        ReportJSON(self, sess, io_trace=False)
+        ReportJSON(self, sess)
 
         with ops.device('cpu'):
           pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
@@ -104,7 +104,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
@@ -120,7 +120,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmin(input, axis=0))
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMinHalf(self, dtype):
@@ -128,7 +128,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmin(a, output_type=dtypes.int32)
 
     with self.session() as sess:
-      ReportJSON(self, sess, io_trace=False)
+      ReportJSON(self, sess)
 
       with ops.device('cpu'):
         pa = array_ops.placeholder(dtype, [3, 5, 2])
@@ -149,7 +149,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
 
     for axis in range(6):
       with self.session() as sess:
-        ReportJSON(self, sess, io_trace=False)
+        ReportJSON(self, sess)
 
         with ops.device('cpu'):
           pa = array_ops.placeholder(dtype, [1, 2, 3, 4, 5, 6])
@@ -170,7 +170,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmax(a, axis=-1, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       with ops.device('cpu'):
@@ -185,7 +185,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input, axis=-1))
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
   @parameterized.named_parameters(*TESTCASES)
   def testArgMaxVector(self, dtype):
@@ -193,7 +193,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       return math_ops.argmax(a, axis=0, output_type=dtypes.int32)
 
     with self.session() as sess:
-      report = ReportJSON(self, sess, io_trace=False)
+      report = ReportJSON(self, sess)
       report.reset()
 
       with ops.device('cpu'):
@@ -208,7 +208,7 @@ class ArgMinMax(xla_test.XLATestCase, parameterized.TestCase):
       result = sess.run(out, fd)
       self.assertAllClose(result, np.argmax(input))
 
-      report.parse_log(assert_len=3)
+      report.parse_log(assert_len=4)
 
 
 if __name__ == "__main__":
