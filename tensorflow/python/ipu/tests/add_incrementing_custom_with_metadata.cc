@@ -45,8 +45,8 @@ extern "C" poplar::program::Program Build(
 // Custom poplar kernel.
 extern "C" poplar::program::Program Build_grad(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& gradients,
-    const std::vector<poplar::Tensor>& old_outputs,
-    const std::vector<poplar::Tensor>& old_inputs,
+    const std::vector<poplar::Tensor>& fwd_outputs,
+    const std::vector<poplar::Tensor>& fwd_inputs,
     std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
@@ -63,20 +63,15 @@ extern "C" poplar::program::Program Build_grad(
   return seq;
 }
 
-extern "C" void Build_metadata(std::unordered_set<std::int64_t>& allocating_indices,
-    std::unordered_map<std::int64_t,std::int64_t>& layout_dependencies,
-    std::uint32_t& num_inplace, bool& is_elementwise,
-    std::uint32_t num_inputs) {
+extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
+                               std::uint32_t& num_inplace, bool& is_elementwise,
+                               std::uint32_t num_inputs) {
   num_inplace = num_inputs;
   is_elementwise = num_inputs < 2;
-
-  if (num_inputs == 2) {
-    allocating_indices.insert(0);
-    allocating_indices.insert(1);
-    layout_dependencies[0] = 1;
-  }
 }
 
-extern "C" poplar::Tensor Build_allocator(std::uint32_t operand) {
-  return poplar::Tensor{};  
+extern "C" poplar::Tensor Build_allocator(std::uint32_t operand,
+                                          const std::vector<size_t>& shape,
+                                          poplar::Type type) {
+  return poplar::Tensor{};
 }

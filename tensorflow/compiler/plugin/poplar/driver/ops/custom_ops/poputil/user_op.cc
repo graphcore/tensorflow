@@ -63,8 +63,8 @@ class UserOpImpl : public PoplarOpDef {
     // Get the function pointer from the HLO.
     poplar::program::Program (*as_function_ptr_gradient)(
         poplar::Graph&, const std::vector<poplar::Tensor>& gradients_in,
-        const std::vector<poplar::Tensor>& old_outputs,
-        const std::vector<poplar::Tensor>& old_inputs,
+        const std::vector<poplar::Tensor>& fwd_outputs,
+        const std::vector<poplar::Tensor>& fwd_inputs,
         std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix);
 
     // We have a special function pointer type for when the intent is to execute
@@ -280,12 +280,18 @@ class UserOpImpl : public PoplarOpDef {
       return Status::OK();
     }
 
+    // Get the Poplar shape and type
+    auto shape = user_op->operand(input_index)->shape();
+    std::vector<std::size_t> poplar_shape = PoplarShapeFromXlaShape(shape);
+    TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape));
+
     // Convert into a function pointer.
-    poplar::Tensor (*allocatorSig)(std::int64_t);
+    poplar::Tensor (*allocatorSig)(
+        std::int64_t, const std::vector<std::size_t>&, poplar::Type);
     allocatorSig = reinterpret_cast<decltype(allocatorSig)>(allocator_func);
 
     // Return the tensor via user specified function.
-    return allocatorSig(input_index);
+    return allocatorSig(input_index, poplar_shape, poplar_type);
   }
 };
 
