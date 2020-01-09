@@ -32,11 +32,9 @@ extern "C" poplar::program::Program Build(
   return seq;
 }
 
-extern "C" void Build_metadata(
-    std::unordered_set<std::int64_t>& allocating_indices,
-    std::unordered_map<std::int64_t, std::int64_t>& layout_dependencies,
-    std::uint32_t& num_inplace, bool& is_elementwise,
-    std::uint32_t num_inputs) {
+extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
+                               std::uint32_t& num_inplace, bool& is_elementwise,
+                               std::uint32_t num_inputs) {
   num_inplace = 12;
   is_elementwise = true;
 
@@ -47,8 +45,4 @@ extern "C" void Build_metadata(
 
   layout_dependencies[0] = 2;
   layout_dependencies[1] = 3;
-}
-
-extern "C" poplar::Tensor Build_allocator(std::uint32_t operand) {
-  return poplar::Tensor{};
 }

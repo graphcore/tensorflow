@@ -71,7 +71,9 @@ def precompiled_user_op(inputs,
                                      gp_path=gp_path,
                                      op_name=op_name,
                                      name=name,
+                                     separate_gradients=False,
                                      is_gradient=False,
+                                     gradients=[],
                                      **outs)
 
 
@@ -100,11 +102,11 @@ def cpu_user_operation(inputs,
     }
   name = name if name else "UserOp"
   op_name = op_name if op_name else "Callback"
-  return gen_poputil_ops.ipu_user_read_write_op(
-      inputs,
-      library_path=library_path,
-      op_name=op_name,
-      name=name,
-      is_gradient=False,
-      **outs)
-
+  return gen_poputil_ops.ipu_user_read_write_op(inputs,
+                                                library_path=library_path,
+                                                op_name=op_name,
+                                                name=name,
+                                                separate_gradients=False,
+                                                is_gradient=False,
+                                                gradients=[],
+                                                **outs)

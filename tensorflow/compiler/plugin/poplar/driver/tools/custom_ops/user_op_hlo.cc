@@ -40,17 +40,14 @@ HloUserOpInstruction::HloUserOpInstruction(
 
   // If there is a metadata function, call it to populate the metadata_ struct.
   if (metadata_function_ptr_ != nullptr) {
-    void (*metadataSignature)(
-        std::unordered_set<std::int64_t> & allocating_indices,
-        std::unordered_map<std::int64_t, std::int64_t> & layout_dependencies,
-        std::uint32_t & num_inplace, bool& is_elementwise,
-        std::uint32_t num_inputs);
+    void (*metadataSignature)(std::vector<std::int64_t> & allocating_indices,
+                              std::uint32_t & num_inplace, bool& is_elementwise,
+                              std::uint32_t num_inputs);
 
     metadataSignature =
         reinterpret_cast<decltype(metadataSignature)>(metadata_function_ptr_);
 
-    metadataSignature(metadata_.allocating_indices_,
-                      metadata_.layout_dependencies_, metadata_.num_inplace_,
+    metadataSignature(metadata_.allocating_indices_, metadata_.num_inplace_,
                       metadata_.is_elementwise_, num_inputs_);
   }
 }
@@ -66,10 +63,6 @@ absl::flat_hash_set<int64> HloUserOpInstruction::AllocatingIndices() const {
 absl::flat_hash_map<int64, int64> HloUserOpInstruction::LayoutDependencies()
     const {
   absl::flat_hash_map<int64, int64> map;
-
-  for (auto& pair : metadata_.layout_dependencies_) {
-    map[pair.first] = pair.second;
-  }
   return map;
 }
 

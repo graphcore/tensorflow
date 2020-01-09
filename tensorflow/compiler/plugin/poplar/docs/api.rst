@@ -11,6 +11,10 @@ Python API
   :members:
   :noindex:
 
+.. automodule:: tensorflow.python.ipu.scopes
+  :members:
+  :noindex:
+
 .. automodule:: tensorflow.python.ipu.ipu_infeed_queue
   :members:
   :noindex:
