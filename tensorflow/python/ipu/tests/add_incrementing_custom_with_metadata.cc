@@ -14,13 +14,11 @@ limitations under the License.
 ==============================================================================*/
 
 #include <algorithm>
+#include <vector>
 
 #include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 #include <popops/ElementWise.hpp>
-
-#include <unordered_map>
-#include <unordered_set>
 
 namespace pe = popops::expr;
 
@@ -44,7 +42,8 @@ extern "C" poplar::program::Program Build(
 
 // Custom poplar kernel.
 extern "C" poplar::program::Program Build_grad(
-    poplar::Graph& graph, const std::vector<poplar::Tensor>& gradients,
+    poplar::Graph& graph, int input_grad_index,
+    const std::vector<poplar::Tensor>& gradients,
     const std::vector<poplar::Tensor>& fwd_outputs,
     const std::vector<poplar::Tensor>& fwd_inputs,
     std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
@@ -53,13 +52,11 @@ extern "C" poplar::program::Program Build_grad(
   outputs.resize(gradients.size());
 
   float i = 1.0f;
-  std::transform(
-      gradients.begin(), gradients.end(), outputs.begin(),
-      [&](const poplar::Tensor& input) {
-        seq.add(poplar::program::PrintTensor(std::to_string(i), input));
-        return popops::map(graph, pe::Mul(pe::_1, pe::Const(i++)), {input},
-                           seq);
-      });
+  std::transform(gradients.begin(), gradients.end(), outputs.begin(),
+                 [&](const poplar::Tensor& input) {
+                   return popops::map(graph, pe::Mul(pe::_1, pe::Const(i++)),
+                                      {input}, seq);
+                 });
   return seq;
 }
 
@@ -74,4 +71,28 @@ extern "C" poplar::Tensor Build_allocator(std::uint32_t operand,
                                           const std::vector<size_t>& shape,
                                           poplar::Type type) {
   return poplar::Tensor{};
+}
+
+// An alternative name for the same operation
+extern "C" poplar::program::Program SepGrad(
+    poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
+    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+  return Build(graph, inputs, outputs, debugPrefix);
+}
+
+extern "C" poplar::program::Program SepGrad_grad(
+    poplar::Graph& graph, int input_grad_index,
+    const std::vector<poplar::Tensor>& gradients,
+    const std::vector<poplar::Tensor>& fwd_outputs,
+    const std::vector<poplar::Tensor>& fwd_inputs,
+    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+  poplar::program::Sequence seq;
+
+  outputs.resize(1);
+
+  float i = static_cast<float>(input_grad_index + 1);
+  outputs[0] = popops::map(graph, pe::Mul(pe::_1, pe::Const(i)),
+                           {gradients[input_grad_index]}, seq);
+
+  return seq;
 }

@@ -52,18 +52,41 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
   op_name = op.get_attr("op_name").decode("utf-8")
   gp_path = op.get_attr("gp_path").decode("utf-8")
 
-  outs = {
-      "output_types": [t.dtype for t in op.inputs],
-      "output_shapes": [t.shape for t in op.inputs],
-  }
+  separate_grads = op.get_attr("separate_gradients")
 
-  return gen_poputil_ops.ipu_user_op(list(grads) + list(op.outputs) +
-                                     list(op.inputs),
-                                     library_path=library_path,
-                                     op_name=op_name + "_grad",
-                                     gp_path=gp_path,
-                                     name=op.name + "_grad",
-                                     separate_gradients=False,
-                                     is_gradient=True,
-                                     gradients=[],
-                                     **outs)
+  result = []
+  if separate_grads:
+    for t in enumerate(op.inputs):
+      outs = {
+          "output_types": [t[1].dtype],
+          "output_shapes": [t[1].shape],
+      }
+      o = gen_poputil_ops.ipu_user_op(list(grads) + list(op.outputs) +
+                                      list(op.inputs),
+                                      library_path=library_path,
+                                      op_name=op_name + "_grad",
+                                      gp_path=gp_path,
+                                      name=op.name + "_grad",
+                                      separate_gradients=True,
+                                      is_gradient=True,
+                                      partial_derivative_index=t[0],
+                                      **outs)[0]
+      result.append(o)
+  else:
+    outs = {
+        "output_types": [t.dtype for t in op.inputs],
+        "output_shapes": [t.shape for t in op.inputs],
+    }
+
+    result = gen_poputil_ops.ipu_user_op(list(grads) + list(op.outputs) +
+                                         list(op.inputs),
+                                         library_path=library_path,
+                                         op_name=op_name + "_grad",
+                                         gp_path=gp_path,
+                                         name=op.name + "_grad",
+                                         separate_gradients=False,
+                                         is_gradient=True,
+                                         partial_derivative_index=0,
+                                         **outs)
+
+  return result

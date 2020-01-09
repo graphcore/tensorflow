@@ -62,7 +62,8 @@ class UserOpImpl : public PoplarOpDef {
 
     // Get the function pointer from the HLO.
     poplar::program::Program (*as_function_ptr_gradient)(
-        poplar::Graph&, const std::vector<poplar::Tensor>& gradients_in,
+        poplar::Graph&, int partial_derivative_index,
+        const std::vector<poplar::Tensor>& gradients_in,
         const std::vector<poplar::Tensor>& fwd_outputs,
         const std::vector<poplar::Tensor>& fwd_inputs,
         std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix);
@@ -94,6 +95,11 @@ class UserOpImpl : public PoplarOpDef {
 
     // If this is a user operation we have to copy over all the buffers.
     const bool is_user_read_write = user_op_inst->IsReadWrite();
+
+    // If this op is a gradient and the gradients are separate, then this
+    // is the index of the input for which this grad op is the partial
+    // derivative.
+    const int pdi = user_op_inst->PartialDerivativeIndex();
 
     // We use the instruction name to keep track of which buffers are allocated
     // to which user op.
@@ -211,7 +217,7 @@ class UserOpImpl : public PoplarOpDef {
               FindInstructionInput(tensor_map, res, inst, i, seq, false));
           inputs[i] = in;
         }
-        // Call the user operation and add it to the sequence.s
+        // Call the user operation and add it to the sequence.
         seq.add(as_function_ptr(graph, inputs, outputs, instruction_name));
       } else {
         // There is a gradient for each output and if we are doing the backward
@@ -251,7 +257,7 @@ class UserOpImpl : public PoplarOpDef {
         }
 
         // Call the user operation and add it to the sequence.
-        seq.add(as_function_ptr_gradient(graph, gradients, previous_inputs,
+        seq.add(as_function_ptr_gradient(graph, pdi, gradients, previous_inputs,
                                          previous_outputs, outputs,
                                          GetDebugName(inst)));
       }

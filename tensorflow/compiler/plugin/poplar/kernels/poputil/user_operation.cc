@@ -108,6 +108,10 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(context, context->GetAttr("op_name", &op_name));
 
     OP_REQUIRES_OK(context, context->GetAttr("is_gradient", &is_gradient));
+
+    OP_REQUIRES_OK(context,
+                   context->GetAttr("partial_derivative_index", &pd_index));
+
     XlaShapesFromAttr(context, output_shape);
   }
 
@@ -130,15 +134,18 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
     // Initialize the symbols which are common to all types of user op.
     int64 fn_ptr = GetSymbolAddressAsInt64(library, op_name);
     if (fn_ptr == 0) {
-      OP_REQUIRES_OK(context,
-                     errors::InvalidArgument("Couldn't read " + op_name +
-                                             " symbol from library"));
+      OP_REQUIRES_OK(context, errors::InvalidArgument(
+                                  "Couldn't read " + op_name +
+                                  " symbol from library " + library_path));
     }
-    attribute_map_.AddAttribute("is_gradient", is_gradient);
+
     attribute_map_.AddAttribute("operation_fn", fn_ptr);
   }
 
   void CreateCustomCall(XlaOpKernelContext* context) {
+    GetAttrMap().AddAttribute("is_gradient", is_gradient);
+    GetAttrMap().AddAttribute("partial_derivative_index", pd_index);
+
     const size_t num_inputs = context->num_inputs();
 
     // Create the input tuple.
@@ -177,6 +184,8 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
   std::vector<xla::Shape> output_shape;
 
   bool is_gradient;
+
+  int pd_index;
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOpBase);
