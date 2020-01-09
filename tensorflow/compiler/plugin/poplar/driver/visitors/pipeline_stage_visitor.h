@@ -38,6 +38,13 @@ class PipelineStageVisitor : public InplaceSubComputationVisitor {
   // returns for which output (flat_index) tensors we need to add copies.
   StatusOr<std::vector<bool>> GetOutputCopies(const HloInstruction* inst,
                                               bool used_for_recomputation);
+
+  poplar::program::Sequence GetSequence() const override;
+
+ private:
+  // Caching fields for the GetSequence call
+  mutable bool has_function_ = false;
+  mutable poplar::Function function_;
 };
 
 }  // namespace poplarplugin

@@ -67,5 +67,15 @@ StatusOr<std::vector<bool>> PipelineStageVisitor::GetOutputCopies(
   return result;
 }
 
+poplar::program::Sequence PipelineStageVisitor::GetSequence() const {
+  if (!has_function_) {
+    poplar::program::Sequence seq = InplaceSubComputationVisitor::GetSequence();
+    function_ = GetMasterGraph(resources_).addFunction(seq);
+  }
+  has_function_ = true;
+
+  return poplar::program::Sequence(poplar::program::Call(function_));
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
