@@ -56,10 +56,14 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
       lib_path = cwd + "/tensorflow/python/ipu/libadd_incrementing_custom.so"
 
       def my_net(x, y, z):
-        x = ipu.custom_ops.precompiled_user_op([x, y, z],
-                                               lib_path,
-                                               outs=outputs)
-        return x
+        o1 = ipu.custom_ops.precompiled_user_op([x, y, z],
+                                                lib_path,
+                                                outs=outputs)
+
+        o2 = ipu.custom_ops.precompiled_user_op([x + 1., y + 1., z + 1.],
+                                                lib_path,
+                                                outs=outputs)
+        return o1, o2
 
       with ipu.scopes.ipu_scope('/device:IPU:0'):
         x = array_ops.placeholder(np.float32, shape=[20])
@@ -75,9 +79,63 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
           z: np.ones([10])
       })
 
-      self.assertAllEqual(np.full([20], 2.0), res[0])
-      self.assertAllEqual(np.full([5, 2], 3.0), res[1])
-      self.assertAllEqual(np.full([10], 4.0), res[2])
+      self.assertAllEqual(np.full([20], 2.0), res[0][0])
+      self.assertAllEqual(np.full([5, 2], 3.0), res[0][1])
+      self.assertAllEqual(np.full([10], 4.0), res[0][2])
+      self.assertAllEqual(np.full([20], 3.0), res[1][0])
+      self.assertAllEqual(np.full([5, 2], 4.0), res[1][1])
+      self.assertAllEqual(np.full([10], 5.0), res[1][2])
+
+  @test_util.deprecated_graph_mode_only
+  def testUserOpWithAllocate(self):
+    with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32],
+          "output_shapes": [tensor_shape.TensorShape([128])],
+      }
+
+      lib_path = os.path.join(
+          cwd,
+          "tensorflow/python/ipu/libadd_incrementing_custom_with_metadata.so")
+
+      def my_net(x, y):
+        x = ipu.custom_ops.precompiled_user_op([x, y],
+                                               lib_path,
+                                               op_name="AllocTest",
+                                               outs=outputs)
+        return x
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[128])
+        y = array_ops.placeholder(np.float32, shape=[128])
+
+        model = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      sess.run(variables.global_variables_initializer())
+      res = sess.run(model, {
+          x: np.ones([128]),
+          y: np.ones([128]),
+      })
+
+      report.parse_log()
+
+      found = 0
+      for t in report.get_tensor_map().all_tensors():
+        if t.inst == "arg0.1":
+          # Allocator maps all of input 0 to tile 0
+          self.assertAllEqual(t.tile_ids(), [0])
+          found = found + 1
+        if t.inst == "arg1.2":
+          # Allocator leaves input 1 to be linearly mapped
+          self.assertAllEqual(t.tile_ids(), [0, 1, 2, 3])
+          found = found + 1
+
+      self.assertAllEqual(found, 2)
+      self.assertAllEqual(np.full([128], 2.0), res[0])
 
   @test_util.deprecated_graph_mode_only
   def testUserOpBackwards(self):
