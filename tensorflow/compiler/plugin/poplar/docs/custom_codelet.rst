@@ -48,11 +48,11 @@ The arguments are:
   the TensorFlow graph.
 
 If the operation can have its gradient taken, then the shared object can
-contain a separate function with the same name as the forward pass builder. By
-default the gradient of the forward operation will be given the same name as
-the foward operation with `_grad` appended.  The signature of the builder
-function is slightly different, as it takes the forward pass outputs and
-inputs as arguments, as well as the gradient outputs.
+contain a separate function with the same name as the forward pass builder.
+The funnction must be given the same name as the foward operation with `_grad`
+appended.  The signature of the builder function is slightly different, as it
+takes the forward pass outputs and inputs as arguments, as well as the
+gradient outputs.
 
 .. code-block:: cpp
 
@@ -68,7 +68,7 @@ inputs as arguments, as well as the gradient outputs.
 The arguments are:
 
 :graph: the poplar graph into which to add tensors and vertices.
-:input_grad_index: The index of the input for this this operation is producing
+:input_grad_index: The index of the input for which this op is producing
                    the partial derivative.  If the gradient operation
                    calculates all of the partial derivatives, then this input
                    should be ignored.
@@ -81,8 +81,11 @@ The arguments are:
           differentiable can have an null Poplar tensor.
 :debug_prefix: the name of the operation.
 
+Metadata
+________
+
 The shared object file can optionally contain an undecorated symbol that is
-the same as the builder function with a `_metadata` appended.  This function
+the same as the builder function with `_metadata` appended.  This function
 must have the following signature:
 
 .. code-block:: cpp
@@ -92,21 +95,22 @@ must have the following signature:
     std::uint32_t& num_inplace, bool& is_elementwise,
     std::uint32_t num_inputs)
 
-The arguments are all reference types to be filled in by the function.  They
-are:
+The arguments are:
 
-:allocating_indices: use to indicate which of the inputs should be allocated
+:allocating_indices: indicates which of the inputs should be allocated
                      using the tensor allocation function.  See the
                      description in the `Tensor allocation` section below.
 :num_inplace: indicates the number of inputs which are 'in place'.  The first
               `num_inplace` of the inputs will be considered to be in-place.
 :is_elementwise: indicates that this operation is element-wise.
-:num_inputs: indicates how many inputs are on the operation. Typically this
-             will be set to the actual number of inputs to the op.
+:num_inputs: indicates how many inputs are on the operation.
+
+The function should fill in the values of the first three arguments, which
+are all reference types.
 
 
 In place operations
-~~~~~~~~~~~~~~~~~~~
+___________________
 
 If an operation does an in-place modification of an input tensor, as
 opposed to creating a new output tensor, then the `num_inplace` can be
@@ -119,7 +123,7 @@ it.  If it is modified then other operations which consume it may see an
 incorrect value on their input.
 
 Elementwise operations
-~~~~~~~~~~~~~~~~~~~~~~
+______________________
 
 The IPU driver can do a better job of allocating the layout of Poplar tensors
 if it can associate them with specific operations.  If the output of an
@@ -130,11 +134,11 @@ Typically the graph building code for the operation will clone the input in
 order to generate the output Poplar tensor.
 
 Tensor allocation
-~~~~~~~~~~~~~~~~~
+_________________
 
 When generating the Poplar graph, sometimes the backend has the freedom to
 allocate an input to an operation.  This happens when an input to an op is
-also the input to the graph, or when all previous operations do not put
+also the input to the graph, or when previous operations do not put
 constraints on the input tensor.
 
 If this condition occurs, then by default the backend will create the Poplar
@@ -159,17 +163,17 @@ The arguments are:
 
 
 Gradient operations
-~~~~~~~~~~~~~~~~~~~
+___________________
 
 As described above, when the gradient of the forward operation is generated,
 either a single op, or multiple operations can be inserted into the graph.
 
 The parameter `separate_gradients` on the `precompiled_user_op` function
 allows the developer to select which of the two options are required.  The
-compiled code must match this setting however.
+compiled code must match this setting.
 
 If the `separate_gradients` parameter is set to False, then the compiled
-function for generaing the gradient operation should fill in one output
+function for generating the gradient operation should fill in one output
 for each of the inputs of the forward pass function.  Each output should be
 the partial derivative with respect to one of the inputs.
 
@@ -181,7 +185,7 @@ The specific input will be given by the `input_grad_index` input of the call
 to the sharded object `Build_grad` function.
 
 Example
-~~~~~~~
+_______
 
 This example shows the source file for a rotate op, which takes three vectors
 and rotates the `x` and `y` ones by the `angle` one.
