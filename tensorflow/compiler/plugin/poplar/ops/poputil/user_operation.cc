@@ -28,7 +28,9 @@ REGISTER_OP("IpuUserOp")
     .Attr("library_path: string")
     .Attr("op_name: string")
     .Attr("gp_path: string")
+    .Attr("separate_gradients: bool")
     .Attr("is_gradient: bool")
+    .Attr("gradients: list(int)")
     // We don't know what the user is going to do.
     .SetIsStateful()
 
@@ -50,7 +52,15 @@ REGISTER_OP("IpuUserOp")
         output_types: The type of each tuple element output
         library_path: The path to the shared library containing
             the operation.
+        op_name: The name of the prefix in the shared object for the
+            building/metadata functions.
         gp_path (optional): Path to the gp file if provided.
+        separate_gradients: When true, generating the partial derivatives will
+            create one grad op per input.  When false, one grad op will be
+            created that should generate all partial derivatives.
+        is_gradient: when true, this is the gradient form of the op.
+        gradients: the list of inputs for which the op should produce
+            gradients w.r.t. the outputs.
     )doc");
 
 REGISTER_OP("IpuUserReadWriteOp")
@@ -61,7 +71,9 @@ REGISTER_OP("IpuUserReadWriteOp")
     .Attr("output_shapes: list(shape) >= 0")
     .Attr("library_path: string")
     .Attr("op_name: string")
+    .Attr("separate_gradients: bool")
     .Attr("is_gradient: bool")
+    .Attr("gradients: list(int)")
     // We don't know what the user is going to do.
     .SetIsStateful()
 
@@ -83,6 +95,15 @@ REGISTER_OP("IpuUserReadWriteOp")
         output_types: The type of each tuple element output
         library_path: The path to the shared library containing
             the operation.
+        op_name: The name of the prefix in the shared object for the
+            building/metadata functions.
+        separate_gradients: When true, generating the partial derivatives will
+            create one grad op per input.  When false, one grad op will be
+            created that should generate all partial derivatives.
+        is_gradient: when true, this is the gradient form of the op.
+        gradients: the list of inputs for which the op should produce
+            gradients w.r.t. the outputs.
+
     )doc");
 
 }  // namespace tensorflow

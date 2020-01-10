@@ -63,5 +63,7 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
                                      op_name=op_name + "_grad",
                                      gp_path=gp_path,
                                      name=op.name + "_grad",
+                                     separate_gradients=False,
                                      is_gradient=True,
+                                     gradients=[],
                                      **outs)

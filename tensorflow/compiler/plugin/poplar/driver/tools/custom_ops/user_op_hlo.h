@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_DROPOUT_H
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_DROPOUT_H
 
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
 namespace xla {
@@ -73,12 +75,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   struct MetadataStructure {
     MetadataStructure()
-        : allocating_indices_({}),
-          layout_dependencies_({}),
-          num_inplace_(0),
-          is_elementwise_(false) {}
-    std::unordered_set<std::int64_t> allocating_indices_;
-    std::unordered_map<std::int64_t, std::int64_t> layout_dependencies_;
+        : allocating_indices_({}), num_inplace_(0), is_elementwise_(false) {}
+    std::vector<std::int64_t> allocating_indices_;
     std::uint32_t num_inplace_;
     bool is_elementwise_;
   };

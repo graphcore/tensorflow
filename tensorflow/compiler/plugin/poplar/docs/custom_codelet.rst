@@ -1,32 +1,41 @@
 Custom IPU operations
 ---------------------
 
-There are two mechanisms for providing custom operations to the IPU through the
-TensorFlow interface.  The first allows a fully custom codelet and host build
-file.  The second allows a custom fused elementwise arithmetic operation.
+There are three mechanisms for providing custom operations to the IPU through
+the TensorFlow interface.  The first allows a fully custom codelet and host
+build file.
 
-In both of these cases, the gradient creation in the Optimizers will not
-produce a gradient operation for the custom operation.
+The second allows a custom operation which is executed on the CPU.
 
-Fully customized operations
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The third allows a custom fused elementwise arithmetic operation. In this last
+case, the gradient creation in the Optimizers will not produce a gradient
+operation for the custom operation.
+
+Fully customized IPU operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A user can provide a custom operation that can be compiled into the Poplar
 executable and run on the IPU hardware.  The user must provide a host side
-shard object library which implements the action of adding vertices to a
+shared object library that implements the action of adding vertices to a
 Poplar Graph, given some Poplar Tensor inputs.  They can optionally provide
 a Poplar `GP` file containing one or more codelets.
 
-The shared object file must contain an undecorated symbol `Build`, which should
-be declared as below.  It should add vertices to the graph that perform the
-custom operation.
+These operations are added with `ipu.user_ops.precompiled_user_op`. More
+information about this can be found in the :ref:`api-section`.  An example of
+this can be found below.
+
+The shared object file must contain an undecorated symbol, that should be
+declared as below.  It should add vertices to the graph that perform the
+custom operation.  The name of the symbol should match the name of the
+operation in the graph.  By default these types of operations are called
+`Build`.
 
 .. code-block:: cpp
 
   extern "C"
   poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string &debugPrefix)
+    std::vector<poplar::Tensor>& outputs, const std::string &debug_prefix)
 
 The arguments are:
 
@@ -34,20 +43,117 @@ The arguments are:
 :inputs: a vector of poplar tensors which are inputs to the operation.
 :outputs: a vector into which to store the outputs of the operation. The
   vector will contain zero entries when the `Build` function is called.
-:debugPrefix:
+:debug_prefix:
   the debug name that has been given to the operation in
   the TensorFlow graph.
 
-The shared object file can optionally contain an undecorated symbol
-`IsElementWise`, which indicates whether the custom operation is element-wise.
-If an operation takes one or more tensors of the same shape, and performs an
-expression on only corresponding elements in the input tensors,  and produces
-a tensor of the same shape, then it is elementwise.
+If the operation can have its gradient taken, then the shared object can
+contain a separate function with the same name as the forward pass builder. By
+default the gradient of the forward operation will be given the same name as
+the foward operation with `_grad` appended.  The signature of the builder
+function is slightly different, as it takes the forward pass outputs and
+inputs as arguments, as well as the gradient outputs.
 
 .. code-block:: cpp
 
-  extern "C" bool IsElementWise()
+  extern "C"
+  poplar::program::Program Build_grad(
+      poplar::Graph& graph, const std::vector<poplar::Tensor>& gradients,
+      const std::vector<poplar::Tensor>& fwd_outputs,
+      const std::vector<poplar::Tensor>& fwd_inputs,
+      std::vector<poplar::Tensor>& outputs, const std::string& debug_prefix)
 
+The arguments are:
+
+:graph: the poplar graph into which to add tensors and vertices.
+:gradients: the inputs to the gradient op, from the previous gradient op
+            or loss.
+:fwd_outputs: the tensors which are the outputs of the forward operation.
+:fwd_inputs: the tensors which are the inputs to the forward operation.
+:outputs: the outputs of this gradient operation. There must be one per
+          input of the original forward operation.  Inputs which are not
+          differentiable can have an null Poplar tensor.
+:debug_prefix: the name of the operation.
+
+The shared object file can optionally contain an undecorated symbol that is
+the same as the builder function with a `_metadata` appended.  This function
+must have the following signature:
+
+.. code-block:: cpp
+
+  extern "C"
+  void Build_metadata(std::vector<std::int64_t>& allocating_indices,
+    std::uint32_t& num_inplace, bool& is_elementwise,
+    std::uint32_t num_inputs)
+
+The arguments are all reference types to be filled in by the function.  They
+are:
+
+:allocating_indices: use to indicate which of the inputs should be allocated
+                     using the tensor allocation function.  See the
+                     description in the `Tensor allocation` section below.
+:num_inplace: indicates the number of inputs which are 'in place'.  The first
+              `num_inplace` of the inputs will be considered to be in-place.
+:is_elementwise: indicates that this operation is element-wise.
+:num_inputs: indicates how many inputs are on the operation. Typically this
+             will be set to the actual number of inputs to the op.
+
+
+In place operations
+~~~~~~~~~~~~~~~~~~~
+
+If an operation does an in-place modification of an input tensor, as
+opposed to creating a new output tensor, then the `num_inplace` can be
+used to indicate that this is the case.  The system will ensure that when
+a tensor is updated in place, that any other uses of that tensor will be
+complete before the operation is run.
+
+If a tensor is not marked as `in place` then the operation must not modify
+it.  If it is modified then other operations which consume it may see an
+incorrect value on their input.
+
+Elementwise operations
+~~~~~~~~~~~~~~~~~~~~~~
+
+The IPU driver can do a better job of allocating the layout of Poplar tensors
+if it can associate them with specific operations.  If the output of an
+operation is the same shape and layout as its first input, then it should be
+marked as elementwise.
+
+Typically the graph building code for the operation will clone the input in
+order to generate the output Poplar tensor.
+
+Tensor allocation
+~~~~~~~~~~~~~~~~~
+
+When generating the Poplar graph, sometimes the backend has the freedom to
+allocate an input to an operation.  This happens when an input to an op is
+also the input to the graph, or when all previous operations do not put
+constraints on the input tensor.
+
+If this condition occurs, then by default the backend will create the Poplar
+tensor with linear mapping.  See the section on tile mapping in the Poplar
+API guide.
+
+To override this behaviour and allocate a tensor using a specific layout
+mapping, the custom operation can provide a function with the following
+signature:
+
+.. code-block:: cpp
+
+  extern "C" poplar::Tensor Build_allocator(
+    std::uint32_t operand,  const std::vector<size_t>& shape,
+    poplar::Type type)
+
+The arguments are:
+
+:operand: the operand number of the input to allocate.
+:shape: the shape of the tensor.
+:type: the Poplar data type for the tensor.
+
+
+Example
+~~~~~~~
 
 This example shows the source file for a rotate op, which takes three vectors
 and rotates the `x` and `y` ones by the `angle` one.
@@ -62,16 +168,21 @@ This is an example of it in use:
 
 .. literalinclude:: tutorial_custom_codelet.py
 
-When compiling the host-size shared object file, it is not necessary to include
-or link against any TensorFlow header or library files.  Only the Poplar
-headers and link libraries should be necessary.
+When compiling the host-size shared object file, it is not necessary to
+include or link against any TensorFlow header or library files.  Only the
+Poplar headers and link libraries should be necessary.
+
+Fully customized CPU operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TBD
 
 Custom elementwise expressions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The python class `ipu.custom_ops.codelet_expression_op` provides an interface
-for giving a custom fused expression to the compiler.  This will be encoded into
-a single compute set.
+for giving a custom fused expression to the compiler.  This will be encoded
+into a single compute set.
 
 The arguments to the python function are a callable python function which
 encodes the arithmetic expression, and the tensor arguments to the operation.
@@ -86,8 +197,8 @@ For instance:
   ipu.custom_ops.codelet_expression_op(my_custom_op, a, b, c)
 
 In this example, the python function `my_custom_op` provides the expression,
-and the arguments `a`, `b` and `c` are the three inputs from other parts of the
-TensorFlow graph.
+and the arguments `a`, `b` and `c` are the three inputs from other parts of
+the TensorFlow graph.
 
 Python operators which are supported in the function are `+`, `-`, `*`, and
 `abs`.
