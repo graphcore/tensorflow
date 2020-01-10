@@ -28,6 +28,7 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   explicit HloUserOpInstruction(absl::Span<HloInstruction* const> operands,
                                 const Shape& shape, const std::string& gp_path,
                                 void*, void*, void*, bool is_gradient,
+                                int partial_derivative_index,
                                 bool is_user_read_write);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
@@ -42,9 +43,11 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   void* GetAllocatorFunc() const { return allocator_function_ptr_; }
 
-  const std::string& GetPath() const { return gp_path; }
+  const std::string& GetPath() const { return gp_path_; }
 
   bool IsGradient() const { return is_gradient_; }
+
+  int PartialDerivativeIndex() const { return partial_derivative_index_; }
 
   bool IsReadWrite() const { return is_user_read_write_; }
 
@@ -71,7 +74,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   // The number of inputs to this operation.
   size_t num_inputs_;
 
-  std::string gp_path;
+  // The path to the codelet GP file
+  std::string gp_path_;
 
   struct MetadataStructure {
     MetadataStructure()
@@ -83,7 +87,13 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   MetadataStructure metadata_;
 
+  // When true, this is a gradient operation, rather than a forward pass
+  // operation.
   bool is_gradient_;
+
+  // If this is a grad function, and it is the partial derivative for only one
+  // input, then this is the index of that input.
+  int partial_derivative_index_;
 
   // Is this a read/write user op. That is an operation which streams the
   // tensors to host, executes some processing, then streams the outputs back.
@@ -93,7 +103,7 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> operands, const Shape& shape,
     const std::string& gp_path, void*, void*, void*, bool is_gradient,
-    bool is_user_read_write);
+    int partial_derivative_index, bool is_user_read_write);
 
 }  // namespace poplarplugin
 }  // namespace xla
