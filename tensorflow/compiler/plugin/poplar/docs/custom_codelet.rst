@@ -49,7 +49,7 @@ The arguments are:
 
 If the operation can have its gradient taken, then the shared object can
 contain a separate function with the same name as the forward pass builder.
-The funnction must be given the same name as the foward operation with `_grad`
+The function must be given the same name as the forward operation with `_grad`
 appended.  The signature of the builder function is slightly different, as it
 takes the forward pass outputs and inputs as arguments, as well as the
 gradient outputs.
@@ -152,11 +152,13 @@ signature:
 .. code-block:: cpp
 
   extern "C" poplar::Tensor Build_allocator(
-    std::uint32_t operand,  const std::vector<size_t>& shape,
-    poplar::Type type)
+    poplar::Graph& graph, std::uint32_t operand,
+    const std::vector<size_t>& shape, poplar::Type type,
+    const std::string& debug_prefix)
 
 The arguments are:
 
+:graph: the Poplar graph where the tensor should be created.
 :operand: the operand number of the input to allocate.
 :shape: the shape of the tensor.
 :type: the Poplar data type for the tensor.

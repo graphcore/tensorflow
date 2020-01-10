@@ -67,7 +67,8 @@ extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
   is_elementwise = num_inputs < 2;
 }
 
-extern "C" poplar::Tensor Build_allocator(std::uint32_t operand,
+extern "C" poplar::Tensor Build_allocator(poplar::Graph& graph,
+                                          std::uint32_t operand,
                                           const std::vector<size_t>& shape,
                                           poplar::Type type) {
   return poplar::Tensor{};
@@ -95,4 +96,35 @@ extern "C" poplar::program::Program SepGrad_grad(
                            {gradients[input_grad_index]}, seq);
 
   return seq;
+}
+
+// Custom poplar Add kernel with allocator
+extern "C" poplar::program::Program AllocTest(
+    poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
+    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+  poplar::program::Sequence seq;
+
+  outputs.resize(1);
+
+  outputs[0] =
+      popops::map(graph, pe::Add(pe::_1, pe::_2), {inputs[0], inputs[1]}, seq);
+  return seq;
+}
+
+extern "C" void AllocTest_metadata(
+    std::vector<std::int64_t>& allocating_indices, std::uint32_t& num_inplace,
+    bool& is_elementwise, std::uint32_t num_inputs) {
+  allocating_indices.push_back(0);
+  num_inplace = 0;
+  is_elementwise = false;
+}
+
+extern "C" poplar::Tensor AllocTest_allocator(poplar::Graph& graph,
+                                              std::uint32_t operand,
+                                              const std::vector<size_t>& shape,
+                                              poplar::Type type,
+                                              const std::string& debugPrefix) {
+  auto t = graph.addVariable(type, shape);
+  graph.setTileMapping(t, 0);
+  return t;
 }

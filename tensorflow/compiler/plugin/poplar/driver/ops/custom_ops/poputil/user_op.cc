@@ -27,7 +27,6 @@ limitations under the License.
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_split.h"
 
 #include <poputil/TileMapping.hpp>
 
@@ -292,12 +291,14 @@ class UserOpImpl : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape));
 
     // Convert into a function pointer.
-    poplar::Tensor (*allocatorSig)(
-        std::int64_t, const std::vector<std::size_t>&, poplar::Type);
+    poplar::Tensor (*allocatorSig)(poplar::Graph&, std::int64_t,
+                                   const std::vector<std::size_t>&,
+                                   poplar::Type, const std::string&);
     allocatorSig = reinterpret_cast<decltype(allocatorSig)>(allocator_func);
 
     // Return the tensor via user specified function.
-    return allocatorSig(input_index, poplar_shape, poplar_type);
+    return allocatorSig(graph, input_index, poplar_shape, poplar_type,
+                        absl::StrCat(GetDebugName(inst), ":", input_index));
   }
 };
 
