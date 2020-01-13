@@ -19,6 +19,7 @@ limitations under the License.
 #include <atomic>
 #include <bitset>
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <vector>
 

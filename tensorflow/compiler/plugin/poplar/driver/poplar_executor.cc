@@ -43,6 +43,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conversions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
@@ -56,7 +57,6 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/dma_helper.h"
 #include "tensorflow/core/framework/dataset.h"
-#include "tensorflow/core/framework/function_handle_cache.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/io/path.h"
 #include "tensorflow/core/lib/strings/proto_serialization.h"
@@ -268,40 +268,6 @@ PoplarExecutor::TensorControl::~TensorControl() {
   tensorflow::port::AlignedFree(data);
 }
 
-PoplarExecutor::InfeedDatasetIterator::InfeedDatasetIterator(
-    int64 replication_factor,
-    std::unique_ptr<tensorflow::FunctionLibraryDefinition> flib_def,
-    std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime> process_flib,
-    std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache,
-    std::unique_ptr<tensorflow::data::IteratorBase> iterator,
-    std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx,
-    const std::vector<xla::Shape>& shapes)
-    : flib_def(std::move(flib_def)),
-      process_flib(std::move(process_flib)),
-      handle_cache(std::move(handle_cache)),
-      iterator(std::move(iterator)),
-      iterator_ctx(std::move(iterator_ctx)),
-      shapes(std::move(shapes)),
-      tensor_queues(shapes.size()) {
-  // Function applied after we evict a buffer from the queue.
-  auto post_apply = [](tensorflow::TensorBuffer*& buffer) {
-    if (buffer) {
-      buffer->Unref();
-      buffer = nullptr;
-    }
-  };
-
-  // Set up the queue per tensor per replica.
-  replication_factor = std::max<int64>(replication_factor, 1);
-  for (uint64 i = 0; i < shapes.size(); i++) {
-    for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
-      void* ptr = tensorflow::port::AlignedMalloc(sizeof(InfeedQueueType), 64);
-      tensor_queues[i].emplace_back(new (ptr)
-                                        InfeedQueueType(nullptr, post_apply));
-    }
-  }
-}
-
 PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
     : config(outfeed_info.config),
       shapes(GetOutfeedShapes(FlattenedXlaShape(outfeed_info.shape),
@@ -453,7 +419,7 @@ Status PoplarExecutor::ConnectRecvCallbacksToRendezvous(
 namespace {
 class InfeedPrefetchCallback : public poplar::StreamCallback {
  public:
-  InfeedPrefetchCallback(InfeedQueueType* queue, uint64 num_bytes)
+  InfeedPrefetchCallback(InfeedQueue* queue, uint64 num_bytes)
       : queue_(queue), num_bytes_(num_bytes) {}
 
   poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
@@ -476,7 +442,7 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
   void complete() noexcept override { queue_->AdvanceReadPosition(); }
 
  private:
-  InfeedQueueType* queue_;
+  InfeedQueue* queue_;
   const uint64 num_bytes_;
 };
 
@@ -524,27 +490,29 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
   }
 
   for (const auto& infeed_info : infeed_infos) {
-    auto itr = infeed_dataset_iterators_.find(infeed_info.config.feed_id());
-    if (itr == infeed_dataset_iterators_.end()) {
+    auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
+    if (itr == infeed_iterators_.end()) {
       LOG(FATAL) << "Trying to access an infeed dataset iterator which has not "
                     "been created."
                  << " Did you initialize the infeed_queue?";
     }
     auto* infeed_dataset_iterator = itr->second.get();
-    size_t tensor_count = infeed_dataset_iterator->shapes.size();
-    for (size_t j = 0; j < tensor_count; ++j) {
-      auto length = ShapeUtil::ByteSizeOf(infeed_dataset_iterator->shapes[j]);
+    auto& shapes = infeed_dataset_iterator->GetShapes();
+    auto& queues = infeed_dataset_iterator->GetInfeedQueues();
+
+    for (size_t j = 0; j < shapes.size(); ++j) {
+      auto length = ShapeUtil::ByteSizeOf(shapes[j]);
       auto bytes_per_replica = length / current_replication_factor_;
       for (auto replica_id = 0; replica_id < current_replication_factor_;
            ++replica_id) {
-        auto& queue = infeed_dataset_iterator->tensor_queues[j][replica_id];
+        auto& queue = queues[j][replica_id];
         std::unique_ptr<poplar::StreamCallback> infeed_callback;
         if (PoplarXlaFlags::Get().null_data_feed) {
           infeed_callback = absl::make_unique<NullPrefetchCallback>(
               GetInfeedAllocator(), bytes_per_replica);
         } else {
           infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
-              queue.get(), bytes_per_replica);
+              queue, bytes_per_replica);
         }
         current_engine_->connectStreamToCallback(
             GetInfeedCopyHandle(infeed_info.stream_prefix, j), replica_id,
@@ -596,35 +564,35 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
 IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
     const FeedInfo& infeed_info) {
   // Find the iterator.
-  auto itr = infeed_dataset_iterators_.find(infeed_info.config.feed_id());
-  if (itr == infeed_dataset_iterators_.end()) {
+  auto itr = infeed_iterators_.find(infeed_info.config.feed_id());
+  if (itr == infeed_iterators_.end()) {
     LOG(FATAL)
         << "Trying to access an infeed context which has not been created."
         << " Did you initialize the infeed_queue?";
   }
-  InfeedDatasetIterator* infeed_dataset_iterator = itr->second.get();
+  InfeedIterator* infeed_dataset_iterator = itr->second.get();
 
   return [this, infeed_dataset_iterator](std::atomic<bool>& cancelled) {
+    auto& infeed_queues = infeed_dataset_iterator->GetInfeedQueues();
     while (!cancelled) {
       // We do not call GetNext if queues are full.
       // We make an assumption that all tensors from each queue for each
       // replica for an infeed are dequeued every iteration - we therefore
       // only need to check if the first queue is full to know whether all the
       // queues are full.
-      if (infeed_dataset_iterator->tensor_queues[0][0]->IsFull()) {
+      if (infeed_queues[0][0]->IsFull()) {
         VLOG(1) << "Infeed queue is full.";
         continue;
       }
 
-      if (infeed_dataset_iterator->tensor_queues[0][0]->IsEmpty()) {
+      if (infeed_queues[0][0]->IsEmpty()) {
         VLOG(1) << "Infeed queue is empty.";
       }
 
-      bool end_of_sequence = false;
       std::vector<tensorflow::Tensor> outputs;
-      TF_RETURN_IF_ERROR(infeed_dataset_iterator->iterator->GetNext(
-          infeed_dataset_iterator->iterator_ctx.get(), &outputs,
-          &end_of_sequence));
+      bool end_of_sequence = false;
+      TF_RETURN_IF_ERROR(
+          infeed_dataset_iterator->GetNext(&outputs, &end_of_sequence));
 
       if (end_of_sequence) {
         return tensorflow::errors::OutOfRange(
@@ -652,7 +620,7 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
         // Enqueue tensors to each replica.
         for (size_t replica_id = 0; replica_id < tensor_slices.size();
              replica_id++) {
-          auto& queue = infeed_dataset_iterator->tensor_queues[j][replica_id];
+          auto& queue = infeed_queues[j][replica_id];
           auto* tb = tensorflow::DMAHelper::buffer(&tensor_slices[replica_id]);
           tb->Ref();
           queue->BlockPush(tb);
@@ -2067,30 +2035,25 @@ poplar::DeviceManager& PoplarExecutor::GetDeviceManager() {
   return device_mgr;
 }
 
-void PoplarExecutor::CreateInfeedDatasetIterator(
-    const PoplarFeedConfig& feed_config,
-    std::unique_ptr<tensorflow::FunctionLibraryDefinition>& flib_def,
-    std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime>& process_lib,
-    std::unique_ptr<tensorflow::data::FunctionHandleCache>& handle_cache,
-    std::unique_ptr<tensorflow::data::IteratorBase>& iterator,
-    std::unique_ptr<tensorflow::data::IteratorContext>& iterator_ctx,
-    const std::vector<xla::Shape>& shapes) {
-  auto& feed_id = feed_config.feed_id();
-  if (infeed_dataset_iterators_.contains(feed_id)) {
+void PoplarExecutor::CreateInfeedIterator(
+    const PoplarFeedConfig& config, const std::vector<xla::Shape>& shapes,
+    const tensorflow::data::IteratorContext::Params& params,
+    tensorflow::FunctionLibraryRuntime* flr,
+    tensorflow::data::DatasetBase* dataset) {
+  auto& feed_id = config.feed_id();
+  if (infeed_iterators_.contains(feed_id)) {
     LOG(FATAL) << "Infeed with id='" << feed_id
                << "' already exists. Consider changing the `feed_name` in "
                   "IPUInfeedQueue. The Poplar backend requires all infeeds in "
                   "the same TensorFlow device to have unique names.";
   } else {
-    infeed_dataset_iterators_[feed_id] =
-        absl::make_unique<InfeedDatasetIterator>(
-            feed_config.replication_factor(), std::move(flib_def),
-            std::move(process_lib), std::move(handle_cache),
-            std::move(iterator), std::move(iterator_ctx), shapes);
+    infeed_iterators_[feed_id] = absl::make_unique<InfeedIterator>(
+        flr, params, dataset, cancellation_manager(), GetInfeedAllocator(),
+        config.replication_factor(), shapes, feed_id);
   }
 }
 
-Status PoplarExecutor::DeleteInfeedDatasetIterator(const std::string& feed_id) {
+Status PoplarExecutor::DeleteInfeedIterator(const std::string& feed_id) {
   std::lock_guard<std::recursive_mutex> l(ipu_.Mutex());
 
   if (io_threads_.size()) {
@@ -2098,7 +2061,7 @@ Status PoplarExecutor::DeleteInfeedDatasetIterator(const std::string& feed_id) {
         "Cannot delete infeed with id='%s' while in use", feed_id.c_str());
   }
 
-  const auto num_erased = infeed_dataset_iterators_.erase(feed_id);
+  const auto num_erased = infeed_iterators_.erase(feed_id);
   if (num_erased == 0) {
     return xla::NotFound(
         "Infeed with id='%s'. Make sure that you have run the initializer "

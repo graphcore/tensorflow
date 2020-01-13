@@ -60,6 +60,10 @@ absl::flat_hash_map<std::string, std::string> GetFlagUsage() {
        "The maximum number of threads Poplar should use during compilation of "
        "the graph. Negative value allows Poplar to pick the number of threads "
        "automatically. (int=-1)"},
+      {"max_infeed_threads",
+       "The maximum number of threads which each infeed queue is allowed to "
+       "use when accessing data from datasets. Negative value allows the "
+       "infeed to automatically pick the number of threads. (int=-1)"},
       {"save_vertex_graph",
        "Path to a directory where the Poplar vertex graphs should be saved to. "
        "(path)"},
@@ -105,6 +109,7 @@ PoplarXlaFlags::PoplarXlaFlags() {
     ADD_FLAG(log_cycle_count)
     ADD_FLAG(while_loop_brute_force_max_trip_count)
     ADD_FLAG(max_compilation_threads)
+    ADD_FLAG(max_infeed_threads)
     ADD_FLAG(save_vertex_graph)
     ADD_FLAG(save_interval_report)
     ADD_FLAG(executable_cache_path)

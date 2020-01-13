@@ -151,6 +151,9 @@ constant value X (synthetic_data_initializer=X)
 ``--max_compilation_threads`` sets the maximum number of threads which Poplar
 is allowed to use for compiling the executable.
 
+``--max_infeed_threads`` sets the maximum number of threads which each infeed
+queue is allowed to use when accessing data from datasets.
+
 ``--save_vertex_graph`` dumps the Poplar vertex graph (DOT file) to the given
 directory.
 

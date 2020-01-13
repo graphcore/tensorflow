@@ -144,15 +144,13 @@ class IPUCreateDatasetIteratorOp : public OpKernel {
   ~IPUCreateDatasetIteratorOp() override {}
 
   void Compute(OpKernelContext* ctx) override {
-    // Create a function library to allow Map datasets to create operations
-    // and execute them.
-    FunctionLibraryRuntime* flr;
-    std::unique_ptr<FunctionLibraryDefinition> flib_def(nullptr);
-    std::unique_ptr<ProcessFunctionLibraryRuntime> pflr(nullptr);
-    OP_REQUIRES_OK(
-        ctx, ctx->function_library()->Clone(&flib_def, &pflr, &flr, true));
+    // Get the flr and create base parameters.
+    FunctionLibraryRuntime* flr = ctx->function_library();
+    IteratorContext::Params params(ctx);
 
-    auto fhc = absl::make_unique<data::FunctionHandleCache>(flr);
+    // Get the dataset
+    DatasetBase* dataset;
+    OP_REQUIRES_OK(ctx, GetDatasetFromVariantTensor(ctx->input(0), &dataset));
 
     auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
     OP_REQUIRES(ctx, platform.ok(), platform.status());
@@ -162,32 +160,9 @@ class IPUCreateDatasetIteratorOp : public OpKernel {
     auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
         stream_executor->implementation());
 
-    // Set up IteratorContext for iterator initialization
-    IteratorContext::Params params(ctx);
-    params.resource_mgr = ctx->resource_manager();
-    params.cancellation_manager = poplar_executor->cancellation_manager();
-    params.function_handle_cache = fhc.get();
-    params.flr = flr;
-    // Use the infeed specific allocator.
-    xla::poplarplugin::InfeedAllocator* allocator =
-        poplar_executor->GetInfeedAllocator();
-    params.allocator_getter = [allocator](AllocatorAttributes) {
-      return allocator;
-    };
-
-    auto iter_ctx = absl::make_unique<IteratorContext>(params);
-
-    // Create a dataset
-    DatasetBase* dataset;
-    OP_REQUIRES_OK(ctx, GetDatasetFromVariantTensor(ctx->input(0), &dataset));
-
-    // Create a dataset iterator
-    std::unique_ptr<IteratorBase> iterator;
-    OP_REQUIRES_OK(ctx, dataset->MakeIterator(iter_ctx.get(),
-                                              "IPUDatasetIterator", &iterator));
     // Pass to the correct executor
-    poplar_executor->CreateInfeedDatasetIterator(
-        config_, flib_def, pflr, fhc, iterator, iter_ctx, xla_shapes_);
+    poplar_executor->CreateInfeedIterator(config_, xla_shapes_, params, flr,
+                                          dataset);
   }
 
  private:
@@ -222,7 +197,7 @@ class IPUDeleteDatasetIteratorOp : public OpKernel {
     auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
         stream_executor->implementation());
 
-    OP_REQUIRES_OK(ctx, poplar_executor->DeleteInfeedDatasetIterator(feed_id_));
+    OP_REQUIRES_OK(ctx, poplar_executor->DeleteInfeedIterator(feed_id_));
   }
 
  private:

@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_transfer_manager.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/seed_generator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_outfeed_queue.h"
@@ -51,9 +52,9 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/process_function_library_runtime.h"
 
+#include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/rendezvous.h"
 #include "tensorflow/core/framework/types.pb.h"
-#include "tensorflow/core/lib/core/threadpool.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/lib/io/path.h"
 
@@ -70,18 +71,6 @@ limitations under the License.
 #include <poplar/Tensor.hpp>
 
 namespace se = stream_executor;
-
-namespace tensorflow {
-class CancellationManager;
-class TensorBuffer;
-class FunctionLibraryDefinition;
-class ProcessFunctionLibraryRuntime;
-namespace data {
-class IteratorBase;
-class IteratorContext;
-class FunctionHandleCache;
-}  // namespace data
-}  // namespace tensorflow
 
 namespace xla {
 
@@ -113,7 +102,6 @@ using Args = tensorflow::gtl::ArraySlice<se::DeviceMemoryBase>;
 
 using ConversionList = std::vector<ConversionFn>;
 
-using InfeedQueueType = SPSCQueue<tensorflow::TensorBuffer*, 2048>;
 using OutfeedQueueType = SPSCOutfeedQueue<2048>;
 
 // An IO thread signature.
@@ -457,16 +445,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static poplar::DeviceManager& GetDeviceManager();
 
-  void CreateInfeedDatasetIterator(
-      const PoplarFeedConfig&,
-      std::unique_ptr<tensorflow::FunctionLibraryDefinition>&,
-      std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime>&,
-      std::unique_ptr<tensorflow::data::FunctionHandleCache>&,
-      std::unique_ptr<tensorflow::data::IteratorBase>&,
-      std::unique_ptr<tensorflow::data::IteratorContext>&,
-      const std::vector<xla::Shape>&);
+  void CreateInfeedIterator(
+      const PoplarFeedConfig& config, const std::vector<xla::Shape>& shapes,
+      const tensorflow::data::IteratorContext::Params& params,
+      tensorflow::FunctionLibraryRuntime* flr,
+      tensorflow::data::DatasetBase* dataset);
 
-  Status DeleteInfeedDatasetIterator(const std::string& feed_id);
+  Status DeleteInfeedIterator(const std::string& feed_id);
 
   InfeedAllocator* GetInfeedAllocator();
 
@@ -748,31 +733,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   std::list<tensorflow::IpuTraceEvent> reports_;
 
-  struct InfeedDatasetIterator {
-    InfeedDatasetIterator(
-        int64 replication_factor,
-        std::unique_ptr<tensorflow::FunctionLibraryDefinition> flib_def,
-        std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime> process_flib,
-        std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache,
-        std::unique_ptr<tensorflow::data::IteratorBase> iterator,
-        std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx,
-        const std::vector<xla::Shape>& shapes);
-
-    // The order of these is important since they borrow raw pointers
-    // to each other. FunctionLibraryDefinition must outlive
-    // ProcessFunctionLibraryRuntime which again must outlive
-    // data::FunctionHandleCache.
-    std::unique_ptr<tensorflow::FunctionLibraryDefinition> flib_def;
-    std::unique_ptr<tensorflow::ProcessFunctionLibraryRuntime> process_flib;
-    std::unique_ptr<tensorflow::data::FunctionHandleCache> handle_cache;
-    std::unique_ptr<tensorflow::data::IteratorBase> iterator;
-    std::unique_ptr<tensorflow::data::IteratorContext> iterator_ctx;
-
-    const std::vector<xla::Shape> shapes;
-
-    std::vector<std::vector<std::unique_ptr<InfeedQueueType>>> tensor_queues;
-  };
-
   struct OutfeedContext {
     OutfeedContext(const FeedInfo& outfeed_info);
     OutfeedContext() = delete;
@@ -792,8 +752,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // Allocator that should be used for infeeds.
   InfeedAllocator infeed_allocator;
 
-  absl::flat_hash_map<std::string, std::unique_ptr<InfeedDatasetIterator>>
-      infeed_dataset_iterators_;
+  absl::flat_hash_map<std::string, std::unique_ptr<InfeedIterator>>
+      infeed_iterators_;
 
   absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>
       outfeed_contexts_;
