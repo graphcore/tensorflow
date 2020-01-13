@@ -95,7 +95,7 @@ class TestDeviceConnection(xla_test.XLATestCase):  # pylint: disable=abstract-me
           "There is no device contention with the model: nothing to test.")
 
     def BuildAndRunModelAlways(first):
-      connection_type = DeviceConnectionType.ALWAYS
+      connection_type = IpuDeviceConnectionType.ALWAYS
       with session.Session() as sess:
         train, loss, inp, bias = _MyNet()
         if first:
@@ -127,7 +127,7 @@ class TestDeviceConnection(xla_test.XLATestCase):  # pylint: disable=abstract-me
           "There is no device contention with the model: nothing to test.")
 
     def BuildAndRunModelOnDemand(first):
-      connection_type = DeviceConnectionType.ON_DEMAND
+      connection_type = IpuDeviceConnectionType.ON_DEMAND
       with session.Session() as sess:
         train, loss, inp, bias = _MyNet()
         if first:

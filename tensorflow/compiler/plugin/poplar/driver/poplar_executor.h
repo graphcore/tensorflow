@@ -323,7 +323,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   const IpuOptions::FloatingPointBehaviour& FloatingPointBehaviour() const {
     return current_config_.floating_point_behaviour();
   }
-  DeviceConnectionType ConnectionType() const {
+
+  IpuDeviceConnectionType ConnectionType() const {
     return current_config_.device_connection_type();
   }
 
@@ -408,7 +409,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                            current_config_.max_scheduler_search_space_size());
   }
 
-  IPUSelectionOrder GetSelectionOrder() const {
+  IpuSelectionOrder GetSelectionOrder() const {
     return current_config_.selection_order();
   }
 
