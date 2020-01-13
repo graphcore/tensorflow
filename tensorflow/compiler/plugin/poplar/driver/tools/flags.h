@@ -60,6 +60,10 @@ class PoplarXlaFlags {
   // graph.
   int64 max_compilation_threads = -1;
 
+  // The maximum number of threads which each infeed queue is allowed to use
+  // when accessing data from datasets.
+  int64 max_infeed_threads = -1;
+
   // Path to a directory where the Poplar vertex graph should be saved to.
   std::string save_vertex_graph = "";
 
