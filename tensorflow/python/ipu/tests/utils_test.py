@@ -5,7 +5,7 @@ from __future__ import print_function
 import tempfile
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, DeviceConnectionType
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IpuDeviceConnectionType, IpuExecutionProfileType
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.python import ipu
@@ -137,8 +137,8 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertTrue(cfg.serialization_folder, folder_name)
 
     cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_connection_type(cfg, DeviceConnectionType.NEVER)
-    self.assertTrue(cfg.device_connection_type, DeviceConnectionType.NEVER)
+    cfg = ipu.utils.set_ipu_connection_type(cfg, IpuDeviceConnectionType.NEVER)
+    self.assertTrue(cfg.device_connection_type, IpuDeviceConnectionType.NEVER)
 
     with self.assertRaises(Exception):
       cfg = ipu.utils.create_ipu_config()
@@ -150,6 +150,24 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     with self.assertRaises(Exception):
       cfg = ipu.utils.create_ipu_config(profiling=False,
                                         profile_execution=True)
+
+    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
+    self.assertTrue(cfg.profiling.execution_trace_type ==
+                    IpuExecutionProfileType.DEVICE_PROFILE)
+
+    cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=False)
+    self.assertTrue(cfg.profiling.execution_trace_type ==
+                    IpuExecutionProfileType.NO_PROFILE)
+
+    cfg = ipu.utils.create_ipu_config(
+        profiling=True,
+        profile_execution=ipu.utils.ExecutionProfileType.IPU_PROFILE)
+    self.assertTrue(cfg.profiling.execution_trace_type ==
+                    IpuExecutionProfileType.IPU_PROFILE)
+
+    with self.assertRaises(Exception):
+      cfg = ipu.utils.create_ipu_config(profiling=True,
+                                        profile_execution="IPU")
 
   @test_util.deprecated_graph_mode_only
   def testEventFetchAndStringDecode(self):

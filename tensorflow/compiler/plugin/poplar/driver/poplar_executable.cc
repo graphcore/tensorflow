@@ -95,7 +95,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   PoplarExecutor* poplarExecutor(
       static_cast<PoplarExecutor*>(executor->implementation()));
 
-  if (poplarExecutor->ConnectionType() == DeviceConnectionType::NEVER) {
+  if (poplarExecutor->ConnectionType() == IpuDeviceConnectionType::NEVER) {
     return InvalidArgument(
         "Trying to run an executable on a device that was configured for "
         "compilation only.");

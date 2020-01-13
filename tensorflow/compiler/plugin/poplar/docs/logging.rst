@@ -124,8 +124,12 @@ Instead of a JSON format report, a CBOR format report will be generated.
 ``profile_execution``
 _____________________
 
-When this is set to true, then EXECUTE events will be generated in addition to
-compilation events.
+When this is set to `True`, then EXECUTE events will be generated in addition
+to compilation events.  By default the execution events will contain a
+`device` type trace.  If a different type of execution trace is required,
+then instead of `True`, one of `ExecutionProfileType.DEVICE_PROFILE`,
+`ExecutionProfileType.IPU_PROFILE` or `ExecutionProfileType.TILE_PROFILE`
+can be used.
 
 ``report_every_nth_execution``
 ______________________________

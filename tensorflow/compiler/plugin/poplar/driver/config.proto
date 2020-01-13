@@ -4,7 +4,7 @@ package xla.poplarplugin;
 
 import "tensorflow/compiler/plugin/poplar/driver/option_flag.proto";
 
-enum IPUSelectionOrder {
+enum IpuSelectionOrder {
   AUTO = 0;
   ZIGZAG = 1;
   SNAKE = 2;
@@ -12,7 +12,7 @@ enum IPUSelectionOrder {
 }
 
 // When to attach to the device.
-enum DeviceConnectionType {
+enum IpuDeviceConnectionType {
   // Attach when configuring the device.
   ALWAYS = 0;
   // Defer connection to when the IPU is needed. (i.e when running an executable).
@@ -25,6 +25,19 @@ enum DeviceConnectionType {
 enum IpuOptionsCreator {
   INVALID = 0;
   IPU_UTILS = 1;
+}
+
+// The type of execution profiling to use. See poplar docs for the meaning of
+// the profiling types.
+enum IpuExecutionProfileType {
+  // Do not do execution profiling.
+  NO_PROFILE = 0;
+  // Do execution profiling at the device level.
+  DEVICE_PROFILE = 1;
+  // Do execution profiling at the IPU level.
+  IPU_PROFILE = 2;
+  // Do execution profiling at the Tile level.
+  TILE_PROFILE = 3;
 }
 
 // NEXT ID 25
@@ -48,8 +61,8 @@ message IpuOptions {
     // Set to enable I/O trace
     bool enable_io_trace = 3;
 
-    // Set to enable execution trace
-    bool enable_execution_trace = 4;
+    // Execution trace type
+    IpuExecutionProfileType execution_trace_type = 4;
 
     // Report every N'th execution (0=once only)
     int64 report_every_nth_execution = 5;
@@ -167,7 +180,7 @@ message IpuOptions {
   bool enable_matmul_combiner = 18;
 
   // Which selection order to use when creating the virtual graphs.
-  IPUSelectionOrder selection_order = 19;
+  IpuSelectionOrder selection_order = 19;
 
   // Whether to converts gathers into multiSlice operations.
   bool enable_gather_simplifier = 20;
@@ -176,7 +189,7 @@ message IpuOptions {
   string serialization_folder = 21;
 
   // When to attach to the device.
-  DeviceConnectionType device_connection_type = 22;
+  IpuDeviceConnectionType device_connection_type = 22;
 
   // Version of the IPU hardware used.
   int64 ipu_version = 23;

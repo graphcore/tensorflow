@@ -445,14 +445,14 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     auto num_ipus = target.getNumIPUs();
     auto tiles_per_ipu = target.getTilesPerIPU();
 
-    IPUSelectionOrder order = poplar_executor->GetSelectionOrder();
-    if (order == IPUSelectionOrder::AUTO) {
+    IpuSelectionOrder order = poplar_executor->GetSelectionOrder();
+    if (order == IpuSelectionOrder::AUTO) {
       order = HasPipeliningWithDefaultSharding(module)
-                  ? IPUSelectionOrder::SNAKE
-                  : IPUSelectionOrder::ZIGZAG;
+                  ? IpuSelectionOrder::SNAKE
+                  : IpuSelectionOrder::ZIGZAG;
     }
 
-    VLOG(1) << "Using " << IPUSelectionOrder_Name(order)
+    VLOG(1) << "Using " << IpuSelectionOrder_Name(order)
             << " selection order when mapping shards to IPUs.";
     for (unsigned virtual_graph_idx = 0; virtual_graph_idx < num_ipus;
          ++virtual_graph_idx) {
@@ -470,7 +470,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
       // |   0   |=============|   1   |
       // |_______|             |_______|
       switch (order) {
-        case IPUSelectionOrder::SNAKE: {
+        case IpuSelectionOrder::SNAKE: {
           // With snake allocation order, we want to use IPUs in the following
           // order {0, 1, 3, 2}. This allows consecutive virtual graphs to
           // always be neighbours.
@@ -478,7 +478,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
           ipu = virtual_graph_idx - mod + (mod < 2 ? mod : (5 - mod));
           break;
         }
-        case IPUSelectionOrder::HOOF: {
+        case IpuSelectionOrder::HOOF: {
           // With hoof allocation order, we want to use IPUs in the following
           // order {0, 2, 3, 1}. This allows the first and last virtual graph to
           // be on the same C2 card (and hence directly connected).
@@ -488,7 +488,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
                     : num_ipus - 1 - (virtual_graph_idx % half_num_ipus) * 2;
           break;
         }
-        case IPUSelectionOrder::ZIGZAG:
+        case IpuSelectionOrder::ZIGZAG:
         default: {
           // With zig-zag allocation order, we want to use IPUs in the following
           // order {0, 1, 2, 3}. Default ordering.

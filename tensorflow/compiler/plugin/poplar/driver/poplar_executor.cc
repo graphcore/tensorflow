@@ -342,8 +342,7 @@ PoplarExecutor::PoplarExecutor()
 
 PoplarExecutor::~PoplarExecutor() {}
 
-se::DeviceMemoryBase PoplarExecutor::Allocate(
-  uint64 size, int64 memory_space) {
+se::DeviceMemoryBase PoplarExecutor::Allocate(uint64 size, int64 memory_space) {
   TensorControl* allocated = new TensorControl(size);
   {
     std::lock_guard<std::recursive_mutex> g(ipu_.Mutex());
@@ -1222,7 +1221,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
 
   if (!device_attached_) {
     TF_RETURN_IF_ERROR(CreatePoplarTarget());
-    if (cfg.device_connection_type() == DeviceConnectionType::ALWAYS) {
+    if (cfg.device_connection_type() == IpuDeviceConnectionType::ALWAYS) {
       TF_RETURN_IF_ERROR(AttachToPoplarDevice());
     }
   }
@@ -1230,11 +1229,22 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   option_flags_ = poplar::OptionFlags();
   option_flags_.set("target.workerStackSizeInBytes", "0x200");
 
-  if (!current_config_.ipu_model_config().enable_ipu_model() &&
-      current_config_.profiling().enable_execution_trace()) {
-    // Enable getting the cycle counts for each compute set on hardware
-    // when asking for an execution trace
-    option_flags_.set("debug.instrument", "true");
+  // Set appropriate options for trace levels.
+  switch (current_config_.profiling().execution_trace_type()) {
+    case IpuExecutionProfileType::NO_PROFILE:
+      break;
+    case IpuExecutionProfileType::DEVICE_PROFILE:
+      option_flags_.set("debug.instrument", "true");
+      option_flags_.set("debug.computeInstrumentationLevel", "device");
+      break;
+    case IpuExecutionProfileType::IPU_PROFILE:
+      option_flags_.set("debug.instrument", "true");
+      option_flags_.set("debug.computeInstrumentationLevel", "ipu");
+      break;
+    case IpuExecutionProfileType::TILE_PROFILE:
+      option_flags_.set("debug.instrument", "true");
+      option_flags_.set("debug.computeInstrumentationLevel", "tile");
+      break;
   }
 
   // By setting stream options before user options we make sure the user can
@@ -2471,7 +2481,8 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 
       if (current_config_.profiling().enable_ipu_trace_events()) {
         std::string report;
-        if (current_config_.profiling().enable_execution_trace() > 0) {
+        if (current_config_.profiling().execution_trace_type() !=
+            IpuExecutionProfileType::NO_PROFILE) {
           if (executable.ExecutionCount() == 0 &&
               !executable.IsLoadedFromCache()) {
             std::stringstream report_stream;

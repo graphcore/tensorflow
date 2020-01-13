@@ -19,10 +19,11 @@ General utility functions
 
 from enum import Enum
 
+import numpy as np
 import time
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions, IPUSelectionOrder, DeviceConnectionType, IpuOptionsCreator
+from tensorflow.compiler.plugin.poplar.driver import config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
@@ -123,10 +124,42 @@ class SelectionOrder(Enum):
   The `SNAKE` and `HOOF` IPU selection orders are particularly beneficial for
   pipelined models.
   """
-  AUTO = IPUSelectionOrder.Value("AUTO")
-  ZIGZAG = IPUSelectionOrder.Value("ZIGZAG")
-  SNAKE = IPUSelectionOrder.Value("SNAKE")
-  HOOF = IPUSelectionOrder.Value("HOOF")
+  AUTO = config_pb2.IpuSelectionOrder.Value("AUTO")
+  ZIGZAG = config_pb2.IpuSelectionOrder.Value("ZIGZAG")
+  SNAKE = config_pb2.IpuSelectionOrder.Value("SNAKE")
+  HOOF = config_pb2.IpuSelectionOrder.Value("HOOF")
+
+
+class ExecutionProfileType(Enum):
+  """The execution profile type indicates the desired information in the
+  execution profile.
+
+  * `NO_PROFILE` indicates that there should be no execution profiling.
+  * `DEVICE_PROFILE` indicates that the execution profile should contain only
+    device wide
+  * `IPU_PROFILE` indicates that the profile should contain IPU level
+    execution events.
+  * `TILE_PROFILE` indicates that the profile should contain Tile level
+    execution events.
+  """
+  NO_PROFILE = config_pb2.IpuExecutionProfileType.Value("NO_PROFILE")
+  DEVICE_PROFILE = config_pb2.IpuExecutionProfileType.Value("DEVICE_PROFILE")
+  IPU_PROFILE = config_pb2.IpuExecutionProfileType.Value("IPU_PROFILE")
+  TILE_PROFILE = config_pb2.IpuExecutionProfileType.Value("TILE_PROFILE")
+
+
+class DeviceConnectionType(Enum):
+  """Enumeration to describe the mechanism used to attach to the Poplar
+  device.
+
+  * `ALWAYS` indicates that the system will attach when configuring the
+    device.
+  * `ON_DEMAND` will defer connection to when the IPU is needed.
+  * `NEVER` will never try to attach to a device. Used when compiling offline.
+  """
+  ALWAYS = config_pb2.IpuDeviceConnectionType.Value("ALWAYS")
+  ON_DEMAND = config_pb2.IpuDeviceConnectionType.Value("ON_DEMAND")
+  NEVER = config_pb2.IpuDeviceConnectionType.Value("NEVER")
 
 
 def configure_ipu_system(config, device="cpu"):
@@ -140,7 +173,7 @@ def configure_ipu_system(config, device="cpu"):
   Returns:
     None
   """
-  if not isinstance(config, IpuOptions):
+  if not isinstance(config, config_pb2.IpuOptions):
     raise Exception("`config` must be an IpuOptions instance")
 
   g = ops.Graph()
@@ -168,7 +201,7 @@ def running_on_ipu_model(device="cpu"):
       op = gen_ipu_ops.ipu_model_used()
 
   with session_lib.Session(graph=g) as sess:
-    return sess.run(op)
+    return sess.run(op)[0]
 
 
 @deprecation.deprecated_args(None, "Use set_optimization_options() instead.",
@@ -178,7 +211,7 @@ def create_ipu_config(profiling=False,
                       enable_ipu_events=False,
                       use_poplar_text_report=False,
                       use_poplar_cbor_report=False,
-                      profile_execution=False,
+                      profile_execution=ExecutionProfileType.NO_PROFILE,
                       report_every_nth_execution=0,
                       max_report_size=0x10000000,
                       report_directory="",
@@ -202,7 +235,8 @@ def create_ipu_config(profiling=False,
     use_poplar_text_report: Enable the poplar textual report summary
     use_poplar_cbor_report: Enable the poplar CBOR reports
     profile_execution: Include Poplar execution profiles in the execution
-      events.
+      events.  Can be `True`, or a member of the `ExecutionProfileType`
+      enumeration.
     report_every_nth_execution: Only produce an execution report on every Nth
       execution.  0 = One report only.
     max_report_size: The maximum size of Poplar profiles to include in the
@@ -257,7 +291,7 @@ def create_ipu_config(profiling=False,
     raise Exception(
         "`profiling` and `enable_ipu_events` are mutually exclusive")
 
-  if profile_execution and not profiling:
+  if (profile_execution != ExecutionProfileType.NO_PROFILE and not profiling):
     raise Exception("`profiling` is required when `profile_execution` is set")
 
   if retain_control_dependencies:
@@ -265,16 +299,28 @@ def create_ipu_config(profiling=False,
 
   selection_order = selection_order if selection_order else SelectionOrder.AUTO
 
-  opts = IpuOptions()
+  connection_type = DeviceConnectionType.ALWAYS
+
+  if isinstance(profile_execution, (np.bool_, bool)):
+    if profile_execution:
+      profile_execution = ExecutionProfileType.DEVICE_PROFILE
+    else:
+      profile_execution = ExecutionProfileType.NO_PROFILE
+
+  if not isinstance(profile_execution, ExecutionProfileType):
+    raise Exception("`profile_execution` must be True, False, or an "
+                    "ExecutionProfileType instamce")
+
+  opts = config_pb2.IpuOptions()
 
   # Default initialize IpuOptions() attributes here.
-  opts.creator_id = IpuOptionsCreator.IPU_UTILS
+  opts.creator_id = config_pb2.IpuOptionsCreator.IPU_UTILS
   opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = True
   opts.enable_multi_slice_combiner = False
   opts.enable_matmul_combiner = False
   opts.enable_gather_simplifier = False
-  opts.device_connection_type = DeviceConnectionType.ALWAYS
+  opts.device_connection_type = connection_type.value
   opts.ipu_version = 1
   opts.speed_size_config.allow_recompute = False
   opts.speed_size_config.allow_stateful_recompute = False
@@ -283,7 +329,7 @@ def create_ipu_config(profiling=False,
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
   opts.profiling.enable_compilation_trace = profiling
   opts.profiling.enable_io_trace = profiling
-  opts.profiling.enable_execution_trace = profiling and profile_execution
+  opts.profiling.execution_trace_type = profile_execution.value
   opts.profiling.enable_poplar_reports_text = use_poplar_text_report
   opts.profiling.enable_poplar_reports_cbor = use_poplar_cbor_report
   opts.profiling.report_every_nth_execution = report_every_nth_execution
