@@ -186,6 +186,7 @@ def create_ipu_config(profiling=False,
                       always_rearrange_copies_on_the_host=False,
                       merge_infeed_io_copies=False,
                       disable_graph_convolution_caching=False,
+                      disable_graph_outlining=False,
                       retain_control_dependencies=False,
                       max_cross_replica_sum_buffer_size=0,
                       max_inter_ipu_copies_buffer_size=0,
@@ -226,6 +227,12 @@ def create_ipu_config(profiling=False,
       searches for an equivalent cached operation, and uses this  instead of
       creating a new convolution. Setting this flag forces the creation of a
       new convolution. This can improve runtime at the expense of graph size.
+    disable_graph_outlining: By default, some operations, such as matrix
+      multiplications, which occur in the graph multiple times but with
+      different input tensors might be optimised to reduce the total code size
+      of the graph at the expense of the execution time. Setting this flag will
+      disable these optimisations. This option is not valid for the convolution 
+      operration (also see disable_graph_convolution_caching)
     retain_control_dependencies: When set to true, control dependencies from the
       Tensorflow graph are passed through to the backend.  This can result in a
       different memory size due to differing constraints on the operation
@@ -288,6 +295,8 @@ def create_ipu_config(profiling=False,
   opts.speed_size_config.merge_infeed_io_copies = merge_infeed_io_copies
   opts.speed_size_config.disable_graph_convolution_caching = \
       disable_graph_convolution_caching
+  opts.speed_size_config.disable_graph_outlining = \
+      disable_graph_outlining
   opts.speed_size_config.scheduler_selection = scheduler_selection
 
   opts.retain_control_dependencies = retain_control_dependencies

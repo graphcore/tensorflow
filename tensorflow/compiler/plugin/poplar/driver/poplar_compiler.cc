@@ -640,6 +640,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->GetMatMulOptions(), poplar_executor->GetPoolingOptions(),
       poplar_executor->ClearMatmulPassType(),
       poplar_executor->DisableGraphConvCaching(),
+      poplar_executor->DisableGraphOutlining(),
       poplar_executor->MergeInfeedCopies(), replication_factor,
       poplar_executor->GetMaxAllReduceBufferSize(),
       poplar_executor->GetMaxInterIpuCopyBufferSize(),

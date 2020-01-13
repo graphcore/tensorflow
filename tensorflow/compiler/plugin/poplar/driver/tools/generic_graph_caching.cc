@@ -12,8 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
@@ -86,7 +89,7 @@ Status GenericGraphCache::ExecuteCached(
     const absl::flat_hash_map<int64, int64>& layout_dependencies) {
   // Check if we have already executed this instruction.
   auto itr = table_.find(inst);
-  if (itr != table_.end()) {
+  if ((itr != table_.end()) && !resources.disable_graph_outlining) {
     // We have a cached graph for this dot operation.
     itr->second(args, seq);
   } else {
