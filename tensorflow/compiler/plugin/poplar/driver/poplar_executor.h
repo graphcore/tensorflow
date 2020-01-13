@@ -345,6 +345,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
         .disable_graph_convolution_caching();
   }
 
+  bool DisableGraphOutlining() const {
+    return current_config_.speed_size_config().disable_graph_outlining();
+  }
+
   bool RecomputationEnabled() const {
     return current_config_.speed_size_config().allow_recompute();
   }

@@ -80,6 +80,8 @@ struct CompilerResources {
 
   bool disable_graph_convolution_caching;
 
+  bool disable_graph_outlining;
+
   uint32 replication_factor;
 
   bool merge_infeed_io_copies;
@@ -116,9 +118,9 @@ struct CompilerResources {
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
       const poplar::OptionFlags& pooling_options, bool clear_matmul_pass_type,
-      bool disable_graph_convolution_caching, bool merge_infeed_io_copies,
-      uint32 replication_factor, int64 max_all_reduce_buffer_size,
-      int64 max_inter_ipu_copies_buffer_size,
+      bool disable_graph_convolution_caching, bool disable_graph_outlining,
+      bool merge_infeed_io_copies, uint32 replication_factor,
+      int64 max_all_reduce_buffer_size, int64 max_inter_ipu_copies_buffer_size,
       int64 max_scheduler_lookahead_depth,
       int64 max_scheduler_search_space_size, HloModule* module,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
@@ -134,6 +136,7 @@ struct CompilerResources {
         default_pooling_options(pooling_options),
         clear_matmul_pass_type(clear_matmul_pass_type),
         disable_graph_convolution_caching(disable_graph_convolution_caching),
+        disable_graph_outlining(disable_graph_outlining),
         replication_factor(replication_factor),
         merge_infeed_io_copies(merge_infeed_io_copies),
         always_rearrange_copies_on_host(always_rearrange_copies_on_host),
