@@ -678,7 +678,6 @@ cc_library(
         ":custom_kernels_util",
         ":driver",
         ":rearrange_pipeline_stage_arguments",
-        "//tensorflow/core/common_runtime/data:standalone",
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core/kernels/data:dataset_utils",
         "//tensorflow/compiler/tf2xla:xla_compiler",

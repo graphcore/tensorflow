@@ -23,7 +23,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
 
-#include "tensorflow/core/common_runtime/data/standalone.h"
 #include "tensorflow/core/common_runtime/dma_helper.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/node_def_util.h"
