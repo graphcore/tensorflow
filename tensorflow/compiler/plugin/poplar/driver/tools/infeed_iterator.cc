@@ -73,7 +73,7 @@ InfeedIterator::InfeedIterator(
   tensorflow::SessionOptions options;
   (*options.config.mutable_device_count())["CPU"] = 1;
   // Create the device manager.
-  device_mgr_ = absl::make_unique<tensorflow::DeviceMgr>(
+  device_mgr_ = absl::make_unique<tensorflow::StaticDeviceMgr>(
       tensorflow::DeviceFactory::NewDevice("CPU", options,
                                            "/job:localhost/replica:0/task:0"));
   tensorflow::Device* device = device_mgr_->ListDevices()[0];
@@ -84,8 +84,8 @@ InfeedIterator::InfeedIterator(
   flib_def_ = absl::make_unique<tensorflow::FunctionLibraryDefinition>(
       *flr->GetFunctionLibraryDefinition());
   pflr_ = absl::make_unique<tensorflow::ProcessFunctionLibraryRuntime>(
-      device_mgr_.get(), tensorflow::Env::Default(), TF_GRAPH_DEF_VERSION,
-      flib_def_.get(), tensorflow::OptimizerOptions{}, nullptr /* parent */);
+      device_mgr_.get(), tensorflow::Env::Default(), /*config=*/nullptr,
+      TF_GRAPH_DEF_VERSION, flib_def_.get(), tensorflow::OptimizerOptions{});
 
   // Set up the thread pools.
   unbounded_thread_pool_ =
