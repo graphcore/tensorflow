@@ -315,6 +315,7 @@ tf_py_test(
 tf_py_test(
     name = "ipu_estimator_test",
     size = "large",
+    tags = ['exclusive'],
     shard_count = 8,
     srcs = ["tests/ipu_estimator_test.py"],
     additional_deps = [
@@ -348,6 +349,7 @@ tf_py_test(
 
 tf_py_test(
     name = "ipu_pipeline_estimator_test",
+    tags = ['exclusive'],
     size = "large",
     shard_count = 8,
     srcs = ["tests/ipu_pipeline_estimator_test.py"],
@@ -366,7 +368,9 @@ tf_py_test(
 
 tf_py_test(
     name = "ipu_multi_worker_strategy_test",
-    size = "medium",
+    tags = ['exclusive'],
+    size = "large",
+    shard_count = 4,
     srcs = ["tests/ipu_multi_worker_strategy_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",

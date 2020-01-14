@@ -2116,7 +2116,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "ipu_model_device_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/ipu_model_device_test.py"],
     enabled_backends = ["poplar"],
     deps = [
@@ -2520,7 +2520,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "sendrecv_ops_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/sendrecv_ops_test.py"],
     enabled_backends = ["poplar"],
     deps = [
