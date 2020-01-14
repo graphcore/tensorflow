@@ -921,31 +921,6 @@ PoplarExecutor::CreateDeviceDescription() const {
   return InternalError("Failed to create device description.");
 }
 
-PoplarExecutor::IOThread::IOThread(const std::string& name, IOFunction fn,
-                                   const tensorflow::ThreadOptions& options)
-    : cancelled_(false) {
-  thread_.reset(tensorflow::Env::Default()->StartThread(
-      options, name, [options, name, f = std::move(fn), this]() {
-        // StartThread currently ignores `options`.
-        // Explicitly set the NUMA node if one was requested.
-        if (options.numa_node != tensorflow::port::kNUMANoAffinity) {
-          tensorflow::port::NUMASetThreadNodeAffinity(options.numa_node);
-        }
-        auto status = f(cancelled_);
-        if (!status.ok()) {
-          LOG(INFO) << "Thread " << name
-                    << " has finished with status: " << status.ToString();
-        }
-        cancelled_ = true;
-      }));
-}
-
-PoplarExecutor::IOThread::~IOThread() {
-  // Cancel the thread.
-  cancelled_ = true;
-  // The destructor of `thread_` will now block until the thread has joined.
-}
-
 bool PoplarExecutor::IPUConfig::DeviceConfigured() const {
   return device_.has_value();
 }

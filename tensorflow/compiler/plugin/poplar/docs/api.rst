@@ -95,3 +95,7 @@ Python API
 .. automodule:: tensorflow.python.ipu.optimizers.map_gradient_optimizer
   :members:
   :noindex:
+
+.. automodule:: tensorflow.python.ipu.dataset_benchmark
+  :members:
+  :noindex:

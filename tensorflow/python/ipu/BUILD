@@ -28,6 +28,7 @@ py_library(
         "ops/summary_ops.py",
     ],
     deps = [
+        "//tensorflow/compiler/plugin/poplar:dataset_benchmark_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
         "//tensorflow/compiler/plugin/poplar:popfloat_ops_py",
@@ -82,6 +83,7 @@ py_library(
         "__init__.py",
         "autoshard.py",
         "autoshard_cnn.py",
+        "dataset_benchmark.py",
         "gradient_accumulation_optimizer.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
@@ -258,6 +260,21 @@ tf_py_test(
     size = "large",
     shard_count = 2,
     srcs = ["tests/infeed_outfeed_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
+    name = "dataset_benchmark_test",
+    size = "medium",
+    srcs = ["tests/dataset_benchmark_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python/ipu:ipu_lib",
@@ -622,9 +639,10 @@ test_suite(
     name = "all_tests",
     tests = [
         "autoshard_cnn_test",
-        "expression_op_test",
+        "dataset_benchmark_test",
         "dropout_test",
         "embedding_lookup_test",
+        "expression_op_test",
         "estimator_test",
         "fifo_test",
         "frontend_attributes_test",

@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/io_thread.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/seed_generator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_outfeed_queue.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_queue.h"
@@ -103,9 +104,6 @@ using Args = tensorflow::gtl::ArraySlice<se::DeviceMemoryBase>;
 using ConversionList = std::vector<ConversionFn>;
 
 using OutfeedQueueType = SPSCOutfeedQueue<2048>;
-
-// An IO thread signature.
-using IOFunction = std::function<Status(std::atomic<bool>&)>;
 
 class PoplarExecutor : public se::internal::StreamExecutorInterface {
  public:
@@ -662,25 +660,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   void ConnectCycleCounterCallback();
 
   int ordinal_;
-
-  class IOThread {
-   public:
-    // A structure used to run an IO thread which reads from a data source. The
-    // `fn` takes a `cancelled` parameter which indicates whether the thread
-    // should stop.
-    // Destroying this object cancels the thread and blocks until the thread
-    // has completed and joined.
-    IOThread(const std::string& name, IOFunction fn,
-             const tensorflow::ThreadOptions& options = {});
-    ~IOThread();
-
-   private:
-    // Warning: The `cancelled_` member must outlive the `thread_` member.
-    std::atomic<bool> cancelled_;
-    std::unique_ptr<tensorflow::Thread> thread_;
-
-    TF_DISALLOW_COPY_AND_ASSIGN(IOThread);
-  };
 
   std::vector<std::unique_ptr<IOThread>> io_threads_;
 
