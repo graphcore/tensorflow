@@ -486,6 +486,7 @@ cc_library(
         "driver/tools/generic_graph_caching.cc",
         "driver/tools/infeed_allocator.cc",
         "driver/tools/infeed_iterator.cc",
+        "driver/tools/io_thread.cc",
         "driver/tools/mapping_helper.cc",
         "driver/tools/poplar_util.cc",
         "driver/tools/seed_generator.cc",
@@ -524,6 +525,7 @@ cc_library(
         "driver/tools/generic_graph_caching.h",
         "driver/tools/infeed_allocator.h",
         "driver/tools/infeed_iterator.h",
+        "driver/tools/io_thread.h",
         "driver/tools/mapping_helper.h",
         "driver/tools/poplar_util.h",
         "driver/tools/seed_generator.h",
@@ -635,6 +637,7 @@ cc_library(
 cc_library(
     name = "kernels",
     srcs = [
+        "kernels/datastream/dataset_benchmark.cc",
         "kernels/datastream/feeds.cc",
         "kernels/host_compute_kernels.cc",
         "kernels/ipu_kernels.cc",
@@ -675,7 +678,9 @@ cc_library(
         ":custom_kernels_util",
         ":driver",
         ":rearrange_pipeline_stage_arguments",
+        "//tensorflow/core/common_runtime/data:standalone",
         "//tensorflow/core:framework_headers_lib",
+        "//tensorflow/core/kernels/data:dataset_utils",
         "//tensorflow/compiler/tf2xla:xla_compiler",
         "//tensorflow/compiler/tf2xla/kernels:tensor_list_utils",
         "//tensorflow/compiler/xla/client/lib:pooling",
@@ -903,6 +908,27 @@ tf_custom_op_py_library(
     srcs_version = "PY2AND3",
 )
 
+cc_library(
+    name = "dataset_benchmark",
+    srcs = ["ops/datastream/dataset_benchmark.cc"],
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "dataset_benchmark_wrapper_py",
+    out = "ops/gen_dataset_benchmark.py",
+    deps = [":dataset_benchmark"],
+    visibility = ["//tensorflow:internal"],
+)
+
+tf_custom_op_py_library(
+    name = "dataset_benchmark_py",
+    kernels = [":dataset_benchmark"],
+    deps = [":dataset_benchmark_wrapper_py"],
+    srcs_version = "PY2AND3",
+)
+
 
 cc_library(
     name = "poplar_lib",
@@ -911,6 +937,7 @@ cc_library(
     ],
     hdrs = [],
     deps = [
+        ":dataset_benchmark",
         ":driver",
         ":kernels",
         ":poplar_backend",

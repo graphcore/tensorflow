@@ -228,3 +228,36 @@ ______________
 By default the pipeine operation will map the pipeline stages onto IPUs in
 order to minimise the inter-IPU communication lengths.  If the user needs to
 overide this order, the `device_mapping` parameter can be used.
+
+Dataset Benchmarking
+~~~~~~~~~~~~~~~~~~~~
+In order to fully utilize the potential of the IPU, the `tf.data.Dataset` used
+by the `IPUInfeedQueue` needs to be optimal so that the IPU is not constantly
+waiting for more data to become available.
+
+To benchmark your `tf.data.Dataset`, you can make use of the
+`ipu.dataset_benchmark` tool, see the :ref:`api-section` for more specific
+details of the `ipu.dataset_benchmark` functions which allow you to obtain the
+maximum throughput of your `tf.data.Dataset`.
+
+If the throughput of your `tf.data.Dataset` is the bottleneck, you can try and
+optimize it using:
+ - https://www.tensorflow.org/guide/data
+ - https://www.tensorflow.org/guide/data_performance
+
+Accessing the JSON data
+_______________________
+The functions in `ipu.dataset_benchmark` return the JSON as a string which can
+be loaded into a JSON object using the native JSON library:
+
+
+.. code-block:: python
+  import json
+
+  # Create your `tf.data.Dataset`
+  dataset = ...
+  benchmark_op = ipu.dataset_benchmark.dataset_benchmark(dataset, 10, 512)
+
+  with tf.Session() as sess:
+      json_string = sess.run(benchmark_op)
+      json_object = json.loads(j_str[0])
