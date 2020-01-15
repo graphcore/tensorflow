@@ -57,7 +57,10 @@ class RecomputeSuggestionTest(test_util.TensorFlowTestCase):
       out = ipu.ipu_compiler.compile(my_model, inputs=[inp])
 
     with tu.ipu_session() as sess:
-      report = tu.ReportJSON(self, sess, replicated=False)
+      report = tu.ReportJSON(self,
+                             sess,
+                             replicated=False,
+                             allow_recompute=True)
       sess.run(variables.global_variables_initializer())
 
       report.reset()

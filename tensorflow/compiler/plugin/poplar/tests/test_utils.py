@@ -161,7 +161,8 @@ class ReportJSON(object):
                always_rearrange_copies_on_the_host=False,
                serialization_folder="",
                estimator_hook=False,
-               eager_mode=False):
+               eager_mode=False,
+               allow_recompute=False):
     self.report = None
     self.test = test
     self.sess = sess
@@ -202,6 +203,8 @@ class ReportJSON(object):
 
       opts = utils.set_serialization_options(opts, serialization_folder)
       opts = utils.set_ipu_model_options(opts, compile_ipu_code)
+      opts = utils.set_recomputation_options(opts,
+                                             allow_recompute=allow_recompute)
 
       if not estimator_hook:
         utils.configure_ipu_system(opts)
