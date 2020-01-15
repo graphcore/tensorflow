@@ -39,7 +39,8 @@ class DumpPoplarInfo(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         r = ipu.ipu_compiler.compile(my_model, inputs=[pa, pb, pc])
 
-      cfg = ipu.utils.create_ipu_config(profiling=False)
+      cfg = ipu.utils.create_ipu_config(profiling=False,
+                                        profile_execution=False)
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
       ipu.utils.configure_ipu_system(cfg)
 
