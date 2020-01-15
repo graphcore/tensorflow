@@ -383,6 +383,9 @@ class ReportJSON(object):
   def assert_contains_one_compile_event(self):
     self.test.assertTrue(IpuTraceEvent.COMPILE_END in self.events)
 
+  def assert_contains_no_compile_event(self):
+    self.test.assertFalse(IpuTraceEvent.COMPILE_END in self.events)
+
   def get_tensor_map(self):
     return self.tensor_map
 

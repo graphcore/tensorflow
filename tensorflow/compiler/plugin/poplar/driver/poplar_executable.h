@@ -50,6 +50,7 @@ class PoplarExecutable : public Executable {
                    const bool is_constant_graph,
                    std::vector<std::vector<Literal>> literal_output,
                    const bool is_remap_graph,
+                   const bool is_scalar_elementwise_graph,
                    std::vector<uint64> remaped_output,
                    uint32 replication_factor_, const InfeedInfos& infeed_infos,
                    const OutfeedInfos& outfeed_infos, StreamInfos&& stream_info,

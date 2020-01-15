@@ -473,6 +473,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   uint64 HashModuleAndDevice(const HloModule& module) const;
   Status CreatePoplarTarget();
 
+  Status LiteralEvaluateForScalarElementwiseGraph(
+      xla::poplarplugin::PoplarExecutable& executable, const Args& args,
+      std::vector<std::vector<Literal>>& literal_evaluate_break_down);
+
   struct TensorControl {
     size_t size = 0;
     unsigned int ref_count = 0;
@@ -603,6 +607,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   // device
   StatusOr<bool> CheckMoveDeviceToHostRequired(const bool engine_changed);
   StatusOr<bool> CheckMoveHostToDeviceRequired(const bool engine_changed);
+
+  // Check if there is tensor/arg of current executable on device.
+  StatusOr<bool> CheckAnyArgOnDevice(const Args& args);
 
   // Create a new trace event object
   tensorflow::IpuTraceEvent NewTraceEvent();

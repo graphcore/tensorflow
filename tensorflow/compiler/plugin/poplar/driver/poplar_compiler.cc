@@ -358,6 +358,34 @@ bool AreAllOutputsParameters(const HloModule* module,
       root->GetModule()->entry_computation_layout().result_shape());
 }
 
+// Check that module is of type - scalar/elementwise only. 
+bool AreAllScalarElementwiseGraph(const HloModule* module) {
+  for (auto* comp : module->computations()) {
+    for (auto* inst : comp->instructions()) {
+      switch (inst->opcode()) {
+        case HloOpcode::kConstant:
+        case HloOpcode::kParameter:
+          if (!ShapeUtil::IsScalar(inst->shape())) {
+            return false;
+          }
+          break;
+        case HloOpcode::kTuple:
+          if (comp->root_instruction() != inst) {
+            return false;
+          }
+          break;
+        default:
+          if (!(ShapeUtil::IsScalar(inst->shape()) && inst->IsElementwise())) {
+            return false;
+          }
+          break;
+      }
+    }
+  }
+
+  return true;
+}
+
 HloPrintOptions GetPrintOptions() {
   HloPrintOptions opts;
   opts.set_print_operand_shape(false)
@@ -1024,8 +1052,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(profile_index_map), std::move(engine),
       std::move(resources.annotations.input_output_aliasing_map),
       is_constant_graph, std::move(constant_output), is_remap_graph,
-      std::move(remaped_output), replication_factor,
-      std::move(resources.annotations.infeed_infos),
+      is_scalar_elementwise_graph, std::move(remaped_output),
+      replication_factor, std::move(resources.annotations.infeed_infos),
       std::move(resources.annotations.outfeed_infos),
       std::move(resources.annotations.stream_infos),
       std::move(resources.annotations.stream_meta_infos),
