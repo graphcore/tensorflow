@@ -3158,6 +3158,25 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "scalar_elementwise_graph_test",
+    size = "medium",
+    tags = ['exclusive'],
+    srcs = ["tests/scalar_elementwise_graph_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_xla_py_test(
     name = "sort_op_py_test",
     size = "medium",
     srcs = ["tests/sort_op_py_test.py"],
@@ -3530,6 +3549,7 @@ test_suite(
         "remove_blocked_recompute_test",
         "root_token_replacer_test",
         "sendrecv_ops_test",
+        "scalar_elementwise_graph_test",
         "scatter_simplifier_test",
         "scheduler_tree_test",
         "sharded_inplace_test",
