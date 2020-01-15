@@ -230,6 +230,14 @@ class ReportJSON(object):
     events = self.get_event_trace(session)
     return self.get_events_from_log(events)
 
+  def assert_no_event(self, msg=""):
+    types, _ = self.get_ipu_events()
+    self.test.assertFalse(types, msg)
+
+  def assert_compiled_for_ipu(self, msg=""):
+    types, _ = self.get_ipu_events()
+    self.test.assertContainsSubset([IpuTraceEvent.COMPILE_END], types, msg)
+
   def get_event_trace(self, session=None):
     if self.eager_mode:
       assert session is None, "Sessions can't be used in eager mode"
