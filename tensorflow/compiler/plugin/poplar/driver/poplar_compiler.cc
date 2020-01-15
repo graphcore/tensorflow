@@ -30,8 +30,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/apply_recompute_suggestion.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/casts_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
@@ -72,10 +74,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
@@ -724,6 +729,19 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
     }
+    if (poplar_executor->RecomputationEnabled()) {
+      pipeline.AddPass<SuggestRecompute>();
+      pipeline.AddPass<AddBlockRecompute>();
+      {
+        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+            "resolve-recompute-suggestions");
+
+        pass.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+        pass.AddPass<ApplyRecomputeSuggestion>();
+      }
+    }
+    pipeline.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+    pipeline.AddPass<HloPassFix<RemoveRecomputeSuggestions>>();
     if (poplar_executor->EnableMatmulCombiner()) {
       pipeline.AddPass<MatmulCombiner>(resources.annotations);
     }

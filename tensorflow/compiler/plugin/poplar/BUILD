@@ -142,6 +142,8 @@ cc_library(
     srcs = [
         "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
+        "driver/passes/add_block_recompute.cc",
+        "driver/passes/apply_recompute_suggestion.cc",
         "driver/passes/casts_elimination.cc",
         "driver/passes/combine_instructions.cc",
         "driver/passes/commutative_instruction_reorder_operands.cc",
@@ -184,10 +186,13 @@ cc_library(
         "driver/passes/pipeline_verifier.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/recompute_instructions.cc",
+        "driver/passes/remove_blocked_recompute_suggestions.cc",
+        "driver/passes/remove_recompute_suggestions.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_simplifier.cc",
         "driver/passes/sharding_pass.cc",
+        "driver/passes/suggest_recompute.cc",
         "driver/passes/while_loop_condition_simplify.cc",
         "driver/passes/while_loop_to_repeat_simplify.cc",
         "driver/passes/wide_const_finder.cc",
@@ -217,6 +222,7 @@ cc_library(
         "driver/tools/custom_ops/pooling.cc",
         "driver/tools/custom_ops/print_tensor.cc",
         "driver/tools/custom_ops/relu.cc",
+        "driver/tools/custom_ops/recompute.cc",
         "driver/tools/custom_ops/remap.cc",
         "driver/tools/custom_ops/remap_deduce.cc",
         "driver/tools/custom_ops/replication_factor.cc",
@@ -254,6 +260,8 @@ cc_library(
         "driver/compiler_information.h",
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
+        "driver/passes/add_block_recompute.h",
+        "driver/passes/apply_recompute_suggestion.h",
         "driver/passes/casts_elimination.h",
         "driver/passes/combine_instructions.h",
         "driver/passes/commutative_instruction_reorder_operands.h",
@@ -295,11 +303,14 @@ cc_library(
         "driver/passes/pipeline_resource_update_fixer.h",
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
+        "driver/passes/remove_blocked_recompute_suggestions.h",
+        "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/recompute_instructions.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
         "driver/passes/sharding_pass.h",
+        "driver/passes/suggest_recompute.h",
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
@@ -320,6 +331,7 @@ cc_library(
         "driver/tools/custom_ops/pooling.h",
         "driver/tools/custom_ops/print_tensor.h",
         "driver/tools/custom_ops/relu.h",
+        "driver/tools/custom_ops/recompute.h",
         "driver/tools/custom_ops/remap.h",
         "driver/tools/custom_ops/remap_deduce.h",
         "driver/tools/custom_ops/replication_factor.h",
@@ -661,6 +673,7 @@ cc_library(
         "kernels/poputil/codelet_expression.cc",
         "kernels/poputil/fifo.cc",
         "kernels/poputil/print_tensor.cc",
+        "kernels/poputil/recompute.cc",
         "kernels/poputil/remap.cc",
         "kernels/poputil/replication_factor.cc",
         "kernels/poputil/replication_index.cc",
@@ -811,6 +824,7 @@ cc_library(
         "ops/poputil/codelet_expression.cc",
         "ops/poputil/fifo.cc",
         "ops/poputil/print_tensor.cc",
+        "ops/poputil/recompute.cc",
         "ops/poputil/remap.cc",
         "ops/poputil/remap_deduce.cc",
         "ops/poputil/replication_factor.cc",
@@ -1198,6 +1212,54 @@ xla_test(
 xla_test(
     name = "wide_const_finder_test",
     srcs = ["tests/wide_const_finder_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "add_block_recompute_test",
+    srcs = ["tests/add_block_recompute_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "apply_recompute_suggestion_test",
+    srcs = ["tests/apply_recompute_suggestion_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "remove_blocked_recompute_test",
+    srcs = ["tests/remove_blocked_recompute_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "recompute_suggestion_test",
+    srcs = ["tests/recompute_suggestion_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -3315,7 +3377,9 @@ test_suite(
     name = "all_tests",
     tests = [
         "64_bit_test",
+        "add_block_recompute_test",
         "allocation_finder_test",
+        "apply_recompute_suggestion_test",
         "arithmetic_expr_test",
         "arg_min_max_test",
         "batch_norm_test",
@@ -3395,8 +3459,10 @@ test_suite(
         "pipeline_util_test",
         "pipeline_visitor_test",
         "recomputation_test",
+        "recompute_suggestion_test",
         "reduce_test",
         "remapping_test",
+        "remove_blocked_recompute_test",
         "root_token_replacer_test",
         "sendrecv_ops_test",
         "scatter_simplifier_test",

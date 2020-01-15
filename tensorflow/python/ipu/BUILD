@@ -256,6 +256,23 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "recompute_suggestion_test",
+    size = "small",
+    srcs = ["tests/recompute_suggestion_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
     name = "infeed_outfeed_test",
     size = "large",
     shard_count = 2,
@@ -663,6 +680,7 @@ test_suite(
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
+        "recompute_suggestion_test",
         "user_ops_test",
         "utils_test",
     ],
