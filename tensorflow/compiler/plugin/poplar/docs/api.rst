@@ -48,6 +48,11 @@ Python API
   :members: IPUMultiWorkerStrategy
   :noindex:
 
+.. automodule:: tensorflow.python.ipu.keras.sequential
+.. autoclass:: Sequential
+  :members:
+  :inherited-members:
+
 .. automodule:: tensorflow.python.ipu.loops
   :members:
   :noindex:

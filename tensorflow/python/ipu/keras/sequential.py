@@ -38,10 +38,18 @@ class Sequential(keras.Sequential):
     ipu_device:
       Target device to explicitly target when adding layers to the sequence.
     """
-    super(Sequential, self).__init__(layers=layers, name=name)
+    super().__init__(layers=layers, name=name)
     self._device = ipu_device
 
   def add(self, layer):
-    """See tensorflow.keras.Sequential documentation."""
     with ops.device(self._device):
-      super(Sequential, self).add(layer)
+      super().add(layer)
+
+  def call(self, inputs, training=None, mask=None):  # pylint: disable=redefined-outer-name
+    with ops.device(self._device):
+      return super().call(inputs, training, mask)
+
+  def build(self, input_shape=None):  # pylint: disable=useless-super-delegation
+    # Note: This override is needed to preserve the behaviour of the weights
+    # property of the original Sequential class.
+    super().build(input_shape)
