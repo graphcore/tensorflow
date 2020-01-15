@@ -105,6 +105,7 @@ py_library(
         "ops/normalization_ops.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
+        "ops/reduce_scatter_op.py",
         "ops/replication_ops.py",
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
