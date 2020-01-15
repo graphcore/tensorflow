@@ -53,4 +53,5 @@ enum PoplarOp {
   AllGather = 49;
   SuggestRecompute = 50;
   BlockRecompute = 51;
+  ReduceScatter = 52;
 }
