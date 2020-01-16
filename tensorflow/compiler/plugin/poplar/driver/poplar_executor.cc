@@ -581,12 +581,12 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
       // only need to check if the first queue is full to know whether all the
       // queues are full.
       if (infeed_queues[0][0]->IsFull()) {
-        VLOG(1) << "Infeed queue is full.";
+        VLOG(2) << "Infeed queue is full.";
         continue;
       }
 
       if (infeed_queues[0][0]->IsEmpty()) {
-        VLOG(1) << "Infeed queue is empty.";
+        VLOG(2) << "Infeed queue is empty.";
       }
 
       std::vector<tensorflow::Tensor> outputs;
