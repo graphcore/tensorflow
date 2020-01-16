@@ -36,6 +36,7 @@ from tensorflow.python.ipu.function import function
 from tensorflow.python.ipu.keras.sequential import Sequential
 
 from tensorflow.python.ipu.ops import all_to_all_op
+from tensorflow.python.ipu.ops import all_to_all_op_grad
 from tensorflow.python.ipu.ops import custom_ops
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ipu.ops import embedding_ops

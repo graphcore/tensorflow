@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """
-Popnn cross replica operators
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Popops cross replica operators
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
@@ -25,7 +25,7 @@ def all_to_all(x,
                concat_dimension,
                replication_factor,
                name=None):
-  """ Peform an XLA all to all operation across all replicas
+  """ Perform an XLA all to all operation across all replicas
     (https://www.tensorflow.org/xla/operation_semantics#alltoall)
 
     Args:
