@@ -695,6 +695,7 @@ cc_library(
         ":custom_kernels_util",
         ":driver",
         ":rearrange_pipeline_stage_arguments",
+        "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core/kernels/data:dataset_utils",
         "//tensorflow/compiler/tf2xla:xla_compiler",
@@ -707,6 +708,58 @@ cc_library(
         "@com_google_protobuf//:protobuf_headers",
     ],
     alwayslink = True,
+)
+
+# When creating a new set of ops the following needs to be done:
+#
+# 1. New cc_library:
+# cc_library(
+#     name = "new_ops",
+#     srcs = ["new/new_ops.cc"],
+#     deps = ["//tensorflow/core:framework"],
+#     alwayslink = True,
+# )
+#
+# 2. New python wrapper for those ops:
+# tf_gen_op_wrapper_py(
+#     name = "new_ops_wrapper_py",
+#     out = "gen_new_ops.py",
+#     deps = [":new_ops"],
+#     visibility = ["//tensorflow:internal"],
+# )
+#
+# 3. New custom op libary:
+# tf_custom_op_py_library(
+#     name = "new_ops_py",
+#     kernels = [":new_ops"],
+#     deps = [":new_ops_wrapper_py"],
+#     srcs_version = "PY2AND3",
+# )
+#
+# The cc library `new_ops` needs to be added as a dependency to:
+# //tensorflow/compiler/plugin/poplar:poplar_lib
+# The custom op py library `new_ops_py` needs to be added as a dependency to one
+# of the relevant libs in //tensorflow/python/ipu.
+
+cc_library(
+    name = "dataset_ops",
+    srcs = ["ops/dataset/dataset_ops.cc"],
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "dataset_ops_wrapper_py",
+    out = "ops/gen_dataset_ops.py",
+    deps = [":dataset_ops"],
+    visibility = ["//tensorflow:internal"],
+)
+
+tf_custom_op_py_library(
+    name = "dataset_ops_py",
+    kernels = [":dataset_ops"],
+    deps = [":dataset_ops_wrapper_py"],
+    srcs_version = "PY2AND3",
 )
 
 cc_library(
@@ -956,6 +1009,7 @@ cc_library(
     hdrs = [],
     deps = [
         ":dataset_benchmark",
+        ":dataset_ops",
         ":driver",
         ":kernels",
         ":poplar_backend",
@@ -3543,6 +3597,7 @@ test_suite(
     name = "poplar_test_suite",
     tests = [
         ":all_tests",
+        "//tensorflow/compiler/plugin/poplar/kernels/dataset:dataset_tests",
         "//tensorflow/compiler/tests:poplar_tests",
         "//tensorflow/compiler/xla/client/lib:poplar_tests",
         "//tensorflow/compiler/xla/tests:poplar_tests",
