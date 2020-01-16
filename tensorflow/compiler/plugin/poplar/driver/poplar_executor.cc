@@ -1273,6 +1273,12 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   // Get environment PoplarXlaFlags hash
   target_hash.push_back(PoplarXlaFlags::Get().hlo_hash);
 
+  // TODO(T12447) - use a hash returned by Poplar.
+  char* env_engine_options = getenv("POPLAR_ENGINE_OPTIONS");
+  if (env_engine_options) {
+    target_hash.push_back(std::hash<string>()(std::string(env_engine_options)));
+  }
+
   poplar_device_hash_ = CombinedHash(target_hash);
 
   return Status::OK();
