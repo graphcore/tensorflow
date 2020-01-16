@@ -78,6 +78,22 @@ py_library(
 )
 
 py_library(
+    name = "data",
+    srcs_version = "PY2AND3",
+    srcs = [
+        "data/__init__.py",
+        "data/ops/__init__.py",
+        "data/ops/dataset_ops.py"
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:dataset_ops_py",
+        "//tensorflow/compiler/xla:xla_data_proto_py",
+        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
+        "//tensorflow/python/distribute:values",
+    ],
+)
+
+py_library(
     name = "ipu_lib",
     srcs_version = "PY2AND3",
     srcs = [
@@ -119,6 +135,7 @@ py_library(
         "vertex_edsl.py",
     ],
     deps = [
+        ":data",
         ":utils",
         ":ipu_ops_lib",
         ":ipu_grad_ops_lib",
@@ -654,11 +671,25 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "dataset_ops_test",
+    size = "medium",
+    srcs = ["tests/dataset_ops_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
         "autoshard_cnn_test",
         "dataset_benchmark_test",
+        "dataset_ops_test",
         "dropout_test",
         "embedding_lookup_test",
         "expression_op_test",

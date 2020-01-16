@@ -18,6 +18,7 @@
 # pylint: disable=wildcard-import,unused-import
 from tensorflow.python.ipu import autoshard
 from tensorflow.python.ipu import autoshard_cnn
+from tensorflow.python.ipu import data
 from tensorflow.python.ipu import dataset_benchmark
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
