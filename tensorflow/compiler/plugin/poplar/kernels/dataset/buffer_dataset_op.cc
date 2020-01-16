@@ -121,6 +121,11 @@ class BufferDatasetOp::Dataset : public DatasetBase {
       return dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_);
     }
 
+    string BuildTraceMeName() override {
+      return strings::StrCat(prefix(), "#buffer_size=", dataset()->buffer_size_,
+                             "#");
+    }
+
     Status GetNextInternal(IteratorContext* ctx,
                            std::vector<Tensor>* out_tensors,
                            bool* end_of_sequence) override {
