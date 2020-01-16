@@ -45,6 +45,7 @@ py_library(
     name = "ipu_grad_ops_lib",
     srcs_version = "PY2AND3",
     srcs = [
+        "ops/all_to_all_op_grad.py",
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
         "ops/internal_ops_grad.py",
