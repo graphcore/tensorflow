@@ -27,6 +27,7 @@ from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
 from tensorflow.compiler.xla.python_api import types
 
 FRONTEND_ATTRIBUTES_NAME = "_XlaFrontendAttributes"
+OUTSIDE_COMPILATION_NAME = "_xla_outside_compilation"
 
 
 @tf_contextlib.contextmanager
@@ -102,7 +103,7 @@ def outside_compilation_scope(name="outside"):
   graph = ops.get_default_graph()
   unique_name = graph.unique_name(name, mark_as_used=True)
   attr_value = attr_value_pb2.AttrValue(s=unique_name.encode())
-  attrs = {"_xla_outside_compilation": attr_value}
+  attrs = {OUTSIDE_COMPILATION_NAME: attr_value}
 
   with graph._attr_scope(attrs):  # pylint: disable=protected-access
     yield

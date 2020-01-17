@@ -54,6 +54,7 @@ from tensorflow.python.training import server_lib
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
 from tensorflow.python.training.momentum import MomentumOptimizer
 from tensorflow.python.training.monitored_session import MonitoredTrainingSession
+from tensorflow.python.training import gradient_descent
 
 disable_v2_behavior()
 
@@ -603,14 +604,18 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
 
   def _run_workers_in_processes(self, task_fn, cluster_spec):
     task_type = "worker"
+
     processes = []
     for task_id in range(len(cluster_spec[task_type])):
       p = self._run_task_in_process(task_fn, cluster_spec, task_type, task_id)
       p.start()
       processes.append(p)
 
+    # Join all the processes before asserting to avoid any orphans.
     for p in processes:
       p.join()
+
+    for p in processes:
       self.assertEqual(0, p.exitcode)
 
   def _create_test_objects(self):
@@ -619,7 +624,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
 
     sess_config = config_pb2.ConfigProto()
     sess_config.allow_soft_placement = False
-    sess_config.log_device_placement = True
+    sess_config.log_device_placement = False
     # The line below sets `sess_config.experimental.collective_group_leader`
     sess_config = strategy.update_config_proto(sess_config)
 
@@ -630,19 +635,21 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
                                config=sess_config)
     target = server.target
 
-    return strategy, target
+    return strategy, target, sess_config
 
-  def _test_reduction_in_outside_compilation_scope(self, task_id):
-    strategy, target = self._create_test_objects()
+  def _test_reduction_in_compiled_cluster(self, task_id):
+    strategy, target, sess_config = self._create_test_objects()
 
     with strategy.scope():
 
       def device_fn(x):
         y = x * x
-        with scopes.outside_compilation_scope():
-          sum_y = strategy.reduce(ReduceOp.SUM, y, axis=None)
+        # Test both without and with an explicit outside_compilation_scope.
+        sum_y = strategy.reduce(ReduceOp.SUM, y, axis=None)
         z = sum_y * sum_y
-        return z
+        with scopes.outside_compilation_scope():
+          sum_z = strategy.reduce(ReduceOp.SUM, z, axis=None)
+        return sum_z
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
       with ipu_scope("/device:IPU:0"):
@@ -652,14 +659,55 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
       config = ipu_utils.auto_select_ipus(config, 1)
       ipu_utils.configure_ipu_system(config)
 
-      with session_lib.Session(target=target) as sess:
+      with session_lib.Session(target=target, config=sess_config) as sess:
         [out] = sess.run(compiled_fn, feed_dict={inputs: task_id + 1})
-        self.assertEqual(out, 25.0)  # (1^2 + 2^2)^2
+        self.assertEqual(out, 50.0)  # 2 * (1^2 + 2^2)^2
 
-  def test_reduction_in_outside_compilation_scope(self):
+  def test_reduction_in_compiled_cluster(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
-    self._run_workers_in_processes(
-        self._test_reduction_in_outside_compilation_scope, cluster_spec)
+    self._run_workers_in_processes(self._test_reduction_in_compiled_cluster,
+                                   cluster_spec)
+
+  def _test_optimizer_in_compiled_cluster(self, _task_id):
+    strategy, target, sess_config = self._create_test_objects()
+
+    strategy.extended.experimental_allow_variable_placement()
+
+    x = 1.5
+    initial_w = 2.0
+    learning_rate = 0.5
+
+    with strategy.scope():
+
+      w = variable_scope.get_variable(name="w", initializer=initial_w)
+
+      def device_fn(features):
+        loss = w * features
+        optimizer = gradient_descent.GradientDescentOptimizer(learning_rate)
+        return optimizer.minimize(loss)
+
+      def compiled_fn():
+        with ipu_scope("/device:IPU:0"):
+          return ipu_compiler.compile(device_fn, inputs=[x])
+
+      train_op = strategy.experimental_run_v2(compiled_fn, args=[])
+
+      config = ipu_utils.create_ipu_config()
+      config = ipu_utils.auto_select_ipus(config, 1)
+      ipu_utils.configure_ipu_system(config)
+
+      num_workers = strategy.num_replicas_in_sync
+
+      with session_lib.Session(target=target, config=sess_config) as sess:
+        sess.run(w.initializer)
+        sess.run(train_op)
+        expected_w = initial_w - num_workers * learning_rate * x
+        self.assertEqual(expected_w, sess.run(w))
+
+  def test_optimizer_in_compiled_cluster(self):
+    cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
+    self._run_workers_in_processes(self._test_optimizer_in_compiled_cluster,
+                                   cluster_spec)
 
 
 if __name__ == "__main__":
