@@ -73,7 +73,7 @@ class UserOpImpl : public PoplarOpDef {
     void (*as_function_host_rw_ptr)(
         const std::vector<void*>& data,
         const std::vector<std::uint32_t>& number_of_elements,
-        std::vector<void*>& outputs);
+        std::vector<void*>& outputs, const std::string& name);
 
     // Convert the function pointer to each of the types of function we could
     // have.
@@ -113,7 +113,8 @@ class UserOpImpl : public PoplarOpDef {
       auto functor = [=](std::vector<void*>& data,
                          std::vector<std::uint32_t>& number_of_elements,
                          std::vector<void*>& outputs) {
-        as_function_host_rw_ptr(data, number_of_elements, outputs);
+        as_function_host_rw_ptr(data, number_of_elements, outputs,
+                                instruction_name);
       };
 
       // We add a map of user ops to their owned streams.

@@ -209,7 +209,24 @@ Poplar headers and link libraries should be necessary.
 Fully customized CPU operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-TBD
+The framework also allows a custom operation which executes code on the CPU
+instead of on the IPU.  A shared object, much like the builder function of
+the device side custom operation must be written.  The signature of this
+function should be:
+
+.. code-block:: C++
+
+  extern "C" void Callback(const std::vector<void*>& data,
+                           const std::vector<std::uint32_t>& number_of_elements,
+                           std::vector<void*>& outputs,
+                           const std::string& name);
+
+The arguments are:
+:data: the input data. the function should be written to expect a certain data
+type so the void pointer can be cast into the expected type.
+:number_of_elements: indicates the number of elements in the input data.
+:outputs: should be filled in by the operation.
+:name: is the name of the operation within the XLA/HLO graph.
 
 Custom elementwise expressions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
