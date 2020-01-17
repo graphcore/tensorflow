@@ -956,8 +956,9 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=1):
   Returns:
     The IpuOptions configuration protobuf.
   """
-
-  opts.device_connection_type = connection_type or DeviceConnectionType.ALWAYS
+  connection_type = connection_type if connection_type \
+                                    else DeviceConnectionType.ALWAYS
+  opts.device_connection_type = connection_type.value
   opts.ipu_version = ipu_version
   return opts
 
