@@ -166,10 +166,10 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       def device_fn(x):
         with ipu_scope("/device:IPU:0"):
           x *= 2.0
-          with outside_compilation_scope(name="outside0"):
+          with outside_compilation_scope():
             x *= 2.0
           x *= 2.0
-          with outside_compilation_scope(name="outside1"):
+          with outside_compilation_scope():
             x *= 2.0
           x *= 2.0
         return x

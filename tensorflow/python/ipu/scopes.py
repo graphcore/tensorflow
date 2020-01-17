@@ -94,15 +94,17 @@ def outside_compilation_scope(name="outside"):
         return d
 
   Args:
-    name: A unique name for the outside compilation scope.
+    name: A name for the outside compilation scope.
 
   Returns:
     A context
   """
-  attrs = {
-      "_xla_outside_compilation": attr_value_pb2.AttrValue(s=name.encode())
-  }
-  with ops.get_default_graph()._attr_scope(attrs):  # pylint: disable=protected-access
+  graph = ops.get_default_graph()
+  unique_name = graph.unique_name(name, mark_as_used=True)
+  attr_value = attr_value_pb2.AttrValue(s=unique_name.encode())
+  attrs = {"_xla_outside_compilation": attr_value}
+
+  with graph._attr_scope(attrs):  # pylint: disable=protected-access
     yield
 
 
