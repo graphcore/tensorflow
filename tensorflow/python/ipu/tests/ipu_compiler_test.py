@@ -19,7 +19,10 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow_estimator.python.estimator import model_fn
+from tensorflow_estimator.python.estimator.mode_keys import ModeKeys
 from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
@@ -60,6 +63,44 @@ class IpuCompilerTest(test_util.TensorFlowTestCase):
         a = array_ops.placeholder(np.float32, shape=[1])
         with self.assertRaisesRegex(Exception, "not placed on an IPU"):
           ipu_compiler.compile(my_net, inputs=[a])
+
+  @test_util.deprecated_graph_mode_only
+  def testCompileWrongUseOfEstimatorSpec(self):
+    def my_net(features, labels):
+      mode = ModeKeys.TRAIN
+      loss = features + labels
+      train_op = array_ops.identity(loss)
+      return [
+          2, [], 1,
+          [model_fn.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)]
+      ]
+
+    a = array_ops.placeholder(np.float32, shape=[1])
+    b = array_ops.placeholder(np.float32, shape=[1])
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(ValueError, "contains an EstimatorSpec"):
+        ipu_compiler.compile(my_net, inputs=[a, b])
+
+  @test_util.deprecated_graph_mode_only
+  def testCompileWrongUseOfIPUEstimatorSpec(self):
+    def my_net(features, labels):
+      mode = ModeKeys.TRAIN
+      loss = features + labels
+      train_op = array_ops.identity(loss)
+      return [
+          2, [], 1,
+          [
+              ipu_estimator.IPUEstimatorSpec(mode=mode,
+                                             loss=loss,
+                                             train_op=train_op)
+          ]
+      ]
+
+    a = array_ops.placeholder(np.float32, shape=[1])
+    b = array_ops.placeholder(np.float32, shape=[1])
+    with ops.device("/device:IPU:0"):
+      with self.assertRaisesRegex(ValueError, "contains an EstimatorSpec"):
+        ipu_compiler.compile(my_net, inputs=[a, b])
 
 
 if __name__ == "__main__":
