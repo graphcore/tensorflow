@@ -97,15 +97,14 @@ class IPUPipelineEstimatorSpec(
       raise ValueError("`IPUPipelineEstimatorSpec` must contain "
                        "`eval_metrics_fn` when evaluating")
 
-    return super(IPUPipelineEstimatorSpec,
-                 cls).__new__(cls,
-                              mode=mode,
-                              computational_stages=computational_stages,
-                              eval_metrics_fn=eval_metrics_fn,
-                              pipeline_depth=pipeline_depth,
-                              optimizer_function=optimizer_function,
-                              device_mapping=device_mapping,
-                              pipeline_schedule=pipeline_schedule)
+    return super().__new__(cls,
+                           mode=mode,
+                           computational_stages=computational_stages,
+                           eval_metrics_fn=eval_metrics_fn,
+                           pipeline_depth=pipeline_depth,
+                           optimizer_function=optimizer_function,
+                           device_mapping=device_mapping,
+                           pipeline_schedule=pipeline_schedule)
 
 
 class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: disable=protected-access
@@ -279,8 +278,8 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
     model_function = ipu_estimator._augment_model_fn(model_fn,
                                                      _ModelFnPipelineWrapper)
     # pylint: enable=protected-access
-    super(IPUPipelineEstimator, self).__init__(model_fn=model_function,
-                                               model_dir=model_dir,
-                                               config=config,
-                                               params=params,
-                                               warm_start_from=warm_start_from)
+    super().__init__(model_fn=model_function,
+                     model_dir=model_dir,
+                     config=config,
+                     params=params,
+                     warm_start_from=warm_start_from)

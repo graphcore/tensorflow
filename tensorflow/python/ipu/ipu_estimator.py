@@ -106,17 +106,16 @@ class IPUEstimatorSpec(
       if not isinstance(host_call[1], list):
         raise ValueError("second element in `host_call` must be a list")
 
-    return super(IPUEstimatorSpec,
-                 cls).__new__(cls,
-                              mode=mode,
-                              predictions=predictions,
-                              loss=loss,
-                              train_op=train_op,
-                              eval_metric_ops=eval_metric_ops,
-                              host_call=host_call,
-                              training_hooks=training_hooks,
-                              evaluation_hooks=evaluation_hooks,
-                              prediction_hooks=prediction_hooks)
+    return super().__new__(cls,
+                           mode=mode,
+                           predictions=predictions,
+                           loss=loss,
+                           train_op=train_op,
+                           eval_metric_ops=eval_metric_ops,
+                           host_call=host_call,
+                           training_hooks=training_hooks,
+                           evaluation_hooks=evaluation_hooks,
+                           prediction_hooks=prediction_hooks)
 
 
 class _IPUConfigureIPUSystemHook(session_run_hook.SessionRunHook):
@@ -350,7 +349,7 @@ def _extract_metric_values(eval_dict):
 
 
 @six.add_metaclass(abc.ABCMeta)
-class _ModelFnWrapperBase(object):
+class _ModelFnWrapperBase:
   """Interface for wrapping the user-provided `model_fn` in a loop."""
   @abc.abstractproperty
   def captured_hooks(self):
@@ -380,11 +379,10 @@ class _ModelFnWrapperBase(object):
   def get_predictions(self, compiled_prediction_loop):
     raise NotImplementedError()
 
-  # TODO(hakons): This works in Python >= 3.3
-  # @staticmethod
-  # @abc.abstractmethod
-  # def get_outfeed_mode(mode):
-  #   raise NotImplementedError()
+  @staticmethod
+  @abc.abstractmethod
+  def get_outfeed_mode(mode):
+    raise NotImplementedError()
 
 
 class _ModelFnWrapper(_ModelFnWrapperBase):
@@ -757,11 +755,11 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
       raise ValueError('{} are reserved keys but existed in params {}.'.format(
           _RESERVED_PARAMS_KEYS, params))
 
-    super(_IPUEstimatorBase, self).__init__(model_fn=model_fn,
-                                            model_dir=model_dir,
-                                            config=config,
-                                            params=params,
-                                            warm_start_from=warm_start_from)
+    super().__init__(model_fn=model_fn,
+                     model_dir=model_dir,
+                     config=config,
+                     params=params,
+                     warm_start_from=warm_start_from)
 
   def train(self,
             input_fn,
@@ -799,12 +797,11 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
     """
     self._validate_steps(steps)
     self._params[_INPUT_FN_KEY] = input_fn
-    return super(_IPUEstimatorBase,
-                 self).train(input_fn=input_fn,
-                             hooks=hooks,
-                             steps=steps,
-                             max_steps=max_steps,
-                             saving_listeners=saving_listeners)
+    return super().train(input_fn=input_fn,
+                         hooks=hooks,
+                         steps=steps,
+                         max_steps=max_steps,
+                         saving_listeners=saving_listeners)
 
   def _convert_train_steps_to_hooks(self, steps, max_steps):
     return [
@@ -882,12 +879,11 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
 
     self._validate_steps(steps)
     self._params[_INPUT_FN_KEY] = input_fn
-    return super(_IPUEstimatorBase,
-                 self).evaluate(input_fn=input_fn,
-                                hooks=hooks,
-                                steps=steps,
-                                checkpoint_path=checkpoint_path,
-                                name=name)
+    return super().evaluate(input_fn=input_fn,
+                            hooks=hooks,
+                            steps=steps,
+                            checkpoint_path=checkpoint_path,
+                            name=name)
 
   def predict(self,
               input_fn,
@@ -934,12 +930,11 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
     """
 
     self._params[_INPUT_FN_KEY] = input_fn
-    predictions = super(_IPUEstimatorBase, self).predict(
-        input_fn=input_fn,
-        predict_keys=predict_keys,
-        hooks=hooks,
-        checkpoint_path=checkpoint_path,
-        yield_single_examples=yield_single_examples)
+    predictions = super().predict(input_fn=input_fn,
+                                  predict_keys=predict_keys,
+                                  hooks=hooks,
+                                  checkpoint_path=checkpoint_path,
+                                  yield_single_examples=yield_single_examples)
 
     # If yield_single_examples == True, the base class has
     # already flattened the outermost iterations_per_loop
@@ -1007,8 +1002,8 @@ class IPUEstimator(_IPUEstimatorBase):
 
     model_function = _augment_model_fn(model_fn, _ModelFnWrapper)
 
-    super(IPUEstimator, self).__init__(model_fn=model_function,
-                                       model_dir=model_dir,
-                                       config=config,
-                                       params=params,
-                                       warm_start_from=warm_start_from)
+    super().__init__(model_fn=model_function,
+                     model_dir=model_dir,
+                     config=config,
+                     params=params,
+                     warm_start_from=warm_start_from)
