@@ -500,19 +500,19 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
     auto& shapes = infeed_dataset_iterator->GetShapes();
     auto& queues = infeed_dataset_iterator->GetInfeedQueues();
 
-    for (size_t j = 0; j < shapes.size(); ++j) {
-      auto length = ShapeUtil::ByteSizeOf(shapes[j]);
-      auto bytes_per_replica = length / current_replication_factor_;
-      for (auto replica_id = 0; replica_id < current_replication_factor_;
-           ++replica_id) {
-        auto& queue = queues[j][replica_id];
+    for (auto replica_id = 0; replica_id < current_replication_factor_;
+         ++replica_id) {
+      auto& replica_queues = queues[replica_id];
+      for (size_t j = 0; j < shapes.size(); ++j) {
+        const auto length = ShapeUtil::ByteSizeOf(shapes[j]);
+        const auto bytes_per_replica = length / current_replication_factor_;
         std::unique_ptr<poplar::StreamCallback> infeed_callback;
         if (PoplarXlaFlags::Get().null_data_feed) {
           infeed_callback = absl::make_unique<NullPrefetchCallback>(
               GetInfeedAllocator(), bytes_per_replica);
         } else {
           infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
-              queue, bytes_per_replica);
+              replica_queues[j], bytes_per_replica);
         }
         current_engine_->connectStreamToCallback(
             GetInfeedCopyHandle(infeed_info.stream_prefix, j), replica_id,
@@ -620,7 +620,7 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
         // Enqueue tensors to each replica.
         for (size_t replica_id = 0; replica_id < tensor_slices.size();
              replica_id++) {
-          auto& queue = infeed_queues[j][replica_id];
+          auto& queue = infeed_queues[replica_id][j];
           auto* tb = tensorflow::DMAHelper::buffer(&tensor_slices[replica_id]);
           tb->Ref();
           queue->BlockPush(tb);
