@@ -74,8 +74,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   checkpoint the model at the same time.
   """
   def __init__(self, cluster_resolver):
-    super(IPUMultiWorkerStrategy,
-          self).__init__(IPUMultiWorkerExtended(self, cluster_resolver))
+    super().__init__(IPUMultiWorkerExtended(self, cluster_resolver))
 
 
 def _current_device():
@@ -101,7 +100,7 @@ class IPUMirroredVariable(values.MirroredVariable):  # pylint: disable=abstract-
 class IPUMultiWorkerExtended(
     collective_all_reduce_strategy.CollectiveAllReduceExtended):
   def __init__(self, container_strategy, cluster_resolver):
-    super(IPUMultiWorkerExtended, self).__init__(
+    super().__init__(
         container_strategy,
         communication=cross_device_ops_lib.CollectiveCommunication.RING,
         cluster_resolver=cluster_resolver)
@@ -229,23 +228,20 @@ class IPUMultiWorkerExtended(
     if _is_inside_compilation():
       # Escape the compilation scope and place the reduction on the host.
       with scopes.outside_compilation_scope("reduce_to"):
-        return super(IPUMultiWorkerExtended,
-                     self)._reduce_to(reduce_op, value, destinations)
+        return super()._reduce_to(reduce_op, value, destinations)
 
     # Make sure the reduction is done on the host device
     # by wrapping the inputs in an identity op on that device.
     with ops.device(self._host_device):
       value = array_ops.identity(value, name="reduce_to")
 
-    return super(IPUMultiWorkerExtended,
-                 self)._reduce_to(reduce_op, value, destinations)
+    return super()._reduce_to(reduce_op, value, destinations)
 
   def _batch_reduce_to(self, reduce_op, value_destination_pairs):
     if _is_inside_compilation():
       # Escape the compilation scope and place the reduction on the host.
       with scopes.outside_compilation_scope("batch_reduce"):
-        return super(IPUMultiWorkerExtended,
-                     self)._batch_reduce_to(reduce_op, value_destination_pairs)
+        return super()._batch_reduce_to(reduce_op, value_destination_pairs)
 
     # Make sure the reduction is done on the host device
     # by wrapping the inputs in an identity op on that device.
@@ -254,8 +250,7 @@ class IPUMultiWorkerExtended(
                                                      name="batch_reduce"), d)
                                  for (v, d) in value_destination_pairs]
 
-    return super(IPUMultiWorkerExtended,
-                 self)._batch_reduce_to(reduce_op, value_destination_pairs)
+    return super()._batch_reduce_to(reduce_op, value_destination_pairs)
 
   def _call_for_each_replica(self, fn, args, kwargs):
     with distribute_lib.ReplicaContext(
