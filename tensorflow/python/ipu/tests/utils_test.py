@@ -137,7 +137,8 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertTrue(cfg.serialization_folder, folder_name)
 
     cfg = ipu.utils.create_ipu_config()
-    cfg = ipu.utils.set_ipu_connection_type(cfg, IpuDeviceConnectionType.NEVER)
+    cfg = ipu.utils.set_ipu_connection_type(
+        cfg, ipu.utils.DeviceConnectionType.NEVER)
     self.assertTrue(cfg.device_connection_type, IpuDeviceConnectionType.NEVER)
 
     with self.assertRaises(Exception):
