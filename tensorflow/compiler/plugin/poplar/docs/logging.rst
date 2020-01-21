@@ -557,17 +557,17 @@ To extract size information from it type the following:
     $ size -A binaries.a > tiles_elf.txt
 
 This pipes a tile-by-tile rendition of the memory consumed in bytes to the file
-*tiles_elf.txt*. The important part is the *data* section, which contains the
-graph-dependent components of memory allocation. This can be extracted from the
-file to produce a single column of data where each entry is the *data* entry:
+*tiles_elf.txt*. All the memory allocated is part of the *text* section.
+This can be extracted from the tiles elf files to produce a single column where each entry
+is the size of the *text* section corresponding to a tile:
 
 .. code-block:: console
 
-    $ size -A binaries.a | grep -e ".data" | awk '{print $2}' > data_usage_per_tile.txt
+    $ size -A binaries.a | grep -e ".text" | awk '{print $2}' > memory_usage_per_tile.txt
 
-The file *data_usage_per_tile.txt* will contain this single column of *data*
+The file *memory_usage_per_tile.txt* will contain this single column of memory
 allocation. Further facets of the deployed graph can be extracted from this
-approach, and are well documented in the out of memory guide.
+approach, and are documented in the out of memory guide.
 
 Dumping auxiliary Poplar information
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
