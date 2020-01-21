@@ -22,95 +22,95 @@ const unsigned fp16_man_size = 10;
 
 namespace gfloatutils {
 // Convert FPConfig::RoundMode to popfloat's GfloatRoundType
-experimental::popfloat::RoundType GetPopfloatRoundModeType(
+popfloat::experimental::RoundType GetPopfloatRoundModeType(
     FPConfig::RoundMode round_mode, const bool quantised_fp32,
     unsigned sr_bits) {
   switch (round_mode) {
     case FPConfig_RoundMode_RZ:
-      return experimental::popfloat::RoundType::RZ;
+      return popfloat::experimental::RoundType::RZ;
     case FPConfig_RoundMode_RN:
-      return experimental::popfloat::RoundType::RN;
+      return popfloat::experimental::RoundType::RN;
     case FPConfig_RoundMode_RA:
-      return experimental::popfloat::RoundType::RA;
+      return popfloat::experimental::RoundType::RA;
     case FPConfig_RoundMode_RU:
-      return experimental::popfloat::RoundType::RU;
+      return popfloat::experimental::RoundType::RU;
     case FPConfig_RoundMode_RD:
-      return experimental::popfloat::RoundType::RD;
+      return popfloat::experimental::RoundType::RD;
     case FPConfig_RoundMode_SR:
       if (quantised_fp32) {
         return (sr_bits < fp32_man_size)
-                   ? experimental::popfloat::RoundType::SR
-                   : experimental::popfloat::RoundType::SX;
+                   ? popfloat::experimental::RoundType::SR
+                   : popfloat::experimental::RoundType::SX;
       } else {
         return (sr_bits < fp16_man_size)
-                   ? experimental::popfloat::RoundType::SR
-                   : experimental::popfloat::RoundType::SX;
+                   ? popfloat::experimental::RoundType::SR
+                   : popfloat::experimental::RoundType::SX;
       }
     case FPConfig_RoundMode_INVALID:
-      return experimental::popfloat::RoundType::INV;
+      return popfloat::experimental::RoundType::INV;
   }
   LOG(FATAL) << "Unhandled RoundMode: " << round_mode;
 }
 
 // Convert GFConfig::GfloatFormat to popfloat's GfloatFormatType
-experimental::popfloat::FormatType GetPopfloatFormatType(
+popfloat::experimental::FormatType GetPopfloatFormatType(
     GFConfig::GfloatFormat gfloat_format) {
   switch (gfloat_format) {
     case GFConfig_GfloatFormat_ieeeFp16:
-      return experimental::popfloat::FormatType::IEEE_FP16;
+      return popfloat::experimental::FormatType::IEEE_FP16;
     case GFConfig_GfloatFormat_quantisedFp32:
-      return experimental::popfloat::FormatType::QUANTISED_FP32;
+      return popfloat::experimental::FormatType::QUANTISED_FP32;
     case GFConfig_GfloatFormat_quantisedFp16:
-      return experimental::popfloat::FormatType::QUANTISED_FP16;
+      return popfloat::experimental::FormatType::QUANTISED_FP16;
     case GFConfig_GfloatFormat_minNormAlignGf8:
-      return experimental::popfloat::FormatType::MIN_NORM_ALIGN_GF8;
+      return popfloat::experimental::FormatType::MIN_NORM_ALIGN_GF8;
     case GFConfig_GfloatFormat_oneFiveTwoGf8:
-      return experimental::popfloat::FormatType::ONE_FIVE_TWO_GF8;
+      return popfloat::experimental::FormatType::ONE_FIVE_TWO_GF8;
     case GFConfig_GfloatFormat_maxNormAlignGf8:
-      return experimental::popfloat::FormatType::MAX_NORM_ALIGN_GF8;
+      return popfloat::experimental::FormatType::MAX_NORM_ALIGN_GF8;
     case GFConfig_GfloatFormat_bfloat16:
-      return experimental::popfloat::FormatType::BFLOAT16;
+      return popfloat::experimental::FormatType::BFLOAT16;
     case GFConfig_GfloatFormat_noDenormGf16:
-      return experimental::popfloat::FormatType::NO_DENORM_GF16;
+      return popfloat::experimental::FormatType::NO_DENORM_GF16;
     case GFConfig_GfloatFormat_enDenormGf16:
-      return experimental::popfloat::FormatType::ENABLE_DENORM_GF16;
+      return popfloat::experimental::FormatType::ENABLE_DENORM_GF16;
     case GFConfig_GfloatFormat_Invalid:
-      return experimental::popfloat::FormatType::INVALID_FORMAT;
+      return popfloat::experimental::FormatType::INVALID_FORMAT;
   }
   LOG(FATAL) << "Unhandled GfloatFormat : " << gfloat_format;
 }
 
 // Convert SRConfig::Density to popfloat's
 // GfloatSRDensityType
-experimental::popfloat::SRDensityType GetPopfloatSRDensityType(
+popfloat::experimental::SRDensityType GetPopfloatSRDensityType(
     SRConfig::Density noise_density) {
   switch (noise_density) {
     case SRConfig_Density_Uniform:
-      return experimental::popfloat::SRDensityType::UNIFORM;
+      return popfloat::experimental::SRDensityType::UNIFORM;
     case SRConfig_Density_Normal:
-      return experimental::popfloat::SRDensityType::NORMAL;
+      return popfloat::experimental::SRDensityType::NORMAL;
     case SRConfig_Density_TruncatedNormal:
-      return experimental::popfloat::SRDensityType::TRUNCATED_NORMAL;
+      return popfloat::experimental::SRDensityType::TRUNCATED_NORMAL;
     case SRConfig_Density_Bernoulli:
-      return experimental::popfloat::SRDensityType::BERNOULLI;
+      return popfloat::experimental::SRDensityType::BERNOULLI;
     case SRConfig_Density_TruncatedLogistic:
-      return experimental::popfloat::SRDensityType::TRUNCATED_LOGISTIC;
+      return popfloat::experimental::SRDensityType::TRUNCATED_LOGISTIC;
     case SRConfig_Density_Logistic:
-      return experimental::popfloat::SRDensityType::LOGISTIC;
+      return popfloat::experimental::SRDensityType::LOGISTIC;
     case SRConfig_Density_Laplace:
-      return experimental::popfloat::SRDensityType::LAPLACE;
+      return popfloat::experimental::SRDensityType::LAPLACE;
     case SRConfig_Density_TruncatedLaplace:
-      return experimental::popfloat::SRDensityType::TRUNCATED_LAPLACE;
+      return popfloat::experimental::SRDensityType::TRUNCATED_LAPLACE;
     case SRConfig_Density_LogitNormal:
-      return experimental::popfloat::SRDensityType::LOGIT_NORMAL;
+      return popfloat::experimental::SRDensityType::LOGIT_NORMAL;
     case SRConfig_Density_TruncatedLogitNormal:
-      return experimental::popfloat::SRDensityType::TRUNCATED_LOGIT_NORMAL;
+      return popfloat::experimental::SRDensityType::TRUNCATED_LOGIT_NORMAL;
     case SRConfig_Density_Invalid:
-      return experimental::popfloat::SRDensityType::INVALID;
+      return popfloat::experimental::SRDensityType::INVALID;
   }
   LOG(FATAL) << "Unhandled Density type: " << noise_density;
 }
-experimental::popfloat::GfloatCast::RoundConfig GetPopfloatGfloatRoundConfig(
+popfloat::experimental::GfloatCast::RoundConfig GetPopfloatGfloatRoundConfig(
     PopfloatCastConfig cast_config, poplar::Type calc_type) {
   auto round_mode = GetPopfloatRoundModeType(
       cast_config.fp_config().round_mode(), (calc_type == poplar::FLOAT),
@@ -119,7 +119,7 @@ experimental::popfloat::GfloatCast::RoundConfig GetPopfloatGfloatRoundConfig(
   auto sr_density =
       GetPopfloatSRDensityType(cast_config.sr_config().sr_density());
 
-  return experimental::popfloat::GfloatCast::RoundConfig(
+  return popfloat::experimental::GfloatCast::RoundConfig(
       round_mode, cast_config.sr_config().sr_bits(), calc_type, sr_density,
       cast_config.sr_config().sr_norm_offset(),
       cast_config.sr_config().sr_norm_scale(),
@@ -128,7 +128,7 @@ experimental::popfloat::GfloatCast::RoundConfig GetPopfloatGfloatRoundConfig(
       cast_config.sr_config().sr_bernoulli_prob());
 }
 
-experimental::popfloat::GfloatCast::CastConfig CreateCastNativeToGfloatConfig(
+popfloat::experimental::GfloatCast::CastConfig CreateCastNativeToGfloatConfig(
     PopfloatCastConfig cast_config, poplar::Type calc_type,
     poplar::Type out_type) {
   auto gfloat_format =
@@ -136,7 +136,7 @@ experimental::popfloat::GfloatCast::CastConfig CreateCastNativeToGfloatConfig(
 
   auto round_cfg = GetPopfloatGfloatRoundConfig(cast_config, calc_type);
 
-  return experimental::popfloat::GfloatCast::CastConfig::createCastNativeToGF(
+  return popfloat::experimental::GfloatCast::CastConfig::createCastNativeToGF(
       gfloat_format, calc_type, out_type, round_cfg,
       cast_config.fp_config().enable_nanoo());
 }

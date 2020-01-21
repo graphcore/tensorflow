@@ -130,7 +130,7 @@ limitations under the License.
 #include <poplar/exceptions.hpp>
 #include <poputil/exceptions.hpp>
 
-#include <experimental/popfloat/codelets.hpp>
+#include <popfloat/experimental/codelets.hpp>
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
 #include <popops/codelets.hpp>
@@ -517,7 +517,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   popnn::addCodelets(main_graph);
   popops::addCodelets(main_graph);
   poprand::addCodelets(main_graph);
-  experimental::popfloat::addCodelets(main_graph);
+  popfloat::experimental::addCodelets(main_graph);
 
   return Status::OK();
 }

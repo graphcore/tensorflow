@@ -19,29 +19,29 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/kernels/popfloat/gfloat_config_utils.pb.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 
-#include <experimental/popfloat/CastToGfloat.hpp>
+#include <popfloat/experimental/CastToGfloat.hpp>
 
 namespace gfloatutils {
 
 // Convert FPConfig::RoundMode to popfloat's GfloatRoundType
-experimental::popfloat::RoundType GetPopfloatRoundModeType(
+popfloat::experimental::RoundType GetPopfloatRoundModeType(
     FPConfig::RoundMode round_mode, const bool quantised_fp32,
     unsigned sr_bits);
 
 // Convert GFConfig::GfloatFormat to popfloat's GfloatFormatType
-experimental::popfloat::FormatType GetPopfloatFormatType(
+popfloat::experimental::FormatType GetPopfloatFormatType(
     GFConfig::GfloatFormat gf_format);
 
 // Convert SRConfig::Density to popfloat's
 // GfloatSRDensityType
-experimental::popfloat::SRDensityType GetPopfloatSRDensityType(
+popfloat::experimental::SRDensityType GetPopfloatSRDensityType(
     SRConfig::Density noise_density);
 
-experimental::popfloat::GfloatCast::CastConfig CreateCastNativeToGfloatConfig(
+popfloat::experimental::GfloatCast::CastConfig CreateCastNativeToGfloatConfig(
     PopfloatCastConfig gf_cast_config, poplar::Type calc_type,
     poplar::Type out_type);
 
-experimental::popfloat::GfloatCast::RoundConfig GetPopfloatGfloatRoundConfig(
+popfloat::experimental::GfloatCast::RoundConfig GetPopfloatGfloatRoundConfig(
     PopfloatCastConfig cast_config);
 }  // namespace gfloatutils
 
