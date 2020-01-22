@@ -358,28 +358,28 @@ bool AreAllOutputsParameters(const HloModule* module,
       root->GetModule()->entry_computation_layout().result_shape());
 }
 
-// Check that module is of type - scalar/elementwise only. 
+// Checkk that module is of type - scalar, elementwise instructions only.
 bool AreAllScalarElementwiseGraph(const HloModule* module) {
-  for (auto* comp : module->computations()) {
-    for (auto* inst : comp->instructions()) {
-      switch (inst->opcode()) {
-        case HloOpcode::kConstant:
-        case HloOpcode::kParameter:
-          if (!ShapeUtil::IsScalar(inst->shape())) {
-            return false;
-          }
-          break;
-        case HloOpcode::kTuple:
-          if (comp->root_instruction() != inst) {
-            return false;
-          }
-          break;
-        default:
-          if (!(ShapeUtil::IsScalar(inst->shape()) && inst->IsElementwise())) {
-            return false;
-          }
-          break;
-      }
+  const auto& entry_comp = module->entry_computation();
+
+  for (auto* inst : entry_comp->instructions()) {
+    switch (inst->opcode()) {
+      case HloOpcode::kConstant:
+      case HloOpcode::kParameter:
+        if (!ShapeUtil::IsScalar(inst->shape())) {
+          return false;
+        }
+        break;
+      case HloOpcode::kTuple:
+        if (entry_comp->root_instruction() != inst) {
+          return false;
+        }
+        break;
+      default:
+        if (!(ShapeUtil::IsScalar(inst->shape()) && inst->IsElementwise())) {
+          return false;
+        }
+        break;
     }
   }
 
@@ -877,10 +877,18 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   bool is_remap_graph =
       all_outputs_are_parameters && !any_computation_has_side_effects;
 
+  const bool all_scalar_elementwise_graph =
+      AreAllScalarElementwiseGraph(module.get());
+
+  const bool is_scalar_elementwise_graph =
+      all_scalar_elementwise_graph && !any_computation_has_side_effects;
+
   if (is_constant_graph) {
     VLOG(1) << "Skip engine compilation - output is constant.";
   } else if (is_remap_graph) {
     VLOG(1) << "Skip engine compilation - all outputs are inputs.";
+  } else if (is_scalar_elementwise_graph) {
+    VLOG(1) << "Skip engine compilation - scalar elementwise graph.";
   } else {
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(

@@ -469,6 +469,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   uint64 HashModuleAndDevice(const HloModule& module) const;
   Status CreatePoplarTarget();
 
+  // Compute literal(s) input for ConstantOutputAllocation
+  // when dealing with scalar elementwise graph.
   Status LiteralEvaluateForScalarElementwiseGraph(
       xla::poplarplugin::PoplarExecutable& executable, const Args& args,
       std::vector<std::vector<Literal>>& literal_evaluate_break_down);
