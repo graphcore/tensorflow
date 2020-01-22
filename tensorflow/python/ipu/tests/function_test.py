@@ -37,9 +37,10 @@ class FunctionTest(test_util.TensorFlowTestCase):
 
     r = tu.ReportJSON(self, eager_mode=True)
 
-    result = my_func(constant_op.constant(1), constant_op.constant(2),
-                     constant_op.constant(3))
-    self.assertAllEqual(6, result.numpy())
+    result = my_func(constant_op.constant(1, shape=[2]),
+                     constant_op.constant(2, shape=[2]),
+                     constant_op.constant(3, shape=[2]))
+    self.assertAllEqual([6, 6], result.numpy())
 
     r.parse_log(assert_len=4)
     r.assert_contains_one_compile_event()
@@ -55,13 +56,13 @@ class FunctionTest(test_util.TensorFlowTestCase):
 
     r = tu.ReportJSON(self, eager_mode=True)
 
-    result = my_func(constant_op.constant(1), 2, c=3)
-    self.assertAllEqual(6, result.numpy())
+    result = my_func(constant_op.constant(1, shape=[2]), 2, c=3)
+    self.assertAllEqual([6, 6], result.numpy())
 
     r.parse_log(assert_len=4)
     r.assert_contains_one_compile_event()
 
-    cs = ['add_1/*/AddTo', '__seed']
+    cs = ['add_1/*/Add', '__seed']
     r.assert_compute_sets_contain_list(cs)
 
   @test_util.run_v2_only
