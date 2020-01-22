@@ -104,6 +104,10 @@ class PoplarExecutable : public Executable {
 
   const bool IsLoadedFromCache() const { return loaded_from_cache_; }
 
+  const bool IsScalarElementwiseGraph() const {
+    return is_scalar_elementwise_graph_;
+  }
+
   static StatusOr<PoplarExecutable*> Deserialize(
       std::unique_ptr<HloModule> hlo_module,
       std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
@@ -139,6 +143,7 @@ class PoplarExecutable : public Executable {
   SendRecvInfos send_infos_;
   SendRecvInfos recv_infos_;
   bool loaded_from_cache_;
+  const bool is_scalar_elementwise_graph_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutable);
 };

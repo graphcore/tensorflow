@@ -1801,6 +1801,7 @@ StatusOr<bool> PoplarExecutor::CheckMoveDeviceToHostRequired(
   return do_device_to_host;
 }
 
+// Check if there is tensor/arg of current executable on device.
 StatusOr<bool> PoplarExecutor::CheckAnyArgOnDevice(const Args& args) {
   for (auto& device_buffer : args) {
     const TensorControl* tc =
@@ -2236,7 +2237,7 @@ Status TransformEvaluatorOutput(const Shape& layout, Literal& evaluator_output,
 }
 }  // namespace
 
-// Computes vector(s) literal input for ConstantOutputAllocation when 
+// Computes vector(s) literal input for ConstantOutputAllocation when
 // dealing with ScalarElementwiseGraph.
 Status PoplarExecutor::LiteralEvaluateForScalarElementwiseGraph(
     xla::poplarplugin::PoplarExecutable& executable, const Args& args,
@@ -2294,7 +2295,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       retbuf = GetOutputBuffer(executable, allocator, remap, output_shape, args,
                                input_output_aliasing_map);
     } else if (executable.IsScalarElementwiseGraph()) {
-      // If some arg on device, move them to host.
+      // If some arg are on device, move them to host.
       TF_ASSIGN_OR_RETURN(bool any_arg_on_device, CheckAnyArgOnDevice(args));
       if (any_arg_on_device) {
         TF_RETURN_IF_ERROR(MoveDeviceToHost());
