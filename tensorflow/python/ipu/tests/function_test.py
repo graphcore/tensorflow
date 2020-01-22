@@ -76,6 +76,35 @@ class FunctionTest(test_util.TensorFlowTestCase):
     with self.assertRaises(errors.InvalidArgumentError):
       my_func(constant_op.constant([1., 2., 1., 4., 1., 6.]))
 
+  @test_util.run_v2_only
+  def testDoNotCompileGraphForElementwiseScalar(self):
+    @ipu.function
+    def my_func(a, b, c):
+      return a + b + c
+
+    r = tu.ReportJSON(self, eager_mode=True)
+
+    result = my_func(constant_op.constant(1), constant_op.constant(2),
+                     constant_op.constant(3))
+    self.assertAllEqual(6, result.numpy())
+
+    r.parse_log()
+    r.assert_contains_no_compile_event()
+
+  @test_util.run_v2_only
+  def testDoNotCompileGraphForElementwiseScalar2(self):
+    @ipu.function
+    def my_func(a, b, c):
+      return a + b + c
+
+    r = tu.ReportJSON(self, eager_mode=True)
+
+    result = my_func(constant_op.constant(1), 2, c=3)
+    self.assertAllEqual(6, result.numpy())
+
+    r.parse_log()
+    r.assert_contains_no_compile_event()
+
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +
