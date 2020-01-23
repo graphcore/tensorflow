@@ -36,12 +36,15 @@ from tensorflow.python.distribute.reduce_util import ReduceOp
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_estimator
+from tensorflow.python.ipu import ipu_infeed_queue
+from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMirroredVariable
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMultiWorkerStrategy
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUSyncOnReadVariable
+from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.keras.layers.normalization import BatchNormalization
 from tensorflow.python.ops import array_ops
@@ -708,6 +711,79 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_optimizer_in_compiled_cluster,
                                    cluster_spec)
+
+  def _test_pipelining(self, _task_id):
+    x = 1.5
+    y = 1.0
+    initial_w = 2.0
+    learning_rate = 0.5
+    pipeline_depth = 4
+
+    strategy, target, sess_config = self._create_test_objects()
+
+    strategy.extended.experimental_allow_variable_placement()
+
+    with strategy.scope():
+
+      features = [x] * pipeline_depth
+      labels = [y] * pipeline_depth
+      dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+
+      w = variable_scope.get_variable(name="w", initializer=initial_w)
+
+      def stage1(features, labels):
+        partial = w * features
+        return partial, labels
+
+      def stage2(partial, labels):
+        loss = partial + labels
+        return loss
+
+      def optimizer_function(loss):
+        opt = gradient_descent.GradientDescentOptimizer(learning_rate)
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+      def model():
+        pipeline_op = pipelining_ops.pipeline(
+            computational_stages=[stage1, stage2],
+            pipeline_depth=pipeline_depth,
+            repeat_count=1,
+            inputs=[],
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            optimizer_function=optimizer_function,
+            name="Pipeline")
+        return pipeline_op
+
+      def compiled_model():
+        with ops.device("/device:IPU:0"):
+          return ipu_compiler.compile(model, inputs=[])
+
+      train_op = strategy.experimental_run_v2(compiled_model, args=[])
+      config = ipu_utils.create_ipu_config()
+      config = ipu_utils.auto_select_ipus(config, 2)
+      ipu_utils.configure_ipu_system(config)
+
+      expected_w = initial_w
+      num_workers = strategy.num_replicas_in_sync
+
+      with session_lib.Session(target=target, config=sess_config) as sess:
+        sess.run(infeed_queue.initializer)
+        sess.run(variables.global_variables_initializer())
+        sess.run(train_op)
+
+        # L(x) = w * x + y
+        # dL(x)/dw = x
+        # w := w - learning_rate * x
+        expected_w -= num_workers * pipeline_depth * learning_rate * x
+        self.assertEqual(expected_w, sess.run(w))
+
+  def test_pipelining(self):
+    cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
+    self._run_workers_in_processes(self._test_pipelining, cluster_spec)
 
 
 if __name__ == "__main__":
