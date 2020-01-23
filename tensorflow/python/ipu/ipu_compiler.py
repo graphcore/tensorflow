@@ -107,7 +107,7 @@ def compile(computation, inputs=None):
       outputs = inspect.trace()[-1][0].f_locals['outputs']
       is_estimator = _is_estimatorspec(outputs)
     except:
-      raise e
+      raise e from None
     if is_estimator:
       raise ValueError("""\
   Your computation output contains an EstimatorSpec or IPUEstimatorSpec object.
