@@ -169,7 +169,10 @@ Status ExtractOutsideCompilationPass::Run(
   }
 
   // Run the placer again to assign devices to the nodes added by this pass.
-  Placer placer(graph, "", options.device_set);
+  // Make sure the default local device is used when in a distributed context.
+  Device* default_local_device = options.device_set->client_device();
+  Placer placer(graph, "", options.device_set, default_local_device);
+
   TF_RETURN_IF_ERROR(placer.Run());
 
   if (VLOG_IS_ON(4)) {

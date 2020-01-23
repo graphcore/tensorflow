@@ -136,7 +136,7 @@ class ExecutionProfileType(Enum):
 
   * `NO_PROFILE` indicates that there should be no execution profiling.
   * `DEVICE_PROFILE` indicates that the execution profile should contain only
-    device wide
+    device wide events.
   * `IPU_PROFILE` indicates that the profile should contain IPU level
     execution events.
   * `TILE_PROFILE` indicates that the profile should contain Tile level
@@ -211,7 +211,7 @@ def create_ipu_config(profiling=False,
                       enable_ipu_events=False,
                       use_poplar_text_report=False,
                       use_poplar_cbor_report=False,
-                      profile_execution=ExecutionProfileType.NO_PROFILE,
+                      profile_execution=None,
                       report_every_nth_execution=0,
                       max_report_size=0x10000000,
                       report_directory="",
@@ -235,8 +235,9 @@ def create_ipu_config(profiling=False,
     use_poplar_text_report: Enable the poplar textual report summary
     use_poplar_cbor_report: Enable the poplar CBOR reports
     profile_execution: Include Poplar execution profiles in the execution
-      events.  Can be `True`, or a member of the `ExecutionProfileType`
-      enumeration.
+      events. Can only be enabled if `profling` is also enabled. If set, can be
+      `True`, 'False`, or a member of the `ExecutionProfileType` enumeration.
+      A `True` value indicates `ExecutionProfileType.DEVICE_PROFILE`.
     report_every_nth_execution: Only produce an execution report on every Nth
       execution.  0 = One report only.
     max_report_size: The maximum size of Poplar profiles to include in the
@@ -294,12 +295,9 @@ def create_ipu_config(profiling=False,
     raise Exception(
         "`profiling` and `enable_ipu_events` are mutually exclusive")
 
-  if (profile_execution != ExecutionProfileType.NO_PROFILE and not profiling):
-    raise Exception("`profiling` is required when `profile_execution` is set")
-
   selection_order = selection_order if selection_order else SelectionOrder.AUTO
-
-  connection_type = DeviceConnectionType.ALWAYS
+  profile_execution = profile_execution if profile_execution \
+                                        else ExecutionProfileType.NO_PROFILE
 
   if isinstance(profile_execution, (np.bool_, bool)):
     if profile_execution:
@@ -307,9 +305,14 @@ def create_ipu_config(profiling=False,
     else:
       profile_execution = ExecutionProfileType.NO_PROFILE
 
+  if (profile_execution != ExecutionProfileType.NO_PROFILE and not profiling):
+    raise Exception("`profiling` is required when `profile_execution` is set")
+
+  connection_type = DeviceConnectionType.ALWAYS
+
   if not isinstance(profile_execution, ExecutionProfileType):
     raise Exception("`profile_execution` must be True, False, or an "
-                    "ExecutionProfileType instamce")
+                    "ExecutionProfileType instance")
 
   opts = config_pb2.IpuOptions()
 
@@ -953,8 +956,9 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=1):
   Returns:
     The IpuOptions configuration protobuf.
   """
-
-  opts.device_connection_type = connection_type or DeviceConnectionType.ALWAYS
+  connection_type = connection_type if connection_type \
+                                    else DeviceConnectionType.ALWAYS
+  opts.device_connection_type = connection_type.value
   opts.ipu_version = ipu_version
   return opts
 

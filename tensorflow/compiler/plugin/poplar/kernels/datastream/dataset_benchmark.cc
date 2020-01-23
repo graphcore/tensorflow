@@ -100,16 +100,17 @@ xla::poplarplugin::IOFunction ConsumerThread(
       using seconds = std::chrono::duration<float>;
       auto t0 = std::chrono::high_resolution_clock::now();
       for (uint64 j = 0; j != elements_per_epochs; ++j) {
-        for (uint64 k = 0; k != queues.size(); ++k) {
+        auto& replica_queues = queues[replica_id];
+        for (uint64 k = 0; k != replica_queues.size(); ++k) {
           tensorflow::TensorBuffer* buf;
           // Continue to try and get a buffer unless we have been cancelled.
-          while (!queues[k][replica_id]->TryPop(buf)) {
+          while (!replica_queues[k]->TryPop(buf)) {
             if (cancelled) {
               return tensorflow::errors::Aborted("Consumer thread cancelled");
             }
           }
           std::memcpy(buffers[k], buf->data(), buffer_sizes[k]);
-          queues[k][replica_id]->AdvanceReadPosition();
+          replica_queues[k]->AdvanceReadPosition();
         }
       }
       auto t1 = std::chrono::high_resolution_clock::now();
@@ -170,7 +171,7 @@ xla::poplarplugin::IOFunction ProducerThread(
       }
 
       for (size_t j = 0; j < outputs.size(); ++j) {
-        auto& queue = queues[j][replica_id];
+        auto& queue = queues[replica_id][j];
         TensorBuffer* tb = tensorflow::DMAHelper::buffer(&outputs[j]);
         tb->Ref();
         queue->BlockPush(tb);

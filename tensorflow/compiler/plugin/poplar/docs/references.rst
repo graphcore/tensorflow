@@ -14,8 +14,5 @@ References
   http://shop.oreilly.com/product/0636920052289.do
 - Installation guide: https://support.graphcore.ai/hc/en-us/articles/360001118534-Poplar-SDK-TensorFlow-Installation-Instructions
 - Poplar User Guide
-- ``Public examples`` repository with application examples
+- `Public examples <https://github.com/graphcore/examples>`_ repository with application examples
 - Installation guide: https://support.graphcore.ai/hc/en-us/articles/360001118534-Poplar-SDK-TensorFlow-Installation-Instructions
-
-
-.. TODO: add links for last bullet points

@@ -36,7 +36,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 
-#include <experimental/popfloat/CastToGfloat.hpp>
+#include <popfloat/experimental/CastToGfloat.hpp>
 
 #include <string>
 
@@ -61,7 +61,7 @@ class CalcGfloatParamsOp : public PoplarOpDef {
     poplar::Type calc_type;
     TF_ASSIGN_OR_RETURN(calc_type, PoplarDataType(calc_type_));
 
-    auto gf_format_cfg = experimental::popfloat::GfloatCast::FormatConfig(
+    auto gf_format_cfg = popfloat::experimental::GfloatCast::FormatConfig(
         param_inst->NumberMantissaBits(), param_inst->NumberExponentBits(),
         param_inst->ExponentBias(), param_inst->IsDenormEnabled(),
         param_inst->InfAndNansEnabled(), calc_type);
@@ -147,7 +147,7 @@ class CastGfloatToNativeOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(out_type, PoplarDataType(out_type_));
 
     auto cast_op_cfg =
-        experimental::popfloat::GfloatCast::CastConfig::createCastGFToNative(
+        popfloat::experimental::GfloatCast::CastConfig::createCastGFToNative(
             gfloat_format, calc_type, out_type);
 
     return CreatePoplibsCastGfloatToNative(res, inst, output_shape, tensor_map,

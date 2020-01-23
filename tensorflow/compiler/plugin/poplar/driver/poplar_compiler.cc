@@ -30,8 +30,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/all_to_all_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/apply_recompute_suggestion.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/casts_elimination.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
@@ -72,10 +74,13 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
@@ -125,7 +130,7 @@ limitations under the License.
 #include <poplar/exceptions.hpp>
 #include <poputil/exceptions.hpp>
 
-#include <experimental/popfloat/codelets.hpp>
+#include <popfloat/experimental/codelets.hpp>
 #include <poplin/codelets.hpp>
 #include <popnn/codelets.hpp>
 #include <popops/codelets.hpp>
@@ -353,6 +358,34 @@ bool AreAllOutputsParameters(const HloModule* module,
       root->GetModule()->entry_computation_layout().result_shape());
 }
 
+// Checkk that module is of type - scalar, elementwise instructions only.
+bool AreAllScalarElementwiseGraph(const HloModule* module) {
+  const auto& entry_comp = module->entry_computation();
+
+  for (auto* inst : entry_comp->instructions()) {
+    switch (inst->opcode()) {
+      case HloOpcode::kConstant:
+      case HloOpcode::kParameter:
+        if (!ShapeUtil::IsScalar(inst->shape())) {
+          return false;
+        }
+        break;
+      case HloOpcode::kTuple:
+        if (entry_comp->root_instruction() != inst) {
+          return false;
+        }
+        break;
+      default:
+        if (!(ShapeUtil::IsScalar(inst->shape()) && inst->IsElementwise())) {
+          return false;
+        }
+        break;
+    }
+  }
+
+  return true;
+}
+
 HloPrintOptions GetPrintOptions() {
   HloPrintOptions opts;
   opts.set_print_operand_shape(false)
@@ -512,7 +545,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
   popnn::addCodelets(main_graph);
   popops::addCodelets(main_graph);
   poprand::addCodelets(main_graph);
-  experimental::popfloat::addCodelets(main_graph);
+  popfloat::experimental::addCodelets(main_graph);
 
   return Status::OK();
 }
@@ -724,6 +757,19 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
     }
+    if (poplar_executor->RecomputationEnabled()) {
+      pipeline.AddPass<SuggestRecompute>();
+      pipeline.AddPass<AddBlockRecompute>();
+      {
+        auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+            "resolve-recompute-suggestions");
+
+        pass.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+        pass.AddPass<ApplyRecomputeSuggestion>();
+      }
+    }
+    pipeline.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+    pipeline.AddPass<HloPassFix<RemoveRecomputeSuggestions>>();
     if (poplar_executor->EnableMatmulCombiner()) {
       pipeline.AddPass<MatmulCombiner>(resources.annotations);
     }
@@ -834,10 +880,18 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   bool is_remap_graph =
       all_outputs_are_parameters && !any_computation_has_side_effects;
 
+  const bool all_scalar_elementwise_graph =
+      AreAllScalarElementwiseGraph(module.get());
+
+  const bool is_scalar_elementwise_graph =
+      all_scalar_elementwise_graph && !any_computation_has_side_effects;
+
   if (is_constant_graph) {
     VLOG(1) << "Skip engine compilation - output is constant.";
   } else if (is_remap_graph) {
     VLOG(1) << "Skip engine compilation - all outputs are inputs.";
+  } else if (is_scalar_elementwise_graph) {
+    VLOG(1) << "Skip engine compilation - scalar elementwise graph.";
   } else {
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(
@@ -1006,8 +1060,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(profile_index_map), std::move(engine),
       std::move(resources.annotations.input_output_aliasing_map),
       is_constant_graph, std::move(constant_output), is_remap_graph,
-      std::move(remaped_output), replication_factor,
-      std::move(resources.annotations.infeed_infos),
+      is_scalar_elementwise_graph, std::move(remaped_output),
+      replication_factor, std::move(resources.annotations.infeed_infos),
       std::move(resources.annotations.outfeed_infos),
       std::move(resources.annotations.stream_infos),
       std::move(resources.annotations.stream_meta_infos),

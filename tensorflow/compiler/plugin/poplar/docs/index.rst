@@ -24,3 +24,4 @@ Targeting the IPU from TensorFlow
     references
     api
     build
+    supported_ops

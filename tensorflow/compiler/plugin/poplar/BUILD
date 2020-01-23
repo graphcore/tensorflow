@@ -142,6 +142,8 @@ cc_library(
     srcs = [
         "driver/passes/all_to_all_finder.cc",
         "driver/passes/allocation_finder.cc",
+        "driver/passes/add_block_recompute.cc",
+        "driver/passes/apply_recompute_suggestion.cc",
         "driver/passes/casts_elimination.cc",
         "driver/passes/combine_instructions.cc",
         "driver/passes/commutative_instruction_reorder_operands.cc",
@@ -184,10 +186,13 @@ cc_library(
         "driver/passes/pipeline_verifier.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/recompute_instructions.cc",
+        "driver/passes/remove_blocked_recompute_suggestions.cc",
+        "driver/passes/remove_recompute_suggestions.cc",
         "driver/passes/replication_factor_to_constant.cc",
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_simplifier.cc",
         "driver/passes/sharding_pass.cc",
+        "driver/passes/suggest_recompute.cc",
         "driver/passes/while_loop_condition_simplify.cc",
         "driver/passes/while_loop_to_repeat_simplify.cc",
         "driver/passes/wide_const_finder.cc",
@@ -216,7 +221,9 @@ cc_library(
         "driver/tools/custom_ops/norm.cc",
         "driver/tools/custom_ops/pooling.cc",
         "driver/tools/custom_ops/print_tensor.cc",
+        "driver/tools/custom_ops/reduce_scatter.cc",
         "driver/tools/custom_ops/relu.cc",
+        "driver/tools/custom_ops/recompute.cc",
         "driver/tools/custom_ops/remap.cc",
         "driver/tools/custom_ops/remap_deduce.cc",
         "driver/tools/custom_ops/replication_factor.cc",
@@ -254,6 +261,8 @@ cc_library(
         "driver/compiler_information.h",
         "driver/passes/all_to_all_finder.h",
         "driver/passes/allocation_finder.h",
+        "driver/passes/add_block_recompute.h",
+        "driver/passes/apply_recompute_suggestion.h",
         "driver/passes/casts_elimination.h",
         "driver/passes/combine_instructions.h",
         "driver/passes/commutative_instruction_reorder_operands.h",
@@ -295,11 +304,14 @@ cc_library(
         "driver/passes/pipeline_resource_update_fixer.h",
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
+        "driver/passes/remove_blocked_recompute_suggestions.h",
+        "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/recompute_instructions.h",
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
         "driver/passes/sharding_pass.h",
+        "driver/passes/suggest_recompute.h",
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
         "driver/passes/wide_const_finder.h",
@@ -319,7 +331,9 @@ cc_library(
         "driver/tools/custom_ops/norm.h",
         "driver/tools/custom_ops/pooling.h",
         "driver/tools/custom_ops/print_tensor.h",
+        "driver/tools/custom_ops/reduce_scatter.h",
         "driver/tools/custom_ops/relu.h",
+        "driver/tools/custom_ops/recompute.h",
         "driver/tools/custom_ops/remap.h",
         "driver/tools/custom_ops/remap_deduce.h",
         "driver/tools/custom_ops/replication_factor.h",
@@ -440,6 +454,7 @@ cc_library(
         "driver/ops/custom_ops/popnn/tanh.cc",
         "driver/ops/custom_ops/popnn/topk.cc",
         "driver/ops/custom_ops/popops/all_gather.cc",
+        "driver/ops/custom_ops/popops/reduce_scatter.cc",
         "driver/ops/custom_ops/popops/select_scalars.cc",
         "driver/ops/custom_ops/popops/multi_slice.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
@@ -657,10 +672,12 @@ cc_library(
         "kernels/popops/all_reduce.cc",
         "kernels/popops/all_to_all.cc",
         "kernels/popops/multi_slice.cc",
+        "kernels/popops/reduce_scatter.cc",
         "kernels/popops/sparse_softmax_cross_entropy.cc",
         "kernels/poputil/codelet_expression.cc",
         "kernels/poputil/fifo.cc",
         "kernels/poputil/print_tensor.cc",
+        "kernels/poputil/recompute.cc",
         "kernels/poputil/remap.cc",
         "kernels/poputil/replication_factor.cc",
         "kernels/poputil/replication_index.cc",
@@ -676,6 +693,7 @@ cc_library(
         ":custom_kernels_util",
         ":driver",
         ":rearrange_pipeline_stage_arguments",
+        "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core/kernels/data:dataset_utils",
         "//tensorflow/compiler/tf2xla:xla_compiler",
@@ -688,6 +706,58 @@ cc_library(
         "@com_google_protobuf//:protobuf_headers",
     ],
     alwayslink = True,
+)
+
+# When creating a new set of ops the following needs to be done:
+#
+# 1. New cc_library:
+# cc_library(
+#     name = "new_ops",
+#     srcs = ["new/new_ops.cc"],
+#     deps = ["//tensorflow/core:framework"],
+#     alwayslink = True,
+# )
+#
+# 2. New python wrapper for those ops:
+# tf_gen_op_wrapper_py(
+#     name = "new_ops_wrapper_py",
+#     out = "gen_new_ops.py",
+#     deps = [":new_ops"],
+#     visibility = ["//tensorflow:internal"],
+# )
+#
+# 3. New custom op libary:
+# tf_custom_op_py_library(
+#     name = "new_ops_py",
+#     kernels = [":new_ops"],
+#     deps = [":new_ops_wrapper_py"],
+#     srcs_version = "PY2AND3",
+# )
+#
+# The cc library `new_ops` needs to be added as a dependency to:
+# //tensorflow/compiler/plugin/poplar:poplar_lib
+# The custom op py library `new_ops_py` needs to be added as a dependency to one
+# of the relevant libs in //tensorflow/python/ipu.
+
+cc_library(
+    name = "dataset_ops",
+    srcs = ["ops/dataset/dataset_ops.cc"],
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "dataset_ops_wrapper_py",
+    out = "ops/gen_dataset_ops.py",
+    deps = [":dataset_ops"],
+    visibility = ["//tensorflow:internal"],
+)
+
+tf_custom_op_py_library(
+    name = "dataset_ops_py",
+    kernels = [":dataset_ops"],
+    deps = [":dataset_ops_wrapper_py"],
+    srcs_version = "PY2AND3",
 )
 
 cc_library(
@@ -737,9 +807,10 @@ tf_custom_op_py_library(
 cc_library(
     name = "popops_ops",
     srcs = [
-        "ops/popops/cross_replica_sum.cc",
         "ops/popops/all_to_all.cc",
+        "ops/popops/cross_replica_sum.cc",
         "ops/popops/multi_slice.cc",
+        "ops/popops/reduce_scatter.cc",
     ],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,
@@ -811,6 +882,7 @@ cc_library(
         "ops/poputil/codelet_expression.cc",
         "ops/poputil/fifo.cc",
         "ops/poputil/print_tensor.cc",
+        "ops/poputil/recompute.cc",
         "ops/poputil/remap.cc",
         "ops/poputil/remap_deduce.cc",
         "ops/poputil/replication_factor.cc",
@@ -935,6 +1007,7 @@ cc_library(
     hdrs = [],
     deps = [
         ":dataset_benchmark",
+        ":dataset_ops",
         ":driver",
         ":kernels",
         ":poplar_backend",
@@ -1198,6 +1271,54 @@ xla_test(
 xla_test(
     name = "wide_const_finder_test",
     srcs = ["tests/wide_const_finder_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "add_block_recompute_test",
+    srcs = ["tests/add_block_recompute_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "apply_recompute_suggestion_test",
+    srcs = ["tests/apply_recompute_suggestion_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "remove_blocked_recompute_test",
+    srcs = ["tests/remove_blocked_recompute_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "recompute_suggestion_test",
+    srcs = ["tests/recompute_suggestion_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -3031,6 +3152,25 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "scalar_elementwise_graph_test",
+    size = "medium",
+    tags = ['exclusive'],
+    srcs = ["tests/scalar_elementwise_graph_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_xla_py_test(
     name = "sort_op_py_test",
     size = "medium",
     srcs = ["tests/sort_op_py_test.py"],
@@ -3315,7 +3455,9 @@ test_suite(
     name = "all_tests",
     tests = [
         "64_bit_test",
+        "add_block_recompute_test",
         "allocation_finder_test",
+        "apply_recompute_suggestion_test",
         "arithmetic_expr_test",
         "arg_min_max_test",
         "batch_norm_test",
@@ -3395,10 +3537,13 @@ test_suite(
         "pipeline_util_test",
         "pipeline_visitor_test",
         "recomputation_test",
+        "recompute_suggestion_test",
         "reduce_test",
         "remapping_test",
+        "remove_blocked_recompute_test",
         "root_token_replacer_test",
         "sendrecv_ops_test",
+        "scalar_elementwise_graph_test",
         "scatter_simplifier_test",
         "scheduler_tree_test",
         "sharded_inplace_test",
@@ -3466,6 +3611,7 @@ test_suite(
     name = "poplar_test_suite",
     tests = [
         ":all_tests",
+        "//tensorflow/compiler/plugin/poplar/kernels/dataset:dataset_tests",
         "//tensorflow/compiler/tests:poplar_tests",
         "//tensorflow/compiler/xla/client/lib:poplar_tests",
         "//tensorflow/compiler/xla/tests:poplar_tests",

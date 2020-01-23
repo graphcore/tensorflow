@@ -22,6 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.core.framework import attr_value_pb2
+from tensorflow.python.compiler.xla import xla
 from tensorflow.python.distribute import collective_all_reduce_strategy
 from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
 from tensorflow.python.distribute import distribute_lib
@@ -29,8 +30,10 @@ from tensorflow.python.distribute import numpy_dataset
 from tensorflow.python.distribute import values
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import collective_ops
+from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variable_scope
 
 
@@ -71,12 +74,19 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   checkpoint the model at the same time.
   """
   def __init__(self, cluster_resolver):
-    super(IPUMultiWorkerStrategy,
-          self).__init__(IPUMultiWorkerExtended(self, cluster_resolver))
+    super().__init__(IPUMultiWorkerExtended(self, cluster_resolver))
 
 
-def current_device():
+def _current_device():
   return constant_op.constant(1.).device
+
+
+def _is_inside_compilation():
+  dummy_op = control_flow_ops.no_op()
+  attrs = dummy_op.node_def.attr
+  is_inside_xla_compile = xla._XLA_COMPILE_ATTR in attrs  # pylint: disable=protected-access
+  is_outside_compilation = scopes.OUTSIDE_COMPILATION_NAME in attrs
+  return is_inside_xla_compile and not is_outside_compilation
 
 
 class IPUSyncOnReadVariable(values.SyncOnReadVariable):  # pylint: disable=abstract-method
@@ -90,15 +100,21 @@ class IPUMirroredVariable(values.MirroredVariable):  # pylint: disable=abstract-
 class IPUMultiWorkerExtended(
     collective_all_reduce_strategy.CollectiveAllReduceExtended):
   def __init__(self, container_strategy, cluster_resolver):
-    super(IPUMultiWorkerExtended, self).__init__(
+    super().__init__(
         container_strategy,
         communication=cross_device_ops_lib.CollectiveCommunication.RING,
         cluster_resolver=cluster_resolver)
 
     devices = self._device_map.all_devices
     if len(devices) != 1:
-      raise ValueError("Expected one device per worker for variables")
-    self._variable_device = devices[0]
+      raise ValueError("Expected one host device per worker")
+    self._host_device = devices[0]
+
+    # The default is to force the variables on the host device.
+    self._allow_variable_placement = False
+
+  def experimental_allow_variable_placement(self):
+    self._allow_variable_placement = True
 
   def _get_variable_creator_initial_value(self, replica_id, device,
                                           primary_var, **kwargs):
@@ -158,15 +174,19 @@ class IPUMultiWorkerExtended(
 
     def _real_creator(devices, *args, **kwargs):
       assert len(devices) == 1
-      assert devices[0] == self._variable_device
+      assert devices[0] == self._host_device
 
       # The chief worker will initialize and broadcast the value to
       # the other workers.
       kwargs["initial_value"] = self._get_variable_creator_initial_value(
           replica_id=0,  # First (and only) replica on each worker.
-          device=self._variable_device,
+          device=self._host_device,
           primary_var=None,
           **kwargs)
+
+      if self._allow_variable_placement:
+        # Skip device placement override below.
+        return [next_creator(*args, **kwargs)]
 
       # For sync-on-read variables we do not override the device
       # placement, allowing them to be placed on the IPU. They will
@@ -178,7 +198,7 @@ class IPUMultiWorkerExtended(
       # Cache a snapshot of the variable on the current device,
       # otherwise the XLA cluster containing the ops consuming the
       # variable might be moved to the host to be colocated with it.
-      kwargs["caching_device"] = current_device()
+      kwargs["caching_device"] = _current_device()
 
       # In case we are inside an ipu_jit_scope, we need to override it
       # to disable XLA for variable initialization on the host.
@@ -188,7 +208,7 @@ class IPUMultiWorkerExtended(
       }
 
       graph = ops.get_default_graph()
-      with ops.device(self._variable_device), \
+      with ops.device(self._host_device), \
           graph._attr_scope(disable_xla):  # pylint: disable=protected-access
         return [next_creator(*args, **kwargs)]
 
@@ -205,32 +225,40 @@ class IPUMultiWorkerExtended(
       assert len(value.values) == 1
       value = value.values[0]
 
-    # Make sure the reduction is done on the variable device
+    if _is_inside_compilation():
+      # Escape the compilation scope and place the reduction on the host.
+      with scopes.outside_compilation_scope("reduce_to"):
+        return super()._reduce_to(reduce_op, value, destinations)
+
+    # Make sure the reduction is done on the host device
     # by wrapping the inputs in an identity op on that device.
-    with ops.device(self._variable_device):
+    with ops.device(self._host_device):
       value = array_ops.identity(value, name="reduce_to")
 
-    return super(IPUMultiWorkerExtended,
-                 self)._reduce_to(reduce_op, value, destinations)
+    return super()._reduce_to(reduce_op, value, destinations)
 
   def _batch_reduce_to(self, reduce_op, value_destination_pairs):
-    # Make sure the reduction is done on the variable device
+    if _is_inside_compilation():
+      # Escape the compilation scope and place the reduction on the host.
+      with scopes.outside_compilation_scope("batch_reduce"):
+        return super()._batch_reduce_to(reduce_op, value_destination_pairs)
+
+    # Make sure the reduction is done on the host device
     # by wrapping the inputs in an identity op on that device.
-    with ops.device(self._variable_device):
+    with ops.device(self._host_device):
       value_destination_pairs = [(array_ops.identity(v,
                                                      name="batch_reduce"), d)
                                  for (v, d) in value_destination_pairs]
 
-    return super(IPUMultiWorkerExtended,
-                 self)._batch_reduce_to(reduce_op, value_destination_pairs)
+    return super()._batch_reduce_to(reduce_op, value_destination_pairs)
 
   def _call_for_each_replica(self, fn, args, kwargs):
     with distribute_lib.ReplicaContext(
         self._container_strategy(), replica_id_in_sync_group=0), \
-        ops.device(self._variable_device):
+        ops.device(self._host_device):
       return fn(*args, **kwargs)
 
   def _validate_colocate_with_variable(self, colocate_with_variable):
-    if colocate_with_variable.device != self._variable_device:
+    if colocate_with_variable.device != self._host_device:
       raise ValueError("Unexpected colocated variable device: {}".format(
           colocate_with_variable.device))

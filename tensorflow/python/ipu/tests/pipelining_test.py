@@ -284,6 +284,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)
+      report.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
@@ -413,6 +414,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
     outfeed_op = outfeed_queue.dequeue()
     with tu.ipu_session() as sess:
       report = tu.ReportJSON(self, sess, configure_device=False)
+      report.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
       sess.run(r, {c: 10.01})
@@ -1095,6 +1097,46 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       got = sess.run(outfed)
       self.assertIsInstance(got, dict)
       self.assertAllEqual(np.ones(8), got["x"])
+
+  @test_util.deprecated_graph_mode_only
+  def testGradientShapeInference(self):
+
+    with tu.ipu_session():
+
+      variable_shape = (1, 2, 3)
+
+      def stage1(x):
+        with variable_scope.variable_scope("stage1", use_resource=True):
+          w = variable_scope.get_variable(name="w", shape=variable_shape)
+          return w * x
+
+      def stage2(x):
+        return x
+
+      class MockOptimizer(gradient_descent.GradientDescentOptimizer):  # pylint: disable=abstract-method
+        def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+          self.applied_gradients = [g for (g, _) in grads_and_vars]
+          return super().apply_gradients(grads_and_vars, global_step, name)
+
+      optimizer = MockOptimizer(0.01)
+
+      def optimizer_function(loss):
+        return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed14")
+
+      def my_net(x):
+        return pipelining_ops.pipeline([stage1, stage2],
+                                       pipeline_depth=4,
+                                       inputs=[x],
+                                       outfeed_queue=outfeed_queue,
+                                       optimizer_function=optimizer_function)
+
+      with ops.device("/device:IPU:0"):
+        ipu_compiler.compile(my_net, inputs=[0.0])
+
+      self.assertEqual(1, len(optimizer.applied_gradients))
+      self.assertEqual(variable_shape, optimizer.applied_gradients[0].shape)
 
 
 if __name__ == "__main__":

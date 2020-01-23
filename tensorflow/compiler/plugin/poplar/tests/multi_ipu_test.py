@@ -261,7 +261,7 @@ class MultiIpuTest(xla_test.XLATestCase):
       # There is 1 piece of global exchange (apart from progId)
       wl = [
           'switchControlBroadcast*/GlobalPre',
-          '*_to_/custom-call/GlobalPre',
+          '*_to_/custom-call*/GlobalPre',
           '__seed/set/setMasterSeed',
       ]
       report.assert_all_global_exchanges_and_list(wl)

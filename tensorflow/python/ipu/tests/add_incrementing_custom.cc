@@ -67,7 +67,7 @@ extern "C" poplar::program::Program Build_grad(
 // Custom host program.
 extern "C" void Callback(const std::vector<void*>& data,
                          const std::vector<std::uint32_t>& number_of_elements,
-                         std::vector<void*>& outputs) {
+                         std::vector<void*>& outputs, const std::string& name) {
   float acc = 0.0f;
   float* out_ptr = (float*)outputs[0];
   float* in_ptr = (float*)data[0];

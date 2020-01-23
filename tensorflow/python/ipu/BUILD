@@ -45,6 +45,7 @@ py_library(
     name = "ipu_grad_ops_lib",
     srcs_version = "PY2AND3",
     srcs = [
+        "ops/all_to_all_op_grad.py",
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
         "ops/internal_ops_grad.py",
@@ -70,6 +71,22 @@ py_library(
         "utils.py"
     ],
     deps = [
+        "//tensorflow/compiler/xla:xla_data_proto_py",
+        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
+        "//tensorflow/python/distribute:values",
+    ],
+)
+
+py_library(
+    name = "data",
+    srcs_version = "PY2AND3",
+    srcs = [
+        "data/__init__.py",
+        "data/ops/__init__.py",
+        "data/ops/dataset_ops.py"
+    ],
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:dataset_ops_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/python/distribute:values",
@@ -103,6 +120,7 @@ py_library(
         "ops/normalization_ops.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
+        "ops/reduce_scatter_op.py",
         "ops/replication_ops.py",
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
@@ -117,6 +135,7 @@ py_library(
         "vertex_edsl.py",
     ],
     deps = [
+        ":data",
         ":utils",
         ":ipu_ops_lib",
         ":ipu_grad_ops_lib",
@@ -242,6 +261,23 @@ tf_py_test(
     name = "random_constant_matmul_test",
     size = "small",
     srcs = ["tests/random_constant_matmul_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
+    name = "recompute_suggestion_test",
+    size = "small",
+    srcs = ["tests/recompute_suggestion_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
@@ -635,11 +671,25 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "dataset_ops_test",
+    size = "medium",
+    srcs = ["tests/dataset_ops_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
         "autoshard_cnn_test",
         "dataset_benchmark_test",
+        "dataset_ops_test",
         "dropout_test",
         "embedding_lookup_test",
         "expression_op_test",
@@ -663,6 +713,7 @@ test_suite(
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
+        "recompute_suggestion_test",
         "user_ops_test",
         "utils_test",
     ],

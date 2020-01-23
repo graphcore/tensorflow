@@ -50,6 +50,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
+#include "tensorflow/compiler/xla/service/hlo_evaluator.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/transfer_manager.h"
@@ -500,19 +501,19 @@ void PoplarExecutor::ConnectInfeedsToStreamCallback(
     auto& shapes = infeed_dataset_iterator->GetShapes();
     auto& queues = infeed_dataset_iterator->GetInfeedQueues();
 
-    for (size_t j = 0; j < shapes.size(); ++j) {
-      auto length = ShapeUtil::ByteSizeOf(shapes[j]);
-      auto bytes_per_replica = length / current_replication_factor_;
-      for (auto replica_id = 0; replica_id < current_replication_factor_;
-           ++replica_id) {
-        auto& queue = queues[j][replica_id];
+    for (auto replica_id = 0; replica_id < current_replication_factor_;
+         ++replica_id) {
+      auto& replica_queues = queues[replica_id];
+      for (size_t j = 0; j < shapes.size(); ++j) {
+        const auto length = ShapeUtil::ByteSizeOf(shapes[j]);
+        const auto bytes_per_replica = length / current_replication_factor_;
         std::unique_ptr<poplar::StreamCallback> infeed_callback;
         if (PoplarXlaFlags::Get().null_data_feed) {
           infeed_callback = absl::make_unique<NullPrefetchCallback>(
               GetInfeedAllocator(), bytes_per_replica);
         } else {
           infeed_callback = absl::make_unique<InfeedPrefetchCallback>(
-              queue, bytes_per_replica);
+              replica_queues[j], bytes_per_replica);
         }
         current_engine_->connectStreamToCallback(
             GetInfeedCopyHandle(infeed_info.stream_prefix, j), replica_id,
@@ -581,12 +582,12 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
       // only need to check if the first queue is full to know whether all the
       // queues are full.
       if (infeed_queues[0][0]->IsFull()) {
-        VLOG(1) << "Infeed queue is full.";
+        VLOG(2) << "Infeed queue is full.";
         continue;
       }
 
       if (infeed_queues[0][0]->IsEmpty()) {
-        VLOG(1) << "Infeed queue is empty.";
+        VLOG(2) << "Infeed queue is empty.";
       }
 
       std::vector<tensorflow::Tensor> outputs;
@@ -620,7 +621,7 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
         // Enqueue tensors to each replica.
         for (size_t replica_id = 0; replica_id < tensor_slices.size();
              replica_id++) {
-          auto& queue = infeed_queues[j][replica_id];
+          auto& queue = infeed_queues[replica_id][j];
           auto* tb = tensorflow::DMAHelper::buffer(&tensor_slices[replica_id]);
           tb->Ref();
           queue->BlockPush(tb);
@@ -1273,6 +1274,12 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   // Get environment PoplarXlaFlags hash
   target_hash.push_back(PoplarXlaFlags::Get().hlo_hash);
 
+  // TODO(T12447) - use a hash returned by Poplar.
+  char* env_engine_options = getenv("POPLAR_ENGINE_OPTIONS");
+  if (env_engine_options) {
+    target_hash.push_back(std::hash<string>()(std::string(env_engine_options)));
+  }
+
   poplar_device_hash_ = CombinedHash(target_hash);
 
   return Status::OK();
@@ -1794,6 +1801,19 @@ StatusOr<bool> PoplarExecutor::CheckMoveDeviceToHostRequired(
   return do_device_to_host;
 }
 
+// Check if there is tensor/arg of current executable on device.
+StatusOr<bool> PoplarExecutor::CheckAnyArgOnDevice(const Args& args) {
+  for (auto& device_buffer : args) {
+    const TensorControl* tc =
+        reinterpret_cast<const TensorControl*>(device_buffer.opaque());
+
+    if (tc->on_device && !tc->output_handle.empty()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 StatusOr<bool> PoplarExecutor::CheckMoveHostToDeviceRequired(
     const bool engine_changed) {
   // Put resources on the device if:
@@ -2163,6 +2183,88 @@ void PoplarExecutor::ConnectCycleCounterCallback() {
   }
 }
 
+namespace {
+
+Status TransformEvaluatorSubOutput(ShapeIndex& shape_index, const Shape& layout,
+                                   Literal& evaluator_output,
+                                   std::vector<Literal>& sub_result) {
+  if (layout.IsTuple()) {
+    // Continue a depth-first traversal from each subshape.
+    for (int64 i = 0; i < layout.tuple_shapes_size(); i++) {
+      // We need to traverse the shape tree down.
+      shape_index.push_back(i);
+      auto& sub_shape = layout.tuple_shapes(i);
+      TF_RETURN_IF_ERROR(TransformEvaluatorSubOutput(
+          shape_index, sub_shape, evaluator_output, sub_result));
+      shape_index.pop_back();
+    }
+  } else {
+    // A single element.
+    Literal literal(layout);
+    TF_RETURN_IF_ERROR(literal.CopyFrom(evaluator_output, {}, shape_index));
+    sub_result.emplace_back(std::move(literal));
+  }
+
+  return Status::OK();
+}
+
+// Transforms literal evaluate to ConstantOutputAllocation format
+// when dealing with ScalarElementwiseGraph. Deals with nested tuples.
+Status TransformEvaluatorOutput(const Shape& layout, Literal& evaluator_output,
+                                std::vector<std::vector<Literal>>& result) {
+  Shape shape = evaluator_output.shape();
+  if (shape.IsTuple()) {
+    ShapeIndex shape_index;
+    // Start a depth-first traversal from each subshape.
+    for (int64 i = 0; i < shape.tuple_shapes_size(); i++) {
+      // We need to traverse the shape tree down.
+      shape_index.push_back(i);
+      auto& sub_shape = layout.tuple_shapes(i);
+      std::vector<Literal> sub_result;
+      TF_RETURN_IF_ERROR(TransformEvaluatorSubOutput(
+          shape_index, sub_shape, evaluator_output, sub_result));
+      result.emplace_back(std::move(sub_result));
+      shape_index.pop_back();
+    }
+  } else {
+    // A single element.
+    Literal literal = evaluator_output.Clone().Relayout(layout);
+    std::vector<Literal> sub_result;
+    sub_result.emplace_back(std::move(literal));
+    result.emplace_back(std::move(sub_result));
+  }
+  return Status::OK();
+}
+}  // namespace
+
+// Computes vector(s) literal input for ConstantOutputAllocation when
+// dealing with ScalarElementwiseGraph.
+Status PoplarExecutor::LiteralEvaluateForScalarElementwiseGraph(
+    xla::poplarplugin::PoplarExecutable& executable, const Args& args,
+    std::vector<std::vector<Literal>>& literal_evaluate_break_down) {
+  literal_evaluate_break_down.clear();
+  std::vector<Literal> arg_literals;
+  const auto* comp = executable.module().entry_computation();
+
+  for (const auto& inst : comp->parameter_instructions()) {
+    Literal literal(inst->shape(), true);
+    const TensorControl* src_tc = reinterpret_cast<const TensorControl*>(
+        args[inst->parameter_number()].opaque());
+    memcpy(literal.untyped_data(), src_tc->data, src_tc->size);
+    arg_literals.push_back(std::move(literal));
+  }
+
+  HloEvaluator hlo_evaluator(1);
+  TF_ASSIGN_OR_RETURN(Literal literal_evaluate,
+                      hlo_evaluator.Evaluate(*comp, arg_literals));
+
+  const auto& output_shape = executable.result_shape();
+  TF_RETURN_IF_ERROR(TransformEvaluatorOutput(output_shape, literal_evaluate,
+                                              literal_evaluate_break_down));
+
+  return Status::OK();
+}
+
 StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     perftools::gputools::StreamExecutor* executor,
     xla::poplarplugin::PoplarExecutable& executable,
@@ -2192,6 +2294,22 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
                                   input_output_aliasing_map);
       retbuf = GetOutputBuffer(executable, allocator, remap, output_shape, args,
                                input_output_aliasing_map);
+    } else if (executable.IsScalarElementwiseGraph()) {
+      // If some arg are on device, move them to host.
+      TF_ASSIGN_OR_RETURN(bool any_arg_on_device, CheckAnyArgOnDevice(args));
+      if (any_arg_on_device) {
+        TF_RETURN_IF_ERROR(MoveDeviceToHost());
+      }
+
+      std::vector<std::vector<Literal>> literal_evaluate_break_down;
+      LiteralEvaluateForScalarElementwiseGraph(executable, args,
+                                               literal_evaluate_break_down);
+
+      retbuf =
+          GetOutputBuffer(executable, allocator,
+                          ConstantOutputAllocation(literal_evaluate_break_down),
+                          output_shape, args, input_output_aliasing_map);
+
     } else {
       LOG(FATAL) << "Cannot construct a NULL graph.";
     }

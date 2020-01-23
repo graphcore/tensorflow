@@ -46,6 +46,18 @@ def _poputil_fifo_backward(op, grads):
   return [None] * len(grads)
 
 
+@ops.RegisterGradient("IpuSuggestRecompute")
+def _poputil_recompute_backward(op, grads):
+  """Gradients for the IpuSuggestRecompute op."""
+  return grads
+
+
+@ops.RegisterGradient("IpuBlockRecompute")
+def _poputil_block_recompute_backward(op, grads):
+  """Gradients for the IpuBlockRecompute op."""
+  return grads
+
+
 @ops.RegisterGradient("IpuUserOp")
 def _poputil_precompiled_user_op_layer_backward(op, *grads):
   library_path = op.get_attr("library_path").decode("utf-8")

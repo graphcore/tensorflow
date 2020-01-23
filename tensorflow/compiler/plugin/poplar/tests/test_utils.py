@@ -161,7 +161,8 @@ class ReportJSON(object):
                always_rearrange_copies_on_the_host=False,
                serialization_folder="",
                estimator_hook=False,
-               eager_mode=False):
+               eager_mode=False,
+               allow_recompute=False):
     self.report = None
     self.test = test
     self.sess = sess
@@ -202,6 +203,8 @@ class ReportJSON(object):
 
       opts = utils.set_serialization_options(opts, serialization_folder)
       opts = utils.set_ipu_model_options(opts, compile_ipu_code)
+      opts = utils.set_recomputation_options(opts,
+                                             allow_recompute=allow_recompute)
 
       if not estimator_hook:
         utils.configure_ipu_system(opts)
@@ -379,6 +382,15 @@ class ReportJSON(object):
 
   def assert_contains_one_compile_event(self):
     self.test.assertTrue(IpuTraceEvent.COMPILE_END in self.events)
+
+  def assert_contains_no_compile_event(self):
+    self.test.assertFalse(IpuTraceEvent.COMPILE_END in self.events)
+
+  def assert_contains_host_to_device_transfer_event(self):
+    assert IpuTraceEvent.HOST_TO_DEVICE_TRANSFER in self.events
+
+  def assert_contains_device_to_host_transfer_event(self):
+    assert IpuTraceEvent.DEVICE_TO_HOST_TRANSFER in self.events
 
   def get_tensor_map(self):
     return self.tensor_map

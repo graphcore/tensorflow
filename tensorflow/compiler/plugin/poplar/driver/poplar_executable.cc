@@ -38,10 +38,11 @@ PoplarExecutable::PoplarExecutable(
     const InputOutputAliasingMap& input_output_aliasing_map,
     const bool is_constant_graph,
     std::vector<std::vector<Literal>> literal_output, const bool is_remap_graph,
-    std::vector<uint64> remaped_output, uint32 replication_factor,
-    const InfeedInfos& infeed_infos, const OutfeedInfos& outfeed_infos,
-    StreamInfos&& stream_infos, StreamMetaInfos&& stream_meta_info,
-    SendRecvInfos&& send_infos, SendRecvInfos&& recv_infos)
+    const bool is_scalar_elementwise_graph, std::vector<uint64> remaped_output,
+    uint32 replication_factor, const InfeedInfos& infeed_infos,
+    const OutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
+    StreamMetaInfos&& stream_meta_info, SendRecvInfos&& send_infos,
+    SendRecvInfos&& recv_infos)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       poplar_engine_(std::move(engine)),
@@ -50,6 +51,7 @@ PoplarExecutable::PoplarExecutable(
       is_constant_graph_(is_constant_graph),
       remaped_output_(std::move(remaped_output)),
       is_remap_graph_(is_remap_graph),
+      is_scalar_elementwise_graph_(is_scalar_elementwise_graph),
       execution_count_(0),
       replication_factor_(replication_factor),
       infeed_infos_(std::move(infeed_infos)),
@@ -219,7 +221,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   auto executable = new PoplarExecutable(
       std::move(hlo_module), std::move(profile_printer),
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
-      {}, false, {}, replication_factor, std::move(infeeds),
+      {}, false, false, {}, replication_factor, std::move(infeeds),
       std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs));
 
   executable->loaded_from_cache_ = true;

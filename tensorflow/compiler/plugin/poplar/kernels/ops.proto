@@ -51,4 +51,7 @@ enum PoplarOp {
   MultiUpdateAdd = 47;
   PipelineStatefulGradientAccumulate = 48;
   AllGather = 49;
+  SuggestRecompute = 50;
+  BlockRecompute = 51;
+  ReduceScatter = 52;
 }

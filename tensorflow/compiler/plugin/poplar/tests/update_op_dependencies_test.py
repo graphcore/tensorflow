@@ -32,13 +32,8 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
       result = sess.run(e, fd)
       self.assertAllClose(result, 4)
 
-      report.parse_log(assert_len=4)
-
-      ok = [
-          '__seed*', 'add/add.*/AddTo', 'sub/subtract.*/AddTo',
-          'add_1/add.*/AddTo'
-      ]
-      report.assert_all_compute_sets_and_list(ok)
+      report.parse_log()
+      report.assert_contains_no_compile_event()
 
   def tesInplaceAddCopyWithInplacePeer(self):
     with self.session() as sess:

@@ -716,6 +716,11 @@ def _compile_function(func,
   # Add any control outputs.
   func_graph.control_outputs.extend(control_outputs)
 
+  # Fix shape inference for the gradients.
+  for op in func_graph.get_operations():
+    output_shapes = [out.get_shape() for out in op.outputs]
+    op._set_shape_list_attr("_output_shapes", output_shapes)  # pylint: disable=protected-access
+
   return func_graph, captured_args
 
 

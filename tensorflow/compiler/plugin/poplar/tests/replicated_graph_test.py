@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -496,6 +496,52 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       # Both replicas should receive 1.
       self.assertEqual(2, sess.run(res))
+
+  def testReplicatedReduceScatter(self):
+
+    with self.session() as sess:
+
+      replication_factor = 2
+
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          feed_name=next_feed_id(), replication_factor=replication_factor)
+
+      def my_net(x):
+        with self.assertRaisesRegex(ValueError,
+                                    "Shape must be rank 1 but is rank 2"):
+          ipu.ops.reduce_scatter_op.reduce_scatter(
+              [x], replication_factor=replication_factor)
+
+        y = ipu.ops.reduce_scatter_op.reduce_scatter(
+            x, replication_factor=replication_factor)
+
+        self.assertEqual(1, len(y.shape))
+        expected_length = np.ceil(int(x.shape[0]) / replication_factor)
+        self.assertEqual(expected_length, y.shape[0])
+
+        return outfeed_queue.enqueue(y)
+
+      num_elements = 5  # To test padding
+
+      inputs = [np.arange(num_elements, dtype=np.float32)]
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        compiled_net = ipu.ipu_compiler.compile(my_net, inputs=inputs)
+
+      with ops.device("/device:CPU:0"):
+        scattered_chunks = outfeed_queue.dequeue()
+        gathered_padded = array_ops.reshape(scattered_chunks, shape=[-1])
+        gathered = array_ops.slice(gathered_padded, [0], [num_elements])
+
+      cfg = ipu.utils.create_ipu_config(
+          profiling=False, max_cross_replica_sum_buffer_size=10000)
+      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+      cfg = ipu.utils.auto_select_ipus(cfg, replication_factor)
+      ipu.utils.configure_ipu_system(cfg)
+
+      sess.run(compiled_net)
+      gathered_result = sess.run(gathered)
+      expected_result = replication_factor * np.arange(num_elements)
+      self.assertAllEqual(expected_result, gathered_result)
 
 
 if __name__ == "__main__":

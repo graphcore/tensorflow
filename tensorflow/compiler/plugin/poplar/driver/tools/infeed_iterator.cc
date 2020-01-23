@@ -61,8 +61,8 @@ InfeedIterator::InfeedIterator(
       shapes_(shapes),
       cancellation_manager_(cancellation_manager),
       infeed_allocator_(infeed_allocator),
-      infeed_queues_(shapes.size()),
-      infeed_queues_ptrs_(shapes.size()) {
+      infeed_queues_(replication_factor),
+      infeed_queues_ptrs_(replication_factor) {
   // Respect the user request for the number of threads.
   const int num_threads = PoplarXlaFlags::Get().max_infeed_threads > 0
                               ? PoplarXlaFlags::Get().max_infeed_threads
@@ -128,11 +128,12 @@ InfeedIterator::InfeedIterator(
   }
 
   // Create the queues.
-  for (uint64 i = 0; i < shapes.size(); i++) {
-    for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
+  for (int64 replica_id = 0; replica_id < replication_factor; replica_id++) {
+    for (uint64 i = 0; i < shapes.size(); i++) {
       void* ptr = tensorflow::port::AlignedMalloc(sizeof(InfeedQueue), 64);
-      infeed_queues_[i].emplace_back(new (ptr) InfeedQueue());
-      infeed_queues_ptrs_[i].emplace_back(infeed_queues_[i].back().get());
+      infeed_queues_[replica_id].emplace_back(new (ptr) InfeedQueue());
+      infeed_queues_ptrs_[replica_id].emplace_back(
+          infeed_queues_[replica_id].back().get());
     }
   }
 }
