@@ -42,6 +42,9 @@ namespace tensorflow {
 
 namespace {
 
+constexpr char kFunctionToApplyAttrName[] = "to_apply";
+constexpr char kXlaClusterAttrName[] = "_XlaCluster";
+
 bool IsKeyPlaceholderNode(const Node& n) {
   return n.type_string() == "Placeholder" &&
          absl::EndsWith(n.name(), "_key_placeholder");
@@ -89,7 +92,34 @@ Status CheckForXlaSendToHostNodes(const FunctionDef* function_def) {
   return Status::OK();
 }
 
-std::unordered_map<string, XlaClusterInfo> FindClusters(Graph* g) {
+void AddFunctions(const string& func, Node* xla_launch_node,
+                  FunctionLibraryDefinition* flib_def,
+                  std::unordered_map<string, XlaClusterInfo>* clusters) {
+  // Add the current function.
+  NameAttrList func_name_attrs;
+  func_name_attrs.set_name(func);
+  clusters->emplace(func, XlaClusterInfo{func, func_name_attrs, xla_launch_node,
+                                         std::map<string, int>{}});
+
+  // Do a recursive depth first search through the functions found
+  // in the kFunctionToApplyAttrName. This is done for extracting
+  // outside compilations from within pipeline functions.
+  const FunctionDef* function_def = flib_def->Find(func);
+  CHECK(function_def) << "not found: " << func;
+  for (const NodeDef& n : function_def->node_def()) {
+    const auto found = n.attr().find(kFunctionToApplyAttrName);
+    if (found != n.attr().end()) {
+      const AttrValue& to_apply = found->second;
+      if (to_apply.has_func()) {
+        const string& child_func = to_apply.func().name();
+        AddFunctions(child_func, xla_launch_node, flib_def, clusters);
+      }
+    }
+  }
+}
+
+std::unordered_map<string, XlaClusterInfo> FindClusters(
+    Graph* g, FunctionLibraryDefinition* flib_def) {
   std::unordered_map<string, XlaClusterInfo> clusters;
 
   for (Node* n : g->op_nodes()) {
@@ -98,17 +128,12 @@ std::unordered_map<string, XlaClusterInfo> FindClusters(Graph* g) {
       CHECK_NOTNULL(f);
       CHECK(f->has_func());
       const string& func = f->func().name();
-      NameAttrList func_name_attrs;
-      func_name_attrs.set_name(func);
-      clusters.emplace(func, XlaClusterInfo{func, func_name_attrs, n,
-                                            std::map<string, int>{}});
+      AddFunctions(func, n, flib_def, &clusters);
     }
   }
 
   return clusters;
 }
-
-static constexpr char kXlaClusterAttrName[] = "_XlaCluster";
 
 }  // namespace
 
@@ -123,7 +148,7 @@ Status ExtractOutsideCompilationPass::Run(
 
   Graph* graph = options.graph->get();
 
-  const auto clusters = FindClusters(graph);
+  const auto clusters = FindClusters(graph, flib_def);
 
   FunctionLibraryRuntime* flr =
       pflr->GetFLR(ProcessFunctionLibraryRuntime::kDefaultFLRDevice);

@@ -34,6 +34,7 @@ from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import collective_ops
 from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import variable_scope
 
 
@@ -82,11 +83,13 @@ def _current_device():
 
 
 def _is_inside_compilation():
-  dummy_op = control_flow_ops.no_op()
-  attrs = dummy_op.node_def.attr
-  is_inside_xla_compile = xla._XLA_COMPILE_ATTR in attrs  # pylint: disable=protected-access
+  graph = ops.get_default_graph()
+  attrs = graph._attr_scope_map  # pylint: disable=protected-access
+
+  is_in_xla_context = control_flow_util.GraphOrParentsInXlaContext(graph)
   is_outside_compilation = scopes.OUTSIDE_COMPILATION_NAME in attrs
-  return is_inside_xla_compile and not is_outside_compilation
+
+  return is_in_xla_context and not is_outside_compilation
 
 
 class IPUSyncOnReadVariable(values.SyncOnReadVariable):  # pylint: disable=abstract-method
