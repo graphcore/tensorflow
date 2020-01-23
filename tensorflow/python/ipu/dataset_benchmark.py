@@ -14,7 +14,7 @@
 # =============================================================================
 """
 Dataset benchmarking
-~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_dataset_benchmark
