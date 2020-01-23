@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+"""
+Popops reduce scatter operator
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 
 
@@ -20,18 +25,21 @@ def reduce_scatter(x, replication_factor, name=None):
   the replicas. For an input of shape `[num_elements]`, the output will have
   shape `[ceil(num_elements / replication_factor)]`. If `replication_factor`
   does not evenly divide `num_elements`, the result is zero-padded. Example:
-  Input:  Replica0: [x0, y0, z0]
-          Replica1: [x1, y1, z1]
-  Output: Replica0: [x0 + x1, y0 + y1]
-          Replica1: [z0 + z1, 0]
 
-    Args:
-      x: The input `Tensor`. Must have rank 1.
-      replication_factor: The replication factor of the model.
-      name: Optional op name.
+  .. code-block:: none
 
-    Returns:
-      A `Tensor` with the result for this replica.
+    Input:  Replica0: [x0, y0, z0]
+            Replica1: [x1, y1, z1]
+    Output: Replica0: [x0 + x1, y0 + y1]
+            Replica1: [z0 + z1, 0]
+
+  Args:
+    x: The input `Tensor`. Must have rank 1.
+    replication_factor: The replication factor of the model.
+    name: Optional op name.
+
+  Returns:
+    A `Tensor` with the result for this replica.
   """
   return gen_popops_ops.ipu_reduce_scatter(
       x, replication_factor=replication_factor, name=name)

@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """
-Popops embedding operators.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Popops embedding operators
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from functools import reduce

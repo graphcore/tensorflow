@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """
-Custom operations.
-~~~~~~~~~~~~~~~~~~
+Custom operations
+~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
