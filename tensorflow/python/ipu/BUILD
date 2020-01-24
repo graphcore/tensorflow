@@ -98,12 +98,15 @@ py_library(
     srcs_version = "PY2AND3",
     srcs = [
         "__init__.py",
+        "keras/__init__.py",
+        "keras/layers/__init__.py",
         "autoshard.py",
         "autoshard_cnn.py",
         "dataset_benchmark.py",
         "function.py",
         "gradient_accumulation_optimizer.py",
         "keras/sequential.py",
+        "keras/layers/RNN.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
         "ipu_infeed_queue.py",
@@ -216,6 +219,18 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
+    ],
+)
+
+tf_py_test(
+    name = "RNN_test",
+    size = "medium",
+    srcs = ["tests/keras/RNN_test.py"],
+    additional_deps = [
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
     ],
 )
 
@@ -744,6 +759,7 @@ test_suite(
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
         # "sequential_test",
+        "RNN_test",
         "recompute_suggestion_test",
         "user_ops_test",
         "utils_test",

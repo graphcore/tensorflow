@@ -18,7 +18,6 @@
 # pylint: disable=wildcard-import,unused-import
 from tensorflow.python.ipu import autoshard
 from tensorflow.python.ipu import autoshard_cnn
-from tensorflow.python.ipu import data
 from tensorflow.python.ipu import dataset_benchmark
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -35,6 +34,7 @@ from tensorflow.python.ipu import vertex_edsl
 
 from tensorflow.python.ipu.function import function
 from tensorflow.python.ipu.keras.sequential import Sequential
+from tensorflow.python.ipu.keras import layers
 
 from tensorflow.python.ipu.ops import all_to_all_op
 from tensorflow.python.ipu.ops import all_to_all_op_grad
