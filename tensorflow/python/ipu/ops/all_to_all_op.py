@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """
-Popops cross replica operators
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Popops all to all and all gather operators
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops

@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """
-Utility operations to be used in replicated mode.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Utility operations to be used in replicated mode
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 from __future__ import absolute_import
 from __future__ import division

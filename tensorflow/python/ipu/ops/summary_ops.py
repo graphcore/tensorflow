@@ -13,8 +13,8 @@
 # limitations under the License.
 # =============================================================================
 """
-Summary opertions for IPUs
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Summary operations for IPUs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops

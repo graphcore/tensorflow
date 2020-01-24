@@ -242,8 +242,9 @@ maximum throughput of your `tf.data.Dataset`.
 
 If the throughput of your `tf.data.Dataset` is the bottleneck, you can try and
 optimize it using:
- - https://www.tensorflow.org/guide/data
- - https://www.tensorflow.org/guide/data_performance
+
+* https://www.tensorflow.org/guide/data
+* https://www.tensorflow.org/guide/data_performance
 
 Accessing the JSON data
 _______________________
@@ -252,6 +253,7 @@ be loaded into a JSON object using the native JSON library:
 
 
 .. code-block:: python
+
   import json
 
   # Create your `tf.data.Dataset`
