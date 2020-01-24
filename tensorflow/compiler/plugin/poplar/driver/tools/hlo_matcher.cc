@@ -1178,6 +1178,8 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
       }
 
       visited.insert(node_id);
+
+      TF_CHECK_OK(inst->DropAllControlDeps());
       TF_CHECK_OK(computation->RemoveInstruction(inst));
     }
   }
