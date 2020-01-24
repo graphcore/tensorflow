@@ -64,8 +64,7 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
       auto fifo = graph.addHostToDeviceFIFO(
           GetInfeedCopyHandle(infeed->name(), tuple_index),
           tensor_to_update.elementType(), tensor_to_update.numElements());
-      seq.add(poplar::program::Copy(fifo, tensor_to_update,
-                                    res.always_rearrange_copies_on_host));
+      seq.add(poplar::program::Copy(fifo, tensor_to_update, false));
     } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
       // Initialize the tensor with a synthetic initalizer.
       auto& initializer = DataInitializer::GetSyntheticDataInitializer();
@@ -218,8 +217,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
           graph.addDeviceToHostFIFO(GetOutfeedCopyHandle(inst->name(), i),
                                     in.elementType(), in.numElements());
 
-      seq.add(
-          poplar::program::Copy(in, fifo, res.always_rearrange_copies_on_host));
+      seq.add(poplar::program::Copy(in, fifo, false));
     } else {
       // Batch multiple writes, and then write as a block.
 
@@ -282,8 +280,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
       auto fifo = graph.addDeviceToHostFIFO(
           GetOutfeedCopyHandle(outfeed->name(), i), batched.elementType(),
           batched.numElements());
-      true_body.add(poplar::program::Copy(batched, fifo,
-                                          res.always_rearrange_copies_on_host));
+      true_body.add(poplar::program::Copy(batched, fifo, false));
 
       // The NOP body.
       poplar::program::Sequence false_body;
