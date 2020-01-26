@@ -116,6 +116,11 @@ class IPUMultiWorkerExtended(
     # The default is to force the variables on the host device.
     self._allow_variable_placement = False
 
+    # By default the functional graphs are not retraced and therefore device
+    # information is not lowered to ops which means distribution strategies do
+    # not work.
+    self._retrace_functions_for_each_device = True
+
   def experimental_allow_variable_placement(self):
     self._allow_variable_placement = True
 
@@ -216,9 +221,11 @@ class IPUMultiWorkerExtended(
         return [next_creator(*args, **kwargs)]
 
     # For tf1: use distribute_lib.create_mirrored_variable
-    return values.create_mirrored_variable(
-        self._container_strategy(), device_map, logical_device, _real_creator,
-        IPUMirroredVariable, IPUSyncOnReadVariable, *args, **kwargs)
+    return values.create_mirrored_variable(self._container_strategy(),
+                                           device_map, logical_device,
+                                           _real_creator, IPUMirroredVariable,
+                                           IPUSyncOnReadVariable, *args,
+                                           **kwargs)
 
   def read_var(self, var):
     return var.read_value()
