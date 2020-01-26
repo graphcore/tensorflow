@@ -98,7 +98,7 @@ StatusOr<std::vector<HloInstruction*>> FindClusterToLower(
     bool ready_to_lower = true;
     for (HloInstruction* operand : inst->operands()) {
       TF_ASSIGN_OR_RETURN(bool operand_needs_lowering,
-                          analysis->HasToBeLowered(operand));
+                          analysis->HasToBeLoweredIntoStage(stage, operand));
       ready_to_lower &= (visited.contains(operand) || !operand_needs_lowering);
     }
     std::vector<HloInstruction*> candidates;
@@ -117,8 +117,9 @@ StatusOr<std::vector<HloInstruction*>> FindClusterToLower(
     // Add any instructions which need to be considered for lowering.
     for (HloInstruction* candidate : candidates) {
       if (!visited.contains(candidate)) {
-        TF_ASSIGN_OR_RETURN(bool needs_lowering,
-                            analysis->HasToBeLowered(candidate));
+        TF_ASSIGN_OR_RETURN(
+            bool needs_lowering,
+            analysis->HasToBeLoweredIntoStage(stage, candidate));
         if (needs_lowering) {
           to_visit.insert(candidate);
         }
@@ -215,7 +216,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
       HloInstruction* stage_user = stage_gte_user->users()[0];
 
       TF_ASSIGN_OR_RETURN(bool needs_lowering,
-                          analysis->HasToBeLowered(stage_user));
+                          analysis->HasToBeLoweredIntoStage(stage, stage_user));
       if (!needs_lowering) {
         continue;
       }
@@ -338,7 +339,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
          ++operand_idx) {
       HloInstruction* operand = stage->mutable_operand(operand_idx);
       TF_ASSIGN_OR_RETURN(bool operand_needs_lowering,
-                          analysis->HasToBeLowered(operand));
+                          analysis->HasToBeLoweredIntoStage(stage, operand));
       if (operand_needs_lowering) {
         parameters_to_replace[operand_idx] = operand;
       }
@@ -370,8 +371,9 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
       // Add any operand which has to be lowered.
       for (HloInstruction* operand : inst->operands()) {
         if (!visited.contains(operand)) {
-          TF_ASSIGN_OR_RETURN(bool needs_lowering,
-                              analysis->HasToBeLowered(operand));
+          TF_ASSIGN_OR_RETURN(
+              bool needs_lowering,
+              analysis->HasToBeLoweredIntoStage(stage, operand));
           if (needs_lowering) {
             to_visit.insert(operand);
           }
@@ -448,7 +450,7 @@ StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
       HloInstruction* param_user = *params_users.begin();
       params_users.erase(param_user);
       TF_ASSIGN_OR_RETURN(bool needs_lowering,
-                          analysis->HasToBeLowered(param_user));
+                          analysis->HasToBeLoweredIntoStage(stage, param_user));
       if (!needs_lowering) {
         continue;
       }

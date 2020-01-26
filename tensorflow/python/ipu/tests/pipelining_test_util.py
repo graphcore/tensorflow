@@ -161,9 +161,18 @@ class PipelineTester(object):
       return session.run(outfeed_op)
 
   @staticmethod
-  def pipeline_on_ipu(stages, inputs_fn, input_values, repeat_count,
-                      pipeline_depth, dataset_fn, optimizer, test_wrapper,
-                      expected_max_tile_memory, recomp, schedule):
+  def pipeline_on_ipu(stages,
+                      inputs_fn,
+                      input_values,
+                      repeat_count,
+                      pipeline_depth,
+                      dataset_fn,
+                      optimizer,
+                      test_wrapper,
+                      expected_max_tile_memory,
+                      recomp,
+                      schedule,
+                      device_mapping=None):
 
     g = ops.Graph()
     with g.as_default(), test_wrapper.test_session(graph=g) as session:
@@ -186,12 +195,14 @@ class PipelineTester(object):
                                          optimizer_function=optimizer_function,
                                          infeed_queue=infeed_queue,
                                          outfeed_queue=outfeed_queue,
-                                         pipeline_schedule=schedule)
+                                         pipeline_schedule=schedule,
+                                         device_mapping=device_mapping)
 
       with ops.device("/device:IPU:0"):
         compiled_model_pipeline = ipu_compiler.compile(my_net, inputs=inputs)
 
-      # Execution profiles of code with dynamic control flow are not supported on real HW
+      # Execution profiles of code with dynamic control flow are not supported
+      # on real HW.
       profiling = utils.running_on_ipu_model()
       cfg = utils.create_ipu_config(profiling=profiling,
                                     profile_execution=profiling)
@@ -214,10 +225,12 @@ class PipelineTester(object):
       out = session.run(outfeed_op)[0]
       if profiling:
         report.parse_log()
-        report.assert_pipeline_stages_on_expected_ipu([
-            i - (i % 4) + ((i % 4) if (i % 4) < 2 else 5 - (i % 4))
-            for i in range(len(stages))
-        ])
+        if not device_mapping:
+          device_mapping = [
+              i - (i % 4) + ((i % 4) if (i % 4) < 2 else 5 - (i % 4))
+              for i in range(len(stages))
+          ]
+        report.assert_pipeline_stages_on_expected_ipu(device_mapping)
         report.assert_max_tile_memory(expected_max_tile_memory, tolerance=0.3)
       return out
 
@@ -232,7 +245,8 @@ class PipelineTester(object):
                               test_wrapper,
                               expected_max_tile_memory,
                               recomp=False,
-                              schedule=None):
+                              schedule=None,
+                              device_mapping=None):
 
     # Run pipeline_on_ipu before the CPU version as pipeline_on_ipu
     # will initialize the IPU which might be needed by the CPU path
@@ -240,8 +254,7 @@ class PipelineTester(object):
     pipeline_losses = PipelineTester.pipeline_on_ipu(
         stages, inputs_fn, input_values, repeat_count, pipeline_depth,
         dataset_fn, optimizer, test_wrapper, expected_max_tile_memory, recomp,
-        schedule)
-
+        schedule, device_mapping)
     cpu_losses = PipelineTester._cpu_with_grad_accum(test_wrapper, stages,
                                                      inputs_fn, input_values,
                                                      repeat_count,
@@ -261,18 +274,21 @@ class PipelineTester(object):
                                    test_wrapper,
                                    expected_max_tile_memory,
                                    recomp=False,
-                                   schedule=None):
-    pipeline_losses = PipelineTester.pipeline_on_ipu(stages,
-                                                     inputs_fn,
-                                                     input_values,
-                                                     repeat_count,
-                                                     pipeline_depth,
-                                                     dataset_fn,
-                                                     optimizer,
-                                                     test_wrapper,
-                                                     expected_max_tile_memory,
-                                                     recomp=recomp,
-                                                     schedule=schedule)
+                                   schedule=None,
+                                   device_mapping=None):
+    pipeline_losses = PipelineTester.pipeline_on_ipu(
+        stages,
+        inputs_fn,
+        input_values,
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        test_wrapper,
+        expected_max_tile_memory,
+        recomp=recomp,
+        schedule=schedule,
+        device_mapping=device_mapping)
 
     sharded_losses = PipelineTester._sharded_on_ipu(stages, inputs_fn,
                                                     input_values, repeat_count,

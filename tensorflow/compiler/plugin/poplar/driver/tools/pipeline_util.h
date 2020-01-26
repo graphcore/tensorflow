@@ -201,6 +201,11 @@ class PipelineDataflowAnalysis {
                                     bool allow_communication_ops,
                                     bool allow_feeds, bool allow_recomputation);
 
+  // Returns whether the instruction needs to be lowered into a stage given the
+  // current analysis.
+  StatusOr<bool> HasToBeLoweredIntoStage(const HloInstruction* stage,
+                                         const HloInstruction* inst) const;
+
   // Returns whether the instruction needs to be lowered given the current
   // analysis.
   StatusOr<bool> HasToBeLowered(const HloInstruction* inst) const;
@@ -212,6 +217,9 @@ class PipelineDataflowAnalysis {
   // Given the PipelineStage(Backward) instruction, get the
   // PipelineStage(Backward) which will be executed next.
   StatusOr<StageID> GetPreviousStageID(const HloInstruction* inst) const;
+
+  // Get the sharding device a pipeline stage resides on.
+  StatusOr<int64> GetShardForStage(const StageID& stage_id) const;
 
   // Verifies that the dataflow between Pipeline Stages is legal.
   Status VerifyPipelineUsage(const HloInstruction* pipeline_stage,
@@ -242,7 +250,7 @@ class PipelineDataflowAnalysis {
   HloValueSet* CreateValueSet(HloInstruction* inst);
 
   // Get the value set which is the union of all operands of inst.
-  HloValueSet GetOperandsValueSet(const HloInstruction* inst);
+  HloValueSet GetOperandsValueSet(const HloInstruction* inst) const;
 
  private:
   // Updates the analysis

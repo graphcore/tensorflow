@@ -334,7 +334,11 @@ def pipeline(computational_stages,
   which calculate the gradients and apply them to the weights. Note how the
   loss is returned to the host by the outfeed queue.
 
-  Note that modifying tf.Variable values in a pipeline stage and/or during the
+  If a model requires multiple computational pipeline stages to access the same
+  `tf.Variable`, then all of these computational stages need to be placed on the
+  same IPU using the `device_mapping` argument.
+
+  Note that modifying `tf.Variable` values in a pipeline stage and/or during the
   gradient calculation will result in undefined behavior. These variables can
   only be modified by the `apply_gradients` member function of the applied
   Optimizer.
@@ -356,7 +360,11 @@ def pipeline(computational_stages,
       `pipelining_ops.OptimizerFunctionOutput` in order to generate the
       back-propagation and weight-update parts of the model suitable for
       training.
-    device_mapping: optional stage to ipu mapping override.
+    device_mapping: If provided, a list of length equal to the number of
+      computational stages. An element at index `i` in the list represents which
+      IPU the computational stage `computational_stages[i]` should reside on.
+      This can be used to make sure computational stages which share
+      `tf.Variable`s are resident on the same IPU.
     pipeline_schedule: Which scheduling algorithm to use for pipeline
       lowering. Defaults to `PipelineSchedule.Grouped`.
     forward_propagation_stages_poplar_options: If provided, a list of length
