@@ -918,7 +918,7 @@ HloValueSet* PipelineDataflowAnalysis::CreateValueSet(HloInstruction* inst) {
 }
 
 HloValueSet PipelineDataflowAnalysis::GetOperandsValueSet(
-    const HloInstruction* inst) {
+    const HloInstruction* inst) const {
   std::vector<const HloValueSet*> operand_sets(inst->operand_count());
   absl::c_transform(
       inst->operands(), operand_sets.begin(),
@@ -973,6 +973,22 @@ StatusOr<StageID> PipelineDataflowAnalysis::GetPreviousStageID(
       }
     }
     default: { return FailedPrecondition("Invalid enum type."); }
+  }
+}
+
+StatusOr<int64> PipelineDataflowAnalysis::GetShardForStage(
+    const StageID& stage_id) const {
+  switch (stage_id.stage_type) {
+    case StageType::kForward:
+    case StageType::kBackward:
+    case StageType::kRecomputation: {
+      // Get the shard for the pipeline stage from the forward stage as we can
+      // guarantee that it has sharding information attached.
+      return *pipeline_stages_.forward[stage_id.id]->sharding_unique_device();
+    }
+    default: {
+      return FailedPrecondition("Invalid enum type for GetShardForStage.");
+    }
   }
 }
 
@@ -1050,19 +1066,27 @@ Status PipelineDataflowAnalysis::VerifyParameterUsage(
     const HloInstruction* pipeline_stage_user) {
   CHECK_EQ(parameter->opcode(), HloOpcode::kParameter);
   TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(pipeline_stage_user));
+  // Get the shard for the pipeline stage.
+  TF_ASSIGN_OR_RETURN(const int64 shard, GetShardForStage(stage_id));
   // Get the parameter value and check where it is used.
   const HloValue& parameter_value = GetValueSet(parameter).GetUniqueValue();
   for (const HloInstruction* user_stage :
        used_by_stages_.at(&parameter_value)) {
     TF_ASSIGN_OR_RETURN(StageID user_stage_id, GetStageID(user_stage));
-    if (stage_id.id != user_stage_id.id) {
+    // Get the shard for the other user stage.
+    TF_ASSIGN_OR_RETURN(const int64 user_shard,
+                        GetShardForStage(user_stage_id));
+    if (stage_id.id != user_stage_id.id && shard != user_shard) {
       return UnimplementedStrCat(
           "The ", stage_id.ToString(), " is trying to use an input (",
           parameter->name(), ") which is already used by the ",
           user_stage_id.ToString(),
-          ". This violates the dataflow "
-          " constraints because an input can only be used by a single"
-          " PipelineStage.");
+          ". This violates the dataflow constraints because an input can only "
+          "be used by pipeline stages on the same IPU.\n"
+          "If the model requires for multiple pipeline stages to access the "
+          "same `tf.Variable` then these pipeline stages need to placed onto "
+          "the same IPU using the `device_mapping` argument to "
+          "`tf.python.ipu.pipelining_ops.pipeline`.");
     }
   }
   return Status::OK();
@@ -1117,6 +1141,35 @@ Status PipelineDataflowAnalysis::VerifyPipelineStageOperands(
     }
   }
   return Status::OK();
+}
+
+StatusOr<bool> PipelineDataflowAnalysis::HasToBeLoweredIntoStage(
+    const HloInstruction* stage, const HloInstruction* inst) const {
+  TF_ASSIGN_OR_RETURN(bool lower, HasToBeLowered(inst));
+  if (lower && IsPipelineStageBackward(stage)) {
+    TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(stage));
+    // inst has to be lowered, however it might have to be lowered into a
+    // different stage - example is when a resource has multiple gradients
+    // coming from different stages - we need to lower it into the last stage it
+    // is used in.
+
+    // We only do this for the bwd stages because the fwd stages were threaded
+    // correctly anyway.
+    HloValueSet value_set = GetOperandsValueSet(inst);
+    for (const HloValue* value : value_set.values()) {
+      HloInstruction* producer = value->instruction();
+      if (IsPipelineStageBackward(producer)) {
+        TF_ASSIGN_OR_RETURN(StageID producer_stage_id, GetStageID(producer));
+        if (producer_stage_id.id < stage_id.id) {
+          // Let a later stage deal with this.
+          return false;
+        }
+      }
+    }
+    return true;
+  } else {
+    return lower;
+  }
 }
 
 StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(

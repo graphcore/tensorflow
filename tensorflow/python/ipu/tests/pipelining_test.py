@@ -417,6 +417,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       report.reset()
       sess.run(variables.global_variables_initializer())
       sess.run(infeed_queue.initializer)
+      report.parse_log()
       sess.run(r, {c: 10.01})
       losses_pipeline = sess.run(outfeed_op)
       self.assertAllClose(losses_pipeline, [[
@@ -891,6 +892,95 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         schedule=pipelining_ops.PipelineSchedule.Interleaved)
 
   @test_util.deprecated_graph_mode_only
+  def testPipelineCompareSharedWeights(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value / 7
+        label = value[0][0] % 4
+        return img, math_ops.cast(label, np.int32)
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    pipeline_depth = 20
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w1",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage3(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage4(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w3",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage5(x, label):
+      # Ruse the weight here.
+      with variable_scope.variable_scope("vs", use_resource=True, reuse=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        logits = math_ops.reduce_sum(x, axis=[-1])
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                        labels=label))
+        return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4, stage5],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        21458,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved,
+        device_mapping=[0, 1, 2, 3, 0])
+
+  @test_util.deprecated_graph_mode_only
   def testStageOptionsNotEnough(self):
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed8")
 
@@ -1051,7 +1141,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[0.0])
 
-      cfg = utils.create_ipu_config()
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
       cfg = utils.auto_select_ipus(cfg, 4)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
@@ -1085,7 +1175,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device("/device:IPU:0"):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
-      cfg = utils.create_ipu_config()
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
       cfg = utils.auto_select_ipus(cfg, 4)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()

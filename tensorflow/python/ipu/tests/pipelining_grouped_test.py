@@ -753,6 +753,95 @@ class PipeliningGroupedTest(test_util.TensorFlowTestCase):
         13821,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
 
+  @test_util.deprecated_graph_mode_only
+  def testPipelineCompareSharedWeights(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
+
+      def dataset_parser(value):
+        img = value / 7
+        label = value[0][0] % 4
+        return img, math_ops.cast(label, np.int32)
+
+      dataset = dataset.map(dataset_parser)
+
+      return dataset.batch(batch_size=2, drop_remainder=True)
+
+    pipeline_depth = 20
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w1",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage3(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage4(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w3",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        return x, label
+
+    def stage5(x, label):
+      # Ruse the weight here.
+      with variable_scope.variable_scope("vs", use_resource=True, reuse=True):
+        weight = variable_scope.get_variable(
+            "w0",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.random_normal_initializer(stddev=0.1))
+        x = math_ops.matmul(x, weight)
+        logits = math_ops.reduce_sum(x, axis=[-1])
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                        labels=label))
+        return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3, stage4, stage5],
+        inputs_fn, [10.01],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        21458,
+        schedule=pipelining_ops.PipelineSchedule.Grouped,
+        device_mapping=[0, 1, 2, 3, 0])
+
 
 if __name__ == "__main__":
   googletest.main()
