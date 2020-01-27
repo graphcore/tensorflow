@@ -187,6 +187,21 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
       bl = ['*convert*/Cast*']
       report.assert_compute_sets_not_in_blacklist(bl)
 
+  def testBatchNormalizeLayerWithStableStatistics(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        with variable_scope.variable_scope("", use_resource=True):
+          x = array_ops.placeholder(np.float32, [4, 64, 64, 4], name="a")
+          normed = layers_norm.batch_normalization(x, training=True)
+
+      ReportJSON(self, sess, use_stable_norm_statistics=True)
+      sess.run(variables.global_variables_initializer())
+
+      # Use a tensor with large mean to test the stability
+      input_mean = 1e10
+      result = sess.run(normed, {x: input_mean * np.ones([4, 64, 64, 4])})
+      self.assertAllClose(result, np.ones([4, 64, 64, 4]))
+
   def testBatchNormalizeFusedLayer(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):

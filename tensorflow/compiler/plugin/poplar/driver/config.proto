@@ -40,7 +40,7 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
-// NEXT ID 25
+// NEXT ID 26
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -195,4 +195,7 @@ message IpuOptions {
   int64 ipu_version = 23;
 
   IpuOptionsCreator creator_id = 24;
+
+  // Use stable statistics calculation in norms
+  bool use_stable_norm_statistics = 25;
 };

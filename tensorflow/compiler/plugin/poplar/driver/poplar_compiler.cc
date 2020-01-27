@@ -682,7 +682,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->FloatingPointBehaviour(),
       poplar_executor->AlwaysRearrangeCopiesOnTheHost(),
       poplar_executor->GetSchedulerSelection(),
-      poplar_executor->RecomputationEnabled());
+      poplar_executor->RecomputationEnabled(),
+      poplar_executor->UseStableNormStatistics());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";

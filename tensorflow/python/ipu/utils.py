@@ -427,6 +427,23 @@ def set_optimization_options(opts,
   return opts
 
 
+def set_norm_options(opts, use_stable_statistics=False):
+  """Set the IPU options related to norms.
+
+  Args:
+    use_stable_statistics: If True, computes the mean first and subtracts
+      the activations by it before computing the variance. The
+      implementation with this flag set to True is slower than when set
+      to False.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.use_stable_norm_statistics = use_stable_statistics
+
+  return opts
+
+
 def set_compilation_options(opts, compilation_options=None):
   """Set the IPU compilation options for the session.
 

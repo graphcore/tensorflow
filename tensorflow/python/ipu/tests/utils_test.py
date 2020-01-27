@@ -79,6 +79,10 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.set_optimization_options(cfg, combine_matmuls=True)
     self.assertTrue(cfg.enable_matmul_combiner)
 
+    self.assertFalse(cfg.use_stable_norm_statistics)
+    cfg = ipu.utils.set_norm_options(cfg, use_stable_statistics=True)
+    self.assertTrue(cfg.use_stable_norm_statistics)
+
     self.assertFalse(cfg.convolution_options)
     cfg = ipu.utils.set_convolution_options(cfg,
                                             {"tempMemoryBudget": "1000000"})
