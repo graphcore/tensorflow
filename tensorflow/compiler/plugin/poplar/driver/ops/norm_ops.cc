@@ -234,8 +234,10 @@ StatusOr<poplar::program::Program> CreateNormTraining(
   using namespace poputil::graphfn;
   const std::string debug_prefix = GetDebugName(inst);
   auto func = [&graph, feature_dimension, debug_prefix, norm_type, epsilon,
-               optional_num_groups](std::vector<poplar::Tensor>& args,
-                                    poplar::program::Sequence& prog) {
+               optional_num_groups,
+               use_stable_statistics = res.use_stable_norm_statistics](
+                  std::vector<poplar::Tensor>& args,
+                  poplar::program::Sequence& prog) {
     poplar::Tensor operand = args[0];
     poplar::Tensor scale = args[1];
     poplar::Tensor offset = args[2];
@@ -247,7 +249,8 @@ StatusOr<poplar::program::Program> CreateNormTraining(
       case NormType::BatchNorm: {
         poplar::Tensor inv_sd;
         std::tie(args[4], inv_sd) = popnn::bn::batchNormStatistics(
-            graph, operand, epsilon, prog, false, poplar::FLOAT, debug_prefix);
+            graph, operand, epsilon, prog, /*unbiasedVarEstimate=*/false,
+            use_stable_statistics, poplar::FLOAT, debug_prefix);
 
         args[3] = BatchNormalise(graph, operand, scale, offset, args[4], inv_sd,
                                  prog, debug_prefix);
@@ -261,8 +264,9 @@ StatusOr<poplar::program::Program> CreateNormTraining(
         // For group norm variance_or_inv_std_dev is inv_std_dev, so we
         // don't need to convert it.
         std::tie(args[4], args[5]) = popnn::gn::groupNormStatistics(
-            graph, operand, epsilon, prog, *optional_num_groups, false,
-            poplar::FLOAT, debug_prefix);
+            graph, operand, epsilon, prog, *optional_num_groups,
+            /*unbiasedVarEstimate=*/false, use_stable_statistics, poplar::FLOAT,
+            debug_prefix);
 
         args[3] =
             popnn::gn::groupNormalise(graph, operand, scale, offset, args[4],
@@ -457,8 +461,10 @@ StatusOr<poplar::program::Program> CreateNormStatistics(
   using namespace poputil::graphfn;
   const std::string debug_prefix = GetDebugName(inst);
   auto func = [&graph, feature_dimension, debug_prefix, norm_type, epsilon,
-               optional_num_groups](std::vector<poplar::Tensor>& args,
-                                    poplar::program::Sequence& prog) {
+               optional_num_groups,
+               use_stable_statistics = res.use_stable_norm_statistics](
+                  std::vector<poplar::Tensor>& args,
+                  poplar::program::Sequence& prog) {
     poplar::Tensor operand = args[0];
     // Move the channels.
     operand = ShuffleNormInputToPoplar(operand, feature_dimension);
@@ -467,7 +473,8 @@ StatusOr<poplar::program::Program> CreateNormStatistics(
       case NormType::BatchNorm: {
         poplar::Tensor inv_sd;
         std::tie(args[1], inv_sd) = popnn::bn::batchNormStatistics(
-            graph, operand, epsilon, prog, false, poplar::FLOAT, debug_prefix);
+            graph, operand, epsilon, prog, /*unbiasedVarEstimate=*/false,
+            use_stable_statistics, poplar::FLOAT, debug_prefix);
         // For batch norm variance_or_inv_std_dev is variance, so we need to
         // convert it.
         args[2] = ConvertInvStdDevToVariance(graph, inv_sd, epsilon, prog,
@@ -478,8 +485,9 @@ StatusOr<poplar::program::Program> CreateNormStatistics(
         // For group norm variance_or_inv_std_dev is inv_std_dev, so we
         // don't need to convert it.
         std::tie(args[1], args[2]) = popnn::gn::groupNormStatistics(
-            graph, operand, epsilon, prog, *optional_num_groups, false,
-            poplar::FLOAT, debug_prefix);
+            graph, operand, epsilon, prog, *optional_num_groups,
+            /*unbiasedVarEstimate=*/false, use_stable_statistics, poplar::FLOAT,
+            debug_prefix);
         break;
       }
     }

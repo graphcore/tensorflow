@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <memory>
 #include <stack>
+#include <string>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
@@ -112,6 +113,8 @@ struct CompilerResources {
 
   bool recomputation_enabled;
 
+  bool use_stable_norm_statistics;
+
   std::unique_ptr<CallGraph> module_call_graph;
 
   CompilerResources(
@@ -125,7 +128,8 @@ struct CompilerResources {
       int64 max_scheduler_search_space_size, HloModule* module,
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
-      const std::string& scheduler_selection, bool recomputation_enabled)
+      const std::string& scheduler_selection, bool recomputation_enabled,
+      bool use_stable_norm_statistics)
       : annotations(module),
         information(
             max_all_reduce_buffer_size, max_inter_ipu_copies_buffer_size,
@@ -141,7 +145,8 @@ struct CompilerResources {
         merge_infeed_io_copies(merge_infeed_io_copies),
         always_rearrange_copies_on_host(always_rearrange_copies_on_host),
         scheduler_selection(scheduler_selection),
-        recomputation_enabled(recomputation_enabled) {}
+        recomputation_enabled(recomputation_enabled),
+        use_stable_norm_statistics(use_stable_norm_statistics) {}
 };
 
 }  // namespace poplarplugin

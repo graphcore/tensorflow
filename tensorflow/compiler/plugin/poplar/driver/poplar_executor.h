@@ -378,6 +378,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.serialization_folder();
   }
 
+  bool UseStableNormStatistics() const {
+    return current_config_.use_stable_norm_statistics();
+  }
+
   int64 GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }
