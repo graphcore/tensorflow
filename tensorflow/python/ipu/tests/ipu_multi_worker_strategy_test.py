@@ -52,12 +52,13 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
+from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
+from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import server_lib
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
 from tensorflow.python.training.momentum import MomentumOptimizer
 from tensorflow.python.training.monitored_session import MonitoredTrainingSession
-from tensorflow.python.training import gradient_descent
 
 disable_v2_behavior()
 
@@ -589,7 +590,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
                                     num_gpus=0)
 
 
-class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
+class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
   """Tests using multiple processes."""
   def _run_task_in_process(self, task_fn, cluster_spec, task_type, task_id):
     def wrapper_fn():
@@ -682,9 +683,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
 
     with strategy.scope():
 
-      w = variable_scope.get_variable(name="w", initializer=initial_w)
-
       def device_fn(features):
+        w = variable_scope.get_variable(name="w", initializer=initial_w)
         loss = w * features
         optimizer = gradient_descent.GradientDescentOptimizer(learning_rate)
         return optimizer.minimize(loss)
@@ -696,10 +696,11 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
       train_op = strategy.experimental_run_v2(compiled_fn, args=[])
 
       config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, 1)
+      config = ipu_utils.auto_select_ipus(config, num_ipus=1)
       ipu_utils.configure_ipu_system(config)
 
       num_workers = strategy.num_replicas_in_sync
+      [w] = variables.global_variables()
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(w.initializer)
@@ -712,29 +713,30 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
     self._run_workers_in_processes(self._test_optimizer_in_compiled_cluster,
                                    cluster_spec)
 
-  def _test_pipelining(self, _task_id):
-    x = 1.5
-    y = 1.0
-    initial_w = 2.0
-    learning_rate = 0.5
-    pipeline_depth = 4
-
+  def _test_pipelining(self, task_id):
     strategy, target, sess_config = self._create_test_objects()
 
     strategy.extended.experimental_allow_variable_placement()
 
+    per_worker_x = [i + 1.0 for i in range(strategy.num_replicas_in_sync)]
+    y = 1.0
+    initial_w = 2.0
+    learning_rate = 0.5
+    pipeline_depth = 4
+    num_iterations = 3
+
     with strategy.scope():
 
-      features = [x] * pipeline_depth
-      labels = [y] * pipeline_depth
+      x = per_worker_x[task_id]
+      features = [x] * pipeline_depth * num_iterations
+      labels = [y] * pipeline_depth * num_iterations
       dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
 
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
 
-      w = variable_scope.get_variable(name="w", initializer=initial_w)
-
       def stage1(features, labels):
+        w = variable_scope.get_variable(name="w", initializer=initial_w)
         partial = w * features
         return partial, labels
 
@@ -764,22 +766,22 @@ class IPUMultiWorkerStrategyMultiProcessTest(test.TestCase):
 
       train_op = strategy.experimental_run_v2(compiled_model, args=[])
       config = ipu_utils.create_ipu_config()
-      config = ipu_utils.auto_select_ipus(config, 2)
+      config = ipu_utils.auto_select_ipus(config, num_ipus=2)
       ipu_utils.configure_ipu_system(config)
 
       expected_w = initial_w
-      num_workers = strategy.num_replicas_in_sync
+      [w] = variables.global_variables()
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(infeed_queue.initializer)
         sess.run(variables.global_variables_initializer())
-        sess.run(train_op)
 
-        # L(x) = w * x + y
-        # dL(x)/dw = x
-        # w := w - learning_rate * x
-        expected_w -= num_workers * pipeline_depth * learning_rate * x
-        self.assertEqual(expected_w, sess.run(w))
+        for _ in range(num_iterations):
+          sess.run(train_op)
+          # L(x) = w * x_0 + y + w * x_1 + y
+          # dL(x)/dw = x_0 + x_1
+          expected_w -= learning_rate * pipeline_depth * sum(per_worker_x)
+          self.assertEqual(expected_w, sess.run(w))
 
   def test_pipelining(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
