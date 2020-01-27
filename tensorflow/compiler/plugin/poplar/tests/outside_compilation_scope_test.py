@@ -228,6 +228,21 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       utils.configure_ipu_system(opts)
       self.assertEqual(5.0, sess.run(out, feed_dict={inputs: 1.0}))
 
+  def testNotInXlaContextShouldRaiseException(self):
+    with self.assertRaisesRegex(ValueError, "only allowed in XLA context"):
+      with outside_compilation_scope():
+        pass
+
+  def testNestedScopesShouldRaiseException(self):
+    def device_fn():
+      with ipu_scope("/device:IPU:0"):
+        with outside_compilation_scope():
+          with outside_compilation_scope():
+            pass
+
+    with self.assertRaisesRegex(ValueError, "Illegal nesting"):
+      ipu_compiler.compile(device_fn, inputs=[])
+
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=1 ' +

@@ -2688,7 +2688,7 @@ tf_xla_py_test(
 
 tf_xla_py_test(
     name = "outside_compilation_scope_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/outside_compilation_scope_test.py"],
     enabled_backends = ["poplar"],
     deps = [
