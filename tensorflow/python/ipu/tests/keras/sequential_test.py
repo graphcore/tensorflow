@@ -33,9 +33,9 @@ from tensorflow.python import ipu
 
 
 class KerasSequentialTest(test_util.TensorFlowTestCase):
-  def setUp(self):
-    super(KerasSequentialTest, self).setUp()
-    # Reset the context to avoid pollution from previous test cases.
+  def tearDown(self):
+    super().tearDown()
+    # Reset the eager context to avoid polluting future test cases.
     context._reset_context()  # pylint: disable=protected-access
 
   @test_util.run_v2_only

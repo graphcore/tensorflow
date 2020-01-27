@@ -758,7 +758,7 @@ test_suite(
         "popnn_normalization_test",
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
-        # "sequential_test",
+        "sequential_test",
         "RNN_test",
         "recompute_suggestion_test",
         "user_ops_test",
