@@ -98,16 +98,6 @@ std::function<bool(const HloInstruction*)> IsIpuInterCopyInstruction() {
   };
 }
 
-PoplarBackendConfig::CallConfig::PipelineConfig::Schedule GetPipelineSchedule(
-    const HloInstruction* pipeline) {
-  // Cannot reasonably return StatusOr because this is called inside a
-  // constructor.
-  auto backend_config =
-      pipeline->backend_config<PoplarBackendConfig>().ValueOrDie();
-
-  return backend_config.call_config().pipeline_config().schedule();
-}
-
 /**
  * Get the number of stages in a pipeline.
  *
@@ -961,7 +951,7 @@ PipelineVisitor::PipelineVisitor(
     const HloInstruction* pipeline, CompilerResources& res,
     const ArgVectors& inputs,
     const std::vector<const SubComputationVisitor*>& dependent_subcomputations)
-    : PipelineVisitor(GetPipelineSchedule(pipeline),
+    : PipelineVisitor(GetPipelineSchedule(pipeline).ValueOrDie(),
                       GetPipelineStageCount(pipeline),
                       GetPipelineStageDeviceMapping(pipeline),
                       GetPipelineInstStageMapping(pipeline),
@@ -1012,7 +1002,6 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
 // Collect the pipeline stage programs and call CreateRampSequences
 poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
   std::vector<int> offsets = ScheduleOffsets(schedule_, stage_ipu_mapping_);
-
   const bool is_grouped =
       schedule_ == PoplarBackendConfig::CallConfig::PipelineConfig::Grouped;
 

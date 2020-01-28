@@ -152,9 +152,13 @@ StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
 StatusOr<HloInstruction*> RemoveParametersFromCall(
     HloInstruction* call, const std::set<int64>& parameters_to_remove);
 
-// Compute the fifo depth multiplier for the given schedule.
-StatusOr<int> ScheduleToFifoDepthMultiplier(
-    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule);
+// Get a schedule from a pipeline.
+StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
+GetPipelineSchedule(const HloInstruction* pipeline_op);
+
+// Compute the fifo depth multiplier for the given schedule of a pipeline
+// operation.
+StatusOr<int> GetFifoDepthMultiplier(const HloInstruction* pipeline_op);
 
 // Removes outputs from the call, and GTEs which are not used by anything.
 Status RemoveOutputsFromCall(HloInstruction* call,
@@ -194,12 +198,13 @@ class PipelineDataflowAnalysis {
       const PipelineStages& pipeline_stages,
       bool allow_duplicate_gte_edges = false,
       bool allow_communication_ops = false, bool allow_feeds = false,
-      bool allow_recomputation = false);
+      bool allow_recomputation = false, bool allow_fifo_optimizations = false);
 
   explicit PipelineDataflowAnalysis(const PipelineStages& pipeline_stages,
                                     bool allow_duplicate_gte_edges,
                                     bool allow_communication_ops,
-                                    bool allow_feeds, bool allow_recomputation);
+                                    bool allow_feeds, bool allow_recomputation,
+                                    bool allow_fifo_optimizations);
 
   // Returns whether the instruction needs to be lowered into a stage given the
   // current analysis.
@@ -281,6 +286,7 @@ class PipelineDataflowAnalysis {
   bool allow_communication_ops_;
   bool allow_feeds_;
   bool allow_recomputation_;
+  bool allow_fifo_optimizations_;
 };
 }  // namespace poplarplugin
 }  // namespace xla

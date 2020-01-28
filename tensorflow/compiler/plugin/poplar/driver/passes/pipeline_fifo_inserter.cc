@@ -37,13 +37,8 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
                       PipelineDataflowAnalysis::GetAnalysis(stages, true));
 
   const int64 last_stage_id = stages.forward.size() - 1;
-
-  TF_ASSIGN_OR_RETURN(PoplarBackendConfig config,
-                      pipeline_op->backend_config<PoplarBackendConfig>());
-
-  const auto schedule = config.call_config().pipeline_config().schedule();
   TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
-                      ScheduleToFifoDepthMultiplier(schedule));
+                      GetFifoDepthMultiplier(pipeline_op));
 
   for (HloInstruction* stage : stages.backward) {
     TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));

@@ -502,7 +502,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
       dataset = tu.create_single_increasing_dataset(7, shape=[4, 4])
 
       def dataset_parser(value):
-        img = value / 7
+        img = value
         label = value[0][0] % 4
         return img, math_ops.cast(label, np.int32)
 
@@ -520,7 +520,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
             "w0",
             shape=[4, 4],
             dtype=np.float32,
-            initializer=init_ops.random_normal_initializer(stddev=0.1))
+            initializer=init_ops.ones_initializer())
         x = math_ops.matmul(x, weight)
         return x, label
 
@@ -539,9 +539,9 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
             "w0",
             shape=[4, 4],
             dtype=np.float32,
-            initializer=init_ops.random_normal_initializer(stddev=0.1))
+            initializer=init_ops.ones_initializer())
         x = math_ops.matmul(x, weight)
-        logits = math_ops.reduce_sum(x, axis=[-1])
+        logits = math_ops.reduce_mean(x, axis=[1])
         loss = math_ops.reduce_mean(
             nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
                                                         labels=label))
