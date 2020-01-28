@@ -43,6 +43,8 @@ namespace tensorflow {
 namespace {
 
 constexpr char kFunctionToApplyAttrName[] = "to_apply";
+constexpr char kKeyAttrName[] = "key";
+constexpr char kOutputTypesAttrName[] = "Toutputs";
 constexpr char kXlaClusterAttrName[] = "_XlaCluster";
 
 bool IsKeyPlaceholderNode(const Node& n) {
@@ -56,6 +58,10 @@ bool IsSequencerNode(const Node& n) {
 }
 
 bool IsXlaLaunchNode(const Node& n) { return n.type_string() == "XlaLaunch"; }
+
+bool IsXlaRecvAtHostNode(const Node& n) {
+  return n.type_string() == "_XlaRecvAtHost";
+}
 
 Status ReplaceKeyPlaceholdersWithConstants(Graph* g) {
   for (Node* n : g->nodes()) {
@@ -135,6 +141,85 @@ std::unordered_map<string, XlaClusterInfo> FindClusters(
   return clusters;
 }
 
+// Splits a node with N outputs into N nodes with 1 output each, all
+// getting the same inputs as the original node.
+Status SplitXlaRecvAtHostNode(Graph* g, Node* n) {
+  // Create a template based on the original node and clear attributes that must
+  // be unique for the split nodes.
+  NodeDef node_def_template(n->def());
+  node_def_template.clear_name();
+  node_def_template.mutable_attr()->erase(kKeyAttrName);
+  node_def_template.mutable_attr()->erase(kOutputTypesAttrName);
+
+  // Grab attributes needed to set unique attributes for the split nodes.
+  string key;
+  TF_RETURN_IF_ERROR(GetNodeAttr(n->attrs(), kKeyAttrName, &key));
+  std::vector<DataType> output_types;
+  TF_RETURN_IF_ERROR(
+      GetNodeAttr(n->attrs(), kOutputTypesAttrName, &output_types));
+  TF_RET_CHECK(static_cast<int32>(output_types.size()) == n->num_outputs());
+
+  // Record the original node's output edges and remove them first. This is to
+  // avoid multiple producers for dst nodes' input.
+  std::vector<OutEdgeInfo> out_edge_info;
+  std::vector<const Edge*> out_edges;
+  for (const Edge* edge : n->out_edges()) {
+    out_edges.push_back(edge);
+    out_edge_info.push_back(
+        {edge->dst(), edge->src_output(), edge->dst_input()});
+  }
+  for (const Edge* edge : out_edges) {
+    g->RemoveEdge(edge);
+  }
+
+  // Add the new split nodes based on the template.
+  for (int32 i = 0; i < n->num_outputs(); ++i) {
+    NodeDef new_node_def(node_def_template);
+    new_node_def.set_name(strings::StrCat(n->name(), i));
+
+    // Refer to CreateSendRendezvousKey in host_compute_kernels.cc.
+    const string new_key = strings::StrCat(key, ":", i);
+    AddNodeAttr(kKeyAttrName, new_key, &new_node_def);
+    AddNodeAttr(kOutputTypesAttrName, {output_types[i]}, &new_node_def);
+
+    Status s;
+    Node* new_node = g->AddNode(new_node_def, &s);
+    if (!s.ok()) {
+      return s;
+    }
+
+    // Add all the original node's input edges to the new node.
+    for (const Edge* in_edge : n->in_edges()) {
+      g->AddEdge(in_edge->src(), in_edge->src_output(), new_node,
+                 in_edge->dst_input());
+    }
+
+    // Add the output edges belonging to this new node, i.e. the output
+    // edges connected to output slot i of the original node.
+    for (const OutEdgeInfo& out_edge : out_edge_info) {
+      if (out_edge.src_output == i) {
+        g->AddEdge(new_node, /*src_output=*/0, out_edge.dst,
+                   out_edge.dst_input);
+      }
+    }
+  }
+
+  // Remove the original node.
+  g->RemoveNode(n);
+
+  return Status::OK();
+}
+
+Status SplitXlaRecvAtHostNodes(Graph* g) {
+  for (Node* n : g->op_nodes()) {
+    if (IsXlaRecvAtHostNode(*n)) {
+      TF_RETURN_IF_ERROR(SplitXlaRecvAtHostNode(g, n));
+    }
+  }
+
+  return Status::OK();
+}
+
 }  // namespace
 
 Status ExtractOutsideCompilationPass::Run(
@@ -192,6 +277,12 @@ Status ExtractOutsideCompilationPass::Run(
     TF_RET_CHECK(function_def != nullptr);
     TF_RETURN_IF_ERROR(CheckForXlaSendToHostNodes(function_def));
   }
+
+  // Split XlaRecvAtHost nodes with multiple outputs such that the new nodes
+  // have only one output each. This rewrite avoids the synchronization point
+  // of a single node that waits for all the necessary data to satisfy all of
+  // its outputs. The split nodes can complete when only their data is ready.
+  TF_RETURN_IF_ERROR(SplitXlaRecvAtHostNodes(graph));
 
   // Run the placer again to assign devices to the nodes added by this pass.
   // Make sure the default local device is used when in a distributed context.
