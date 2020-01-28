@@ -59,7 +59,7 @@ StatusOr<HloComputation*> CloneStageCompWithStates(
 
   // Return the output of all the stateful ops to pipeline
   auto* root = stage_comp->root_instruction();
-  CHECK(root->opcode() == HloOpcode::kTuple);
+  CHECK_EQ(root->opcode(), HloOpcode::kTuple);
   HloInstruction::InstructionVector tuple_elts = root->operands();
 
   // Add the output of the stateful ops to the output of the computation.
@@ -207,13 +207,8 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     recomp_stage->set_backend_config(config);
     CHECK(IsPipelineStageRecomputation(recomp_stage));
 
-    TF_ASSIGN_OR_RETURN(PoplarBackendConfig pipeline_config,
-                        pipeline_op->backend_config<PoplarBackendConfig>());
-
-    const auto schedule =
-        pipeline_config.call_config().pipeline_config().schedule();
     TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
-                        ScheduleToFifoDepthMultiplier(schedule));
+                        GetFifoDepthMultiplier(pipeline_op));
 
     // Replace all the non parameter inputs with FIFOs.
     auto recomp_operands = recomp_stage->operands();
@@ -246,10 +241,19 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
       if (!IsPoplarInstruction(PoplarOp::Fifo)(operand)) {
         continue;
       }
-      // We expect the FIFO input to be a GTE on a forward stage.
+      // We expect the FIFO input to be a GTE.
       HloInstruction* gte = operand->mutable_operand(0);
       CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
-      CHECK_EQ(gte->operand(0), fwd_stage);
+      const HloInstruction* gte_operand = gte->operand(0);
+      // If it is not on the fwd stage, then it is a FIFO on some other bwd
+      // stage which should be on the same shard.
+      if (gte_operand != fwd_stage) {
+        CHECK(IsPipelineStageBackward(gte_operand));
+        CHECK_EQ(*gte_operand->sharding_unique_device(),
+                 *bwd_stage->sharding_unique_device());
+        continue;
+      }
+
       // Create a GTE from the recomputation output and wire it to the BWD
       // stage.
       HloInstruction* new_gte = pipeline_comp->AddInstruction(

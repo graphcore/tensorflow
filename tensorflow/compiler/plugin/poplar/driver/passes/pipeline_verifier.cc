@@ -100,9 +100,9 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
   HloComputation* pipeline_computation = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages,
                       GetPipelineStages(pipeline_computation));
-  TF_ASSIGN_OR_RETURN(auto analysis,
-                      PipelineDataflowAnalysis::GetAnalysis(
-                          stages, true, true, true, allow_recomputation_));
+  TF_ASSIGN_OR_RETURN(
+      auto analysis, PipelineDataflowAnalysis::GetAnalysis(
+                         stages, true, true, true, allow_recomputation_, true));
 
   // Make sure all the instructions in the pipeline_computation do not require
   // lowering. Note that the lowering checks validity of the usage.

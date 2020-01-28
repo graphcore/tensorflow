@@ -457,7 +457,7 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
     // PipelineFixer checks that fwd stages have sharding.
     CHECK(fwd_stage->has_sharding());
     const HloSharding& sharding = fwd_stage->sharding();
-    CHECK(!sharding.IsTuple());
+    CHECK(sharding.HasUniqueDevice());
     // Turn it into tuple sharding.
     TF_RETURN_IF_ERROR(
         SetPipelineStageInstructionSharding(fwd_stage, fwd_stage));

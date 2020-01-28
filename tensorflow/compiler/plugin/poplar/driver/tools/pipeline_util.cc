@@ -374,6 +374,19 @@ StatusOr<bool> UniquifyPipelineStageCallsites(PipelineStages& pipeline_stages) {
   return added_computations;
 }
 
+namespace {
+Status SetTupleUniqueDeviceSharding(const HloInstruction* source,
+                                    HloInstruction* dest) {
+  auto optional_sharding = source->sharding().ExtractSingleSharding();
+  if (!optional_sharding) {
+    return FailedPrecondition("Could not extract single sharding.");
+  }
+  dest->set_sharding(
+      HloSharding::SingleTuple(dest->shape(), *optional_sharding));
+  return Status::OK();
+}
+}  // namespace
+
 // Replace pipeline call with a new one with a new computation.
 StatusOr<HloInstruction*> ReplaceCallWith(
     HloInstruction* call, std::unique_ptr<HloComputation> new_computation,
@@ -392,9 +405,8 @@ StatusOr<HloInstruction*> ReplaceCallWith(
           new_call_computation));
   call->SetupDerivedInstruction(new_call);
   new_call->set_raw_backend_config_string(call->raw_backend_config_string());
-  if (call->has_sharding() && !new_call->has_sharding()) {
-    // Shapes were incompatible but fixing hasn't happened yet, so copy anyway.
-    new_call->set_sharding(call->sharding());
+  if (call->has_sharding()) {
+    TF_RETURN_IF_ERROR(SetTupleUniqueDeviceSharding(call, new_call));
   }
 
   VLOG(3) << "Replacing " << call->ToString() << " and computation:";
@@ -809,8 +821,17 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
   return new_call;
 }
 
-StatusOr<int> ScheduleToFifoDepthMultiplier(
-    PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule) {
+StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
+GetPipelineSchedule(const HloInstruction* pipeline_op) {
+  TF_ASSIGN_OR_RETURN(auto backend_config,
+                      pipeline_op->backend_config<PoplarBackendConfig>());
+
+  return backend_config.call_config().pipeline_config().schedule();
+}
+
+StatusOr<int> GetFifoDepthMultiplier(const HloInstruction* pipeline_op) {
+  TF_ASSIGN_OR_RETURN(const auto schedule, GetPipelineSchedule(pipeline_op));
+
   switch (schedule) {
     case PoplarBackendConfig::CallConfig::PipelineConfig::Grouped:
       return 2;
@@ -869,6 +890,10 @@ Status RemoveOutputsFromCall(HloInstruction* call,
   std::vector<Shape>* mutable_call_tuple_shapes =
       call->mutable_shape()->mutable_tuple_shapes();
   *mutable_call_tuple_shapes = new_root->shape().tuple_shapes();
+  if (call->has_sharding()) {
+    TF_RETURN_IF_ERROR(SetTupleUniqueDeviceSharding(call, call));
+    TF_RETURN_IF_ERROR(SetTupleUniqueDeviceSharding(call, new_root));
+  }
   call_computation->set_root_instruction(new_root, true);
 
   if (root->user_count() == 0) {
@@ -881,12 +906,14 @@ Status RemoveOutputsFromCall(HloInstruction* call,
 
 PipelineDataflowAnalysis::PipelineDataflowAnalysis(
     const PipelineStages& pipeline_stages, bool allow_duplicate_gte_edges,
-    bool allow_communication_ops, bool allow_feeds, bool allow_recomputation)
+    bool allow_communication_ops, bool allow_feeds, bool allow_recomputation,
+    bool allow_fifo_optimizations)
     : pipeline_stages_(pipeline_stages),
       allow_duplicate_gte_edges_(allow_duplicate_gte_edges),
       allow_communication_ops_(allow_communication_ops),
       allow_feeds_(allow_feeds),
-      allow_recomputation_(allow_recomputation) {
+      allow_recomputation_(allow_recomputation),
+      allow_fifo_optimizations_(allow_fifo_optimizations) {
   // Put stages into lookup tables so that we can quickly get the stage id from
   // an instruction.
   for (size_t id = 0; id != pipeline_stages_.forward.size(); ++id) {
@@ -1032,12 +1059,28 @@ Status PipelineDataflowAnalysis::VerifyPipelineUsage(
           pipeline_stage_id.id == pipeline_stage_user_id.id) {
         return Status::OK();
       }
+
+      // If we allow fifo optimizations, then it can also be used by any other
+      // forward which occurs later.
+      if (allow_fifo_optimizations_ &&
+          pipeline_stage_user_id.stage_type == StageType::kForward &&
+          pipeline_stage_id.id < pipeline_stage_user_id.id) {
+        return Status::OK();
+      }
       break;
     }
     case StageType::kBackward: {
-      // A backward stage can only be used by the next backward stage.
+      // A backward stage can be used by the next backward stage.
       if (pipeline_stage_user_id.stage_type == StageType::kBackward &&
           pipeline_stage_id.id == (pipeline_stage_user_id.id + 1)) {
+        return Status::OK();
+      }
+
+      // If we allow fifo optimizations, then it can also be used by any other
+      // forward which occurs later.
+      if (allow_fifo_optimizations_ &&
+          pipeline_stage_user_id.stage_type == StageType::kBackward &&
+          pipeline_stage_id.id > pipeline_stage_user_id.id) {
         return Status::OK();
       }
       break;
@@ -1359,9 +1402,17 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
                               GetStageID(inst->users()[0]));
           // Expect the input to FIFO to be a forward stage and the output of
           // FIFO to be a backward stage. Expect their IDs to match.
-          if (fifo_input_stage_id.stage_type != StageType::kForward ||
-              fifo_output_stage_id.stage_type != StageType::kBackward ||
-              fifo_input_stage_id.id != fifo_output_stage_id.id) {
+          bool allowed_fifo =
+              fifo_input_stage_id.stage_type == StageType::kForward &&
+              fifo_output_stage_id.stage_type == StageType::kBackward &&
+              fifo_input_stage_id.id == fifo_output_stage_id.id;
+
+          if (allow_fifo_optimizations_) {
+            // Allow FIFOs between stages of the same type.
+            allowed_fifo |= fifo_input_stage_id.stage_type ==
+                            fifo_output_stage_id.stage_type;
+          }
+          if (!allowed_fifo) {
             return UnimplementedStrCat(
                 "Trying to create a FIFO between ",
                 fifo_input_stage_id.ToString(), " and ",
@@ -1479,10 +1530,11 @@ PipelineDataflowAnalysis::GetAnalysis(const PipelineStages& pipeline_stages,
                                       bool allow_duplicate_gte_edges,
                                       bool allow_communication_ops,
                                       bool allow_feeds,
-                                      bool allow_recomputation) {
+                                      bool allow_recomputation,
+                                      bool allow_fifo_optimizations) {
   auto analysis = absl::make_unique<PipelineDataflowAnalysis>(
       pipeline_stages, allow_duplicate_gte_edges, allow_communication_ops,
-      allow_feeds, allow_recomputation);
+      allow_feeds, allow_recomputation, allow_fifo_optimizations);
   if (!allow_recomputation && analysis->pipeline_stages_.recomputation.size()) {
     return FailedPrecondition(
         "Detected PipelineStageRecomputation which are not allowed");
