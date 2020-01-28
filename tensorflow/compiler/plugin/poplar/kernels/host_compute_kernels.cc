@@ -13,8 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <thread>
-
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
@@ -54,14 +52,32 @@ string CreateRendezvousKey(const string& key, const string& send_device,
 // "key" for each host computation should make sure this is the case.
 // Should maybe make this more clear somehow.
 
+string CreateSendRendezvousKey(const string& key) {
+  return CreateRendezvousKey(key, "/device:IPU:0", "/device:CPU:0");
+}
+
 string CreateSendRendezvousKey(const string& key, int index) {
-  return CreateRendezvousKey(strings::StrCat(key, ":", index), "/device:IPU:0",
-                             "/device:CPU:0");
+  return CreateSendRendezvousKey(strings::StrCat(key, ":", index));
 }
 
 string CreateRecvRendezvousKey(const string& key, int index) {
   return CreateRendezvousKey(strings::StrCat(key, ":", index), "/device:CPU:0",
                              "/device:IPU:0");
+}
+
+Rendezvous::DoneCallback MakeRecvCallback(OpKernelContext* ctx,
+                                          AsyncOpKernel::DoneCallback done) {
+  return [ctx, done](const Status& s, const Rendezvous::Args& send_args,
+                     const Rendezvous::Args& recv_args, const Tensor& val,
+                     bool is_dead) {
+    ctx->SetStatus(s);
+    if (s.ok()) {
+      if (!is_dead) {
+        ctx->set_output(0, val);
+      }
+    }
+    done();
+  };
 }
 
 }  // namespace
@@ -169,15 +185,15 @@ class XlaRecvAtHostOp : public AsyncOpKernel {
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
                                         device_ordinal_));
 
+    OP_REQUIRES(ctx, ctx->num_outputs() == 1,
+                errors::InvalidArgument("Must have 1 output, got ",
+                                        ctx->num_outputs()));
+
     string key;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("key", &key));
 
-    for (int i = 0; i < ctx->num_outputs(); ++i) {
-      const string full_key = CreateSendRendezvousKey(key, i);
-      Rendezvous::ParsedKey parsed_key;
-      OP_REQUIRES_OK(ctx, Rendezvous::ParseKey(full_key, &parsed_key));
-      parsed_keys_.push_back(std::move(parsed_key));
-    }
+    const string full_key = CreateSendRendezvousKey(key);
+    OP_REQUIRES_OK(ctx, Rendezvous::ParseKey(full_key, &parsed_key_));
   }
 
   void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override {
@@ -185,67 +201,13 @@ class XlaRecvAtHostOp : public AsyncOpKernel {
     OP_REQUIRES_OK_ASYNC(ctx, poplar_executor.status(), done);
     auto* rendezvous = poplar_executor.ValueOrDie()->GetRendezvous();
 
-    output_accumulator_.emplace(ctx, std::move(done));
-
-    for (int i = 0; i < ctx->num_outputs(); ++i) {
-      rendezvous->RecvAsync(
-          parsed_keys_[i], Rendezvous::Args{},
-          [this, i](const Status& status, const Rendezvous::Args& send_args,
-                    const Rendezvous::Args& recv_args, const Tensor& val,
-                    bool is_dead) {
-            CHECK(!is_dead);
-            output_accumulator_->SetOutput(i, status, val);
-          });
-    }
+    rendezvous->RecvAsync(parsed_key_, Rendezvous::Args{},
+                          MakeRecvCallback(ctx, std::move(done)));
   }
-
-  // Accumulate the outputs asynchronously and call the done callback
-  // when all of them have been received (and forwarded). Currently
-  // it assumes all SetOutput() calls come from the same thread.
-  class OutputAccumulator {
-   public:
-    OutputAccumulator(OpKernelContext* ctx, DoneCallback&& done)
-        : ctx_(ctx),
-          done_(std::move(done)),
-          num_outputs_remaining_(ctx->num_outputs()),
-          thread_id_() {}
-
-    void SetOutput(int index, const Status& status, const Tensor& val) {
-      OP_REQUIRES_OK_ASYNC(ctx_, status, done_);
-      CheckThreadId();
-
-      ctx_->set_output(index, val);
-
-      CHECK_GT(num_outputs_remaining_, 0);
-      --num_outputs_remaining_;
-      if (num_outputs_remaining_ == 0) {
-        done_();
-      }
-    }
-
-   private:
-    void CheckThreadId() {
-      // The current Poplar will invoke all the stream callbacks from
-      // the same thread. We embrace this here by e.g. not using an
-      // atomic counter. So let's make sure this assumption still holds.
-      if (thread_id_ == std::thread::id()) {
-        thread_id_ = std::this_thread::get_id();
-      } else {
-        CHECK_EQ(thread_id_, std::this_thread::get_id())
-            << " All usage must be from the same thread";
-      }
-    }
-
-    OpKernelContext* ctx_;
-    DoneCallback done_;
-    int num_outputs_remaining_;
-    std::thread::id thread_id_;
-  };
 
  private:
   int device_ordinal_;
-  std::vector<Rendezvous::ParsedKey> parsed_keys_;
-  absl::optional<OutputAccumulator> output_accumulator_;
+  Rendezvous::ParsedKey parsed_key_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(XlaRecvAtHostOp);
 };
