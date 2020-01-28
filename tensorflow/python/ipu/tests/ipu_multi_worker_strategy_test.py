@@ -16,6 +16,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import json
 import multiprocessing
 import os
@@ -590,6 +591,14 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
                                     num_gpus=0)
 
 
+def _get_executed_nodes_by_device(run_metadata):
+  nodes_by_device = collections.defaultdict(list)
+  for dev_stats in run_metadata.step_stats.dev_stats:
+    for node_stats in dev_stats.node_stats:
+      nodes_by_device[dev_stats.device].append(node_stats.node_name)
+  return nodes_by_device
+
+
 class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
   """Tests using multiple processes."""
   def _run_task_in_process(self, task_fn, cluster_spec, task_type, task_id):
@@ -718,9 +727,13 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
     strategy.extended.experimental_allow_variable_placement()
 
+    cpu_device = "/job:worker/replica:0/task:{}/device:CPU:0".format(task_id)
+    ipu_device = "/job:worker/replica:0/task:{}/device:IPU:0".format(task_id)
+
     per_worker_x = [i + 1.0 for i in range(strategy.num_replicas_in_sync)]
     y = 1.0
-    initial_w = 2.0
+    initial_w0 = 1.0
+    initial_w1 = 2.0
     learning_rate = 0.5
     pipeline_depth = 4
     num_iterations = 3
@@ -735,13 +748,19 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
 
-      def stage1(features, labels):
-        w = variable_scope.get_variable(name="w", initializer=initial_w)
-        partial = w * features
-        return partial, labels
+      def stage1(feature, label):
+        w0 = variable_scope.get_variable(name="w0", initializer=initial_w0)
+        self.assertIsInstance(w0, IPUMirroredVariable)
+        self.assertEqual(w0.device, ipu_device)
+        partial = w0 * feature
+        return partial, label
 
-      def stage2(partial, labels):
-        loss = partial + labels
+      def stage2(partial, label):
+        w1 = variable_scope.get_variable(name="w1", initializer=initial_w1)
+        self.assertIsInstance(w1, IPUMirroredVariable)
+        self.assertEqual(w1.device, ipu_device)
+        prediction = partial + w1
+        loss = losses.mean_squared_error(label, prediction)
         return loss
 
       def optimizer_function(loss):
@@ -769,19 +788,55 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       config = ipu_utils.auto_select_ipus(config, num_ipus=2)
       ipu_utils.configure_ipu_system(config)
 
-      expected_w = initial_w
-      [w] = variables.global_variables()
+      expected_w0 = initial_w0
+      expected_w1 = initial_w1
+      w0, w1 = variables.global_variables()
+      self.assertEqual("w0:0", w0.name)
+      self.assertEqual("w1:0", w1.name)
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(infeed_queue.initializer)
         sess.run(variables.global_variables_initializer())
 
-        for _ in range(num_iterations):
-          sess.run(train_op)
-          # L(x) = w * x_0 + y + w * x_1 + y
-          # dL(x)/dw = x_0 + x_1
-          expected_w -= learning_rate * pipeline_depth * sum(per_worker_x)
-          self.assertEqual(expected_w, sess.run(w))
+        run_metadata = config_pb2.RunMetadata()
+
+        for i in range(num_iterations):
+          if i < num_iterations - 1:
+            sess.run(train_op)
+          else:
+            # Save execution trace for the last run.
+            options = config_pb2.RunOptions(
+                trace_level=config_pb2.RunOptions.FULL_TRACE)
+            sess.run(train_op, options=options, run_metadata=run_metadata)
+
+          # L(x) = sum_i (w_0 * x_i + w_1 - y)^2
+
+          # dL(x)/dw_0 = sum_i 2 (w_0 * x_i + w_1 - y) x_i
+          grad_w0 = sum(2 * (expected_w0 * x_i + expected_w1 - y) * x_i
+                        for x_i in per_worker_x)
+          accumulated_grad_w0 = pipeline_depth * grad_w0
+
+          # dL(x)/dw_1 = sum_i 2 (w_0 * x_i + w_1 - y)
+          grad_w1 = sum(2 * (expected_w0 * x_i + expected_w1 - y)
+                        for x_i in per_worker_x)
+          accumulated_grad_w1 = pipeline_depth * grad_w1
+
+          expected_w0 -= learning_rate * accumulated_grad_w0
+          self.assertEqual(expected_w0, sess.run(w0))
+
+          expected_w1 -= learning_rate * accumulated_grad_w1
+          self.assertEqual(expected_w1, sess.run(w1))
+
+      # Do some sanity checks on what actually executed the last iteration.
+      nodes_by_device = _get_executed_nodes_by_device(run_metadata)
+      cpu_nodes = nodes_by_device[cpu_device]
+      ipu_nodes = nodes_by_device[ipu_device]
+
+      # There should be 2 reductions on the CPU (one for each gradient)
+      self.assertEqual(2, sum(1 for n in cpu_nodes if "CollectiveReduce" in n))
+
+      # There should be 1 XLA run on the IPU
+      self.assertEqual(1, sum(1 for n in ipu_nodes if "xla_run" in n))
 
   def test_pipelining(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)

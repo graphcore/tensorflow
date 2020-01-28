@@ -22,7 +22,6 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.core.framework import attr_value_pb2
-from tensorflow.python.compiler.xla import xla
 from tensorflow.python.distribute import collective_all_reduce_strategy
 from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
 from tensorflow.python.distribute import distribute_lib
@@ -33,7 +32,6 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import collective_ops
-from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import variable_scope
 
