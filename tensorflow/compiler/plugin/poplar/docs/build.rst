@@ -18,11 +18,11 @@ Build tool prerequisites
 
         sudo apt install openjdk-8-jdk
 
-    - Bazel is the build tool - use version 0.21.0 or later versions
+    - Bazel is the build tool - use version 0.24.1 or later versions
 
       .. code-block:: shell
 
-        export BAZEL_VERSION=0.21.0
+        export BAZEL_VERSION=0.24.1
         wget https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh
         chmod +x bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh
         ./bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh --user
@@ -76,7 +76,7 @@ Build instructions
 
     .. code-block:: console
 
-        source tensorflow_packaging/configure python3
+        bash tensorflow_packaging/configure python3
 
     Using the pip wheel package generator as the final target, build TensorFlow
 
