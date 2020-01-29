@@ -20,15 +20,24 @@ from __future__ import print_function
 import os
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
-from tensorflow.python.platform import googletest
+from tensorflow.python import ipu
+from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops.signal import dct_ops
-from tensorflow.python import ipu
+from tensorflow.python.platform import googletest
 
 
 class FunctionTest(test_util.TensorFlowTestCase):
+  @test_util.run_v2_only
+  def testFunctionIsCorrectType(self):
+    @ipu.function
+    def my_func(a, b, c):
+      return a + b + c
+
+    self.assertTrue(isinstance(my_func, def_function.Function))
+
   @test_util.run_v2_only
   def testBasicFunction(self):
     @ipu.function
@@ -46,6 +55,28 @@ class FunctionTest(test_util.TensorFlowTestCase):
     r.assert_contains_one_compile_event()
 
     cs = ['add/*/AddTo', 'add_1/*/AddTo', '__seed']
+    r.assert_compute_sets_contain_list(cs)
+
+  @test_util.run_v2_only
+  def testMethodOfClass(self):
+    class MyClass():
+      @ipu.function
+      def my_func(self, a, b, c):
+        return a * b * c
+
+    model = MyClass()
+
+    r = tu.ReportJSON(self, eager_mode=True)
+
+    result = model.my_func(constant_op.constant(1, shape=[2]),
+                           constant_op.constant(2, shape=[2]),
+                           constant_op.constant(3, shape=[2]))
+    self.assertAllEqual([6, 6], result.numpy())
+
+    r.parse_log(assert_len=4)
+    r.assert_contains_one_compile_event()
+
+    cs = ['mul/*/Multiply', 'mul_1/*/Multiply', '__seed']
     r.assert_compute_sets_contain_list(cs)
 
   @test_util.run_v2_only

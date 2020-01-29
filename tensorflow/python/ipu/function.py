@@ -17,20 +17,38 @@ Graph functions for the IPU.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.python.eager import function as function_lib
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import ops
+from tensorflow.python.util import tf_decorator
 
 
 # This class ensures that when the function passed is called, it is done with
 # an IPU device context.
-class IpuFunction():
-  def __init__(self, fn, device):
-    self._call = fn
-    self._device = device
+class IpuFunction(def_function.Function):
+  def __init__(self,
+               python_function,
+               name,
+               input_signature=None,
+               autograph=True,
+               experimental_implements=None,
+               experimental_autograph_options=None,
+               experimental_relax_shapes=False,
+               ipu_device="/device:IPU:0"):
+    super().__init__(
+        python_function,
+        name,
+        input_signature=input_signature,
+        autograph=autograph,
+        experimental_implements=experimental_implements,
+        experimental_autograph_options=experimental_autograph_options,
+        experimental_relax_shapes=experimental_relax_shapes,
+        experimental_compile=True)
+    self._device = ipu_device
 
-  def __call__(self, *args, **kwds):
+  def _call(self, *args, **kwds):
     with ops.device(self._device):
-      return self._call(*args, **kwds)
+      return super()._call(*args, **kwds)
 
 
 def function(func=None,
@@ -38,29 +56,41 @@ def function(func=None,
              autograph=True,
              ipu_device="/device:IPU:0",
              experimental_implements=None,
-             experimental_autograph_options=None):
+             experimental_autograph_options=None,
+             experimental_relax_shapes=False):
   """Compiles a function into a callable TensorFlow graph.
 
-      The function will be compiled using XLA and the Poplar back end.
+  The function will be compiled using XLA and the Poplar back end. Both
+  a python module function, and a member of a class can be annotated.
 
-      This function annotation is used in a similar manner to tf.function,
-      but it explicitly targets the IPU.
-      """
-  f = def_function.function(
-      func,
-      input_signature=input_signature,
-      autograph=autograph,
-      experimental_implements=experimental_implements,
-      experimental_autograph_options=experimental_autograph_options,
-      experimental_relax_shapes=False,
-      experimental_compile=True)
+  This function annotation is used in a similar manner to tf.function,
+  but it explicitly targets the IPU.
 
-  decorator = IpuFunction(f, ipu_device)
+  See the documentation for tf.function for examples and discussions
+  of proper use.
+  """
 
-  # We wrap this so we are still returning a function rather than an instance
-  # of IpuFunction, this is so that if we are annotating a member function then
-  # a call to foo.wrapper(args, kwargs) will add "self=foo" to the argument list.
-  def wrapper(*args, **kwargs):
-    return decorator(*args, **kwargs)
+  if input_signature is not None:
+    function_lib.validate_signature(input_signature)
 
-  return wrapper
+  def decorated(inner_function):
+    try:
+      name = inner_function.__name__
+    except AttributeError:
+      name = "function"
+    return tf_decorator.make_decorator(
+        inner_function,
+        IpuFunction(
+            inner_function,
+            name,
+            input_signature=input_signature,
+            autograph=autograph,
+            experimental_autograph_options=experimental_autograph_options,
+            experimental_implements=experimental_implements,
+            experimental_relax_shapes=experimental_relax_shapes,
+            ipu_device=ipu_device))
+
+  if func is not None:
+    return decorated(func)
+
+  return decorated
