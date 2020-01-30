@@ -42,6 +42,20 @@
                 "(^tensorflow/contrib/ipu/.*\\.py$)",
                 "(^tensorflow/python/ops/poplar/.*\\.py$)"
             ]
+        },
+        "buildifier": {
+          "type": "script-and-regex",
+          "include": [
+               "(^tensorflow/compiler/plugin/poplar/.*BUILD$)",
+               "(^tensorflow/python/ipu/.*BUILD$)",
+               "(^third_party/ipus/.*)"
+          ],
+          "exclude": [
+            "(^third_party/ipus/poplar_lib/LICENSE)"
+          ],
+          "script-and-regex.script": "sh -c '{ ./.linters/buildifier -lint warn -mode check $0 2>&1 ; ./.linters/buildifier -mode fix -lint fix $0;} || true'",
+          "script-and-regex.regex": "/^(?P<file>[^ :]*)(( # )|(:(?P<line>[^:]+): ))(?P<name>[^:]+)(: (?P<message>.*))?$/m"
         }
+
     }
 }
