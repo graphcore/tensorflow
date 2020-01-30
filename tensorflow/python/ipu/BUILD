@@ -103,7 +103,6 @@ py_library(
         "autoshard.py",
         "autoshard_cnn.py",
         "dataset_benchmark.py",
-        "function.py",
         "gradient_accumulation_optimizer.py",
         "keras/sequential.py",
         "keras/layers/RNN.py",
@@ -273,24 +272,6 @@ tf_py_test(
     name = "fifo_test",
     size = "small",
     srcs = ["tests/fifo_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:math_ops",
-        "//tensorflow/python:platform",
-    ],
-)
-
-
-tf_py_test(
-    name = "function_test",
-    size = "small",
-    srcs = ["tests/function_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
@@ -740,7 +721,6 @@ test_suite(
         "estimator_test",
         "fifo_test",
         "frontend_attributes_test",
-        "function_test",
         "infeed_outfeed_test",
         "ipu_compiler_test",
         "ipu_estimator_test",

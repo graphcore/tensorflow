@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.python.eager import def_function
 from tensorflow.python.platform import test
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -27,8 +28,6 @@ from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
 
 from tensorflow.python import ipu
-
-from tensorflow.python.ipu.function import function as ipu_function
 
 # Test hyperparameters.
 batch_size = 1
@@ -60,7 +59,7 @@ def _tfLSTM(x, h, c):
       initializer=init_ops.random_uniform_initializer(seed=42, dtype=dataType))
   state = rnn_cell.LSTMStateTuple(c, h)
 
-  @ipu_function
+  @def_function.function
   def impl(
       cell,
       x,
@@ -96,7 +95,7 @@ def _tfGRU(x, initial_state):
       kernel_initializer=init_ops.zeros_initializer(dtype=dataType),
       bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType))
 
-  @ipu_function
+  @def_function.function
   def impl(x, initial_state, cell):
     return rnn.dynamic_rnn(cell,
                            x,

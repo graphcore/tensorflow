@@ -28,7 +28,6 @@ from tensorflow.python.util.tf_export import keras_export
 from tensorflow.python.ops import rnn_cell
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 
-from tensorflow.python.ipu.function import function as ipu_function
 from tensorflow.python.keras import initializers
 
 POPNN_LSTM = "lstm"
@@ -306,7 +305,6 @@ class PopnnLSTM(_PopnnRNN):
                                     bias_initializer=bias_initializer,
                                     name=name)
 
-  @ipu_function
   def build(self, input_shape):
     """Create variables of the PopnnLSTM.
 
@@ -323,7 +321,6 @@ class PopnnLSTM(_PopnnRNN):
         """
     self._build(input_shape, self.recurrent_weight_initializer)
 
-  @ipu_function
   def call(self, inputs, initial_state=None, training=True):
     """Runs the forward step for the LSTM model.
 
@@ -466,7 +463,6 @@ class PopnnGRU(_PopnnRNN):
                                    bias_initializer=bias_initializer,
                                    name=name)
 
-  @ipu_function
   def build(self, input_shape):
     """Create variables of the PopnnGRU.
 
@@ -483,7 +479,6 @@ class PopnnGRU(_PopnnRNN):
         """
     self._build(input_shape)
 
-  @ipu_function
   def call(self, inputs, initial_state=None, training=True):
     """Runs the forward step for the GRU model.
 
