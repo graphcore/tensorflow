@@ -17,12 +17,12 @@ tf_kernel_library(
     srcs = ["buffer_dataset_op.cc"],
     hdrs = ["buffer_dataset_op.h"],
     deps = [
-        "//tensorflow/core/kernels/data:dataset_ops",
-        "//tensorflow/core/kernels/data:name_utils",
         "//tensorflow/core:dataset_ops_op_lib",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
+        "//tensorflow/core/kernels/data:dataset_ops",
+        "//tensorflow/core/kernels/data:name_utils",
     ],
 )
 
@@ -33,10 +33,6 @@ tf_cc_test(
     deps = [
         ":buffer_dataset_op",
         "//tensorflow/compiler/plugin/poplar:dataset_ops",
-        "//tensorflow/core/kernels/data:dataset_test_base",
-        "//tensorflow/core/kernels/data:dataset_utils",
-        "//tensorflow/core/kernels/data:range_dataset_op",
-        "//tensorflow/core/kernels/data:tensor_slice_dataset_op",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:dataset_ops_op_lib",
         "//tensorflow/core:framework",
@@ -44,6 +40,10 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "//tensorflow/core/kernels/data:dataset_test_base",
+        "//tensorflow/core/kernels/data:dataset_utils",
+        "//tensorflow/core/kernels/data:range_dataset_op",
+        "//tensorflow/core/kernels/data:tensor_slice_dataset_op",
     ],
 )
 

@@ -9,14 +9,8 @@ package(
 
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
 
-# Needed so we can build the custom op.
-load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
-load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
-load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
-
 py_library(
     name = "ipu_ops_lib",
-    srcs_version = "PY2AND3",
     srcs = [
         "ops/cross_replica_ops.py",
         "ops/embedding_ops.py",
@@ -27,33 +21,34 @@ py_library(
         "ops/rnn_ops.py",
         "ops/summary_ops.py",
     ],
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:dataset_benchmark_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
+        "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:popfloat_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
         "//tensorflow/compiler/plugin/poplar:popops_ops_py",
         "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
         "//tensorflow/compiler/plugin/poplar:poputil_ops_py",
-        "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
     ],
 )
 
 py_library(
     name = "ipu_grad_ops_lib",
-    srcs_version = "PY2AND3",
     srcs = [
         "ops/all_to_all_op_grad.py",
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
         "ops/internal_ops_grad.py",
-        "ops/pipelining_ops_grad.py",
         "ops/normalization_ops_grad.py",
+        "ops/pipelining_ops_grad.py",
         "ops/rand_ops_grad.py",
         "ops/rnn_ops_grad.py",
     ],
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
@@ -66,36 +61,35 @@ py_library(
 
 py_library(
     name = "utils",
-    srcs_version = "PY2AND3",
     srcs = [
-        "utils.py"
+        "utils.py",
     ],
+    srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
+        "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/distribute:values",
     ],
 )
 
 py_library(
     name = "data",
-    srcs_version = "PY2AND3",
     srcs = [
         "data/__init__.py",
         "data/ops/__init__.py",
-        "data/ops/dataset_ops.py"
+        "data/ops/dataset_ops.py",
     ],
+    srcs_version = "PY2AND3",
     deps = [
+        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/compiler/plugin/poplar:dataset_ops_py",
         "//tensorflow/compiler/xla:xla_data_proto_py",
-        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/python/distribute:values",
     ],
 )
 
 py_library(
     name = "ipu_lib",
-    srcs_version = "PY2AND3",
     srcs = [
         "__init__.py",
         "autoshard.py",
@@ -134,15 +128,16 @@ py_library(
         "sharding_utils.py",
         "vertex_edsl.py",
     ],
+    srcs_version = "PY2AND3",
     deps = [
         ":data",
-        ":utils",
-        ":ipu_ops_lib",
         ":ipu_grad_ops_lib",
-        "//tensorflow/compiler/xla:xla_data_proto_py",
+        ":ipu_ops_lib",
+        ":utils",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:sendrecv_ops_py",
+        "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/estimator:estimator_py",
     ],
@@ -221,23 +216,23 @@ py_test(
     name = "estimator_test",
     size = "medium",
     srcs = ["tests/estimator_test.py"],
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
-        "//tensorflow/python/data/ops:dataset_ops",
-        "//tensorflow/python/estimator:estimator_py",
-        "//tensorflow/python/estimator:model_fn",
-        "//tensorflow/python/estimator:run_config",
         "//tensorflow/python:framework",
         "//tensorflow/python:init_ops",
         "//tensorflow/python:nn",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
+        "//tensorflow/python/data/ops:dataset_ops",
+        "//tensorflow/python/estimator:estimator_py",
+        "//tensorflow/python/estimator:model_fn",
+        "//tensorflow/python/estimator:run_config",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
     ],
-    srcs_version = "PY2AND3",
 )
 
 tf_py_test(
@@ -294,7 +289,6 @@ tf_py_test(
 tf_py_test(
     name = "infeed_outfeed_test",
     size = "large",
-    shard_count = 2,
     srcs = ["tests/infeed_outfeed_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -305,6 +299,7 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 2,
 )
 
 tf_py_test(
@@ -335,8 +330,6 @@ tf_py_test(
 tf_py_test(
     name = "ipu_estimator_test",
     size = "large",
-    tags = ['exclusive'],
-    shard_count = 8,
     srcs = ["tests/ipu_estimator_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -349,12 +342,13 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 8,
+    tags = ["exclusive"],
 )
 
 tf_py_test(
     name = "ipu_estimator_replicated_test",
     size = "large",
-    shard_count = 2,
     srcs = ["tests/ipu_estimator_replicated_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -367,13 +361,12 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 2,
 )
 
 tf_py_test(
     name = "ipu_pipeline_estimator_test",
-    tags = ['exclusive'],
     size = "large",
-    shard_count = 8,
     srcs = ["tests/ipu_pipeline_estimator_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -386,36 +379,38 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 8,
+    tags = ["exclusive"],
 )
 
 tf_py_test(
     name = "ipu_multi_worker_strategy_test",
-    tags = ['exclusive'],
     size = "large",
-    shard_count = 4,
     srcs = ["tests/ipu_multi_worker_strategy_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
+    shard_count = 4,
+    tags = ["exclusive"],
 )
 
 py_test(
     name = "pop_datastream_test",
     size = "small",
     srcs = ["tests/pop_datastream_test.py"],
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
-        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
-    srcs_version = "PY2AND3",
 )
 
 tf_py_test(
@@ -462,6 +457,7 @@ py_test(
     name = "replication_normalise_test",
     size = "medium",
     srcs = ["tests/replication_normalise_test.py"],
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -472,28 +468,28 @@ py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python/keras:layers",
     ],
-    srcs_version = "PY2AND3",
 )
 
 cc_binary(
     name = "libadd_incrementing_custom.so",
     srcs = ["tests/add_incrementing_custom.cc"],
     copts = ["-fexceptions"],
+    linkshared = True,
     deps = [
         "@local_config_poplar//poplar:poplar_libs",
     ],
-    linkshared = True,
 )
 
 cc_binary(
     name = "libadd_incrementing_custom_with_metadata.so",
     srcs = ["tests/add_incrementing_custom_with_metadata.cc"],
     copts = ["-fexceptions"],
+    linkshared = True,
     deps = [
         "@local_config_poplar//poplar:poplar_libs",
     ],
-    linkshared = True,
 )
+
 tf_py_test(
     name = "user_ops_test",
     size = "small",
@@ -548,7 +544,6 @@ tf_py_test(
     name = "pipelining_test",
     size = "large",
     srcs = ["tests/pipelining_test.py"],
-    shard_count = 16,
     additional_deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -560,13 +555,13 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 16,
 )
 
 tf_py_test(
     name = "pipelining_grouped_recomputation_test",
     size = "large",
     srcs = ["tests/pipelining_grouped_recomputation_test.py"],
-    shard_count = 4,
     additional_deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -578,13 +573,13 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 4,
 )
 
 tf_py_test(
     name = "pipelining_grouped_test",
     size = "large",
     srcs = ["tests/pipelining_grouped_test.py"],
-    shard_count = 16,
     additional_deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -596,13 +591,13 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 16,
 )
 
 tf_py_test(
     name = "pipelining_recomputation_test",
     size = "large",
     srcs = ["tests/pipelining_recomputation_test.py"],
-    shard_count = 4,
     additional_deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -615,13 +610,13 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 4,
 )
 
 tf_py_test(
     name = "pipelining_sequential_recomputation_test",
     size = "large",
     srcs = ["tests/pipelining_sequential_recomputation_test.py"],
-    shard_count = 16,
     additional_deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -633,13 +628,13 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 16,
 )
 
 tf_py_test(
     name = "pipelining_sequential_test",
     size = "large",
     srcs = ["tests/pipelining_sequential_test.py"],
-    shard_count = 16,
     additional_deps = [
         ":ipu_lib",
         ":pipelining_test_util",
@@ -651,13 +646,13 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 16,
 )
 
 tf_py_test(
     name = "pipelining_conv_classify_test",
     size = "large",
     srcs = ["tests/pipelining_conv_classify_test.py"],
-    shard_count = 4,
     additional_deps = [
         ":ipu_lib",
         "//tensorflow:tensorflow_py",
@@ -669,6 +664,7 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    shard_count = 4,
 )
 
 tf_py_test(
@@ -692,8 +688,8 @@ test_suite(
         "dataset_ops_test",
         "dropout_test",
         "embedding_lookup_test",
-        "expression_op_test",
         "estimator_test",
+        "expression_op_test",
         "fifo_test",
         "frontend_attributes_test",
         "infeed_outfeed_test",
@@ -722,15 +718,15 @@ test_suite(
 test_suite(
     name = "replicated_tests",
     tests = [
+        "ipu_estimator_replicated_test",
         "replication_normalise_test",
-        "ipu_estimator_replicated_test"
     ],
 )
 
 test_suite(
     name = "poplar_ci_test_suite",
     tests = [
-      "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
-      "//tensorflow/python/ipu:all_tests",
+        "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
+        "//tensorflow/python/ipu:all_tests",
     ],
 )

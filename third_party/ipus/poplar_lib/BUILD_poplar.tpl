@@ -8,25 +8,24 @@ filegroup(
 )
 
 cc_library(
-  name = "poplar_headers",
-  hdrs = glob(["**/*.hpp"]),
-  includes = ["poplar/include", "poplibs/include"],
+    name = "poplar_headers",
+    hdrs = glob(["**/*.hpp"]),
+    includes = ["poplar/include", "poplibs/include"],
 )
 
 cc_library(
-  name = "poplar_libs",
-  srcs = glob([
-    "lib/**/libpoplar.*",
-    "lib/**/libpoplin*",
-    "lib/**/libpopnn*",
-    "lib/**/libpopops*",
-    "lib/**/libpoprand*",
-    "lib/**/libpopfloat*",
-    "lib/**/libpopsys*",
-    "lib/**/libpopsolver*",
-    "lib/**/libpoputil*",
-    "lib/**/libtbb.*",
-  ]),
-  deps = [":poplar_headers"],
+    name = "poplar_libs",
+    srcs = glob([
+        "lib/**/libpoplar.*",
+        "lib/**/libpoplin*",
+        "lib/**/libpopnn*",
+        "lib/**/libpopops*",
+        "lib/**/libpoprand*",
+        "lib/**/libpopfloat*",
+        "lib/**/libpopsys*",
+        "lib/**/libpopsolver*",
+        "lib/**/libpoputil*",
+        "lib/**/libtbb.*",
+    ]),
+    deps = [":poplar_headers"],
 )
-
