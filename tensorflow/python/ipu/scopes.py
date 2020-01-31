@@ -115,7 +115,10 @@ def outside_compilation_scope(name="outside"):
   attr_value = attr_value_pb2.AttrValue(s=unique_name.encode())
   attrs = {OUTSIDE_COMPILATION_NAME: attr_value}
 
-  with graph._attr_scope(attrs):  # pylint: disable=protected-access
+  # Use a name scope to reduce the risk of op name collisions when
+  # moving ops from the current graph to the outside graph.
+  with ops.name_scope(unique_name), \
+      graph._attr_scope(attrs):  # pylint: disable=protected-access
     yield
 
 

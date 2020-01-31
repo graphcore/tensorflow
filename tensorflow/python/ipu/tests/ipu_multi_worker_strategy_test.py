@@ -17,6 +17,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import glob
 import json
 import multiprocessing
 import os
@@ -34,11 +35,13 @@ from tensorflow.python.distribute import multi_worker_util
 from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
 from tensorflow.python.distribute.cluster_resolver.tfconfig_cluster_resolver import TFConfigClusterResolver
 from tensorflow.python.distribute.reduce_util import ReduceOp
+from tensorflow.python.estimator import estimator_lib
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu import ipu_pipeline_estimator
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils as ipu_utils
@@ -55,6 +58,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
+from tensorflow.python.summary import summary_iterator
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import server_lib
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
@@ -518,7 +522,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
     for i in range(3):
       estimator.train(my_input_fn, steps=1)
-      self.assertEquals(i + 1, estimator.get_variable_value("global_step"))
+      self.assertEqual(i + 1, estimator.get_variable_value("global_step"))
 
       # L(x, y) = 0.5 * ((w * x_0 - y_0)^2 + (w * x_1 - y_1)^2)
       # dL(x, y)/dw = (w * x_0 - y_0) * x_0 + (w * x_1 - y_1) * x_1
@@ -599,6 +603,21 @@ def _get_executed_nodes_by_device(run_metadata):
   return nodes_by_device
 
 
+def _get_summary_values(model_dir, tag):
+  event_files = glob.glob(model_dir + "/*tfevents*")
+
+  if len(event_files) != 1:
+    raise ValueError("Expected exactly one events file in {}, found {}".format(
+        model_dir, len(event_files)))
+
+  outputs = []
+  for e in summary_iterator.summary_iterator(event_files[0]):
+    for v in e.summary.value:
+      if v.tag == tag:
+        outputs.append(v.simple_value)
+  return outputs
+
+
 class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
   """Tests using multiple processes."""
   def _run_task_in_process(self, task_fn, cluster_spec, task_type, task_id):
@@ -631,7 +650,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     for p in processes:
       self.assertEqual(0, p.exitcode)
 
-  def _create_test_objects(self):
+  def _create_test_objects(self, start_server=True):
     cluster_resolver = TFConfigClusterResolver()
     strategy = IPUMultiWorkerStrategy(cluster_resolver)
 
@@ -641,12 +660,15 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     # The line below sets `sess_config.experimental.collective_group_leader`
     sess_config = strategy.update_config_proto(sess_config)
 
-    server = server_lib.Server(cluster_resolver.cluster_spec(),
-                               job_name=cluster_resolver.task_type,
-                               task_index=cluster_resolver.task_id,
-                               protocol=cluster_resolver.rpc_layer,
-                               config=sess_config)
-    target = server.target
+    if start_server:
+      server = server_lib.Server(cluster_resolver.cluster_spec(),
+                                 job_name=cluster_resolver.task_type,
+                                 task_index=cluster_resolver.task_id,
+                                 protocol=cluster_resolver.rpc_layer,
+                                 config=sess_config)
+      target = server.target
+    else:
+      target = None
 
     return strategy, target, sess_config
 
@@ -841,6 +863,114 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
   def test_pipelining(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_pipelining, cluster_spec)
+
+  def _test_ipu_pipeline_estimator(self, task_id):
+    # The estimator library starts the server when configured in TF_CONFIG.
+    strategy, _, _ = self._create_test_objects(start_server=False)
+
+    strategy.extended.experimental_allow_variable_placement()
+
+    ipu_device = "/job:worker/replica:0/task:{}/device:IPU:0".format(task_id)
+
+    num_iterations = 3
+    num_workers = strategy.num_replicas_in_sync
+    per_worker_x = [i + 1.0 for i in range(num_workers)]
+    y = 1.0
+    initial_w0 = 1.0
+    initial_w1 = 2.0
+    learning_rate = 0.5
+    pipeline_depth = 4
+
+    def my_model_fn(mode):
+      def stage1(feature, label):
+        w0 = variable_scope.get_variable(name="w0", initializer=initial_w0)
+        self.assertIsInstance(w0, IPUMirroredVariable)
+        self.assertEqual(w0.device, ipu_device)
+        partial = w0 * feature
+        return partial, label
+
+      def stage2(partial, label):
+        w1 = variable_scope.get_variable(name="w1", initializer=initial_w1)
+        self.assertIsInstance(w1, IPUMirroredVariable)
+        self.assertEqual(w1.device, ipu_device)
+        prediction = partial + w1
+        loss = losses.mean_squared_error(label, prediction)
+        return loss
+
+      def optimizer_function(loss):
+        opt = gradient_descent.GradientDescentOptimizer(learning_rate)
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+      return ipu_pipeline_estimator.IPUPipelineEstimatorSpec(
+          mode=mode,
+          computational_stages=[stage1, stage2],
+          pipeline_depth=pipeline_depth,
+          optimizer_function=optimizer_function)
+
+    def my_input_fn(input_context):
+      self.assertEqual(task_id, input_context.input_pipeline_id)
+
+      x = per_worker_x[task_id]
+      features = [x] * pipeline_depth * num_iterations
+      labels = [y] * pipeline_depth * num_iterations
+      dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+
+      return dataset
+
+    num_ipus_in_pipeline = 2
+    ipu_options = ipu_utils.create_ipu_config()
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options,
+                                             num_ipus=num_ipus_in_pipeline)
+
+    config = ipu_run_config.RunConfig(
+        train_distribute=strategy,
+        save_summary_steps=1,
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            num_shards=num_ipus_in_pipeline, ipu_options=ipu_options))
+
+    estimator = ipu_pipeline_estimator.IPUPipelineEstimator(
+        model_fn=my_model_fn, config=config)
+
+    estimator_lib.train_and_evaluate(
+        estimator,
+        train_spec=estimator_lib.TrainSpec(input_fn=my_input_fn,
+                                           max_steps=num_iterations),
+        eval_spec=estimator_lib.EvalSpec(input_fn=my_input_fn))
+
+    expected_w0 = initial_w0
+    expected_w1 = initial_w1
+    expected_losses = []
+
+    for _ in range(num_iterations):
+      x = np.array(per_worker_x)
+
+      # The loss reduction op is decided by _get_loss_reduce_op_for_reporting()
+      loss = np.sum(np.square(expected_w0 * x + expected_w1 - y))
+      expected_losses.append(loss)
+
+      grad_w0 = np.sum(2 * (expected_w0 * x + expected_w1 - y) * x)
+      accumulated_grad_w0 = pipeline_depth * grad_w0
+
+      grad_w1 = np.sum(2 * (expected_w0 * x + expected_w1 - y))
+      accumulated_grad_w1 = pipeline_depth * grad_w1
+
+      expected_w0 -= learning_rate * accumulated_grad_w0 / num_workers
+      expected_w1 -= learning_rate * accumulated_grad_w1 / num_workers
+
+    # Only the chief worker has the checkpoint to read the variables from.
+    if task_id == 0:
+      self.assertEqual(num_iterations,
+                       estimator.get_variable_value("global_step"))
+      self.assertEqual(expected_w0, estimator.get_variable_value("w0"))
+      self.assertEqual(expected_w1, estimator.get_variable_value("w1"))
+
+      loss_outputs = _get_summary_values(estimator.model_dir, "loss")
+      self.assertEqual(expected_losses, loss_outputs)
+
+  def test_ipu_pipeline_estimator(self):
+    cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
+    self._run_workers_in_processes(self._test_ipu_pipeline_estimator,
+                                   cluster_spec)
 
 
 if __name__ == "__main__":
