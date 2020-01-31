@@ -105,6 +105,7 @@ py_library(
         "dataset_benchmark.py",
         "gradient_accumulation_optimizer.py",
         "keras/sequential.py",
+        "keras/layers/dropout.py",
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
         "ipu_compiler.py",
@@ -239,6 +240,18 @@ tf_py_test(
     name = "keras_normalization_test",
     size = "medium",
     srcs = ["tests/keras/keras_normalization_test.py"],
+    additional_deps = [
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+)
+
+tf_py_test(
+    name = "keras_dropout_test",
+    size = "medium",
+    srcs = ["tests/keras/keras_dropout_test.py"],
     additional_deps = [
         "//tensorflow/python/keras:layers",
         "//third_party/py/numpy",
@@ -752,6 +765,7 @@ test_suite(
         "ipu_multi_worker_strategy_test",
         "ipu_pipeline_estimator_test",
         "ipu_strategy_test",
+        "keras_dropout_test",
         "keras_normalization_test",
         "keras_rnn_test",
         "map_gradient_optimizer_test",

@@ -15,9 +15,9 @@
 """Keras layer specializations for the Graphcore IPU
 """
 
-from tensorflow.python.ipu.keras.layers.rnn import PopnnLSTM
-from tensorflow.python.ipu.keras.layers.rnn import PopnnGRU
-
+from tensorflow.python.ipu.keras.layers.dropout import Dropout
 from tensorflow.python.ipu.keras.layers.normalization import GroupNorm
 from tensorflow.python.ipu.keras.layers.normalization import InstanceNorm
 from tensorflow.python.ipu.keras.layers.normalization import LayerNorm
+from tensorflow.python.ipu.keras.layers.rnn import PopnnLSTM
+from tensorflow.python.ipu.keras.layers.rnn import PopnnGRU
