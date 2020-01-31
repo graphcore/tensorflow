@@ -114,6 +114,7 @@ py_library(
         "ipu_outfeed_queue.py",
         "ipu_pipeline_estimator.py",
         "ipu_run_config.py",
+        "ipu_strategy.py",
         "loops.py",
         "ops/all_to_all_op.py",
         "ops/cross_replica_ops.py",
@@ -427,6 +428,17 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "ipu_strategy_test",
+    size = "large",
+    srcs = ["tests/ipu_strategy_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 py_test(
     name = "pop_datastream_test",
     size = "small",
@@ -726,6 +738,7 @@ test_suite(
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",
         "ipu_pipeline_estimator_test",
+        "ipu_strategy_test",
         "map_gradient_optimizer_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",
