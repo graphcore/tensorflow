@@ -106,6 +106,7 @@ py_library(
         "gradient_accumulation_optimizer.py",
         "keras/sequential.py",
         "keras/layers/dropout.py",
+        "keras/layers/embedding_lookup.py",
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
         "ipu_compiler.py",
@@ -221,6 +222,18 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
+    ],
+)
+
+tf_py_test(
+    name = "keras_embedding_lookup_test",
+    size = "medium",
+    srcs = ["tests/keras/keras_embedding_lookup_test.py"],
+    additional_deps = [
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
     ],
 )
 
@@ -766,6 +779,7 @@ test_suite(
         "ipu_pipeline_estimator_test",
         "ipu_strategy_test",
         "keras_dropout_test",
+        "keras_embedding_lookup_test",
         "keras_normalization_test",
         "keras_rnn_test",
         "map_gradient_optimizer_test",

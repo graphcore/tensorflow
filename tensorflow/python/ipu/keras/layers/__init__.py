@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
-"""Keras layer specializations for the Graphcore IPU
+"""
+Keras layer specializations for the Graphcore IPU
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.python.ipu.keras.layers.dropout import Dropout
+from tensorflow.python.ipu.keras.layers.embedding_lookup import Embedding
 from tensorflow.python.ipu.keras.layers.normalization import GroupNorm
 from tensorflow.python.ipu.keras.layers.normalization import InstanceNorm
 from tensorflow.python.ipu.keras.layers.normalization import LayerNorm
