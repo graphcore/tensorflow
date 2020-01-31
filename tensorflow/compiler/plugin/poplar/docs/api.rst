@@ -45,6 +45,9 @@ Python API
 .. autoclass:: Sequential
   :members:
 
+.. automodule:: tensorflow.python.ipu.keras.layers
+  :members:
+
 .. automodule:: tensorflow.python.ipu.loops
   :members:
 

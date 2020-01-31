@@ -105,7 +105,8 @@ py_library(
         "dataset_benchmark.py",
         "gradient_accumulation_optimizer.py",
         "keras/sequential.py",
-        "keras/layers/RNN.py",
+        "keras/layers/normalization.py",
+        "keras/layers/rnn.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
         "ipu_infeed_queue.py",
@@ -223,9 +224,21 @@ tf_py_test(
 )
 
 tf_py_test(
-    name = "RNN_test",
+    name = "keras_rnn_test",
     size = "medium",
-    srcs = ["tests/keras/RNN_test.py"],
+    srcs = ["tests/keras/keras_rnn_test.py"],
+    additional_deps = [
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+)
+
+tf_py_test(
+    name = "keras_normalization_test",
+    size = "medium",
+    srcs = ["tests/keras/keras_normalization_test.py"],
     additional_deps = [
         "//tensorflow/python/keras:layers",
         "//third_party/py/numpy",
@@ -739,6 +752,8 @@ test_suite(
         "ipu_multi_worker_strategy_test",
         "ipu_pipeline_estimator_test",
         "ipu_strategy_test",
+        "keras_normalization_test",
+        "keras_rnn_test",
         "map_gradient_optimizer_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",
@@ -752,7 +767,6 @@ test_suite(
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
         "sequential_test",
-        "RNN_test",
         "recompute_suggestion_test",
         "user_ops_test",
         "utils_test",

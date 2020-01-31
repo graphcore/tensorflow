@@ -60,11 +60,7 @@ def _tfLSTM(x, h, c):
   state = rnn_cell.LSTMStateTuple(c, h)
 
   @def_function.function
-  def impl(
-      cell,
-      x,
-      state,
-  ):
+  def impl(cell, x, state):
     return rnn.dynamic_rnn(cell,
                            x,
                            dtype=dataType,
@@ -84,8 +80,12 @@ def _new_kerasLSTM(x, h, c):
       bias_initializer=init_ops.zeros_initializer(dtype=dataType))
   layer.build(x.shape)
 
-  state = rnn_cell.LSTMStateTuple(c, h)
-  return layer(inputs=x, initial_state=state)
+  @def_function.function
+  def impl(x, c, h):
+    state = rnn_cell.LSTMStateTuple(c, h)
+    return layer(inputs=x, initial_state=state)
+
+  return impl(x, c, h)
 
 
 def _tfGRU(x, initial_state):
@@ -113,7 +113,12 @@ def _new_kerasGRU(x, initial_state):
       weights_initializer=init_ops.zeros_initializer(dtype=dataType),
       bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType))
   layer.build(x.shape)
-  return layer(x, initial_state=initial_state)
+
+  @def_function.function
+  def impl(x, initial_state):
+    return layer(x, initial_state=initial_state)
+
+  return impl(x, initial_state)
 
 
 class IpuLstmTest(test.TestCase):
