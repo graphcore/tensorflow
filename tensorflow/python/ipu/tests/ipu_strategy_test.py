@@ -208,6 +208,50 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
       self.assertEqual(2, event_counts[IpuTraceEvent.EXECUTE])
 
   @test_util.run_v2_only
+  def test_train_step_fn_keras_model_known_input_size(self):
+    strategy = ipu_strategy.IPUStrategy()
+
+    with strategy.scope():
+
+      model = keras.Sequential([
+          keras.layers.Dense(1, input_shape=[10]),
+      ])
+
+      optimizer = keras.optimizer_v2.gradient_descent.SGD(0.01)
+
+      @def_function.function
+      def step_fn(features, labels):
+        with GradientTape() as tape:
+          predictions = model(features, training=True)
+          prediction_loss = keras.losses.mean_squared_error(
+              labels, predictions)
+          loss = math_ops.reduce_mean(prediction_loss)
+
+        grads = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(grads, model.trainable_variables))
+        return loss
+
+      report = tu.ReportJSON(self, eager_mode=True)
+      report.reset()
+
+      batch_size = 5
+      x_train = np.ones((batch_size, 10), dtype=np.float32)
+      y_train = np.ones((batch_size, 1), dtype=np.float32)
+
+      first_loss = strategy.experimental_run_v2(step_fn,
+                                                args=[x_train, y_train])
+      second_loss = strategy.experimental_run_v2(step_fn,
+                                                 args=[x_train, y_train])
+
+      # Check that loss is decreasing.
+      self.assertLess(second_loss, first_loss)
+
+      # There should be a single engine, loaded once, executed twice.
+      event_counts, _ = report.get_ipu_events()
+      self.assertEqual(1, event_counts[IpuTraceEvent.LOAD_ENGINE])
+      self.assertEqual(2, event_counts[IpuTraceEvent.EXECUTE])
+
+  @test_util.run_v2_only
   def test_keras_mnist_model_compile_fit(self):
     num_examples = 100
     batch_size = 10
@@ -216,13 +260,66 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
 
     def mnist_model():
       model = keras.models.Sequential()
-      model.add(keras.layers.Conv2D(32, (3, 3), activation='relu'))
-      model.add(keras.layers.Conv2D(64, (3, 3), activation='relu'))
-      model.add(keras.layers.MaxPooling2D((2, 2)))
+      model.add(keras.layers.Conv2D(32, (3, 3)))
+      model.add(keras.layers.Conv2D(64, (3, 3)))
       model.add(keras.layers.Dropout(0.25))
       model.add(keras.layers.Flatten())
-      model.add(keras.layers.Dense(64, activation='relu'))
-      model.add(keras.layers.Dropout(0.5))
+      model.add(keras.layers.Dense(num_classes, activation='softmax'))
+      return model
+
+    (x_train, y_train), _ = keras.datasets.mnist.load_data()
+    x_train = x_train[:num_examples]
+    y_train = y_train[:num_examples]
+
+    x_train = x_train.reshape(*x_train.shape, 1)
+    x_train = x_train.astype('float32')
+    x_train /= 255
+    y_train = keras.utils.np_utils.to_categorical(y_train, num_classes)
+
+    report = tu.ReportJSON(self, eager_mode=True)
+    report.reset()
+
+    strategy = ipu_strategy.IPUStrategy()
+
+    with strategy.scope():
+
+      model = mnist_model()
+      model.compile(loss=keras.losses.categorical_crossentropy,
+                    optimizer=keras.optimizer_v2.gradient_descent.SGD(0.05))
+      history = model.fit(
+          x_train,
+          y_train,
+          batch_size=batch_size,
+          shuffle=False,  # Try to make it deterministic.
+          epochs=num_epochs,
+          verbose=1)
+
+      # Check that the loss decreased.
+      losses = history.history["loss"]
+      self.assertEqual(3, len(losses))
+      self.assertLess(losses[1], losses[0])
+      self.assertLess(losses[2], losses[1])
+
+      num_batches = num_epochs * num_examples // batch_size
+
+      # There should be be a single engine, loaded once, and executed one
+      # time for each batch.
+      event_counts, _ = report.get_ipu_events()
+      self.assertEqual(1, event_counts[IpuTraceEvent.LOAD_ENGINE])
+      self.assertEqual(num_batches, event_counts[IpuTraceEvent.EXECUTE])
+
+  @test_util.run_v2_only
+  def test_keras_mnist_model_compile_fit_fixed_input(self):
+    num_examples = 100
+    batch_size = 10
+    num_classes = 10
+    num_epochs = 3
+
+    def mnist_model():
+      model = keras.models.Sequential()
+      model.add(keras.layers.Conv2D(32, (3, 3), input_shape=[28, 28, 1]))
+      model.add(keras.layers.Conv2D(64, (3, 3)))
+      model.add(keras.layers.Flatten())
       model.add(keras.layers.Dense(num_classes, activation='softmax'))
       return model
 
