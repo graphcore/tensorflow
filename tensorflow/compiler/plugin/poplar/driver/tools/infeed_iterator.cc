@@ -39,6 +39,25 @@ limitations under the License.
 #include "tensorflow/core/public/session_options.h"
 #include "tensorflow/core/public/version.h"
 
+namespace {
+std::string GetTaskName(const tensorflow::Device* device) {
+  using Utils = tensorflow::DeviceNameUtils;
+
+  CHECK(device != nullptr);
+  const std::string& full_name = device->name();
+
+  Utils::ParsedName parsed_name;
+  CHECK(Utils::ParseFullName(full_name, &parsed_name))
+      << "Failed to parse: " << full_name;
+
+  std::string task_name;
+  CHECK(Utils::GetTaskName(parsed_name, &task_name))
+      << "Failed to get task name from: " << full_name;
+
+  return task_name;
+}
+}  // namespace
+
 namespace xla {
 namespace poplarplugin {
 InfeedQueue::InfeedQueue()
@@ -72,10 +91,12 @@ InfeedIterator::InfeedIterator(
   // First set up the options.
   tensorflow::SessionOptions options;
   (*options.config.mutable_device_count())["CPU"] = 1;
+  // Get the task name (might vary in distributed contexts).
+  const std::string task_name = GetTaskName(flr->device());
   // Create the device manager.
   device_mgr_ = absl::make_unique<tensorflow::DeviceMgr>(
-      tensorflow::DeviceFactory::NewDevice("CPU", options,
-                                           "/job:localhost/replica:0/task:0"));
+      tensorflow::DeviceFactory::NewDevice("CPU", options, task_name));
+
   tensorflow::Device* device = device_mgr_->ListDevices()[0];
 
   // Create new `FunctionLibraryDefinition` and
