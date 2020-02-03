@@ -3,6 +3,7 @@ Targeting the IPU from TensorFlow
 
 .. gcdoc::
     :verb-borders:
+    :public:
 
 .. toctree::
     :maxdepth: 2
@@ -13,7 +14,7 @@ Targeting the IPU from TensorFlow
     variables
     rand_and_fp
     logging
-    poplar_ops 
+    poplar_ops
     perf_training
     troubleshooting
     perf_training_example
@@ -25,3 +26,4 @@ Targeting the IPU from TensorFlow
     api
     build
     supported_ops
+    legal
