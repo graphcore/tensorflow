@@ -65,14 +65,22 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
   poplar::Graph& graph = GetGraph(resources_, inst);
 
   if (!UseSyntheticData()) {
+    poplar::Tensor tensor_destination = tensor;
+    if (!LayoutUtil::IsMonotonicWithDim0Major(
+            module_shapes[flat_tuple_index].layout())) {
+      // Host tensor needs to be host layout.
+      tensor_destination =
+          ConvertFromDeviceLayout(module_shapes[flat_tuple_index], tensor);
+    }
+
     // Create a host stream.
     auto fifo = graph.addHostToDeviceFIFO(
         GetInputCopyHandle(inst->parameter_number(), flat_tuple_index),
-        tensor.elementType(), tensor.numElements(),
+        tensor_destination.elementType(), tensor_destination.numElements(),
         poplar::ReplicatedStreamMode::BROADCAST);
 
     stream_copy_seq.add(poplar::program::Copy(
-        fifo, tensor,
+        fifo, tensor_destination,
         !in_info.IsStreaming() || resources_.always_rearrange_copies_on_host));
 
   } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
@@ -80,12 +88,6 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     auto& initializer = DataInitializer::GetSyntheticDataInitializer();
     TF_ASSIGN_OR_RETURN(auto literal, initializer.GetData(shape));
     TF_RETURN_IF_ERROR(SetInitialTensorValue(graph, tensor, literal));
-  }
-
-  if (!LayoutUtil::IsMonotonicWithDim0Major(
-          module_shapes[flat_tuple_index].layout())) {
-    // Host tensor needs to be host layout
-    tensor = ConvertToDeviceLayout(module_shapes[flat_tuple_index], tensor);
   }
 
   // If a the input to the graph is a resource variable which does not change
