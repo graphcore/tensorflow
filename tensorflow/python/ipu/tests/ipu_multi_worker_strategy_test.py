@@ -43,6 +43,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import ipu_pipeline_estimator
 from tensorflow.python.ipu import ipu_run_config
+from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.ipu_multi_worker_strategy import IPUMirroredVariable
@@ -971,6 +972,34 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_ipu_pipeline_estimator,
                                    cluster_spec)
+
+  def _test_dataset_infeed(self, task_id):
+    strategy, target, sess_config = self._create_test_objects()
+
+    with strategy.scope():
+      dataset = dataset_ops.Dataset.from_tensor_slices([0.0]).repeat()
+      # Test with a dataset host op.
+      dataset = dataset.map(lambda x: x + task_id)
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "distributed")
+
+      def body(v, x):
+        v += x
+        return v
+
+      def my_net():
+        r = loops.repeat(10, body, [0.0], infeed_queue)
+        return r
+
+      with ipu_scope("/device:IPU:0"):
+        [res] = ipu_compiler.compile(my_net, inputs=[])
+
+      with session_lib.Session(target=target, config=sess_config) as sess:
+        sess.run(infeed_queue.initializer)
+        self.assertEqual(task_id * 10.0, sess.run(res))
+
+  def test_dataset_infeed(self):
+    cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
+    self._run_workers_in_processes(self._test_dataset_infeed, cluster_spec)
 
 
 if __name__ == "__main__":
