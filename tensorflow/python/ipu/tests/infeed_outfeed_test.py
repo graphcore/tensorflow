@@ -1054,8 +1054,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:
         if s['type'] == 'StreamCopy':
-          # batch x shape=[4] floats + header
-          if s['totalData'] == b_count * 4 * 4 + 4:
+          # batch x shape=[4] floats
+          if s['totalData'] == b_count * 4 * 4:
             total_outfeeds = total_outfeeds + 1
 
       self.assertEqual(total_outfeeds, 8 // b_count)
@@ -1111,7 +1111,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       for s in report.get_execution_reports()[0]['simulation']['steps']:
         if s['type'] == 'StreamCopy':
           # batch x shape=[4] floats + header
-          if s['totalData'] == b_count * 4 * 4 + 4:
+          if s['totalData'] == b_count * 4 * 4:
             total_outfeeds = total_outfeeds + 1
 
       self.assertEqual(total_outfeeds, 8 // b_count)
@@ -1163,8 +1163,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:
         if s['type'] == 'StreamCopy':
-          # batch x shape=[1024*256] floats + header
-          if s['totalData'] == b_count * 1024 * 512 * 4 + 4:
+          # batch x shape=[1024*256] floats
+          if s['totalData'] == b_count * 1024 * 512 * 4:
             total_outfeeds = total_outfeeds + 1
 
       self.assertEqual(total_outfeeds, 8 // b_count)
@@ -1218,8 +1218,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:
         if s['type'] == 'StreamCopy':
-          # batch x shape=[1024*256] floats + header
-          if s['totalData'] == b_count * 1024 * 512 * 4 + 4:
+          # batch x shape=[1024*256] floats
+          if s['totalData'] == b_count * 1024 * 512 * 4:
             total_outfeeds = total_outfeeds + 1
 
       self.assertEqual(total_outfeeds, 8 // b_count)

@@ -509,7 +509,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_max_tile_memory(5175)
+      report.assert_max_tile_memory(4967)
 
       # Would fail if there were two batch norms in the graph
       ok = [
