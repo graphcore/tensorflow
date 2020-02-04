@@ -25,6 +25,8 @@ from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
+from tensorflow.python.distribute.distribute_config import DistributeConfig
 from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import combinations
@@ -35,6 +37,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu import ipu_multi_worker_strategy
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
@@ -44,6 +47,7 @@ from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import googletest
 from tensorflow.python.summary import summary_iterator
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.training import server_lib
 from tensorflow.python.training import session_run_hook
 from tensorflow.python.training import training_util
 
@@ -258,6 +262,29 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     with self.assertRaisesRegex(
         ValueError, "host_call is not allowed for iterations_per_loop > 1"):
       estimator.train(input_fn=my_input_fn, steps=2)
+
+  def testDistributedMultipleIterationsPerLoopNotImplemented(self):
+    cluster_spec = server_lib.ClusterSpec({"worker": ["localhost:2222"]})
+    strategy = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
+        SimpleClusterResolver(cluster_spec, task_type="worker", task_id=0))
+
+    # Setting config.train_distribute
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2),
+        train_distribute=strategy)
+    with self.assertRaisesRegex(
+        NotImplementedError,
+        r"iterations_per_loop > 1 \(got 2\) not supported with distribution"):
+      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn, config=config)
+
+    # Setting config.experimental_distribute.train_distribute
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2),
+        experimental_distribute=DistributeConfig(train_distribute=strategy))
+    with self.assertRaisesRegex(
+        NotImplementedError,
+        r"iterations_per_loop > 1 \(got 2\) not supported with distribution"):
+      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn, config=config)
 
   def testHostCallTwoArguments(self):
     def my_input_fn():
