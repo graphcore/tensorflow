@@ -755,6 +755,12 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
       raise ValueError('{} are reserved keys but existed in params {}.'.format(
           _RESERVED_PARAMS_KEYS, params))
 
+    is_distributed = config._train_distribute or config._eval_distribute  # pylint: disable=protected-access
+    if is_distributed and config.ipu_run_config.iterations_per_loop > 1:
+      raise NotImplementedError(
+          "iterations_per_loop > 1 (got {}) not supported with distribution".
+          format(config.ipu_run_config.iterations_per_loop))
+
     super().__init__(model_fn=model_fn,
                      model_dir=model_dir,
                      config=config,
