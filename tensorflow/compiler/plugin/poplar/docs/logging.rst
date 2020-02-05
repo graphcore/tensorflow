@@ -9,9 +9,10 @@ trace report that will disclose a number of different aspects of graph
 deployment to the IPU.
 
 Several mechanisms are available to retrieve trace information about the
-Poplar IPU compilation and executions.  Firstly, there are environment variables
-provided by Poplar itself to dump the compilation and execution reports into a
-file.  The Poplar documentation can give more information about these.
+Poplar IPU compilation and executions.  Firstly, there are environment
+variables provided by Poplar itself to dump the compilation and execution
+reports into a file.  The Poplar documentation can give more information
+about these.
 
 Within TensorFlow, the basic steps for this are.
 
@@ -50,14 +51,15 @@ The first import is *gen_ipu_ops*, which will generate the actual event trace,
 while the second import is an assortment of utility functions, a component of
 which will be used here to parse the event trace to a readable output.
 
-The event trace operation is created when *gen_ipu_ops* is called to instantiate
-the trace and returns it to *report*. This is then fed to the TensorFlow session
-as a *run* argument, directly following the session run call to the feed-forward
-pass through *basic_graph*. In essence the report is generated based on the last
-session graph call. The trace output is then parsed through
-*extract_all_strings_from_event_trace*, and a log file is generated. The final
-component of writing the trace to an actual file is done near the end of the
-example where a file is opened, named and written to with the parsed trace data.
+The event trace operation is created when *gen_ipu_ops* is called to
+instantiate the trace and returns it to *report*. This is then fed to the
+TensorFlow session as a *run* argument, directly following the session run call
+to the feed-forward pass through *basic_graph*. In essence the report is
+generated based on the last session graph call. The trace output is then parsed
+through *extract_all_strings_from_event_trace*, and a log file is generated.
+The final component of writing the trace to an actual file is done near the end
+of the example where a file is opened, named and written to with the parsed
+trace data.
 
 ``ipu_compile_summary(name, [op list])``
 ________________________________________
@@ -267,12 +269,13 @@ using the IPU_MODEL device. Consider the situation in which the event trace is
 being monitored to investigate a graph that creates a tile memory imbalance. In
 those instances, running on the IPU will lead to an out of memory exception
 before the actual report is generated, and so it is important to target the
-*IPU_MODEL* over actual hardware. *IPU_MODEL* is an emulator that mimics the IPU
-computational framework on the host device. It is functionally equivalent to the
-IPU, but obviously the compute timings will be completely different. There are a
-number of ways to target *IPU_MODEL*, but let's assume the previous code is in
-the active current directory, and all the pertinent library variables required
-by the IPU are set correctly. At the terminal command line, one could then type:
+*IPU_MODEL* over actual hardware. *IPU_MODEL* is an emulator that mimics the
+IPU computational framework on the host device. It is functionally equivalent
+to the IPU, but obviously the compute timings will be completely different.
+There are a number of ways to target *IPU_MODEL*, but let's assume the previous
+code is in the active current directory, and all the pertinent library
+variables required by the IPU are set correctly. At the terminal command line,
+one could then type:
 
 .. code-block:: console
 
@@ -283,8 +286,7 @@ by the IPU are set correctly. At the terminal command line, one could then type:
 See the :ref:`env-var-section` for details about the *TF_POPLAR_FLAGS*
 environment variable.
 
-.. code-block:: none
-
+.. code-block:: text
 
     ...] Device /device:IPU:0 attached to IPU: 0
 
@@ -331,13 +333,13 @@ Reading the Poplar textual summary report
 
 If the example code is run, a new file is generated called
 *Trace_Event_Report.rep*. This is the Poplar compilation report. The report is
-broken into a number of sections, but the three that will be focused on here are
-the first three: *Target*, *Graph*, and *Memory Usage*.
+broken into a number of sections, but the three that will be focused on here
+are the first three: *Target*, *Graph*, and *Memory Usage*.
 
 *Target* describes the target hardware, where in absence of sharding, will be a
 single IPU, for instance:
 
-.. code-block:: none
+.. code-block:: text
 
 
     Target:
@@ -353,10 +355,12 @@ It is important to note that this section of the report does not distinguish
 between hardware or *IPU_MODEL*, and in essence it is only dependent on the
 number of IPUs selected for deployment via the sharding utility.
 
-The next section is *Graph*, which describes the topology of the deployed graph.
+The next section is *Graph*, which describes the topology of the deployed
+graph.
+
 For instance:
 
-.. code-block:: none
+.. code-block:: text
 
 
     Graph:
@@ -373,7 +377,7 @@ vertices in the graph is suspiciously close to the *1,216* tiles on the IPU.
 The *Memory Usage* section gives the memory consumption profile of the graph
 from a number of different perspectives:
 
-.. code-block:: none
+.. code-block:: text
 
 
     Memory Usage:
@@ -430,14 +434,14 @@ memory usage including gaps. This is followed by a breakdown of the
 gap-excluding memory: first in terms of interleaved vs non-interleaved usage,
 then by data type, followed by vertex data.
 
-A useful portion of the report is the tile histogram memory consumption profile,
-which in this simple case is confined to two categories. When the graph is more
-complex, the histogram will most likely have a more distributed profile. In
-those instances, where there is in fact a tile imbalance, the histogram produced
-may look more like:
+A useful portion of the report is the tile histogram memory consumption
+profile, which in this simple case is confined to two categories. When the
+graph is more complex, the histogram will most likely have a more distributed
+profile. In those instances, where there is in fact a tile imbalance, the
+histogram produced may look more like:
 
 
-.. code-block:: none
+.. code-block:: text
 
 
     By Tile (Excluding Gaps):
@@ -468,15 +472,16 @@ may look more like:
         2 tile(s) out of memory
 
 
-In this case, two tiles are out of physical memory, while most of the allocation
-is well within single tile budget. In those instances where a memory imbalance
-occurs, the report will produce a detailed depiction of the operations running
-on five of the most memory-subscribed tiles, (regardless if they are over their
-physical limit or not), and list them in descending order in terms of memory
-consumption. In the above case, Tile *0* is the most overly-subscribed tile, and
-the report produces the following:
+In this case, two tiles are out of physical memory, while most of the
+allocation is well within single tile budget. In those instances where
+a memory imbalance occurs, the report will produce a detailed depiction
+of the operations running on five of the most memory-subscribed tiles,
+(regardless if they are over their physical limit or not), and list them
+in descending order in terms of memory consumption. In the above case,
+Tile *0* is the most overly-subscribed tile, and the report produces the
+following:
 
-.. code-block:: none
+.. code-block:: text
 
     Tile # 0 memory usage:
     Memory Usage:
@@ -535,10 +540,7 @@ approach. In this second paradigm, the intent is to target IPU hardware, not an
 emulator run on host, and use an ELF binary file created at compile time to
 review the memory allocation. This second technique will be reviewed in more
 concise fashion here, (only exploring how the actual binary is created and
-memory-per-tile information extracted), but is detailed in the out of memory
-guide.
-
-.. TODO: Link out of memory guide
+memory-per-tile information extracted).
 
 When compiling the graph, a Poplar engine option can be used to dump the ELF
 file to a specified location.
@@ -549,8 +551,8 @@ file to a specified location.
     POPLAR_ENGINE_OPTIONS='{"target.saveArchive":"binaries.a", "debug.allowOutOfMemory": "true"}' python basic_graph.py
 
 
-The file *binaries.a* is created which is a bit-code file of the deployed graph.
-To extract size information from it type the following:
+The file *binaries.a* is created which is a bit-code file of the deployed
+graph. To extract size information from it type the following:
 
 .. code-block:: console
 
@@ -558,8 +560,8 @@ To extract size information from it type the following:
 
 This pipes a tile-by-tile rendition of the memory consumed in bytes to the file
 *tiles_elf.txt*. All the memory allocated is part of the *text* section.
-This can be extracted from the tiles elf files to produce a single column where each entry
-is the size of the *text* section corresponding to a tile:
+This can be extracted from the tiles elf files to produce a single column where
+each entry is the size of the *text* section corresponding to a tile:
 
 .. code-block:: console
 
@@ -567,12 +569,13 @@ is the size of the *text* section corresponding to a tile:
 
 The file *memory_usage_per_tile.txt* will contain this single column of memory
 allocation. Further facets of the deployed graph can be extracted from this
-approach, and are documented in the out of memory guide.
+approach.
 
 Dumping auxiliary Poplar information
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Two environment variable flags are available to get to extra Poplar information.
+Two environment variable flags are available to get to extra Poplar
+information.
 
 Poplar vertex graph
 ___________________
@@ -592,5 +595,6 @@ exchanging and syncing on each instruction cycle.
 It can be used for generating a GraphCore linear activity diagram.
 
 
-The :ref:`env-var-section` describes how to set the environment flags correctly.
+The :ref:`env-var-section` describes how to set the environment flags
+correctly.
 
