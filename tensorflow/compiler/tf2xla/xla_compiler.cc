@@ -931,6 +931,13 @@ Status XlaCompiler::BuildArguments(
     }
   } else {
     for (std::vector<int>::size_type i = 0; i < input_to_args->size(); ++i) {
+      const XlaCompiler::Argument& arg = args[input_to_args->at(i)];
+      if (arg.name.empty()) {
+        arg_metadata.set_op_name("XLA_Args");
+      } else {
+        arg_metadata.set_op_name("XLA_Args/" + arg.name);
+      }
+      builder->SetOpMetadata(arg_metadata);
       auto it = arg_shardings.find(i);
       xla::XlaScopedShardingAssignment assign_sharding(
           builder, it == arg_shardings.end() ? absl::optional<xla::OpSharding>()
