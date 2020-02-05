@@ -1,12 +1,20 @@
-Outline
--------
+Introduction
+------------
 
 The purpose of this document is to introduce the TensorFlow framework from the
-perspective of developing and training models for the IPU. To some extent,
-implementing at the framework level is relatively agnostic to the underlying
-hardware as it pertains to the specifics of graph definition and its various
-components, (e.g. how a convolutional layer is defined), but there are critical
-facets of targeting the IPU from TensorFlow that need to be understood to
-use it as a training and inference engine successfully. These elements include
-IPU-specific API configurations, model parallelism, error logging and report
-generation, as well as strategies for dealing with out-of-memory (OOM) issues.
+perspective of developing and training models for the IPU. It assumes you have
+some knowledge of TensorFlow and machine learning.
+
+See the "Getting Started" guide for your IPU system on the
+`Graphcore support portal <https://support.graphcore.ai>`_
+for installation instructions.
+
+To some extent, implementing at the framework level is relatively independent of
+the underlying hardware as it relates to the specifics of defining a graph and
+its components (for example, how a convolutional layer is defined).
+
+However, there are critical elements of targeting the IPU from TensorFlow that
+need to be understood to successfully use it as a training and inference
+engine. These include IPU-specific API configurations, model parallelism, error
+logging and report generation, as well as strategies for dealing with
+out-of-memory (OOM) issues.

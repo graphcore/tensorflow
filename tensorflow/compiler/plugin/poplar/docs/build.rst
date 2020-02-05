@@ -4,7 +4,7 @@ How to build TensorFlow from source
 Build tool prerequisites
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-    The install requires bazel, pip, curl, and various python packages. 
+    To build TensorFlow you will need to install bazel, pip, curl, and various Python packages.
 
     - Curl
 
@@ -41,7 +41,7 @@ Build tool prerequisites
 
         sudo apt install libc-ares-dev
 
-    You will also need Poplar installation. Poplar SDK can be downloaded at: https://downloads.graphcore.ai/
+    You will also need a Poplar installation. The Poplar SDK can be downloaded from: https://downloads.graphcore.ai/
 
 Build instructions
 ~~~~~~~~~~~~~~~~~~
@@ -82,7 +82,7 @@ Build instructions
 
     .. code-block:: console
 
-        bazel build --config=opt //tensorflow/tools/pip_package:build_pip_package  
+        bazel build --config=opt //tensorflow/tools/pip_package:build_pip_package
 
     Once the build has completed, make the pip wheel using the package generator
 
@@ -97,7 +97,7 @@ Build instructions
         bash ../tensorflow_packaging/run_ci_tests.sh
 
     Adding  ``--test_env TF_CPP_MIN_VLOG_LEVEL=1`` to the command line will dump out more debug information, including the work done by the XLA driver turning the XLA graph into a Poplar graph.
-    
+
     To repeat a test multiple times, add ``--runs_per_test N``.
-    
+
     To ensure a test is run, even when it ran successfully and is cached, add ``--no_cache_test_results``.

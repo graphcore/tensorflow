@@ -3,16 +3,16 @@
 References
 ----------
 
+The following documents may be useful.
+
 - TensorFlow main site:  http://tensorflow.org
 - TensorFlow user guide: https://www.tensorflow.org/guide
 - TensorFlow tutorial series: https://www.tensorflow.org/tutorials
 - TensorFlow XLA:  https://www.tensorflow.org/performance/xla/
-- TensorFlow general model repository on github.com, (an excellent reference for
+- TensorFlow general model repository on GitHub, (an excellent reference for
   various model implementations): https://github.com/tensorflow/models
-- Hands-on Machine Learning with Scikit-Learn and TensorFlow - A very useful
+- *Hands-on Machine Learning with Scikit-Learn and TensorFlow*: A very useful
   practical guide to developing and training network models using TensorFlow:
   http://shop.oreilly.com/product/0636920052289.do
-- Installation guide: https://support.graphcore.ai/hc/en-us/articles/360001118534-Poplar-SDK-TensorFlow-Installation-Instructions
-- Poplar User Guide
-- `Public examples <https://github.com/graphcore/examples>`_ repository with application examples
-- Installation guide: https://support.graphcore.ai/hc/en-us/articles/360001118534-Poplar-SDK-TensorFlow-Installation-Instructions
+- `Poplar and Poplibs User Guide <https://documents.graphcore.ai/documents/UG1/latest>`_
+- `Graphcore GitHub repository <https://github.com/graphcore/examples>`_ with application examples

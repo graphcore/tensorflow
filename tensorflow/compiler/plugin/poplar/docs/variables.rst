@@ -4,7 +4,7 @@ Adding variables
 Do not add variables using ``tf.Variable([shape], initializer)``, they will fail
 to obey certain operations, such as ``assign_add``. Make sure that all variables
 are added using a variable scope that is marked as a resource. This can be done
-globally:
+globally, as shown below:
 
 .. code-block:: python
 
@@ -14,7 +14,7 @@ globally:
   var = tf.get_variable(name, shape=[...], dtype=tf.float32, initializer=tf.constant_initializer(0.5))
   ...
 
-or locally in a specific scope:
+or locally, in a specific scope:
 
 .. code-block:: python
 

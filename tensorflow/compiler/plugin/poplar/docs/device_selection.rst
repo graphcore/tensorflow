@@ -1,9 +1,11 @@
 Targeting the Poplar XLA device
 -------------------------------
 
+.. TODO: what is X
+
 The name of the Poplar XLA devices are ``/device:IPU:X``.
 
-A python context handler is available for setting up all appropriate scoping
+A Python context handler is available for setting up all appropriate scoping
 while creating the graph:
 
 .. literalinclude:: tutorial_sharding.py
@@ -17,13 +19,13 @@ parts of the graph which will be compiled.  For most graphs, the function
 device scope.
 
 The function ``ipu_compiler.compile()`` will cause all operations created by
-the python function passed into its first argument to be placed on the IPU
+the Python function passed into its first argument to be placed on the IPU
 system, and be compiled together into a single Poplar executable.
 
 Supported types
 ~~~~~~~~~~~~~~~
 
-Poplar and the poplibs libraries support the following data types:
+Poplar and the Poplibs libraries support the following data types:
 
 .. code-block:: python
 
@@ -35,8 +37,8 @@ Poplar and the poplibs libraries support the following data types:
 Device selection
 ~~~~~~~~~~~~~~~~
 
-Hardware configuration options allow the number of IPU devices to be
-selected.  By default, TensorFlow will create one device.  This device
+Hardware configuration options enable you to select the number of IPU devices.
+By default, TensorFlow will create one device.  This device
 will be for a single IPU. The first available single IPU will be used.
 
 Two API calls are available for selecting the number and configuration
@@ -45,19 +47,19 @@ of the IPU system.
 ``auto_select_ipus`` allows the selection of a number of IPUs.  The process
 searches for the first set of IPUs which match the number requested.
 
-``select_ipus`` allows the selection of a specific IPU hardware device ordinal,
+``select_ipus`` allows the selection of a specific IPU hardware device,
 as returned by the ``gc-info`` tool.
 
 Each of these functions takes as a first argument the options structure
 returned by the ``create_ipu_config`` function.  The second argument is
-either an integer or a list.  When an integer is supplied, then the user
-gets a single TensorFlow device (`/device:IPU:0`) configured with the
+either an integer or a list.  When an integer is supplied, then you will
+get a single TensorFlow device (``/device:IPU:0``) configured with the
 appropriate number of IPUs.  When a list of integers is provided, then the
-system is configured with multiple TensorFlow IPU devices (`/device:IPU:0`,
-`/device:IPU:1`, etc), configured as specified.  For examples look at the
+system is configured with multiple TensorFlow IPU devices (``/device:IPU:0``,
+``/device:IPU:1``, and so on), configured as specified.  For examples, see the
 documentation in the :ref:`api-section`.
 
-Once the hardware configuration stucture has been configured, the API call
+Once the hardware configuration structure has been configured, the API call
 ``ipu.utils.configure_ipu_system`` must be used to attach and to configure the
 hardware.
 
@@ -84,20 +86,20 @@ functions exist for configuring the hardware and compiler.
 * ``set_compilation_options`` sets general options to be passed to the Poplar
   compiler.
 * ``set_convolution_options``, ``set_matmul_options`` and
-  ``set_pooling_options`` pass specific options directly to the ``poplibs``
+  ``set_pooling_options`` pass specific options directly to the Poplibs
   convolution and pooling operations.
-* ``set_report_options`` allows options to be passed directly to the Poplar
+* ``set_report_options`` passes options directly to the Poplar
   summary report generator.
-* ``set_ipu_model_options`` allows control of the Poplar IPU_MODEL device type.
+* ``set_ipu_model_options`` controls the Poplar IPU Model device type.
 * ``set_recomputation_options`` turns on recomputation, to reduce the memory
   requirement at the expense of speed.
-* ``set_floating_point_behaviour_options`` allows control of the IPUs floating
+* ``set_floating_point_behaviour_options`` controls the IPUs floating
   point control register.
-* ``set_optimization_options`` allows control of the performance / memory usage
+* ``set_optimization_options`` controls the performance and memory use
   trade offs.
 
 More options are available on the ``create_ipu_config`` function itself. These
-mostly control specific features of the Poplar and poplibs operations.
+mostly control specific features of the Poplar and Poplibs operations.
 
 * ``max_scheduler_lookahead_depth`` controls how far the scheduler can look
   beyond a given scheduling decision to understand the max-liveness
@@ -119,8 +121,8 @@ mostly control specific features of the Poplar and poplibs operations.
   * ``PostOrder``, which schedules the instructions in the order which is
     obtained by walking the graph in 'post order'.
   * ``LookAhead``, which looks ahead a number of operations from any
-    schedulable one, as given by the `max_scheduler_lookahead_depth` and
-    `max_scheduler_search_space_size` options described above.  It attempts
+    schedulable one, as given by the ``max_scheduler_lookahead_depth`` and
+    ``max_scheduler_search_space_size`` options described above.  It attempts
     to look through areas of high liveness.
   * ``ShortestPath``, which schedules the graph giving priority to
     the shortest path to the root.
@@ -137,7 +139,7 @@ can be directed at any machine in a TensorFlow cluster.  Some configuration
 options are provided by an environment variable called ``TF_POPLAR_FLAGS``.
 
 Setting ``TF_POPLAR_FLAGS=--help`` and executing a TF session will produce some
-help for each option.
+help for each option. For a full lst, refer to the API documentation.
 
 ``--use_synthetic_data`` will prevent the system from downloading or uploading
 data to the card when executing code.  This is used for testing performance
@@ -169,7 +171,7 @@ a graphviz DOT file.
 of all tensors to be written to this directory.
 
 ``--fallback_scheduler`` uses the standard TensorFlow scheduler, instead of
-the GraphCore specific one.
+the Graphcore specific one.
 
 ``--allow_nans`` will allow NaNs.
 
@@ -178,8 +180,8 @@ main graph. The numeric argument indicates on which tile the cycle count
 operation will be created. This may be used as an alternative to profiling
 for graphs with dynamic control flow.
 
-The options can be used at the same time by treating them as command line
-switches, eg. ``--executable_cache_path=/tmp/cache --allow_nans``
+Multiple options can be specified at the same time by concatenating them like command line
+switches, for example: ``--executable_cache_path=/tmp/cache --allow_nans``.
 
 
 Caching of compiled executables
@@ -201,15 +203,14 @@ in this directory.
 A pair of files will be saved for each compiled graph, the TensorFlow
 metadata and the Poplar executable.
 
-The cache does not manage the files within the directory. It is the
-responsibility of the user to delete files.  No index is kept of the
+The cache does not manage the files within the directory. It is your
+responsibility to delete files.  No index is kept of the
 files, so they can be deleted without risk.
 
 Supported operations
 ~~~~~~~~~~~~~~~~~~~~
 
-The Poplar SDK is distributed with another file containing a list of all
-TensorFlow operations which are supported by the IPU.
+A list of all TensorFlow operations is provided in :ref:`supported-section`.
 
 Unsupported operations
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -220,7 +221,7 @@ supported. For instance, ``JpegDecode``.
 Unsupported operations will cause the compilation to fail. By including
 ``config=tf.ConfigProto(log_device_placement=True)`` as an argument to the
 creation of the session, you can check whether the operations in your graph
-have been targeted at the Poplar device:
+have been targeted at the Poplar device. For example:
 
 .. code-block:: python
 

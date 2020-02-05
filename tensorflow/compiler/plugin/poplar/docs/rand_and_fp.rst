@@ -1,7 +1,9 @@
-IEEE half precision floating point numbers and stochastic rounding
-------------------------------------------------------------------
+IEEE half precision floating point and stochastic rounding
+----------------------------------------------------------
 
-The IPU supports IEEE half precision floating point numbers, and supports
+.. TODO: what are these "two interfaces"?
+
+The IPU supports IEEE half-precision floating-point numbers, and supports
 hardware stochastic rounding.  The IPU extensions to TensorFlow expose this
 floating point functionality through two interfaces.
 
@@ -15,9 +17,9 @@ When configuring the IPU system hardware, the function
 :py:func:`tensorflow.python.ipu.utils.set_floating_point_behaviour_options`
 will set the control register.
 
-The `esr` bit enables the stochastic rounding unit. Three of the remaining
+The ``esr`` bit enables the stochastic rounding unit. Three of the remaining
 options control the generation of hardware exceptions on various conditions.
-The `nanoo` bit selects between clipping on overflow of a half precision number
+The ``nanoo`` bit selects between clipping on overflow of a half precision number
 or generating a NaN.
 
 Resetting the global random number seed
@@ -31,17 +33,19 @@ By default this seed is set randomly, but it can be reset by using the
 :py:func:`tensorflow.python.ipu.utils.reset_ipu_seed` function.
 
 Due to the hardware threading in the device, if the seed reset function is used
-then the `target.deterministicWorkers` Poplar Engine option will need to be set
-to `true`.
+then the ``target.deterministicWorkers`` Poplar Engine option will need to be set
+to ``true``.
 
-This can be done with using the
+This can be done using the
 :py:func:`tensorflow.python.ipu.utils.set_compilation_options` function.
 
-Debugging Numerical Issues
+Debugging numerical issues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The values held in a tensor can be printed by calling ipu.internal.print_tensor.
-This function takes in a tensor and will print it to standard error as a side
+The values held in a tensor can be printed by calling `ipu.ops.internal_ops.print_tensor`.
+This function takes a tensor and will print it to standard error as a side
 effect.
 
-See :py:func:`tensorflow.python.ipu.ops.interal_ops.print_tensor`.
+.. TODO: not documented yet?
+
+See :py:func:`tensorflow.python.ipu.ops.internal_ops.print_tensor`.
