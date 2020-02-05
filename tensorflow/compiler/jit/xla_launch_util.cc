@@ -557,6 +557,8 @@ Status XlaComputationLaunchContext::BuildXlaCompilerArguments(
 
   for (int64 input_num = 0; input_num < ctx->num_inputs(); ++input_num) {
     XlaCompiler::Argument& arg = (*args)[input_num];
+    // Mangled name
+    arg.name = ctx->op_kernel().requested_input(input_num);
     if (constant_args.count(input_num) > 0) {
       // Handles compile-time constants.
       const Tensor& input = constant_args.at(input_num);
