@@ -1720,9 +1720,9 @@ TEST_F(AllocationFinderTest, BatchNormTrainingParams) {
   std::string hlo = R"(
 HloModule top
 Sum-reduction48 {
-  x.48.45 = f32[] parameter(0)
-  y.48.46 = f32[] parameter(1)
-  ROOT add.48.47 = f32[] add(x.48.45, y.48.46)
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT add = f32[] add(x, y)
 }
 
 _pop_op_conv_scaled_inplace {
@@ -1816,7 +1816,7 @@ ENTRY top {
   EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
 
   // We have added one new entry for the bias add
-  ASSERT_EQ(annotations.tensor_allocation_map.size(), 4);
+  ASSERT_EQ(annotations.tensor_allocation_map.size(), 5);
 
   t = annotations.tensor_allocation_map.at(std::make_pair(bn_ip1, 0));
   EXPECT_EQ(t.tgt, bn_tr);
@@ -1835,11 +1835,23 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 0);
 
   auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
+  EXPECT_EQ(tensors_with_layout.size(), 5);
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(conv_ip0, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(conv_ip1, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(bn_ip1, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(bn_ip2, 0)));
+
+  // The add in the reduce computation can also have a layout on either operand.
+  HloInstruction* x = FindInstruction(module0, "x");
+  HloInstruction* y = FindInstruction(module0, "y");
+  if (annotations.tensor_allocation_map.find(std::make_pair(x, 0)) ==
+      annotations.tensor_allocation_map.end()) {
+    EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
+              annotations.tensor_allocation_map.end());
+    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(y, 0)));
+  } else {
+    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(x, 0)));
+  }
 }
 
 TEST_F(AllocationFinderTest, ForwardAllocationMultipleUsesOneTarget) {
@@ -1848,9 +1860,9 @@ TEST_F(AllocationFinderTest, ForwardAllocationMultipleUsesOneTarget) {
   std::string hlo = R"(
 HloModule top
 Sum-reduction48 {
-  x.48.45 = f32[] parameter(0)
-  y.48.46 = f32[] parameter(1)
-  ROOT add.48.47 = f32[] add(x.48.45, y.48.46)
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT add = f32[] add(x, y)
 }
 
 ENTRY top {
@@ -1918,7 +1930,7 @@ ENTRY top {
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added one new entry for the bias add
-  EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 5);
 
   t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
   EXPECT_EQ(t.tgt, bn);
@@ -1939,13 +1951,25 @@ ENTRY top {
   EXPECT_EQ(t.backward_path[0], reshape2);
 
   auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
+  EXPECT_EQ(tensors_with_layout.size(), 7);
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape1, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape2, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
+
+  // The add in the reduce computation can also have a layout on either operand.
+  HloInstruction* x = FindInstruction(module0, "x");
+  HloInstruction* y = FindInstruction(module0, "y");
+  if (annotations.tensor_allocation_map.find(std::make_pair(x, 0)) ==
+      annotations.tensor_allocation_map.end()) {
+    EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
+              annotations.tensor_allocation_map.end());
+    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(y, 0)));
+  } else {
+    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(x, 0)));
+  }
 }
 
 TEST_F(AllocationFinderTest,
@@ -1955,9 +1979,9 @@ TEST_F(AllocationFinderTest,
   std::string hlo = R"(
 HloModule top
 Sum-reduction48 {
-  x.48.45 = f32[2] parameter(0)
-  y.48.46 = f32[2] parameter(1)
-  ROOT add.48.47 = f32[2] add(x.48.45, y.48.46)
+  x = f32[2] parameter(0)
+  y = f32[2] parameter(1)
+  ROOT add = f32[2] add(x, y)
 }
 
 ENTRY top {
@@ -2025,7 +2049,7 @@ ENTRY top {
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added two new entires for the layer norms.
-  EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 5);
 
   t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
   auto target_bn = t.tgt == bn1 ? bn1 : bn2;
@@ -2049,13 +2073,25 @@ ENTRY top {
   EXPECT_EQ(t.backward_path[0], reshape2);
 
   auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
+  EXPECT_EQ(tensors_with_layout.size(), 7);
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape1, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape2, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
+
+  // The add in the reduce computation can also have a layout on either operand.
+  HloInstruction* x = FindInstruction(module0, "x");
+  HloInstruction* y = FindInstruction(module0, "y");
+  if (annotations.tensor_allocation_map.find(std::make_pair(x, 0)) ==
+      annotations.tensor_allocation_map.end()) {
+    EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
+              annotations.tensor_allocation_map.end());
+    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(y, 0)));
+  } else {
+    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(x, 0)));
+  }
 }
 
 TEST_F(AllocationFinderTest,
@@ -2066,9 +2102,9 @@ TEST_F(AllocationFinderTest,
   std::string hlo = R"(
 HloModule top
 Sum-reduction48 {
-  x.48.45 = f32[2] parameter(0)
-  y.48.46 = f32[2] parameter(1)
-  ROOT add.48.47 = f32[2] add(x.48.45, y.48.46)
+  x = f32[2] parameter(0)
+  y = f32[2] parameter(1)
+  ROOT add = f32[2] add(x, y)
 }
 
 ENTRY top {
@@ -2134,7 +2170,7 @@ ENTRY top {
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added two new entires for the layer norms.
-  EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 5);
 
   t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
   // Layer norm has priority over elementwise ops.
@@ -2157,13 +2193,25 @@ ENTRY top {
   EXPECT_EQ(t.backward_path[0], reshape2);
 
   auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
+  EXPECT_EQ(tensors_with_layout.size(), 7);
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape1, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape2, 0)));
   EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
+
+  // The add in the reduce computation can also have a layout on either operand.
+  HloInstruction* x = FindInstruction(module0, "x");
+  HloInstruction* y = FindInstruction(module0, "y");
+  if (annotations.tensor_allocation_map.find(std::make_pair(x, 0)) ==
+      annotations.tensor_allocation_map.end()) {
+    EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
+              annotations.tensor_allocation_map.end());
+    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(y, 0)));
+  } else {
+    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(x, 0)));
+  }
 }
 
 TEST_F(AllocationFinderTest, ForwardAllocationElementwiseGetsALayout) {
@@ -2251,10 +2299,9 @@ ENTRY c1 {
   t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
   EXPECT_EQ(t.tgt, add);
   EXPECT_EQ(t.input_index, 0);
-  EXPECT_EQ(t.layout, conv);
+  EXPECT_EQ(t.layout, call);
   EXPECT_EQ(t.layout_output_idx, 0);
-  EXPECT_EQ(t.forward_path.size(), 1);
-  EXPECT_EQ(t.forward_path[0], call);
+  EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
   auto tensors_with_layout = annotations.tensors_with_layout;
@@ -2441,10 +2488,9 @@ ENTRY top {
   t = annotations.tensor_allocation_map.at(std::make_pair(ip4, 0));
   EXPECT_EQ(t.tgt, subtract);
   EXPECT_EQ(t.input_index, 1);
-  EXPECT_EQ(t.layout, bn);
-  EXPECT_EQ(t.layout_output_idx, 2);
-  EXPECT_EQ(t.forward_path.size(), 1);
-  EXPECT_EQ(t.forward_path[0], gte);
+  EXPECT_EQ(t.layout, gte);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
   auto tensors_with_layout = annotations.tensors_with_layout;
@@ -3520,10 +3566,9 @@ ENTRY cast3 (arg0.78.22: f32[1,4,4,2], arg1: f32[1,1,2,2], arg2: f32[2], arg3: f
   auto t = annotations.tensor_allocation_map.at(std::make_pair(p4, 0));
   EXPECT_EQ(t.tgt, subtract);
   EXPECT_EQ(t.input_index, 1);
-  EXPECT_EQ(t.layout, bn);
-  EXPECT_EQ(t.layout_output_idx, 2);
-  EXPECT_EQ(t.forward_path.size(), 1);
-  EXPECT_EQ(t.forward_path[0], gte);
+  EXPECT_EQ(t.layout, gte);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], cast_arg4);
 }
@@ -3572,10 +3617,9 @@ ENTRY cast4 {
 
   auto t = annotations.tensor_allocation_map.at(std::make_pair(e, 0));
   EXPECT_EQ(t.tgt, g_add);
-  EXPECT_EQ(t.forward_path.size(), 1);
+  EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], f_cast);
-  EXPECT_EQ(t.forward_path[0], d_conv_cast);
 }
 
 TEST_F(AllocationFinderTest, AllocationsWithIpuRemapDeduce) {

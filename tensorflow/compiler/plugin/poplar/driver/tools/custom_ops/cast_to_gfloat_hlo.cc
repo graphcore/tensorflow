@@ -194,7 +194,7 @@ uint64 HloCastNativeToGfloatInstruction::NumberOfInplaceOperands() const {
 }
 
 bool HloCastNativeToGfloatInstruction::IsPopOpsElementwise() const {
-  return true;
+  return false;
 }
 
 std::unique_ptr<HloInstruction>

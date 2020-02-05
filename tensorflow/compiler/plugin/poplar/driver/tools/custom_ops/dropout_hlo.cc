@@ -46,7 +46,7 @@ absl::flat_hash_map<int64, int64> HloDropoutInstruction::LayoutDependencies()
 
 uint64 HloDropoutInstruction::NumberOfInplaceOperands() const { return 0; }
 
-bool HloDropoutInstruction::IsPopOpsElementwise() const { return true; }
+bool HloDropoutInstruction::IsPopOpsElementwise() const { return false; }
 
 std::unique_ptr<HloInstruction> HloDropoutInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,

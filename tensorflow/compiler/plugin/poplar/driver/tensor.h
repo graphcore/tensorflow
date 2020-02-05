@@ -98,19 +98,19 @@ StatusOr<poplar::Tensor> AddPlainTensor(poplar::Graph& graph,
                                         CompilerResources& resources,
                                         bool offset = true);
 
-StatusOr<poplar::Tensor> AddNormScaleTensor(
-    poplar::Graph& graph, const std::string& debug_name,
-    const HloInstruction* layout, uint64 layout_output_idx,
-    const unsigned feature_dimension,
-    std::vector<const HloInstruction*> forward_path,
-    const TensorMap& tensor_map);
+StatusOr<poplar::Tensor> AddNormScaleTensor(poplar::Graph& graph,
+                                            const std::string& debug_name,
+                                            const HloInstruction* layout,
+                                            uint64 layout_output_idx,
+                                            const unsigned feature_dimension,
+                                            const TensorMap& tensor_map);
 
-StatusOr<poplar::Tensor> AddNormOffsetTensor(
-    poplar::Graph& graph, const std::string& debug_name,
-    const HloInstruction* layout, uint64 layout_output_idx,
-    const unsigned feature_dimension,
-    std::vector<const HloInstruction*> forward_path,
-    const TensorMap& tensor_map);
+StatusOr<poplar::Tensor> AddNormOffsetTensor(poplar::Graph& graph,
+                                             const std::string& debug_name,
+                                             const HloInstruction* layout,
+                                             uint64 layout_output_idx,
+                                             const unsigned feature_dimension,
+                                             const TensorMap& tensor_map);
 
 StatusOr<poplar::Tensor> CreateIndicesTensor(
     poplar::Graph& graph, const popops::SlicePlan& plan,
