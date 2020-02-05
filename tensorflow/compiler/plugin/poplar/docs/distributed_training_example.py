@@ -4,7 +4,9 @@ from __future__ import print_function
 
 import argparse
 import numpy as np
-import tensorflow as tf
+
+import tensorflow.compat.v1 as tf
+
 from tensorflow.python import ipu
 
 BATCH_SIZE = 64
