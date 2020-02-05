@@ -2,9 +2,6 @@
 # Python support for IPU.
 #
 
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
-load("@rules_cc//cc:defs.bzl", "cc_binary")
-
 package(
     default_visibility = ["//tensorflow:internal"],
     licenses = ["notice"],  # Apache 2.0
