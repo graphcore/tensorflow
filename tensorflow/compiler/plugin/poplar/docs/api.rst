@@ -41,13 +41,6 @@ Python API
 .. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
   :members: IPUMultiWorkerStrategy
 
-.. automodule:: tensorflow.python.ipu.keras.sequential
-.. autoclass:: Sequential
-  :members:
-
-.. automodule:: tensorflow.python.ipu.keras.layers
-  :members:
-
 .. automodule:: tensorflow.python.ipu.loops
   :members:
 
