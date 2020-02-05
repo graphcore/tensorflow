@@ -1,4 +1,5 @@
-# Template for the BUILD file for the generated poplar repository
+"""Template for the BUILD file for the generated poplar repository
+"""
 
 package(default_visibility = ["//visibility:public"])
 

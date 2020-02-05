@@ -1,4 +1,6 @@
 # Copyright 2017 Graphcore Ltd
+"""Helpers to generate Poplar BUILD files from templates
+"""
 
 def _poplar_autoconf_impl(repository_ctx):
     if not "TF_POPLAR_SANDBOX" in repository_ctx.os.environ and \

@@ -69,7 +69,7 @@ tf_proto_library(
 )
 
 xla_proto_library(
-    name = "backend_protos",
+    name = "xla_backend_protos",
     srcs = [
         "driver/backend_config.proto",
         "driver/poplar_executable.proto",
@@ -369,7 +369,6 @@ cc_library(
         "driver/tools/while_loop_util.h",
     ],
     deps = [
-        ":backend_protos",
         ":common",
         ":config_protos_cc_impl",
         ":custom_kernels_util",
@@ -377,6 +376,7 @@ cc_library(
         ":hash",
         ":option_flag_cc_impl",
         ":pipeline_config_cc_impl",
+        ":xla_backend_protos",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:call_inliner",
@@ -2216,10 +2216,10 @@ xla_test(
 
 xla_test(
     name = "pipeline_communication_optimizer_test",
+    size = "small",
     srcs = ["tests/pipeline_communication_optimizer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
-    size = "small",
     deps = [
         ":optimizers",
         "//tensorflow/compiler/xla/service:hlo_matchers",
