@@ -253,7 +253,8 @@ def _call_input_fn(input_fn, mode, params, config, input_context):
     kwargs["config"] = config
   if input_context and "input_context" in input_fn_args:
     kwargs["input_context"] = input_context
-  return input_fn(**kwargs)
+  with ops.device(_HOST_DEVICE):
+    return input_fn(**kwargs)
 
 
 def _validate_global_step_not_incremented():
@@ -504,8 +505,9 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
       # If there is a dependency on the `loss` calculated on
       # the IPU, they will be sequenced. Otherwise they might
       # run in parallel on the IPU and CPU.
-      train_op = _call_host_fn(self._captured_host_call_fn,
-                               self._received_host_call_args())
+      with ops.device(_HOST_DEVICE):
+        train_op = _call_host_fn(self._captured_host_call_fn,
+                                 self._received_host_call_args())
 
     return loss, train_op
 
@@ -547,15 +549,17 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
   def get_evaluation_loss_and_metrics(self, compiled_evaluation_loop):
     loss = compiled_evaluation_loop[0]
 
-    metrics = self._outfeed_queue.dequeue()
-    metric_ops = {}
-    for metric_name, metric_tensor in six.iteritems(metrics):
-      # For replicated graphs the tensor will have an additional replica
-      # dimension, so we reduce over this dimension (if it exists).
-      # TODO(hakons): mean is not always correct, e.g. for root_mean_squared_error
-      # Use no-op as the update_op since updating is done inside the loop.
-      metric_ops[metric_name] = (math_ops.reduce_mean(metric_tensor),
-                                 control_flow_ops.no_op())
+    with ops.device(_HOST_DEVICE):
+      metrics = self._outfeed_queue.dequeue()
+      metric_ops = {}
+      for metric_name, metric_tensor in six.iteritems(metrics):
+        # For replicated graphs the tensor will have an additional replica
+        # dimension, so we reduce over this dimension (if it exists).
+        # TODO(hakons): mean is not always correct, e.g. for
+        # root_mean_squared_error.
+        # Use no-op as the update_op since updating is done inside the loop.
+        metric_ops[metric_name] = (math_ops.reduce_mean(metric_tensor),
+                                   control_flow_ops.no_op())
 
     return loss, metric_ops
 
@@ -584,8 +588,9 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
     return prediction_loop
 
   def get_predictions(self, compiled_prediction_loop):
-    with ops.control_dependencies([compiled_prediction_loop]):
-      predictions = self._outfeed_queue.dequeue()
+    with ops.device(_HOST_DEVICE):
+      with ops.control_dependencies([compiled_prediction_loop]):
+        predictions = self._outfeed_queue.dequeue()
     return predictions
 
   def _call_model_fn(self, features, labels, mode):
@@ -618,8 +623,7 @@ def _call_host_fn(host_call_fn, host_call_args):
   assert host_call_fn is not None
   assert host_call_args is not None
 
-  with ops.device(_HOST_DEVICE):
-    ret = host_call_fn(*host_call_args)
+  ret = host_call_fn(*host_call_args)
 
   model_fn_lib._check_is_tensor_or_operation(  # pylint: disable=protected-access
       ret, "`host_call` return value")
