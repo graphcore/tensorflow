@@ -17,13 +17,11 @@ Targeting the IPU from TensorFlow
     poplar_ops
     perf_training
     troubleshooting
-    perf_training_example
     ipu_estimator_example
     ipu_pipeline_estimator_example
     distributed_training_example
     custom_codelet
     references
     api
-    build
     supported_ops
     legal

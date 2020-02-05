@@ -1,5 +1,5 @@
-Retrieving information about the Poplar compilation and execution
------------------------------------------------------------------
+Retrieving information about compilation and execution
+------------------------------------------------------
 
 When developing models for the IPU, it is important to be able to see how
 compute tiles are being utilized and what is the balance of the memory across
@@ -9,16 +9,15 @@ trace report that will disclose a number of different aspects of graph
 deployment to the IPU.
 
 Several mechanisms are available to retrieve trace information about the
-Poplar IPU compilation and executions.  Firstly, there are environment
-variables provided by Poplar itself to dump the compilation and execution
-reports into a file.  The Poplar documentation can give more information
-about these.
+Poplar IPU compilation and execution. Firstly, there are environment variables
+provided by Poplar itself to dump the compilation and execution reports into a
+file.  The Poplar documentation can give more information about these.
 
-Within TensorFlow, the basic steps for this are.
+Within TensorFlow, the basic steps for this are:
 
 * Include an operation in the graph that can retrieve reports
 * Enable tracing in the hardware configuration options
-* Execute a graph, including the operation to retrieve the reports
+* Execute the graph, including the operation to retrieve the reports
 * Extract the reports from the returned events
 
 Adding an operation to the graph to get compilation and execution events
@@ -29,10 +28,10 @@ is an operation which fetches the reporting events into a tensor, and is
 typically executed independently of the main graph.  The second is a summary
 event which will extract the reports along with any other summary events. These
 events will typically be written into a file using the
-tensorflow.summary.FileWriter class.
+``tensorflow.summary.FileWriter`` class.
 
-``ipu_event_trace()``
-_____________________
+ipu_event_trace()
+_________________
 
 This is an op which retrieves all IPU events since the last time it was
 executed. The operation must be placed on the CPU, and returns the events as a
@@ -47,22 +46,21 @@ create a trace report:
   :linenos:
 
 The example starts by importing two new elements that are IPU-specific APIs.
-The first import is *gen_ipu_ops*, which will generate the actual event trace,
-while the second import is an assortment of utility functions, a component of
-which will be used here to parse the event trace to a readable output.
+The first import is ``gen_ipu_ops``, which will generate the actual event trace.
+The second import is an assortment of utility functions, one of
+which is used here to parse the event trace to a readable output.
 
-The event trace operation is created when *gen_ipu_ops* is called to
-instantiate the trace and returns it to *report*. This is then fed to the
-TensorFlow session as a *run* argument, directly following the session run call
-to the feed-forward pass through *basic_graph*. In essence the report is
-generated based on the last session graph call. The trace output is then parsed
-through *extract_all_strings_from_event_trace*, and a log file is generated.
-The final component of writing the trace to an actual file is done near the end
-of the example where a file is opened, named and written to with the parsed
-trace data.
+The event trace operation is created when ``gen_ipu_ops`` is called to instantiate
+the trace and returns it to ``report``. This is then fed to the TensorFlow session
+as a ``run`` argument, directly following the session run call to the feed-forward
+pass through ``basic_graph``. In essence the report is generated based on the last
+session graph call. The trace output is then parsed through
+``extract_all_strings_from_event_trace``, and a log file is generated. The final
+step of writing the trace to a file is done near the end of the
+example where a file is opened and the parsed trace data written to it.
 
-``ipu_compile_summary(name, [op list])``
-________________________________________
+ipu_compile_summary(name, [op list])
+____________________________________
 
 This produces a summary, which can be tied into the rest of the summary system
 to produce output for Tensorboard. The parameter name is the name of the
@@ -98,56 +96,56 @@ The main function for producing an IPU system hardware configuration is called
 ``create_ipu_config``.  It provides several options for controlling the logging
 and tracing of Poplar compilations.
 
-``profiling``
-_____________
+profiling
+_________
 
 This enables compilation and execution graph reports in Poplar, and generates
 COMPILE_BEGIN and COMPILE_END events in the trace.
 
-``enable_ipu_events``
-_____________________
+enable_ipu_events
+_________________
 
 Setting this to True leaving ``profiling`` as False will generate trace events
 without setting the Poplar compilation and execution reports in them.  This is
 useful for getting timing information from the event trace without the overhead
 of the Poplar reporting.
 
-``use_poplar_text_report``
-__________________________
+use_poplar_text_report
+______________________
 
 Normally, the Poplar reports are generated in JSON format.  Setting this
 parameter to True will generate a text summary report instead of JSON.
 
-``use_poplar_cbor_report``
-__________________________
+use_poplar_cbor_report
+______________________
 
 Instead of a JSON format report, a CBOR format report will be generated.
 
-``profile_execution``
-_____________________
+profile_execution
+_________________
 
-When this is set to `True`, then EXECUTE events will be generated in addition
+When this is set to ``True``, then EXECUTE events will be generated in addition
 to compilation events.  By default the execution events will contain a
-`device` type trace.  If a different type of execution trace is required,
-then instead of `True`, one of `ExecutionProfileType.DEVICE_PROFILE`,
-`ExecutionProfileType.IPU_PROFILE` or `ExecutionProfileType.TILE_PROFILE`
+``device`` type trace.  If a different type of execution trace is required,
+then instead of ``True``, one of ``ExecutionProfileType.DEVICE_PROFILE``,
+``ExecutionProfileType.IPU_PROFILE`` or ``ExecutionProfileType.TILE_PROFILE``
 can be used.
 
-``report_every_nth_execution``
-______________________________
+report_every_nth_execution
+__________________________
 
 This will restrict the number of execution reports to a subset of all
 executions.
 
-``max_report_size``
-___________________
+max_report_size
+_______________
 
 Poplar reports can get very large.  This parameter can be used to restrict the
 maximum size of report generated.  Reports larger than this value will be
 discarded and a warning message sent to the TensorFlow log.
 
-``report_directory``
-____________________
+report_directory
+________________
 
 Rather than reports being placed directly into the events, they can be written
 to a file, and the filename written into the event log.  This behaviour is
@@ -159,14 +157,14 @@ Extract the reports from the returned events
 
 If the summary event generator has been used then the events will be inside
 Tensor type events in the Tensorboard logs.  A tool is available for extracting
-these all from the log.  This is available in the GraphCore Toolshed repository
+these all from the log.  This is available in the Graphcore Toolshed repository
 on GitHub.
 
 If the individual report gathering event is used then executing it will return
 an array of Tensors.  Within each Tensor is a string which is an IpuTraceEvent
 of one type.
 
-The IpuTraceEvent is within the Tensorflow namespace at
+The IpuTraceEvent is within the ``tensorflow`` namespace at
 ``tensorflow.compiler.plugin.poplar.driver.trace_pb2.IpuTraceEvent``.  It is
 a protobuf that can be decoded from the string into an object with fields
 containing trace information.
@@ -244,7 +242,7 @@ HLO instructions were mapped to Poplar API calls.  Its format is as follows.
   { 'ml_types': {'instruction': <ml_type>, ... } }
 
 The instruction is the name of the instruction at the HLO level, which
-is similar to the name in the main compilation report.  The `ml_type` field
+is similar to the name in the main compilation report.  The ``ml_type`` field
 takes one of the following values, for instructions which are convolution or
 matmul.
 
@@ -261,29 +259,37 @@ _______
 This event contains the Poplar execution report in the ``execution_report``
 field.
 
-Using the IPU_MODEL device
+.. _using_the_ipu_model:
+
+Using the IPU Model device
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When there is an out of memory situation, it is useful to do the compilation
-using the IPU_MODEL device. Consider the situation in which the event trace is
+If you encounter an out of memory error, it is useful to do the compilation
+using the IPU Model device to enable more debugging of the problem.
+
+Consider the situation in which the event trace is
 being monitored to investigate a graph that creates a tile memory imbalance. In
 those instances, running on the IPU will lead to an out of memory exception
 before the actual report is generated, and so it is important to target the
-*IPU_MODEL* over actual hardware. *IPU_MODEL* is an emulator that mimics the
-IPU computational framework on the host device. It is functionally equivalent
-to the IPU, but obviously the compute timings will be completely different.
-There are a number of ways to target *IPU_MODEL*, but let's assume the previous
-code is in the active current directory, and all the pertinent library
-variables required by the IPU are set correctly. At the terminal command line,
-one could then type:
+IPU Model instead of actual hardware.
+
+.. TODO what are the "relevant library variables"?
+
+The IPU Model is an emulator that mimics the IPU
+computational framework on the host device. It is functionally equivalent to the
+IPU, but obviously the compute timings will be completely different. There are a
+number of ways to target the IPU Model, but let's assume the previous code is in
+the active current directory, and all the relevant library variables required
+by the IPU are set correctly.
+
+At the terminal command line, one could then type:
 
 .. code-block:: console
-
 
     $ TF_POPLAR_FLAGS="--use_ipu_model" python basic_graph.py
 
 
-See the :ref:`env-var-section` for details about the *TF_POPLAR_FLAGS*
+See the :ref:`env-var-section` for details about the ``TF_POPLAR_FLAGS``
 environment variable.
 
 .. code-block:: text
@@ -291,9 +297,9 @@ environment variable.
     ...] Device /device:IPU:0 attached to IPU: 0
 
 
-where the *Device /device:IPU:0 attached to IPU: 0* indicates that the device
-known to TensorFlow as */device:IPU:0* is IPU 0.  The numbering of IPUs in your
-machine can be found by using the `gc-info -l` command.
+where the "Device /device:IPU:0 attached to IPU: 0" indicates that the device
+known to TensorFlow as "/device:IPU:0" is IPU 0.  The numbering of IPUs in your
+machine can be found by using the ``gc-info -l`` command.
 
 TensorFlow options for reporting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -301,10 +307,10 @@ TensorFlow options for reporting
 Some tracing and reporting options are provided by TensorFlow as standard, and
 can be useful when developing graphs for the IPU.
 
-`TF_CPP_MIN_VLOG_LEVEL` is an environment variable that enables the logging of
+``TF_CPP_MIN_VLOG_LEVEL`` is an environment variable that enables the logging of
 the main C++ backend.  Setting `TF_CPP_MIN_VLOG_LEVEL=1` will show a lot of
 output.  Included in this is the compilation and execution of the IPU code.
-The output of `TF_CPP_MIN_VLOG_LEVEL` can be overwhelming. `TF_CPP_VMODULE`
+The output of ``TF_CPP_MIN_VLOG_LEVEL`` can be overwhelming. ``TF_CPP_VMODULE``
 provides a mechanism to reduce the logging to certain translation units (source
 files).  This combination is quite useful:
 
@@ -312,35 +318,33 @@ files).  This combination is quite useful:
 
   TF_CPP_VMODULE='poplar_compiler=1,poplar_executable=1'
 
-Finally, there is an environment variable called `XLA_FLAGS` which provides
-options to the general XLA back end.
-
-A useful pair of flags will produce a Graphviz DOT file of the optimized HLO
+Finally, there is an environment variable called ``XLA_FLAGS`` which provides
+options to the general XLA backend. For example, the follow will produce a Graphviz DOT file of the optimized HLO
 graph which is passed to the Poplar compiler.
 
 .. code-block:: python
 
   XLA_FLAGS='--xla_dump_to=. --xla_dump_hlo_as_dot --xla_dump_hlo_pass_re=forward-allocation --xla_hlo_graph_sharding_color'
 
-The HLO pass `forward-allocation` is the final pass to run before the HLO
-instructions are scheduled for passing to the Poplar graph compiler. A file
+The HLO pass ``forward-allocation`` is the final pass to run before the HLO
+instructions are scheduled for passing to the Poplar graph compiler.
+Running with these options will create a file
 called something like
-`module_0001.0001.IPU.after_forward-allocation.before_hlo-memory-scheduler.dot`
-will be produced.  Graphviz `dot` can be used to turn this into an image.
+``module_0001.0001.IPU.after_forward-allocation.before_hlo-memory-scheduler.dot``.
+The Graphviz ``dot`` command can be used to convert this to an image.
 
 Reading the Poplar textual summary report
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If the example code is run, a new file is generated called
-*Trace_Event_Report.rep*. This is the Poplar compilation report. The report is
-broken into a number of sections, but the three that will be focused on here
-are the first three: *Target*, *Graph*, and *Memory Usage*.
+``Trace_Event_Report.rep``. This is the Poplar compilation report. The report is
+broken into a number of sections, but here, we will focus on
+the first three: **Target**, **Graph**, and **Memory Usage**.
 
-*Target* describes the target hardware, where in absence of sharding, will be a
+**Target** describes the target hardware, where in absence of sharding, will be a
 single IPU, for instance:
 
 .. code-block:: text
-
 
     Target:
       Number of IPUs:         1
@@ -352,10 +356,10 @@ single IPU, for instance:
 
 
 It is important to note that this section of the report does not distinguish
-between hardware or *IPU_MODEL*, and in essence it is only dependent on the
+between hardware or the IPU Model, and in essence it is only dependent on the
 number of IPUs selected for deployment via the sharding utility.
 
-The next section is *Graph*, which describes the topology of the deployed
+The next section is **Graph**, which describes the topology of the deployed
 graph.
 
 For instance:
@@ -369,12 +373,13 @@ For instance:
       Number of variables:          30,562
       Number of compute sets:            4
 
+You may see different numbers, depending on the version of the software.
 
 This is from the report generated by the adder example. The graph map includes
 control code, not just compute graph components. Note that the number of
-vertices in the graph is suspiciously close to the *1,216* tiles on the IPU.
+vertices in the graph is suspiciously close to the 1,216 tiles on the IPU.
 
-The *Memory Usage* section gives the memory consumption profile of the graph
+The **Memory Usage** section gives the memory consumption profile of the graph
 from a number of different perspectives:
 
 .. code-block:: text
@@ -431,7 +436,7 @@ from a number of different perspectives:
 
 The information is presented in distinct sections, where first is the total
 memory usage including gaps. This is followed by a breakdown of the
-gap-excluding memory: first in terms of interleaved vs non-interleaved usage,
+gap-excluding memory: first in terms of interleaved and non-interleaved usage,
 then by data type, followed by vertex data.
 
 A useful portion of the report is the tile histogram memory consumption
@@ -472,14 +477,15 @@ histogram produced may look more like:
         2 tile(s) out of memory
 
 
-In this case, two tiles are out of physical memory, while most of the
-allocation is well within single tile budget. In those instances where
-a memory imbalance occurs, the report will produce a detailed depiction
-of the operations running on five of the most memory-subscribed tiles,
-(regardless if they are over their physical limit or not), and list them
-in descending order in terms of memory consumption. In the above case,
-Tile *0* is the most overly-subscribed tile, and the report produces the
-following:
+In this case, two tiles are out of physical memory, while most of the allocation
+is well within the single tile budget. In those instances where a memory imbalance
+occurs, the report will produce a detailed description of the operations running
+on five of the most memory-subscribed tiles (regardless of whether they are over their
+physical limit or not) and list them in descending order of memory
+consumption.
+
+In the above case, tile 0 is the most over-subscribed tile, and
+the report produces the following:
 
 .. code-block:: text
 
@@ -534,41 +540,40 @@ over-allocation.
 Producing an ELF image of the compilation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-There is another method to produce much of the same detailed operational
-perspectives given in the trace event report, but using a very different
-approach. In this second paradigm, the intent is to target IPU hardware, not an
-emulator run on host, and use an ELF binary file created at compile time to
-review the memory allocation. This second technique will be reviewed in more
-concise fashion here, (only exploring how the actual binary is created and
-memory-per-tile information extracted).
+There is another method to produce much of the same detailed information
+provided in the trace event report.
+This generates code for IPU hardware (not an
+emulator on the host) and then extracts the memory allocation information from the
+generated ELF object file created at compile time. This technique will be described
+briefly here, only showing how the object file is created and
+memory-per-tile information extracted.
 
 When compiling the graph, a Poplar engine option can be used to dump the ELF
 file to a specified location.
 
 .. code-block:: bash
 
-
     POPLAR_ENGINE_OPTIONS='{"target.saveArchive":"binaries.a", "debug.allowOutOfMemory": "true"}' python basic_graph.py
 
 
-The file *binaries.a* is created which is a bit-code file of the deployed
-graph. To extract size information from it type the following:
+The file ``binaries.a`` is created, which is an archive file of the compiled graph.
+To extract the memory size information from it run the following command:
 
 .. code-block:: console
 
     $ size -A binaries.a > tiles_elf.txt
 
 This pipes a tile-by-tile rendition of the memory consumed in bytes to the file
-*tiles_elf.txt*. All the memory allocated is part of the *text* section.
-This can be extracted from the tiles elf files to produce a single column where
-each entry is the size of the *text* section corresponding to a tile:
+``tiles_elf.txt``. All of the memory allocated is part of the text section.
+This can be extracted from the tiles' ELF files to produce a single column where each entry
+is the size of the text section corresponding to a tile:
 
 .. code-block:: console
 
     $ size -A binaries.a | grep -e ".text" | awk '{print $2}' > memory_usage_per_tile.txt
 
-The file *memory_usage_per_tile.txt* will contain this single column of memory
-allocation. Further facets of the deployed graph can be extracted from this
+The file ``memory_usage_per_tile.txt`` will contain this memory
+allocation information. Further details of the deployed graph can be extracted with this
 approach.
 
 Dumping auxiliary Poplar information
@@ -584,7 +589,7 @@ The Poplar vertex graph is a DOT file containing a complete description of the
 lowered Poplar graph.  Each node in the graph represents one vertex in the
 Poplar graph operating on one region of a tensor.
 
-It can be used for generating a GraphCore circular graph image.
+It can be used for generating a Graphcore circular graph image.
 
 Poplar interval report
 ______________________
@@ -592,9 +597,7 @@ ______________________
 The interval report is a CSV file describing the number of tiles executing,
 exchanging and syncing on each instruction cycle.
 
-It can be used for generating a GraphCore linear activity diagram.
-
+It can be used for generating a Graphcore linear activity diagram.
 
 The :ref:`env-var-section` describes how to set the environment flags
 correctly.
-
