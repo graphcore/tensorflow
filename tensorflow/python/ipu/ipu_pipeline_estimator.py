@@ -30,6 +30,8 @@ from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.util import function_utils
 
+_HOST_DEVICE = ipu_estimator._HOST_DEVICE  # pylint: disable=protected-access
+
 
 class IPUPipelineEstimatorSpec(
     collections.namedtuple('IPUPipelineEstimatorSpec', [
@@ -142,11 +144,13 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
     return training_pipeline
 
   def get_training_loss_and_op(self, compiled_training_loop):
-    with ops.control_dependencies([compiled_training_loop]):
-      loss = self._outfeed_queue.dequeue()
+    with ops.device(_HOST_DEVICE):
+      with ops.control_dependencies([compiled_training_loop]):
+        loss = self._outfeed_queue.dequeue()
 
-    # Reduce loss over all dimensions (i.e. batch_size, pipeline_depth)
-    loss = math_ops.reduce_mean(loss)
+      # Reduce loss over all dimensions (i.e. batch_size, pipeline_depth)
+      loss = math_ops.reduce_mean(loss)
+
     train_op = compiled_training_loop
 
     return loss, train_op
@@ -172,10 +176,10 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
     return evaluation_pipeline
 
   def get_evaluation_loss_and_metrics(self, compiled_evaluation_loop):
-    with ops.control_dependencies([compiled_evaluation_loop]):
-      inputs = self._outfeed_queue.dequeue()
+    with ops.device(_HOST_DEVICE):
+      with ops.control_dependencies([compiled_evaluation_loop]):
+        inputs = self._outfeed_queue.dequeue()
 
-    with ops.device(ipu_estimator._HOST_DEVICE):  # pylint: disable=protected-access
       metrics = self._captured_eval_metrics_fn(*inputs)
 
     if not isinstance(metrics, dict):
@@ -207,8 +211,9 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
     return prediction_pipeline
 
   def get_predictions(self, compiled_prediction_loop):
-    with ops.control_dependencies([compiled_prediction_loop]):
-      predictions = self._outfeed_queue.dequeue()
+    with ops.device(_HOST_DEVICE):
+      with ops.control_dependencies([compiled_prediction_loop]):
+        predictions = self._outfeed_queue.dequeue()
 
     if isinstance(predictions, dict):
       return predictions

@@ -89,7 +89,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     IPUMultiWorkerStrategyTest.collective_key_base += 100000
     super(IPUMultiWorkerStrategyTest, self).setUp()
 
-  def _create_test_objects(self, task_type, task_id):
+  def _create_test_objects(self, task_type, task_id, variables_on_host=True):
     sess_config = config_pb2.ConfigProto()
     sess_config.allow_soft_placement = False
     sess_config.log_device_placement = False
@@ -101,7 +101,8 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     target = cluster_resolver.master(task_id=task_id,
                                      task_type=task_type,
                                      rpc_layer="grpc")
-    strategy = IPUMultiWorkerStrategy(cluster_resolver)
+    strategy = IPUMultiWorkerStrategy(cluster_resolver,
+                                      variables_on_host=variables_on_host)
     sess_config = strategy.update_config_proto(sess_config)
 
     collective_keys = cross_device_utils.CollectiveKeys(
@@ -114,6 +115,15 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     strategy.extended._cross_device_ops._collective_keys = collective_keys
 
     return strategy, target, sess_config
+
+  def _get_devices(self, task_type, task_id):
+    cpu_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
+        task_type, task_id)
+
+    ipu_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
+        task_type, task_id)
+
+    return cpu_device, ipu_device
 
   def test_strategy_first_worker(self):
     strategy, _, _ = self._create_test_objects(task_type="worker", task_id=0)
@@ -131,14 +141,63 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     self.assertEqual(False, strategy.extended.should_checkpoint)
     self.assertEqual(False, strategy.extended.should_save_summary)
 
+  def _test_variables_on_host(self, task_type, task_id, _num_gpus):
+    strategy, _, _ = self._create_test_objects(task_type,
+                                               task_id,
+                                               variables_on_host=True)
+    cpu_device, ipu_device = self._get_devices(task_type, task_id)
+
+    with strategy.scope():
+
+      v = variables.Variable(1.0)
+      self.assertEqual(cpu_device, v.device)
+
+      def per_replica_fn():
+        w = variable_scope.get_variable(name="w", initializer=0.0)
+        self.assertEqual(cpu_device, w.device)
+        op = math_ops.abs(w)
+        self.assertEqual(ipu_device, op.device)
+        return op
+
+      per_replica_op = strategy.experimental_run_v2(per_replica_fn)
+      self.assertEqual(ipu_device, per_replica_op.device)
+
+  def test_variables_on_host(self):
+    self._run_between_graph_clients(self._test_variables_on_host,
+                                    self._cluster_spec,
+                                    num_gpus=0)
+
+  def _test_variables_on_ipu(self, task_type, task_id, _num_gpus):
+    strategy, _, _ = self._create_test_objects(task_type,
+                                               task_id,
+                                               variables_on_host=False)
+    _, ipu_device = self._get_devices(task_type, task_id)
+
+    with strategy.scope():
+
+      v = variables.Variable(1.0)
+      self.assertEqual(ipu_device, v.device)
+
+      def per_replica_fn():
+        w = variable_scope.get_variable(name="w", initializer=0.0)
+        self.assertEqual(ipu_device, w.device)
+        op = math_ops.abs(w)
+        self.assertEqual(ipu_device, op.device)
+        return op
+
+      per_replica_op = strategy.experimental_run_v2(per_replica_fn)
+      self.assertEqual(ipu_device, per_replica_op.device)
+
+  def test_variables_on_ipu(self):
+    self._run_between_graph_clients(self._test_variables_on_ipu,
+                                    self._cluster_spec,
+                                    num_gpus=0)
+
   def _test_all_reduce(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
-    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
-        task_type, task_id)
-    compute_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
-        task_type, task_id)
+    variable_device, compute_device = self._get_devices(task_type, task_id)
 
     with strategy.scope():
 
@@ -168,10 +227,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
-    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
-        task_type, task_id)
-    compute_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
-        task_type, task_id)
+    variable_device, compute_device = self._get_devices(task_type, task_id)
 
     with strategy.scope():
 
@@ -206,10 +262,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
-    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
-        task_type, task_id)
-    compute_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
-        task_type, task_id)
+    variable_device, compute_device = self._get_devices(task_type, task_id)
 
     with strategy.scope():
 
@@ -247,10 +300,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
-    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
-        task_type, task_id)
-    compute_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
-        task_type, task_id)
+    variable_device, compute_device = self._get_devices(task_type, task_id)
 
     with strategy.scope():
       learning_rate = 0.5
@@ -280,11 +330,13 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         with ops.name_scope("apply_gradients"):
           grads_and_vars = zip(grads, variables.global_variables())
           train_op = optimizer.apply_gradients(grads_and_vars)
+          self.assertEqual(variable_device, train_op.device)
           return train_op
 
       def step_fn(inputs):
         grads, loss = compiled_device_step_fn(inputs)
-        train_op = host_step_fn(grads)
+        with ops.device("/device:CPU:0"):
+          train_op = host_step_fn(grads)
         return train_op, loss
 
       inputs = array_ops.placeholder(dtype=np.float32, shape=())
@@ -319,10 +371,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
-    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
-        task_type, task_id)
-    compute_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
-        task_type, task_id)
+    variable_device, compute_device = self._get_devices(task_type, task_id)
 
     with strategy.scope():
       learning_rate = 0.5
@@ -371,12 +420,11 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
                                     self._cluster_spec,
                                     num_gpus=0)
 
-  def _test_slot_variable_placement(self, task_type, task_id, _num_gpus):
+  def _test_slot_variable_on_host(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
         task_type=task_type, task_id=task_id)
 
-    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
-        task_type, task_id)
+    variable_device, _ = self._get_devices(task_type, task_id)
 
     with strategy.scope():
       optimizer = MomentumOptimizer(learning_rate=0.5, momentum=0.9)
@@ -402,8 +450,43 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
         _, loss_val = sess.run([train_op, total_loss], feed_dict={inputs: 1.0})
         self.assertEqual(2.0, loss_val)
 
-  def test_slot_variable_placement(self):
-    self._run_between_graph_clients(self._test_slot_variable_placement,
+  def test_slot_variable_on_host(self):
+    self._run_between_graph_clients(self._test_slot_variable_on_host,
+                                    self._cluster_spec,
+                                    num_gpus=0)
+
+  def _test_slot_variable_on_ipu(self, task_type, task_id, _num_gpus):
+    strategy, target, sess_config = self._create_test_objects(
+        task_type=task_type, task_id=task_id, variables_on_host=False)
+
+    _, ipu_device = self._get_devices(task_type, task_id)
+
+    with strategy.scope():
+      optimizer = MomentumOptimizer(learning_rate=0.5, momentum=0.9)
+
+      def step_fn(x):
+        with ipu_scope("/device:IPU:0"):
+          w = variable_scope.get_variable(name="w", initializer=1.0)
+          loss = w * x
+          train_op = optimizer.minimize(loss)
+          return train_op, loss
+
+      inputs = array_ops.placeholder(dtype=np.float32, shape=())
+      train_op, per_replica_loss = strategy.experimental_run_v2(step_fn,
+                                                                args=[inputs])
+      total_loss = strategy.reduce(ReduceOp.SUM, per_replica_loss, axis=None)
+
+      # Verify device placement of momentum accumulator variable.
+      self.assertEqual(1, len(optimizer.variables()))
+      self.assertEqual(ipu_device, optimizer.variables()[0].device)
+
+      with session_lib.Session(target=target, config=sess_config) as sess:
+        sess.run(variables.global_variables_initializer())
+        _, loss_val = sess.run([train_op, total_loss], feed_dict={inputs: 1.0})
+        self.assertEqual(2.0, loss_val)
+
+  def test_slot_variable_on_ipu(self):
+    self._run_between_graph_clients(self._test_slot_variable_on_ipu,
                                     self._cluster_spec,
                                     num_gpus=0)
 
@@ -513,6 +596,7 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       return dataset
 
     config = ipu_run_config.RunConfig(
+        session_config=config_pb2.ConfigProto(allow_soft_placement=False),
         master=target,
         train_distribute=strategy,
     )
@@ -538,12 +622,9 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
 
   def _test_batch_normalization(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
-        task_type=task_type, task_id=task_id)
+        task_type=task_type, task_id=task_id, variables_on_host=True)
 
-    variable_device = "/job:{}/replica:0/task:{}/device:CPU:0".format(
-        task_type, task_id)
-    compute_device = "/job:{}/replica:0/task:{}/device:IPU:0".format(
-        task_type, task_id)
+    variable_device, compute_device = self._get_devices(task_type, task_id)
 
     with strategy.scope():
       batch_norm = BatchNormalization(momentum=0.0)
@@ -651,9 +732,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     for p in processes:
       self.assertEqual(0, p.exitcode)
 
-  def _create_test_objects(self, start_server=True):
+  def _create_test_objects(self, start_server=True, variables_on_host=True):
     cluster_resolver = TFConfigClusterResolver()
-    strategy = IPUMultiWorkerStrategy(cluster_resolver)
+    strategy = IPUMultiWorkerStrategy(cluster_resolver,
+                                      variables_on_host=variables_on_host)
 
     sess_config = config_pb2.ConfigProto()
     sess_config.allow_soft_placement = False
@@ -705,9 +787,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
                                    cluster_spec)
 
   def _test_optimizer_in_compiled_cluster(self, _task_id):
-    strategy, target, sess_config = self._create_test_objects()
-
-    strategy.extended.experimental_allow_variable_placement()
+    strategy, target, sess_config = self._create_test_objects(
+        variables_on_host=False)
 
     x = 1.5
     initial_w = 2.0
@@ -722,8 +803,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         return optimizer.minimize(loss)
 
       def compiled_fn():
-        with ipu_scope("/device:IPU:0"):
-          return ipu_compiler.compile(device_fn, inputs=[x])
+        return ipu_compiler.compile(device_fn, inputs=[x])
 
       train_op = strategy.experimental_run_v2(compiled_fn, args=[])
 
@@ -746,9 +826,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
                                    cluster_spec)
 
   def _test_pipelining(self, task_id):
-    strategy, target, sess_config = self._create_test_objects()
-
-    strategy.extended.experimental_allow_variable_placement()
+    strategy, target, sess_config = self._create_test_objects(
+        variables_on_host=False)
 
     cpu_device = "/job:worker/replica:0/task:{}/device:CPU:0".format(task_id)
     ipu_device = "/job:worker/replica:0/task:{}/device:IPU:0".format(task_id)
@@ -803,8 +882,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         return pipeline_op
 
       def compiled_model():
-        with ops.device("/device:IPU:0"):
-          return ipu_compiler.compile(model, inputs=[])
+        return ipu_compiler.compile(model, inputs=[])
 
       train_op = strategy.experimental_run_v2(compiled_model, args=[])
       config = ipu_utils.create_ipu_config()
@@ -867,9 +945,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
   def _test_ipu_pipeline_estimator(self, task_id):
     # The estimator library starts the server when configured in TF_CONFIG.
-    strategy, _, _ = self._create_test_objects(start_server=False)
-
-    strategy.extended.experimental_allow_variable_placement()
+    strategy, _, _ = self._create_test_objects(start_server=False,
+                                               variables_on_host=False)
 
     ipu_device = "/job:worker/replica:0/task:{}/device:IPU:0".format(task_id)
 
@@ -924,6 +1001,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
                                              num_ipus=num_ipus_in_pipeline)
 
     config = ipu_run_config.RunConfig(
+        session_config=config_pb2.ConfigProto(allow_soft_placement=False),
         train_distribute=strategy,
         save_summary_steps=1,
         ipu_run_config=ipu_run_config.IPURunConfig(
