@@ -131,6 +131,8 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
   const auto is_node_ok_on_path = [path, source](HloInstruction* inst,
                                                  const unsigned path_idx,
                                                  const unsigned path_size) {
+    const HloInstruction* op_source =
+        (path_idx == 0) ? source : path[path_idx - 1];
     // Element-wise ops are ok.
     if (IsPopOpsElementwise(inst)) {
       if (inst->opcode() == HloOpcode::kConvert) {
@@ -142,6 +144,10 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
     if (IsPopOpsFusion(inst, "zero_pad")) {
       return output_and_all_operands_same_type(inst);
     }
+    if (IsPopOpsFusion(inst, "implicit")) {
+      return output_and_all_operands_same_type(inst) &&
+             op_source->shape() == inst->shape();
+    }
     switch (inst->opcode()) {
       case HloOpcode::kConcatenate:
       case HloOpcode::kReshape:
@@ -149,8 +155,6 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
         return output_and_all_operands_same_type(inst);
       case HloOpcode::kPad: {
         // Only handle operand 0
-        const HloInstruction* op_source =
-            (path_idx == 0) ? source : path[path_idx - 1];
         return inst->operand_index(op_source) == 0 &&
                output_and_all_operands_same_type(inst);
       }
@@ -171,8 +175,8 @@ static absl::optional<int64> IsSuffixPathOk(
   const auto is_node_ok_on_path = [](HloInstruction* inst,
                                      const unsigned path_idx,
                                      const unsigned path_size) {
-    // Element-wise ops are ok.
-    if (IsPopOpsElementwise(inst)) {
+    // Element-wise and bias ops are ok.
+    if (IsPopOpsElementwise(inst) || IsPopOpsBiasAdd(inst)) {
       if (inst->opcode() == HloOpcode::kConvert) {
         return true;
       } else {
@@ -206,7 +210,7 @@ static absl::optional<int64> IsSuffixPathOk(
 // requires us to be able to access a tensor and the corresponding
 // HloInstruction which created another input.
 static bool IsLayoutSensitiveTarget(const HloInstruction* target) {
-  return IsPopOpsElementwiseBinary(target);
+  return IsPopOpsBiasAdd(target);
 }
 
 // An operation is layout dependent if the allocation of one of its inputs
@@ -214,6 +218,9 @@ static bool IsLayoutSensitiveTarget(const HloInstruction* target) {
 // sensitive target, we do not need the access to the instruction which created
 // the tensor on which we depend on.
 static bool IsLayoutDependentTarget(const HloInstruction* target) {
+  if (IsPopOpsElementwiseBinary(target)) {
+    return true;
+  }
   switch (target->opcode()) {
     case HloOpcode::kBatchNormInference:
     case HloOpcode::kBatchNormTraining:
@@ -237,10 +244,8 @@ static absl::optional<int64> GetLayoutSensitiveOperandIndex(
     const HloInstruction* target, const HloInstruction* operand,
     const HloInstruction* layout_producer) {
   const auto op_idx = target->operand_index(operand);
-  // Some PopOps elementwise binary ops have more than two inputs (for example
-  // scaled inplace with a scalar) - we make sure that we only target the first
-  // two operands.
-  if (IsPopOpsElementwiseBinary(target) && op_idx < 2) {
+  if (IsPopOpsBiasAdd(target)) {
+    CHECK_LT(op_idx, 2);
     return op_idx;
   }
   return absl::nullopt;
@@ -249,6 +254,14 @@ static absl::optional<int64> GetLayoutSensitiveOperandIndex(
 static absl::optional<std::pair<int64, int64>> GetLayoutDependentOperandIndices(
     const HloInstruction* target, const HloInstruction* operand) {
   const auto op_idx = target->operand_index(operand);
+
+  // Some PopOps elementwise binary ops have more than two inputs (for example
+  // scaled inplace with a scalar) - we make sure that we only target the first
+  // two operands.
+  if (IsPopOpsElementwiseBinary(target) && op_idx < 2) {
+    return std::make_pair(op_idx, (op_idx + 1) % 2);
+  }
+
   switch (target->opcode()) {
     case HloOpcode::kBatchNormInference:
     case HloOpcode::kBatchNormTraining:
@@ -503,15 +516,14 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
   const auto get_source_consumers = [is_layout_producer, layout_producing_ops,
                                      alloc_dependencies,
                                      g](HloInstruction* inst) {
-    return g.FindConsumers(
-        inst,
-        [is_layout_producer, layout_producing_ops,
-         alloc_dependencies](HloInstruction* inst) {
-          return !is_layout_producer(inst) &&
-                 !alloc_dependencies.contains(inst) &&
-                 !layout_producing_ops.contains(inst);
-        },
-        true);
+    return g.FindConsumers(inst,
+                           [is_layout_producer, layout_producing_ops,
+                            alloc_dependencies](HloInstruction* inst) {
+                             return !is_layout_producer(inst) &&
+                                    !alloc_dependencies.contains(inst) &&
+                                    !layout_producing_ops.contains(inst);
+                           },
+                           true);
   };
   const MetaGraph<HloInstruction*> source_consumers(source_ops,
                                                     get_source_consumers);
@@ -621,8 +633,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
 
   // Get everything that depends on a source op
   const auto get_source_consumers = [g](HloInstruction* inst) {
-    return g.FindConsumers(
-        inst, [](HloInstruction*) { return true; }, true);
+    return g.FindConsumers(inst, [](HloInstruction*) { return true; }, true);
   };
   const MetaGraph<HloInstruction*> source_consumers(source_ops,
                                                     get_source_consumers);

@@ -779,12 +779,12 @@ static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
   return result.dimShuffle(ToUnsignedVector(permutations));
 }
 
-StatusOr<poplar::Tensor> AddNormScaleTensor(
-    poplar::Graph& graph, const std::string& debug_name,
-    const HloInstruction* layout, uint64 layout_output_idx,
-    const unsigned feature_dimension,
-    std::vector<const HloInstruction*> forward_path,
-    const TensorMap& tensor_map) {
+StatusOr<poplar::Tensor> AddNormScaleTensor(poplar::Graph& graph,
+                                            const std::string& debug_name,
+                                            const HloInstruction* layout,
+                                            uint64 layout_output_idx,
+                                            const unsigned feature_dimension,
+                                            const TensorMap& tensor_map) {
   OutVector outputs = FindInstructionOutputs(tensor_map, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
@@ -795,19 +795,15 @@ StatusOr<poplar::Tensor> AddNormScaleTensor(
 
   poplar::Tensor acts = outputs[layout_output_idx];
   auto shuffled = ShuffleNormInputToPoplar(acts, feature_dimension);
-
-  TF_ASSIGN_OR_RETURN(acts,
-                      ReversePathTransform(graph, shuffled, forward_path));
-
-  return poplin::createNormGamma(graph, acts);
+  return poplin::createNormGamma(graph, shuffled);
 }
 
-StatusOr<poplar::Tensor> AddNormOffsetTensor(
-    poplar::Graph& graph, const std::string& debug_name,
-    const HloInstruction* layout, uint64 layout_output_idx,
-    const unsigned feature_dimension,
-    std::vector<const HloInstruction*> forward_path,
-    const TensorMap& tensor_map) {
+StatusOr<poplar::Tensor> AddNormOffsetTensor(poplar::Graph& graph,
+                                             const std::string& debug_name,
+                                             const HloInstruction* layout,
+                                             uint64 layout_output_idx,
+                                             const unsigned feature_dimension,
+                                             const TensorMap& tensor_map) {
   OutVector outputs = FindInstructionOutputs(tensor_map, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
@@ -818,17 +814,12 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
 
   poplar::Tensor acts = outputs[layout_output_idx];
   auto shuffled = ShuffleNormInputToPoplar(acts, feature_dimension);
-
-  TF_ASSIGN_OR_RETURN(acts,
-                      ReversePathTransform(graph, shuffled, forward_path));
-
-  return poplin::createNormBeta(graph, acts);
+  return poplin::createNormBeta(graph, shuffled);
 }
 
 static StatusOr<poplar::Tensor> AddElementwiseBinary(
     poplar::Graph& graph, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
-    std::vector<const HloInstruction*> forward_path,
     const TensorMap& tensor_map) {
   OutVector outputs = FindInstructionOutputs(tensor_map, layout);
 
@@ -839,10 +830,6 @@ static StatusOr<poplar::Tensor> AddElementwiseBinary(
   }
 
   poplar::Tensor other_side = outputs[layout_output_idx];
-
-  TF_ASSIGN_OR_RETURN(other_side,
-                      ReversePathTransform(graph, other_side, forward_path));
-
   return graph.clone(other_side, debug_name);
 }
 
@@ -866,11 +853,10 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
   const auto optional_layout_output_idx = tensor_target.layout_output_idx;
   const auto forward_path = tensor_target.forward_path;
 
-  if (IsPopOpsElementwiseBinary(target) && !IsPopOpsBiasAdd(target)) {
+  if (IsPopOpsElementwiseBinary(target)) {
     TF_ASSIGN_OR_RETURN(
         out, AddElementwiseBinary(graph, debug_name, *optional_layout,
-                                  *optional_layout_output_idx, forward_path,
-                                  tensor_map));
+                                  *optional_layout_output_idx, tensor_map));
   } else {
     const std::string error_msg =
         absl::StrCat("Invalid operand for tensor allocation on ", debug_name);
@@ -884,16 +870,14 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
             TF_ASSIGN_OR_RETURN(
                 out, AddNormScaleTensor(graph, debug_name, *optional_layout,
                                         *optional_layout_output_idx,
-                                        feature_dimension, forward_path,
-                                        tensor_map));
+                                        feature_dimension, tensor_map));
             break;
           }
           case 2: {
             TF_ASSIGN_OR_RETURN(
                 out, AddNormOffsetTensor(graph, debug_name, *optional_layout,
                                          *optional_layout_output_idx,
-                                         feature_dimension, forward_path,
-                                         tensor_map));
+                                         feature_dimension, tensor_map));
             break;
           }
           default:

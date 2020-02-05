@@ -362,8 +362,7 @@ bool IsPopOpsElementwise(const HloInstruction* inst) {
   if (auto* poplar_inst = DynCast<HloPoplarInstruction>(inst)) {
     return poplar_inst->IsPopOpsElementwise();
   }
-  return IsPopOpsBiasAdd(inst) || IsPopOpsFusion(inst, "scaled_inplace") ||
-         inst->IsElementwise();
+  return IsPopOpsFusion(inst, "scaled_inplace") || inst->IsElementwise();
 }
 
 bool IsPopOpsElementwiseBinary(const HloInstruction* inst) {

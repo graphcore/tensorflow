@@ -64,8 +64,6 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
     const HloInstruction* inst = tensor_target.tgt;
     auto norm_inst = Cast<HloNormInstruction>(inst);
     const int64 input_index = tensor_target.input_index;
-    std::vector<const HloInstruction*> forward_path =
-        tensor_target.forward_path;
     absl::optional<const HloInstruction*> layout = tensor_target.layout;
     absl::optional<int64> layout_output_idx = tensor_target.layout_output_idx;
 
@@ -80,11 +78,11 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
     switch (input_index) {
       case 1: {
         return AddNormScaleTensor(graph, name, *layout, *layout_output_idx,
-                                  feature_index, forward_path, tensor_map);
+                                  feature_index, tensor_map);
       }
       case 2: {
         return AddNormOffsetTensor(graph, name, *layout, *layout_output_idx,
-                                   feature_index, forward_path, tensor_map);
+                                   feature_index, tensor_map);
       }
       default: {
         return xla::FailedPrecondition(

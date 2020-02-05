@@ -113,15 +113,15 @@ class MappingTest(xla_test.XLATestCase):
         pad_layout = fusion_1_layout
 
       # The pad contains 512 elements on tile 0,
-      # and one region with 32 elements on tiles 256-271
-      self.assertEqual(len(pad_layout.tiles), 17)
+      # and one region with 4 elements on tiles 64-192
+      self.assertEqual(len(pad_layout.tiles), 129)
       for tile_idx, tile in enumerate(pad_layout.tiles):
         if tile_idx == 0:
           self.assertEqual(tile.tile, tile_idx)
           self.assertEqual(tile.num_elements, 512)
         else:
-          self.assertEqual(tile.tile, 256 + tile_idx)
-          self.assertEqual(tile.num_elements, 32)
+          self.assertEqual(tile.tile, 63 + tile_idx)
+          self.assertEqual(tile.num_elements, 4)
 
       # The add is done inplace
       self.assertEqual(slice_layout.tiles, add_layout.tiles)
