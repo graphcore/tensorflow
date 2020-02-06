@@ -134,6 +134,11 @@ def _ipu_device_for_host(ipu_device_string, host_device_string):
   return ipu_for_host.to_string()
 
 
+def _make_identity_op(v):
+  name = v.name.replace(":", "_")
+  return array_ops.identity(v, name=name)
+
+
 class IPUSyncOnReadVariable(values.SyncOnReadVariable):  # pylint: disable=abstract-method
   pass
 
@@ -283,7 +288,7 @@ class IPUMultiWorkerExtended(
       # This also disables the scoped_allocator_optimizer because
       # it allows it to see that we cross a device boundary here.
       with ops.device(self._host_device):
-        value = array_ops.identity(value, name="reduce_to")
+        value = _make_identity_op(value)
 
       return super()._reduce_to(reduce_op, value, destinations)
 
@@ -294,8 +299,7 @@ class IPUMultiWorkerExtended(
       # This also disables the scoped_allocator_optimizer because
       # it allows it to see that we cross a device boundary here.
       with ops.device(self._host_device):
-        value_destination_pairs = [(array_ops.identity(v,
-                                                       name="batch_reduce"), d)
+        value_destination_pairs = [(_make_identity_op(v), d)
                                    for (v, d) in value_destination_pairs]
 
       return super()._batch_reduce_to(reduce_op, value_destination_pairs)
