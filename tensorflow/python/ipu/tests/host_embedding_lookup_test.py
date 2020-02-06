@@ -55,7 +55,10 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
 
     with ops.device('cpu'):
       i = array_ops.placeholder(np.int32, [lookup_count])
-      w = variable_scope.get_variable("foo", dtype=np.float32, shape=shape)
+      w = variable_scope.get_variable("foo",
+                                      dtype=np.float32,
+                                      shape=shape,
+                                      use_resource=False)
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
@@ -104,7 +107,10 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
 
     with ops.device('cpu'):
       i = array_ops.placeholder(np.int32, [lookup_count])
-      w = variable_scope.get_variable("foo", dtype=np.float32, shape=shape)
+      w = variable_scope.get_variable("foo",
+                                      dtype=np.float32,
+                                      shape=shape,
+                                      use_resource=False)
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       r = ipu.ipu_compiler.compile(my_net, inputs=[i])
