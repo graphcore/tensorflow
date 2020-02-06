@@ -253,6 +253,19 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "host_embedding_lookup_test",
+    size = "large",
+    srcs = ["tests/host_embedding_lookup_test.py"],
+    additional_deps = [
+        ":ipu_grad_ops_lib",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+)
+
+tf_py_test(
     name = "random_constant_matmul_test",
     size = "small",
     srcs = ["tests/random_constant_matmul_test.py"],
@@ -692,6 +705,7 @@ test_suite(
         "expression_op_test",
         "fifo_test",
         "frontend_attributes_test",
+        "host_embedding_lookup_test",
         "infeed_outfeed_test",
         "ipu_compiler_test",
         "ipu_estimator_test",

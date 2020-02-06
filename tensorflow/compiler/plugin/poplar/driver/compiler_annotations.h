@@ -57,9 +57,26 @@ struct SendRecvInfo {
   Shape shape;
 };
 
+struct HostEmbeddingInfo {
+  HostEmbeddingInfo(const std::string& stream_handle,
+                    const std::string& embedding_id, const Shape& indices_shape,
+                    const Shape& activations_shape)
+      : stream_handle(stream_handle),
+        embedding_id(embedding_id),
+        indices_shape(indices_shape),
+        activations_shape(activations_shape) {}
+  HostEmbeddingInfo() = delete;
+
+  std::string stream_handle;
+  std::string embedding_id;
+  Shape indices_shape;
+  Shape activations_shape;
+};
+
 using OutfeedInfos = std::vector<FeedInfo>;
 using InfeedInfos = std::vector<FeedInfo>;
 using SendRecvInfos = std::vector<SendRecvInfo>;
+using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
 
 // We use this structure to communicate data about the DataStreams between the
 // UserOp custom operation and the PoplarExecutable so it can link the streams
@@ -153,6 +170,8 @@ struct CompilerAnnotations {
 
   SendRecvInfos send_infos;
   SendRecvInfos recv_infos;
+  HostEmbeddingInfos host_embedding_lookup_infos;
+  HostEmbeddingInfos host_embedding_update_infos;
 
   TensorsWithLayouts tensors_with_layout;
 
