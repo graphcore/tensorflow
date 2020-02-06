@@ -3394,6 +3394,28 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "example_tf2_fit",
+    size = "small",
+    srcs = ["docs/example_tf2_fit.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "example_tf2_custom_training",
+    size = "small",
+    srcs = ["docs/example_tf2_custom_training.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "bias_apply_graph_caching_test",
     size = "medium",
     srcs = ["tests/bias_apply_graph_caching_test.py"],
@@ -3614,6 +3636,8 @@ test_suite(
     name = "doc_examples",
     tests = [
         "distributed_training_example",
+        "example_tf2_custom_training",
+        "example_tf2_fit",
         "ipu_estimator_example",
         "ipu_pipeline_estimator_example",
         "logging_example_1",

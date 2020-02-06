@@ -16,6 +16,8 @@ Targeting the IPU from TensorFlow
     logging
     poplar_ops
     perf_training
+    targetting_tf2
+    examples_tf2
     troubleshooting
     perf_training_example
     ipu_estimator_example
