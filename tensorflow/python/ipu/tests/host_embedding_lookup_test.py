@@ -35,7 +35,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
   @test_util.deprecated_graph_mode_only
   def testDIENShape(self):
-    shape = [1000000000, 20]  # 74GB at float32
+    shape = [10000000, 20]  # 740MB at float32
     lookup_count = 4096
 
     def my_net(i):
