@@ -418,6 +418,173 @@ Status PoplarExecutor::ConnectRecvCallbacksToRendezvous(
 }
 
 namespace {
+uint64 DeviceIncarnation(int device_ordinal, int replica) {
+  return (device_ordinal << 5) | replica;
+}
+}  // namespace
+
+Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
+    const HostEmbeddingInfo& lookup_info) {
+  // Extract the shapes and types.
+  tensorflow::TensorShape indices_shape;
+  TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(
+      lookup_info.indices_shape, &indices_shape));
+
+  tensorflow::TensorShape act_shape;
+  TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(
+      lookup_info.activations_shape, &act_shape));
+
+  TF_ASSIGN_OR_RETURN(const tensorflow::DataType indices_type,
+                      tensorflow::EncodePrimitiveTypeAsDataType(
+                          lookup_info.indices_shape.element_type()));
+
+  TF_ASSIGN_OR_RETURN(const tensorflow::DataType act_type,
+                      tensorflow::EncodePrimitiveTypeAsDataType(
+                          lookup_info.activations_shape.element_type()));
+
+  // We currently don't support replication
+  if (current_replication_factor_ > 1) {
+    return xla::InternalError(
+        "Host embeddings do not support replication, replication_factor=",
+        current_replication_factor_);
+  }
+
+  const std::string cpu_device_name = "/device:CPU:0";
+  const std::string ipu_device_name =
+      "/device:IPU:" + std::to_string(device_ordinal());
+
+  for (int replica = 0;
+       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
+    auto lookup_indices_key_str = tensorflow::Rendezvous::CreateKey(
+        ipu_device_name, DeviceIncarnation(device_ordinal(), replica),
+        cpu_device_name, lookup_info.embedding_id + "_lookup_indices", {0, 0});
+    tensorflow::Rendezvous::ParsedKey lookup_indices_key;
+    TF_RETURN_IF_ERROR(tensorflow::Rendezvous::ParseKey(lookup_indices_key_str,
+                                                        &lookup_indices_key));
+
+    auto lookup_act_key_str = tensorflow::Rendezvous::CreateKey(
+        cpu_device_name, DeviceIncarnation(device_ordinal(), replica),
+        ipu_device_name, lookup_info.embedding_id + "_lookup_activations",
+        {0, 0});
+    tensorflow::Rendezvous::ParsedKey lookup_act_key;
+    TF_RETURN_IF_ERROR(
+        tensorflow::Rendezvous::ParseKey(lookup_act_key_str, &lookup_act_key));
+
+    auto* rendezvous = GetRendezvous();
+
+    // Connect the indices callback.
+    current_engine_->connectStreamToCallback(
+        lookup_info.stream_handle + lookup_info.embedding_id + "_indices",
+        replica,
+        [rendezvous, lookup_indices_key,
+         tensor = tensorflow::Tensor(indices_type, indices_shape)](void* ptr) {
+          auto* dst = tensorflow::DMAHelper::buffer(&tensor);
+
+          CHECK(dst->RefCountIsOne());
+          std::memcpy(dst->data(), ptr, dst->size());
+          rendezvous->Send(lookup_indices_key, {}, tensor, false);
+        });
+
+    // Connect the activations callback.
+    current_engine_->connectStreamToCallback(
+        lookup_info.stream_handle + lookup_info.embedding_id + "_activations",
+        replica, [rendezvous, lookup_act_key](void* ptr) {
+          bool is_dead;
+          tensorflow::Tensor tensor;
+          auto s =
+              rendezvous->Recv(lookup_act_key, {}, &tensor, &is_dead, 1000);
+
+          if (s.ok()) {
+            auto* dst = tensorflow::DMAHelper::buffer(&tensor);
+            std::memcpy(ptr, dst->data(), dst->size());
+          }
+        });
+  }
+
+  return Status::OK();
+}
+
+Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
+    const HostEmbeddingInfo& update_info) {
+  // Extract the shapes and types.
+  tensorflow::TensorShape indices_shape;
+  TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(
+      update_info.indices_shape, &indices_shape));
+
+  tensorflow::TensorShape act_shape;
+  TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(
+      update_info.activations_shape, &act_shape));
+
+  TF_ASSIGN_OR_RETURN(const tensorflow::DataType indices_type,
+                      tensorflow::EncodePrimitiveTypeAsDataType(
+                          update_info.indices_shape.element_type()));
+
+  TF_ASSIGN_OR_RETURN(const tensorflow::DataType act_type,
+                      tensorflow::EncodePrimitiveTypeAsDataType(
+                          update_info.activations_shape.element_type()));
+
+  // We currently don't support replication
+  if (current_replication_factor_ > 1) {
+    return xla::InternalError(
+        "Host embeddings do not support replication, replication_factor=",
+        current_replication_factor_);
+  }
+
+  const std::string cpu_device_name = "/device:CPU:0";
+  const std::string ipu_device_name =
+      "/device:IPU:" + std::to_string(device_ordinal());
+
+  for (int replica = 0;
+       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
+    // Create the Rendezvous keys
+    auto update_indices_key_str = tensorflow::Rendezvous::CreateKey(
+        ipu_device_name, DeviceIncarnation(device_ordinal(), replica),
+        cpu_device_name, update_info.embedding_id + "_" + "update_indices",
+        {0, 0});
+    tensorflow::Rendezvous::ParsedKey update_indices_key;
+    TF_RETURN_IF_ERROR(tensorflow::Rendezvous::ParseKey(update_indices_key_str,
+                                                        &update_indices_key));
+
+    auto update_act_key_str = tensorflow::Rendezvous::CreateKey(
+        ipu_device_name, DeviceIncarnation(device_ordinal(), replica),
+        cpu_device_name, update_info.embedding_id + "_update_grads", {0, 0});
+    tensorflow::Rendezvous::ParsedKey update_act_key;
+    TF_RETURN_IF_ERROR(
+        tensorflow::Rendezvous::ParseKey(update_act_key_str, &update_act_key));
+
+    auto* rendezvous = GetRendezvous();
+
+    // Connect the indices callback.
+    current_engine_->connectStreamToCallback(
+        update_info.stream_handle + update_info.embedding_id + "_indices",
+        replica,
+        [rendezvous, update_indices_key,
+         tensor = tensorflow::Tensor(indices_type, indices_shape)](void* ptr) {
+          auto* dst = tensorflow::DMAHelper::buffer(&tensor);
+
+          CHECK(dst->RefCountIsOne());
+          std::memcpy(dst->data(), ptr, dst->size());
+          rendezvous->Send(update_indices_key, {}, tensor, false);
+        });
+
+    // Connect the grads callback.
+    current_engine_->connectStreamToCallback(
+        update_info.stream_handle + update_info.embedding_id + "_grads",
+        replica,
+        [rendezvous, update_act_key,
+         tensor = tensorflow::Tensor(act_type, act_shape)](void* ptr) {
+          auto* dst = tensorflow::DMAHelper::buffer(&tensor);
+
+          CHECK(dst->RefCountIsOne());
+          std::memcpy(dst->data(), ptr, dst->size());
+          rendezvous->Send(update_act_key, {}, tensor, false);
+        });
+  }
+
+  return Status::OK();
+}
+
+namespace {
 class InfeedPrefetchCallback : public poplar::StreamCallback {
  public:
   InfeedPrefetchCallback(InfeedQueue* queue, uint64 num_bytes)
@@ -2430,6 +2597,17 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         ConnectInfeedsToStreamCallback(infeed_infos);
       }
 
+      for (auto& host_embedding_lookup_info :
+           executable.GetHostEmbeddingLookupInfos()) {
+        TF_RETURN_IF_ERROR(
+            ConnectHostEmbeddingLookupToRendezvous(host_embedding_lookup_info));
+      }
+
+      for (auto& host_embedding_update_info :
+           executable.GetHostEmbeddingUpdateInfos()) {
+        ConnectHostEmbeddingUpdateToRendezvous(host_embedding_update_info);
+      }
+
       const auto& outfeed_infos = executable.GetOutfeedInfos();
       if (!outfeed_infos.empty()) {
         ConnectOutfeedToStreamCallback(outfeed_infos);
@@ -2519,7 +2697,6 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       // We need to call post process to make sure all the data is in the
       // right format on the host
       PostProcessStreamedVariablesDeviceToHost();
-
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus("[Execute engine] ", e);
     }

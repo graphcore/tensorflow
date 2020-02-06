@@ -192,6 +192,7 @@ cc_library(
         "driver/tools/custom_ops/group_norm_grad.cc",
         "driver/tools/custom_ops/group_norm_stats.cc",
         "driver/tools/custom_ops/gru.cc",
+        "driver/tools/custom_ops/host_embedding.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
         "driver/tools/custom_ops/lstm.cc",
         "driver/tools/custom_ops/onehot.cc",
@@ -310,6 +311,7 @@ cc_library(
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
         "driver/tools/custom_ops/hlo_poplar_instruction.h",
+        "driver/tools/custom_ops/host_embedding.h",
         "driver/tools/custom_ops/ipu_inter_copy.h",
         "driver/tools/custom_ops/lstm.h",
         "driver/tools/custom_ops/multi_slice.h",
@@ -421,6 +423,7 @@ cc_library(
         "driver/ops/conv_graph_caching.cc",
         "driver/ops/conv_ops.cc",
         "driver/ops/custom_ops/custom_ops.cc",
+        "driver/ops/custom_ops/host_embedding.cc",
         "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
         "driver/ops/custom_ops/popfloat/gfloat_ops_utils.cc",
         "driver/ops/custom_ops/poplar_ops.cc",
@@ -632,6 +635,7 @@ cc_library(
     srcs = [
         "kernels/datastream/dataset_benchmark.cc",
         "kernels/datastream/feeds.cc",
+        "kernels/datastream/host_embedding.cc",
         "kernels/host_compute_kernels.cc",
         "kernels/ipu_kernels.cc",
         "kernels/pipelining/pipelining.cc",
@@ -888,7 +892,10 @@ tf_custom_op_py_library(
 
 cc_library(
     name = "pop_datastream_ops",
-    srcs = ["ops/datastream/feeds.cc"],
+    srcs = [
+        "ops/datastream/feeds.cc",
+        "ops/datastream/host_embedding.cc",
+    ],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,
 )

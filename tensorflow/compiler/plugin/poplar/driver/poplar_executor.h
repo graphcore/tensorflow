@@ -643,6 +643,11 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status ConnectSendCallbacksToRendezvous(const SendRecvInfos& send_infos);
   Status ConnectRecvCallbacksToRendezvous(const SendRecvInfos& recv_infos);
 
+  Status ConnectHostEmbeddingLookupToRendezvous(
+      const HostEmbeddingInfo& lookup_info);
+  Status ConnectHostEmbeddingUpdateToRendezvous(
+      const HostEmbeddingInfo& update_info);
+
   // Connect buffers provided by infeed transfer manager to Poplar
   // HostToDevice FIFO
   void ConnectInfeedsToStreamCallback(const InfeedInfos& infeed_infos);

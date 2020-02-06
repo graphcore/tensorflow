@@ -42,7 +42,9 @@ PoplarExecutable::PoplarExecutable(
     uint32 replication_factor, const InfeedInfos& infeed_infos,
     const OutfeedInfos& outfeed_infos, StreamInfos&& stream_infos,
     StreamMetaInfos&& stream_meta_info, SendRecvInfos&& send_infos,
-    SendRecvInfos&& recv_infos)
+    SendRecvInfos&& recv_infos,
+    HostEmbeddingInfos&& host_embedding_lookup_infos,
+    HostEmbeddingInfos&& host_embedding_update_infos)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       poplar_engine_(std::move(engine)),
@@ -60,6 +62,8 @@ PoplarExecutable::PoplarExecutable(
       stream_meta_infos_(std::move(stream_meta_info)),
       send_infos_(std::move(send_infos)),
       recv_infos_(std::move(recv_infos)),
+      host_embedding_lookup_infos_(std::move(host_embedding_lookup_infos)),
+      host_embedding_update_infos_(std::move(host_embedding_update_infos)),
       loaded_from_cache_(false) {}
 
 PoplarExecutable::~PoplarExecutable() {
@@ -199,6 +203,20 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
                        Shape(recv.shape()));
   }
 
+  HostEmbeddingInfos lookups;
+  for (const auto& lookup : proto.lookups()) {
+    lookups.emplace_back(lookup.stream_handle(), lookup.embedding_id(),
+                         Shape(lookup.indices_shape()),
+                         Shape(lookup.activations_shape()));
+  }
+
+  HostEmbeddingInfos updates;
+  for (const auto& update : proto.updates()) {
+    updates.emplace_back(update.stream_handle(), update.embedding_id(),
+                         Shape(update.indices_shape()),
+                         Shape(update.activations_shape()));
+  }
+
   // Load the poplar compilation options from the serialized executable
   poplar::OptionFlags opts;
   for (const auto& flag : proto.option_flags()) {
@@ -222,7 +240,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       std::move(hlo_module), std::move(profile_printer),
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
       {}, false, false, {}, replication_factor, std::move(infeeds),
-      std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs));
+      std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs),
+      std::move(lookups), std::move(updates));
 
   executable->loaded_from_cache_ = true;
 
@@ -233,6 +252,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     const std::string& filename, const poplar::Executable& executable,
     const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
     const SendRecvInfos& sends, const SendRecvInfos& recvs,
+    const HostEmbeddingInfos& lookups, const HostEmbeddingInfos& updates,
     uint32 replication_count, const poplar::OptionFlags& opts) {
   PoplarExecutableProto proto;
 
@@ -282,6 +302,24 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     auto* poplar_opt = proto.add_option_flags();
     poplar_opt->set_option(flag.first);
     poplar_opt->set_value(flag.second);
+  }
+
+  for (const auto lookup : lookups) {
+    auto* lookup_proto = proto.add_lookups();
+    lookup_proto->set_stream_handle(lookup.stream_handle);
+    lookup_proto->set_embedding_id(lookup.embedding_id);
+    *lookup_proto->mutable_indices_shape() = lookup.indices_shape.ToProto();
+    *lookup_proto->mutable_activations_shape() =
+        lookup.activations_shape.ToProto();
+  }
+
+  for (const auto update : updates) {
+    auto* update_proto = proto.add_updates();
+    update_proto->set_stream_handle(update.stream_handle);
+    update_proto->set_embedding_id(update.embedding_id);
+    *update_proto->mutable_indices_shape() = update.indices_shape.ToProto();
+    *update_proto->mutable_activations_shape() =
+        update.activations_shape.ToProto();
   }
 
   return WriteBinaryProto(tensorflow::Env::Default(), filename, proto);

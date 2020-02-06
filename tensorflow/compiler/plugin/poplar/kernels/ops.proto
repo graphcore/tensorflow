@@ -54,4 +54,6 @@ enum PoplarOp {
   SuggestRecompute = 50;
   BlockRecompute = 51;
   ReduceScatter = 52;
+  HostEmbeddingLookup = 53;
+  HostEmbeddingUpdate = 54;
 }

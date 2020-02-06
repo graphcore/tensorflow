@@ -19,6 +19,13 @@ message SendRecvConfig {
   ShapeProto shape = 3;
 }
 
+message HostEmbeddingConfig {
+  string stream_handle = 1;
+  string embedding_id = 2;
+  ShapeProto indices_shape = 3;
+  ShapeProto activations_shape = 4;
+}
+
 message PoplarExecutableProto {
 
   // The serialized Engine
@@ -38,4 +45,7 @@ message PoplarExecutableProto {
 
   repeated SendRecvConfig sends = 6;
   repeated SendRecvConfig recvs = 7;
+
+  repeated HostEmbeddingConfig lookups = 8;
+  repeated HostEmbeddingConfig updates = 9;
 };
