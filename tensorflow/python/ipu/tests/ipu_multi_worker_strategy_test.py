@@ -60,7 +60,6 @@ from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
 from tensorflow.python.summary import summary_iterator
-from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import server_lib
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
 from tensorflow.python.training.momentum import MomentumOptimizer
@@ -546,13 +545,16 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
                                     self._cluster_spec,
                                     num_gpus=0)
 
-  def _test_ipu_estimator_train(self, task_type, task_id, _num_gpus):
+  def _test_ipu_estimator_train_with_host_call(self, task_type, task_id,
+                                               _num_gpus):
     strategy, target, _ = self._create_test_objects(task_type=task_type,
                                                     task_id=task_id)
 
     learning_rate = 0.5
     initial_w = 2.0
-    optimizer = GradientDescentOptimizer(learning_rate)
+    # Use momentum, but set to zero, just to verify that the
+    # momentum accumulator "slot" does not cause any problems.
+    optimizer = MomentumOptimizer(learning_rate=learning_rate, momentum=0.0)
 
     def host_model_fn(*grads):
       grads_and_vars = zip(grads, variables.trainable_variables())
@@ -615,10 +617,11 @@ class IPUMultiWorkerStrategyTest(multi_worker_test_base.MultiWorkerTestBase):
       reference_w -= learning_rate * reference_gradient
       self.assertEqual(reference_w, estimator.get_variable_value("w"))
 
-  def test_ipu_estimator_train(self):
-    self._run_between_graph_clients(self._test_ipu_estimator_train,
-                                    self._cluster_spec,
-                                    num_gpus=0)
+  def test_ipu_estimator_train_with_host_call(self):
+    self._run_between_graph_clients(
+        self._test_ipu_estimator_train_with_host_call,
+        self._cluster_spec,
+        num_gpus=0)
 
   def _test_batch_normalization(self, task_type, task_id, _num_gpus):
     strategy, target, sess_config = self._create_test_objects(
@@ -799,7 +802,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       def device_fn(features):
         w = variable_scope.get_variable(name="w", initializer=initial_w)
         loss = w * features
-        optimizer = gradient_descent.GradientDescentOptimizer(learning_rate)
+        optimizer = GradientDescentOptimizer(learning_rate)
         return optimizer.minimize(loss)
 
       def compiled_fn():
@@ -866,7 +869,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         return loss
 
       def optimizer_function(loss):
-        opt = gradient_descent.GradientDescentOptimizer(learning_rate)
+        opt = GradientDescentOptimizer(learning_rate)
         return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
       def model():
@@ -976,7 +979,9 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         return loss
 
       def optimizer_function(loss):
-        opt = gradient_descent.GradientDescentOptimizer(learning_rate)
+        # Use momentum, but set to zero, just to verify that the
+        # momentum accumulator "slot" does not cause any problems.
+        opt = MomentumOptimizer(learning_rate, momentum=0.0)
         return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
       return ipu_pipeline_estimator.IPUPipelineEstimatorSpec(
@@ -1078,6 +1083,100 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
   def test_dataset_infeed(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_dataset_infeed, cluster_spec)
+
+  def _test_ipu_estimator(self, task_id):
+    # The estimator library starts the server when configured in TF_CONFIG.
+    strategy, _, _ = self._create_test_objects(start_server=False,
+                                               variables_on_host=False)
+
+    ipu_device = "/job:worker/replica:0/task:{}/device:IPU:0".format(task_id)
+
+    num_iterations = 3
+    num_workers = strategy.num_replicas_in_sync
+    per_worker_x = [i + 1.0 for i in range(num_workers)]
+    y = 1.0
+    initial_w0 = 1.0
+    initial_w1 = 2.0
+    learning_rate = 0.5
+
+    def my_model_fn(features, labels, mode):
+      w0 = variable_scope.get_variable(name="w0", initializer=initial_w0)
+      self.assertIsInstance(w0, IPUMirroredVariable)
+      self.assertEqual(w0.device, ipu_device)
+      partial = w0 * features
+
+      w1 = variable_scope.get_variable(name="w1", initializer=initial_w1)
+      self.assertIsInstance(w1, IPUMirroredVariable)
+      self.assertEqual(w1.device, ipu_device)
+      prediction = partial + w1
+      loss = losses.mean_squared_error(labels, prediction)
+
+      # Use momentum, but set to zero, just to verify that the
+      # momentum accumulator "slot" does not cause any problems.
+      opt = MomentumOptimizer(learning_rate, momentum=0.0)
+      train_op = opt.minimize(loss)
+
+      return ipu_estimator.IPUEstimatorSpec(mode=mode,
+                                            loss=loss,
+                                            train_op=train_op)
+
+    def my_input_fn(input_context):
+      self.assertEqual(task_id, input_context.input_pipeline_id)
+
+      x = per_worker_x[task_id]
+      features = [x] * num_iterations
+      labels = [y] * num_iterations
+      dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+
+      return dataset
+
+    ipu_options = ipu_utils.create_ipu_config()
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=1)
+
+    config = ipu_run_config.RunConfig(
+        session_config=config_pb2.ConfigProto(allow_soft_placement=False),
+        train_distribute=strategy,
+        save_summary_steps=1,
+        ipu_run_config=ipu_run_config.IPURunConfig(ipu_options=ipu_options))
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+
+    estimator_lib.train_and_evaluate(
+        estimator,
+        train_spec=estimator_lib.TrainSpec(input_fn=my_input_fn,
+                                           max_steps=num_iterations),
+        eval_spec=estimator_lib.EvalSpec(input_fn=my_input_fn))
+
+    expected_w0 = initial_w0
+    expected_w1 = initial_w1
+    expected_losses = []
+
+    for _ in range(num_iterations):
+      x = np.array(per_worker_x)
+
+      # The loss reduction op is decided by _get_loss_reduce_op_for_reporting()
+      loss = np.mean(np.square(expected_w0 * x + expected_w1 - y))
+      expected_losses.append(loss)
+
+      grad_w0 = np.sum(2 * (expected_w0 * x + expected_w1 - y) * x)
+      grad_w1 = np.sum(2 * (expected_w0 * x + expected_w1 - y))
+
+      expected_w0 -= learning_rate * grad_w0 / num_workers
+      expected_w1 -= learning_rate * grad_w1 / num_workers
+
+    # Only the chief worker has the checkpoint to read the variables from.
+    if task_id == 0:
+      self.assertEqual(num_iterations,
+                       estimator.get_variable_value("global_step"))
+      self.assertEqual(expected_w0, estimator.get_variable_value("w0"))
+      self.assertEqual(expected_w1, estimator.get_variable_value("w1"))
+
+      loss_outputs = _get_summary_values(estimator.model_dir, "loss")
+      self.assertEqual(expected_losses, loss_outputs)
+
+  def test_ipu_estimator(self):
+    cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
+    self._run_workers_in_processes(self._test_ipu_estimator, cluster_spec)
 
 
 if __name__ == "__main__":

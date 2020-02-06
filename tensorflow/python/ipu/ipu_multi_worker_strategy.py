@@ -34,6 +34,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import collective_ops
 from tensorflow.python.ops import control_flow_util
 from tensorflow.python.ops import variable_scope
+from tensorflow.python.util import tf_contextlib
 
 
 class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
@@ -110,6 +111,15 @@ def _is_inside_compilation():
   return is_in_xla_context and not is_outside_compilation
 
 
+@tf_contextlib.contextmanager
+def _outside_compilation_scope_if_needed(name):
+  if _is_inside_compilation():
+    with scopes.outside_compilation_scope(name):
+      yield
+  else:
+    yield
+
+
 def _ipu_device_for_host(ipu_device_string, host_device_string):
   ipu_device = device_lib.DeviceSpec.from_string(ipu_device_string)
   host_device = device_lib.DeviceSpec.from_string(host_device_string)
@@ -122,6 +132,11 @@ def _ipu_device_for_host(ipu_device_string, host_device_string):
                                        device_index=ipu_device.device_index)
 
   return ipu_for_host.to_string()
+
+
+def _make_identity_op(v):
+  name = v.name.replace(":", "_")
+  return array_ops.identity(v, name=name)
 
 
 class IPUSyncOnReadVariable(values.SyncOnReadVariable):  # pylint: disable=abstract-method
@@ -260,32 +275,27 @@ class IPUMultiWorkerExtended(
       assert len(value.values) == 1
       value = value.values[0]
 
-    if _is_inside_compilation():
-      # Escape the compilation scope and place the reduction on the host.
-      with scopes.outside_compilation_scope("reduce_to"):
-        return super()._reduce_to(reduce_op, value, destinations)
+    with _outside_compilation_scope_if_needed("host_reduce"):
+      # Make sure the reduction is done on the host device
+      # by wrapping the inputs in an identity op on that device.
+      # This also disables the scoped_allocator_optimizer because
+      # it allows it to see that we cross a device boundary here.
+      with ops.device(self._host_device):
+        value = _make_identity_op(value)
 
-    # Make sure the reduction is done on the host device
-    # by wrapping the inputs in an identity op on that device.
-    with ops.device(self._host_device):
-      value = array_ops.identity(value, name="reduce_to")
-
-    return super()._reduce_to(reduce_op, value, destinations)
+      return super()._reduce_to(reduce_op, value, destinations)
 
   def _batch_reduce_to(self, reduce_op, value_destination_pairs):
-    if _is_inside_compilation():
-      # Escape the compilation scope and place the reduction on the host.
-      with scopes.outside_compilation_scope("batch_reduce"):
-        return super()._batch_reduce_to(reduce_op, value_destination_pairs)
+    with _outside_compilation_scope_if_needed("host_batch_reduce"):
+      # Make sure the reduction is done on the host device
+      # by wrapping the inputs in an identity op on that device.
+      # This also disables the scoped_allocator_optimizer because
+      # it allows it to see that we cross a device boundary here.
+      with ops.device(self._host_device):
+        value_destination_pairs = [(_make_identity_op(v), d)
+                                   for (v, d) in value_destination_pairs]
 
-    # Make sure the reduction is done on the host device
-    # by wrapping the inputs in an identity op on that device.
-    with ops.device(self._host_device):
-      value_destination_pairs = [(array_ops.identity(v,
-                                                     name="batch_reduce"), d)
-                                 for (v, d) in value_destination_pairs]
-
-    return super()._batch_reduce_to(reduce_op, value_destination_pairs)
+      return super()._batch_reduce_to(reduce_op, value_destination_pairs)
 
   def _call_for_each_replica(self, fn, args, kwargs):
     with distribute_lib.ReplicaContext(
