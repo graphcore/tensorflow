@@ -26,27 +26,42 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
-
-Status EntryVisitor::HandleParameter(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-  // Go through all the shapes for inst, don't allocate any tensors which are
-  // marked as deferred.
-  std::vector<Shape> shapes = FlattenedXlaShape(inst->shape());
-  for (size_t i = 0; i < shapes.size(); i++) {
-    if (CanDeferAllocation(inst, i)) {
-      VLOG(1) << "Deferring allocation of " << inst->name() << " sub tensor "
-              << i << ".";
-      DeferAllocation(inst, i);
-    } else {
-      TF_RETURN_IF_ERROR(AllocateInput(inst, i, shapes[i]));
-    }
+namespace {
+// Helper function which marks all the entry computation inputs as unallocated.
+DeferredArgVectors MakeArgVector(const HloComputation* comp) {
+  DeferredArgVectors output(comp->num_parameters());
+  for (int64 i = 0; i != comp->num_parameters(); ++i) {
+    output[i].resize(
+        FlattenedXlaShape(comp->parameter_instruction(i)->shape()).size());
   }
-  return Status::OK();
+  return output;
+}
+}  // namespace
+
+EntryVisitor::EntryVisitor(CompilerResources& resources,
+                           const HloComputation* comp)
+    : DeferredVisitor(resources, MakeArgVector(comp), true) {}
+
+StatusOr<poplar::program::Sequence*> EntryVisitor::GetSequenceForInstruction(
+    const HloInstruction* inst) {
+  // Get the right sequence for stream copies, otherwise fallback to the
+  // default.
+  switch (inst->opcode()) {
+    case HloOpcode::kParameter: {
+      const auto& in_info = resources_.annotations.input_output_aliasing_map
+                                .GetEntryInputInfos()[inst->parameter_number()];
+      return in_info.IsStreaming() ? &sequence : &host_to_device;
+    }
+    default: { return DeferredVisitor::GetSequenceForInstruction(inst); }
+  }
 }
 
 StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
-    const HloInstruction* inst, const int64 flat_tuple_index,
-    const Shape& shape, poplar::Tensor tensor) {
+    TensorSource location, const Shape& shape,
+    poplar::program::Sequence& stream_copy_seq, poplar::Tensor tensor) {
+  auto inst = location.first;
+  auto flat_tuple_index = location.second;
+
   const auto& in_info = resources_.annotations.input_output_aliasing_map
                             .GetEntryInputInfos()[inst->parameter_number()];
 
@@ -58,9 +73,6 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     const Shape& mod_shape = layout.parameter_shape(inst->parameter_number());
     module_shapes = FlattenedXlaShape(mod_shape);
   }
-
-  poplar::program::Sequence& stream_copy_seq =
-      in_info.IsStreaming() ? sequence : host_to_device;
 
   poplar::Graph& graph = GetGraph(resources_, inst);
 
@@ -104,12 +116,11 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
   return tensor;
 }
 
-Status EntryVisitor::FinishVisit(HloInstruction* root) {
+Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
   VLOG(1) << "Processing FinishVisit";
   HloComputation* comp = root->parent();
   if (ShapeUtil::IsEmptyTuple(root->shape())) {
     VLOG(1) << "Root instruction shape is empty tuple";
-    resources_.tensor_maps[comp->name()] = std::move(tensor_map);
     return Status::OK();
   }
 
@@ -159,7 +170,8 @@ Status EntryVisitor::FinishVisit(HloInstruction* root) {
         // variable doesn't change between the runs
         // (the alternative is to reload the graph everytime)
         auto in_tensors = FindInstructionOutputs(
-            tensor_map, comp->parameter_instruction(out_info.GetInputIndex()));
+            tensor_map, resources_,
+            comp->parameter_instruction(out_info.GetInputIndex()));
         if (in_tensors[current_output_flat_tensor_index] !=
             out_tensors[all_outputs_flat_tensor_index]) {
           sequence.add(poplar::program::Copy(
@@ -185,8 +197,6 @@ Status EntryVisitor::FinishVisit(HloInstruction* root) {
     }
     from_tensor_index = to_tensor_index;
   }
-
-  resources_.tensor_maps[comp->name()] = std::move(tensor_map);
 
   return Status::OK();
 }

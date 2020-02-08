@@ -15,6 +15,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TENSOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TENSOR_H_
 
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 
@@ -98,19 +100,15 @@ StatusOr<poplar::Tensor> AddPlainTensor(poplar::Graph& graph,
                                         CompilerResources& resources,
                                         bool offset = true);
 
-StatusOr<poplar::Tensor> AddNormScaleTensor(poplar::Graph& graph,
-                                            const std::string& debug_name,
-                                            const HloInstruction* layout,
-                                            uint64 layout_output_idx,
-                                            const unsigned feature_dimension,
-                                            const TensorMap& tensor_map);
+StatusOr<poplar::Tensor> AddNormScaleTensor(
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
+    const HloInstruction* layout, uint64 layout_output_idx,
+    const unsigned feature_dimension, const TensorMap& tensor_map);
 
-StatusOr<poplar::Tensor> AddNormOffsetTensor(poplar::Graph& graph,
-                                             const std::string& debug_name,
-                                             const HloInstruction* layout,
-                                             uint64 layout_output_idx,
-                                             const unsigned feature_dimension,
-                                             const TensorMap& tensor_map);
+StatusOr<poplar::Tensor> AddNormOffsetTensor(
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
+    const HloInstruction* layout, uint64 layout_output_idx,
+    const unsigned feature_dimension, const TensorMap& tensor_map);
 
 StatusOr<poplar::Tensor> CreateIndicesTensor(
     poplar::Graph& graph, const popops::SlicePlan& plan,
@@ -202,8 +200,32 @@ ArgVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
                                 poplar::program::Sequence& seq,
                                 bool expand_constants = true);
 
-bool AreInplaceOutputTensorsWritable(TensorMap& map,
+bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
                                      const HloInstruction* inst);
+
+/**
+ * Sometimes an inplace op cannot be performed because the input/output tensor
+ * is not parallel writable or because further analysis has shown that the op
+ * can no longer be in place. This function performs the copy if required.
+ *
+ * @param tensor The tensor which might be copied.
+ * @param res resources
+ * @param inst the instruction which uses tensor.
+ * @param operand_index the index of `inst` operand where tensor came from.
+ * @param operand_tuple_idx the output tuple index for the operand where tensor
+ * came from.
+ * @param seq sequence where copies might be added.
+ * @param is_lowered_inplace whether this tensor is being lowered inplace.
+ * @param parallel_writeable_output whether the output must be parallel
+ * writeable.
+ *
+ * @returns a tensor which is safe to be modified inplace.
+ */
+poplar::Tensor GetTensorForInplaceOp(
+    poplar::Tensor tensor, CompilerResources& res, const HloInstruction* inst,
+    int64 operand_index, uint64 operand_tuple_idx,
+    poplar::program::Sequence& seq, bool is_lowered_inplace,
+    bool parallel_writeable_output);
 
 /* Sometimes an inplace op cannot be performed because the input/output tensor
  * is not parallel writable or because further analysis has shown that the op
@@ -219,10 +241,17 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(
     bool always_preserve_aliases = false);
 
 /* This returns a vector of poplar tensors which are all of the outputs from
- * the given instruction
+ * the given instruction.
  */
-OutVector FindInstructionOutputs(const TensorMap& map,
+OutVector FindInstructionOutputs(const TensorMap& map, CompilerResources& res,
                                  const HloInstruction* inst);
+
+/* This returns a vector of all poplar tensors which are outputs of the inst
+ *   in range [range.first, range.second).
+ */
+OutVector FindInstructionOutputsInRange(TensorMap& map, CompilerResources& res,
+                                        const HloInstruction* inst,
+                                        std::pair<int64, int64> range);
 
 /* This returns a vector of poplar tensors which are all of the outputs from
  * the given instruction - any wide constants are expanded - TODO T5364

@@ -117,8 +117,8 @@ ENTRY main {
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
   EmbeddingPlansPreplanning embeddings_preplanning;
   TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
-  EntryVisitor visitor(*resources);
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   auto root = entry_computation->root_instruction();
@@ -150,8 +150,8 @@ ENTRY main {
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
   EmbeddingPlansPreplanning embeddings_preplanning;
   TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
-  EntryVisitor visitor(*resources);
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   auto root = entry_computation->root_instruction();
@@ -185,8 +185,8 @@ ENTRY main {
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
   EmbeddingPlansPreplanning embeddings_preplanning;
   TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
-  EntryVisitor visitor(*resources);
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   auto root = entry_computation->root_instruction();
@@ -226,8 +226,8 @@ ENTRY main {
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
   EmbeddingPlansPreplanning embeddings_preplanning;
   TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
-  EntryVisitor visitor(*resources);
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   auto root = entry_computation->root_instruction();
@@ -266,8 +266,8 @@ ENTRY main {
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
   EmbeddingPlansPreplanning embeddings_preplanning;
   TF_EXPECT_OK(embeddings_preplanning.Plan(module.get(), *resources));
-  EntryVisitor visitor(*resources);
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   auto root = entry_computation->root_instruction();

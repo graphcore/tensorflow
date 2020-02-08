@@ -19,7 +19,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_ARITHMETIC_EXPR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_ARITHMETIC_EXPR_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_full.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_base.h"
 
 #include <popops/Expr.hpp>
 
@@ -33,7 +33,7 @@ class Tensor;
 namespace xla {
 namespace poplarplugin {
 
-class ArithmeticExprVisitor : public FullVisitor {
+class ArithmeticExprVisitor : public BaseVisitor {
  public:
   ArithmeticExprVisitor(CompilerResources& res, const ArgVectors& inputs);
 

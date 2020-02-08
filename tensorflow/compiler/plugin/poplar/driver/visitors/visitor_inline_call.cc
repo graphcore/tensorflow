@@ -36,7 +36,7 @@ Status InlineCallVisitor::HandleParameter(HloInstruction* inst) {
 }
 
 Status InlineCallVisitor::FinishVisit(HloInstruction* inst) {
-  outputs_ = FindInstructionOutputs(tensor_map, inst);
+  outputs_ = FindInstructionOutputs(tensor_map, resources_, inst);
   resources_.tensor_maps[inst->parent()->name()] = std::move(tensor_map);
 
   return Status::OK();

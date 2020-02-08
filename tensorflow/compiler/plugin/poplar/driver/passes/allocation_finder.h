@@ -32,14 +32,6 @@ namespace poplarplugin {
 struct CompilerAnnotations;
 
 using TensorSource = std::pair<const HloInstruction*, int64>;
-using TensorsWithLayouts = absl::flat_hash_set<TensorSource>;
-
-using DeferredAllocationInfo = absl::flat_hash_map<TensorSource, TensorSource>;
-// For each computation, a map which stores information about which parameter
-// input tensor to the computation is being deferred.
-using DeferredAllocations =
-    absl::flat_hash_map<const HloComputation*, DeferredAllocationInfo>;
-using DeferredAllocationsPath = std::vector<TensorSource>;
 
 struct TensorTarget {
   // The node in the graph which consumes the tensor
@@ -68,22 +60,16 @@ struct TensorTarget {
   // at the target site.
   std::vector<const HloInstruction*> backward_path;
 
-  // A path of deferred allocations from the target operation to the
-  // Parameter/Infeed input to the graph.
-  DeferredAllocationsPath deferred_allocations_path;
-
   TensorTarget(const HloInstruction* tgt, int64 input_index,
                const HloInstruction* layout, const int64 layout_output_idx,
                const std::vector<const HloInstruction*>& forward_path = {},
-               const std::vector<const HloInstruction*>& backward_path = {},
-               const DeferredAllocationsPath& deferred_allocations_path = {})
+               const std::vector<const HloInstruction*>& backward_path = {})
       : tgt(tgt),
         input_index(input_index),
         layout(layout),
         layout_output_idx(layout_output_idx),
         forward_path(forward_path),
-        backward_path(backward_path),
-        deferred_allocations_path(deferred_allocations_path) {}
+        backward_path(backward_path) {}
 
   TensorTarget(const HloInstruction* tgt, int64 input_index,
                const std::vector<const HloInstruction*>& backward_path = {})
@@ -98,9 +84,6 @@ struct TensorTarget {
 };
 
 using TensorAllocationMap = std::map<TensorSource, TensorTarget>;
-
-TensorsWithLayouts GetAllLayoutsInPath(const TensorSource& source,
-                                       const TensorTarget& tensor_target);
 
 /**
  * This class finds all instructions that explicitly add tensors to the
@@ -132,7 +115,6 @@ class AllocationFinder : public HloModulePass {
 
   const CompilerAnnotations& annotations;
   TensorAllocationMap& tensor_allocation_map;
-  TensorsWithLayouts& tensors_with_layout;
 };
 
 }  // namespace poplarplugin

@@ -291,9 +291,8 @@ static absl::optional<std::pair<int64, int64>> GetLayoutDependentOperandIndices(
 // Depth First Tree traversal from source to non-tuple outputs, traversing
 // through GetTupleElement.
 void ForwardAllocation::FlattenInputs(
-    HloInstruction* inst, std::vector<const HloInstruction*> path,
-    absl::flat_hash_map<HloInstruction*, DeferredAllocationsPath>&
-        input_to_deferred_allocation_path) {
+    HloInstruction* inst,
+    absl::flat_hash_set<HloInstruction*>& deferred_inputs) {
   const Shape& shape = inst->shape();
   if (shape.IsTuple()) {
     // We can only defer allocation of tuples iff all the users of the inst are
@@ -334,30 +333,11 @@ void ForwardAllocation::FlattenInputs(
       CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
       // We can only look through if it's inplace.
       if (IsLoweredInplace(user)) {
-        std::vector<const HloInstruction*> new_path(path);
-        new_path.push_back(user);
-        FlattenInputs(user, new_path, input_to_deferred_allocation_path);
+        FlattenInputs(user, deferred_inputs);
       }
     }
   } else {
-    // The back of the path is the current op so remove it.
-    path.pop_back();
-    // We need to traverse back and complete the information about which
-    // sub-tensors we are deferring the allocation of.
-    DeferredAllocationsPath deferred_allocation_path;
-    const HloInstruction* last_gte = inst;
-    int64 flat_tuple_index = 0;
-    for (auto it = path.rbegin(); it != path.rend(); ++it) {
-      // We guarantee that all the deferred allocations depend on GTEs only.
-      CHECK_EQ(last_gte->opcode(), HloOpcode::kGetTupleElement);
-      const HloInstruction* inst = *it;
-      flat_tuple_index = InsertIntoTuple(inst->shape(), last_gte->tuple_index(),
-                                         flat_tuple_index);
-      deferred_allocation_path.push_back(
-          std::make_pair(inst, flat_tuple_index));
-      last_gte = inst;
-    }
-    input_to_deferred_allocation_path[inst] = deferred_allocation_path;
+    deferred_inputs.insert(inst);
   }
 }
 
@@ -384,10 +364,9 @@ void ForwardAllocation::FlattenInputs(
 // In this graph %arg0 is the input, but we traverse the graph and find that
 // %gte0, %gte1, %gte2.0, %gte2.1, %gte3, %gte4 are the non tuple inputs and we
 // find the forward allocations for those.
-absl::flat_hash_map<HloInstruction*, DeferredAllocationsPath>
-ForwardAllocation::FindInputs(HloComputation* comp) {
-  absl::flat_hash_map<HloInstruction*, DeferredAllocationsPath>
-      input_to_deferred_allocation_path;
+absl::flat_hash_set<HloInstruction*> ForwardAllocation::FindInputs(
+    HloComputation* comp) {
+  absl::flat_hash_set<HloInstruction*> deferred_inputs;
   for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
     // Check if it is either a custom call or has already been replaced.
     if (inst->opcode() == HloOpcode::kConstant ||
@@ -395,10 +374,10 @@ ForwardAllocation::FindInputs(HloComputation* comp) {
         inst->opcode() == HloOpcode::kParameter ||
         inst->opcode() == HloOpcode::kRecvDone ||
         IsPoplarInstruction(PoplarOp::RemapDeduce)(inst)) {
-      FlattenInputs(inst, {inst}, input_to_deferred_allocation_path);
+      FlattenInputs(inst, deferred_inputs);
     }
   }
-  return input_to_deferred_allocation_path;
+  return deferred_inputs;
 }
 
 bool ForwardAllocation::CreateForwardAllocationTarget(
@@ -407,8 +386,7 @@ bool ForwardAllocation::CreateForwardAllocationTarget(
     HloInstruction* layout_producer, const int64 layout_output_index,
     const std::vector<HloInstruction*>& other_targets,
     const std::vector<HloInstruction*>& forward_path,
-    const std::vector<HloInstruction*>& backward_path,
-    const DeferredAllocationsPath& deferred_allocations_path) {
+    const std::vector<HloInstruction*>& backward_path) {
   // Make sure that the layout producer can be executed before the
   // source - i.e. source is not reachable form the layout producer.
   if (reachability_map->IsReachable(source, layout_producer)) {
@@ -454,18 +432,8 @@ bool ForwardAllocation::CreateForwardAllocationTarget(
   auto src = std::make_pair(source, 0);
   auto tensor_target =
       TensorTarget(target, input_index, layout_producer, layout_output_index,
-                   c_forward_path, c_backward_path, deferred_allocations_path);
+                   c_forward_path, c_backward_path);
   tensor_allocation_map[src] = tensor_target;
-  // Add all the new layouts
-  auto ops_with_layout = GetAllLayoutsInPath(src, tensor_target);
-  absl::c_copy(ops_with_layout,
-               std::inserter(tensors_with_layout, tensors_with_layout.end()));
-
-  // Add the deferred allocation.
-  if (deferred_allocations_path.size()) {
-    deferred_allocations[source->parent()][deferred_allocations_path.back()] =
-        src;
-  }
   return true;
 }
 
@@ -473,12 +441,12 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
     HloComputation* comp, std::set<const HloInstruction*>& ops_with_layout) {
   bool found_target = false;
 
-  auto input_to_deferred_allocations = FindInputs(comp);
+  auto deferred_allocation_inputs = FindInputs(comp);
 
-  const auto is_input = [&input_to_deferred_allocations,
+  const auto is_input = [&deferred_allocation_inputs,
                          this](HloInstruction* inst) {
-    auto itr = input_to_deferred_allocations.find(inst);
-    if (itr != input_to_deferred_allocations.end()) {
+    auto itr = deferred_allocation_inputs.find(inst);
+    if (itr != deferred_allocation_inputs.end()) {
       return tensor_allocation_map.find(std::make_pair(inst, 0)) ==
              tensor_allocation_map.end();
     }
@@ -588,8 +556,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
               auto layout_output_idx = *suffix_path_ok;
               const bool created_target = CreateForwardAllocationTarget(
                   reachability_map.get(), source, target, op_idx,
-                  layout_producer, layout_output_idx, targets, suffix, prefix,
-                  input_to_deferred_allocations[source]);
+                  layout_producer, layout_output_idx, targets, suffix, prefix);
               found_target |= created_target;
               if (created_target) {
                 break;
@@ -607,12 +574,12 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
     HloComputation* comp) {
   bool found_target = false;
 
-  auto input_to_deferred_allocations = FindInputs(comp);
+  auto deferred_allocation_inputs = FindInputs(comp);
 
-  const auto is_input = [&input_to_deferred_allocations,
+  const auto is_input = [&deferred_allocation_inputs,
                          this](HloInstruction* inst) {
-    auto itr = input_to_deferred_allocations.find(inst);
-    if (itr != input_to_deferred_allocations.end()) {
+    auto itr = deferred_allocation_inputs.find(inst);
+    if (itr != deferred_allocation_inputs.end()) {
       return tensor_allocation_map.find(std::make_pair(inst, 0)) ==
              tensor_allocation_map.end();
     }
@@ -679,7 +646,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
 
         const bool created_target = CreateForwardAllocationTarget(
             reachability_map.get(), source, target, op_idx, layout_producer, 0,
-            targets, {}, prefix, input_to_deferred_allocations[source]);
+            targets, {}, prefix);
         found_target |= created_target;
         if (created_target) {
           break;
@@ -691,22 +658,13 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
 }
 
 ForwardAllocation::ForwardAllocation(CompilerAnnotations& annotations)
-    : tensor_allocation_map(annotations.tensor_allocation_map),
-      tensors_with_layout(annotations.tensors_with_layout),
-      deferred_allocations(annotations.deferred_allocations) {}
+    : tensor_allocation_map(annotations.tensor_allocation_map) {}
 
 StatusOr<bool> ForwardAllocation::Run(HloModule* module) {
   bool found_target = false;
 
   // Stores all the ops which we have identified to have layouts.
   std::set<const HloInstruction*> ops_with_layout;
-  // Add all the non tuple ops with layouts.
-  for (auto& tensor_with_layout : tensors_with_layout) {
-    auto inst = tensor_with_layout.first;
-    if (!inst->shape().IsTuple()) {
-      ops_with_layout.insert(inst);
-    }
-  }
   // Add all the tensor allocation targets.
   for (auto& ta : tensor_allocation_map) {
     ops_with_layout.insert(ta.second.tgt);

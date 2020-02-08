@@ -30,6 +30,7 @@ from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.training import momentum
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import utils
@@ -497,7 +498,7 @@ class PipeliningRecomputationTest(test_util.TensorFlowTestCase):
 
     pipeline_depth = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):

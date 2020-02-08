@@ -869,7 +869,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   std::unique_ptr<poplar::Engine> engine;
   std::vector<poplar::program::Program> progs;
-  EntryVisitor visitor(resources);
 
   std::vector<std::vector<Literal>> constant_output;
   const bool is_constant_output = GetConstantOutput(
@@ -902,6 +901,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   } else if (is_scalar_elementwise_graph) {
     VLOG(1) << "Skip engine compilation - scalar elementwise graph.";
   } else {
+    EntryVisitor visitor(resources, entry);
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(
         CreatePoplarGraphs(resources, module.get(), poplar_executor));

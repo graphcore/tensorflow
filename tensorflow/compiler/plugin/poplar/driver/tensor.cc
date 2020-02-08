@@ -18,7 +18,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 
+#include <limits>
 #include <numeric>
+#include <string>
 #include <tuple>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -34,6 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
 #include "tensorflow/compiler/xla/layout_util.h"
@@ -101,15 +104,20 @@ poplar::Tensor AddLinearlyMappedTensorWithOffset(
 }
 
 TensorVector GetTensorsInMap(
-    const TensorMap& map, const HloInstruction* inst,
+    const TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     absl::optional<int64> opt_tensors_start = absl::nullopt,
     absl::optional<int64> opt_tensors_end = absl::nullopt) {
   int64 lower_tensor_idx = opt_tensors_start ? *opt_tensors_start : 0;
   int64 upper_tensor_idx =
-      opt_tensors_end ? *opt_tensors_end : std::numeric_limits<int64>::max();
+      (opt_tensors_end ? *opt_tensors_end : std::numeric_limits<int64>::max()) -
+      1;
+
+  // Allocate any tensors which were deferred.
+  DeferredAllocations::AllocateIfExists(res, {inst, lower_tensor_idx},
+                                        {inst, upper_tensor_idx});
 
   auto lower = std::make_pair(inst->name(), lower_tensor_idx);
-  auto upper = std::make_pair(inst->name(), upper_tensor_idx - 1);
+  auto upper = std::make_pair(inst->name(), upper_tensor_idx);
   TensorVector outputs;
   for (auto it = map.lower_bound(lower); it != map.upper_bound(upper); it++) {
     outputs.push_back(*it);
@@ -123,7 +131,7 @@ ArgVector GetTensorsMaybeExpand(
     absl::optional<int64> opt_tensors_start = absl::nullopt,
     absl::optional<int64> opt_tensors_end = absl::nullopt) {
   TensorVector tensor_vector =
-      GetTensorsInMap(map, inst, opt_tensors_start, opt_tensors_end);
+      GetTensorsInMap(map, res, inst, opt_tensors_start, opt_tensors_end);
   ArgVector outputs;
   for (auto pair : tensor_vector) {
     const auto key = pair.first;
@@ -673,11 +681,11 @@ static StatusOr<poplar::Tensor> AddConvolutionWeights(
 }
 
 static StatusOr<poplar::Tensor> AddConvAddBiasTensor(
-    poplar::Graph& graph, const std::string& debug_name,
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     std::vector<const HloInstruction*> forward_path,
     const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, layout);
+  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition("Convolution %s output not found for %s",
@@ -693,11 +701,11 @@ static StatusOr<poplar::Tensor> AddConvAddBiasTensor(
 }
 
 static StatusOr<poplar::Tensor> AddMatMulAddBiasTensor(
-    poplar::Graph& graph, const std::string& debug_name,
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     std::vector<const HloInstruction*> forward_path,
     const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, layout);
+  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition("Matmul %s output not found for %s",
@@ -779,13 +787,11 @@ static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
   return result.dimShuffle(ToUnsignedVector(permutations));
 }
 
-StatusOr<poplar::Tensor> AddNormScaleTensor(poplar::Graph& graph,
-                                            const std::string& debug_name,
-                                            const HloInstruction* layout,
-                                            uint64 layout_output_idx,
-                                            const unsigned feature_dimension,
-                                            const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, layout);
+StatusOr<poplar::Tensor> AddNormScaleTensor(
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
+    const HloInstruction* layout, uint64 layout_output_idx,
+    const unsigned feature_dimension, const TensorMap& tensor_map) {
+  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -798,13 +804,11 @@ StatusOr<poplar::Tensor> AddNormScaleTensor(poplar::Graph& graph,
   return poplin::createNormGamma(graph, shuffled);
 }
 
-StatusOr<poplar::Tensor> AddNormOffsetTensor(poplar::Graph& graph,
-                                             const std::string& debug_name,
-                                             const HloInstruction* layout,
-                                             uint64 layout_output_idx,
-                                             const unsigned feature_dimension,
-                                             const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, layout);
+StatusOr<poplar::Tensor> AddNormOffsetTensor(
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
+    const HloInstruction* layout, uint64 layout_output_idx,
+    const unsigned feature_dimension, const TensorMap& tensor_map) {
+  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -818,10 +822,10 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(poplar::Graph& graph,
 }
 
 static StatusOr<poplar::Tensor> AddElementwiseBinary(
-    poplar::Graph& graph, const std::string& debug_name,
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, layout);
+  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -854,9 +858,9 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
   const auto forward_path = tensor_target.forward_path;
 
   if (IsPopOpsElementwiseBinary(target)) {
-    TF_ASSIGN_OR_RETURN(
-        out, AddElementwiseBinary(graph, debug_name, *optional_layout,
-                                  *optional_layout_output_idx, tensor_map));
+    TF_ASSIGN_OR_RETURN(out, AddElementwiseBinary(
+                                 graph, resources, debug_name, *optional_layout,
+                                 *optional_layout_output_idx, tensor_map));
   } else {
     const std::string error_msg =
         absl::StrCat("Invalid operand for tensor allocation on ", debug_name);
@@ -868,14 +872,16 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
         switch (input_index) {
           case 1: {
             TF_ASSIGN_OR_RETURN(
-                out, AddNormScaleTensor(graph, debug_name, *optional_layout,
+                out, AddNormScaleTensor(graph, resources, debug_name,
+                                        *optional_layout,
                                         *optional_layout_output_idx,
                                         feature_dimension, tensor_map));
             break;
           }
           case 2: {
             TF_ASSIGN_OR_RETURN(
-                out, AddNormOffsetTensor(graph, debug_name, *optional_layout,
+                out, AddNormOffsetTensor(graph, resources, debug_name,
+                                         *optional_layout,
                                          *optional_layout_output_idx,
                                          feature_dimension, tensor_map));
             break;
@@ -1015,12 +1021,14 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
             }
           } else if (IsPopOpsFusion(comp, "conv_biasadd")) {
             TF_ASSIGN_OR_RETURN(
-                out, AddConvAddBiasTensor(graph, debug_name, *optional_layout,
+                out, AddConvAddBiasTensor(graph, resources, debug_name,
+                                          *optional_layout,
                                           *optional_layout_output_idx,
                                           forward_path, tensor_map));
           } else if (IsPopOpsFusion(comp, "matmul_biasadd")) {
             TF_ASSIGN_OR_RETURN(
-                out, AddMatMulAddBiasTensor(graph, debug_name, *optional_layout,
+                out, AddMatMulAddBiasTensor(graph, resources, debug_name,
+                                            *optional_layout,
                                             *optional_layout_output_idx,
                                             forward_path, tensor_map));
           } else {
@@ -1087,6 +1095,8 @@ StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
 
   auto itr = resources.annotations.tensor_allocation_map.find(src);
   if (itr != resources.annotations.tensor_allocation_map.end()) {
+    VLOG(1) << "Adding a tensor with layout for (" << src.first->ToString()
+            << ", " << src.second << ").";
     TF_ASSIGN_OR_RETURN(out, AddTensorForTarget(graph, itr->second, shape,
                                                 resources, tensor_map, name));
 
@@ -1518,9 +1528,23 @@ ArgVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
   return GetTensorsMaybeExpand(map, res, operand, seq, expand_constants);
 }
 
-OutVector FindInstructionOutputs(const TensorMap& map,
+OutVector FindInstructionOutputs(const TensorMap& map, CompilerResources& res,
                                  const HloInstruction* inst) {
-  TensorVector tensor_vector = GetTensorsInMap(map, inst);
+  TensorVector tensor_vector = GetTensorsInMap(map, res, inst);
+  OutVector outputs;
+  std::transform(tensor_vector.begin(), tensor_vector.end(),
+                 std::back_inserter(outputs),
+                 [](const std::pair<TensorKey, poplar::Tensor>& value) {
+                   return std::get<1>(value);
+                 });
+  return outputs;
+}
+
+OutVector FindInstructionOutputsInRange(TensorMap& map, CompilerResources& res,
+                                        const HloInstruction* inst,
+                                        std::pair<int64, int64> range) {
+  TensorVector tensor_vector =
+      GetTensorsInMap(map, res, inst, range.first, range.second);
   OutVector outputs;
   std::transform(tensor_vector.begin(), tensor_vector.end(),
                  std::back_inserter(outputs),
@@ -1537,7 +1561,7 @@ OutVector FindExpandedInstructionOutputs(TensorMap& map, CompilerResources& res,
   return outputs;
 }
 
-bool AreInplaceOutputTensorsWritable(TensorMap& map,
+bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
                                      const HloInstruction* inst) {
   if (!IsLoweredInplace(inst)) {
     return false;
@@ -1555,7 +1579,7 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map,
 
   std::vector<TensorVector> tensor_vectors(inplace_indexes.size());
   for (uint64 i = 0; i < inplace_indexes.size(); i++) {
-    tensor_vectors[i] = GetTensorsInMap(map, inst->operand(i));
+    tensor_vectors[i] = GetTensorsInMap(map, res, inst->operand(i));
   }
   // Go through all the inplace tensors and check they are all parallel
   // writeable.
@@ -1568,6 +1592,49 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map,
   }
 
   return true;
+}
+
+poplar::Tensor GetTensorForInplaceOp(
+    poplar::Tensor tensor, CompilerResources& res, const HloInstruction* inst,
+    int64 operand_index, uint64 operand_tuple_idx,
+    poplar::program::Sequence& seq, bool is_lowered_inplace,
+    bool parallel_writeable_output) {
+  // We need to add a copy before an inplace op if:
+  // 1. inst is not marked as inplace, or
+  // 2. the output has to be parallel Writeable, but tensor is not.
+  bool add_copy = !is_lowered_inplace;
+  if (parallel_writeable_output) {
+    add_copy |= !tensor.isParallelWriteable();
+  }
+
+  if (add_copy) {
+    // Preserve aliases for inplace read only ops.
+    auto clone_method =
+        parallel_writeable_output
+            ? poplar::TensorCloneMethod::PRESERVE_ORDER_UNLESS_ALIASES
+            : poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES;
+
+    VLOG(1) << "Adding a copy for operand " << operand_index << ", tuple index "
+            << operand_tuple_idx << ", of inplace op " << inst->name();
+    const auto* operand = inst->operand(operand_index);
+    auto& graph = GetGraphWithOutputIndex(res, operand, operand_tuple_idx);
+
+    const std::string name = GetDebugName(inst) + ".clone";
+
+    if (parallel_writeable_output) {
+      poplar::Tensor tensor_clone = graph.clone(tensor, name, clone_method);
+      const uint64 tiles_used = GetNumberOfUsedTiles(graph, tensor);
+      if (tiles_used == 1 && !tensor.isParallelWriteable()) {
+        poputil::mapTensorLinearly(graph, tensor_clone);
+      }
+      seq.add(poplar::program::Copy(tensor, tensor_clone));
+      tensor = tensor_clone;
+    } else {
+      tensor = poputil::duplicate(graph, tensor, seq, name, clone_method);
+    }
+  }
+
+  return tensor;
 }
 
 StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
@@ -1641,6 +1708,7 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
                    std::inserter(visited_indices, visited_indices.end()));
     }
   }
+
   // True if the tensors returned by this function need to be parallel
   // writeable.
   const bool parallel_writeable_output =
@@ -1650,45 +1718,12 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
   for (uint64 i = 0; i < inplace_indexes.size(); i++) {
     for (uint64 tuple_idx = 0; tuple_idx < tensors[i].size(); tuple_idx++) {
       poplar::Tensor t = tensors[i][tuple_idx];
-      // We need to add a copy before an inplace op if:
-      // 1. inst is not marked as inplace, or
-      // 2. this is a repeated use of the same operand, or
-      // 3. the output has to be parallel Writeable, but t is not.
-      bool requires_copy_of_inplace_operand =
-          !is_still_inplace || tuple_repeated_use[i];
-      if (parallel_writeable_output) {
-        requires_copy_of_inplace_operand |= !t.isParallelWriteable();
-      }
+      // Make sure to add a copy if this is a repeated use of the same operand.
+      const bool is_tensor_inplace = is_still_inplace && !tuple_repeated_use[i];
 
-      if (requires_copy_of_inplace_operand) {
-        // Preserve aliases for inplace read only ops.
-        auto clone_method =
-            parallel_writeable_output
-                ? poplar::TensorCloneMethod::PRESERVE_ORDER_UNLESS_ALIASES
-                : poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES;
-
-        VLOG(1) << "Adding a copy for operand " << inplace_indexes[i]
-                << ", tuple index " << tuple_idx << ", of inplace op "
-                << inst->name()
-                << " inplace description: " << inplace_description.ToString();
-        const auto* operand = inst->operand(inplace_indexes[i]);
-        auto& graph = GetGraphWithOutputIndex(res, operand, tuple_idx);
-
-        if (parallel_writeable_output) {
-          poplar::Tensor t_clone =
-              graph.clone(t, GetDebugName(inst) + ".clone", clone_method);
-          const uint64 tiles_used = GetNumberOfUsedTiles(graph, t);
-          if (tiles_used == 1 && !t.isParallelWriteable()) {
-            poputil::mapTensorLinearly(graph, t_clone);
-          }
-          seq.add(poplar::program::Copy(t, t_clone));
-          t = t_clone;
-        } else {
-          t = poputil::duplicate(graph, t, seq, GetDebugName(inst) + ".clone",
-                                 clone_method);
-        }
-      }
-      tensors[i][tuple_idx] = t;
+      tensors[i][tuple_idx] = GetTensorForInplaceOp(
+          t, res, inst, inplace_indexes[i], tuple_idx, seq, is_tensor_inplace,
+          parallel_writeable_output);
     }
   }
   return tensors;

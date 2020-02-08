@@ -17,7 +17,7 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_ENTRY_VISITOR_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_allocation_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -27,21 +27,22 @@ struct CompilerResources;
 /*
  * This visitor handles inputs and outputs of the entry computation in a module.
  */
-class EntryVisitor : public DeferredAllocationVisitor {
+class EntryVisitor : public DeferredVisitor {
  public:
-  EntryVisitor(CompilerResources& resources)
-      : DeferredAllocationVisitor(resources) {}
-
-  Status HandleParameter(HloInstruction* inst);
-  Status FinishVisit(HloInstruction* root);
+  EntryVisitor(CompilerResources& resources, const HloComputation* comp);
 
   const poplar::program::Sequence GetHostToDevice() const;
   const poplar::program::Sequence GetDeviceToHost() const;
 
  protected:
+  StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
+      const HloInstruction* inst) override;
+
   StatusOr<poplar::Tensor> PostProcessParameterAllocation(
-      const HloInstruction* inst, int64 flat_tuple_index, const Shape& shape,
-      poplar::Tensor tensor) override;
+      TensorSource location, const Shape& shape,
+      poplar::program::Sequence& sequence, poplar::Tensor tensor) override;
+
+  Status FinishDeferedAllocationVisit(HloInstruction* root) override;
 
  private:
   Status StreamOutputs(HloInstruction* inst, uint64 start_idx,

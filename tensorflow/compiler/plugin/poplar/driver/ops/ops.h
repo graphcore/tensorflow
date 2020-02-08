@@ -23,6 +23,8 @@ limitations under the License.
 
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -207,10 +209,41 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                                                  const xla::Shape& output,
                                                  TensorMap& tensor_map);
 
+// Version of While op which allows inputs to not have a layout.
+StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
+                                                 const HloInstruction* inst,
+                                                 DeferredArgVectors& inputs,
+                                                 const xla::Shape& output,
+                                                 TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
                                                   const HloInstruction* inst,
                                                   const xla::Shape& output,
                                                   TensorMap& tensor_map);
+
+// Version of Repeat op which allows inputs to not have a layout.
+StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
+                                                  const HloInstruction* inst,
+                                                  DeferredArgVectors& inputs,
+                                                  const xla::Shape& output,
+                                                  TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
+                                                    const HloInstruction* inst,
+                                                    const xla::Shape& output,
+                                                    TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
+                                                    const HloInstruction* inst,
+                                                    const xla::Shape& output,
+                                                    TensorMap& tensor_map);
+
+// Version of Pipeline op which allows inputs to not have a layout.
+StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
+                                                    const HloInstruction* inst,
+                                                    DeferredArgVectors& inputs,
+                                                    const xla::Shape& output,
+                                                    TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateConv2D(CompilerResources& res,
                                                 const HloInstruction* inst,

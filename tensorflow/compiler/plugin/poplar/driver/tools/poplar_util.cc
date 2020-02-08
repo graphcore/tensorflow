@@ -447,5 +447,13 @@ StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
   }
   return plan->second;
 }
+
+DeferredArgVectors ConvertInputsToDeferredInputs(ArgVectors& inputs) {
+  DeferredArgVectors deferred_inputs(inputs.size());
+  for (uint64 i = 0; i != inputs.size(); ++i) {
+    deferred_inputs[i] = {inputs[i].begin(), inputs[i].end()};
+  }
+  return deferred_inputs;
+}
 }  // namespace poplarplugin
 }  // namespace xla

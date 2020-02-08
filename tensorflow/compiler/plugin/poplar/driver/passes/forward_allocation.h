@@ -16,13 +16,14 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_FORWARD_ALLOCATION_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_FORWARD_ALLOCATION_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
-#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
-
 #include <fstream>
 #include <queue>
 #include <sstream>
+#include <vector>
+
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
 
@@ -48,25 +49,19 @@ class ForwardAllocation : public HloModulePass {
       HloInstruction* layout_producer, const int64 layout_output_index,
       const std::vector<HloInstruction*>& other_targets,
       const std::vector<HloInstruction*>& forward_path,
-      const std::vector<HloInstruction*>& backward_path,
-      const DeferredAllocationsPath& deferred_allocations_path);
+      const std::vector<HloInstruction*>& backward_path);
 
   StatusOr<bool> FindLayoutSensativeTargets(
       HloComputation* comp, std::set<const HloInstruction*>& ops_with_layout);
 
   StatusOr<bool> FindLayoutDependentTargets(HloComputation* comp);
 
-  absl::flat_hash_map<HloInstruction*, DeferredAllocationsPath> FindInputs(
-      HloComputation* comp);
+  absl::flat_hash_set<HloInstruction*> FindInputs(HloComputation* comp);
 
-  void FlattenInputs(
-      HloInstruction* inst, std::vector<const HloInstruction*> path,
-      absl::flat_hash_map<HloInstruction*, DeferredAllocationsPath>&
-          input_to_deferred_allocation_path);
+  void FlattenInputs(HloInstruction* inst,
+                     absl::flat_hash_set<HloInstruction*>& deferred_inputs);
 
   TensorAllocationMap& tensor_allocation_map;
-  TensorsWithLayouts& tensors_with_layout;
-  DeferredAllocations& deferred_allocations;
 };
 
 }  // namespace poplarplugin

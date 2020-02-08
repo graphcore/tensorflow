@@ -92,11 +92,16 @@ StatusOr<poplar::program::Program> CreateScatter(
         auto b_elem = b.flatten()[i];
         auto o_elem = result.flatten()[i];
 
-        // Copy the inputs in
-        p.add(
-            poplar::program::Copy(a_elem, update_comp_visitor->inputs()[0][0]));
-        p.add(
-            poplar::program::Copy(b_elem, update_comp_visitor->inputs()[1][0]));
+        // Copy the inputs in if they were used.
+        if (update_comp_visitor->InputIsUsed(0, 0)) {
+          p.add(poplar::program::Copy(a_elem,
+                                      update_comp_visitor->inputs()[0][0]));
+        }
+
+        if (update_comp_visitor->InputIsUsed(1, 0)) {
+          p.add(poplar::program::Copy(b_elem,
+                                      update_comp_visitor->inputs()[1][0]));
+        }
 
         // Add the sequence
         p.add(update_comp_visitor->GetSequence());

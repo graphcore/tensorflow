@@ -158,8 +158,6 @@ struct CompilerAnnotations {
 
   TensorAllocationMap tensor_allocation_map;
 
-  DeferredAllocations deferred_allocations;
-
   InfeedInfos infeed_infos;
 
   OutfeedInfos outfeed_infos;
@@ -172,8 +170,6 @@ struct CompilerAnnotations {
   SendRecvInfos recv_infos;
   HostEmbeddingInfos host_embedding_lookup_infos;
   HostEmbeddingInfos host_embedding_update_infos;
-
-  TensorsWithLayouts tensors_with_layout;
 
   std::unique_ptr<HloModule> flattened_module;
 

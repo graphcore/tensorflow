@@ -16,15 +16,17 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SUBCOMPUTATION_GRAPH_CACHING_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SUBCOMPUTATION_GRAPH_CACHING_H_
 
+#include <memory>
+#include <unordered_map>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/xla/status.h"
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 
-#include <map>
 #include <poputil/GraphFunction.hpp>
 
 namespace xla {
@@ -35,9 +37,9 @@ namespace subcomputation_graph_caching {
 
 class SubcomputationGraphCache {
  public:
-  // Get or compile the SubComputationVisitor for a computation.
-  StatusOr<const SubComputationVisitor*> GetOrCompileSubcomputation(
-      CompilerResources& res, const ArgVectors& inputs,
+  // Get or compile the DeferredVisitor for a computation.
+  StatusOr<const DeferredVisitor*> GetOrCompileSubcomputation(
+      CompilerResources& res, ArgVectors& inputs,
       const HloComputation* computation);
 
  private:
@@ -48,9 +50,8 @@ class SubcomputationGraphCache {
   struct HloComputationEquals {
     bool operator()(const HloComputation* a, const HloComputation* b) const;
   };
-  std::unordered_map<const HloComputation*,
-                     std::unique_ptr<SubComputationVisitor>, HloComputationHash,
-                     HloComputationEquals>
+  std::unordered_map<const HloComputation*, std::unique_ptr<DeferredVisitor>,
+                     HloComputationHash, HloComputationEquals>
       table_;
 };
 

@@ -136,11 +136,6 @@ ENTRY c1 {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], ip2);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 2);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 // Check it goes through call sites
@@ -222,13 +217,6 @@ TEST_F(AllocationFinderTest, FindSubCompTensorAllocations) {
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op0_sub, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1_sub, 0)));
 }
 
 // Check it works for multiple valid destinations (perferred one first)
@@ -350,15 +338,6 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations1) {
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op0_sub1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1_sub1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op0_sub2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1_sub2, 0)));
 }
 
 // Check it works for multiple valid destinations (perferred one second)
@@ -480,15 +459,6 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations2) {
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op0_sub1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1_sub1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op0_sub2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1_sub2, 0)));
 }
 
 // Check it works for constants
@@ -542,11 +512,6 @@ ENTRY c1 {
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 2);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 // Check it goes through Tuple/Detuple pairs
@@ -598,15 +563,6 @@ TEST_F(AllocationFinderTest, CanTraverseTuples) {
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 3);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(in, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(w, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(tuple, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(tuple, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(in1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(w1, 0)));
 }
 
 // Check it can start from tuple subshapes
@@ -654,13 +610,6 @@ TEST_F(AllocationFinderTest, CanStartOnTuples) {
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(in, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(in, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(in1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(w1, 0)));
 }
 
 // Check it goes through while instructions
@@ -765,17 +714,6 @@ TEST_F(AllocationFinderTest, FindWhileTensorAllocations) {
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 8);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(in, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(w, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(init, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(init, 2)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(tuple_body, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(tuple_body, 2)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(in_body, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(w_body, 0)));
 }
 
 // Check it goes through repeat instructions
@@ -892,9 +830,6 @@ TEST_F(AllocationFinderTest, FindRepeatTensorAllocations) {
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 8);
 }
 
 // Check basic parameter matching
@@ -949,12 +884,6 @@ ENTRY c1 {
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], ip1);
   EXPECT_EQ(t.backward_path[1], trans);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 3);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(trans, 0)));
 }
 
 // Check it goes through call sites
@@ -1011,10 +940,6 @@ TEST_F(AllocationFinderTest, FindDoesntTraceThroughInvalidCalls) {
   EXPECT_EQ(t1.tgt, conv);
   EXPECT_EQ(t1.input_index, 1ll);
   EXPECT_EQ(t1.backward_path.size(), 1);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 1);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(op1, 0)));
 }
 
 TEST_F(AllocationFinderTest, BiasAdd1) {
@@ -1084,12 +1009,6 @@ ENTRY c1 {
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
   EXPECT_EQ(t.layout_output_idx, 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 3);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest, BiasAddATwice) {
@@ -1181,13 +1100,6 @@ ENTRY c1 {
   EXPECT_EQ(t.forward_path.size(), 1);
   EXPECT_EQ(t.forward_path[0], call);
   EXPECT_EQ(t.backward_path.size(), 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
 }
 
 TEST_F(AllocationFinderTest, BiasAddWithPath) {
@@ -1263,13 +1175,6 @@ ENTRY c1 {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest, MatMulBiasAdd) {
@@ -1338,12 +1243,6 @@ HloModule top
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 3);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest,
@@ -1403,11 +1302,6 @@ HloModule top
   ForwardAllocation fwd_finder(annotations);
   EXPECT_FALSE(fwd_finder.Run(module0).ValueOrDie());
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 2);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
 }
 
 TEST_F(AllocationFinderTest, MatMulBiasAddWithPath) {
@@ -1479,13 +1373,6 @@ HloModule top
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest, BatchNormInfParams) {
@@ -1541,11 +1428,6 @@ ENTRY top {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 2);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest, ConstantInput) {
@@ -1619,13 +1501,6 @@ ENTRY top  {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
 }
 
 TEST_F(AllocationFinderTest, BatchNormInfParamsWithPath) {
@@ -1705,15 +1580,6 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape2);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
 }
 
 TEST_F(AllocationFinderTest, BatchNormTrainingParams) {
@@ -1834,13 +1700,6 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 5);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(conv_ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(conv_ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(bn_ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(bn_ip2, 0)));
-
   // The add in the reduce computation can also have a layout on either operand.
   HloInstruction* x = FindInstruction(module0, "x");
   HloInstruction* y = FindInstruction(module0, "y");
@@ -1848,9 +1707,6 @@ ENTRY top {
       annotations.tensor_allocation_map.end()) {
     EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
               annotations.tensor_allocation_map.end());
-    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(y, 0)));
-  } else {
-    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(x, 0)));
   }
 }
 
@@ -1950,15 +1806,6 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape2);
 
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 7);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
-
   // The add in the reduce computation can also have a layout on either operand.
   HloInstruction* x = FindInstruction(module0, "x");
   HloInstruction* y = FindInstruction(module0, "y");
@@ -1966,9 +1813,6 @@ ENTRY top {
       annotations.tensor_allocation_map.end()) {
     EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
               annotations.tensor_allocation_map.end());
-    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(y, 0)));
-  } else {
-    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(x, 0)));
   }
 }
 
@@ -2072,15 +1916,6 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape2);
 
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 7);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
-
   // The add in the reduce computation can also have a layout on either operand.
   HloInstruction* x = FindInstruction(module0, "x");
   HloInstruction* y = FindInstruction(module0, "y");
@@ -2088,9 +1923,6 @@ ENTRY top {
       annotations.tensor_allocation_map.end()) {
     EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
               annotations.tensor_allocation_map.end());
-    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(y, 0)));
-  } else {
-    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(x, 0)));
   }
 }
 
@@ -2192,15 +2024,6 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape2);
 
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 7);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
-
   // The add in the reduce computation can also have a layout on either operand.
   HloInstruction* x = FindInstruction(module0, "x");
   HloInstruction* y = FindInstruction(module0, "y");
@@ -2208,9 +2031,6 @@ ENTRY top {
       annotations.tensor_allocation_map.end()) {
     EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
               annotations.tensor_allocation_map.end());
-    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(y, 0)));
-  } else {
-    EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(x, 0)));
   }
 }
 
@@ -2303,14 +2123,6 @@ ENTRY c1 {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 5);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2_r, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
 }
 
 TEST_F(AllocationFinderTest, ForwardAllocationDontLookThroughCasts) {
@@ -2394,13 +2206,6 @@ ENTRY c1 {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], ip2_r);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2_r, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest, ForwardAllocationElementwiseGetsALayoutWithGTE) {
@@ -2492,14 +2297,6 @@ ENTRY top {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 5);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip4, 0)));
 }
 
 TEST_F(AllocationFinderTest, ForwardAllocationCustomPoplarOp) {
@@ -2575,13 +2372,6 @@ ENTRY top {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
 }
 
 TEST_F(AllocationFinderTest, FindInfeedAllocation) {
@@ -2659,16 +2449,6 @@ ENTRY top {
   t = annotations.tensor_allocation_map.at(std::make_pair(repeat_tuple, 2));
   EXPECT_EQ(t.tgt, convolution);
   EXPECT_EQ(t.input_index, 1);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 7);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip_weights, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(input_tuple, 2)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(repeat_tuple, 2)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(infeed_tuple, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(infeed_gte, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(conv_input, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(conv_weights, 0)));
 }
 
 TEST_F(AllocationFinderTest, FindInfeedAllocationTuple) {
@@ -2738,15 +2518,6 @@ ENTRY top {
   t = annotations.tensor_allocation_map.at(std::make_pair(infeed_tuple, 1));
   EXPECT_EQ(t.tgt, convolution);
   EXPECT_EQ(t.input_index, 1);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 6);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(infeed_tuple, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(infeed_tuple, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(infeed_gte, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(infeed_gte, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(conv_input, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(conv_weights, 0)));
 }
 
 TEST_F(AllocationFinderTest, FindRecvDoneAllocation) {
@@ -2870,14 +2641,6 @@ ENTRY top {
   ASSERT_EQ(t.layout_output_idx, 0);
   ASSERT_EQ(t.forward_path.size(), 0);
   ASSERT_EQ(t.backward_path.size(), 0);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  ASSERT_EQ(tensors_with_layout.size(), 5);
-  ASSERT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  ASSERT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  ASSERT_TRUE(tensors_with_layout.contains(std::make_pair(p2_r, 0)));
-  ASSERT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  ASSERT_TRUE(tensors_with_layout.contains(std::make_pair(bn_offset, 0)));
 }
 
 TEST_F(AllocationFinderTest, InputTupleBiasAdd) {
@@ -2949,25 +2712,6 @@ HloModule top
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-  EXPECT_EQ(t.deferred_allocations_path.size(), 1);
-  DeferredAllocationsPath expected_deferred_allocations_path = {
-      std::make_pair(ip_tuple, 2)};
-  EXPECT_EQ(t.deferred_allocations_path, expected_deferred_allocations_path);
-
-  EXPECT_TRUE(annotations.deferred_allocations.contains(root->parent()));
-  EXPECT_TRUE(annotations.deferred_allocations[root->parent()].contains(
-      std::make_pair(ip_tuple, 2)));
-  EXPECT_EQ(annotations.deferred_allocations[root->parent()]
-                                            [std::make_pair(ip_tuple, 2)],
-            std::make_pair(gte2, 0ll));
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 5);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip_tuple, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip_tuple, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(gte0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(gte1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(gte2, 0)));
 }
 
 TEST_F(AllocationFinderTest, InputTupleInfeedBiasAdd) {
@@ -3041,27 +2785,6 @@ HloModule top
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-  EXPECT_EQ(t.deferred_allocations_path.size(), 2);
-  DeferredAllocationsPath expected_deferred_allocations_path = {
-      std::make_pair(ip_tuple, 2), std::make_pair(infeed, 2)};
-  EXPECT_EQ(t.deferred_allocations_path, expected_deferred_allocations_path);
-
-  EXPECT_TRUE(annotations.deferred_allocations.contains(root->parent()));
-  EXPECT_TRUE(annotations.deferred_allocations[root->parent()].contains(
-      std::make_pair(infeed, 2)));
-  EXPECT_EQ(annotations.deferred_allocations[root->parent()]
-                                            [std::make_pair(infeed, 2)],
-            std::make_pair(gte2, 0ll));
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 7);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(infeed, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(infeed, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip_tuple, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip_tuple, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(gte0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(gte1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(gte2, 0)));
 }
 
 TEST_F(AllocationFinderTest, NestedInputTupleBatchNormInfParamsWithPath) {
@@ -3138,10 +2861,6 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape1);
-  EXPECT_EQ(t.deferred_allocations_path.size(), 2);
-  DeferredAllocationsPath expected_deferred_allocations_path0 = {
-      std::make_pair(nested_tuple, 0), std::make_pair(arg_tuple, 2)};
-  EXPECT_EQ(t.deferred_allocations_path, expected_deferred_allocations_path0);
 
   t = annotations.tensor_allocation_map.at(std::make_pair(ip2_1, 0));
   EXPECT_EQ(t.tgt, bn);
@@ -3151,33 +2870,6 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape2);
-  EXPECT_EQ(t.deferred_allocations_path.size(), 2);
-  DeferredAllocationsPath expected_deferred_allocations_path1 = {
-      std::make_pair(nested_tuple, 1), std::make_pair(arg_tuple, 3)};
-  EXPECT_EQ(t.deferred_allocations_path, expected_deferred_allocations_path1);
-
-  EXPECT_TRUE(annotations.deferred_allocations.contains(root->parent()));
-  EXPECT_TRUE(annotations.deferred_allocations[root->parent()].contains(
-      std::make_pair(arg_tuple, 2)));
-  EXPECT_EQ(annotations.deferred_allocations[root->parent()]
-                                            [std::make_pair(arg_tuple, 2)],
-            std::make_pair(ip2_0, 0ll));
-  EXPECT_TRUE(annotations.deferred_allocations[root->parent()].contains(
-      std::make_pair(arg_tuple, 3)));
-  EXPECT_EQ(annotations.deferred_allocations[root->parent()]
-                                            [std::make_pair(arg_tuple, 3)],
-            std::make_pair(ip2_1, 0ll));
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 8);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(arg_tuple, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(arg_tuple, 1)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2_0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2_1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(reshape2, 0)));
 }
 
 TEST_F(AllocationFinderTest, ForwardAllocationTupleHasTupleSharding) {
@@ -3235,9 +2927,6 @@ ENTRY top {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-  DeferredAllocationsPath expected_deferred_allocations_path0 = {
-      std::make_pair(arg0, 1)};
-  EXPECT_EQ(t.deferred_allocations_path, expected_deferred_allocations_path0);
 
   t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
   EXPECT_EQ(t.tgt, custom_op);
@@ -3246,26 +2935,6 @@ ENTRY top {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-  DeferredAllocationsPath expected_deferred_allocations_path1 = {
-      std::make_pair(arg0, 2)};
-  EXPECT_EQ(t.deferred_allocations_path, expected_deferred_allocations_path1);
-
-  EXPECT_TRUE(annotations.deferred_allocations.contains(custom_op->parent()));
-  EXPECT_TRUE(annotations.deferred_allocations[custom_op->parent()].contains(
-      std::make_pair(arg0, 1)));
-  EXPECT_EQ(annotations.deferred_allocations[custom_op->parent()]
-                                            [std::make_pair(arg0, 1)],
-            std::make_pair(ip1, 0ll));
-  EXPECT_TRUE(annotations.deferred_allocations[custom_op->parent()].contains(
-      std::make_pair(arg0, 2)));
-  EXPECT_EQ(annotations.deferred_allocations[custom_op->parent()]
-                                            [std::make_pair(arg0, 2)],
-            std::make_pair(ip2, 0ll));
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 2);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest, ForwardAllocationTupleHasNonTupleSharding) {
@@ -3325,9 +2994,6 @@ ENTRY top {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-  DeferredAllocationsPath expected_deferred_allocations_path0 = {
-      std::make_pair(arg0, 1)};
-  EXPECT_EQ(t.deferred_allocations_path, expected_deferred_allocations_path0);
 
   t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
   EXPECT_EQ(t.tgt, custom_op);
@@ -3336,26 +3002,6 @@ ENTRY top {
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
-  DeferredAllocationsPath expected_deferred_allocations_path1 = {
-      std::make_pair(arg0, 2)};
-  EXPECT_EQ(t.deferred_allocations_path, expected_deferred_allocations_path1);
-
-  EXPECT_TRUE(annotations.deferred_allocations.contains(custom_op->parent()));
-  EXPECT_TRUE(annotations.deferred_allocations[custom_op->parent()].contains(
-      std::make_pair(arg0, 1)));
-  EXPECT_EQ(annotations.deferred_allocations[custom_op->parent()]
-                                            [std::make_pair(arg0, 1)],
-            std::make_pair(ip1, 0ll));
-  EXPECT_TRUE(annotations.deferred_allocations[custom_op->parent()].contains(
-      std::make_pair(arg0, 2)));
-  EXPECT_EQ(annotations.deferred_allocations[custom_op->parent()]
-                                            [std::make_pair(arg0, 2)],
-            std::make_pair(ip2, 0ll));
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 2);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest, ForwardAllocationTupleHasTupleShardingDoesnMatch) {
@@ -3446,11 +3092,6 @@ ENTRY cast1 {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], ip2);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 3);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 // Check cast for find path
@@ -3727,11 +3368,6 @@ ENTRY main {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], ip2);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 3);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
 }
 
 TEST_F(AllocationFinderTest, AllocationsWithPad) {
@@ -3789,13 +3425,6 @@ ENTRY c1 {
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], ip1);
   EXPECT_EQ(t.backward_path[1], trans);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(padded_ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(trans, 0)));
 
   Literal p0_data =
       LiteralUtil::CreateR4<float>({{{{10}, {20}, {30}, {40}, {50}, {60}},
@@ -3922,13 +3551,6 @@ ENTRY c1 {
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], ip1);
   EXPECT_EQ(t.backward_path[1], trans);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 4);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(padded_ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(trans, 0)));
 
   Literal p0_data =
       LiteralUtil::CreateR4<float>({{{{10}, {20}, {30}, {40}, {50}, {60}},
@@ -4076,17 +3698,8 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], p3_r);
   EXPECT_EQ(t.backward_path[1], padded_p3);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 7);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(p2_r, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(padded_p3, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(p3_r, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
 }
+
 TEST_F(AllocationFinderTest, BatchNormInfParamsWithZeroPad) {
   std::string hlo = R"(
 HloModule top
@@ -4173,16 +3786,6 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], p3_r);
   EXPECT_EQ(t.backward_path[1], padded_p3);
-
-  auto tensors_with_layout = annotations.tensors_with_layout;
-  EXPECT_EQ(tensors_with_layout.size(), 7);
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip1, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(p2_r, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip2, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(padded_p3, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(p3_r, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(ip3, 0)));
 }
 
 // // TODO:
