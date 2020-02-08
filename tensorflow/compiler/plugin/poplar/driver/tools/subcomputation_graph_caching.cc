@@ -40,17 +40,18 @@ bool SubcomputationGraphCache::HloComputationEquals::operator()(
   return a->Equal(*b, false, true);
 }
 
-StatusOr<const SubComputationVisitor*>
+StatusOr<const DeferredVisitor*>
 SubcomputationGraphCache::GetOrCompileSubcomputation(
-    CompilerResources& res, const ArgVectors& inputs,
+    CompilerResources& res, ArgVectors& inputs,
     const HloComputation* computation) {
+  DeferredArgVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
   auto itr = table_.find(computation);
   if (itr == table_.end()) {
     VLOG(2) << "Compiling sub-computation " << computation->name();
     XLA_VLOG_LINES(2, computation->ToString());
     itr = table_
               .emplace(computation,
-                       absl::make_unique<SubComputationVisitor>(res, inputs))
+                       absl::make_unique<DeferredVisitor>(res, deferred_inputs))
               .first;
     auto order =
         computation->parent()->schedule().sequence(computation).instructions();

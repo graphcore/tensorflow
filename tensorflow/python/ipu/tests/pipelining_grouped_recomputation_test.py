@@ -30,6 +30,7 @@ from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.training import momentum
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import pipelining_ops
@@ -362,7 +363,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
     pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 10044, True,
+        pipeline_depth, dataset_fn, optimizer, self, 13107, True,
         pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
@@ -512,7 +513,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
     pipeline_depth = 24
     repeat_count = 2
-    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+    optimizer = optimizer = momentum.MomentumOptimizer(0.01, 0.98)
 
     def stage1(x, label):
       with variable_scope.variable_scope("vs", use_resource=True):

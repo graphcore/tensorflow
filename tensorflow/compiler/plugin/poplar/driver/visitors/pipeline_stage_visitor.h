@@ -17,27 +17,19 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_STAGE_VISITOR_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 
 namespace xla {
 namespace poplarplugin {
 
 struct CompilerResources;
 
-class PipelineStageVisitor : public InplaceSubComputationVisitor {
+class PipelineStageVisitor : public InplaceDeferredVisitor {
  public:
-  PipelineStageVisitor(CompilerResources& res, const ArgVectors& inputs);
+  PipelineStageVisitor(CompilerResources& res,
+                       const DeferredArgVectors& inputs);
 
-  Status HandleTuple(HloInstruction* inst) override;
-
-  // When recomputation of the pipline is enabled, the forward and the
-  // recomputation stage share the Poplar program, meaning that their outputs
-  // will be in the same tensor. To prevent clobbering of the tensors, copies
-  // need to be inserted. This function takes a PipelineStage instruction and
-  // returns for which output (flat_index) tensors we need to add copies.
-  StatusOr<std::vector<bool>> GetOutputCopies(const HloInstruction* inst,
-                                              bool used_for_recomputation);
+  bool TupleOutputsNeedToPreserveAliasing(const HloInstruction* inst) override;
 
   poplar::program::Sequence GetSequence() const override;
 
@@ -45,6 +37,30 @@ class PipelineStageVisitor : public InplaceSubComputationVisitor {
   // Caching fields for the GetSequence call
   mutable bool has_function_ = false;
   mutable poplar::Function function_;
+};
+
+// Similar to PipelineStageVisitor, however it adds copies for any non-inplace
+// which allows its sequence to be reused with different inputs.
+class ReusablePipelineStageVisitor : public PipelineStageVisitor {
+ public:
+  ReusablePipelineStageVisitor(CompilerResources& res,
+                               const DeferredArgVectors& inputs);
+
+  // A function which propagates any tensors which were not allocated at call
+  // site but now have a tensor.
+  Status PropagateDeferredAllocations(const HloInstruction* callsite);
+
+  // Get the sequence for this stage, adding any copies for inplace inputs.
+  poplar::program::Sequence GetSequence(const HloInstruction* callsite,
+                                        const DeferredArgVectors& inputs,
+                                        TensorMap& callsite_tensor_map) const;
+
+  // Same as above, but all tensors are allocated.
+  poplar::program::Sequence GetSequence(const HloInstruction* callsite,
+                                        const ArgVectors& inputs) const;
+
+ private:
+  const HloInstruction* callsite_;
 };
 
 }  // namespace poplarplugin

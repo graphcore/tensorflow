@@ -37,7 +37,7 @@ Status MapVisitor::HandleParameter(HloInstruction* inst) {
 }
 
 Status MapVisitor::FinishVisit(HloInstruction* inst) {
-  outputs_ = FindInstructionOutputs(tensor_map, inst);
+  outputs_ = FindInstructionOutputs(tensor_map, resources_, inst);
   tensor_map.clear();
   return Status::OK();
 }

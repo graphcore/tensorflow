@@ -245,7 +245,8 @@ StatusOr<ExpressionInput> GetTensorInput(CompilerResources& res,
                                          poplar::program::Sequence& seq) {
   // For elementwise, operand 0 might be inplace.
   poplar::Tensor tensor;
-  if (operand_idx == 0 && AreInplaceOutputTensorsWritable(tensor_map, inst)) {
+  if (operand_idx == 0 &&
+      AreInplaceOutputTensorsWritable(tensor_map, res, inst)) {
     TF_ASSIGN_OR_RETURN(
         ArgVectors inputs,
         FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
@@ -370,7 +371,8 @@ StatusOr<poplar::program::Program> CreateUnaryElementwiseOp(
   auto expr = popops::expr::UnaryOp(op, *expression_inputs[0].expr);
 
   poplar::Tensor out;
-  const bool is_inplace = AreInplaceOutputTensorsWritable(tensor_map, inst);
+  const bool is_inplace =
+      AreInplaceOutputTensorsWritable(tensor_map, res, inst);
   if (is_inplace) {
     popops::mapInPlace(graph, expr, input_tensors, seq, GetDebugName(inst));
     out = input_tensors[0];
@@ -399,7 +401,8 @@ StatusOr<poplar::program::Program> CreateBinaryElementwiseOp(
                                      *expression_inputs[1].expr);
 
   poplar::Tensor out;
-  const bool is_inplace = AreInplaceOutputTensorsWritable(tensor_map, inst);
+  const bool is_inplace =
+      AreInplaceOutputTensorsWritable(tensor_map, res, inst);
   if (is_inplace) {
     switch (operation->opcode()) {
       case HloOpcode::kAdd:
@@ -432,7 +435,8 @@ StatusOr<poplar::program::Program> CreateTernaryElementwiseOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {
   // Non of the ternary ops currently support in-placing.
-  const bool is_inplace = AreInplaceOutputTensorsWritable(tensor_map, inst);
+  const bool is_inplace =
+      AreInplaceOutputTensorsWritable(tensor_map, res, inst);
   CHECK(!is_inplace);
 
   poplar::Graph& graph = GetGraph(res, inst);
@@ -845,7 +849,8 @@ StatusOr<poplar::program::Program> CreateNonLinearityOp(
 
   poplar::program::Sequence seq;
   poplar::Tensor t;
-  const bool is_inplace = AreInplaceOutputTensorsWritable(tensor_map, inst);
+  const bool is_inplace =
+      AreInplaceOutputTensorsWritable(tensor_map, res, inst);
 
   if (is_inplace) {
     TF_ASSIGN_OR_RETURN(ArgVectors inputs,

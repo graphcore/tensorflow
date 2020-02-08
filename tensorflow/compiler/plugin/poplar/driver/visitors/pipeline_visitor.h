@@ -17,9 +17,8 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_VISITOR_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
 
 #define HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(X) \
   Status X(HloInstruction* hlo) override { return HandleNotImplemented(hlo); }
@@ -29,21 +28,17 @@ namespace poplarplugin {
 
 struct CompilerResources;
 
-class PipelineVisitor : public InplaceSubComputationVisitor {
+class PipelineVisitor : public InplaceDeferredVisitor {
  public:
   PipelineVisitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Schedule schedule,
       int64 stage_count, const std::vector<int>& stage_ipu_mapping,
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
       const absl::flat_hash_set<int> stages_with_recomputation,
-      CompilerResources& res, const ArgVectors& inputs,
-      const std::vector<const SubComputationVisitor*>&
-          dependent_subcomputations = {});
+      CompilerResources& res, const DeferredArgVectors& inputs);
 
   PipelineVisitor(const HloInstruction* pipeline, CompilerResources& res,
-                  const ArgVectors& inputs,
-                  const std::vector<const SubComputationVisitor*>&
-                      dependent_subcomputations = {});
+                  const DeferredArgVectors& inputs);
 
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleClamp);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleSelect);
@@ -77,7 +72,6 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleMap);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleReduceWindow);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleSelectAndScatter);
-  HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleWhile);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleConditional);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleGather);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleScatter);
@@ -94,23 +88,26 @@ class PipelineVisitor : public InplaceSubComputationVisitor {
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleAddDependency);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleConstant);
 
-  Status HandleCall(HloInstruction* hlo) override;
   Status HandleCopy(HloInstruction* hlo) override;
   Status HandleCustomCall(HloInstruction* hlo) override;
-  Status HandleGetTupleElement(HloInstruction* hlo) override;
-  Status HandleTuple(HloInstruction* hlo) override;
-  Status HandleInfeed(HloInstruction* hlo) override;
   Status HandleOutfeed(HloInstruction* hlo) override;
 
   virtual Status HandleFifo(HloInstruction* hlo);
   virtual Status HandleInterIpuCopy(HloInstruction* hlo);
 
-  Status FinishVisit(HloInstruction* hlo) override;
-
   StatusOr<poplar::program::Sequence> GetPipelineSequence(
       int64 iterations) const;
 
  protected:
+  StatusOr<poplar::program::Sequence*> GetSequenceForInstruction(
+      const HloInstruction* inst);
+
+  Status HandleDeferredAllocationCall(HloInstruction* inst) override;
+  Status HandleDeferredAllocationTuple(HloInstruction* inst) override;
+  Status HandleDeferredAllocationWhile(HloInstruction* inst) override;
+
+  Status FinishDeferedAllocationVisit(HloInstruction* inst) override;
+
   poplar::program::Sequence& GetSequenceForAliasingCopy() override;
 
  private:

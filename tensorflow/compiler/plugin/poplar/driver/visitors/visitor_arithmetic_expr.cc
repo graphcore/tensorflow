@@ -41,7 +41,7 @@ namespace poplarplugin {
 
 ArithmeticExprVisitor::ArithmeticExprVisitor(CompilerResources& res,
                                              const ArgVectors& inputs)
-    : FullVisitor(res), inputs_(std::move(inputs)) {}
+    : BaseVisitor(res), inputs_(std::move(inputs)) {}
 
 StatusOr<std::unique_ptr<popops::expr::Expr>>
 ArithmeticExprVisitor::FindExpressionInput(const HloInstruction* inst) {

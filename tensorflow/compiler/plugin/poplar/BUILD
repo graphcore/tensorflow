@@ -487,7 +487,7 @@ cc_library(
         "driver/tools/poplar_util.cc",
         "driver/tools/seed_generator.cc",
         "driver/tools/subcomputation_graph_caching.cc",
-        "driver/visitors/deferred_allocation_visitor.cc",
+        "driver/visitors/deferred_visitor.cc",
         "driver/visitors/entry_visitor.cc",
         "driver/visitors/pipeline_stage_visitor.cc",
         "driver/visitors/pipeline_visitor.cc",
@@ -496,7 +496,6 @@ cc_library(
         "driver/visitors/visitor_full.cc",
         "driver/visitors/visitor_inline_call.cc",
         "driver/visitors/visitor_map.cc",
-        "driver/visitors/visitor_subcomputation.cc",
     ],
     hdrs = [
         "driver/compiler_resources.h",
@@ -529,7 +528,7 @@ cc_library(
         "driver/tools/spsc_queue.h",
         "driver/tools/subcomputation_graph_caching.h",
         "driver/vertex_templates.h",
-        "driver/visitors/deferred_allocation_visitor.h",
+        "driver/visitors/deferred_visitor.h",
         "driver/visitors/entry_visitor.h",
         "driver/visitors/pipeline_stage_visitor.h",
         "driver/visitors/pipeline_visitor.h",
@@ -538,7 +537,6 @@ cc_library(
         "driver/visitors/visitor_full.h",
         "driver/visitors/visitor_inline_call.h",
         "driver/visitors/visitor_map.h",
-        "driver/visitors/visitor_subcomputation.h",
     ],
     copts = [
         "-DTF_POPLAR_BUILD_TAG=" + tf_poplar_build_tag(),
@@ -1636,8 +1634,8 @@ xla_test(
 )
 
 xla_test(
-    name = "deferred_allocation_visitor_test",
-    srcs = ["tests/deferred_allocation_visitor_test.cc"],
+    name = "deferred_visitor_test",
+    srcs = ["tests/deferred_visitor_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -3507,7 +3505,7 @@ test_suite(
         "conversions_test",
         "convolution_classifier_test",
         "data_initializer_test",
-        "deferred_allocation_visitor_test",
+        "deferred_visitor_test",
         "dependency_replacer_test",
         "dump_poplar_info",
         "dynamic_slice_layout_test",

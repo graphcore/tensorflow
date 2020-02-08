@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -299,6 +300,8 @@ Status FullVisitor::HandleSelectAndScatter(HloInstruction* inst) {
 
 Status FullVisitor::HandleWhile(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  // Version of the while operation which does not allow parameters to be
+  // deferred.
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
       CreateWhileOp(resources_, inst, GetOutputShape(inst), tensor_map));
@@ -375,30 +378,6 @@ Status FullVisitor::HandleBatchNormGrad(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status FullVisitor::Postprocess(HloInstruction* inst) {
-  if (!(inst->shape().IsTuple() || inst->shape().IsToken())) {
-    auto outs = FindInstructionOutputs(tensor_map, inst);
-    if (outs.size() == 1) {
-      if (!PoplarShapeMatchesXLAShape(outs[0], inst->shape())) {
-        return xla::InternalError(
-            "Instruction %s has mismatched Poplar (%s) and XLA (%s) shapes",
-            inst->name().c_str(), Join(outs[0].shape(), ",").c_str(),
-            Join(inst->shape().dimensions(), ",").c_str());
-      }
-      TF_ASSIGN_OR_RETURN(poplar::Type expected_type,
-                          PoplarDataType(inst->shape()));
-      if (expected_type != outs[0].elementType()) {
-        return xla::InternalError(
-            "Instruction %s has mismatched Poplar (%s) and XLA (%s) type",
-            inst->name().c_str(),
-            outs[0].elementType().toString().cloneAsString().c_str(),
-            expected_type.toString().cloneAsString().c_str());
-      }
-    }
-  }
-  return Status::OK();
-}
-
 Status FullVisitor::HandleGather(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
@@ -439,6 +418,67 @@ Status FullVisitor::HandleSendDone(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(auto prog, CreateSendDone(resources_, inst, tensor_map));
   sequence.add(prog);
+  return Status::OK();
+}
+
+Status FullVisitor::Postprocess(HloInstruction* inst) {
+  std::vector<Shape> shapes = FlattenedXlaShape(inst->shape());
+  for (size_t i = 0; i < shapes.size(); i++) {
+    const Shape shape = shapes[i];
+    if (shape.IsToken()) {
+      continue;
+    }
+    // If the current location is a deferred location, then skip this.
+    if (!resources_.deferred_allocation_scopes.empty() &&
+        resources_.deferred_allocation_scopes.top()
+            .IsDeferredAllocationLocation({inst, i})) {
+      continue;
+    }
+
+    // Handle special cases which do not have outputs at certain locations.
+    switch (inst->opcode()) {
+      case HloOpcode::kRecv:
+      case HloOpcode::kSend: {
+        continue;
+      }
+      case HloOpcode::kCustomCall: {
+        // Inference RNNs don't output intermediates.
+        const bool is_fwd_lstm =
+            IsPoplarInstruction(PoplarOp::LstmLayerFwd)(inst);
+        const bool is_fwd_gru =
+            IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst);
+        const int64 intermediates_idx = is_fwd_gru ? 2 : 3;
+        if (is_fwd_lstm || is_fwd_gru) {
+          auto rnn_inst = Cast<HloRNNFwdInstruction>(inst);
+          if (!rnn_inst->is_training() && i == intermediates_idx) {
+            continue;
+          }
+        }
+        break;
+      }
+      default: { break; }
+    }
+
+    // Find the tensor for this output location.
+    auto outs =
+        FindInstructionOutputsInRange(tensor_map, resources_, inst, {i, i + 1});
+    CHECK_EQ(outs.size(), 1);
+    auto& out = outs[0];
+    if (!PoplarShapeMatchesXLAShape(out, shape)) {
+      return xla::InternalError(
+          "Instruction %s has mismatched Poplar (%s) and XLA (%s) shapes",
+          inst->name().c_str(), Join(out.shape(), ",").c_str(),
+          Join(shape.dimensions(), ",").c_str());
+    }
+    TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
+    if (expected_type != out.elementType()) {
+      return xla::InternalError(
+          "Instruction %s has mismatched Poplar (%s) and XLA (%s) type",
+          inst->name().c_str(),
+          outs[0].elementType().toString().cloneAsString().c_str(),
+          expected_type.toString().cloneAsString().c_str());
+    }
+  }
   return Status::OK();
 }
 

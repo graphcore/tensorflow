@@ -188,6 +188,41 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
 
       report.assert_total_tile_memory(49036521)
 
+  def testTrainingMomentumInLoop(self):
+    with self.session() as sess:
+
+      x = array_ops.placeholder(datatype, shape=[1, 224, 224, 4])
+      y_ = array_ops.placeholder(datatype, shape=[1, 1000])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+
+        def model(x, l):
+          def body(x, label):
+            logits = inference(x)
+            loss = math_ops.reduce_mean(
+                nn_ops.softmax_cross_entropy_with_logits_v2(
+                    logits=logits, labels=array_ops.stop_gradient(label)))
+            return x, label, momentum.MomentumOptimizer(0.01,
+                                                        0.9).minimize(loss)
+
+          return ipu.loops.repeat(10, body, (x, l))
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        train = ipu.ipu_compiler.compile(model, inputs=[x, y_])
+
+      report = tu.ReportJSON(self, sess)
+
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+
+      data = np.zeros([1, 224, 224, 4])
+      labels = np.zeros([1, 1000])
+
+      sess.run(train, feed_dict={x: data, y_: labels})
+      report.parse_log()
+
+      report.assert_total_tile_memory(50176067)
+
 
 if __name__ == "__main__":
   googletest.main()

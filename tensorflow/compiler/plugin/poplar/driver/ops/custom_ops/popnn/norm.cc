@@ -77,12 +77,13 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
 
     switch (input_index) {
       case 1: {
-        return AddNormScaleTensor(graph, name, *layout, *layout_output_idx,
+        return AddNormScaleTensor(graph, res, name, *layout, *layout_output_idx,
                                   feature_index, tensor_map);
       }
       case 2: {
-        return AddNormOffsetTensor(graph, name, *layout, *layout_output_idx,
-                                   feature_index, tensor_map);
+        return AddNormOffsetTensor(graph, res, name, *layout,
+                                   *layout_output_idx, feature_index,
+                                   tensor_map);
       }
       default: {
         return xla::FailedPrecondition(

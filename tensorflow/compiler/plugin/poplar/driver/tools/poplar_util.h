@@ -59,7 +59,6 @@ class Shape;
 namespace poplarplugin {
 
 struct CompilerResources;
-class SubComputationVisitor;
 
 class PoplarExecutor;
 
@@ -70,6 +69,8 @@ using TensorMaps = std::map<std::string, TensorMap>;
 using OutVector = std::vector<poplar::Tensor>;
 using ArgVector = std::vector<poplar::Tensor>;
 using ArgVectors = std::vector<ArgVector>;
+using DeferredArgVectors =
+    std::vector<std::vector<absl::optional<poplar::Tensor>>>;
 
 Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
                       const Literal& literal);
@@ -137,6 +138,9 @@ poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
 // Get a slice plan for an instruction.
 StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
                                                 const HloInstruction* inst);
+
+// A helper function to convert inputs into deferred inputs.
+DeferredArgVectors ConvertInputsToDeferredInputs(ArgVectors& inputs);
 }  // namespace poplarplugin
 }  // namespace xla
 

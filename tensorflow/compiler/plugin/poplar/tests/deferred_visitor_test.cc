@@ -56,7 +56,7 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-class DeferredAllocationsVisitorTest : public HloTestBase {};
+class DeferredVisitorTest : public HloTestBase {};
 
 std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
                                                     bool merge_infeeds) {
@@ -91,7 +91,7 @@ HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   return pipeline;
 }
 
-TEST_F(DeferredAllocationsVisitorTest, TestDeferredAllocation) {
+TEST_F(DeferredVisitorTest, TestDeferredAllocation) {
   const string& hlo_string = R"(
 
 HloModule module
@@ -116,8 +116,8 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Verify that gte1 has a tensor and all the deferred allocations have that
@@ -130,13 +130,15 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
       FindInstructionInput(tensor_map, *resources.get(), root, 1,
                            visitor.GetMutableSequence(), false)
           .ValueOrDie();
-  poplar::Tensor gte1_tensor = FindInstructionOutputs(tensor_map, gte1)[0];
-  poplar::Tensor arg_tensor = FindInstructionOutputs(tensor_map, arg)[1];
+  poplar::Tensor gte1_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
+  poplar::Tensor arg_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), arg)[1];
   EXPECT_EQ(root_tensor, gte1_tensor);
   EXPECT_EQ(gte1_tensor, arg_tensor);
 }
 
-TEST_F(DeferredAllocationsVisitorTest, TestDeferredAllocationNestedTuple) {
+TEST_F(DeferredVisitorTest, TestDeferredAllocationNestedTuple) {
   const string& hlo_string = R"(
 
 HloModule module
@@ -162,8 +164,8 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Verify that gte1 has a tensor and all the deferred allocations have that
@@ -177,16 +179,18 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
       FindInstructionInput(tensor_map, *resources.get(), root, 1,
                            visitor.GetMutableSequence(), false)
           .ValueOrDie();
-  poplar::Tensor gte1_tensor = FindInstructionOutputs(tensor_map, gte1)[0];
-  poplar::Tensor gte_tensor = FindInstructionOutputs(tensor_map, gte)[1];
-  poplar::Tensor arg_tensor = FindInstructionOutputs(tensor_map, arg)[1];
+  poplar::Tensor gte1_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
+  poplar::Tensor gte_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte)[1];
+  poplar::Tensor arg_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), arg)[1];
   EXPECT_EQ(root_tensor, gte1_tensor);
   EXPECT_EQ(gte1_tensor, gte_tensor);
   EXPECT_EQ(gte_tensor, arg_tensor);
 }
 
-TEST_F(DeferredAllocationsVisitorTest,
-       TestDeferredAllocationDoubleNestedTuple) {
+TEST_F(DeferredVisitorTest, TestDeferredAllocationDoubleNestedTuple) {
   const string& hlo_string = R"(
 
 HloModule module
@@ -213,8 +217,8 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Verify that gte1.0 has a tensor and all the deferred allocations have that
@@ -229,17 +233,21 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
       FindInstructionInput(tensor_map, *resources.get(), root, 1,
                            visitor.GetMutableSequence(), false)
           .ValueOrDie();
-  poplar::Tensor gte1_0_tensor = FindInstructionOutputs(tensor_map, gte1_0)[0];
-  poplar::Tensor gte1_tensor = FindInstructionOutputs(tensor_map, gte1)[0];
-  poplar::Tensor gte_tensor = FindInstructionOutputs(tensor_map, gte)[1];
-  poplar::Tensor arg_tensor = FindInstructionOutputs(tensor_map, arg)[1];
+  poplar::Tensor gte1_0_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1_0)[0];
+  poplar::Tensor gte1_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
+  poplar::Tensor gte_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte)[1];
+  poplar::Tensor arg_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), arg)[1];
   EXPECT_EQ(root_tensor, gte1_0_tensor);
   EXPECT_EQ(gte1_0_tensor, gte1_tensor);
   EXPECT_EQ(gte1_tensor, gte_tensor);
   EXPECT_EQ(gte_tensor, arg_tensor);
 }
 
-TEST_F(DeferredAllocationsVisitorTest,
+TEST_F(DeferredVisitorTest,
        TestDeferredAllocationMultipleDeferredAllocationsNestedTuple) {
   const string& hlo_string = R"(
 
@@ -282,8 +290,8 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   auto tensor_map = resources->tensor_maps.at(entry_computation->name());
@@ -300,10 +308,14 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
       FindInstructionInput(tensor_map, *resources.get(), fusion_0, 1,
                            visitor.GetMutableSequence(), false)
           .ValueOrDie();
-  poplar::Tensor gte1_0_tensor = FindInstructionOutputs(tensor_map, gte1_0)[0];
-  poplar::Tensor gte1_tensor_zero = FindInstructionOutputs(tensor_map, gte1)[0];
-  poplar::Tensor gte_tensor_two = FindInstructionOutputs(tensor_map, gte)[2];
-  poplar::Tensor arg_tensor_two = FindInstructionOutputs(tensor_map, arg)[2];
+  poplar::Tensor gte1_0_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1_0)[0];
+  poplar::Tensor gte1_tensor_zero =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
+  poplar::Tensor gte_tensor_two =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte)[2];
+  poplar::Tensor arg_tensor_two =
+      FindInstructionOutputs(tensor_map, *resources.get(), arg)[2];
   EXPECT_EQ(fusion_0_input_one_tensor, gte1_0_tensor);
   EXPECT_EQ(gte1_0_tensor, gte1_tensor_zero);
   EXPECT_EQ(gte1_tensor_zero, gte_tensor_two);
@@ -319,18 +331,21 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
       FindInstructionInput(tensor_map, *resources.get(), fusion_1, 1,
                            visitor.GetMutableSequence(), false)
           .ValueOrDie();
-  poplar::Tensor gte1_2_tensor = FindInstructionOutputs(tensor_map, gte1_2)[0];
-  poplar::Tensor gte1_tensor_two = FindInstructionOutputs(tensor_map, gte1)[2];
-  poplar::Tensor gte_tensor_four = FindInstructionOutputs(tensor_map, gte)[4];
-  poplar::Tensor arg_tensor_four = FindInstructionOutputs(tensor_map, arg)[4];
+  poplar::Tensor gte1_2_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1_2)[0];
+  poplar::Tensor gte1_tensor_two =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1)[2];
+  poplar::Tensor gte_tensor_four =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte)[4];
+  poplar::Tensor arg_tensor_four =
+      FindInstructionOutputs(tensor_map, *resources.get(), arg)[4];
   EXPECT_EQ(fusion_1_input_one_tensor, gte1_2_tensor);
   EXPECT_EQ(gte1_2_tensor, gte1_tensor_two);
   EXPECT_EQ(gte1_tensor_two, gte_tensor_four);
   EXPECT_EQ(gte_tensor_four, arg_tensor_four);
 }
 
-TEST_F(DeferredAllocationsVisitorTest,
-       TestDeferredAllocationNestedTupleInfeed) {
+TEST_F(DeferredVisitorTest, TestDeferredAllocationNestedTupleInfeed) {
   const string& hlo_string = R"(
 
 HloModule module
@@ -357,8 +372,8 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Verify that gte1 has a tensor and all the deferred allocations have that
@@ -372,16 +387,18 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
       FindInstructionInput(tensor_map, *resources.get(), root, 1,
                            visitor.GetMutableSequence(), false)
           .ValueOrDie();
-  poplar::Tensor gte1_tensor = FindInstructionOutputs(tensor_map, gte1)[0];
-  poplar::Tensor gte_tensor = FindInstructionOutputs(tensor_map, gte)[1];
-  poplar::Tensor infeed_tensor = FindInstructionOutputs(tensor_map, infeed)[1];
+  poplar::Tensor gte1_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte1)[0];
+  poplar::Tensor gte_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), gte)[1];
+  poplar::Tensor infeed_tensor =
+      FindInstructionOutputs(tensor_map, *resources.get(), infeed)[1];
   EXPECT_EQ(root_tensor, gte1_tensor);
   EXPECT_EQ(gte1_tensor, gte_tensor);
   EXPECT_EQ(gte_tensor, infeed_tensor);
 }
 
-TEST_F(DeferredAllocationsVisitorTest,
-       TestDeferredAllocationLoopsInputWithLayout) {
+TEST_F(DeferredVisitorTest, TestDeferredAllocationLoopsInputWithLayout) {
   const string& hlo_string = R"(
 HloModule module
 
@@ -482,8 +499,8 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   auto resources = GetMockResources(module.get(), false);
   HloPassPipeline pipeline = GetMockPipeline(*resources.get());
   EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
-  EntryVisitor visitor(*resources.get());
   auto entry_computation = module->entry_computation();
+  EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Check that the two last inputs to the loop are the same tensor - these
@@ -494,25 +511,18 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   auto entry_input0 = entry_computation->parameter_instruction(0);
   auto entry_input2 = entry_computation->parameter_instruction(2);
   auto entry_root_instruction = entry_computation->root_instruction();
-  auto entry_loop_tensors =
-      FindInstructionOutputs(entry_tensor_map, entry_root_instruction);
+  auto entry_loop_tensors = FindInstructionOutputs(
+      entry_tensor_map, *resources.get(), entry_root_instruction);
 
   auto loop_body = entry_root_instruction->while_body();
   auto loop_tensor_map = resources->tensor_maps.at(loop_body->name());
   EXPECT_EQ(loop_body->num_parameters(), 1);
   auto loop_tuple = loop_body->parameter_instruction(0);
-  auto loop_tuple_tensors = FindInstructionOutputs(loop_tensor_map, loop_tuple);
+  auto loop_tuple_tensors =
+      FindInstructionOutputs(loop_tensor_map, *resources.get(), loop_tuple);
 
-  // Check that they have layouts in entry and loop computation.
-  auto num_inputs = CountShapes(loop_tuple->shape());
-  auto tensors_with_layout = resources->annotations.tensors_with_layout;
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(entry_input0, 0)));
-  EXPECT_TRUE(tensors_with_layout.contains(std::make_pair(entry_input2, 0)));
-  EXPECT_TRUE(
-      tensors_with_layout.contains(std::make_pair(loop_tuple, num_inputs - 1)));
-  EXPECT_TRUE(
-      tensors_with_layout.contains(std::make_pair(loop_tuple, num_inputs - 2)));
   // Check the tensors.
+  auto num_inputs = CountShapes(loop_tuple->shape());
   EXPECT_EQ(entry_loop_tensors.size(), num_inputs);
   EXPECT_EQ(entry_loop_tensors.size(), loop_tuple_tensors.size());
   EXPECT_EQ(entry_loop_tensors[num_inputs - 1],
@@ -521,7 +531,7 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
             loop_tuple_tensors[num_inputs - 2]);
 }
 
-TEST_F(DeferredAllocationsVisitorTest, TestDeferredAllocationInsideLoops) {
+TEST_F(DeferredVisitorTest, TestDeferredAllocationInsideLoops) {
   const string& hlo_string = R"(
 HloModule module
 

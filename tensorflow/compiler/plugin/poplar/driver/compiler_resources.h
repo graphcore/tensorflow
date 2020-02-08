@@ -32,7 +32,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_subcomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 
 #include <poplar/OptionFlags.hpp>
 #include <poplin/Convolution.hpp>
@@ -108,6 +108,8 @@ struct CompilerResources {
 
   std::stack<std::vector<poplar::program::Sequence>>
       pipelining_write_undef_sequences;
+
+  std::stack<DeferredAllocations> deferred_allocation_scopes;
 
   std::string scheduler_selection;
 
