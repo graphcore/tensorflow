@@ -179,10 +179,9 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
    */
   Rendezvous::DoneCallback CreateIndexLookupRecvCallback(
       OpKernelContext* ctx, Rendezvous* rendezvous,
-      const Rendezvous::ParsedKey& recv_key,
-      const Rendezvous::ParsedKey& send_key, Tensor& inp,
-      AsyncOpKernel::DoneCallback done) {
-    return [this, ctx, rendezvous, recv_key, &send_key, &inp, done](
+      Rendezvous::ParsedKey recv_key, Rendezvous::ParsedKey send_key,
+      Tensor inp, AsyncOpKernel::DoneCallback done) {
+    return [this, ctx, rendezvous, recv_key, send_key, inp, done](
                const Status& status, const Rendezvous::Args& sender_args,
                const Rendezvous::Args& reciever_args, const Tensor& tensor,
                const bool is_dead) mutable {
@@ -240,10 +239,9 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
 
   Rendezvous::DoneCallback CreateIndexUpdateRecvCallback(
       OpKernelContext* ctx, Rendezvous* rendezvous,
-      const Rendezvous::ParsedKey& indices_key,
-      const Rendezvous::ParsedKey& grad_key, Tensor& inp,
-      AsyncOpKernel::DoneCallback done) {
-    return [this, ctx, rendezvous, indices_key, &grad_key, &inp, done](
+      Rendezvous::ParsedKey indices_key, Rendezvous::ParsedKey grad_key,
+      Tensor inp, AsyncOpKernel::DoneCallback done) {
+    return [this, ctx, rendezvous, indices_key, grad_key, inp, done](
                const Status& status, const Rendezvous::Args& sender_args,
                const Rendezvous::Args& reciever_args, const Tensor& tensor,
                const bool is_dead) mutable {
@@ -265,10 +263,9 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
 
   Rendezvous::DoneCallback CreateGradUpdateRecvCallback(
       OpKernelContext* ctx, Rendezvous* rendezvous,
-      const Rendezvous::ParsedKey& indices_key,
-      const Rendezvous::ParsedKey& grad_key, Tensor& inp, Tensor indices,
-      AsyncOpKernel::DoneCallback done) {
-    return [this, ctx, rendezvous, indices_key, &grad_key, &inp, indices, done](
+      Rendezvous::ParsedKey indices_key, Rendezvous::ParsedKey grad_key,
+      Tensor inp, Tensor indices, AsyncOpKernel::DoneCallback done) {
+    return [this, ctx, rendezvous, indices_key, grad_key, inp, indices, done](
                const Status& status, const Rendezvous::Args& sender_args,
                const Rendezvous::Args& reciever_args, const Tensor& grads,
                const bool is_dead) mutable {
