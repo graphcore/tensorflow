@@ -1180,13 +1180,12 @@ Status PoplarExecutor::AttachToPoplarDevice() {
     return InternalError("Already attached to device");
   }
 
-  const poplar::Target& target = GetOrCreatePoplarTarget();
-
   try {
     if (!ipu_.TargetConfigured()) {
       if (!use_ipu_model) {
         return InvalidArgument("Device not configured and IPU model disabled.");
       }
+      GetOrCreatePoplarTarget();
     }
     if (ipu_.DeviceConfigured()) {
       // Device was selected when the target was created: attach or fail.
@@ -1205,6 +1204,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
     } else {
       // Poplar device would already be set if we were using the model.
       CHECK(use_ipu_hardware);
+      const poplar::Target& target = GetOrCreatePoplarTarget();
       // Hardware devices
       auto device_list = GetDeviceManager().getDevices(target.getTargetType(),
                                                        target.getNumIPUs());
