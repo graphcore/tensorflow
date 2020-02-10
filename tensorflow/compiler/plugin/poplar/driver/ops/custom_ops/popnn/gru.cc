@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -40,52 +41,6 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 static const size_t basic_gru_cell_num_units = 3;
-
-StatusOr<popnn::gru::GruParams> GetGruParameters(const HloInstruction* inst) {
-  auto gru_inst = Cast<HloRNNInstruction>(inst);
-
-  const auto input_shape = inst->operand(0)->shape();
-  const auto time_steps = input_shape.dimensions(0);
-  const auto batch_size = input_shape.dimensions(1);
-  auto optional_input_size = convert_scalar<uint32>(input_shape.dimensions(2));
-  if (!optional_input_size) {
-    return xla::FailedPrecondition(
-        "GRU - Input size cannot be interpreted as an unsigned integer.");
-  }
-  const auto input_size = *optional_input_size;
-
-  auto optional_num_channels = convert_scalar<uint32>(gru_inst->num_channels());
-  if (!optional_num_channels) {
-    return xla::FailedPrecondition(
-        "GRU - Num Channels cannot be interpreted as an unsigned integer.");
-  }
-  const auto num_channels = *optional_num_channels;
-
-  TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(input_shape));
-  popnn::gru::GruParams gru_params(type, batch_size, time_steps,
-                                   {input_size, num_channels});
-
-  gru_params.calcInputGradients = gru_inst->is_training();
-  return gru_params;
-}
-
-StatusOr<poplar::OptionFlags> GetGruOpts(const HloInstruction* inst,
-                                         const CompilerResources& res) {
-  auto gru_inst = Cast<HloRNNInstruction>(inst);
-
-  poplar::OptionFlags gru_opts = res.default_matmul_options;
-  bool is_training = gru_inst->is_training();
-  if (!is_training) {
-    gru_opts.set({{"inferenceOnly", "true"}});
-  }
-
-  // Get the partial type.
-  xla::PrimitiveType partials_xla_type = gru_inst->partials_type();
-  TF_ASSIGN_OR_RETURN(poplar::Type partials_poplar_type,
-                      PoplarDataType(partials_xla_type));
-  gru_opts.set({{"partialsType", partials_poplar_type.toString()}});
-  return gru_opts;
-}
 
 poplar::Tensor UnflattenWeight(const poplar::Tensor& t) {
   return t
