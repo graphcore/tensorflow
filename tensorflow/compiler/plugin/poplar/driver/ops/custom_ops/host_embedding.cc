@@ -47,24 +47,28 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
                         AddTensor(graph, std::make_pair(inst, 0), output_shape,
                                   res, tensor_map));
 
-    const HloHostEmbeddingLookupInstruction* host_embedding_inst =
-        Cast<HloHostEmbeddingLookupInstruction>(inst);
+    if (UseSyntheticData()) {
+      seq.add(poplar::program::WriteUndef(output));
+    } else {
+      const HloHostEmbeddingLookupInstruction* host_embedding_inst =
+          Cast<HloHostEmbeddingLookupInstruction>(inst);
 
-    res.annotations.host_embedding_lookup_infos.push_back(
-        {inst->name(), host_embedding_inst->EmbeddingId(),
-         inst->operand(0)->shape(), output_shape});
+      res.annotations.host_embedding_lookup_infos.push_back(
+          {inst->name(), host_embedding_inst->EmbeddingId(),
+           inst->operand(0)->shape(), output_shape});
 
-    auto index_buffer = graph.addDeviceToHostFIFO(
-        inst->name() + host_embedding_inst->EmbeddingId() + "_indices",
-        indices[0].elementType(), indices[0].numElements());
+      auto index_buffer = graph.addDeviceToHostFIFO(
+          inst->name() + host_embedding_inst->EmbeddingId() + "_indices",
+          indices[0].elementType(), indices[0].numElements());
 
-    auto activation_fifo = graph.addHostToDeviceFIFO(
-        inst->name() + host_embedding_inst->EmbeddingId() + "_activations",
-        output.elementType(), output.numElements());
+      auto activation_fifo = graph.addHostToDeviceFIFO(
+          inst->name() + host_embedding_inst->EmbeddingId() + "_activations",
+          output.elementType(), output.numElements());
 
-    seq.add(poplar::program::Copy(indices[0], index_buffer));
-    seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL));
-    seq.add(poplar::program::Copy(activation_fifo, output));
+      seq.add(poplar::program::Copy(indices[0], index_buffer));
+      seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL));
+      seq.add(poplar::program::Copy(activation_fifo, output));
+    }
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
@@ -82,29 +86,31 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
-    ArgVector grads =
-        FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
+    if (!UseSyntheticData()) {
+      ArgVector grads =
+          FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
 
-    ArgVector indices =
-        FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
+      ArgVector indices =
+          FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
 
-    const HloHostEmbeddingUpdateInstruction* host_embedding_inst =
-        Cast<HloHostEmbeddingUpdateInstruction>(inst);
+      const HloHostEmbeddingUpdateInstruction* host_embedding_inst =
+          Cast<HloHostEmbeddingUpdateInstruction>(inst);
 
-    res.annotations.host_embedding_update_infos.push_back(
-        {inst->name(), host_embedding_inst->EmbeddingId(),
-         inst->operand(1)->shape(), inst->operand(0)->shape()});
+      res.annotations.host_embedding_update_infos.push_back(
+          {inst->name(), host_embedding_inst->EmbeddingId(),
+           inst->operand(1)->shape(), inst->operand(0)->shape()});
 
-    auto index_buffer = graph.addDeviceToHostFIFO(
-        inst->name() + host_embedding_inst->EmbeddingId() + "_indices",
-        indices[0].elementType(), indices[0].numElements());
+      auto index_buffer = graph.addDeviceToHostFIFO(
+          inst->name() + host_embedding_inst->EmbeddingId() + "_indices",
+          indices[0].elementType(), indices[0].numElements());
 
-    auto grad_fifo = graph.addDeviceToHostFIFO(
-        inst->name() + host_embedding_inst->EmbeddingId() + "_grads",
-        grads[0].elementType(), grads[0].numElements());
+      auto grad_fifo = graph.addDeviceToHostFIFO(
+          inst->name() + host_embedding_inst->EmbeddingId() + "_grads",
+          grads[0].elementType(), grads[0].numElements());
 
-    seq.add(poplar::program::Copy(indices[0], index_buffer));
-    seq.add(poplar::program::Copy(grads[0], grad_fifo));
+      seq.add(poplar::program::Copy(indices[0], index_buffer));
+      seq.add(poplar::program::Copy(grads[0], grad_fifo));
+    }
 
     return seq;
   }

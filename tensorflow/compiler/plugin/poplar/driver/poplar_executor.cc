@@ -425,6 +425,10 @@ uint64 DeviceIncarnation(int device_ordinal, int replica) {
 
 Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
     const HostEmbeddingInfo& lookup_info) {
+  if (UseSyntheticData()) {
+    return Status::OK();
+  }
+
   // Extract the shapes and types.
   tensorflow::TensorShape indices_shape;
   TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(
@@ -506,6 +510,10 @@ Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
 
 Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
     const HostEmbeddingInfo& update_info) {
+  if (UseSyntheticData()) {
+    return Status::OK();
+  }
+
   // Extract the shapes and types.
   tensorflow::TensorShape indices_shape;
   TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(

@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -111,43 +112,46 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
 
   void ComputeAsync(OpKernelContext* ctx,
                     AsyncOpKernel::DoneCallback done) override {
-    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
-    OP_REQUIRES(ctx, platform.ok(), platform.status());
-    auto* p =
-        static_cast<xla::poplarplugin::PoplarPlatform*>(platform.ValueOrDie());
-    auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
-    auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
-        stream_executor->implementation());
-
-    auto rendezvous = poplar_executor->GetRendezvous();
-
-    Tensor inp = ctx->mutable_input(0, true);
-
-    lookup_count_.store(lookup_count_init_);
-    update_count_.store(update_count_init_);
-
-    auto done_wrapper = [this, done]() mutable {
-      if (lookup_count_ == 0 && update_count_ == 0) {
-        done();
-      }
-    };
-
-    for (int replica = 0; replica < replication_factor_; ++replica) {
-      rendezvous->RecvAsync(
-          rendezvous_keys_[replica]["lookup_indices"], {},
-          CreateIndexLookupRecvCallback(
-              ctx, rendezvous, rendezvous_keys_[replica]["lookup_indices"],
-              rendezvous_keys_[replica]["lookup_activations"], inp,
-              done_wrapper));
-
-      rendezvous->RecvAsync(
-          rendezvous_keys_[replica]["update_indices"], {},
-          CreateIndexUpdateRecvCallback(
-              ctx, rendezvous, rendezvous_keys_[replica]["update_indices"],
-              rendezvous_keys_[replica]["update_grads"], inp, done_wrapper));
-    }
-
     ctx->forward_ref_input_to_ref_output(0, 0);
+    if (xla::poplarplugin::UseSyntheticData()) {
+      done();
+    } else {
+      auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+      OP_REQUIRES(ctx, platform.ok(), platform.status());
+      auto* p = static_cast<xla::poplarplugin::PoplarPlatform*>(
+          platform.ValueOrDie());
+      auto stream_executor = p->ExecutorForDevice(device_ordinal_).ValueOrDie();
+      auto* poplar_executor = static_cast<xla::poplarplugin::PoplarExecutor*>(
+          stream_executor->implementation());
+
+      auto rendezvous = poplar_executor->GetRendezvous();
+
+      Tensor inp = ctx->mutable_input(0, true);
+
+      lookup_count_.store(lookup_count_init_);
+      update_count_.store(update_count_init_);
+
+      auto done_wrapper = [this, done]() mutable {
+        if (lookup_count_ == 0 && update_count_ == 0) {
+          done();
+        }
+      };
+
+      for (int replica = 0; replica < replication_factor_; ++replica) {
+        rendezvous->RecvAsync(
+            rendezvous_keys_[replica]["lookup_indices"], {},
+            CreateIndexLookupRecvCallback(
+                ctx, rendezvous, rendezvous_keys_[replica]["lookup_indices"],
+                rendezvous_keys_[replica]["lookup_activations"], inp,
+                done_wrapper));
+
+        rendezvous->RecvAsync(
+            rendezvous_keys_[replica]["update_indices"], {},
+            CreateIndexUpdateRecvCallback(
+                ctx, rendezvous, rendezvous_keys_[replica]["update_indices"],
+                rendezvous_keys_[replica]["update_grads"], inp, done_wrapper));
+      }
+    }
   }
 
  private:
