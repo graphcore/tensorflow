@@ -71,6 +71,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertTrue(isinstance(cfg, IpuOptions))
     self.assertTrue(len(cfg.device_config), 2)
     self.assertFalse(cfg.floating_point_behaviour.flags_set)
+    self.assertFalse(cfg.has_ipu_version)
 
     cfg = ipu.utils.set_floating_point_behaviour_options(cfg)
     self.assertTrue(cfg.floating_point_behaviour.flags_set)
@@ -142,8 +143,15 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_connection_type(
-        cfg, ipu.utils.DeviceConnectionType.NEVER)
+        cfg, ipu.utils.DeviceConnectionType.NEVER, ipu_version=1)
     self.assertTrue(cfg.device_connection_type, IpuDeviceConnectionType.NEVER)
+    self.assertTrue(cfg.ipu_version, 1)
+    self.assertTrue(cfg.has_ipu_version)
+
+    with self.assertRaises(Exception):
+      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.set_ipu_connection_type(
+          cfg, ipu.utils.DeviceConnectionType.NEVER)
 
     with self.assertRaises(Exception):
       cfg = ipu.utils.create_ipu_config()

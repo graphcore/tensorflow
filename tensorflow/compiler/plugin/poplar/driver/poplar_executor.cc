@@ -1172,12 +1172,13 @@ Status PoplarExecutor::AttachToPoplarDevice() {
     return InternalError("Already attached to device");
   }
 
+  const poplar::Target& target = GetOrCreatePoplarTarget();
+
   try {
     if (!ipu_.TargetConfigured()) {
       if (!use_ipu_model) {
         return InvalidArgument("Device not configured and IPU model disabled.");
       }
-      GetOrCreatePoplarTarget();
     }
     if (ipu_.DeviceConfigured()) {
       // Device was selected when the target was created: attach or fail.
@@ -1197,23 +1198,17 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       // Poplar device would already be set if we were using the model.
       CHECK(use_ipu_hardware);
       // Hardware devices
-      auto device_list = GetDeviceManager().getDevices();
-      bool found_match = false;
+      auto device_list = GetDeviceManager().getDevices(target.getTargetType(),
+                                                       target.getNumIPUs());
       for (auto& d : device_list) {
-        if (d.getTarget().getTargetType() ==
-                GetOrCreatePoplarTarget().getTargetType() &&
-            d.getTarget().getNumIPUs() ==
-                GetOrCreatePoplarTarget().getNumIPUs()) {
-          found_match = true;
-          // Try to attach to that device.
-          if (d.attach()) {
-            ipu_.SetDevice(std::move(d));
-            break;
-          }
+        // Try to attach to that device.
+        if (d.attach()) {
+          ipu_.SetDevice(std::move(d));
+          break;
         }
       }
       if (!ipu_.DeviceConfigured()) {
-        if (found_match) {
+        if (device_list.size()) {
           return xla::ResourceExhausted(
               "Failed to attach to any of the device(s) with matching configs "
               "for ordinal %d",
@@ -1253,10 +1248,10 @@ Status PoplarExecutor::CreatePoplarTarget() {
   const bool use_ipu_hardware = UseIpuHardware();
 
   if (use_ipu_hardware) {
-    if (!has_user_config) {
-      // Default case - 1 single TF device with one single IPU
-      ipu_.SetTarget(CreateIpuTarget(1, 1));
-    } else {
+    // Try to extract info from the user configuration if it was provided.
+    absl::optional<int64> device_index;
+    absl::optional<int64> num_devices;
+    if (has_user_config) {
       // User has specified a configuration
       if (ordinal_ >= current_config_.device_config_size()) {
         return InternalError(
@@ -1267,14 +1262,54 @@ Status PoplarExecutor::CreatePoplarTarget() {
       if (device_config.selection_case() ==
           IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
         // The config specifies the index of the device to use.
-        const int32 cfg_index = device_config.cfg_index();
-
-        auto device_list = GetDeviceManager().getDevices();
-        ipu_.SetDeviceAndTarget(std::move(device_list.at(cfg_index)));
+        device_index = device_config.cfg_index();
       } else {
-        // The config only specifies a number of IPUs.
-        ipu_.SetTarget(CreateIpuTarget(device_config.auto_count(),
-                                       current_config_.ipu_version()));
+        num_devices = device_config.auto_count();
+      }
+    } else {
+      // User didn't specify a configuration - default to a single IPU.
+      LOG(INFO) << "No IPU device was configured for /device:IPU:" << ordinal_
+                << ", creating a device with a single IPU.";
+      num_devices = 1;
+    }
+
+    if (device_index) {
+      // A specific device was chosen.
+      auto device_list = GetDeviceManager().getDevices();
+      ipu_.SetDeviceAndTarget(std::move(device_list.at(*device_index)));
+    } else {
+      CHECK(num_devices);
+      // If there is an IPU version configured then use that.
+      if (current_config_.has_ipu_version()) {
+        ipu_.SetTarget(
+            CreateIpuTarget(*num_devices, current_config_.ipu_version()));
+      } else {
+        // Deduce the IPU target given the configuration.
+        switch (current_config_.device_connection_type()) {
+          case IpuDeviceConnectionType::ALWAYS:
+          case IpuDeviceConnectionType::ON_DEMAND: {
+            // Get target from the available devices.
+            auto device_list = GetDeviceManager().getDevices(
+                poplar::TargetType::IPU, *num_devices);
+            if (device_list.empty()) {
+              return FailedPrecondition(
+                  "Could not find any IPU devices with %d IPUs for "
+                  "/device:IPU:%d",
+                  *num_devices, ordinal_);
+            }
+            ipu_.SetTarget(device_list.front().getTarget());
+            break;
+          }
+          case IpuDeviceConnectionType::NEVER: {
+            return FailedPrecondition(
+                "Expected the `ipu_version` to be set when the "
+                "`device_connection_type` is set to "
+                "`IpuDeviceConnectionType.NEVER`");
+          }
+          default: {
+            return FailedPrecondition("Unrecognised connection type.");
+          }
+        }
       }
     }
   } else if (use_ipu_model) {
