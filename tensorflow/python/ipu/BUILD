@@ -483,6 +483,7 @@ tf_py_test(
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
     ],
+    shard_count = 2,
 )
 
 py_test(

@@ -296,7 +296,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
 
       # Check that the loss decreased.
       losses = history.history["loss"]
-      self.assertEqual(3, len(losses))
+      self.assertEqual(num_epochs, len(losses))
       self.assertLess(losses[1], losses[0])
       self.assertLess(losses[2], losses[1])
 
@@ -352,7 +352,7 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
 
       # Check that the loss decreased.
       losses = history.history["loss"]
-      self.assertEqual(3, len(losses))
+      self.assertEqual(num_epochs, len(losses))
       self.assertLess(losses[1], losses[0])
       self.assertLess(losses[2], losses[1])
 
@@ -363,6 +363,73 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
       event_counts, _ = report.get_ipu_events()
       self.assertEqual(1, event_counts[IpuTraceEvent.LOAD_ENGINE])
       self.assertEqual(num_batches, event_counts[IpuTraceEvent.EXECUTE])
+
+  @test_util.run_v2_only
+  def test_keras_mnist_model_compile_fit_fixed_input_w_validation(self):
+    num_train_examples = 1000
+    num_valid_examples = 240
+    batch_size = 10
+    num_classes = 10
+    num_epochs = 3
+    validation_steps = 8
+
+    def mnist_model():
+      model = keras.models.Sequential([
+          keras.layers.Flatten(),
+          keras.layers.Dense(num_classes, activation='softmax')
+      ])
+      return model
+
+    def load_data(n):
+      (x, y), _ = keras.datasets.mnist.load_data()
+      x = x[:n]
+      y = y[:n]
+
+      x = x.reshape(*x.shape, 1)
+      x = x.astype('float32')
+      x /= 255
+      y = keras.utils.np_utils.to_categorical(y, num_classes)
+      return (x, y)
+
+    (x_train, y_train) = load_data(num_train_examples)
+    (x_valid, y_valid) = load_data(num_valid_examples)
+
+    report = tu.ReportJSON(self, eager_mode=True)
+    report.reset()
+
+    strategy = ipu_strategy.IPUStrategy()
+
+    with strategy.scope():
+
+      model = mnist_model()
+      model.compile(loss=keras.losses.categorical_crossentropy,
+                    optimizer=keras.optimizer_v2.gradient_descent.SGD(0.05))
+      history = model.fit(
+          x_train,
+          y_train,
+          batch_size=batch_size,
+          shuffle=False,  # Try to make it deterministic.
+          epochs=num_epochs,
+          validation_data=(x_valid, y_valid),
+          validation_steps=validation_steps,
+          verbose=1)
+
+      # Check that the loss decreased.
+      losses = history.history["loss"]
+      self.assertEqual(num_epochs, len(losses))
+      self.assertLess(losses[1], losses[0])
+      self.assertLess(losses[2], losses[1])
+
+      train_steps = num_train_examples // batch_size
+      num_execs = num_epochs * (train_steps + validation_steps)
+
+      # There should be be a single engine, loaded once, and executed one
+      # time for each batch.
+      event_counts, _ = report.get_ipu_events()
+
+      # Need to flip between main and validation engine 3 times = 6 loads
+      self.assertEqual(num_epochs * 2, event_counts[IpuTraceEvent.LOAD_ENGINE])
+      self.assertEqual(num_execs, event_counts[IpuTraceEvent.EXECUTE])
 
 
 if __name__ == "__main__":

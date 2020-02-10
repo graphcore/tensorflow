@@ -13,6 +13,8 @@
 # limitations under the License.
 # ===================================================================
 from tensorflow.python.distribute import distribute_lib
+from tensorflow.python.distribute import input_lib
+from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.util import nest
@@ -44,6 +46,12 @@ class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstrac
     super().__init__(container_strategy)
     self._ipu_device = ipu_device
     self._cpu_device = cpu_device
+
+    device_map = values.ReplicaDeviceMap([self._cpu_device])
+
+    worker_device_pairs = [("", [self._cpu_device])]
+    self._input_workers = input_lib.InputWorkers(device_map,
+                                                 worker_device_pairs)
 
   def _create_variable(self, next_creator, *args, **kwargs):
     # Place initializer on the CPU.
@@ -98,4 +106,5 @@ class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstrac
     return True
 
   def _experimental_distribute_dataset(self, dataset):
-    return dataset
+    return input_lib.get_distributed_dataset(dataset, self._input_workers,
+                                             self._container_strategy())
