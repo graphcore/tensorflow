@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/rnn_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 
@@ -40,55 +41,6 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 static const size_t basic_lstm_cell_num_units = 4;
-
-StatusOr<popnn::lstm::LstmParams> GetLstmParameters(
-    const HloInstruction* inst) {
-  auto lstm_inst = Cast<HloRNNInstruction>(inst);
-
-  const auto input_shape = inst->operand(0)->shape();
-  const auto time_steps = input_shape.dimensions(0);
-  const auto batch_size = input_shape.dimensions(1);
-  auto optional_input_size = convert_scalar<uint32>(input_shape.dimensions(2));
-  if (!optional_input_size) {
-    return xla::FailedPrecondition(
-        "LSTM - Input size cannot be interpreted as an unsigned integer.");
-  }
-  const auto input_size = *optional_input_size;
-
-  auto optional_num_channels =
-      convert_scalar<uint32>(lstm_inst->num_channels());
-  if (!optional_num_channels) {
-    return xla::FailedPrecondition(
-        "LSTM - Num Channels cannot be interpreted as an unsigned integer.");
-  }
-  const auto num_channels = *optional_num_channels;
-
-  TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(input_shape));
-  popnn::lstm::LstmParams lstm_params(type, batch_size, time_steps,
-                                      {input_size, num_channels});
-
-  lstm_params.calcInputGradients = lstm_inst->is_training();
-  return lstm_params;
-}
-
-StatusOr<poplar::OptionFlags> GetLstmOpts(const HloInstruction* inst,
-                                          const CompilerResources& res) {
-  auto lstm_inst = Cast<HloRNNInstruction>(inst);
-
-  // Initialize options from matmul options
-  poplar::OptionFlags lstm_opts = res.default_matmul_options;
-  bool is_training = lstm_inst->is_training();
-  if (!is_training) {
-    lstm_opts.set({{"inferenceOnly", "true"}});
-  }
-
-  // Get the partial type
-  xla::PrimitiveType partials_xla_type = lstm_inst->partials_type();
-  TF_ASSIGN_OR_RETURN(poplar::Type partials_poplar_type,
-                      PoplarDataType(partials_xla_type));
-  lstm_opts.set({{"partialsType", partials_poplar_type.toString()}});
-  return lstm_opts;
-}
 
 poplar::Tensor UnflattenWeight(const poplar::Tensor& t) {
   return t

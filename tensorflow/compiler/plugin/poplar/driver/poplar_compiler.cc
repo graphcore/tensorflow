@@ -98,6 +98,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
@@ -913,6 +914,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     try {
       ConvolutionPreplanning convolution_preplanning;
       TF_RETURN_IF_ERROR(convolution_preplanning.Plan(module.get(), resources));
+      MatMulPreplanning matmul_preplanning;
+      TF_RETURN_IF_ERROR(matmul_preplanning.Plan(module.get(), resources));
       auto order = module->schedule().sequence(entry).instructions();
 
       // The following line starts the lowering in poplar.

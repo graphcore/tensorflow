@@ -67,6 +67,8 @@ struct CompilerResources {
 
   poplin::PlanningCache convolution_cache;
 
+  poplin::matmul::PlanningCache matmul_cache;
+
   poplin::matmul::PlanningCache dot_cache;
 
   const IpuOptions::FloatingPointBehaviour global_floating_point_behaviour;
