@@ -1,10 +1,11 @@
 Adding variables
 ----------------
 
-Do not add variables using ``tf.Variable([shape], initializer)``, they will fail
-to obey certain operations, such as ``assign_add``. Make sure that all variables
-are added using a variable scope that is marked as a resource. This can be done
-globally, as shown below:
+Do not add variables using ``tf.Variable([shape], initializer)``, because they will fail
+to obey certain operations, such as ``assign_add``.
+
+Make sure that all variables are added using a variable scope that is marked as
+a resource. This can be done globally, as shown below:
 
 .. code-block:: python
 
@@ -14,12 +15,32 @@ globally, as shown below:
   var = tf.get_variable(name, shape=[...], dtype=tf.float32, initializer=tf.constant_initializer(0.5))
   ...
 
-or locally, in a specific scope:
+Or it can be done locally, in a specific scope:
 
 .. code-block:: python
 
   with tf.variable_scope("vs", use_resource=True):
     var = tf.get_variable(name, shape=[...], dtype=tf.float32, initializer=tf.constant_initializer(0.5))
+
+Troubleshooting
+~~~~~~~~~~~~~~~
+
+If you get an error similar to the following (especially the lines containing
+``VariableV2``) it indicates that a variable has been created which is not a
+resource variable.
+
+.. code-block:: none
+
+    InvalidArgumentError (see above for traceback): Cannot assign a device for operation
+      'InceptionV1/Logits/Conv2d_0c_1x1/biases': Could not satisfy explicit device specification
+      '/device:IPU:0' because no supported kernel for IPU devices is available.
+    Colocation Debug Info:
+    Colocation group had the following types and devices:
+    Const: CPU IPU XLA_CPU
+    Identity: CPU IPU XLA_CPU
+    Fill: CPU IPU XLA_CPU
+    Assign: CPU
+    VariableV2: CPU
 
 Note on the global_step counter
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

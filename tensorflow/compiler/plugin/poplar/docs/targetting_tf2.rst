@@ -1,26 +1,26 @@
-Targetting the IPU with Tensorflow 2
-------------------------------------
+Targeting the IPU with TensorFlow 2
+-----------------------------------
 
-In Tensorflow version 2, the Eager mode is enabled by default, and Keras has
+In TensorFlow version 2, the Eager mode is enabled by default, and Keras has
 become the main API for constructing models.  Distribution strategies are the
-new way of targetting different pieces of hardware.
+new way of targeting different pieces of hardware.
 
-As in Tensorflow version 1, there are a small number of different things
-that need to be done when constructing and executing a model, in order to
-target the IPU efficiently. The IPU acheives its performance by fusing
-operations into a single kernel that is executed repeatedly, amortizing
+As in TensorFlow version 1, there are a small number of things
+that need to be done when constructing and executing a model in order to
+target the IPU efficiently. The IPU achieves its performance by fusing
+operations into a single kernel that is executed repeatedly, amortising
 the cost of control and I/O.
 
 IPUStrategy
 ~~~~~~~~~~~
 
 Distribution strategies are a more advanced and flexible version of device
-tagging. The IPUStrategy is a sub-class of distribution strategy which
+tagging. The ``IPUStrategy`` is a sub-class of distribution strategy which
 specifically targets the IPU.
 
-Use the `strategy.scope()` context to ensure that everything within that
+Use the ``strategy.scope()`` context to ensure that everything within that
 context will be compiled for the IPU device.  You should do this instead
-of using the `tf.device` context.
+of using the ``tf.device`` context.
 
 .. code-block:: python
 
@@ -33,31 +33,31 @@ of using the `tf.device` context.
         ...
 
 It is important to construct any Keras model within the scope of the
-IPUStrategy, because a Keras Model class may create some of the model at
+``IPUStrategy``, because a Keras ``Model`` class may create some of the model at
 construction time, and some other parts of it at execution time.
 
 See the online documentation for more details.
 
 - https://www.tensorflow.org/guide/distributed_training
 
-tf.function
-~~~~~~~~~~~
+Function annotation with @tf.function
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The function annotation `@tf.function` is well documented in the standard
-Tensorflow documentation.  It converts the body of the annotated function into
+The function annotation ``@tf.function`` is well documented in the standard
+TensorFlow documentation.  It converts the body of the annotated function into
 a fused set of operations that are executed as a group, in the same way as a
-whole graph would have done in Tensorflow version 1.  In addition, a library
-called `autograph` will convert python flow control constructs into Tensorflow
+whole graph would have been in TensorFlow version 1.  In addition, a library
+called ``autograph`` will convert python flow control constructs into TensorFlow
 graph operations.
 
 Best practice is to ensure that anything which is intended to be executed on
-the IPU is placed into a function and annotated with `@tf.function`.  This
-does not apply to constructing a Keras model or using the Keras `Model.fit()`
+the IPU is placed into a function and annotated with ``@tf.function``.  This
+does not apply to constructing a Keras model or using the Keras ``Model.fit()``
 API.  See below for details on Keras.
 
-When calling a function that is marked with a `@tf.function` from within a
-distribution strategy like `IPUStrategy`, you should not call them directly,
-but instead use the `experimental_run_v2` method.
+When calling a function that is marked with a ``@tf.function`` from within a
+distribution strategy like ``IPUStrategy``, you should not call them directly,
+but instead use the ``experimental_run_v2`` method.
 
 See the following online resources for more information.
 
@@ -67,31 +67,31 @@ See the following online resources for more information.
 Keras
 ~~~~~
 
-The Keras API is used for constructing models using a set of high level Layers
+The Keras API is used for constructing models using a set of high-level ``Layers``
 objects.  https://www.tensorflow.org/guide/keras.
 
 Full support is available for Keras on the IPU.  It is important to ensure
-that the model is both instantiated and called from within an `IPUStrategy`
+that the model is both instantiated and called from within an ``IPUStrategy``
 context.
 
 - https://www.tensorflow.org/guide/keras/train_and_evaluate
 
-The `Model.fit` method
-______________________
+The Model.fit method
+____________________
 
-This method of the Keras `Model` class can be used within an `IPUStrategy`
-to train a model without the need for a specialized training loop.
+This method of the Keras ``Model`` class can be used within an ``IPUStrategy``
+to train a model without the need for a specialised training loop.
 
-For high performance training, the `fit` API should be avoided, because it
+For high performance training, the ``fit`` API should be avoided, because it
 does not provide an on-device training loop.
 
 Custom training loops
 _____________________
 
 If a more sophisticated training loop is required, then it can be described
-inside a function which is marked as a `@tf.function`.  See the examples
+inside a function which is marked as a ``@tf.function``.  See the examples
 section for a full example.
 
-The outer training function should be called using the `experimental_run_v2`
-method on the `IPUStrategy` object, to ensure that it is executed using the
+The outer training function should be called using the ``experimental_run_v2``
+method on the ``IPUStrategy`` object, to ensure that it is executed using the
 strategy's configuration.
