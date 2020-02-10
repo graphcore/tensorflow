@@ -308,8 +308,6 @@ def create_ipu_config(profiling=False,
   if (profile_execution != ExecutionProfileType.NO_PROFILE and not profiling):
     raise Exception("`profiling` is required when `profile_execution` is set")
 
-  connection_type = DeviceConnectionType.ALWAYS
-
   if not isinstance(profile_execution, ExecutionProfileType):
     raise Exception("`profile_execution` must be True, False, or an "
                     "ExecutionProfileType instance")
@@ -323,8 +321,7 @@ def create_ipu_config(profiling=False,
   opts.enable_multi_slice_combiner = False
   opts.enable_matmul_combiner = False
   opts.enable_gather_simplifier = False
-  opts.device_connection_type = connection_type.value
-  opts.ipu_version = 1
+  opts.device_connection_type = DeviceConnectionType.ALWAYS.value
   opts.speed_size_config.allow_recompute = False
   opts.speed_size_config.allow_stateful_recompute = False
 
@@ -951,7 +948,7 @@ def select_ipus(opts, indices):
   return opts
 
 
-def set_ipu_connection_type(opts, connection_type=None, ipu_version=1):
+def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
   """ Configure when to attach to the device.
 
   .. code-block:: python
@@ -969,14 +966,23 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=1):
     connection_type: One of `DeviceConnectionType`.
                      Defaults to `DeviceConnectionType.ALWAYS` if None.
 
-    ipu_version: Version of the IPU hardware used.
+    ipu_version: Version of the IPU hardware used. Required if the
+                 `connection_type` provided is `DeviceConnectionType.NEVER`.
   Returns:
     The IpuOptions configuration protobuf.
   """
   connection_type = connection_type if connection_type \
                                     else DeviceConnectionType.ALWAYS
+
+  if connection_type == DeviceConnectionType.NEVER and ipu_version is None:
+    raise Exception("`ipu_version` must be set when `connection_type` is set "
+                    "to `DeviceConnectionType.NEVER`")
   opts.device_connection_type = connection_type.value
-  opts.ipu_version = ipu_version
+
+  if ipu_version is not None:
+    opts.ipu_version = ipu_version
+    opts.has_ipu_version = True
+
   return opts
 
 
