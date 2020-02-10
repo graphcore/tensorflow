@@ -8,10 +8,10 @@ build file.
 The second case is a custom operation which is executed on the CPU.
 
 The third possibility is a custom, fused elementwise arithmetic operation. In this last
-case, the gradient creation in the Optimizers will not produce a gradient
+case, the gradient creation in the optimisers will not produce a gradient
 operation for the custom operation.
 
-Fully customized IPU operations
+Fully customised IPU operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You can provide a custom operation to be compiled into the Poplar
@@ -21,13 +21,13 @@ Poplar graph, given some Poplar tensor inputs.  They can optionally provide
 a Poplar source code or binary file containing one or more "codelets"
 (code that runs on the IPU).
 
-For more details writing codelets, please refer to the
+For more information about writing codelets, please refer to the
 `Poplar and Poplibs User Guide
 <https://documents.graphcore.ai/documents/UG1/latest>`_.
 
 These operations are added with ``ipu.user_ops.precompiled_user_op``. More
-information about this can be found in the :ref:`api-section`.  An example of
-this can be found below.
+information about this can be found in :ref:`api-section`.  An example of
+this is shown below.
 
 The shared object file must contain an undecorated symbol, that should be
 declared as below.  It should add vertices to the graph that perform the
@@ -44,12 +44,14 @@ operation in the graph.  By default these types of operations are called
 
 The arguments are:
 
-:graph: the poplar graph into which to add tensors and vertices.
-:inputs: a vector of poplar tensors which are inputs to the operation.
-:outputs: a vector into which to store the outputs of the operation. The
+* ``graph``: the Poplar graph into which to add tensors and vertices.
+
+* ``inputs``: a vector of Poplar tensors which are inputs to the operation.
+
+* ``outputs``: a vector into which to store the outputs of the operation. The
   vector will contain zero entries when the ``Build`` function is called.
-:debug_prefix:
-  the debug name that has been given to the operation in
+
+* ``debug_prefix: the debug name that has been given to the operation in
   the TensorFlow graph.
 
 If the operation can have its gradient taken, then the shared object can
@@ -72,19 +74,25 @@ gradient outputs.
 
 The arguments are:
 
-:graph: the poplar graph into which to add tensors and vertices.
-:input_grad_index: The index of the input for which this op is producing
-                   the partial derivative.  If the gradient operation
-                   calculates all of the partial derivatives, then this input
-                   should be ignored.
-:gradients: the inputs to the gradient op, from the previous gradient op
-            or loss.
-:fwd_outputs: the tensors which are the outputs of the forward operation.
-:fwd_inputs: the tensors which are the inputs to the forward operation.
-:outputs: the outputs of this gradient operation. There must be one per
-          input of the original forward operation.  Inputs which are not
-          differentiable can have an null Poplar tensor.
-:debug_prefix: the name of the operation.
+* ``graph``: the Poplar graph into which to add tensors and vertices.
+
+* ``input_grad_index``: The index of the input for which this operation is producing
+  the partial derivative.  If the gradient operation
+  calculates all of the partial derivatives, then this input
+  should be ignored.
+
+* ``gradients``: the inputs to the gradient operation, from the previous gradient operation
+  or loss.
+
+* ``fwd_outputs``: the tensors which are the outputs of the forward operation.
+
+* ``fwd_inputs``: the tensors which are the inputs to the forward operation.
+
+* ``outputs``: the outputs of this gradient operation. There must be one per
+  input of the original forward operation.  Inputs which are not
+  differentiable can have an null Poplar tensor.
+
+* ``debug_prefix``: the name of the operation.
 
 Metadata
 ________
@@ -102,19 +110,22 @@ must have the following signature:
 
 The arguments are:
 
-:allocating_indices: indicates which of the inputs should be allocated
-                     using the tensor allocation function.  See the
-                     description in the `Tensor allocation` section below.
-:num_inplace: indicates the number of inputs which are 'in place'.  The first
-              ``num_inplace`` of the inputs will be considered to be in-place.
-:is_elementwise: indicates that this operation is element-wise.
-:num_inputs: indicates how many inputs are on the operation.
+* ``allocating_indices``: indicates which of the inputs should be allocated
+  using the tensor allocation function.  See the
+  description in :ref:`tensor_allocation`.
+
+* ``num_inplace``: indicates the number of inputs which are 'in place'.  The first
+  ``num_inplace`` of the inputs will be considered to be in-place.
+
+* ``is_elementwise``: indicates that this operation is element-wise.
+
+* ``num_inputs``: indicates how many inputs are on the operation.
 
 The function should fill in the values of the first three arguments, which
 are all reference types.
 
 
-In place operations
+In-place operations
 ___________________
 
 If an operation does an in-place modification of an input tensor, as
@@ -135,20 +146,23 @@ if it can associate them with specific operations.  If the output of an
 operation is the same shape and layout as its first input, then it should be
 marked as elementwise.
 
-Typically the graph building code for the operation will clone the input in
+Typically, the graph building code for the operation will clone the input in
 order to generate the output Poplar tensor.
+
+.. _tensor_allocation:
 
 Tensor allocation
 _________________
 
 When generating the Poplar graph, sometimes the backend has the freedom to
-allocate an input to an operation.  This happens when an input to an op is
+allocate an input to an operation.  This happens when an input to an operation is
 also the input to the graph, or when previous operations do not put
 constraints on the input tensor.
 
 If this condition occurs, then by default the backend will create the Poplar
-tensor with linear mapping.  See the section on tile mapping in the Poplar
-API guide.
+tensor with linear mapping.  See the section on tile mapping in the
+`Poplar and Poplibs API Reference
+<https://documents.graphcore.ai/documents/UG2/latest>`_.
 
 To override this behaviour and allocate a tensor using a specific layout
 mapping, the custom operation can provide a function with the following
@@ -163,28 +177,28 @@ signature:
 
 The arguments are:
 
-:graph: the Poplar graph where the tensor should be created.
-:operand: the operand number of the input to allocate.
-:shape: the shape of the tensor.
-:type: the Poplar data type for the tensor.
+* ``graph``: the Poplar graph where the tensor should be created.
+* ``operand``: the operand number of the input to allocate.
+* ``shape``: the shape of the tensor.
+* ``type``: the Poplar data type for the tensor.
 
 
 Gradient operations
 ___________________
 
 As described above, when the gradient of the forward operation is generated,
-either a single op, or multiple operations can be inserted into the graph.
+either a single operation, or multiple operations can be inserted into the graph.
 
 You can use the parameter ``separate_gradients`` on the ``precompiled_user_op`` function
 to select which of the two options are required.  The
 compiled code must match this setting.
 
-If the ``separate_gradients`` parameter is set to False, then the compiled
+If the ``separate_gradients`` parameter is set to ``False``, then the compiled
 function for generating the gradient operation should fill in one output
 for each of the inputs of the forward pass function.  Each output should be
 the partial derivative with respect to one of the inputs.
 
-If the ``separate_gradients`` parameter is True, then the gradient operation
+If the ``separate_gradients`` parameter is ``True``, then the gradient operation
 building function should produce an operation with a single output, which is
 the partial differential with respect to only one of the forward pass inputs.
 
@@ -194,7 +208,7 @@ to the sharded object ``Build_grad`` function.
 Example
 _______
 
-This example shows the source file for a rotate op, which takes three vectors
+This example shows the source file for a rotate operation, which takes three vectors
 and rotates the ``x`` and ``y`` ones by the ``angle`` one.
 
 .. literalinclude:: custom_rotate_op.cc
@@ -211,12 +225,12 @@ When compiling the host-size shared object file, it is not necessary to
 include or link against any TensorFlow header or library files.  Only the
 Poplar headers and link libraries should be necessary.
 
-Fully customized CPU operations
+Fully customised CPU operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The framework also allows a custom operation which executes code on the CPU
+The framework also allows a custom operation that executes code on the CPU
 instead of on the IPU.  A shared object, much like the builder function of
-the device side custom operation must be written.  The signature of this
+the device-side custom operation, must be written.  The signature of this
 function should be:
 
 .. code-block:: C++
@@ -227,11 +241,12 @@ function should be:
                            const std::string& name);
 
 The arguments are:
-:data: the input data. the function should be written to expect a certain data
-type so the void pointer can be cast into the expected type.
-:number_of_elements: indicates the number of elements in the input data.
-:outputs: should be filled in by the operation.
-:name: is the name of the operation within the XLA/HLO graph.
+
+* ``data``: the input data. the function should be written to expect a certain data
+  type so the void pointer can be cast into the expected type.
+* ``number_of_elements``: indicates the number of elements in the input data.
+* ``outputs``: should be filled in by the operation.
+* ``name``: is the name of the operation within the XLA/HLO graph.
 
 Custom elementwise expressions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

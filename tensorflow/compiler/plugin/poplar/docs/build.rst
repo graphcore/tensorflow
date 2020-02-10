@@ -66,7 +66,7 @@ Build instructions
 
         bazel version
 
-    To build against a release, set an environment variable to point to the base of a built poplar installation
+    To build against a release, set an environment variable to point to the base of a built Poplar installation
 
     .. code-block:: console
 

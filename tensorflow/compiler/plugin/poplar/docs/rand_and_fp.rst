@@ -19,15 +19,15 @@ will set the control register.
 
 The ``esr`` bit enables the stochastic rounding unit. Three of the remaining
 options control the generation of hardware exceptions on various conditions.
-The ``nanoo`` bit selects between clipping on overflow of a half precision number
-or generating a NaN.
+The ``nanoo`` bit selects between clipping or generating a NaN
+when a half-precision number overflows.
 
 Resetting the global random number seed
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The stochastic rounding unit, and the TensorFlow stateful random number
-generators both use a common global random number seed to initialize the
-random number generator hardware. Each TensorFlow IPU device has its own seed.
+The stochastic rounding unit and the TensorFlow stateful random number
+generators both use a common global random number seed to initialise the
+random number generator hardware. Each IPU device has its own seed.
 
 By default this seed is set randomly, but it can be reset by using the
 :py:func:`tensorflow.python.ipu.utils.reset_ipu_seed` function.
@@ -42,7 +42,7 @@ This can be done using the
 Debugging numerical issues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The values held in a tensor can be printed by calling `ipu.ops.internal_ops.print_tensor`.
+The values held in a tensor can be printed by calling ``ipu.ops.internal_ops.print_tensor``.
 This function takes a tensor and will print it to standard error as a side
 effect.
 

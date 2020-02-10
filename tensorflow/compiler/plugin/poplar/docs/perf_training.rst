@@ -6,7 +6,7 @@ graph into a single operation in the TensorFlow graph.  This accelerates
 training by removing the need to make calls to the IPU hardware for each
 operation in the graph.
 
-However, if the Python code with the training pass in it is called multiple
+However, if the Python code with the training pass is called multiple
 times, once for each batch in the training data set, then there is still
 the overhead of calling the hardware for each batch.
 
@@ -14,12 +14,12 @@ The Graphcore IPU support for TensorFlow provides three mechanisms to
 improve the training performance: training loops, data set feeds, and
 replicated graphs.
 
-Training loops, datasets and feed queues
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Training loops, data sets and feed queues
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 By placing the training operations inside a loop, they can be executed multiple
 times without returning control to the host.  It is possible to use a standard
-TensorFlow while_loop operation to wrap the training operation, but the IPU
+TensorFlow ``while_loop`` operation to wrap the training operation, but the IPU
 library provides a convenient and feature rich version.
 
 Normally when TensorFlow runs, operations which are not inside a loop will be
@@ -37,13 +37,13 @@ https://www.tensorflow.org/datasets.
 To construct a system that will train in a loop, you will need to do the
 following:
 
-* Wrap your optimizer training operation in a loop.
+* Wrap your optimiser training operation in a loop.
 * Create an ``IPUInfeedQueue`` to feed data to that loop.
 * Create an ``IPUOutfeedQueue`` to take results out of that loop.
 * Create a TensorFlow DataSet to provide data to the input queue.
 
 The following example shows how to construct a trivial DataSet, attach it to
-a model using in IPUInfeedQueue, feed results into an IPUOutfeedQueue, and
+a model using in ``IPUInfeedQueue``, feed results into an ``IPUOutfeedQueue``, and
 construct a loop.
 
 .. literalinclude:: perf_training_example.py
@@ -56,21 +56,21 @@ single TensorFlow constant, and then maps the output of that DataSet into a
 pair of tensors.  It then arranges for the DataSet to be repeated indefinitely.
 
 After the DataSet is constructed, the two data feed queues are constructed. The
-IPUInfeedQueue takes the DataSet as a parameter, along with its name.  Every
+``IPUInfeedQueue`` takes the DataSet as a parameter, along with a name.  Every
 queue in the system must have a unique name.
 
-The IPUOutfeedQueue has extra options to control how it collects and outputs
+The ``IPUOutfeedQueue`` has extra options to control how it collects and outputs
 the data sent to it.  None of these are used in this example.
 
 Now that we have the DataSet and the queues for getting data in and out of the
-device side code, we can construct the device side part of the model.  In this
+device-side code, we can construct the device-side part of the model.  In this
 example, the ``body`` function constructs a very simple model, which does not
-even have an optimizer.  It takes the two data samples which will be provided
+even have an optimiser.  It takes the two data samples which will be provided
 by the DataSet, and performs some simple maths on them, and inserts the
 results into the output queue.
 
-Typically, in this function, the full ML model would be constructed, and a
-TensorFlow Optimizer would be used to generate a backward pass and variable
+Typically, in this function, the full ML model would be constructed and a
+TensorFlow ``Optimizer`` would be used to generate a backward pass and variable
 update operations.  The returned data would typically be a loss value, or
 perhaps nothing at all if all we do is call the training operation.
 
@@ -104,6 +104,9 @@ Replicated graphs
 
 To improve performance, multiple IPUs can be configured to run in a data
 parallel mode.  The graph is said to be replicated across multiple IPUs.
+See the `Poplar and Poplibs User Guide
+<https://documents.graphcore.ai/documents/UG1/latest>`_ for more background
+about replicated graphs.
 
 Selecting the number of replicas
 ________________________________
@@ -117,15 +120,15 @@ replicated across IPUs (data parallelism).  When specifying the number of IPUs
 in the system, you must specify a multiple of the number of shards used
 by the graph.
 
-For instance, if a graph is sharded over 2 IPUs, and you specify 8 IPUs
+For instance, if a graph is sharded over two IPUs, and you specify eight IPUs
 to the ``auto_select_ipus`` function, then the graph will be replicated four
 times.
 
-Supplying data
-______________
+Data feeds
+__________
 
-Data must be fed to a replicated graph using DataSets and infeeds.  The
-``IPUInfeedQueue`` and ``IPUOutfeedQueue`` classes require the number of
+When used with a replicated graph, the ``IPUInfeedQueue`` and
+``IPUOutfeedQueue`` classes require the number of
 replicas to be passed into the constructor in the ``replication_factor``
 parameter.
 
@@ -136,7 +139,7 @@ Each replica maintains its own copy of the graph, but during training it is
 important to ensure that the graph parameters are updated so that they are
 in sync across replicas.
 
-A wrapper for standard TensorFlow optimizers is used to add extra operations to
+A wrapper for standard TensorFlow optimisers is used to add extra operations to
 the parameter update nodes in the graph to average updates across replicas. It
 is called ``CrossReplicaOptimizer``.  See the :ref:`api-section` for more
 details.
@@ -149,7 +152,7 @@ outputs of one stage are the inputs to the next one. These stages are then
 executed in parallel across multiple IPUs. This approach can be used to
 split the model where layer(s) are executed on different IPUs.
 
-This improves utilization of the hardware when a model is too large to fit
+This improves utilisation of the hardware when a model is too large to fit
 into a single IPU and must be sharded across multiple IPUs.
 
 Each of the stages is a set of operations, and is described using a Python
@@ -209,17 +212,17 @@ Every subsequent pipeline stage must have its inputs as the outputs of the
 previous stage.  Note that things like the learning rate must be threaded
 through each pipeline stage until they are used.
 
-Applying an optimizer to the graph
+Applying an optimiser to the graph
 __________________________________
 
-The optimizer must be applied by creating it in a special optimizer function
+The optimiser must be applied by creating it in a special optimiser function
 and then returning a handle to it from that function.  The function is passed
 into the ``optimizer_function`` argument of the pipeline operation.
 
 When a pipeline is running it will accumulate the gradients from each step of
 the pipeline and only apply the updates to the graph parameters at the end of
 each pipeline run, given by the ``pipeline_depth`` parameter. Consequently it is
-important for the system to have more knowledge of the optimizer and so it
+important for the system to have more knowledge of the optimiser and so it
 must be given to the pipeline operator using this function.
 
 Device mapping
@@ -227,12 +230,12 @@ ______________
 
 By default the pipeline operation will map the pipeline stages onto IPUs in
 order to minimise the inter-IPU communication lengths.  If you need to
-override this order, then yu can use the ``device_mapping`` parameter.
+override this order, then you can use the ``device_mapping`` parameter.
 
-Dataset benchmarking
+DataSet benchmarking
 ~~~~~~~~~~~~~~~~~~~~
-In order to fully utilize the potential of the IPU, the ``tf.data.Dataset`` used
-by the ``IPUInfeedQueue`` needs to be optimal so that the IPU is not constantly
+In order to fully utilise the potential of the IPU, the ``tf.data.Dataset`` used
+by the ``IPUInfeedQueue`` needs to be optimised so that the IPU is not constantly
 waiting for more data to become available.
 
 To benchmark your ``tf.data.Dataset``, you can make use of the
@@ -241,7 +244,7 @@ details of the ``ipu.dataset_benchmark`` functions which allow you to obtain the
 maximum throughput of your ``tf.data.Dataset``.
 
 If the throughput of your ``tf.data.Dataset`` is the bottleneck, you can try and
-optimize it using:
+optimise it using the information on the TensorFlow website:
 
 * https://www.tensorflow.org/guide/data
 * https://www.tensorflow.org/guide/data_performance

@@ -6,7 +6,7 @@ This example shows how to use the ``IPUEstimator`` with the
 a model on the MNIST dataset.
 
 The example is based on the following official tutorial
-with some modifications for usage with the IPU:
+with some modifications for use with the IPU:
 https://www.tensorflow.org/tutorials/distribute/multi_worker_with_estimator
 
 We highlight the changes needed to convert code using ``IPUEstimator``
@@ -14,6 +14,7 @@ to support distributed training below.
 
 The input function
 ##################
+
 In multi-worker training, it is necessary to shard the dataset such
 that each worker processes distinct portions of the dataset.
 
@@ -29,7 +30,8 @@ multiplied by the number of workers.
 
 The model function
 ##################
-The optimizer will automatically divide the loss by the number of workers,
+
+The optimiser will automatically divide the loss by the number of workers,
 so in the model function we should only divide the loss by the local
 batch size.
 
@@ -44,7 +46,7 @@ weight updates) is placed on the host. This is done by using the
 ``host_call`` parameter in ``IPUEstimatorSpec``.
 
 In practice this means that the gradients will be streamed from the
-IPU to the host as soon as they are computed. The worker hosts will
+IPU to the host as soon as they are computed. The workers will
 then start reducing the gradients amongst themselves, allowing overlap
 between the backward pass on the IPUs with the reductions on the hosts.
 After a gradient is reduced across the workers, the corresponding
@@ -53,22 +55,25 @@ weight update is also done on the host.
 The reduction is done using a ring-based collectives implementation
 with gRPC as the cross-host communication layer.
 
-One benefit of this approach is that any additional optimizer
+One benefit of this approach is that any additional optimiser
 state (such as momentum) is only needed in host memory, so there
 is no additional IPU memory consumption when using stateful
-optimizers with this approach.
+optimisers with this approach.
 
 Cluster definition
 ##################
+
 We use the ``TFConfigClusterResolver`` which reads the ``TF_CONFIG``
 environment variable to determine the cluster definition.
 
 There are two components of ``TF_CONFIG``: ``cluster`` and ``task``.
-``cluster`` provides information about the entire cluster, namely
-the workers and parameter servers in the cluster. ``task`` provides
-information about the current task. In this example, the task
-``type`` is ``worker`` and the task ``index`` is ``0``.
 
+* ``cluster`` provides information about the entire cluster, namely
+  the workers and parameter servers in the cluster.
+
+* ``task`` provides information about the current task.
+
+In this example, the task ``type`` is ``worker`` and the task ``index`` is 0.
 You could run this example with two workers on the same machine
 (in different terminals) like this:
 
