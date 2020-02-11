@@ -13,25 +13,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
+#include <random>
 
-#include <popops/ElementWise.hpp>
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/dropout_hlo.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/pooling.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
 
+#include <popops/ElementWise.hpp>
 #include <poputil/TileMapping.hpp>
-#include <random>
 
 namespace {
 std::once_flag seed_flag;
@@ -140,9 +140,9 @@ class DropoutOp : public PoplarOpDef {
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
-    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+    if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
       TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, std::make_pair(inst, 0),
+                          AddTensor(graph, TensorLocation{inst, 0},
                                     output_shape, res, tensor_map));
       seq.add(poplar::program::Copy(final_output, new_out));
       final_output = new_out;

@@ -17,15 +17,22 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_base.h"
+
+#include <stddef.h>
+
+#include <map>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
-
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -35,15 +42,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <stddef.h>
-#include <string.h>
-#include <map>
-#include <string>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
 #include "tensorflow/stream_executor/lib/initialize.h"
 
 #include <poplar/CSRFunctions.hpp>
@@ -165,7 +163,7 @@ Status BaseVisitor::HandleConcatenate(HloInstruction* inst) {
 Status BaseVisitor::HandleBitcastConvert(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -257,7 +255,7 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   poplar::Graph& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor t,
-      AddConstantTensor(graph, std::make_pair(inst, 0), GetOutputShape(inst),
+      AddConstantTensor(graph, TensorLocation{inst, 0}, GetOutputShape(inst),
                         inst->literal(), resources_, tensor_map));
 
   // If this constant is used inplace then we need to add a copy and use that
@@ -281,7 +279,7 @@ Status BaseVisitor::HandleConstant(HloInstruction* inst) {
 Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
-      ArgVectors output_tensors,
+      TensorVectors output_tensors,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(output_tensors.size(), 1);
   CHECK_EQ(output_tensors[0].size(), CountShapes(inst->shape()));
@@ -313,13 +311,13 @@ Status BaseVisitor::HandleTranspose(HloInstruction* inst) {
 }
 
 namespace {
-ArgVectors GetFusionInputs(CompilerResources& res, const HloInstruction* inst,
-                           TensorMap& tensor_map,
-                           poplar::program::Sequence& seq,
-                           const bool expand_constants = true) {
-  ArgVectors args;
+TensorVectors GetFusionInputs(CompilerResources& res,
+                              const HloInstruction* inst, TensorMap& tensor_map,
+                              poplar::program::Sequence& seq,
+                              const bool expand_constants = true) {
+  TensorVectors args;
   for (int64 i = 0; i < inst->operand_count(); i++) {
-    ArgVector t =
+    TensorVector t =
         FindInstructionInputs(tensor_map, res, inst, i, seq, expand_constants);
     args.push_back(t);
   }
@@ -332,7 +330,8 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   HloComputation* comp = inst->fused_instructions_computation();
 
   if (IsArithmeticExpressionFusion(inst)) {
-    ArgVectors args = GetFusionInputs(resources_, inst, tensor_map, sequence);
+    TensorVectors args =
+        GetFusionInputs(resources_, inst, tensor_map, sequence);
     ArithmeticExprVisitor arithmetic_visitor(resources_, args);
     TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
     prog = arithmetic_visitor.GetSequence();
@@ -545,7 +544,7 @@ Status BaseVisitor::HandleAddDependency(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name() << " on "
           << absl::StrJoin(dep_names, ",");
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), CountShapes(inst->operand(0)->shape()));

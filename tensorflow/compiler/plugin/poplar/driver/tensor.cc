@@ -20,9 +20,18 @@ limitations under the License.
 
 #include <limits>
 #include <numeric>
+#include <poplar/Engine.hpp>
+#include <poplar/OptionFlags.hpp>
+#include <poplar/TensorCloneMethod.hpp>
+#include <poplin/Norms.hpp>
+#include <popops/Gather.hpp>
+#include <poputil/TileMapping.hpp>
+#include <poputil/Util.hpp>
 #include <string>
 #include <tuple>
 
+#include "absl/algorithm/container.h"
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/custom_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -38,7 +47,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
@@ -52,24 +60,12 @@ limitations under the License.
 #include "tensorflow/core/util/bcast.h"
 #include "tensorflow/stream_executor/lib/status.h"
 
-#include "absl/algorithm/container.h"
-#include "absl/strings/str_cat.h"
-
-#include <poplar/Engine.hpp>
-#include <poplar/OptionFlags.hpp>
-#include <poplar/TensorCloneMethod.hpp>
-#include <poplin/Norms.hpp>
-#include <popops/Gather.hpp>
-#include <poputil/TileMapping.hpp>
-#include <poputil/Util.hpp>
-
 using ::absl::StrCat;
 using ::tensorflow::str_util::Join;
 
 namespace xla {
 namespace poplarplugin {
 namespace {
-using TensorVector = std::vector<std::pair<TensorKey, poplar::Tensor>>;
 
 int64 GetNumberOfUsedTiles(poplar::Graph& graph, const poplar::Tensor& tensor) {
   const auto& mapping = graph.getTileMapping(tensor);
@@ -103,60 +99,43 @@ poplar::Tensor AddLinearlyMappedTensorWithOffset(
   return out;
 }
 
-TensorVector GetTensorsInMap(
-    const TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    absl::optional<int64> opt_tensors_start = absl::nullopt,
-    absl::optional<int64> opt_tensors_end = absl::nullopt) {
-  int64 lower_tensor_idx = opt_tensors_start ? *opt_tensors_start : 0;
-  int64 upper_tensor_idx =
-      (opt_tensors_end ? *opt_tensors_end : std::numeric_limits<int64>::max()) -
-      1;
-
-  // Allocate any tensors which were deferred.
-  DeferredAllocations::AllocateIfExists(res, {inst, lower_tensor_idx},
-                                        {inst, upper_tensor_idx});
-
-  auto lower = std::make_pair(inst->name(), lower_tensor_idx);
-  auto upper = std::make_pair(inst->name(), upper_tensor_idx);
-  TensorVector outputs;
-  for (auto it = map.lower_bound(lower); it != map.upper_bound(upper); it++) {
-    outputs.push_back(*it);
-  }
-  return outputs;
-}
-
-ArgVector GetTensorsMaybeExpand(
+TensorVector GetTensorsMaybeExpand(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     poplar::program::Sequence& seq, bool expand_constants,
     absl::optional<int64> opt_tensors_start = absl::nullopt,
     absl::optional<int64> opt_tensors_end = absl::nullopt) {
-  TensorVector tensor_vector =
-      GetTensorsInMap(map, res, inst, opt_tensors_start, opt_tensors_end);
-  ArgVector outputs;
-  for (auto pair : tensor_vector) {
-    const auto key = pair.first;
-    poplar::Tensor tensor = pair.second;
+  // Allocate any tensors which were deferred.
+  DeferredAllocations::AllocateIfExists(res, inst, opt_tensors_start,
+                                        opt_tensors_end);
+
+  TensorMap::NamedTensorLocationVector tensor_vector =
+      map.FindInstructionNamedTensorLocations(inst, opt_tensors_start,
+                                              opt_tensors_end);
+  TensorVector outputs;
+  for (auto tensor : tensor_vector) {
     // Check if we need to expand the constant tensor.
-    if (tensor.containsConstant() && expand_constants) {
-      auto& graph = GetGraphWithOutputIndex(res, inst, key.second);
+    if (tensor.tensor.containsConstant() && expand_constants) {
+      auto& graph = GetGraphWithOutputIndex(
+          res, inst, tensor.location.flattened_output_tuple_index);
 
       // We only expand the constant tensor if it's mapped to 1 tile and it is
       // not a tensor of scalar shape.
-      const uint64 tiles_used = GetNumberOfUsedTiles(graph, tensor);
-      const auto& tensor_shape = tensor.shape();
+      const uint64 tiles_used = GetNumberOfUsedTiles(graph, tensor.tensor);
+      const auto& tensor_shape = tensor.tensor.shape();
       const auto num_elements =
           std::accumulate(tensor_shape.begin(), tensor_shape.end(),
                           std::size_t(1), std::multiplies<std::size_t>());
 
       if (tiles_used == 1 && num_elements > 1) {
         auto expanded_tensor = AddLinearlyMappedTensorWithOffset(
-            graph, tensor.elementType(), tensor_shape, "wide_constant", res);
-        seq.add(poplar::program::Copy(tensor, expanded_tensor));
-        tensor = expanded_tensor;
+            graph, tensor.tensor.elementType(), tensor_shape, "wide_constant",
+            res);
+        seq.add(poplar::program::Copy(tensor.tensor, expanded_tensor));
+        tensor.tensor = expanded_tensor;
       }
     }
-    map[key] = tensor;
-    outputs.push_back(tensor);
+    TF_CHECK_OK(map.UpdateTensor(tensor.location, tensor.tensor));
+    outputs.push_back(tensor.tensor);
   }
   return outputs;
 }
@@ -685,7 +664,7 @@ static StatusOr<poplar::Tensor> AddConvAddBiasTensor(
     const HloInstruction* layout, uint64 layout_output_idx,
     std::vector<const HloInstruction*> forward_path,
     const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition("Convolution %s output not found for %s",
@@ -705,7 +684,7 @@ static StatusOr<poplar::Tensor> AddMatMulAddBiasTensor(
     const HloInstruction* layout, uint64 layout_output_idx,
     std::vector<const HloInstruction*> forward_path,
     const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition("Matmul %s output not found for %s",
@@ -791,7 +770,7 @@ StatusOr<poplar::Tensor> AddNormScaleTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     const unsigned feature_dimension, const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -808,7 +787,7 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     const unsigned feature_dimension, const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -825,7 +804,7 @@ static StatusOr<poplar::Tensor> AddElementwiseBinary(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     const TensorMap& tensor_map) {
-  OutVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -837,7 +816,7 @@ static StatusOr<poplar::Tensor> AddElementwiseBinary(
   return graph.clone(other_side, debug_name);
 }
 
-bool HasTensorAllocationTarget(const TensorSource& src,
+bool HasTensorAllocationTarget(const TensorLocation& src,
                                const CompilerResources& resources) {
   auto& tensor_allocation_map = resources.annotations.tensor_allocation_map;
   return tensor_allocation_map.find(src) != tensor_allocation_map.end();
@@ -1086,17 +1065,18 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
 }
 
 StatusOr<poplar::Tensor> AddTensor(poplar::Graph& graph,
-                                   const TensorSource& src,
+                                   const TensorLocation& src,
                                    const xla::Shape& shape,
                                    CompilerResources& resources,
                                    const TensorMap& tensor_map) {
-  const std::string& name = GetDebugName(src.first);
+  const std::string& name = GetDebugName(src.instruction);
   poplar::Tensor out;
 
   auto itr = resources.annotations.tensor_allocation_map.find(src);
   if (itr != resources.annotations.tensor_allocation_map.end()) {
-    VLOG(1) << "Adding a tensor with layout for (" << src.first->ToString()
-            << ", " << src.second << ").";
+    VLOG(1) << "Adding a tensor with layout for ("
+            << src.instruction->ToString() << ", "
+            << src.flattened_output_tuple_index << ").";
     TF_ASSIGN_OR_RETURN(out, AddTensorForTarget(graph, itr->second, shape,
                                                 resources, tensor_map, name));
 
@@ -1278,7 +1258,7 @@ StatusOr<poplar::Tensor> CreateConstantTensor(poplar::Graph& graph,
 }
 
 StatusOr<poplar::Tensor> AddConstantTensor(poplar::Graph& graph,
-                                           const TensorSource& src,
+                                           const TensorLocation& src,
                                            const xla::Shape& shape,
                                            const xla::Literal& literal,
                                            CompilerResources& resources,
@@ -1303,7 +1283,7 @@ StatusOr<poplar::Tensor> AddConstantTensor(poplar::Graph& graph,
     return ConvertToDeviceLayout(shape, tensor);
   }
 
-  const auto& name = GetDebugName(src.first);
+  const auto& name = GetDebugName(src.instruction);
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(literal.shape()));
   TF_ASSIGN_OR_RETURN(poplar::Tensor tensor,
                       CreateConstantTensor(graph, literal, shape, type, name));
@@ -1495,11 +1475,10 @@ std::pair<int64, int64> FindGetTupleElementTupleIndices(
   return std::make_pair(start, end);
 }
 
-ArgVector FindInstructionInputsInRange(TensorMap& map, CompilerResources& res,
-                                       const HloInstruction* inst, int64 input,
-                                       std::pair<int64, int64> range,
-                                       poplar::program::Sequence& seq,
-                                       bool expand_constants) {
+TensorVector FindInstructionInputsInRange(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
+    bool expand_constants) {
   const HloInstruction* operand = inst->operand(input);
   return GetTensorsMaybeExpand(map, res, operand, seq, expand_constants,
                                range.first, range.second);
@@ -1509,7 +1488,7 @@ StatusOr<poplar::Tensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, poplar::program::Sequence& seq, bool expand_constants) {
   const HloInstruction* operand = inst->operand(input);
-  ArgVector inputs =
+  TensorVector inputs =
       GetTensorsMaybeExpand(map, res, operand, seq, expand_constants, 0, 1);
 
   if (inputs.size() == 0) {
@@ -1520,44 +1499,34 @@ StatusOr<poplar::Tensor> FindInstructionInput(
   return inputs[0];
 }
 
-ArgVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
-                                const HloInstruction* inst, int64 input,
-                                poplar::program::Sequence& seq,
-                                bool expand_constants) {
+TensorVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
+                                   const HloInstruction* inst, int64 input,
+                                   poplar::program::Sequence& seq,
+                                   bool expand_constants) {
   const HloInstruction* operand = inst->operand(input);
   return GetTensorsMaybeExpand(map, res, operand, seq, expand_constants);
 }
 
-OutVector FindInstructionOutputs(const TensorMap& map, CompilerResources& res,
-                                 const HloInstruction* inst) {
-  TensorVector tensor_vector = GetTensorsInMap(map, res, inst);
-  OutVector outputs;
-  std::transform(tensor_vector.begin(), tensor_vector.end(),
-                 std::back_inserter(outputs),
-                 [](const std::pair<TensorKey, poplar::Tensor>& value) {
-                   return std::get<1>(value);
-                 });
-  return outputs;
+TensorVector FindInstructionOutputs(const TensorMap& map,
+                                    CompilerResources& res,
+                                    const HloInstruction* inst) {
+  DeferredAllocations::AllocateIfExists(res, inst);
+  return map.FindInstructionOutputs(inst);
 }
 
-OutVector FindInstructionOutputsInRange(TensorMap& map, CompilerResources& res,
-                                        const HloInstruction* inst,
-                                        std::pair<int64, int64> range) {
-  TensorVector tensor_vector =
-      GetTensorsInMap(map, res, inst, range.first, range.second);
-  OutVector outputs;
-  std::transform(tensor_vector.begin(), tensor_vector.end(),
-                 std::back_inserter(outputs),
-                 [](const std::pair<TensorKey, poplar::Tensor>& value) {
-                   return std::get<1>(value);
-                 });
-  return outputs;
+TensorVector FindInstructionOutputsInRange(TensorMap& map,
+                                           CompilerResources& res,
+                                           const HloInstruction* inst,
+                                           std::pair<int64, int64> range) {
+  DeferredAllocations::AllocateIfExists(res, inst, range.first, range.second);
+  return map.FindInstructionOutputs(inst, range.first, range.second);
 }
 
-OutVector FindExpandedInstructionOutputs(TensorMap& map, CompilerResources& res,
-                                         const HloInstruction* inst,
-                                         poplar::program::Sequence& seq) {
-  OutVector outputs = GetTensorsMaybeExpand(map, res, inst, seq, true);
+TensorVector FindExpandedInstructionOutputs(TensorMap& map,
+                                            CompilerResources& res,
+                                            const HloInstruction* inst,
+                                            poplar::program::Sequence& seq) {
+  TensorVector outputs = GetTensorsMaybeExpand(map, res, inst, seq, true);
   return outputs;
 }
 
@@ -1579,13 +1548,13 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
 
   std::vector<TensorVector> tensor_vectors(inplace_indexes.size());
   for (uint64 i = 0; i < inplace_indexes.size(); i++) {
-    tensor_vectors[i] = GetTensorsInMap(map, res, inst->operand(i));
+    tensor_vectors[i] = FindInstructionOutputs(map, res, inst->operand(i));
   }
   // Go through all the inplace tensors and check they are all parallel
   // writeable.
   for (auto tensor_vector : tensor_vectors) {
-    for (auto key_tensor_pair : tensor_vector) {
-      if (!key_tensor_pair.second.isParallelWriteable()) {
+    for (auto tensor : tensor_vector) {
+      if (!tensor.isParallelWriteable()) {
         return false;
       }
     }
@@ -1637,12 +1606,12 @@ poplar::Tensor GetTensorForInplaceOp(
   return tensor;
 }
 
-StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
-                                              CompilerResources& res,
-                                              const HloInstruction* inst,
-                                              poplar::program::Sequence& seq,
-                                              bool expand_constants,
-                                              bool always_preserve_aliases) {
+StatusOr<TensorVectors> FindInplaceOutputTensors(TensorMap& map,
+                                                 CompilerResources& res,
+                                                 const HloInstruction* inst,
+                                                 poplar::program::Sequence& seq,
+                                                 bool expand_constants,
+                                                 bool always_preserve_aliases) {
   // Check that the instruction description is for an inplace operation.
   auto inplace_description = HloInstructionDescription(inst);
   if (!inplace_description.IsInplaceType()) {
@@ -1657,7 +1626,7 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
   // Get all the input tensors for all the inplace operands
   auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();
 
-  ArgVectors tensors(inplace_indexes.size());
+  TensorVectors tensors(inplace_indexes.size());
   if (inst->opcode() == HloOpcode::kGetTupleElement) {
     // For GTEs there is only one input, and it is always inplace
     CHECK_EQ(inplace_indexes.size(), 1);
@@ -1731,14 +1700,7 @@ StatusOr<ArgVectors> FindInplaceOutputTensors(TensorMap& map,
 
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
                        const poplar::Tensor& tensor) {
-  auto p = std::make_pair(inst->name(), n);
-  auto it = map.find(p);
-  if (it != map.end()) {
-    return tensorflow::errors::Unknown(StrCat(
-        "[Poplar] Ouptut Tensor for ", GetDebugName(inst), " already exists"));
-  }
-  map[p] = tensor;
-  return Status::OK();
+  return map.AddOutputTensor(inst, n, tensor);
 }
 
 }  // namespace poplarplugin

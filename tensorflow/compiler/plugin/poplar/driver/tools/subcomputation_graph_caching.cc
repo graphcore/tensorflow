@@ -13,10 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
-#include "tensorflow/core/lib/hash/hash.h"
 
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/core/lib/hash/hash.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -42,7 +42,7 @@ bool SubcomputationGraphCache::HloComputationEquals::operator()(
 
 StatusOr<const DeferredVisitor*>
 SubcomputationGraphCache::GetOrCompileSubcomputation(
-    CompilerResources& res, ArgVectors& inputs,
+    CompilerResources& res, TensorVectors& inputs,
     const HloComputation* computation) {
   DeferredArgVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
   auto itr = table_.find(computation);

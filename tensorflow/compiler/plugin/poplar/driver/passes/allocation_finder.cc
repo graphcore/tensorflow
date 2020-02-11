@@ -14,23 +14,22 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
-
-#include "absl/container/flat_hash_set.h"
 namespace xla {
 namespace poplarplugin {
 
@@ -63,19 +62,19 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
   }
 
   Status HandleConstant(HloInstruction* inst) override {
-    allocating_instructions.push_back(std::make_pair(inst, 0));
+    allocating_instructions.push_back(TensorLocation{inst, 0});
     return Status::OK();
   }
 
   Status HandleRng(HloInstruction* inst) override {
-    allocating_instructions.push_back(std::make_pair(inst, 0));
+    allocating_instructions.push_back(TensorLocation{inst, 0});
     return Status::OK();
   }
 
   Status HandleParameter(HloInstruction* inst) override {
     auto shapes = FlattenedXlaShape(inst->shape());
     for (unsigned int i = 0; i < shapes.size(); i++) {
-      allocating_instructions.push_back(std::make_pair(inst, i));
+      allocating_instructions.push_back(TensorLocation{inst, i});
     }
     return Status::OK();
   }
@@ -84,7 +83,7 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
     HloInfeedInstruction* infeed = Cast<HloInfeedInstruction>(inst);
     auto shapes = FlattenedXlaShape(infeed->infeed_shape());
     for (unsigned int i = 0; i < shapes.size(); i++) {
-      allocating_instructions.push_back(std::make_pair(inst, i));
+      allocating_instructions.push_back(TensorLocation{inst, i});
     }
     return Status::OK();
   }
@@ -96,7 +95,7 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
     if (is_remap_deduce) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
-        allocating_instructions.push_back(std::make_pair(inst, i));
+        allocating_instructions.push_back(TensorLocation{inst, i});
       }
     }
     return Status::OK();
@@ -104,27 +103,27 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
 
   Status HandleFusion(HloInstruction* inst) override {
     if (IsPopOpsFusion(inst, "wide_const")) {
-      allocating_instructions.push_back(std::make_pair(inst, 0));
+      allocating_instructions.push_back(TensorLocation{inst, 0});
     }
     return Status::OK();
   }
 
   Status HandleRecvDone(HloInstruction* inst) override {
-    allocating_instructions.push_back(std::make_pair(inst, 0));
+    allocating_instructions.push_back(TensorLocation{inst, 0});
     return Status::OK();
   }
 
   Status HandleReduceWindow(HloInstruction* inst) override {
-    allocating_instructions.push_back(std::make_pair(inst, 0));
+    allocating_instructions.push_back(TensorLocation{inst, 0});
     return Status::OK();
   }
 
-  std::vector<TensorSource> allocating_instructions;
+  std::vector<TensorLocation> allocating_instructions;
 };
 
 }  // namespace
 
-void AllocationFinder::AddTensorTarget(const TensorSource& source,
+void AllocationFinder::AddTensorTarget(const TensorLocation& source,
                                        const TensorTarget& tensor_target) {
   // Insert only if the source is not already in the map.
   tensor_allocation_map.insert(std::make_pair(source, tensor_target));
@@ -136,7 +135,7 @@ bool AllocationFinder::CompareTargets(const TensorTarget& new_target,
          !IsTrainingForward(existing_target.tgt);
 }
 
-void AllocationFinder::FindConsumers(const TensorSource& src,
+void AllocationFinder::FindConsumers(const TensorLocation& src,
                                      const HloInstruction* tgt, int64 index) {
   path.emplace_back(tgt);
   for (auto user : tgt->users()) {
@@ -249,8 +248,9 @@ void AllocationFinder::FindConsumers(const TensorSource& src,
               AddTensorTarget(src, t);
             }
           } else {
-            auto shapes = FlattenedXlaShape(src.first->shape());
-            if (ShapeUtil::Equal(shapes[src.second], user->shape())) {
+            auto shapes = FlattenedXlaShape(src.instruction->shape());
+            if (ShapeUtil::Equal(shapes[src.flattened_output_tuple_index],
+                                 user->shape())) {
               FindConsumers(src, user, index);
             }
           }
@@ -298,8 +298,9 @@ void AllocationFinder::FindConsumers(const TensorSource& src,
           break;
         }
         default: {
-          auto shapes = FlattenedXlaShape(src.first->shape());
-          if (ShapeUtil::Equal(shapes[src.second], user->shape())) {
+          auto shapes = FlattenedXlaShape(src.instruction->shape());
+          if (ShapeUtil::Equal(shapes[src.flattened_output_tuple_index],
+                               user->shape())) {
             FindConsumers(src, user, index);
           }
           break;
@@ -322,7 +323,7 @@ StatusOr<bool> AllocationFinder::Run(HloModule* module) {
 
   for (auto inst : finder.allocating_instructions) {
     visited.clear();
-    FindConsumers(inst, inst.first, inst.second);
+    FindConsumers(inst, inst.instruction, inst.flattened_output_tuple_index);
   }
 
   return true;

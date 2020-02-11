@@ -12,6 +12,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+
+#include <algorithm>
+#include <fstream>
+#include <limits>
+#include <popops/DynamicSlice.hpp>
+#include <popops/Zero.hpp>
+#include <poputil/TileMapping.hpp>
+
+#include "absl/container/inlined_vector.h"
+#include "absl/strings/str_cat.h"
+#include "absl/types/optional.h"
+#include "include/json/json.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
@@ -19,22 +32,9 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
-
-#include "include/json/json.h"
-
-#include "absl/container/inlined_vector.h"
-#include "absl/strings/str_cat.h"
-#include "absl/types/optional.h"
-
-#include <algorithm>
-#include <fstream>
-#include <limits>
-
-#include <popops/DynamicSlice.hpp>
-#include <popops/Zero.hpp>
-#include <poputil/TileMapping.hpp>
 
 using ::absl::StrCat;
 
@@ -356,10 +356,10 @@ std::string GetTensorMappingJson(const std::string& module_name,
   Json::Value mappings;
 
   for (auto tm : tensor_maps) {
-    mappings[tm.first] = Json::Value(Json::arrayValue);
+    mappings[tm.computation] = Json::Value(Json::arrayValue);
 
-    for (auto pair : tm.second) {
-      const auto& pop_tensor = pair.second;
+    for (auto tensor : tm.tensor_map) {
+      const auto& pop_tensor = tensor.tensor;
       const auto& mapping = graph.getTileMapping(pop_tensor);
       Json::Value tiles = Json::Value(Json::arrayValue);
 
@@ -385,17 +385,19 @@ std::string GetTensorMappingJson(const std::string& module_name,
         tensor_shape.append(Json::Value::UInt64(d));
       }
 
-      Json::Value tensor(Json::arrayValue);
-      tensor.append(Json::Value(pair.first.first));
-      tensor.append(Json::Value::UInt64(pair.first.second));
-      tensor.append(tensor_shape);
-      tensor.append(Json::Value(pop_tensor.elementType().toString()));
-      tensor.append(Json::Value::UInt64(pop_tensor.containsConstant()));
-      tensor.append(Json::Value::UInt64(pop_tensor.containsAliases()));
-      tensor.append(Json::Value::UInt64(total_elements));
-      tensor.append(tiles);
+      Json::Value js_tensor(Json::arrayValue);
+      js_tensor.append(Json::Value(tensor.location.instruction->name()));
+      js_tensor.append(
+          Json::Value::UInt64(tensor.location.flattened_output_tuple_index));
+      js_tensor.append(tensor_shape);
+      js_tensor.append(Json::Value(pop_tensor.elementType().toString()));
+      js_tensor.append(Json::Value::UInt64(pop_tensor.containsConstant()));
+      js_tensor.append(Json::Value::UInt64(pop_tensor.containsAliases()));
+      js_tensor.append(Json::Value::UInt64(total_elements));
+      js_tensor.append(tiles);
+      js_tensor.append(Json::Value(tensor.name));
 
-      mappings[tm.first].append(tensor);
+      mappings[tm.computation].append(js_tensor);
     }
   }
 
@@ -448,12 +450,13 @@ StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
   return plan->second;
 }
 
-DeferredArgVectors ConvertInputsToDeferredInputs(ArgVectors& inputs) {
+DeferredArgVectors ConvertInputsToDeferredInputs(TensorVectors& inputs) {
   DeferredArgVectors deferred_inputs(inputs.size());
   for (uint64 i = 0; i != inputs.size(); ++i) {
     deferred_inputs[i] = {inputs[i].begin(), inputs[i].end()};
   }
   return deferred_inputs;
 }
+
 }  // namespace poplarplugin
 }  // namespace xla

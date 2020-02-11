@@ -14,27 +14,26 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
+
+#include <popops/DynamicSlice.hpp>
+#include <popops/ElementWise.hpp>
+#include <popops/Zero.hpp>
+#include <poputil/Util.hpp>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_split.h"
-
-#include <popops/DynamicSlice.hpp>
-#include <popops/ElementWise.hpp>
-#include <popops/Zero.hpp>
-#include <poputil/Util.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -93,7 +92,7 @@ class FifoOp : public PoplarOpDef {
     poplar::program::Sequence seq;
     const std::string debug_name = GetDebugName(inst);
 
-    ArgVector inputs =
+    TensorVector inputs =
         FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
 
     // A degenerate case where the fifo is just an identity op.

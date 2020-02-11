@@ -15,18 +15,16 @@ limitations under the License.
 
 #include <algorithm>
 #include <limits>
+#include <popops/ElementWise.hpp>
+#include <popops/Scatter.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
-
-#include <popops/ElementWise.hpp>
-#include <popops/Scatter.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -46,7 +44,7 @@ StatusOr<poplar::program::Program> CreateScatter(
   poplar::program::Sequence prog;
   poplar::Graph& graph = GetGraph(res, inst);
 
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, prog));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -63,7 +61,7 @@ StatusOr<poplar::program::Program> CreateScatter(
 
   auto tmp = graph.addVariable(operand.elementType(), {});
   graph.setTileMapping(tmp, 0);
-  ArgVectors args = {{tmp}, {graph.clone(tmp)}};
+  TensorVectors args = {{tmp}, {graph.clone(tmp)}};
 
   TF_ASSIGN_OR_RETURN(auto update_comp_visitor,
                       res.subcomputation_cache.GetOrCompileSubcomputation(

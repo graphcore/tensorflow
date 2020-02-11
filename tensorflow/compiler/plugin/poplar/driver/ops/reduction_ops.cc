@@ -14,21 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include <algorithm>
 #include <limits>
-
-#include "absl/strings/str_cat.h"
-
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
-
-#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/service/hlo_instructions.h"
-#include "tensorflow/compiler/xla/service/hlo_query.h"
-#include "tensorflow/compiler/xla/window_util.h"
-
 #include <poplar/TensorCloneMethod.hpp>
 #include <popnn/Pooling.hpp>
 #include <popnn/PoolingDef.hpp>
@@ -39,6 +24,18 @@ limitations under the License.
 #include <popops/Reduce.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
+
+#include "absl/strings/str_cat.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/vertex_templates.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/service/hlo_query.h"
+#include "tensorflow/compiler/xla/window_util.h"
 
 using ::absl::StrCat;
 
@@ -432,7 +429,7 @@ StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
     }
 
     // Allocate the output tensor
-    TF_ASSIGN_OR_RETURN(out, AddTensor(graph, std::make_pair(inst, 0),
+    TF_ASSIGN_OR_RETURN(out, AddTensor(graph, TensorLocation{inst, 0},
                                        output_shape, res, tensor_map));
     poplar::Tensor out_flat = out.flatten();
 
@@ -764,7 +761,7 @@ StatusOr<poplar::program::Program> CreateSimpleSelectAndScatter(
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor identity_val,
-      AddConstantTensor(graph, std::make_pair(inst, 0), partial_shape,
+      AddConstantTensor(graph, TensorLocation{inst, 0}, partial_shape,
                         identity_literal, res, tensor_map));
   prog.add(poplar::program::Copy(identity_val, partial));
 
@@ -891,7 +888,7 @@ StatusOr<poplar::program::Program> CreatePaddingReduceWindow(
   const Window& window(root->window());
 
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
   CHECK_EQ(inputs.size(), 2);
   CHECK_EQ(inputs[0].size(), 1);

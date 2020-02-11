@@ -123,14 +123,14 @@ ENTRY c1 {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], ip0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -194,25 +194,25 @@ TEST_F(AllocationFinderTest, FindSubCompTensorAllocations) {
   const HloInstruction* c_conv = conv;
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(op1, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{op1, 0});
   EXPECT_EQ(t.tgt, c_conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op2, 0});
   EXPECT_EQ(t.tgt, c_conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op0_sub, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op0_sub, 0});
   EXPECT_EQ(t.tgt, c_conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op1_sub, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op1_sub, 0});
   EXPECT_EQ(t.tgt, c_conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -303,37 +303,37 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations1) {
   const HloInstruction* c_conv2 = conv2;
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 6);
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(op1, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{op1, 0});
   EXPECT_EQ(t.tgt, c_conv1);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op2, 0});
   EXPECT_EQ(t.tgt, c_conv1);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op0_sub1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op0_sub1, 0});
   EXPECT_EQ(t.tgt, c_conv1);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op1_sub1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op1_sub1, 0});
   EXPECT_EQ(t.tgt, c_conv1);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op0_sub2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op0_sub2, 0});
   EXPECT_EQ(t.tgt, c_conv2);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op1_sub2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op1_sub2, 0});
   EXPECT_EQ(t.tgt, c_conv2);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -424,37 +424,37 @@ TEST_F(AllocationFinderTest, FindMultiCompTensorAllocations2) {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 6);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(op1, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{op1, 0});
   EXPECT_EQ(t.tgt, c_conv2);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op2, 0});
   EXPECT_EQ(t.tgt, c_conv2);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op0_sub1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op0_sub1, 0});
   EXPECT_EQ(t.tgt, c_conv1);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op1_sub1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op1_sub1, 0});
   EXPECT_EQ(t.tgt, c_conv1);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op0_sub2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op0_sub2, 0});
   EXPECT_EQ(t.tgt, c_conv2);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(op1_sub2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{op1_sub2, 0});
   EXPECT_EQ(t.tgt, c_conv2);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -501,13 +501,13 @@ ENTRY c1 {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -552,13 +552,13 @@ TEST_F(AllocationFinderTest, CanTraverseTuples) {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(in, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{in, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 3);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(w, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{w, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -599,13 +599,13 @@ TEST_F(AllocationFinderTest, CanStartOnTuples) {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(in, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{in, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(in, 1));
+  t = annotations.tensor_allocation_map.at(TensorLocation{in, 1});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -691,25 +691,25 @@ TEST_F(AllocationFinderTest, FindWhileTensorAllocations) {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(in, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{in, 0});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(w, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{w, 0});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(tuple_body, 1));
+  t = annotations.tensor_allocation_map.at(TensorLocation{tuple_body, 1});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(tuple_body, 2));
+  t = annotations.tensor_allocation_map.at(TensorLocation{tuple_body, 2});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -807,25 +807,25 @@ TEST_F(AllocationFinderTest, FindRepeatTensorAllocations) {
   const HloInstruction* body_param = repeat_body->parameter_instruction(0);
   const HloInstruction* dot_inst = repeat_body->root_instruction()->operand(1);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(in, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{in, 0});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(w, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{w, 0});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(body_param, 1));
+  t = annotations.tensor_allocation_map.at(TensorLocation{body_param, 1});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(body_param, 2));
+  t = annotations.tensor_allocation_map.at(TensorLocation{body_param, 2});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -872,13 +872,13 @@ ENTRY c1 {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], ip0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.backward_path.size(), 2);
@@ -936,7 +936,7 @@ TEST_F(AllocationFinderTest, FindDoesntTraceThroughInvalidCalls) {
   EXPECT_TRUE(finder.Run(hlo_module.get()).ValueOrDie());
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 1);
-  auto t1 = annotations.tensor_allocation_map.at(std::make_pair(op1, 0));
+  auto t1 = annotations.tensor_allocation_map.at(TensorLocation{op1, 0});
   EXPECT_EQ(t1.tgt, conv);
   EXPECT_EQ(t1.input_index, 1ll);
   EXPECT_EQ(t1.backward_path.size(), 1);
@@ -990,11 +990,11 @@ ENTRY c1 {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1004,7 +1004,7 @@ ENTRY c1 {
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -1070,11 +1070,11 @@ ENTRY c1 {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1084,7 +1084,7 @@ ENTRY c1 {
   // We have added two new entries to the map for the 2 bias add ops
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -1092,7 +1092,7 @@ ENTRY c1 {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, call1);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -1153,11 +1153,11 @@ ENTRY c1 {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1167,7 +1167,7 @@ ENTRY c1 {
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -1222,11 +1222,11 @@ HloModule top
   // Will have both of the dot parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1236,7 +1236,7 @@ HloModule top
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, dot);
@@ -1291,11 +1291,11 @@ HloModule top
   // Will have both of the dot parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1351,11 +1351,11 @@ HloModule top
   // Will have both of the dot parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1365,7 +1365,7 @@ HloModule top
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, dot);
@@ -1413,7 +1413,7 @@ ENTRY top {
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, ip0);
@@ -1421,7 +1421,7 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, ip0);
@@ -1472,11 +1472,11 @@ ENTRY top  {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1486,7 +1486,7 @@ ENTRY top  {
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -1494,7 +1494,7 @@ ENTRY top  {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -1549,11 +1549,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1563,7 +1563,7 @@ ENTRY top {
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -1572,7 +1572,7 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -1670,11 +1670,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(conv_ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{conv_ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(conv_ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{conv_ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1684,7 +1684,7 @@ ENTRY top {
   // We have added one new entry for the bias add
   ASSERT_EQ(annotations.tensor_allocation_map.size(), 5);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(bn_ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{bn_ip1, 0});
   EXPECT_EQ(t.tgt, bn_tr);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -1692,7 +1692,7 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(bn_ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{bn_ip2, 0});
   EXPECT_EQ(t.tgt, bn_tr);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -1700,12 +1700,13 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  // The add in the reduce computation can also have a layout on either operand.
+  // The add in the reduce computation can also have a layout on either
+  // operand.
   HloInstruction* x = FindInstruction(module0, "x");
   HloInstruction* y = FindInstruction(module0, "y");
-  if (annotations.tensor_allocation_map.find(std::make_pair(x, 0)) ==
+  if (annotations.tensor_allocation_map.find(TensorLocation{x, 0}) ==
       annotations.tensor_allocation_map.end()) {
-    EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
+    EXPECT_NE(annotations.tensor_allocation_map.find(TensorLocation{y, 0}),
               annotations.tensor_allocation_map.end());
   }
 }
@@ -1767,11 +1768,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1781,14 +1782,14 @@ ENTRY top {
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 5);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -1797,7 +1798,7 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -1806,12 +1807,13 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape2);
 
-  // The add in the reduce computation can also have a layout on either operand.
+  // The add in the reduce computation can also have a layout on either
+  // operand.
   HloInstruction* x = FindInstruction(module0, "x");
   HloInstruction* y = FindInstruction(module0, "y");
-  if (annotations.tensor_allocation_map.find(std::make_pair(x, 0)) ==
+  if (annotations.tensor_allocation_map.find(TensorLocation{x, 0}) ==
       annotations.tensor_allocation_map.end()) {
-    EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
+    EXPECT_NE(annotations.tensor_allocation_map.find(TensorLocation{y, 0}),
               annotations.tensor_allocation_map.end());
   }
 }
@@ -1874,11 +1876,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1888,14 +1890,14 @@ ENTRY top {
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added two new entires for the layer norms.
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 5);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   auto target_bn = t.tgt == bn1 ? bn1 : bn2;
   // It was allocated for one of the batch norms.
   EXPECT_EQ(t.tgt, target_bn);
@@ -1906,7 +1908,7 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   // It was allocated for same batch norm due to control dependencies.
   EXPECT_EQ(t.tgt, target_bn);
   EXPECT_EQ(t.input_index, 2);
@@ -1916,12 +1918,13 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape2);
 
-  // The add in the reduce computation can also have a layout on either operand.
+  // The add in the reduce computation can also have a layout on either
+  // operand.
   HloInstruction* x = FindInstruction(module0, "x");
   HloInstruction* y = FindInstruction(module0, "y");
-  if (annotations.tensor_allocation_map.find(std::make_pair(x, 0)) ==
+  if (annotations.tensor_allocation_map.find(TensorLocation{x, 0}) ==
       annotations.tensor_allocation_map.end()) {
-    EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
+    EXPECT_NE(annotations.tensor_allocation_map.find(TensorLocation{y, 0}),
               annotations.tensor_allocation_map.end());
   }
 }
@@ -1983,11 +1986,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -1997,14 +2000,14 @@ ENTRY top {
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added two new entires for the layer norms.
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 5);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   // Layer norm has priority over elementwise ops.
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
@@ -2014,7 +2017,7 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   // Layer norm has priority over elementwise ops.
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
@@ -2024,12 +2027,13 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape2);
 
-  // The add in the reduce computation can also have a layout on either operand.
+  // The add in the reduce computation can also have a layout on either
+  // operand.
   HloInstruction* x = FindInstruction(module0, "x");
   HloInstruction* y = FindInstruction(module0, "y");
-  if (annotations.tensor_allocation_map.find(std::make_pair(x, 0)) ==
+  if (annotations.tensor_allocation_map.find(TensorLocation{x, 0}) ==
       annotations.tensor_allocation_map.end()) {
-    EXPECT_NE(annotations.tensor_allocation_map.find(std::make_pair(y, 0)),
+    EXPECT_NE(annotations.tensor_allocation_map.find(TensorLocation{y, 0}),
               annotations.tensor_allocation_map.end());
   }
 }
@@ -2086,11 +2090,11 @@ ENTRY c1 {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -2100,14 +2104,14 @@ ENTRY c1 {
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -2116,7 +2120,7 @@ ENTRY c1 {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], ip2_r);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, add);
   EXPECT_EQ(t.input_index, 0);
   EXPECT_EQ(t.layout, call);
@@ -2178,11 +2182,11 @@ ENTRY c1 {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -2193,12 +2197,12 @@ ENTRY c1 {
   }
 
   // We expect this to be executed successfully 1 time.
-  EXPECT_TRUE(num_succesful_runs == 1);
+  EXPECT_EQ(num_succesful_runs, 1);
 
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -2253,11 +2257,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -2267,14 +2271,14 @@ ENTRY top {
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 5);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -2282,7 +2286,7 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -2290,7 +2294,7 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip4, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip4, 0});
   EXPECT_EQ(t.tgt, subtract);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, gte);
@@ -2336,11 +2340,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -2350,14 +2354,14 @@ ENTRY top {
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, custom_op);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -2365,7 +2369,7 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, custom_op);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -2438,15 +2442,15 @@ ENTRY top {
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
   auto t =
-      annotations.tensor_allocation_map.at(std::make_pair(infeed_tuple, 0));
+      annotations.tensor_allocation_map.at(TensorLocation{infeed_tuple, 0});
   EXPECT_EQ(t.tgt, convolution);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip_weights, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip_weights, 0});
   EXPECT_EQ(t.tgt, convolution);
   EXPECT_EQ(t.input_index, 1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(repeat_tuple, 2));
+  t = annotations.tensor_allocation_map.at(TensorLocation{repeat_tuple, 2});
   EXPECT_EQ(t.tgt, convolution);
   EXPECT_EQ(t.input_index, 1);
 }
@@ -2511,11 +2515,11 @@ ENTRY top {
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
   auto t =
-      annotations.tensor_allocation_map.at(std::make_pair(infeed_tuple, 0));
+      annotations.tensor_allocation_map.at(TensorLocation{infeed_tuple, 0});
   EXPECT_EQ(t.tgt, convolution);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(infeed_tuple, 1));
+  t = annotations.tensor_allocation_map.at(TensorLocation{infeed_tuple, 1});
   EXPECT_EQ(t.tgt, convolution);
   EXPECT_EQ(t.input_index, 1);
 }
@@ -2554,7 +2558,7 @@ ENTRY %top (arg: f32[1,1,2,2]) -> f32[1,1,2,2] {
   ASSERT_EQ(annotations.tensor_allocation_map.size(), 2);
 
   // The recv-done should have the convolution as allocation target
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(recv_done, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{recv_done, 0});
   ASSERT_EQ(t.tgt, convolution);
   ASSERT_EQ(t.input_index, 0);
 }
@@ -2611,11 +2615,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   ASSERT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   ASSERT_EQ(t.tgt, conv);
   ASSERT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   ASSERT_EQ(t.tgt, conv);
   ASSERT_EQ(t.input_index, 1);
 
@@ -2625,7 +2629,7 @@ ENTRY top {
   // We have added one new entry for the bias add
   ASSERT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   ASSERT_EQ(t.tgt, bn);
   ASSERT_EQ(t.input_index, 1);
   ASSERT_EQ(t.layout, conv);
@@ -2634,7 +2638,7 @@ ENTRY top {
   ASSERT_EQ(t.backward_path.size(), 1);
   ASSERT_EQ(t.backward_path[0], p2_r);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(bn_offset, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{bn_offset, 0});
   ASSERT_EQ(t.tgt, bn);
   ASSERT_EQ(t.input_index, 2);
   ASSERT_EQ(t.layout, conv);
@@ -2691,11 +2695,11 @@ HloModule top
   // Will have both of the dot parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip_tuple, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip_tuple, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip_tuple, 1));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip_tuple, 1});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 1);
 
@@ -2705,7 +2709,7 @@ HloModule top
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(gte2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{gte2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, dot);
@@ -2764,11 +2768,11 @@ HloModule top
 
   // Will have both of the dot parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(infeed, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{infeed, 0});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(infeed, 1));
+  t = annotations.tensor_allocation_map.at(TensorLocation{infeed, 1});
   EXPECT_EQ(t.tgt, dot);
   EXPECT_EQ(t.input_index, 1);
 
@@ -2778,7 +2782,7 @@ HloModule top
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(gte2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{gte2, 0});
   EXPECT_EQ(t.tgt, call);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, dot);
@@ -2839,11 +2843,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(arg_tuple, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{arg_tuple, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(arg_tuple, 1));
+  t = annotations.tensor_allocation_map.at(TensorLocation{arg_tuple, 1});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -2853,7 +2857,7 @@ ENTRY top {
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2_0, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2_0, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -2862,7 +2866,7 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], reshape1);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2_1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2_1, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -2914,13 +2918,13 @@ ENTRY top {
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, custom_op);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, ip0);
@@ -2928,7 +2932,7 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, custom_op);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, ip0);
@@ -2981,13 +2985,13 @@ ENTRY top {
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, custom_op);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, ip0);
@@ -2995,7 +2999,7 @@ ENTRY top {
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, custom_op);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, ip0);
@@ -3079,14 +3083,14 @@ ENTRY cast1 {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], ip0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -3138,13 +3142,13 @@ ENTRY cast2 {
   EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ie, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ie, 0});
   EXPECT_EQ(t.tgt, ig_add);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], if_cast);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ib, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ib, 0});
   EXPECT_EQ(t.tgt, id_conv);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 2);
@@ -3199,12 +3203,12 @@ ENTRY cast3 (arg0.78.22: f32[1,4,4,2], arg1: f32[1,1,2,2], arg2: f32[2], arg3: f
     num_succesful_runs++;
   }
 
-  // Depending on the order we either expect this to be executed successfully 1
-  // or 2 times.
+  // Depending on the order we either expect this to be executed successfully
+  // 1 or 2 times.
   EXPECT_TRUE(num_succesful_runs == 1 || num_succesful_runs == 2);
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 5);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(p4, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{p4, 0});
   EXPECT_EQ(t.tgt, subtract);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, gte);
@@ -3256,7 +3260,7 @@ ENTRY cast4 {
   EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(e, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{e, 0});
   EXPECT_EQ(t.tgt, g_add);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
@@ -3313,9 +3317,9 @@ ENTRY cast4 {
 
   auto allocation_map = annotations.tensor_allocation_map;
   EXPECT_EQ(allocation_map.size(), 3);
-  EXPECT_TRUE(allocation_map.count(std::make_pair(remap_deduce, 0)) == 1);
-  EXPECT_TRUE(allocation_map.count(std::make_pair(a, 0)) == 1);
-  EXPECT_TRUE(allocation_map.count(std::make_pair(e, 0)) == 1);
+  EXPECT_EQ(allocation_map.count(TensorLocation{remap_deduce, 0}), 1);
+  EXPECT_EQ(allocation_map.count(TensorLocation{a, 0}), 1);
+  EXPECT_EQ(allocation_map.count(TensorLocation{e, 0}), 1);
 }
 
 TEST_F(AllocationFinderTest, AllocationsWithConcat) {
@@ -3355,14 +3359,14 @@ ENTRY main {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], ip0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
@@ -3412,14 +3416,14 @@ ENTRY c1 {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], ip0);
   EXPECT_EQ(t.backward_path[1], padded_ip0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.backward_path.size(), 2);
@@ -3538,14 +3542,14 @@ ENTRY c1 {
 
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_EQ(t.backward_path[0], ip0);
   EXPECT_EQ(t.backward_path[1], padded_ip0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.backward_path.size(), 2);
@@ -3666,11 +3670,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -3680,7 +3684,7 @@ ENTRY top {
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -3689,7 +3693,7 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], p2_r);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -3754,11 +3758,11 @@ ENTRY top {
   // Will have both of the convolution parameters
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
 
-  auto t = annotations.tensor_allocation_map.at(std::make_pair(ip0, 0));
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 0);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip1, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
   EXPECT_EQ(t.tgt, conv);
   EXPECT_EQ(t.input_index, 1);
 
@@ -3768,7 +3772,7 @@ ENTRY top {
   // We have added one new entry for the bias add
   EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip2, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, conv);
@@ -3777,7 +3781,7 @@ ENTRY top {
   EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_EQ(t.backward_path[0], p2_r);
 
-  t = annotations.tensor_allocation_map.at(std::make_pair(ip3, 0));
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip3, 0});
   EXPECT_EQ(t.tgt, bn);
   EXPECT_EQ(t.input_index, 2);
   EXPECT_EQ(t.layout, conv);
@@ -3790,7 +3794,8 @@ ENTRY top {
 
 // // TODO:
 // // - can forward path traverse in-place ops
-// // - is forward path rejected when going through non-layout preserving inputs
+// // - is forward path rejected when going through non-layout preserving
+// inputs
 
 }  // namespace
 }  // namespace poplarplugin
