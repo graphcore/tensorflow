@@ -9,6 +9,7 @@ import collections
 import contextlib
 import fnmatch
 import json as js
+import re
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -99,6 +100,10 @@ class TensorMap(object):
     def tile_ids(self):
       return list({t.tile for t in self.tiles})
 
+    @property
+    def id(self):
+      return "%s,%d" % (self.inst, self.index)
+
   def __init__(self, tensor_map, num_tiles_per_ipu):
     self.num_tiles_per_ipu = num_tiles_per_ipu
     self.mappings = {}
@@ -143,6 +148,17 @@ class TensorMap(object):
 
   def computation_names(self):
     return list(self.mappings.keys())
+
+  def tensor_inst_name_mappings(self):
+    mappings = {}
+    for comp, tensors in self.mappings.items():
+      print(comp)
+      for tensor in tensors:
+        assert tensor.id not in mappings, ("Instruction %s already in"
+                                           " mappings %s") % (tensor.id,
+                                                              mappings)
+        mappings[tensor.id] = tensor.name
+    return mappings
 
 
 class ReportJSON(object):
@@ -408,6 +424,36 @@ class ReportJSON(object):
 
   def get_tensor_map(self):
     return self.tensor_map
+
+  def assert_tensor_inst_name_mappings(self, expected_mappings):
+    mappings = self.get_tensor_map().tensor_inst_name_mappings()
+    for inst, expected_name in expected_mappings.items():
+      names = items_matching_at_least_one_pattern(mappings.keys(), [inst])
+      self.test.assertTrue(
+          names,
+          "Couldn't find a match for '%s' in '%s'" % (inst, mappings.keys()))
+      self.test.assertEqual(
+          len(names), 1, "More than one match for '%s' : %s" % (inst, names))
+      self.test.assertTrue(
+          fnmatch.fnmatch(mappings[names[0]], expected_name),
+          "Name '%s' for instruction '%s' does not match expected pattern '%s'"
+          % (mappings[names[0]], names[0], expected_name))
+
+  def assert_tensor_input_names(self, *expected_inputs):
+    mappings = self.get_tensor_map().tensor_inst_name_mappings()
+    for arg_num, expected_name in enumerate(expected_inputs):
+      instrs = items_matching_at_least_one_pattern(mappings.keys(),
+                                                   ["arg%d." % arg_num])
+      assert len(instrs) == 1
+      mangled = mappings[instrs[0]]
+      m = re.match(r"XLA_Args/_arg_(.*)_0_0/_\d+", mangled)
+      if not m:
+        m = re.match("XLA_Args/(.*)", mangled)
+      assert m
+      self.test.assertTrue(
+          fnmatch.fnmatch(m.group(1), expected_name),
+          "Name '%s' for argument %d does not match expected pattern '%s'" %
+          (m.group(1), arg_num, expected_name))
 
   def get_num_ipus(self):
     return self.events[IpuTraceEvent.COMPILE_END]["target"]["numIPUs"]
