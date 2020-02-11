@@ -64,6 +64,10 @@ def _create_regression_dataset(num_samples, num_features):
   return X, y
 
 
+def _is_ipu_estimator(obj):
+  return isinstance(obj, ipu_estimator.IPUEstimator)
+
+
 class _SessionRunCounter(session_run_hook.SessionRunHook):
   def __init__(self):
     self.num_session_runs = 0
@@ -756,12 +760,20 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=1))
     estimator = estimator_class(model_fn=my_model_fn, config=config)
 
-    output = next(estimator.predict(input_fn=my_input_fn))
+    kwargs = {"num_predictions": 1} if _is_ipu_estimator(estimator) else {}
+
+    outputs = list(estimator.predict(input_fn=my_input_fn, **kwargs))
+    self.assertEqual(1, len(outputs))
+    output = outputs[0]
     self.assertAllEqual(2.0, output["features"])
     self.assertAllEqual(4.0, output["features2"])
 
-    output = next(
-        estimator.predict(input_fn=my_input_fn, predict_keys=["features"]))
+    outputs = list(
+        estimator.predict(input_fn=my_input_fn,
+                          predict_keys=["features"],
+                          **kwargs))
+    self.assertEqual(1, len(outputs))
+    output = outputs[0]
     self.assertAllEqual(2.0, output["features"])
     self.assertFalse("labels" in output)
 
@@ -794,21 +806,33 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=3))
     estimator = estimator_class(model_fn=my_model_fn, config=config)
 
+    kwargs = {"num_predictions": 6} if _is_ipu_estimator(estimator) else {}
     outputs = estimator.predict(input_fn=my_input_fn,
-                                yield_single_examples=True)
+                                yield_single_examples=True,
+                                **kwargs)
     self.assertAllEqual(1, next(outputs))
     self.assertAllEqual(0, next(outputs))
     self.assertAllEqual(0, next(outputs))
     self.assertAllEqual(1, next(outputs))
     self.assertAllEqual(1, next(outputs))
     self.assertAllEqual(0, next(outputs))
+
+    with self.assertRaises(StopIteration):
+      next(outputs)
+
     del outputs  # Release generator resources
 
+    kwargs = {"num_predictions": 3} if _is_ipu_estimator(estimator) else {}
     outputs = estimator.predict(input_fn=my_input_fn,
-                                yield_single_examples=False)
+                                yield_single_examples=False,
+                                **kwargs)
     self.assertAllEqual([1, 0], next(outputs))
     self.assertAllEqual([0, 1], next(outputs))
     self.assertAllEqual([1, 0], next(outputs))
+
+    with self.assertRaises(StopIteration):
+      next(outputs)
+
     del outputs  # Release generator resources
 
   @combinations.generate(
@@ -839,21 +863,33 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=3))
     estimator = estimator_class(model_fn=my_model_fn, config=config)
 
+    kwargs = {"num_predictions": 6} if _is_ipu_estimator(estimator) else {}
     outputs = estimator.predict(input_fn=my_input_fn,
-                                yield_single_examples=True)
+                                yield_single_examples=True,
+                                **kwargs)
     self.assertAllEqual(1, next(outputs)["predictions"])
     self.assertAllEqual(0, next(outputs)["predictions"])
     self.assertAllEqual(0, next(outputs)["predictions"])
     self.assertAllEqual(1, next(outputs)["predictions"])
     self.assertAllEqual(1, next(outputs)["predictions"])
     self.assertAllEqual(0, next(outputs)["predictions"])
+
+    with self.assertRaises(StopIteration):
+      next(outputs)
+
     del outputs  # Release generator resources
 
+    kwargs = {"num_predictions": 3} if _is_ipu_estimator(estimator) else {}
     outputs = estimator.predict(input_fn=my_input_fn,
-                                yield_single_examples=False)
+                                yield_single_examples=False,
+                                **kwargs)
     self.assertAllEqual([1, 0], next(outputs)["predictions"])
     self.assertAllEqual([0, 1], next(outputs)["predictions"])
     self.assertAllEqual([1, 0], next(outputs)["predictions"])
+
+    with self.assertRaises(StopIteration):
+      next(outputs)
+
     del outputs  # Release generator resources
 
   def testStepsMustBeMultipleOfIterationsPerLoop(self):

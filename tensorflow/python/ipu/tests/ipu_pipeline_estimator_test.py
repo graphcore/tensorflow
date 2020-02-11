@@ -237,10 +237,12 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     estimator = IPUPipelineEstimator(model_fn=my_model_fn,
                                      config=_make_config(iterations_per_loop))
 
-    predictions = estimator.predict(input_fn=my_input_fn)
+    num_predictions = pipeline_depth * iterations_per_loop
+    predictions = estimator.predict(input_fn=my_input_fn,
+                                    num_predictions=num_predictions)
 
-    for i in range(pipeline_depth * iterations_per_loop):
-      self.assertEqual(i**2, next(predictions))
+    for i, prediction in enumerate(predictions):
+      self.assertEqual(i**2, prediction)
 
     del predictions  # Release generator resources.
 
@@ -292,10 +294,10 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     estimator = IPUPipelineEstimator(model_fn=my_model_fn,
                                      config=_make_config())
 
-    predictions = estimator.predict(input_fn=my_input_fn)
+    predictions = estimator.predict(input_fn=my_input_fn,
+                                    num_predictions=pipeline_depth)
 
-    for i in range(pipeline_depth):
-      out = next(predictions)
+    for i, out in enumerate(predictions):
       self.assertEqual(i, out["partial"])
       self.assertEqual(i**2, out["squared"])
 
