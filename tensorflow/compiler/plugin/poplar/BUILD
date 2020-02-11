@@ -2598,6 +2598,7 @@ tf_xla_py_test(
         "//tensorflow/python:nn",
         "//tensorflow/python:platform",
         "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
     ],
 )
