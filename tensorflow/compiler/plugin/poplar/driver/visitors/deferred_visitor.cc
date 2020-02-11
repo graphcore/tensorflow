@@ -842,13 +842,35 @@ bool DeferredVisitor::InputIsUsedInDependentComputations(
 
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgVectors& inputs,
-    const std::vector<const DeferredVisitor*>& dependent_subcomputations)
-    : DeferredVisitor(res, inputs, false, true, dependent_subcomputations) {}
+    const std::vector<const DeferredVisitor*>& dependent_subcomputations,
+    bool reallocate_inputs)
+    : DeferredVisitor(res, inputs, false, true, dependent_subcomputations),
+      reallocate_inputs_(reallocate_inputs) {}
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst) {
   return DeferredVisitor::PropagateDeferredAllocations(
       callsite_inst, std::vector<bool>(callsite_inst->operand_count(), false));
+}
+
+StatusOr<poplar::program::Sequence>
+InplaceDeferredVisitor::GetPreambleCopies() {
+  poplar::program::Sequence seq;
+  for (uint64 i = 0; i != callsite_inputs_.size(); ++i) {
+    for (uint64 j = 0; j != callsite_inputs_[i].size(); ++j) {
+      if (callsite_inputs_[i][j] &&
+          *callsite_inputs_[i][j] != computation_inputs_[i][j]) {
+        // For inplace vistors, they should only differ if we allow relocation.
+        if (!reallocate_inputs_) {
+          return FailedPrecondition("Input should have not been reallocated.");
+        }
+        VLOG(1) << "Adding a copy for input (" << i << ", " << j << ").";
+        seq.add(poplar::program::Copy(*callsite_inputs_[i][j],
+                                      computation_inputs_[i][j]));
+      }
+    }
+  }
+  return seq;
 }
 
 Status InplaceDeferredVisitor::HandleParameterTensor(
@@ -859,12 +881,15 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
   const bool has_allocation_target =
       HasTensorAllocationTarget(input_location, resources_);
 
+  auto callsite_tensor =
+      callsite_inputs_[param_num][input_location.flattened_output_tuple_index];
+
   // Function which is called when tensor is allocated for this input.
   DeferredAllocateFunction allocate_fn =
-      [this,
-       shape](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-    TF_ASSIGN_OR_RETURN(
-        auto tensor, AllocateInput(allocation_location, shape, absl::nullopt));
+      [this, shape, callsite_tensor](
+          TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+    TF_ASSIGN_OR_RETURN(auto tensor, AllocateInput(allocation_location, shape,
+                                                   callsite_tensor));
     return tensor;
   };
 
@@ -882,15 +907,12 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
     return tensor;
   };
 
-  auto callsite_tensor =
-      callsite_inputs_[param_num][input_location.flattened_output_tuple_index];
-
   poplar::Tensor output;
   bool add_output_tensor = true;
 
-  if (callsite_tensor) {
-    // If a tensor is passed as an input then use it and post process it
-    // immediately.
+  if (callsite_tensor && !reallocate_inputs_) {
+    // If a tensor is passed as an input and we are not reallocating inputs then
+    // use it and post process it immediately.
     output = *callsite_tensor;
     TF_RETURN_IF_ERROR(post_process_fn(output).status());
   } else {
@@ -917,9 +939,6 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
                                 output));
   }
 
-  // Inplace visitor always allocates the input.
-  allocated_tensors_[param_num][input_location.flattened_output_tuple_index] =
-      true;
   return Status::OK();
 }
 
@@ -963,7 +982,6 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
     int64 param_number, param_index;
     std::tie(param_number, param_index) = GetParameterNumberAndFlatIndex(o);
     const bool input_used = InputIsAllocated(param_number, param_index);
-
     if (input_used) {
       if (loop_inputs[o] == loop_outputs[o]) {
         alias_type[o] = AliasType::IDENTICAL_ALIAS;
