@@ -51,23 +51,25 @@ of the IPU system:
 Both of these functions takes the options structure
 returned by the ``create_ipu_config`` function as the first argument .
 
-The second argument to ``select_ipus`` is the number of IPUs required.
+The second argument to ``auto_select_ipus`` is the number of IPUs required.
 
 The second argument to ``select_ipus`` is either an integer or a list.
 
 When a single integer is specified, this will be treated as the ID of the IPU
-devices to use. This ID can specify a single IPU, if it is in the range 0 to
+device or devices to use. The ID specifies a single IPU, if it is in the range 0 to
 15. Larger numbers represent "multi-IPU" IDs that specify groups of closely
-connected IPUs. For example, to use all the IPUs in a 16-IPU system the
+connected IPUs.
+
+For example, to use all the IPUs in a 16-IPU system the
 appropriate ID is 30. (See the `IPU Command Line Tools
 <https://documents.graphcore.ai/documents/UG10/latest>`_ document for details
 of how device IDs map to available IPUs.) This will allocate a single
-TensorFlow device (``/device:IPU:0``) configured with the specified number of IPUs.
+TensorFlow device (``/device:IPU:0``) configured with all 16 IPUs.
 
 You can also use a list of IDs as the argument to ``select_ipus``. This
-specifies specific IPUs to use. In this case  the system is configured
-with multiple TensorFlow IPU devices (``/device:IPU:0``,
-``/device:IPU:1``, and so on), each corresponding to one of the specified IPUs.
+configures a TensorFlow device for each ID in the list (``/device:IPU:0``,
+``/device:IPU:1``, and so on). Again, each ID value can specify a single IPU or
+multiple IPUs.
 
 For more examples, see the documentation in :ref:`api-section`.
 
@@ -112,11 +114,12 @@ functions exist for configuring the hardware and compiler.
 
 More options are available on the ``create_ipu_config`` function itself. These
 mostly control specific features of the Poplar and Poplibs operations.
+Some of the main ones are described below:
 
 * ``max_scheduler_lookahead_depth`` controls how far the scheduler can look
   beyond a given scheduling decision to understand the max-liveness
   implications. This search space grows very quickly and can take an
-  unacceptable amount of time for large ``max_scheduler_lookahead_depth``.
+  unacceptable amount of time for large values.
 * ``max_scheduler_search_space_size`` introduces an upper-limit to the size of
   the schedule search space to guarantee that it will terminate in a reasonable
   amount of time.
@@ -126,7 +129,9 @@ mostly control specific features of the Poplar and Poplibs operations.
   default, several schedules will be created and the one with the lowest
   predicted liveness chosen.  This can sometimes produce incorrect results
   because the overall peak liveness isn't always a good measure for the maximum
-  liveness on one tile of the processor.  The available schedulers are:
+  liveness on one tile of the processor.
+
+  The available schedulers are:
 
   * ``Clustering``, which groups clusters of operations together in order to
     look through stretches of instructions with potentially high liveness.
@@ -159,7 +164,7 @@ For a full list, refer to  :ref:`api-section`.
   without the overhead of data transfer.
 
 * ``--synthetic_data_initializer`` is used in combination with the
- ``--use_synthetic_data`` flag to control how the inputs to the graph will be initialised
+  ``--use_synthetic_data`` flag to control how the inputs to the graph will be initialised
   on the IPU. The values will be either random (``--synthetic_data_initializer=random``)
   or a constant value ``X`` (``--synthetic_data_initializer=X``)
 

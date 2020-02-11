@@ -24,27 +24,26 @@ interdependence.
 
     Relationship between session, graph and device in TensorFlow
 
-Graph
-    A computational graph is the connectivity framework of a deep learning
-    model, where nodes are operators and edges are the data streams that connect
-    them. Building a deep learning model in TensorFlow is the functional
-    equivalent of designing a graph, where specified layer operations (for example,
-    fully-connected layers) are nodes, and the sequence and connectivity of
-    layers (such as a convolutional layer followed by max-pooling) define the
-    edges.
+* **Graph**: A computational graph is the connectivity framework of a deep learning
+  model, where nodes are operators and edges are the data streams that connect
+  them. Building a deep learning model in TensorFlow is the functional
+  equivalent of designing a graph, where specified layer operations (for example,
+  fully-connected layers) are nodes, and the sequence and connectivity of
+  layers (such as a convolutional layer followed by max-pooling) define the
+  edges.
 
-Session
-    A session is the computational platform that encapsulates a graph. It
-    handles data flow into and out of the graph, variable initialisation,
-    model/weight storage and weight restoration, along with a number of other
-    operations that are required to manage the computational task.
+* **Session**:
+  A session is the computational platform that encapsulates a graph. It
+  handles data flow into and out of the graph, variable initialisation,
+  model/weight storage and weight restoration, along with a number of other
+  operations that are required to manage the computational task.
 
-Device
-    The device identifies the hardware on which a session
-    is run, such as the IPU, CPU or TPU. In many of the applications targeting
-    the IPU, it will be helpful to segregate tasks between the CPU and IPU to
-    leverage those aspects of the computation that they are each best suited
-    for.
+* **Device**:
+  The device identifies the hardware on which a session
+  is run, such as the IPU, CPU or TPU. In many of the applications targeting
+  the IPU, it will be helpful to segregate tasks between the CPU and IPU to
+  leverage those aspects of the computation that they are each best suited
+  for.
 
 In the sections that follow, these three concepts will form a recurrent theme in
 building and deploying models from TensorFlow.
@@ -145,7 +144,7 @@ Selecting hardware to run on
 The ``auto_select_ipus`` function enables you to select from the available IPUs
 in a system. In this example, one IPU is selected. This can be changed
 to any number between 1 and 16 for a system, such as the Dell EMC
-DSS8440 IPU Server, which has eight C2 cards installed each with two IPUs.
+DSS8440 IPU Server which has eight C2 cards installed, each with two IPUs.
 
 This option will be important when we
 explore sharding, in which a single graph is segregated into separate sections,
@@ -278,7 +277,7 @@ Were to be replaced with:
             return loop, square, tf.no_op()
 
 Then ``ipu.ipu_compiler.compile`` would be strictly required, because of the use
- of the ``tf.while_loop()`` conditional statement.
+of the ``tf.while_loop()`` conditional statement.
 
 .. _sharding_a_graph:
 

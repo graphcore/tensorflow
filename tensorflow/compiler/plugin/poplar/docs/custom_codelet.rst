@@ -209,11 +209,11 @@ Example
 _______
 
 This example shows the source file for a rotate operation, which takes three vectors
-and rotates the ``x`` and ``y`` ones by the ``angle`` one.
+and rotates the ``x`` and ``y`` ones by the ``angle`` one:
 
 .. literalinclude:: custom_rotate_op.cc
 
-This is the associated codelet file.
+This is the associated codelet file:
 
 .. literalinclude:: custom_codelet.cpp
 

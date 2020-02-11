@@ -99,7 +99,7 @@ The main function for producing an IPU system hardware configuration is called
 and tracing of Poplar compilations.
 
 * ``profiling``: This enables compilation and execution graph reports in Poplar,
-   and generates ``COMPILE_BEGIN`` and ``COMPILE_END`` events in the trace.
+  and generates ``COMPILE_BEGIN`` and ``COMPILE_END`` events in the trace.
 
 * ``enable_ipu_events``: Setting this to ``True`` while leaving ``profiling`` as
   ``False`` will generate trace events without creating the Poplar compilation
@@ -608,7 +608,7 @@ call to be compiled into a single XLA graph. If you don't use
 ``ipu_compiler.compile``, then the results depend on the XLA scheduler, which
 will combine or split up parts of the TensorFlow graph as it sees fit, creating
 many arbitrary distinct XLA graphs. If you do not use ``ipu_compiler.compile``,
-expect to see far more XLA graphs generated. Please note, there is no guarantee your
+expect to see a larger number of XLA graphs generated. Please note, there is no guarantee your
 compiled op will only produce one XLA graph. Sometimes others are created for
 operations such as casting.
 
