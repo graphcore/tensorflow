@@ -68,7 +68,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'Copy_XLA_Args/arg0.*_to_Sigmoid/custom-call/Nonlinearity/out/OnTileCopy-0',
+          'Copy_XLA_Args*/arg0.*_to_Sigmoid/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Sigmoid/custom-call/Nonlinearity', 'add/add.*/AddTo'
       ]
       # pylint: enable=line-too-long
@@ -129,7 +129,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'Copy_XLA_Args/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
+          'Copy_XLA_Args*/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Relu/custom-call/Nonlinearity', 'add/add.*/AddTo'
       ]
       # pylint: enable=line-too-long
@@ -155,7 +155,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'Copy_XLA_Args/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
+          'Copy_XLA_Args*/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
           'Relu/custom-call/Nonlinearity'
       ]
       # pylint: enable=line-too-long
