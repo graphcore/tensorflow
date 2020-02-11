@@ -2,6 +2,7 @@
     "linters": {
         "clang-format": {
             "type": "clang-format",
+            "bin": ["./.linters/clang-format"],
             "include": [
                  "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
                  "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
