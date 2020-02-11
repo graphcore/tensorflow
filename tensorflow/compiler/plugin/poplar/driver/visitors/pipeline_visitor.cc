@@ -17,8 +17,14 @@ limitations under the License.
 
 #include <stddef.h>
 #include <string.h>
+
 #include <map>
 #include <memory>
+#include <poplar/Engine.hpp>
+#include <poplar/GraphElements.hpp>
+#include <poplar/Tensor.hpp>
+#include <poplar/exceptions.hpp>
+#include <poputil/Util.hpp>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -39,7 +45,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
-
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -49,14 +54,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
-
 #include "tensorflow/stream_executor/lib/initialize.h"
-
-#include <poplar/Engine.hpp>
-#include <poplar/GraphElements.hpp>
-#include <poplar/Tensor.hpp>
-#include <poplar/exceptions.hpp>
-#include <poputil/Util.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -676,15 +674,15 @@ StatusOr<int> GetPipelineStage(
  *
  * @returns A 2D array of pipeline stage inputs.
  */
-StatusOr<ArgVectors> GetInputs(poplar::program::Sequence& seq,
-                               CompilerResources& res,
-                               const HloInstruction* inst,
-                               TensorMap& tensor_map) {
-  ArgVectors inputs(inst->operand_count());
+StatusOr<TensorVectors> GetInputs(poplar::program::Sequence& seq,
+                                  CompilerResources& res,
+                                  const HloInstruction* inst,
+                                  TensorMap& tensor_map) {
+  TensorVectors inputs(inst->operand_count());
   // First get all the inplace inputs - we do not expand constants and we
   // preserve all the aliasing.
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inplace_inputs,
+      TensorVectors inplace_inputs,
       FindInplaceOutputTensors(tensor_map, res, inst, seq, false, true));
   auto inplace_inputs_itr = inplace_inputs.begin();
   auto inst_description = HloInstructionDescription(inst);
@@ -782,7 +780,7 @@ StatusOr<std::unique_ptr<PipelineStageVisitor>> CreatePipelineStageOp(
   }
 
   // Set the outputs.
-  const OutVector& pipeline_outputs = visitor->outputs();
+  const TensorVector& pipeline_outputs = visitor->outputs();
   for (size_t i = 0; i < pipeline_outputs.size(); i++) {
     auto output = poputil::duplicate(
         graph, pipeline_outputs[i], seq,
@@ -835,7 +833,7 @@ StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
     seq.add(visitor.GetSequence());
 
     // Set the outputs.
-    const OutVector& pipeline_outputs = visitor.outputs();
+    const TensorVector& pipeline_outputs = visitor.outputs();
     for (size_t i = 0; i < pipeline_outputs.size(); i++) {
       poplar::Tensor output = pipeline_outputs[i];
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
@@ -846,7 +844,7 @@ StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
     seq.add(reusable_visitor->GetSequence(inst, inputs));
 
     // Set the outputs.
-    const OutVector& pipeline_outputs = forward_stage_visitor->outputs();
+    const TensorVector& pipeline_outputs = forward_stage_visitor->outputs();
     for (size_t i = 0; i < pipeline_outputs.size(); i++) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
     }
@@ -883,7 +881,7 @@ StatusOr<poplar::program::Sequence> CreatePipelineResourceUpdateOp(
   // Add to the sequence.
   seq.add(visitor.GetSequence());
   // Set up the outputs.
-  const OutVector& outputs = visitor.outputs();
+  const TensorVector& outputs = visitor.outputs();
   for (size_t i = 0; i < outputs.size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
   }

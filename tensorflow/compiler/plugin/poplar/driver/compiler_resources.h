@@ -20,6 +20,12 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_RESOURCES_H_
 
 #include <memory>
+#include <poplar/OptionFlags.hpp>
+#include <poplin/Convolution.hpp>
+#include <poplin/MatMul.hpp>
+#include <popops/DynamicSlice.hpp>
+#include <poprand/RandomGen.hpp>
+#include <poputil/GraphFunction.hpp>
 #include <stack>
 #include <string>
 #include <vector>
@@ -33,13 +39,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
-
-#include <poplar/OptionFlags.hpp>
-#include <poplin/Convolution.hpp>
-#include <poplin/MatMul.hpp>
-#include <popops/DynamicSlice.hpp>
-#include <poprand/RandomGen.hpp>
-#include <poputil/GraphFunction.hpp>
 
 namespace xla {
 class HloInstruction;
@@ -91,7 +90,7 @@ struct CompilerResources {
 
   bool always_rearrange_copies_on_host;
 
-  std::map<std::string, TensorMap> tensor_maps;
+  TensorMaps tensor_maps;
 
   LinearMapperState linear_mapping_state;
 

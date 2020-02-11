@@ -85,7 +85,7 @@ class TensorMap(object):
 
   class Tensor(object):
     def __init__(self, inst, index, shape, dtype, has_constant, has_aliases,
-                 num_elements, tiles):
+                 num_elements, tiles, name):
       self.inst = inst
       self.index = index
       self.shape = shape
@@ -94,6 +94,7 @@ class TensorMap(object):
       self.has_aliases = has_aliases
       self.num_elements = num_elements
       self.tiles = tiles
+      self.name = name
 
     def tile_ids(self):
       return list({t.tile for t in self.tiles})
@@ -116,7 +117,8 @@ class TensorMap(object):
                              has_constant=bool(js_tensor[4]),
                              has_aliases=bool(js_tensor[5]),
                              num_elements=js_tensor[6],
-                             tiles=tiles))
+                             tiles=tiles,
+                             name=js_tensor[8]))
       self.mappings[comp] = tensors
 
   def all_tensors(self):

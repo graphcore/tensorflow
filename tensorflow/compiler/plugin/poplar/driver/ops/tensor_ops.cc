@@ -13,6 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <algorithm>
+#include <poplar/Engine.hpp>
+#include <poplar/Graph.hpp>
+#include <popops/Cast.hpp>
+#include <popops/DynamicSlice.hpp>
+#include <popops/Encoding.hpp>
+#include <popops/Pad.hpp>
+#include <popops/SelectScalarFromRows.hpp>
+#include <popops/UpdateScalarInRows.hpp>
+#include <poputil/TileMapping.hpp>
+#include <poputil/Util.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -27,17 +37,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <poplar/Engine.hpp>
-#include <poplar/Graph.hpp>
-#include <popops/Cast.hpp>
-#include <popops/DynamicSlice.hpp>
-#include <popops/Encoding.hpp>
-#include <popops/Pad.hpp>
-#include <popops/SelectScalarFromRows.hpp>
-#include <popops/UpdateScalarInRows.hpp>
-#include <poputil/TileMapping.hpp>
-#include <poputil/Util.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -163,7 +162,7 @@ StatusOr<poplar::program::Program> CreateDynamicUpdateSliceOp(
   poplar::program::Sequence seq;
 
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, res, dynamic_inst, seq));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -259,7 +258,7 @@ StatusOr<poplar::program::Program> CreateWideConstant(
   // Allocate the constant first.
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor constant_tensor,
-      AddConstantTensor(graph, std::make_pair(constant, 0), constant->shape(),
+      AddConstantTensor(graph, TensorLocation{constant, 0}, constant->shape(),
                         constant_literal, res, tensor_map));
 
   // Broadcast the tensor to the right shape.
@@ -267,7 +266,7 @@ StatusOr<poplar::program::Program> CreateWideConstant(
                       BroadcastTensor(constant_tensor, output_shape, {}));
   // For wide constants, check if they have an allocation target, if so then
   // allocate the tensor with that target and copy the constant to that layout.
-  TensorSource src = std::make_pair(inst, 0);
+  TensorLocation src{inst, 0};
   if (HasTensorAllocationTarget(src, res)) {
     // Doing this copy rather than allocating a big constant and calling
     // setInitialValue is a trade off between having a large tensor always live
@@ -355,7 +354,7 @@ StatusOr<poplar::program::Program> CreateCopy(CompilerResources& res,
   poplar::program::Sequence seq;
 
   poplar::Graph& graph = GetGraph(res, inst);
-  ArgVector inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq);
+  TensorVector inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq);
 
   for (int64 tuple_idx = 0; tuple_idx != static_cast<int64>(inputs.size());
        ++tuple_idx) {
@@ -381,7 +380,7 @@ StatusOr<poplar::program::Program> CreateZeroPadOp(CompilerResources& res,
   const PaddingConfig& cfg(root->padding_config());
 
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -428,7 +427,7 @@ StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
     TensorMap& tensor_map) {
   poplar::program::Sequence seq;
 
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -452,7 +451,7 @@ StatusOr<poplar::program::Program> CreateTuple(CompilerResources& res,
                                                bool preserve_aliases) {
   poplar::program::Sequence seq;
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, res, inst, seq, expand_constants,
                                preserve_aliases));
   CHECK_EQ(inputs.size(), inst->operand_count());

@@ -21,27 +21,25 @@ limitations under the License.
  * optimizers target in the BUILD file.
  */
 
+#include <popfloat/experimental/CastToGfloat.hpp>
+#include <poplar/Program.hpp>
+#include <poplar/exceptions.hpp>
+#include <poplin/Convolution.hpp>
+#include <popnn/Pooling.hpp>
+#include <popops/Expr.hpp>
+#include <poputil/exceptions.hpp>
 #include <vector>
 
+#include "absl/container/inlined_vector.h"
+#include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
-
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
-
-#include <popfloat/experimental/CastToGfloat.hpp>
-#include <poplar/Program.hpp>
-#include <poplin/Convolution.hpp>
-#include <popnn/Pooling.hpp>
-#include <popops/Expr.hpp>
-
-#include <poplar/exceptions.hpp>
-#include <poputil/exceptions.hpp>
-#include "absl/container/inlined_vector.h"
-#include "absl/types/optional.h"
 
 namespace poplar {
 class Graph;
@@ -63,10 +61,6 @@ enum class NormType {
   BatchNorm,
   GroupNorm,
 };
-
-using TensorKey = std::pair<std::string, int64>;
-using TensorMap = std::map<TensorKey, poplar::Tensor>;
-using TensorMaps = std::map<std::string, TensorMap>;
 
 StatusOr<popops::expr::UnaryOpType> LookupUnaryFn(const HloInstruction*);
 

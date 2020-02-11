@@ -16,11 +16,12 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_ALLOCATION_FINDER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_ALLOCATION_FINDER_H_
 
-#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
+#include <map>
+#include <vector>
 
 #include "absl/types/optional.h"
-
-#include <vector>
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
 
@@ -30,8 +31,6 @@ class HloInstruction;
 namespace poplarplugin {
 
 struct CompilerAnnotations;
-
-using TensorSource = std::pair<const HloInstruction*, int64>;
 
 struct TensorTarget {
   // The node in the graph which consumes the tensor
@@ -83,7 +82,7 @@ struct TensorTarget {
   TensorTarget() = default;
 };
 
-using TensorAllocationMap = std::map<TensorSource, TensorTarget>;
+using TensorAllocationMap = std::map<TensorLocation, TensorTarget>;
 
 /**
  * This class finds all instructions that explicitly add tensors to the
@@ -102,12 +101,12 @@ class AllocationFinder : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
-  void FindConsumers(const TensorSource&, const HloInstruction* tgt, int64);
+  void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64);
 
   // Should return true when target 'a' should be used over 'b'
   bool CompareTargets(const TensorTarget& a, const TensorTarget& b);
 
-  void AddTensorTarget(const TensorSource& source,
+  void AddTensorTarget(const TensorLocation& source,
                        const TensorTarget& tensor_target);
 
   std::set<HloInstruction*> visited;

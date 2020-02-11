@@ -13,8 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
+#include <sstream>
 
+#include "absl/memory/memory.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
@@ -25,8 +26,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
-
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -42,10 +42,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/test_helpers.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
-
-#include "absl/memory/memory.h"
-
-#include <sstream>
 
 #include <poplar/Device.hpp>
 #include <poplar/IPUModel.hpp>
@@ -1307,11 +1303,12 @@ ENTRY pipeline {
 )";
 
   // Check the output of the stage has aliases.
-  ASSERT_TRUE(
-      resources->tensor_maps.at("_stage_0").at({"out", 0}).containsAliases());
+  ASSERT_TRUE(resources->tensor_maps.GetTensorMapForComputation("_stage_0")
+                  .FindTensorByName("out", 0)
+                  .containsAliases());
   // Check that the fifo has aliases.
-  ASSERT_TRUE(resources->tensor_maps.at("pipeline")
-                  .at({"custom-call.1", 0})
+  ASSERT_TRUE(resources->tensor_maps.GetTensorMapForComputation("pipeline")
+                  .FindTensorByName("custom-call.1", 0)
                   .containsAliases());
   ASSERT_EQ(expected, ss.str());
 }

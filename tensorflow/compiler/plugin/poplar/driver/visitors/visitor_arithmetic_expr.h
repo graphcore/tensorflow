@@ -19,11 +19,10 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_ARITHMETIC_EXPR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_ARITHMETIC_EXPR_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_base.h"
-
+#include <map>
 #include <popops/Expr.hpp>
 
-#include <map>
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_base.h"
 
 namespace poplar {
 class Graph;
@@ -35,7 +34,7 @@ namespace poplarplugin {
 
 class ArithmeticExprVisitor : public BaseVisitor {
  public:
-  ArithmeticExprVisitor(CompilerResources& res, const ArgVectors& inputs);
+  ArithmeticExprVisitor(CompilerResources& res, const TensorVectors& inputs);
 
   Status HandleElementwiseUnary(HloInstruction* inst) override;
   Status HandleElementwiseBinary(HloInstruction* inst) override;
@@ -90,13 +89,13 @@ class ArithmeticExprVisitor : public BaseVisitor {
   ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(HandleGather);
 #undef ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED
 
-  const OutVector& outputs() { return outputs_; }
+  const TensorVector& outputs() { return outputs_; }
 
  private:
   StatusOr<std::unique_ptr<popops::expr::Expr>> FindExpressionInput(
       const HloInstruction* inst);
-  ArgVectors inputs_;
-  OutVector outputs_;
+  TensorVectors inputs_;
+  TensorVector outputs_;
   std::map<const HloInstruction*, std::unique_ptr<popops::expr::Expr>>
       expressions_map_;
   std::map<const poplar::Tensor*, std::unique_ptr<popops::expr::Expr>>

@@ -19,7 +19,9 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_BASE_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_BASE_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include <poplar/Program.hpp>
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor.h"
 
 namespace xla {

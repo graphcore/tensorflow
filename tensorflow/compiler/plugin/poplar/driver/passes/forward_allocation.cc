@@ -1,6 +1,3 @@
-/* Copyright 2018 Graphcore Ltd
- */
-
 /* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
@@ -429,11 +427,11 @@ bool ForwardAllocation::CreateForwardAllocationTarget(
                                                     forward_path.end());
   std::vector<const HloInstruction*> c_backward_path(backward_path.begin(),
                                                      backward_path.end());
-  auto src = std::make_pair(source, 0);
-  auto tensor_target =
-      TensorTarget(target, input_index, layout_producer, layout_output_index,
-                   c_forward_path, c_backward_path);
-  tensor_allocation_map[src] = tensor_target;
+  TensorLocation src{source, 0};
+  TensorTarget tensor_target{target,          input_index,
+                             layout_producer, layout_output_index,
+                             c_forward_path,  c_backward_path};
+  tensor_allocation_map[src] = std::move(tensor_target);
   return true;
 }
 
@@ -447,7 +445,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
                          this](HloInstruction* inst) {
     auto itr = deferred_allocation_inputs.find(inst);
     if (itr != deferred_allocation_inputs.end()) {
-      return tensor_allocation_map.find(std::make_pair(inst, 0)) ==
+      return tensor_allocation_map.find(TensorLocation{inst, 0}) ==
              tensor_allocation_map.end();
     }
     return false;
@@ -580,7 +578,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
                          this](HloInstruction* inst) {
     auto itr = deferred_allocation_inputs.find(inst);
     if (itr != deferred_allocation_inputs.end()) {
-      return tensor_allocation_map.find(std::make_pair(inst, 0)) ==
+      return tensor_allocation_map.find(TensorLocation{inst, 0}) ==
              tensor_allocation_map.end();
     }
     return false;

@@ -20,25 +20,24 @@ limitations under the License.
  * optimizers target in the BUILD file.
  */
 
+#include <poplar/Program.hpp>
+#include <poplar/exceptions.hpp>
+#include <poplin/Convolution.hpp>
+#include <popnn/Pooling.hpp>
+#include <popops/Expr.hpp>
+#include <poputil/exceptions.hpp>
 #include <vector>
 
+#include "absl/container/inlined_vector.h"
+#include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
-
-#include <poplar/Program.hpp>
-#include <poplin/Convolution.hpp>
-#include <popnn/Pooling.hpp>
-#include <popops/Expr.hpp>
-
-#include <poplar/exceptions.hpp>
-#include <poputil/exceptions.hpp>
-#include "absl/container/inlined_vector.h"
-#include "absl/types/optional.h"
 
 namespace poplar {
 class Graph;
@@ -59,18 +58,7 @@ class Shape;
 namespace poplarplugin {
 
 struct CompilerResources;
-
 class PoplarExecutor;
-
-using TensorKey = std::pair<std::string, int64>;
-using TensorMap = std::map<TensorKey, poplar::Tensor>;
-using TensorMaps = std::map<std::string, TensorMap>;
-
-using OutVector = std::vector<poplar::Tensor>;
-using ArgVector = std::vector<poplar::Tensor>;
-using ArgVectors = std::vector<ArgVector>;
-using DeferredArgVectors =
-    std::vector<std::vector<absl::optional<poplar::Tensor>>>;
 
 Status SetVertexField(poplar::Graph& graph, const poplar::FieldRef& field,
                       const Literal& literal);
@@ -140,7 +128,9 @@ StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
                                                 const HloInstruction* inst);
 
 // A helper function to convert inputs into deferred inputs.
-DeferredArgVectors ConvertInputsToDeferredInputs(ArgVectors& inputs);
+using DeferredArgVectors =
+    std::vector<std::vector<absl::optional<poplar::Tensor>>>;
+DeferredArgVectors ConvertInputsToDeferredInputs(TensorVectors& inputs);
 }  // namespace poplarplugin
 }  // namespace xla
 

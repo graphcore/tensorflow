@@ -57,7 +57,7 @@ StatusOr<poplar::program::Program> CreateRecvDone(CompilerResources& res,
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor tensor,
-      AddTensor(graph, TensorSource{inst, 0}, recv_shape, res, tensor_map));
+      AddTensor(graph, TensorLocation{inst, 0}, recv_shape, res, tensor_map));
 
   // Use the rendezvous key also for the Poplar stream handle.
   const poplar::DataStream stream = graph.addHostToDeviceFIFO(

@@ -13,8 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
+#include <poplar/Device.hpp>
+#include <poplar/replication_factor.hpp>
+#include <poplin/codelets.hpp>
+#include <popnn/codelets.hpp>
+#include <popops/codelets.hpp>
+#include <poprand/RandomGen.hpp>
+#include <poprand/codelets.hpp>
 
+#include "absl/memory/memory.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
@@ -24,7 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -40,17 +47,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/test_helpers.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
-
-#include "absl/memory/memory.h"
-
-#include <poplar/Device.hpp>
-#include <poplar/replication_factor.hpp>
-#include <poprand/RandomGen.hpp>
-
-#include <poplin/codelets.hpp>
-#include <popnn/codelets.hpp>
-#include <popops/codelets.hpp>
-#include <poprand/codelets.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -122,7 +118,8 @@ ENTRY cluster (arg0.1: (f32[1,4,4,2], f32[2], f32[1,1,2,2])) -> f32[1,4,4,2] {
 
   // Verify that gte1 has a tensor and all the deferred allocations have that
   // tensor too.
-  auto tensor_map = resources->tensor_maps.at(entry_computation->name());
+  auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
   auto root = entry_computation->root_instruction();
   auto gte1 = root->operand(1);
   auto arg = gte1->operand(0);
@@ -170,7 +167,8 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], f32[2], f32[1,1,2,2]))) -> f32[1,4,4,2] {
 
   // Verify that gte1 has a tensor and all the deferred allocations have that
   // tensor too.
-  auto tensor_map = resources->tensor_maps.at(entry_computation->name());
+  auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
   auto root = entry_computation->root_instruction();
   auto gte1 = root->operand(1);
   auto gte = gte1->operand(0);
@@ -223,7 +221,8 @@ ENTRY cluster (arg0.1: ((f32[1,4,4,2], (f32[2], f32[1,1,2,2])))) -> f32[1,4,4,2]
 
   // Verify that gte1.0 has a tensor and all the deferred allocations have that
   // tensor too.
-  auto tensor_map = resources->tensor_maps.at(entry_computation->name());
+  auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
   auto root = entry_computation->root_instruction();
   auto gte1_0 = root->operand(1);
   auto gte1 = gte1_0->operand(0);
@@ -294,7 +293,8 @@ ENTRY cluster (arg0.1: ((((f32[1,4,4,2], f32[1,4,4,2]), (f32[2], f32[1,1,2,2], f
   EntryVisitor visitor(*resources.get(), entry_computation);
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
-  auto tensor_map = resources->tensor_maps.at(entry_computation->name());
+  auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
   auto root_tuple = entry_computation->root_instruction();
 
   // Verify that gte1.0 has a tensor and all the deferred allocations have that
@@ -378,7 +378,8 @@ ENTRY cluster (arg: f32[1,1,2,2]) -> f32[1,4,4,2] {
 
   // Verify that gte1 has a tensor and all the deferred allocations have that
   // tensor too.
-  auto tensor_map = resources->tensor_maps.at(entry_computation->name());
+  auto tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
   auto root = entry_computation->root_instruction();
   auto gte1 = root->operand(1);
   auto gte = gte1->operand(0);
@@ -507,7 +508,8 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   // parameters have allocation targets in the entry computation and inside the
   // loop - but because they already have a layout at the callsite we just use
   // that rather than creating a new layout and copying.
-  auto entry_tensor_map = resources->tensor_maps.at(entry_computation->name());
+  auto entry_tensor_map = resources->tensor_maps.GetTensorMapForComputation(
+      entry_computation->name());
   auto entry_input0 = entry_computation->parameter_instruction(0);
   auto entry_input2 = entry_computation->parameter_instruction(2);
   auto entry_root_instruction = entry_computation->root_instruction();
@@ -515,7 +517,8 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
       entry_tensor_map, *resources.get(), entry_root_instruction);
 
   auto loop_body = entry_root_instruction->while_body();
-  auto loop_tensor_map = resources->tensor_maps.at(loop_body->name());
+  auto loop_tensor_map =
+      resources->tensor_maps.GetTensorMapForComputation(loop_body->name());
   EXPECT_EQ(loop_body->num_parameters(), 1);
   auto loop_tuple = loop_body->parameter_instruction(0);
   auto loop_tuple_tensors =
