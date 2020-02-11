@@ -59,6 +59,7 @@ Build instructions
 
         git clone https://placeholder@github.com/graphcore/tensorflow_packaging.git
         git clone https://placeholder@github.com/graphcore/tensorflow.git
+        git clone https://placeholder@github.com/graphcore/poprithms.git
 
     Check bazel version (make sure it is >= 0.21.0)
 
