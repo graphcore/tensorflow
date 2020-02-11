@@ -22,6 +22,7 @@ from __future__ import print_function
 
 import abc
 import collections
+import itertools
 import threading
 
 from six.moves import _thread
@@ -860,6 +861,18 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
               ops.GraphKeys.GLOBAL_VARIABLES, ops.GraphKeys.GLOBAL_STEP
           ])
 
+  def _flatten_predictions(self, predictions):
+    for nested_predictions in predictions:
+      if isinstance(nested_predictions, dict):
+        for i in range(self._extract_batch_length(nested_predictions)):
+          yield {
+              key: value[i]
+              for key, value in six.iteritems(nested_predictions)
+          }
+      else:
+        for prediction in nested_predictions:
+          yield prediction
+
   def evaluate(self,
                input_fn,
                steps=None,
@@ -908,16 +921,9 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
               predict_keys=None,
               hooks=None,
               checkpoint_path=None,
-              yield_single_examples=True):
+              yield_single_examples=True,
+              num_predictions=None):
     """Yields predictions for given features.
-
-    Note: The returned generator will block forever if you try to consume
-    more elements than what is generated, instead of raising the regular
-    `StopIteration` exception. This is caused by the current behaviour
-    when requesting to run a loop on the IPU for more iterations than there
-    are elements remaining in the dataset. So you cannot simply drain it by
-    using :code:`list(predictions)`, you have to consume the expected number of
-    elements, e.g. using :code:`[next(predictions) for _ in range(num_examples)]`.
 
     Args:
       input_fn: A function that constructs the features. The function should
@@ -942,6 +948,17 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
         the `model_fn` instead of decomposing the batch into individual
         elements. This is useful if `model_fn` returns some tensors whose first
         dimension is not equal to the batch size.
+      num_predictions: If not `None`, the generator will raise `StopIteration`
+        after yielding this number of predictions. This allows draining the
+        generator by using :code:`list(predictions)`. If `None`, the returned
+        generator will block forever if you try to consume more predictions
+        than what is generated, instead of raising the `StopIteration`
+        exception. This is caused by the current behaviour when requesting to
+        run a loop on the IPU for more iterations than there are elements
+        remaining in the dataset. In this case you cannot drain it by using
+        :code:`list(predictions)`, you have to consume the expected number of
+        elements yourself, e.g. using
+        :code:`[next(predictions) for _ in range(num_predictions)]`.
 
     Yields:
       Evaluated values of `predictions` tensors.
@@ -960,16 +977,10 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
     # If however yield_single_examples == False, we need to
     # flatten the iterations_per_loop dimension ourselves.
     # So in both cases we need to flatten the output here.
-    for nested_predictions in predictions:
-      if isinstance(nested_predictions, dict):
-        for i in range(self._extract_batch_length(nested_predictions)):
-          yield {
-              key: value[i]
-              for key, value in six.iteritems(nested_predictions)
-          }
-      else:
-        for prediction in nested_predictions:
-          yield prediction
+    flat_predictions = self._flatten_predictions(predictions)
+
+    # Raise StopIteration after num_predictions (if not None)
+    return itertools.islice(flat_predictions, num_predictions)
 
 
 class IPUEstimator(_IPUEstimatorBase):
