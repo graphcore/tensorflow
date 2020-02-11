@@ -377,10 +377,10 @@ class DeferredVisitor : public FullVisitor {
 // Similar to DeferredVisitor, but the inputs are used inplace.
 class InplaceDeferredVisitor : public DeferredVisitor {
  public:
-  InplaceDeferredVisitor(CompilerResources& res,
-                         const DeferredArgVectors& inputs,
-                         const std::vector<const DeferredVisitor*>&
-                             dependent_subcomputations = {});
+  InplaceDeferredVisitor(
+      CompilerResources& res, const DeferredArgVectors& inputs,
+      const std::vector<const DeferredVisitor*>& dependent_subcomputations = {},
+      bool reallocate_inputs = false);
 
   // Function called for each tensor in a parameter HloInstruction.
   // Input location is the location at which the tensor is an input to the
@@ -398,6 +398,11 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   // site but now have a layout.
   Status PropagateDeferredAllocations(const HloInstruction* callsite_inst);
 
+  // If the visitor operator is allowed to reallocate inputs, then copies from
+  // the callsite to computation inputs might be required as they are different
+  // tensors.
+  StatusOr<poplar::program::Sequence> GetPreambleCopies();
+
  protected:
   // Given the flat tensor index, get the sequence the copy should be inserted
   // into.
@@ -407,6 +412,9 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   // index.
   std::pair<int64, int64> GetParameterNumberAndFlatIndex(
       int64 output_flat_index);
+
+ private:
+  const bool reallocate_inputs_;
 };
 
 }  // namespace poplarplugin
