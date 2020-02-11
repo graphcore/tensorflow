@@ -57,7 +57,7 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
 
   // Same as above, but all tensors are allocated.
   poplar::program::Sequence GetSequence(const HloInstruction* callsite,
-                                        const ArgVectors& inputs) const;
+                                        const TensorVectors& inputs) const;
 
  private:
   const HloInstruction* callsite_;

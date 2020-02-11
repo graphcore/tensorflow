@@ -1,6 +1,3 @@
-/* Copyright 2017 Graphcore Ltd
- */
-
 /* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +14,16 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_full.h"
+
+#include <stddef.h>
+#include <string.h>
+
+#include <map>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
@@ -24,7 +31,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/rnn.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -35,15 +41,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/strings/str_util.h"
-
-#include <stddef.h>
-#include <string.h>
-#include <map>
-#include <string>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
 #include "tensorflow/stream_executor/lib/initialize.h"
 
 #include <poplar/Engine.hpp>
@@ -66,12 +63,12 @@ Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   int64 dimension(inst->concatenate_dimension());
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), inst->operand_count());
 
   std::vector<poplar::Tensor> tensors(inputs.size());
-  absl::c_transform(inputs, tensors.begin(), [](const ArgVector& ts) {
+  absl::c_transform(inputs, tensors.begin(), [](const TensorVector& ts) {
     CHECK_EQ(ts.size(), 1);
     return ts[0];
   });
@@ -112,7 +109,7 @@ Status FullVisitor::HandleCopy(HloInstruction* inst) {
 Status FullVisitor::HandleReverse(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -139,7 +136,7 @@ Status FullVisitor::HandleReduce(HloInstruction* inst) {
 Status FullVisitor::HandleBroadcast(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -156,7 +153,7 @@ Status FullVisitor::HandleReshape(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -170,7 +167,7 @@ Status FullVisitor::HandleReshape(HloInstruction* inst) {
 Status FullVisitor::HandleTranspose(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -190,7 +187,7 @@ Status FullVisitor::HandleTranspose(HloInstruction* inst) {
 Status FullVisitor::HandleSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -312,7 +309,7 @@ Status FullVisitor::HandleWhile(HloInstruction* inst) {
 Status FullVisitor::HandlePad(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
   CHECK_EQ(inputs.size(), 2);
   CHECK_EQ(inputs[0].size(), 1);

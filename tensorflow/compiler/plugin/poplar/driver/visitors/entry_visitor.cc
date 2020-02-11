@@ -15,14 +15,14 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
+#include <poplar/ReplicatedStreamMode.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
-#include <poplar/ReplicatedStreamMode.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -57,10 +57,10 @@ StatusOr<poplar::program::Sequence*> EntryVisitor::GetSequenceForInstruction(
 }
 
 StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
-    TensorSource location, const Shape& shape,
+    TensorLocation location, const Shape& shape,
     poplar::program::Sequence& stream_copy_seq, poplar::Tensor tensor) {
-  auto inst = location.first;
-  auto flat_tuple_index = location.second;
+  const HloInstruction* inst = location.instruction;
+  const int64 flat_tuple_index = location.flattened_output_tuple_index;
 
   const auto& in_info = resources_.annotations.input_output_aliasing_map
                             .GetEntryInputInfos()[inst->parameter_number()];

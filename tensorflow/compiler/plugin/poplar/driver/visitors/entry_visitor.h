@@ -39,14 +39,14 @@ class EntryVisitor : public DeferredVisitor {
       const HloInstruction* inst) override;
 
   StatusOr<poplar::Tensor> PostProcessParameterAllocation(
-      TensorSource location, const Shape& shape,
+      TensorLocation location, const Shape& shape,
       poplar::program::Sequence& sequence, poplar::Tensor tensor) override;
 
   Status FinishDeferedAllocationVisit(HloInstruction* root) override;
 
  private:
   Status StreamOutputs(HloInstruction* inst, uint64 start_idx,
-                       OutVector outputs);
+                       TensorVector outputs);
 
   poplar::program::Sequence host_to_device;
   poplar::program::Sequence device_to_host;

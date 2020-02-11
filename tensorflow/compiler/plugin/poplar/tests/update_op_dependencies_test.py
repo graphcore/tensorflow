@@ -134,7 +134,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
           assert_msg="engine, compile_begin, compile_end, execute")
 
       ok = [
-          '__seed*', 'Copy_XLA_Args/arg*_to_Slice*/slice*.clone',
+          '__seed*', 'Copy_XLA_Args*/arg*_to_Slice*/slice*.clone',
           'add/add.*/AddTo', 'truediv/fusion*/Op/Divide', 'add_1/add.*/AddTo'
       ]
       report.assert_all_compute_sets_and_list(ok)

@@ -14,19 +14,16 @@ limitations under the License.
 ==============================================================================*/
 
 #include <algorithm>
+#include <popfloat/experimental/CastToGfloat.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/cast_to_gfloat_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/tf2xla/type_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
-
-#include <popfloat/experimental/CastToGfloat.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -73,7 +70,7 @@ StatusOr<poplar::program::Program> CreatePoplibsCastNativeToGfloat(
                       FindInstructionInput(tensor_map, res, inst, 1, seq));
 
   if (cast_inst->NumberOfInplaceOperands() && gf_cast_cfg.inPlaceOp(in_type)) {
-    TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, seq));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);

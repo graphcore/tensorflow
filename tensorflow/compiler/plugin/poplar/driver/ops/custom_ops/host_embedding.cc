@@ -14,19 +14,19 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/host_embedding.h"
+
+#include <popops/Zero.hpp>
+
+#include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <popops/Zero.hpp>
-#include "absl/container/flat_hash_map.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -40,11 +40,11 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
-    ArgVector indices =
+    TensorVector indices =
         FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
 
     TF_ASSIGN_OR_RETURN(poplar::Tensor output,
-                        AddTensor(graph, std::make_pair(inst, 0), output_shape,
+                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
                                   res, tensor_map));
 
     if (UseSyntheticData()) {
@@ -87,10 +87,10 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
     poplar::program::Sequence seq;
 
     if (!UseSyntheticData()) {
-      ArgVector grads =
+      TensorVector grads =
           FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
 
-      ArgVector indices =
+      TensorVector indices =
           FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
 
       const HloHostEmbeddingUpdateInstruction* host_embedding_inst =

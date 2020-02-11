@@ -18,18 +18,16 @@ limitations under the License.
 
 #include <functional>
 #include <map>
+#include <poplar/Tensor.hpp>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_full.h"
-
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
-
-#include <poplar/Tensor.hpp>
+#include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_full.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -38,13 +36,13 @@ struct CompilerResources;
 using TensorInputDescription = std::vector<std::vector<bool>>;
 
 // Set of locations in which a tensor allocation is deferred for.
-using DeferredAllocationsLocationsSet = absl::flat_hash_set<TensorSource>;
+using DeferredAllocationsLocationsSet = absl::flat_hash_set<TensorLocation>;
 
 // Function which is called when a deferred allocation is being allocated.
 // Inputs is the allocation location.
 // Returns the allocated tensor.
 using DeferredAllocateFunction =
-    std::function<StatusOr<poplar::Tensor>(TensorSource)>;
+    std::function<StatusOr<poplar::Tensor>(TensorLocation)>;
 
 // Function which is called on a allocated tensor to add any stream copies etc.
 // Input is an allocated tensor.
@@ -60,37 +58,38 @@ class DeferredAllocations {
       : tensor_map_(tensor_map) {}
 
   // Add a deferred allocation location which will be allocated later.
-  Status AddDeferredAllocation(TensorSource location,
+  Status AddDeferredAllocation(TensorLocation location,
                                DeferredAllocateFunction allocate_fn,
                                DeferredPostProcessFunction post_process_fn);
 
   // Add a deferred allocation mapping from a given input location to an output
   // location.
-  Status AddDeferredAllocationUser(TensorSource user_input_location,
-                                   TensorSource user_output_location);
+  Status AddDeferredAllocationUser(TensorLocation user_input_location,
+                                   TensorLocation user_output_location);
 
   // Make a tensor allocation and post process it.
-  Status MakeDeferredAllocation(TensorSource allocation_location,
-                                TensorSource input_to_allocation_location);
+  Status MakeDeferredAllocation(TensorLocation allocation_location,
+                                TensorLocation input_to_allocation_location);
 
   // Post process a tensor from an allocation location.
-  Status PostProcessAllocation(TensorSource allocation_location,
+  Status PostProcessAllocation(TensorLocation allocation_location,
                                poplar::Tensor tensor);
 
   // Returns whether the given location is a deferred allocation location, given
   // the current state.
   static bool IsDeferredAllocationLocation(CompilerResources& res,
-                                           TensorSource location);
+                                           TensorLocation location);
 
   // Returns whether the given location is a deferred allocation location.
-  bool IsDeferredAllocationLocation(TensorSource location);
+  bool IsDeferredAllocationLocation(TensorLocation location);
 
   // This is called by the tensor map when a tensor value for a location has
   // been requested. If any locations in the range are deferred, then allocate
   // them.
-  static void AllocateIfExists(CompilerResources& res,
-                               TensorSource start_location,
-                               TensorSource end_location);
+  static void AllocateIfExists(
+      CompilerResources& res, const HloInstruction* inst,
+      absl::optional<int64> opt_tensors_start = absl::nullopt,
+      absl::optional<int64> opt_tensors_end = absl::nullopt);
 
   // Called during FinishVisit to make sure everything is allocated at the end.
   Status AllocateRemainingLocations();
@@ -99,36 +98,36 @@ class DeferredAllocations {
   // This is called by the tensor map when a tensor value for a location has
   // been requested. If any locations in the range are deferred, then allocate
   // them.
-  Status AllocateIfExists(TensorSource start_location,
-                          TensorSource end_location);
+  Status AllocateIfExists(const HloInstruction* inst, int64 tensors_start,
+                          int64 tensors_end);
 
   // Invokes the allocation function and propagates the allocation to any
   // locations which were deferred.
-  Status MakeAllocation(TensorSource input_location,
-                        TensorSource allocation_location);
+  Status MakeAllocation(TensorLocation input_location,
+                        TensorLocation allocation_location);
 
   TensorMap& tensor_map_;
 
   // For each input location, store all the locations which are also deferring
   // the tensor.
-  absl::flat_hash_map<TensorSource, DeferredAllocationsLocationsSet>
+  absl::flat_hash_map<TensorLocation, DeferredAllocationsLocationsSet>
       to_allocate_locations_;
 
   // For each of the input locations, store the function which is called for
   // allocations.
-  absl::flat_hash_map<TensorSource, DeferredAllocateFunction>
+  absl::flat_hash_map<TensorLocation, DeferredAllocateFunction>
       allocation_functions_;
 
   // For each of the input locations, store the function which is called for
   // post processing.
-  absl::flat_hash_map<TensorSource, DeferredPostProcessFunction>
+  absl::flat_hash_map<TensorLocation, DeferredPostProcessFunction>
       post_process_functions_;
 
   // Set of locations that have been allocated.
-  absl::flat_hash_set<TensorSource> allocated_locations_;
+  absl::flat_hash_set<TensorLocation> allocated_locations_;
 
   // Lookup map for what deferred allocation location set a location belongs to.
-  std::map<TensorSource, TensorSource> location_lookup_table_;
+  std::map<TensorLocation, TensorLocation> location_lookup_table_;
 };
 
 /**
@@ -241,10 +240,10 @@ class DeferredVisitor : public FullVisitor {
   DeferredVisitor() = delete;
 
   // Returns the input tensors for this computation.
-  const ArgVectors& inputs() const;
+  const TensorVectors& inputs() const;
 
   // Returns the output tensors of this computation.
-  const OutVector& outputs() const;
+  const TensorVector& outputs() const;
 
   // Returns whether an input to the computation was allocated for this
   // computation.
@@ -304,32 +303,32 @@ class DeferredVisitor : public FullVisitor {
   // Function called for each tensor in a parameter HloInstruction.
   // Input location is the location at which the tensor is an input to the
   // computation
-  virtual Status HandleParameterTensor(TensorSource input_location,
+  virtual Status HandleParameterTensor(TensorLocation input_location,
                                        const Shape shape);
 
   // Allocates the input by trying to find an allocation target, otherwise tries
   // to use the `tensor_like` argument to create an input tensor.
   // Allocation location is the location where the tensor is actually allocated.
   StatusOr<poplar::Tensor> AllocateInput(
-      TensorSource allocation_location, const Shape& shape,
+      TensorLocation allocation_location, const Shape& shape,
       absl::optional<poplar::Tensor> tensor_like);
 
   // Function called for each input tensor into the computation.
   // Input location is the location at which the tensor is an input to the
   // computation (parameter/infeed).
   StatusOr<poplar::Tensor> PostProcessInputTensor(poplar::Tensor tensor,
-                                                  TensorSource input_location,
+                                                  TensorLocation input_location,
                                                   const Shape& shape);
 
   // Called by AllocateInput when allocating an input for an infeed.
   StatusOr<poplar::Tensor> PostProcessInfeedAllocation(
-      TensorSource location, const Shape& shape,
+      TensorLocation location, const Shape& shape,
       poplar::program::Sequence& sequence, poplar::Tensor tensor);
 
   // Called by AllocateInput when allocating an input for a paramter.
   // By default, inplace evaluator does no post processing for parameters.
   virtual StatusOr<poplar::Tensor> PostProcessParameterAllocation(
-      TensorSource location, const Shape& shape,
+      TensorLocation location, const Shape& shape,
       poplar::program::Sequence& sequence, poplar::Tensor tensor) {
     return tensor;
   }
@@ -344,20 +343,20 @@ class DeferredVisitor : public FullVisitor {
 
   // Returns true if the input is used in this computation and therefore it
   // needs to be allocated.
-  bool InputIsUsedInThisComputation(TensorSource location,
+  bool InputIsUsedInThisComputation(TensorLocation location,
                                     const std::vector<xla::Shape>& shapes);
   // Returns true if the input is used in any dependent computation and
   // therefore it needs to be allocated.
-  bool InputIsUsedInDependentComputations(TensorSource location);
+  bool InputIsUsedInDependentComputations(TensorLocation location);
 
   // These are the inputs at the callsite and where the values will come from,
   // but the actual input in the computation will need it's own Tensor
   // (potentially with a different layout).
   DeferredArgVectors callsite_inputs_;
   // Actual inputs to the computation.
-  ArgVectors computation_inputs_;
+  TensorVectors computation_inputs_;
   // Outputs of the computation.
-  OutVector outputs_;
+  TensorVector outputs_;
 
   // When checking livness of buffers, those buffers might be also live in other
   // dependent subcomputations.
@@ -378,26 +377,31 @@ class DeferredVisitor : public FullVisitor {
 // Similar to DeferredVisitor, but the inputs are used inplace.
 class InplaceDeferredVisitor : public DeferredVisitor {
  public:
-  InplaceDeferredVisitor(CompilerResources& res,
-                         const DeferredArgVectors& inputs,
-                         const std::vector<const DeferredVisitor*>&
-                             dependent_subcomputations = {});
+  InplaceDeferredVisitor(
+      CompilerResources& res, const DeferredArgVectors& inputs,
+      const std::vector<const DeferredVisitor*>& dependent_subcomputations = {},
+      bool reallocate_inputs = false);
 
   // Function called for each tensor in a parameter HloInstruction.
   // Input location is the location at which the tensor is an input to the
   // computation.
-  Status HandleParameterTensor(TensorSource input_location,
+  Status HandleParameterTensor(TensorLocation input_location,
                                const Shape shape) override;
 
   // If the subcomputation is used as a loop, then add input/output aliasing
   // copies. Returns the loop state (i.e. the output of the loop).
-  StatusOr<ArgVector> AddLoopInputOutputAliasingCopies(
+  StatusOr<TensorVector> AddLoopInputOutputAliasingCopies(
       poplar::Graph& graph, const HloComputation* computation,
       const std::string& debug_name);
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a layout.
   Status PropagateDeferredAllocations(const HloInstruction* callsite_inst);
+
+  // If the visitor operator is allowed to reallocate inputs, then copies from
+  // the callsite to computation inputs might be required as they are different
+  // tensors.
+  StatusOr<poplar::program::Sequence> GetPreambleCopies();
 
  protected:
   // Given the flat tensor index, get the sequence the copy should be inserted
@@ -408,6 +412,9 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   // index.
   std::pair<int64, int64> GetParameterNumberAndFlatIndex(
       int64 output_flat_index);
+
+ private:
+  const bool reallocate_inputs_;
 };
 
 }  // namespace poplarplugin

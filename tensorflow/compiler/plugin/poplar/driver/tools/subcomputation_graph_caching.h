@@ -17,17 +17,15 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_SUBCOMPUTATION_GRAPH_CACHING_H_
 
 #include <memory>
+#include <poputil/GraphFunction.hpp>
 #include <unordered_map>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/xla/status.h"
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-
-#include <poputil/GraphFunction.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -39,7 +37,7 @@ class SubcomputationGraphCache {
  public:
   // Get or compile the DeferredVisitor for a computation.
   StatusOr<const DeferredVisitor*> GetOrCompileSubcomputation(
-      CompilerResources& res, ArgVectors& inputs,
+      CompilerResources& res, TensorVectors& inputs,
       const HloComputation* computation);
 
  private:

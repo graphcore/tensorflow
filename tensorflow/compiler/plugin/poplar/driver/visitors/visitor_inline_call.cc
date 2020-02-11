@@ -17,6 +17,9 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_inline_call.h"
+
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 
@@ -24,7 +27,7 @@ namespace xla {
 namespace poplarplugin {
 
 InlineCallVisitor::InlineCallVisitor(CompilerResources& res,
-                                     const ArgVectors& inputs)
+                                     const TensorVectors& inputs)
     : FullVisitor(res), inputs_(std::move(inputs)) {}
 
 Status InlineCallVisitor::HandleParameter(HloInstruction* inst) {
@@ -37,7 +40,8 @@ Status InlineCallVisitor::HandleParameter(HloInstruction* inst) {
 
 Status InlineCallVisitor::FinishVisit(HloInstruction* inst) {
   outputs_ = FindInstructionOutputs(tensor_map, resources_, inst);
-  resources_.tensor_maps[inst->parent()->name()] = std::move(tensor_map);
+  resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),
+                                                    std::move(tensor_map));
 
   return Status::OK();
 }

@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
 
+#include <poplar/Tensor.hpp>
+#include <poputil/Util.hpp>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -23,9 +25,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
-#include <poplar/Tensor.hpp>
-#include <poputil/Util.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -75,7 +74,7 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetSequence(
   poplar::program::Sequence seq;
   // Convert deferred args to actual tensors, filling gaps where required.
   CHECK_EQ(callsite->operand_count(), deferred_inputs.size());
-  ArgVectors inputs(deferred_inputs.size());
+  TensorVectors inputs(deferred_inputs.size());
   for (uint64 operand_idx = 0; operand_idx != deferred_inputs.size();
        ++operand_idx) {
     const uint64 num_tensors = deferred_inputs[operand_idx].size();
@@ -103,7 +102,7 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetSequence(
 }
 
 poplar::program::Sequence ReusablePipelineStageVisitor::GetSequence(
-    const HloInstruction* callsite, const ArgVectors& inputs) const {
+    const HloInstruction* callsite, const TensorVectors& inputs) const {
   poplar::Graph& graph = GetGraph(resources_, callsite);
   // When recomputation is enabled, copies need to be inserted for all the non
   // parameter inputs as we are re-using the forward stage Poplar

@@ -31,16 +31,16 @@ namespace poplarplugin {
 
 class InlineCallVisitor : public FullVisitor {
  public:
-  InlineCallVisitor(CompilerResources& res, const ArgVectors& inputs);
+  InlineCallVisitor(CompilerResources& res, const TensorVectors& inputs);
 
   Status HandleParameter(HloInstruction* inst) override;
   Status FinishVisit(HloInstruction* inst) override;
 
-  const OutVector& outputs() { return outputs_; }
+  const TensorVector& outputs() { return outputs_; }
 
  private:
-  ArgVectors inputs_;
-  OutVector outputs_;
+  TensorVectors inputs_;
+  TensorVector outputs_;
 };
 
 }  // namespace poplarplugin

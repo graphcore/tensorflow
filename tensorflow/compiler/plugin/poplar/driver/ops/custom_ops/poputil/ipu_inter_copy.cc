@@ -12,18 +12,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <poputil/TileMapping.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <poputil/TileMapping.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -49,7 +48,7 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
   const auto& dst_sharding = GetShardingDeviceIdVector(inst->sharding());
 
   absl::flat_hash_set<int64> dst_devices;
-  ArgVector tensors;
+  TensorVector tensors;
   // Go over all the operands and find all the tensors to copy.
   std::vector<poplar::Tensor> tensors_to_copy;
   // Keep track of indexes these tensors are in the tuples.

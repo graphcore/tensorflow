@@ -13,13 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poplar/Graph.hpp>
+#include <popops/DynamicSlice.hpp>
+#include <popops/ElementWise.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -27,10 +30,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <poplar/Graph.hpp>
-#include <popops/DynamicSlice.hpp>
-#include <popops/ElementWise.hpp>
 
 namespace pe = popops::expr;
 
@@ -205,7 +204,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
   }
 
   const bool expand_constants = true;
-  ArgVector input_tensors =
+  TensorVector input_tensors =
       FindInstructionInputs(tensor_map, res, inst, 0, seq, expand_constants);
 
   for (unsigned i = 0; i < input_tensors.size(); ++i) {

@@ -13,6 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <string>
+
+#include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -20,14 +23,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateless_random.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
-
 #include "tensorflow/compiler/xla/statusor.h"
-
-#include "absl/container/flat_hash_map.h"
-
-#include <string>
 
 namespace xla {
 namespace poplarplugin {
@@ -80,9 +77,9 @@ class StatelessRandomUniformOp : public PoplarOpDef {
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
-    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+    if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
       TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, std::make_pair(inst, 0),
+                          AddTensor(graph, TensorLocation{inst, 0},
                                     output_shape, res, tensor_map));
       seq.add(poplar::program::Copy(out, new_out));
       out = new_out;
@@ -131,9 +128,9 @@ class StatelessRandomUniformIntOp : public PoplarOpDef {
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
-    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+    if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
       TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, std::make_pair(inst, 0),
+                          AddTensor(graph, TensorLocation{inst, 0},
                                     output_shape, res, tensor_map));
       seq.add(poplar::program::Copy(out, new_out));
       out = new_out;
@@ -172,9 +169,9 @@ class StatelessRandomNormalOp : public PoplarOpDef {
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
-    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+    if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
       TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, std::make_pair(inst, 0),
+                          AddTensor(graph, TensorLocation{inst, 0},
                                     output_shape, res, tensor_map));
       seq.add(poplar::program::Copy(out, new_out));
       out = new_out;
@@ -213,9 +210,9 @@ class StatelessTruncatedNormalOp : public PoplarOpDef {
     // If this operation has an allocation target allocate a tensor of that
     // layout and copy the result into it after the random numbers have been
     // generated.
-    if (HasTensorAllocationTarget(std::make_pair(inst, 0), res)) {
+    if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
       TF_ASSIGN_OR_RETURN(poplar::Tensor new_out,
-                          AddTensor(graph, std::make_pair(inst, 0),
+                          AddTensor(graph, TensorLocation{inst, 0},
                                     output_shape, res, tensor_map));
       seq.add(poplar::program::Copy(out, new_out));
       out = new_out;

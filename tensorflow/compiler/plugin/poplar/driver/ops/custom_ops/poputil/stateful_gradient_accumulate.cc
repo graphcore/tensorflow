@@ -14,20 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
-#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/service/hlo_instruction.h"
-#include "tensorflow/compiler/xla/status_macros.h"
-#include "tensorflow/compiler/xla/util.h"
-#include "tensorflow/core/lib/core/errors.h"
-
-#include "absl/container/flat_hash_map.h"
 
 #include <poplar/Program.hpp>
 #include <popops/Collectives.hpp>
@@ -36,6 +22,19 @@ limitations under the License.
 #include <popops/Zero.hpp>
 #include <poputil/Broadcast.hpp>
 #include <poputil/Util.hpp>
+
+#include "absl/container/flat_hash_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/status_macros.h"
+#include "tensorflow/compiler/xla/util.h"
+#include "tensorflow/core/lib/core/errors.h"
 
 namespace pe = popops::expr;
 
@@ -60,7 +59,7 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
         res.replication_factor > 1;
 
     TF_ASSIGN_OR_RETURN(
-        ArgVectors inputs,
+        TensorVectors inputs,
         FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
     CHECK_EQ(inputs.size(), inst->operand_count());
     std::vector<poplar::Tensor> input_tensors(inst->operand_count());
@@ -146,11 +145,11 @@ class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
 
     // Create a sequence to be executed during the pipeline.
     poplar::program::Sequence seq;
-    ArgVector inputs =
+    TensorVector inputs =
         FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
 
     // Clone the inputs into accumulators which are the outputs.
-    OutVector accumulators(inputs.size());
+    TensorVector accumulators(inputs.size());
     absl::c_transform(inputs, accumulators.begin(),
                       [&graph, &debug_name](const poplar::Tensor& in) {
                         return graph.clone(in, debug_name + "/Accumulator");

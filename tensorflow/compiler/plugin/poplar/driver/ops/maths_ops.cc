@@ -13,7 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <algorithm>
+#include <poplar/Engine.hpp>
+#include <poplar/Graph.hpp>
+#include <poplin/MatMul.hpp>
+#include <popnn/NonLinearity.hpp>
+#include <popops/Cast.hpp>
+#include <popops/ElementWise.hpp>
+#include <popops/ScaledAdd.hpp>
 
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -26,18 +35,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/util/bcast.h"
-
-#include <poplar/Engine.hpp>
-#include <poplar/Graph.hpp>
-
-#include <poplin/MatMul.hpp>
-#include <popnn/NonLinearity.hpp>
-#include <popops/Cast.hpp>
-#include <popops/ElementWise.hpp>
-#include <popops/ScaledAdd.hpp>
-
-#include "absl/memory/memory.h"
-#include "absl/strings/str_cat.h"
 
 using ::absl::StrCat;
 
@@ -248,7 +245,7 @@ StatusOr<ExpressionInput> GetTensorInput(CompilerResources& res,
   if (operand_idx == 0 &&
       AreInplaceOutputTensorsWritable(tensor_map, res, inst)) {
     TF_ASSIGN_OR_RETURN(
-        ArgVectors inputs,
+        TensorVectors inputs,
         FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);
@@ -489,8 +486,10 @@ StatusOr<poplar::program::Program> CreateTupleSelectOp(
       poplar::Tensor pred,
       FindInstructionInput(tensor_map, res, inst, 0, seq, false));
 
-  ArgVector in0 = FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
-  ArgVector in1 = FindInstructionInputs(tensor_map, res, inst, 2, seq, false);
+  TensorVector in0 =
+      FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
+  TensorVector in1 =
+      FindInstructionInputs(tensor_map, res, inst, 2, seq, false);
 
   if (in0.size() != in1.size()) {
     return xla::FailedPrecondition("Mismatching tuple sizes on %s",
@@ -613,7 +612,7 @@ StatusOr<poplar::program::Program> CreateScaledInplace(
 
   poplar::program::Sequence seq;
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -656,8 +655,9 @@ StatusOr<poplar::program::Program> CreateScaledInplaceaXbY(
   poplar::Graph& graph = GetGraph(res, inst);
 
   poplar::program::Sequence seq;
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs, FindInplaceOutputTensors(
-                                             tensor_map, res, inst, seq, true));
+  TF_ASSIGN_OR_RETURN(
+      TensorVectors inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, true));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor in0 = inputs[0][0];
@@ -802,7 +802,7 @@ StatusOr<poplar::program::Program> CreateMatMulBiasAddOp(
   poplar::program::Sequence prog;
 
   TF_ASSIGN_OR_RETURN(
-      ArgVectors inputs,
+      TensorVectors inputs,
       FindInplaceOutputTensors(tensor_map, res, inst, prog, false));
   CHECK_EQ(inputs.size(), 1);
   CHECK_EQ(inputs[0].size(), 1);
@@ -853,7 +853,7 @@ StatusOr<poplar::program::Program> CreateNonLinearityOp(
       AreInplaceOutputTensorsWritable(tensor_map, res, inst);
 
   if (is_inplace) {
-    TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, seq));
     CHECK_EQ(inputs.size(), 1);
     CHECK_EQ(inputs[0].size(), 1);

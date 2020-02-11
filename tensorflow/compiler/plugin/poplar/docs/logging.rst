@@ -136,9 +136,10 @@ Extract the reports from the returned events
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If the summary event generator has been used then the events will be inside
-``Tensor`` type events in the Tensorboard logs.  A tool for extracting these
-from the log, called ``extract_logs.py``, is available in the Graphcore
-"Toolshed" repository on GitHub..
+``Tensor`` type events in the Tensorboard logs.
+
+.. A tool for extracting these from the log, called ``extract_logs.py``, is
+.. available in the Graphcore "Toolshed" repository on GitHub.
 
 If the individual report gathering event is used then executing it will return
 an array of tensors.  Within each tensor is a string which is an ``IpuTraceEvent``
@@ -309,7 +310,12 @@ instructions are scheduled for passing to the Poplar graph compiler.
 Running with these options will create a file
 called something like
 ``module_0001.0001.IPU.after_forward-allocation.before_hlo-memory-scheduler.dot``.
-The Graphviz ``dot`` command can be used to convert this to an image.
+(The way that the file names are generated is explained in :ref:`xla_file_naming`.)
+The Graphviz ``dot`` command can be used to convert this data to an image.
+
+More information on the XLA flags can be found in the definition of the XLA proto here:
+https://github.com/tensorflow/tensorflow/blob/master/tensorflow/compiler/xla/xla.proto
+
 
 Reading the Poplar textual summary report
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -568,7 +574,7 @@ Dumping auxiliary Poplar information
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Two environment variable flags are available to get to extra Poplar
-information: `--save_vertex_graph`` and ``--save_interval_report``.
+information: ``--save_vertex_graph`` and ``--save_interval_report``.
 
 Poplar vertex graph
 ___________________
@@ -577,14 +583,71 @@ The Poplar vertex graph is a DOT file containing a complete description of the
 lowered Poplar graph.  Each node in the graph represents one vertex in the
 Poplar graph operating on one region of a tensor.
 
-It can be used for generating a Graphcore circular graph image.
-
 Poplar interval report
 ______________________
 
 The interval report is a CSV file describing the number of tiles executing,
 exchanging and syncing on each instruction cycle.
 
-It can be used for generating a Graphcore linear activity diagram.
-
 :ref:`env-var-section` describes how to set the environment flags.
+
+.. xla_file_naming:
+
+XLA graph file naming
+~~~~~~~~~~~~~~~~~~~~~
+
+The number of files produced depends on the number of TensorFlow HLO modules
+generated. This can generally be predicted from the number of ``sess.run`` calls
+on distinct graphs that you make. For example, if your program contains a variable
+initialisation then this will be compiled as a separate XLA graph
+and appear as a separate file when dumped. If your program creates a report operation,
+then that will also be compiled as a separate XLA graph.
+
+When you use ``ipu_compiler.compile``, you force everything inside the compile
+call to be compiled into a single XLA graph. If you don't use
+``ipu_compiler.compile``, then the results depend on the XLA scheduler, which
+will combine or split up parts of the TensorFlow graph as it sees fit, creating
+many arbitrary distinct XLA graphs. If you do not use ``ipu_compiler.compile``,
+expect to see far more XLA graphs generated. Please note, there is no guarantee your
+compiled op will only produce one XLA graph. Sometimes others are created for
+operations such as casting.
+
+The following description provides a break down of the names of the generated files.
+These are of the general form:
+
+  ``module_XXXX.YYYY.IPU.after_allocation-finder.before_forward-allocation.dot``
+
+* There is always a ``module_`` prefix, which indicates that this
+  is the graph for an HLO Module.
+
+* The first ``XXXX`` is the HLO module's unique ID, generated here:
+  https://github.com/tensorflow/tensorflow/blob/r2.1/tensorflow/compiler/xla/service/dump.cc#L263
+
+  There is no guarantee about the spacing between IDs, only that they are unique
+  and increasing.
+
+* To understand the rest of the name, ``YYYY.IPU.......dot``, we need to
+  understand that the XLA graph is operated on by multiple different HLO passes,
+  each modifying the XLA graph by optimizing, shuffling or otherwise rewriting it.
+  After these passes, the graph is then lowered to Poplar. There are some
+  TensorFlow native HLO passes, and there are some IPU specific ones.
+
+  When dumping the XLA graphs, we can render the XLA graph before and after any
+  HLO pass (for example, to see the effect of that pass on the graph) by
+  supplying the argument ``--xla_dump_hlo_pass_re=xxxx``, where ``xxxx`` is a
+  regular expression describing which passes you want. TensorFlow will then
+  render the XLA graph before and after every pass whose name matches that regex.
+  For example, if you wanted to see the effect of every XLA HLO IPU
+  pass involving while loops, you could use ``--xla_dump_hlo_pass_re=*While*``.
+
+  The number ``YYYY`` is simply an ID related to the order in which these graphs
+  are generated.
+
+* Finally, the passes which the graph was "between" when it was rendered
+  are appended to the filename.
+
+  The ``before_optimizations`` graph is always rendered if dumping XLA.
+
+* The HLO modules have CamelCase class names by convention. For the file names,
+  these are converted to snake_case.
+

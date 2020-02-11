@@ -16,22 +16,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "absl/strings/str_cat.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 
+#include <map>
+#include <utility>
+
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
-
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 
-#include <map>
 #include <popops/ElementWise.hpp>
 
 using ::absl::StrCat;
@@ -40,7 +40,7 @@ namespace xla {
 namespace poplarplugin {
 
 ArithmeticExprVisitor::ArithmeticExprVisitor(CompilerResources& res,
-                                             const ArgVectors& inputs)
+                                             const TensorVectors& inputs)
     : BaseVisitor(res), inputs_(std::move(inputs)) {}
 
 StatusOr<std::unique_ptr<popops::expr::Expr>>
@@ -176,7 +176,8 @@ Status ArithmeticExprVisitor::FinishVisit(HloInstruction* inst) {
                                    GetDebugName(inst) + "_expression");
   outputs_.push_back(out);
 
-  resources_.tensor_maps[inst->parent()->name()] = std::move(tensor_map);
+  resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),
+                                                    std::move(tensor_map));
 
   return Status::OK();
 }

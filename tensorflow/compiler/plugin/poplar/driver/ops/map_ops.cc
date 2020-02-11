@@ -13,6 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <algorithm>
+#include <poplar/Graph.hpp>
+#include <popops/AllTrue.hpp>
+#include <poputil/Util.hpp>
+
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/custom_ops.h"
@@ -28,19 +34,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_inline_call.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include "absl/strings/str_cat.h"
-
-#include <poplar/Graph.hpp>
-#include <popops/AllTrue.hpp>
-#include <poputil/Util.hpp>
-
-#include <algorithm>
 
 using ::absl::StrCat;
 using tensorflow::str_util::StartsWith;
@@ -48,12 +45,13 @@ using tensorflow::str_util::StartsWith;
 namespace xla {
 namespace poplarplugin {
 namespace {
-ArgVectors GetCallInputs(CompilerResources& res, const HloInstruction* inst,
-                         TensorMap& tensor_map, poplar::program::Sequence& seq,
-                         const bool expand_constants = true) {
-  ArgVectors args;
+TensorVectors GetCallInputs(CompilerResources& res, const HloInstruction* inst,
+                            TensorMap& tensor_map,
+                            poplar::program::Sequence& seq,
+                            const bool expand_constants = true) {
+  TensorVectors args;
   for (int64 i = 0; i < inst->operand_count(); i++) {
-    ArgVector t =
+    TensorVector t =
         FindInstructionInputs(tensor_map, res, inst, i, seq, expand_constants);
     args.push_back(t);
   }
@@ -106,7 +104,7 @@ StatusOr<poplar::program::Program> CreateParallelMap(CompilerResources& res,
                                                      TensorMap& tensor_map) {
   VLOG(1) << "Processing " << inst->name();
   poplar::program::Sequence seq;
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
   CHECK_EQ(inputs.size(), inst->operand_count());
   for (int64 op = 0; op < inst->operand_count(); op++) {
@@ -170,7 +168,7 @@ StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
   VLOG(1) << "Processing " << inst->name();
   HloComputation* comp = inst->fused_instructions_computation();
   poplar::program::Sequence seq;
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
   CHECK_EQ(inputs.size(), inst->operand_count());
   for (int64 op = 0; op < inst->operand_count(); op++) {
@@ -195,7 +193,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                                                  TensorMap& tensor_map) {
   poplar::program::Sequence seq;
   // Get all the inputs.
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
   // Call the create op with a deferred version of inputs.
   DeferredArgVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
@@ -206,6 +204,17 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   return seq;
 }
 
+namespace {
+bool CanRealloteInputs(const HloInstruction* inst) {
+  CHECK_EQ(inst->operand_count(), 1);
+  // Allow loops to reallocate their inputs if either the loop or the tuple
+  // input to the loop are not inplace. If these are not inplace then a copy has
+  // to be inserted to prevent aliasing issues and Poplar will elide duplicate
+  // copies.
+  return !(IsLoweredInplace(inst) && IsLoweredInplace(inst->operand(0)));
+}
+}  // namespace
+
 StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                                                  const HloInstruction* inst,
                                                  DeferredArgVectors& inputs,
@@ -213,6 +222,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                                                  TensorMap& tensor_map) {
   VLOG(1) << "Processing " << inst->name();
   CHECK_EQ(inputs.size(), 1);
+  const bool reallocate_inputs = CanRealloteInputs(inst);
 
   poplar::Graph& graph = GetGraph(res, inst);
 
@@ -237,7 +247,8 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   }
 
   // Create an inplace visitor for the loop body.
-  InplaceDeferredVisitor body_visitor(res, inputs, {&condition_visitor});
+  InplaceDeferredVisitor body_visitor(res, inputs, {&condition_visitor},
+                                      reallocate_inputs);
   const HloComputation* body_comp = inst->while_body();
   {
     auto order =
@@ -248,11 +259,11 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
     TF_RETURN_IF_ERROR(body_visitor.PropagateDeferredAllocations(inst));
   }
 
-  unsigned int param_count = inputs[0].size();
-  const ArgVector& body_inputs = body_visitor.inputs()[0];
-  const ArgVector& body_outputs = body_visitor.outputs();
-  const ArgVector& cond_inputs = condition_visitor.inputs()[0];
-  const ArgVector& cond_outputs = condition_visitor.outputs();
+  const uint64 param_count = inputs[0].size();
+  const TensorVector& body_inputs = body_visitor.inputs()[0];
+  const TensorVector& body_outputs = body_visitor.outputs();
+  const TensorVector& cond_inputs = condition_visitor.inputs()[0];
+  const TensorVector& cond_outputs = condition_visitor.outputs();
 
   if (body_inputs.size() != param_count) {
     return xla::FailedPrecondition("Invalid number of body inputs.");
@@ -267,10 +278,14 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
     return xla::FailedPrecondition("Invalid number of condition outputs.");
   }
 
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence copy_seq,
+                      body_visitor.GetPreambleCopies());
+  main_seq.add(copy_seq);
+
   // Before executing the condition, copy inputs which are required by
   // the condition to cond_inputs.
   poplar::program::Sequence cond_seq;
-  for (unsigned int i = 0; i < param_count; i++) {
+  for (uint64 i = 0; i < param_count; i++) {
     if (condition_visitor.InputIsUsed(0, i)) {
       cond_seq.add(poplar::program::Copy(body_inputs[i], cond_inputs[i]));
     }
@@ -283,14 +298,14 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
 
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
-  TF_ASSIGN_OR_RETURN(const ArgVector loop_state,
+  TF_ASSIGN_OR_RETURN(const TensorVector loop_state,
                       body_visitor.AddLoopInputOutputAliasingCopies(
                           graph, body_comp, GetDebugName(inst)));
 
   main_seq.add(poplar::program::RepeatWhileTrue(cond_seq, pred,
                                                 body_visitor.GetSequence()));
 
-  for (unsigned int i = 0; i < param_count; i++) {
+  for (uint64 i = 0; i < param_count; i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
   }
 
@@ -303,7 +318,7 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
                                                   TensorMap& tensor_map) {
   poplar::program::Sequence seq;
   // Get all the inputs.
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
 
   // Call the create op with a deferred version of inputs.
@@ -322,6 +337,8 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
                                                   TensorMap& tensor_map) {
   VLOG(1) << "Processing " << inst->name();
   CHECK_EQ(inputs.size(), 1);
+  const bool reallocate_inputs = CanRealloteInputs(inst);
+
   poplar::program::Sequence main_seq;
 
   poplar::Graph& graph = GetGraph(res, inst);
@@ -334,17 +351,17 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
       loop_body->parent()->schedule().sequence(loop_body).instructions();
 
   // Create the visitor.
-  InplaceDeferredVisitor visitor(res, inputs);
+  InplaceDeferredVisitor visitor(res, inputs, {}, reallocate_inputs);
   // Evaluate the loop body in a order.
   TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
 
   // Make sure any deferred inputs to the instruction are pushed up.
   TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
 
-  unsigned int param_count = inputs[0].size();
+  const uint64 param_count = inputs[0].size();
 
-  const ArgVector& body_inputs = visitor.inputs()[0];
-  const ArgVector& body_outputs = visitor.outputs();
+  const TensorVector& body_inputs = visitor.inputs()[0];
+  const TensorVector& body_outputs = visitor.outputs();
 
   if (body_inputs.size() != param_count) {
     return xla::FailedPrecondition("Invalid number of body inputs.");
@@ -354,15 +371,19 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
     return xla::FailedPrecondition("Invalid number of body outputs.");
   }
 
+  TF_ASSIGN_OR_RETURN(poplar::program::Sequence copy_seq,
+                      visitor.GetPreambleCopies());
+  main_seq.add(copy_seq);
+
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
-  TF_ASSIGN_OR_RETURN(const ArgVector loop_state,
+  TF_ASSIGN_OR_RETURN(const TensorVector loop_state,
                       visitor.AddLoopInputOutputAliasingCopies(
                           graph, loop_body, GetDebugName(inst)));
 
   main_seq.add(poplar::program::Repeat(repeat_count, visitor.GetSequence()));
 
-  for (unsigned int i = 0; i < param_count; i++) {
+  for (uint64 i = 0; i < param_count; i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
   }
 
@@ -376,7 +397,7 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
   VLOG(1) << "Processing " << inst->name();
   poplar::Graph& graph = GetGraph(res, inst);
   poplar::program::Sequence seq;
-  ArgVectors inputs = GetCallInputs(res, inst, tensor_map, seq);
+  TensorVectors inputs = GetCallInputs(res, inst, tensor_map, seq);
 
   HloComputation* comp = inst->to_apply();
 
@@ -415,7 +436,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
                                                     TensorMap& tensor_map) {
   poplar::program::Sequence seq;
   // Get all the inputs.
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
 
   // Call the create op with a deferred version of inputs.
@@ -498,7 +519,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
                                    inst->name().c_str());
   }
 
-  TF_ASSIGN_OR_RETURN(ArgVectors inputs,
+  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                       FindInplaceOutputTensors(tensor_map, res, inst, seq));
   CHECK_EQ(inputs.size(), inst->operand_count());
   CHECK_EQ(inputs[0].size(), 1);
@@ -510,7 +531,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   // Compile each branch into a sequence
   for (auto b = 0; b < n_branches; b++) {
     CHECK_EQ(inputs[b + 1].size(), CountShapes(inst->operand(b + 1)->shape()));
-    ArgVectors body_inputs = {inputs[b + 1]};
+    TensorVectors body_inputs = {inputs[b + 1]};
     TF_ASSIGN_OR_RETURN(bodies[b],
                         res.subcomputation_cache.GetOrCompileSubcomputation(
                             res, body_inputs, comps[b]));
