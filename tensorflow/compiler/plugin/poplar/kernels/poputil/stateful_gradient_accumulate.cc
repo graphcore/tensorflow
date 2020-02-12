@@ -49,6 +49,9 @@ class StatefulGradientAccumulate : public XlaOpKernel, IpuOpKernel {
       : XlaOpKernel(ctx), IpuOpKernel(), op_(op) {
     int32 num_mini_batches;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("num_mini_batches", &num_mini_batches));
+    OP_REQUIRES(
+        ctx, num_mini_batches > 0,
+        errors::FailedPrecondition("num_mini_batches needs to be at least 1."));
     attribute_map_.AddAttribute("num_mini_batches", num_mini_batches);
   }
 

@@ -3618,6 +3618,7 @@ test_suite(
         "pipeline_sequential_visitor_test",
         "pipeline_util_test",
         "pipeline_visitor_test",
+        "poplar_algebraic_simplifier_test",
         "recomputation_test",
         "recompute_suggestion_test",
         "reduce_test",
