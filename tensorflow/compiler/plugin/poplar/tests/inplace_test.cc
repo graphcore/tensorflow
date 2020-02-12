@@ -911,6 +911,80 @@ ENTRY %top (arg: f32[]) -> f32[] {
   }
 }
 
+TEST_F(HloInplaceDependencyTest, OperandIsRootInstruction) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = s32[20] parameter(0)
+  p1 = s32[20] parameter(1)
+
+  ROOT s = s32[20] subtract(p0, p1)
+  c = token[] custom-call(s), custom_call_target="CustomOp"
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  InplaceFinder inplaceFinder;
+  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
+
+  auto inplace_instructions = GetInplaceInstructions(module0);
+
+  // 'c' cannot be inplace because the output of 's' must be preserved until
+  // after the computation completes.
+  EXPECT_THAT(inplace_instructions.size(), 1);
+  std::set<std::string> in_place_ops = {"s"};
+  for (const auto* inst : inplace_instructions) {
+    LOG(INFO) << inst->name();
+    EXPECT_THAT(in_place_ops.count(inst->name()), 1);
+  }
+}
+
+TEST_F(HloInplaceDependencyTest, OperandIsRootTupleInstruction) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = s32[20] parameter(0)
+  p1 = s32[20] parameter(1)
+
+  s = s32[20] subtract(p0, p1)
+  ROOT t = (s32[20]) tuple(s)
+  c = token[] custom-call(t), custom_call_target="CustomOp"
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  InplaceFinder inplaceFinder;
+  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
+
+  auto inplace_instructions = GetInplaceInstructions(module0);
+
+  // 'c' cannot be inplace because the output of 's' must be preserved until
+  // after the computation completes.
+  EXPECT_THAT(inplace_instructions.size(), 2);
+  std::set<std::string> in_place_ops = {"s", "t"};
+  for (const auto* inst : inplace_instructions) {
+    EXPECT_THAT(in_place_ops.count(inst->name()), 1);
+  }
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

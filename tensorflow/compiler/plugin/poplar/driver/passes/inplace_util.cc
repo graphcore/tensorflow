@@ -128,8 +128,9 @@ bool IsInplaceReadWrite(HloInstruction* inst,
                         HloReachabilityMap* reachability_map) {
   // An instruction is inplace read/write if:
   // 1. It has an inplace read/write type, and
-  // 2. For each inplace operand instruction, instruction is not a dependency of
-  // peer (users of the same operands).
+  // 2. For each inplace operand instruction, instruction is not a dependency
+  // of peer (users of the same operands) and
+  // 3. It is not using the output of the the ROOT instruction.
   auto inplace_desc = HloInstructionDescription(inst);
 
   // Verify it is inplace read/write (cond 1).
@@ -141,7 +142,7 @@ bool IsInplaceReadWrite(HloInstruction* inst,
   std::vector<HloInstruction*> added_dependencies;
 
   bool is_inplace = true;
-  // Go trough all the inplace operands.
+  // Go through all the inplace operands.
   for (auto op_idx : inplace_desc.GetInplaceOperandIndexes()) {
     HloInstruction* op = inst->mutable_operand(op_idx);
     // Apart from tuples, we expect all the inplace operands to be only used
@@ -155,6 +156,12 @@ bool IsInplaceReadWrite(HloInstruction* inst,
                                 added_dependencies)) {
       is_inplace = false;
       break;
+    }
+    // The ROOT of a computation has an implicit user (the caller of the
+    // computation). Therefore, root instructions with other users cannot be
+    // inplace.
+    if (op->parent()->root_instruction() == op) {
+      is_inplace = false;
     }
   }
 
