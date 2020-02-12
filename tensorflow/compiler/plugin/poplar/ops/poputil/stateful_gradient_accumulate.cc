@@ -23,6 +23,7 @@ REGISTER_OP("IpuStatefulGradientAccumulate")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
     .Attr("num_mini_batches: int")
+    .Attr("verify_usage: bool = true")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 REGISTER_OP("IpuPipelineStatefulGradientAccumulate")
