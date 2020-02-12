@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
-load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
+load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
 load("//tensorflow/core/platform:default/build_config.bzl", "tf_proto_library")
 
 # Rule for creating the vertex program pre-compiled object
@@ -595,11 +595,15 @@ cc_library(
     srcs = [
         "graph_optimizer_passes/extract_outside_compilation_pass.cc",
         "graph_optimizer_passes/graph_optimizer_pass_registration.cc",
+        "graph_optimizer_passes/reorder_gradient_accumulation_pass.cc",
         "graph_optimizer_passes/static_shape_inference_pass.cc",
+        "graph_optimizer_passes/util.cc",
     ],
     hdrs = [
         "graph_optimizer_passes/extract_outside_compilation_pass.h",
+        "graph_optimizer_passes/reorder_gradient_accumulation_pass.h",
         "graph_optimizer_passes/static_shape_inference_pass.h",
+        "graph_optimizer_passes/util.h",
     ],
     deps = [
         "//tensorflow/compiler/jit:compilation_passes",
@@ -2234,6 +2238,32 @@ xla_test(
     ],
 )
 
+tf_cc_test(
+    name = "reorder_gradient_accumulation_pass_test",
+    size = "small",
+    srcs = [
+        "graph_optimizer_passes/reorder_gradient_accumulation_pass_test.cc",
+    ],
+    deps = [
+        ":graph_optimizer_passes",
+        ":poplar_lib",
+        "//tensorflow/cc:cc_ops",
+        "//tensorflow/cc:cc_ops_internal",
+        "//tensorflow/cc:function_ops",
+        "//tensorflow/cc:ops",
+        "//tensorflow/cc:scope",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:framework_internal",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:session_options",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -3591,6 +3621,7 @@ test_suite(
         "reduce_test",
         "remapping_test",
         "remove_blocked_recompute_test",
+        "reorder_gradient_accumulation_pass_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",
         "scatter_simplifier_test",
