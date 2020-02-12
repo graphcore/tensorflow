@@ -25,6 +25,9 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -246,6 +249,8 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   Status HandleSubtract(HloInstruction* sub) override;
 
   Status HandleMap(HloInstruction* map) override;
+
+  Status HandleCustomCall(HloInstruction* custom_call) override;
 
   // Runs the visitor on a computation.
   bool Run(HloComputation* computation, PoplarAlgebraicSimplifier* simplifier);
@@ -3872,6 +3877,21 @@ Status AlgebraicSimplifierVisitor::HandleMap(HloInstruction* map) {
   }
   auto clone = map_root->CloneWithNewOperands(map->shape(), new_operands);
   return ReplaceWithNewInstruction(map, std::move(clone));
+}
+
+Status AlgebraicSimplifierVisitor::HandleCustomCall(
+    HloInstruction* custom_call) {
+  namespace pp = poplarplugin;
+  // We elide gradient accumulation ops with `num_mini_batches=1`.
+  if (pp::IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(
+          custom_call)) {
+    auto* inst = Cast<pp::HloStatefulGradientAccumulate>(custom_call);
+    if (inst->MiniBatchesToAccumulate() == 1) {
+      changed_ = true;
+      return inst->ReplaceAllUsesWith(inst->mutable_operand(0));
+    }
+  }
+  return Status::OK();
 }
 
 StatusOr<bool> PoplarAlgebraicSimplifier::Run(HloModule* module) {

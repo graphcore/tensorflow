@@ -18,6 +18,8 @@ limitations under the License.
 #include <memory>
 #include <utility>
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -4848,8 +4850,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, FuseConcat) {
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  ASSERT_TRUE(
-      PoplarAlgebraicSimplifier(default_options_).Run(m.get()).ValueOrDie());
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Concatenate(m::Parameter(0), m::Parameter(1),
                                         m::Parameter(2))));
@@ -4867,8 +4868,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, FuseConcatDifferentDim) {
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  ASSERT_FALSE(
-      PoplarAlgebraicSimplifier(default_options_).Run(m.get()).ValueOrDie());
+  ASSERT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
   EXPECT_THAT(
       m->entry_computation()->root_instruction(),
       GmockMatch(m::Concatenate(
@@ -4888,8 +4888,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, FuseConcatSeveralUsers) {
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  ASSERT_FALSE(
-      PoplarAlgebraicSimplifier(default_options_).Run(m.get()).ValueOrDie());
+  ASSERT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
   EXPECT_THAT(
       m->entry_computation()->root_instruction(),
       GmockMatch(m::Tuple(
@@ -4912,13 +4911,29 @@ TEST_F(PoplarAlgebraicSimplifierTest, FuseConcatMultiple) {
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  ASSERT_TRUE(HloPassFix<PoplarAlgebraicSimplifier>(default_options_)
-                  .Run(m.get())
-                  .ValueOrDie());
+  ASSERT_TRUE(
+      HloPassFix<PoplarAlgebraicSimplifier>().Run(m.get()).ValueOrDie());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Concatenate(m::Parameter(0), m::Parameter(1),
                                         m::Parameter(2), m::Parameter(2),
                                         m::Parameter(1), m::Parameter(0))));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, ElideStatefulGradientAccumulate) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p0 = f32[4,2] parameter(0)
+      p1 = f32[4,2] parameter(1)
+      ga = f32[4,2] custom-call(p1), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":1}\n"
+      ROOT a = f32[4,2] add(p0, ga)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(CustomOpReplacer().Run(m.get()).ValueOrDie());
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(m::Parameter(0), m::Parameter(1))));
 }
 
 }  // namespace

@@ -32,6 +32,16 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
+// Only fuse the gradient accumulation ops if they accumulate more that one
+// batch.
+bool IsGradientAccumulationWithMinBatchSize(const HloInstruction* inst) {
+  if (IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(inst)) {
+    auto* grad_inst = Cast<HloStatefulGradientAccumulate>(inst);
+    return grad_inst->MiniBatchesToAccumulate() > 1;
+  }
+  return false;
+}
+
 // The
 // `tensorflow/compiler/plugin/poplar/graph_optimizer_passes/reorder_gradient_accumulation_pass.cc`
 // pass guarantees the order of operations.
@@ -43,7 +53,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternInputs({3}),
     PatternOutputs({0}),
     Pattern({
-      {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)},
+      {HloOpcode::kCustomCall, NodeOperands({1}), IsGradientAccumulationWithMinBatchSize},
       {HloOpcode::kCustomCall, NodeOperands({2}), IsPoplarInstruction(PoplarOp::ReplicationNormalise)},
       {HloOpcode::kAllReduce, NodeOperands({3}), IsSupportedAllReduce},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
@@ -55,7 +65,7 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternInputs({2}),
     PatternOutputs({0}),
     Pattern({
-      {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)},
+      {HloOpcode::kCustomCall, NodeOperands({1}), IsGradientAccumulationWithMinBatchSize},
       {HloOpcode::kAllReduce, NodeOperands({2}), IsSupportedAllReduce},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })
