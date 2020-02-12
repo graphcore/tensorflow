@@ -30,11 +30,13 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      # Check that there are no casts to float at the beginning.
+      # Check that there are no casts to float at the beginning
+      # Note that intermidiates are still floats, so there is a final cast
       ok = [
           '__seed*', 'host-exchange-local-copy-',
           'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
-          'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce'
+          'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
+          'Sum/reduce*/ReduceFinalStage/Cast'
       ]
 
       report.assert_all_compute_sets_and_list(ok)
