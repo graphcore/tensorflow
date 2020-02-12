@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/graph_optimizer_passes/extract_outside_compilation_pass.h"
+#include "tensorflow/compiler/plugin/poplar/graph_optimizer_passes/reorder_gradient_accumulation_pass.h"
 #include "tensorflow/compiler/plugin/poplar/graph_optimizer_passes/static_shape_inference_pass.h"
 #include "tensorflow/core/common_runtime/optimization_registry.h"
 
@@ -21,6 +22,10 @@ namespace tensorflow {
 
 // See tensorflow/compiler/jit/jit_compilation_pass_registration.cc for the
 // other passes.
+
+// Run this before StaticShapeInferencePass (20).
+REGISTER_OPTIMIZATION(OptimizationPassRegistry::PRE_PLACEMENT, 17,
+                      ReorderGradientAccumulationPass);
 
 // This must run before EncapsulateXlaComputationsPass (26).
 // We need static shapes for the outside compilation scope

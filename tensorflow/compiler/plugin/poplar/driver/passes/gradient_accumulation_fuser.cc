@@ -32,6 +32,9 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
+// The
+// `tensorflow/compiler/plugin/poplar/graph_optimizer_passes/reorder_gradient_accumulation_pass.cc`
+// pass guarantees the order of operations.
 // clang-format off
 static const std::vector<HloMatcherPattern> patterns = {
   HloMatcherPattern(
@@ -54,17 +57,6 @@ static const std::vector<HloMatcherPattern> patterns = {
     Pattern({
       {HloOpcode::kCustomCall, NodeOperands({1}), IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)},
       {HloOpcode::kAllReduce, NodeOperands({2}), IsSupportedAllReduce},
-      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
-    })
-  ),
-  HloMatcherPattern(
-    PatternType("grad_accum_then_all_reduce"),
-    PatternMetaTarget(1),
-    PatternInputs({2}),
-    PatternOutputs({0}),
-    Pattern({
-      {HloOpcode::kAllReduce, NodeOperands({1}), IsSupportedAllReduce},
-      {HloOpcode::kCustomCall, NodeOperands({2}), IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })
   ),
@@ -96,8 +88,8 @@ bool GradientAccumulationFuser::HandleMatch(
     }
   }
   // Get the gradient accumulation instruction.
-  auto grad_accum = Cast<HloStatefulGradientAccumulate>(
-      match.instruction_mapping.at(pattern.GetMetaTarget()));
+  auto grad_accum =
+      Cast<HloStatefulGradientAccumulate>(match.instruction_mapping.at(0));
 
   auto input = match.instruction_mapping.at(input_id);
 
@@ -126,6 +118,18 @@ bool GradientAccumulationFuser::HandleMatch(
 
   output->ReplaceAllUsesWith(new_output);
   comp->RemoveInstructionAndUnusedOperands(output);
+
+  // If there was a normalization.
+  if (match.pattern_idx == 0) {
+    // Explicitly remove the all-reduce as it has side-effects and it will not
+    // be removed.
+    HloInstruction* all_reduce =
+        match.instruction_mapping.at(match.instruction_mapping.size() - 2);
+    CHECK_EQ(all_reduce->opcode(), HloOpcode::kAllReduce);
+    CHECK_EQ(all_reduce->user_count(), 0);
+    comp->RemoveInstructionAndUnusedOperands(all_reduce);
+  }
+
   return true;
 }
 

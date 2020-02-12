@@ -32,40 +32,6 @@ namespace {
 
 using GradientAccumulationFuserTest = HloTestBase;
 
-TEST_F(GradientAccumulationFuserTest, TestGradAccumAndAllReduce) {
-  std::string hlo_string = R"(
-HloModule top
-
-add {
-  x = f32[] parameter(0)
-  y = f32[] parameter(1)
-  add = f32[] add(x, y)
-}
-
-entry  {
-  %arg0 = f16[4] parameter(0)
-  %ga = f16[4] custom-call(arg0), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
-  ROOT %a1 = f16[4] all-reduce(ga), to_apply=add
-}
-  )";
-
-  auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo_string, config);
-  EXPECT_TRUE(module.ok());
-  auto* module0 = module.ValueOrDie().get();
-
-  CompilerAnnotations annotations(module0);
-  CustomOpReplacer custom_op_replacer;
-  EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
-
-  GradientAccumulationFuser fuser(annotations);
-  EXPECT_TRUE(fuser.Run(module0).ValueOrDie());
-  auto root = module0->entry_computation()->root_instruction();
-  auto cast = DynCast<HloStatefulGradientAccumulateAndAllReduce>(root);
-  ASSERT_TRUE(cast);
-  EXPECT_EQ(cast->MiniBatchesToAccumulate(), 4);
-}
-
 TEST_F(GradientAccumulationFuserTest, TestAllReduceAndGradAccum) {
   std::string hlo_string = R"(
 HloModule top
@@ -150,8 +116,8 @@ divide {
 
 entry  {
   %arg0 = f16[4] parameter(0)
-  %ga = f16[4] custom-call(arg0), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
-  ROOT %a1 = f16[4] all-reduce(ga), to_apply=divide
+  %a1 = f16[4] all-reduce(arg0), to_apply=divide
+  ROOT %ga = f16[4] custom-call(a1), custom_call_target="StatefulGradientAccumulate", backend_config="{\"num_mini_batches\":4}\n"
 }
   )";
 
