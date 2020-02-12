@@ -4,19 +4,17 @@ import multiprocessing
 import numpy as np
 import os
 import tempfile
-import tensorflow.compiler.plugin.poplar.tests.test_utils as tu
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 from tensorflow.compiler.tests import xla_test
-from tensorflow.core.framework import summary_pb2
 from tensorflow.python import ipu
 from tensorflow.python import ops
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import model_fn
 from tensorflow.python.framework import test_util
-from tensorflow.python.ipu.ops.summary_ops import ipu_compile_summary
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import metrics_impl
 from tensorflow.python.platform import googletest
@@ -39,8 +37,11 @@ def _run_in_new_process(fn):
   q = multiprocessing.Queue()
   p = multiprocessing.Process(target=lambda: q.put(fn()))
   p.start()
+  # Get from queue before joining to avoid deadlock if the queue is full and
+  # blocks the producer.
+  ret = q.get()
   p.join()
-  return q.get()
+  return ret
 
 
 def _count_ipu_compilations_in_summary(summary):
@@ -63,10 +64,14 @@ def _count_ipu_compilations_in_dir(model_dir):
   return count
 
 
-def _count_ipu_compilations(summary_string):
-  summary = summary_pb2.Summary()
-  summary.ParseFromString(summary_string)
-  return _count_ipu_compilations_in_summary(summary)
+def _count_ipu_compilations(events):
+  count = 0
+  for evt_str in events:
+    evt = IpuTraceEvent.FromString(evt_str)
+    if (evt.type == IpuTraceEvent.COMPILE_END
+        and evt.compile_end.compilation_report):
+      count += 1
+  return count
 
 
 class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-method
@@ -76,14 +81,15 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       def my_net(x):
         return x * x
 
-      v = array_ops.placeholder(dtype=np.float32, shape=())
+      v = array_ops.placeholder(dtype=np.float32, shape=(1,))
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
-      compile_report = ipu_compile_summary("compile_report", result)
 
-      tu.configure_ipu_system()
       with session.Session() as sess:
-        return sess.run([result, compile_report], feed_dict={v: 2.0})
+        report = ReportJSON(self, sess)
+        res = sess.run(result, {v: [2.0]})
+        events = report.get_event_trace(sess)
+        return res, events
 
     with _temporary_executable_cache():
       result0, report0 = _run_in_new_process(build_and_run_model)
@@ -111,22 +117,23 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       v = array_ops.placeholder(np.float32, shape=())
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
-      compile_report = ipu_compile_summary("compile_report", result)
       with ops.control_dependencies([result]):
         dequeued = outfeed_queue.dequeue()
 
-      tu.configure_ipu_system()
       with session.Session() as sess:
+        report = ReportJSON(self, sess)
         sess.run(infeed_queue.initializer)
-        return sess.run([result, dequeued, compile_report], {v: 0.0})
+        res, deq = sess.run([result, dequeued], {v: 0.0})
+        events = report.get_event_trace(sess)
+        return res, deq, events
 
     with _temporary_executable_cache():
-      result0, dequeued0, report0 = _run_in_new_process(build_and_run_model)
-      result1, dequeued1, report1 = _run_in_new_process(build_and_run_model)
+      result0, dequeued0, events0 = _run_in_new_process(build_and_run_model)
+      result1, dequeued1, events1 = _run_in_new_process(build_and_run_model)
       self.assertAllEqual(dequeued0, dequeued1)
       self.assertEqual(result0, result1)
-      self.assertEqual(1, _count_ipu_compilations(report0))
-      self.assertEqual(0, _count_ipu_compilations(report1))
+      self.assertEqual(1, _count_ipu_compilations(events0))
+      self.assertEqual(0, _count_ipu_compilations(events1))
 
   @test_util.deprecated_graph_mode_only
   def test_model_with_send_to_host_op(self):
@@ -149,19 +156,19 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
             send_device_incarnation=0,
             recv_device="/device:CPU:0")
 
-      compile_report = ipu_compile_summary("compile_report", send_op)
-
-      tu.configure_ipu_system()
       with session.Session() as sess:
-        return sess.run([send_op, recv_op, compile_report], feed_dict={v: 1.0})
+        report = ReportJSON(self, sess)
+        _, received = sess.run([send_op, recv_op], feed_dict={v: 1.0})
+        events = report.get_event_trace(sess)
+        return received, events
 
     with _temporary_executable_cache():
-      _, received0, report0 = _run_in_new_process(build_and_run_model)
-      _, received1, report1 = _run_in_new_process(build_and_run_model)
+      received0, events0 = _run_in_new_process(build_and_run_model)
+      received1, events1 = _run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 1.0)
-      self.assertEqual(1, _count_ipu_compilations(report0))
-      self.assertEqual(0, _count_ipu_compilations(report1))
+      self.assertEqual(1, _count_ipu_compilations(events0))
+      self.assertEqual(0, _count_ipu_compilations(events1))
 
   @test_util.deprecated_graph_mode_only
   def test_new_graph_in_same_process(self):
@@ -169,28 +176,29 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       def my_net(x):
         return x * x
 
-      v = array_ops.placeholder(dtype=np.float32, shape=())
+      v = array_ops.placeholder(dtype=np.float32, shape=(1,))
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
-      compile_report = ipu_compile_summary("compile_report", result)
 
-      tu.configure_ipu_system()
       with session.Session() as sess:
-        return sess.run([result, compile_report], feed_dict={v: 2.0})
+        report = ReportJSON(self, sess)
+        res = sess.run(result, {v: [2.0]})
+        events = report.get_event_trace(sess)
+        return res, events
 
     with _temporary_executable_cache():
       # Since each Graph will have its own XLA compilation cache,
       # the cache we test is the last-level Poplar executable cache.
 
       with ops.Graph().as_default():
-        result0, report0 = build_and_run_model()
+        result0, events0 = build_and_run_model()
 
       with ops.Graph().as_default():
-        result1, report1 = build_and_run_model()
+        result1, events1 = build_and_run_model()
 
       self.assertEqual(result0, result1)
-      self.assertEqual(1, _count_ipu_compilations(report0))
-      self.assertEqual(0, _count_ipu_compilations(report1))
+      self.assertEqual(1, _count_ipu_compilations(events0))
+      self.assertEqual(0, _count_ipu_compilations(events1))
 
   def test_ipu_estimator(self):
     def my_model_fn(features, labels, mode):
@@ -264,19 +272,19 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-      compile_report = ipu_compile_summary("compile_report", result)
-
-      tu.configure_ipu_system()
       with session.Session() as sess:
-        return sess.run([result, compile_report], feed_dict={v: 1.0})
+        report = ReportJSON(self, sess)
+        received = sess.run(result, feed_dict={v: 1.0})
+        events = report.get_event_trace(sess)
+        return received, events
 
     with _temporary_executable_cache():
-      received0, report0 = _run_in_new_process(build_and_run_model)
-      received1, report1 = _run_in_new_process(build_and_run_model)
+      received0, events0 = _run_in_new_process(build_and_run_model)
+      received1, events1 = _run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 4.0)
-      self.assertEqual(1, _count_ipu_compilations(report0))
-      self.assertEqual(0, _count_ipu_compilations(report1))
+      self.assertEqual(1, _count_ipu_compilations(events0))
+      self.assertEqual(0, _count_ipu_compilations(events1))
 
 
 if __name__ == "__main__":
