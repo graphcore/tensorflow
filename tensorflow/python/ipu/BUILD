@@ -165,6 +165,17 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "report_tf2_test",
+    size = "medium",
+    srcs = ["tests/report_tf2_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_py_test(
     name = "map_gradient_optimizer_test",
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],

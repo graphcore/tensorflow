@@ -21,6 +21,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 from tensorflow.core.framework import summary_pb2
 from tensorflow.python.framework import ops
 from tensorflow.python.summary.summary import tensor_summary
+from tensorflow import executing_eagerly
 
 
 def ipu_compile_summary(name, op_list, collections=None):
@@ -56,3 +57,27 @@ def ipu_compile_summary(name, op_list, collections=None):
                                  display_name=name)
 
   return t_summary
+
+
+def get_ipu_reports():
+  """Extracts all reports and converts them from EagerTensor to array of events.
+
+  Args:
+    None
+
+  Returns:
+    A two dimensional numpy.ndarray of IPUTraceEvents protobufs.
+  """
+
+  # make sure we are running in eager mode (default in tf2)
+  if not executing_eagerly():
+    raise ValueError("Eager execution mode should be used.")
+
+  # retrieve all reports as an eager tensor
+  reports = gen_ipu_ops.ipu_event_trace()
+
+  # convert from eager tensor to numpy array
+  if isinstance(reports, ops.EagerTensor):
+    reports = reports.numpy()
+
+  return reports
