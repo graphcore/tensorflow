@@ -598,12 +598,14 @@ cc_library(
         "graph_optimizer_passes/reorder_gradient_accumulation_pass.cc",
         "graph_optimizer_passes/static_shape_inference_pass.cc",
         "graph_optimizer_passes/util.cc",
+        "graph_optimizer_passes/verify_gradient_accumulation_pass.cc",
     ],
     hdrs = [
         "graph_optimizer_passes/extract_outside_compilation_pass.h",
         "graph_optimizer_passes/reorder_gradient_accumulation_pass.h",
         "graph_optimizer_passes/static_shape_inference_pass.h",
         "graph_optimizer_passes/util.h",
+        "graph_optimizer_passes/verify_gradient_accumulation_pass.h",
     ],
     deps = [
         "//tensorflow/compiler/jit:compilation_passes",
@@ -3066,7 +3068,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/size_speed_tests/resnet_size_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 2,
+    shard_count = 4,
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",

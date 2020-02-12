@@ -39,6 +39,7 @@ class GradientAccumulationOptimizer(optimizer.Optimizer):
   def __init__(self,
                opt,
                num_mini_batches,
+               verify_usage=True,
                name="GradientAccumulationOptimizer"):
     """Construct a Gradient Accumulation Optimizer.
 
@@ -46,6 +47,10 @@ class GradientAccumulationOptimizer(optimizer.Optimizer):
       opt: An existing `Optimizer` to encapsulate.
       num_mini_batches: Number of mini-batches the gradients will be accumulated
         for.
+      verify_usage: The current gradient accumulation supports the
+        `GradientDescentOptimizer` optimizer. Any other usages of this optimizer
+        might results in incorrect results. This option can be used to disable
+        this check.
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "GradientAccumulationOptimizer".
     """
@@ -57,6 +62,7 @@ class GradientAccumulationOptimizer(optimizer.Optimizer):
       raise ValueError("num_mini_batches must be a positive number.")
 
     self._num_mini_batches = num_mini_batches
+    self._verify_usage = verify_usage
 
   def compute_gradients(self, loss, var_list=None, **kwargs):
     """Compute gradients of "loss" for the variables in "var_list".
@@ -104,7 +110,9 @@ class GradientAccumulationOptimizer(optimizer.Optimizer):
         with ops.colocate_with(grad):
           summed_grads_and_vars.append(
               (gen_poputil_ops.ipu_stateful_gradient_accumulate(
-                  grad, num_mini_batches=self._num_mini_batches), var))
+                  grad,
+                  num_mini_batches=self._num_mini_batches,
+                  verify_usage=self._verify_usage), var))
     return self._opt.apply_gradients(summed_grads_and_vars, global_step, name)
 
   def get_slot(self, *args, **kwargs):
@@ -158,6 +166,7 @@ class CrossReplicaGradientAccumulationOptimizer(optimizer.Optimizer):
   def __init__(self,
                opt,
                num_mini_batches,
+               verify_usage=True,
                name="CrossReplicaGradientAccumulationOptimizer"):
     """Construct a Cross Replica Gradient Accumulation Optimizer.
 
@@ -165,6 +174,10 @@ class CrossReplicaGradientAccumulationOptimizer(optimizer.Optimizer):
       opt: An existing `Optimizer` to encapsulate.
       num_mini_batches: Number of mini-batches the gradients will be accumulated
         for.
+      verify_usage: The current gradient accumulation supports the
+        `GradientDescentOptimizer` optimizer. Any other usages of this optimizer
+        might results in incorrect results. This option can be used to disable
+        this check.
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizer".
     """
@@ -177,7 +190,7 @@ class CrossReplicaGradientAccumulationOptimizer(optimizer.Optimizer):
 
     # Internally we just wrap the optimizer in a GradientAccumulationOptimizer and CrossReplicaOptimizer.
     self._opt = cross_replica_optimizer.CrossReplicaOptimizer(
-        GradientAccumulationOptimizer(opt, num_mini_batches))
+        GradientAccumulationOptimizer(opt, num_mini_batches, verify_usage))
 
   def compute_gradients(self, loss, var_list=None, **kwargs):
     """Compute gradients of "loss" for the variables in "var_list".
