@@ -611,7 +611,11 @@ class InfeedPrefetchCallback : public poplar::StreamCallback {
 
   void fetch(void* dest) noexcept override {
     tensorflow::TensorBuffer* buffer;
-    queue_->BlockPop(buffer);
+    if (!queue_->BlockPop(buffer)) {
+      LOG(FATAL) << "Infeed dataset iterator out of range. Are you trying to "
+                 << "dequeue more elements than are in the dataset?";
+    }
+
     std::memcpy(dest, buffer->data(), num_bytes_);
   }
 
@@ -771,8 +775,17 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
           infeed_dataset_iterator->GetNext(&outputs, &end_of_sequence));
 
       if (end_of_sequence) {
-        return tensorflow::errors::OutOfRange(
-            "The dataset iterator has reached the end of the dataset.");
+        VLOG(1) << "The dataset iterator has reached the end of the dataset.";
+
+        for (auto& queues : infeed_queues) {
+          for (auto& queue : queues) {
+            queue->SignalEndOfQueue();
+          }
+        }
+
+        // This is not considered an error. However, we will report an
+        // error if the consumer tries to pop past the end of the queue.
+        return Status::OK();
       }
 
       for (size_t j = 0; j < outputs.size(); ++j) {
@@ -785,7 +798,7 @@ IOFunction PoplarExecutor::CreateInfeedIOThreadFunction(
           tensor_slices.reserve(current_replication_factor_);
           for (auto replica_id = 0; replica_id < current_replication_factor_;
                ++replica_id) {
-            // Note that the tensor_slice shares the date buffer with the
+            // Note that the tensor_slice shares the data buffer with the
             // tensor which works with ref counting.
             tensor_slices.push_back(tensor.SubSlice(replica_id));
           }

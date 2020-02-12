@@ -52,11 +52,64 @@ namespace xla {
 namespace poplarplugin {
 class InfeedAllocator;
 
-class InfeedQueue : public SPSCQueue<tensorflow::TensorBuffer*, 2048> {
+// This is a wrapper around SPSCQueue with additional support
+// for using a sentinel value to signal the end of the queue.
+// Member functions are inline in the header to allow for
+// inlining the wrapped calls directly at the call site.
+class InfeedQueue {
  public:
   InfeedQueue();
 
+  using T = tensorflow::TensorBuffer*;
+
+  // Functions delegating directly to the underlying queue.
+  void AdvanceReadPosition() { queue_.AdvanceReadPosition(); }
+  void AdvanceWritePosition() { queue_.AdvanceWritePosition(); }
+  bool IsFull() const { return queue_.IsFull(); }
+  bool IsEmpty() const { return queue_.IsEmpty(); }
+
+  // Pushing with sanity checking against the sentinel.
+  void Push(const T& item) {
+    CHECK(item != kEndOfQueueSentinel);
+    queue_.Push(item);
+  }
+  void BlockPush(const T& item) {
+    CHECK(item != kEndOfQueueSentinel);
+    queue_.BlockPush(item);
+  }
+  bool TryPush(const T& item) {
+    CHECK(item != kEndOfQueueSentinel);
+    return queue_.TryPush(item);
+  }
+
+  // Pushing the sentinel.
+  void SignalEndOfQueue() {
+    queue_.BlockPush(kEndOfQueueSentinel);
+    queue_.AdvanceWritePosition();
+  }
+
+  // Non-blocking pop with sentinel checking. Returns false if no items
+  // are available or the end is reached.
+  bool TryPop(T& item) {
+    if (!queue_.TryPop(item)) {
+      return false;
+    }
+    if (item == kEndOfQueueSentinel) {
+      return false;
+    }
+    return true;
+  }
+
+  // Blocking pop with sentinel checking. Returns false if and only if the end
+  // is reached.
+  bool BlockPop(T& item) {
+    queue_.BlockPop(item);
+    return item != kEndOfQueueSentinel;
+  }
+
  private:
+  SPSCQueue<T, 2048> queue_;
+  static constexpr T kEndOfQueueSentinel = nullptr;
   TF_DISALLOW_COPY_AND_ASSIGN(InfeedQueue);
 };
 
