@@ -61,13 +61,12 @@ std::string GetTaskName(const tensorflow::Device* device) {
 namespace xla {
 namespace poplarplugin {
 InfeedQueue::InfeedQueue()
-    : SPSCQueue<tensorflow::TensorBuffer*, 2048>(
-          nullptr, [](tensorflow::TensorBuffer*& buffer) {
-            if (buffer) {
-              buffer->Unref();
-              buffer = nullptr;
-            }
-          }) {}
+    : queue_(nullptr, [](tensorflow::TensorBuffer*& buffer) {
+        if (buffer) {
+          buffer->Unref();
+          buffer = nullptr;
+        }
+      }) {}
 
 InfeedIterator::InfeedIterator(
     tensorflow::FunctionLibraryRuntime* flr,

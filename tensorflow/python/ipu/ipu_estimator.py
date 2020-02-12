@@ -951,14 +951,14 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
       num_predictions: If not `None`, the generator will raise `StopIteration`
         after yielding this number of predictions. This allows draining the
         generator by using :code:`list(predictions)`. If `None`, the returned
-        generator will block forever if you try to consume more predictions
-        than what is generated, instead of raising the `StopIteration`
-        exception. This is caused by the current behaviour when requesting to
-        run a loop on the IPU for more iterations than there are elements
-        remaining in the dataset. In this case you cannot drain it by using
-        :code:`list(predictions)`, you have to consume the expected number of
-        elements yourself, e.g. using
-        :code:`[next(predictions) for _ in range(num_predictions)]`.
+        generator is infinite and will trigger a fatal error if you try to
+        consume more predictions from it than what is actually generated,
+        instead of raising the `StopIteration` exception. This is caused by
+        the current behaviour when requesting to run a loop on the IPU for
+        more iterations than there are elements remaining in the dataset.
+        In this case you cannot drain it by using :code:`list(predictions)`,
+        you have to consume the expected number of elements yourself, e.g.
+        using :code:`[next(predictions) for _ in range(num_predictions)]`.
 
     Yields:
       Evaluated values of `predictions` tensors.

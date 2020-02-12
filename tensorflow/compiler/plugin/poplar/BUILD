@@ -1373,6 +1373,17 @@ xla_test(
 )
 
 xla_test(
+    name = "infeed_queue_test",
+    srcs = ["tests/infeed_queue_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "commutative_instruction_reorder_operands_test",
     srcs = ["tests/commutative_instruction_reorder_operands_test.cc"],
     backends = ["poplar"],
