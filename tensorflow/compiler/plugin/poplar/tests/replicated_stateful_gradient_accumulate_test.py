@@ -4,16 +4,16 @@ from __future__ import print_function
 
 import os
 import numpy as np
-import test_utils as tu
 
+from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.compiler.xla import xla
-from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import utils
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+from tensorflow.python.platform import googletest
 
 
 class ReplicatedStatefulGradientAccumulateTest(xla_test.XLATestCase):
@@ -40,7 +40,9 @@ class ReplicatedStatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
 
-      tu.configure_ipu_system(execution_trace=False, replicated=True)
+      opts = utils.create_ipu_config()
+      opts = utils.auto_select_ipus(opts, num_ipus=2)
+      utils.configure_ipu_system(opts)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -72,7 +74,9 @@ class ReplicatedStatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
 
-      tu.configure_ipu_system(execution_trace=False, replicated=True)
+      opts = utils.create_ipu_config()
+      opts = utils.auto_select_ipus(opts, num_ipus=2)
+      utils.configure_ipu_system(opts)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
@@ -105,7 +109,9 @@ class ReplicatedStatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         y = array_ops.placeholder(dtype, [1])
 
-      tu.configure_ipu_system(execution_trace=False, replicated=True)
+      opts = utils.create_ipu_config()
+      opts = utils.auto_select_ipus(opts, num_ipus=2)
+      utils.configure_ipu_system(opts)
 
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])

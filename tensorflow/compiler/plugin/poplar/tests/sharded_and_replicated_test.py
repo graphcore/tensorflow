@@ -138,7 +138,7 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
 
       report.parse_log()
       report.assert_compute_sets_matches(
-          "*/GlobalPre/*", 6, "There should be 6 global communications")
+          "*/GlobalPre/*", 10, "There should be 10 global communications")
 
   def testShardedAndReplicatedAndGradientAccumulateTraining(self):
     with self.session() as sess:
@@ -191,7 +191,7 @@ class ShardedAndReplicatedTest(xla_test.XLATestCase):
 
       report.parse_log()
       report.assert_compute_sets_matches(
-          "*/GlobalPre/*", 6, "There should be 6 global communications")
+          "*/GlobalPre/*", 10, "There should be 10 global communications")
 
 
 if __name__ == "__main__":
