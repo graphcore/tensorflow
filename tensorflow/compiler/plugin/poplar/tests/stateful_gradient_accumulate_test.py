@@ -85,7 +85,7 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
           "The while/IpuStatefulGradientAccumulate op"):
         sess.run(r, {y: [10]})
 
-  def testWideConstantWithAllocationTarget(self):
+  def testLoopRepeatCountDoesntDivide(self):
     with self.session() as sess:
       dtype = np.float32
 
@@ -114,11 +114,11 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
 
-      y = sess.run(r, {y: [10]})
-      self.assertEqual(y[0], 10)
-      # Note that num_mini_batches doesn't divide the number of iterations.
-      self.assertAllEqual(y[1], [18])
-      self.assertAllEqual(y[2], [20])
+      with self.assertRaisesRegex(
+          errors.FailedPreconditionError,
+          "Detected a gradient accumulation operation with 4 number of mini "
+          "batches inside of a loop with 10 iterations."):
+        sess.run(r, {y: [10]})
 
 
 if __name__ == "__main__":

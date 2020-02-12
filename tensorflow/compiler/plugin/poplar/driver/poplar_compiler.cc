@@ -51,6 +51,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gather_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_dependency_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
@@ -815,6 +816,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<PipelineVerifier>(poplar_executor->RecomputationEnabled());
+    pipeline.AddPass<GradientAccumulationVerifier>();
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<AllocationFinder>(resources.annotations);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
