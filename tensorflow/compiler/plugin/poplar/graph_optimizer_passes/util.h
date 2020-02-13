@@ -22,17 +22,19 @@ limitations under the License.
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/stream_executor/lib/statusor.h"
 
+using stream_executor::port::StatusOr;
+
 namespace tensorflow {
 class FunctionLibraryDefinition;
 
 Status CopyXLAAttributesIfPresent(Node* from, Node* to);
 
-// Create a graph from a given function name and call the `fn`. Optionally
-// replaces the function definition after calling `fn`.
-Status CallForGraphFromFunctionDef(
-    const NameAttrList& func, FunctionLibraryDefinition* flib_def,
-    std::function<Status(Graph*, FunctionLibraryDefinition*)> fn,
-    bool replace_function = false);
+// Traverse the given graph for any while loops, and call the `fn` on the body
+// of the loop. Changes the body definition of any while loop if `fn` returns
+// true. Returns true if the definition of any while loop has changed.
+StatusOr<bool> CallFunctionForWhileLoopBodies(
+    Graph* graph, FunctionLibraryDefinition* flib_def,
+    std::function<StatusOr<bool>(Graph*, FunctionLibraryDefinition*)> fn);
 
 // Functions used for testing.
 // Count how many nodes there are with a given op name, including traversing
