@@ -19,13 +19,7 @@ limitations under the License.
  * These functions are related to poplar, and cannot be used within the
  * optimizers target in the BUILD file.
  */
-
-#include <poplar/Program.hpp>
-#include <poplar/exceptions.hpp>
-#include <poplin/Convolution.hpp>
-#include <popnn/Pooling.hpp>
-#include <popops/Expr.hpp>
-#include <poputil/exceptions.hpp>
+#include <string>
 #include <vector>
 
 #include "absl/container/inlined_vector.h"
@@ -38,6 +32,13 @@ limitations under the License.
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
+
+#include <poplar/Program.hpp>
+#include <poplar/exceptions.hpp>
+#include <poplin/Convolution.hpp>
+#include <popnn/Pooling.hpp>
+#include <popops/Expr.hpp>
+#include <poputil/exceptions.hpp>
 
 namespace poplar {
 class Graph;
@@ -131,6 +132,18 @@ StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
 using DeferredArgVectors =
     std::vector<std::vector<absl::optional<poplar::Tensor>>>;
 DeferredArgVectors ConvertInputsToDeferredInputs(TensorVectors& inputs);
+
+/* Generate a JSON struture describing the tensor mappings
+ */
+std::string GetTensorMappingJson(const std::string& module_name,
+                                 const poplar::Graph& graph,
+                                 const TensorMaps& tensor_map);
+
+/* Save the inputs / outputs metadata from the compiler resources in a Json
+ * file.
+ */
+Status SaveExecutableMetadataJson(const std::string& filename,
+                                  const CompilerResources& res);
 }  // namespace poplarplugin
 }  // namespace xla
 

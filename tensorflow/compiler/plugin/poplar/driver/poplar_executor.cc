@@ -1516,33 +1516,34 @@ Status PoplarExecutor::CreateExecutableCacheDirIfMissing() const {
   return CreateDirIfMissing(PoplarXlaFlags::Get().executable_cache_path);
 }
 
-std::string PoplarExecutor::SerializedExecutableFilename(
-    const HloModule& module) const {
-  uint64 hash = HashModuleAndDevice(module);
+std::string ModuleFilenames::SerializedExecutableFilename() const {
+  return tensorflow::io::JoinPath(serialization_folder_,
+                                  basename_ + ".ipu_bin");
+}
 
-  std::string filename = tensorflow::strings::Printf("%0llx.ipu_bin", hash);
-
-  return tensorflow::io::JoinPath(SerializationFolder(), filename);
+std::string ModuleFilenames::SerializedMetadataFilename() const {
+  return tensorflow::io::JoinPath(serialization_folder_, basename_ + ".json");
 }
 
 Status PoplarExecutor::CreateSerializedExecutableDirIfMissing() const {
   return CreateDirIfMissing(SerializationFolder());
 }
 
-uint64 PoplarExecutor::HashModuleAndDevice(const HloModule& module) const {
-  HloHash module_hash(&module);
-  uint64 hash = module_hash.GetHash();
-  return tensorflow::Hash64Combine(hash, poplar_device_hash_);
+ModuleFilenames::ModuleFilenames(const HloModule& module, int64 device_hash,
+                                 const std::string& serialization_folder)
+    : basename_(tensorflow::strings::Printf(
+          "%0llx",
+          tensorflow::Hash64Combine(HloHash(&module).GetHash(), device_hash))),
+      serialization_folder_(serialization_folder) {}
+
+std::string ModuleFilenames::CachedExecutableFilename() const {
+  return tensorflow::io::JoinPath(PoplarXlaFlags::Get().executable_cache_path,
+                                  basename_ + ".xla_engine");
 }
 
-std::string PoplarExecutor::CachedExecutableFilename(
+ModuleFilenames PoplarExecutor::GetModuleFilenames(
     const HloModule& module) const {
-  uint64 hash = HashModuleAndDevice(module);
-
-  std::string filename = tensorflow::strings::Printf("%0llx.xla_engine", hash);
-
-  return tensorflow::io::JoinPath(PoplarXlaFlags::Get().executable_cache_path,
-                                  filename);
+  return ModuleFilenames(module, poplar_device_hash_, SerializationFolder());
 }
 
 bool PoplarExecutor::HaveCachedExecutable(const std::string& filename) const {
