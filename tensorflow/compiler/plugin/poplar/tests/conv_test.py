@@ -182,7 +182,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         report.parse_log()
 
         ok = [
-            '__seed*', 'Copy_*actsRearranged', 'host-exchange-local-copy-',
+            '__seed*', 'host-exchange-local-copy-',
             'cnv5*/convolution.*/Conv_1x1', 'ba5*/fusion/Op/Add'
         ]
         report.assert_all_compute_sets_and_list(ok)
@@ -365,7 +365,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'DepthwiseConv2dNativeBackpropInput/fusion*/WeightTranspose',
-          'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_1x1', 'Copy_'
+          'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_1x1',
       ]
 
       report.assert_all_compute_sets_and_list(ok)
@@ -544,7 +544,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
           'host-exchange*',
           'vs/cnv/convolution*/Conv_8x8_stride4x4/Convolve',
           'vs/cnv/convolution*/Conv_8x8_stride4x4/Reduce0',
-          'vs/cnv/convolution*/Conv_8x8_stride4x4/Reduce1',
           'vs/gradients/vs/cnv_grad/Conv2DBackpropFilter/fusion*/Conv_5x5',
           'vs/gradients/vs/cnv_grad/Conv2DBackpropFilter/fusion*/AddTo',
           'vs/gradients/vs/Square_grad/Mul/fusion*/Op/Multiply',
