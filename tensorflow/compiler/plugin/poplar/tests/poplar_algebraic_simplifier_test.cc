@@ -1252,7 +1252,7 @@ TEST_F(PoplarAlgebraicSimplifierTest, PowExp) {
       GmockMatch(m::Exp(m::Multiply(m::Parameter(0), m::Parameter(1)))));
 }
 
-// Test that ln(pow(A, B)) is simplified to ln(A)*B
+// Test that ln(pow(A, B)) is simplified to ln(abs(A))*B
 TEST_F(PoplarAlgebraicSimplifierTest, LnPow) {
   auto m = CreateNewVerifiedModule();
   Shape r0f32 = ShapeUtil::MakeShape(F32, {});
@@ -1274,9 +1274,9 @@ TEST_F(PoplarAlgebraicSimplifierTest, LnPow) {
   PoplarAlgebraicSimplifier simplifier;
   ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
 
-  EXPECT_THAT(
-      computation->root_instruction(),
-      GmockMatch(m::Multiply(m::Log(m::Parameter(0)), m::Parameter(1))));
+  EXPECT_THAT(computation->root_instruction(),
+              GmockMatch(m::Multiply(m::Log(m::Abs(m::Parameter(0))),
+                                     m::Parameter(1))));
 }
 
 // Test that ln(exp(A)) is simplified to A
