@@ -33,4 +33,13 @@ REGISTER_OP("IpuPipelineStatefulGradientAccumulate")
     .Attr("num_mini_batches: int")
     .SetShapeFn(shape_inference::UnchangedShape);
 
+REGISTER_OP("IpuStatefulGradientAccumulateWithMomentum")
+    .Input("accum: resource")
+    .Input("grad: dtype")
+    .Input("momentum: dtype")
+    .Output("output: dtype")
+    .Attr("dtype: {float16, float32, int32}")
+    .Attr("num_mini_batches: int")
+    .SetShapeFn(shape_inference::UnchangedShape);
+
 }  // namespace tensorflow

@@ -33,6 +33,7 @@ namespace {
 constexpr char kIpuStatefulGradientAccumulate[] =
     "IpuStatefulGradientAccumulate";
 constexpr char kResourceApplyGradientDescent[] = "ResourceApplyGradientDescent";
+constexpr char kResourceApplyMomentum[] = "ResourceApplyMomentum";
 constexpr char kVerifyUsage[] = "verify_usage";
 
 StatusOr<bool> VerifyGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
@@ -66,7 +67,8 @@ StatusOr<bool> VerifyGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
 
       // Check that the user is a supported op type.
       bool user_supported = false;
-      for (auto& supported_op : {kResourceApplyGradientDescent}) {
+      for (auto& supported_op :
+           {kResourceApplyGradientDescent, kResourceApplyMomentum}) {
         if (user->def().op() == supported_op) {
           user_supported = true;
           break;

@@ -42,6 +42,8 @@ StatusOr<bool> GradientAccumulationVerifier::Run(HloModule* module) {
       const bool is_grad_accumulation_op =
           IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(inst) ||
           IsPoplarInstruction(PoplarOp::StatefulGradientAccumulateAndAllReduce)(
+              inst) ||
+          IsPoplarInstruction(PoplarOp::StatefulGradientAccumulateWithMomentum)(
               inst);
 
       if (is_grad_accumulation_op) {
@@ -83,8 +85,7 @@ StatusOr<bool> GradientAccumulationVerifier::Run(HloModule* module) {
           LOG(INFO) << "Detected a gradient accumulation operation inside of a "
                        "while loop. This might result in unexpected numerical "
                        "results if the number of mini batches to accumulate "
-                       "does not divide the number of iterations"
-                    << num_mini_batches << ".";
+                       "does not divide the number of iterations.";
         } else {
           return FailedPrecondition(
               "Detected a gradient accumulation operation from an unexpected "
