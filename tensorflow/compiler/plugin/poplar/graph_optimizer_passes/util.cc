@@ -15,10 +15,12 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/graph_optimizer_passes/util.h"
 
+#include <list>
 #include <memory>
 #include <string>
 #include <utility>
 
+#include "tensorflow/compiler/tf2xla/tf2xla_util.h"
 #include "tensorflow/core/common_runtime/function.h"
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/framework/graph_to_functiondef.h"
@@ -46,44 +48,65 @@ Status CopyXLAAttributesIfPresent(Node* from, Node* to) {
   return Status::OK();
 }
 
-Status CallForGraphFromFunctionDef(
-    const NameAttrList& func, FunctionLibraryDefinition* flib_def,
-    std::function<Status(Graph*, FunctionLibraryDefinition*)> fn,
-    bool replace_function) {
-  // Create a graph for the function def.
-  std::unique_ptr<FunctionBody> fbody;
-  TF_RETURN_IF_ERROR(FunctionDefToBodyHelper(
-      *flib_def->Find(func.name()), AttrSlice(&func.attr()), flib_def, &fbody));
-  Graph* graph = fbody->graph;
-
-  // Call the user function.
-  TF_RETURN_IF_ERROR(fn(graph, flib_def));
-
-  if (replace_function) {
-    // Replace original function.
-    FunctionDef replace_fdef;
-    TF_RETURN_IF_ERROR(GraphToFunctionDef(*graph, func.name(), &replace_fdef));
-    TF_RETURN_IF_ERROR(flib_def->ReplaceFunction(func.name(), replace_fdef));
+StatusOr<bool> CallFunctionForWhileLoopBodies(
+    Graph* graph, FunctionLibraryDefinition* flib_def,
+    std::function<StatusOr<bool>(Graph*, FunctionLibraryDefinition*)> fn) {
+  std::list<Node*> while_loop_nodes;
+  // Optimize any while loops as well.
+  for (Node* node : graph->op_nodes()) {
+    if (node->def().op() == kWhile) {
+      while_loop_nodes.push_back(node);
+    }
   }
-  return Status::OK();
+
+  bool changed = false;
+  for (Node* while_loop : while_loop_nodes) {
+    // Get the body of the loop.
+    NameAttrList body;
+    TF_RETURN_IF_ERROR(GetNodeAttr(while_loop->attrs(), kWhileBodyArg, &body));
+
+    // Create a graph for the function def.
+    std::unique_ptr<FunctionBody> fbody;
+    TF_RETURN_IF_ERROR(FunctionDefToBodyHelper(*flib_def->Find(body.name()),
+                                               AttrSlice(&body.attr()),
+                                               flib_def, &fbody));
+    Graph* body_graph = fbody->graph;
+    // Call the body function.
+    TF_ASSIGN_OR_RETURN(bool loop_changed, fn(body_graph, flib_def));
+
+    if (loop_changed) {
+      changed = true;
+      // Add a new function - do not modify any other call sites.
+      string new_name = flib_def->UniqueFunctionName(body.name());
+      body.set_name(new_name);
+      FunctionDef new_fdef;
+      TF_RETURN_IF_ERROR(
+          GraphToFunctionDef(*body_graph, body.name(), &new_fdef));
+      TF_RETURN_IF_ERROR(flib_def->AddFunctionDef(new_fdef));
+      // Make sure the while loop now uses the new function.
+      while_loop->ClearAttr(kWhileBodyArg);
+      while_loop->AddAttr(kWhileBodyArg, body);
+    }
+  }
+
+  return changed;
 }
 
 Status CountNodesWithOpName(const string& name, Graph* graph,
                             FunctionLibraryDefinition* flib_def,
                             uint64* count) {
-  for (Node* node : graph->op_nodes()) {
-    if (node->def().op() == kWhile) {
-      NameAttrList body;
-      TF_RETURN_IF_ERROR(GetNodeAttr(node->attrs(), kWhileBodyArg, &body));
-      // Call this function for any nested loops.
-      auto fn = [name, count](Graph* graph,
-                              FunctionLibraryDefinition* flib_def) -> Status {
-        return CountNodesWithOpName(name, graph, flib_def, count);
-      };
+  // Call this function for any nested loops.
+  auto fn = [name, count](
+                Graph* graph,
+                FunctionLibraryDefinition* flib_def) -> StatusOr<bool> {
+    TF_RETURN_IF_ERROR(CountNodesWithOpName(name, graph, flib_def, count));
+    return false;
+  };
+  TF_RETURN_IF_ERROR(
+      CallFunctionForWhileLoopBodies(graph, flib_def, std::move(fn)).status());
 
-      TF_RETURN_IF_ERROR(
-          CallForGraphFromFunctionDef(body, flib_def, std::move(fn)));
-    }
+  // Count nodes in this graph.
+  for (Node* node : graph->op_nodes()) {
     if (node->def().op() == name) {
       (*count)++;
     }
@@ -94,20 +117,21 @@ Status CountNodesWithOpName(const string& name, Graph* graph,
 Status CallFunctionForEachNodeWithOpName(const string& name, Graph* graph,
                                          FunctionLibraryDefinition* flib_def,
                                          std::function<Status(Node*)> fn) {
-  for (Node* node : graph->op_nodes()) {
-    if (node->def().op() == kWhile) {
-      NameAttrList body;
-      TF_RETURN_IF_ERROR(GetNodeAttr(node->attrs(), kWhileBodyArg, &body));
-      // Call this function for any nested loops.
-      auto nested_fn = [name, fn](
-                           Graph* graph,
-                           FunctionLibraryDefinition* flib_def) -> Status {
-        return CallFunctionForEachNodeWithOpName(name, graph, flib_def, fn);
-      };
+  // Call this function for any nested loops.
+  auto nested_fn = [name, fn](
+                       Graph* graph,
+                       FunctionLibraryDefinition* flib_def) -> StatusOr<bool> {
+    TF_RETURN_IF_ERROR(
+        CallFunctionForEachNodeWithOpName(name, graph, flib_def, fn));
+    return false;
+  };
 
-      TF_RETURN_IF_ERROR(
-          CallForGraphFromFunctionDef(body, flib_def, std::move(nested_fn)));
-    }
+  TF_RETURN_IF_ERROR(
+      CallFunctionForWhileLoopBodies(graph, flib_def, std::move(nested_fn))
+          .status());
+
+  // Evaluate nodes in this graph.
+  for (Node* node : graph->op_nodes()) {
     if (node->def().op() == name) {
       TF_RETURN_IF_ERROR(fn(node));
     }

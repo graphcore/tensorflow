@@ -34,16 +34,15 @@ constexpr char kIpuCrossReplicaSum[] = "IpuCrossReplicaSum";
 constexpr char kIpuReplicationNormalise[] = "IpuReplicationNormalise";
 constexpr char kIpuStatefulGradientAccumulate[] =
     "IpuStatefulGradientAccumulate";
-constexpr char kWhile[] = "While";
-constexpr char kWhileBodyArg[] = "body";
 
 // Reorder the `node` if its input is a gradient accumulation node.
-Status SwapIfInputGradientAccumulation(Graph* graph, Node* node) {
+// Returns true if the input have been swapped.
+StatusOr<bool> SwapIfInputGradientAccumulation(Graph* graph, Node* node) {
   const Edge* accumulator_edge;
   TF_RETURN_IF_ERROR(node->input_edge(0, &accumulator_edge));
   Node* accumulator = accumulator_edge->src();
   if (accumulator->def().op() != kIpuStatefulGradientAccumulate) {
-    return Status::OK();
+    return false;
   }
 
   // We do not allow for gradient accumulation to have multiple users.
@@ -87,21 +86,16 @@ Status SwapIfInputGradientAccumulation(Graph* graph, Node* node) {
   graph->AddEdge(accumulator_input, accumulator_input_idx, node, 0);
   graph->AddEdge(node, 0, accumulator, 0);
 
-  return Status::OK();
+  return true;
 }
 
-Status OptimizeGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
-  // Optimize any while loops as well.
-  for (Node* node : graph->op_nodes()) {
-    if (node->def().op() == kWhile) {
-      NameAttrList body;
-      TF_RETURN_IF_ERROR(GetNodeAttr(node->attrs(), kWhileBodyArg, &body));
-      // Call this function for any nested loops - replace the definitions so
-      // that the inner loop is optimized.
-      TF_RETURN_IF_ERROR(CallForGraphFromFunctionDef(
-          body, flib_def, OptimizeGraph, /*replace_function*/ true));
-    }
-  }
+// Returns true if the graph, including any nested graphs, has changed.
+StatusOr<bool> OptimizeGraph(Graph* graph,
+                             FunctionLibraryDefinition* flib_def) {
+  // Call this function for any nested loops - replace the definitions so
+  // that the inner loop is optimized.
+  TF_ASSIGN_OR_RETURN(bool changed, CallFunctionForWhileLoopBodies(
+                                        graph, flib_def, OptimizeGraph));
 
   // First reorder:
   // IpuCrossReplicaSum(IpuStatefulGradientAccumulate) =>
@@ -115,7 +109,9 @@ Status OptimizeGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
   }
 
   for (Node* node : cross_replica_sum_nodes) {
-    TF_RETURN_IF_ERROR(SwapIfInputGradientAccumulation(graph, node));
+    TF_ASSIGN_OR_RETURN(bool swapped,
+                        SwapIfInputGradientAccumulation(graph, node));
+    changed |= swapped;
   }
 
   // Second reorder:
@@ -130,10 +126,12 @@ Status OptimizeGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
   }
 
   for (Node* node : replica_normalise_nodes) {
-    TF_RETURN_IF_ERROR(SwapIfInputGradientAccumulation(graph, node));
+    TF_ASSIGN_OR_RETURN(bool swapped,
+                        SwapIfInputGradientAccumulation(graph, node));
+    changed |= swapped;
   }
 
-  return Status::OK();
+  return changed;
 }
 }  // namespace
 
@@ -142,7 +140,7 @@ Status ReorderGradientAccumulationPass::Run(
   FunctionLibraryDefinition* flib_def = options.flib_def;
   TF_RET_CHECK(flib_def != nullptr);
   Graph* graph = options.graph->get();
-  TF_RETURN_IF_ERROR(OptimizeGraph(graph, flib_def));
+  TF_RETURN_IF_ERROR(OptimizeGraph(graph, flib_def).status());
   return Status::OK();
 }
 }  // namespace tensorflow

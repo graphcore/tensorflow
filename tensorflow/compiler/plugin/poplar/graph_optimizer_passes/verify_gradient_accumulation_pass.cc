@@ -33,22 +33,12 @@ namespace {
 constexpr char kIpuStatefulGradientAccumulate[] =
     "IpuStatefulGradientAccumulate";
 constexpr char kResourceApplyGradientDescent[] = "ResourceApplyGradientDescent";
-constexpr char kWhile[] = "While";
-constexpr char kWhileBodyArg[] = "body";
 constexpr char kVerifyUsage[] = "verify_usage";
 
-Status VerifyGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
-  // Verify any while loops as well.
-  for (Node* node : graph->op_nodes()) {
-    if (node->def().op() == kWhile) {
-      NameAttrList body;
-      TF_RETURN_IF_ERROR(GetNodeAttr(node->attrs(), kWhileBodyArg, &body));
-      // Call this function for any nested loops - replace the definitions so
-      // that the inner loop is optimized.
-      TF_RETURN_IF_ERROR(
-          CallForGraphFromFunctionDef(body, flib_def, VerifyGraph));
-    }
-  }
+StatusOr<bool> VerifyGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
+  // Call this function for any nested loops.
+  TF_RETURN_IF_ERROR(
+      CallFunctionForWhileLoopBodies(graph, flib_def, VerifyGraph).status());
 
   for (Node* node : graph->op_nodes()) {
     if (node->def().op() == kIpuStatefulGradientAccumulate) {
@@ -103,7 +93,7 @@ Status VerifyGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
     }
   }
 
-  return Status::OK();
+  return false;
 }
 }  // namespace
 
@@ -112,7 +102,7 @@ Status VerifyGradientAccumulationPass::Run(
   FunctionLibraryDefinition* flib_def = options.flib_def;
   TF_RET_CHECK(flib_def != nullptr);
   Graph* graph = options.graph->get();
-  TF_RETURN_IF_ERROR(VerifyGraph(graph, flib_def));
+  TF_RETURN_IF_ERROR(VerifyGraph(graph, flib_def).status());
   return Status::OK();
 }
 }  // namespace tensorflow
