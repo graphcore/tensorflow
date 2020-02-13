@@ -37,7 +37,7 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-// A Poplar executable is a wrapper around and Engine, with
+// A Poplar executable is a wrapper around an Engine, with
 // the execution Sequence program, input tensors and output
 // tensor recorded.
 class PoplarExecutable : public Executable {

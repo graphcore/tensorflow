@@ -17,9 +17,7 @@ limitations under the License.
 #include <algorithm>
 #include <fstream>
 #include <limits>
-#include <popops/DynamicSlice.hpp>
-#include <popops/Zero.hpp>
-#include <poputil/TileMapping.hpp>
+#include <regex>
 
 #include "absl/container/inlined_vector.h"
 #include "absl/strings/str_cat.h"
@@ -35,6 +33,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
+
+#include <popops/DynamicSlice.hpp>
+#include <popops/Zero.hpp>
+#include <poputil/TileMapping.hpp>
 
 using ::absl::StrCat;
 
@@ -350,6 +352,154 @@ StatusOr<std::string> GetInstructionCompilationInfo(
   return Json::writeString(json_builder, root);
 }
 
+namespace {
+
+std::string UnmangleInputName(std::string name) {
+  const std::string long_prefix = "XLA_Args/_arg_";
+  const std::string short_prefix = "XLA_Args/";
+
+  // Try to match the long prefix
+  if (name.find(long_prefix) == 0) {
+    name.erase(0, long_prefix.length());
+
+    // Try to remove the suffix _0_0/_0
+    const std::regex base_regex("(.*)_\\d+_\\d+/_\\d+");
+    std::smatch base_match;
+    if (std::regex_match(name, base_match, base_regex)) {
+      CHECK_EQ(base_match.size(), 2);
+      return base_match[1].str();
+    }
+  }
+  if (name.find(short_prefix) == 0) {
+    name.erase(0, short_prefix.length());
+  }
+  return name;
+}
+
+Json::Value DimensionsToJson(const absl::Span<const int64> dimensions) {
+  Json::Value js_dims{Json::arrayValue};
+  for (auto dim : dimensions) {
+    js_dims.append(Json::Value::Int64(dim));
+  }
+  return js_dims;
+}
+
+}  // namespace
+
+Status SaveExecutableMetadataJson(const std::string& filename,
+                                  const CompilerResources& res) {
+  const InputOutputAliasingMap& io_map =
+      res.annotations.input_output_aliasing_map;
+  const InfeedInfos& infeed_infos = res.annotations.infeed_infos;
+  const OutfeedInfos& outfeed_infos = res.annotations.outfeed_infos;
+
+  Json::Value inputs;
+  int index = 0;
+  for (auto input : io_map.GetEntryInputInfos()) {
+    Json::Value stream;
+
+    stream["index"] = Json::Value::Int64(index++);
+    stream["name"] = UnmangleInputName(input.Name());
+    stream["data_type"] = PrimitiveType_Name(input.Shape().element_type());
+    stream["shape"] = DimensionsToJson(input.Shape().dimensions());
+    if (input.IsStreaming()) {
+      // "input data": bias / input (But not streaming)
+      stream["type"] = "input_data";
+    } else if (input.IsResource()) {
+      // "parameters": weights
+      stream["type"] = "parameter";
+    }
+    inputs.append(stream);
+  }
+
+  index = 0;
+  Json::Value outputs;
+  for (auto output : io_map.GetEntryOutputInfos()) {
+    Json::Value stream;
+
+    stream["index"] = Json::Value::Int64(index++);
+    stream["name"] = output.Name();
+    if (output.Shape().IsTuple()) {
+      return xla::FailedPrecondition("Nested tuples in output not supported");
+    }
+    stream["data_type"] = PrimitiveType_Name(output.Shape().element_type());
+    stream["shape"] = DimensionsToJson(output.Shape().dimensions());
+    if (output.IsStreaming()) {
+      stream["type"] = "output_data";
+    } else if (output.IsResource()) {
+      stream["type"] = "parameter_out";
+    }
+    outputs.append(stream);
+  }
+
+  Json::Value infeeds;
+  index = 0;
+  for (auto infeed : infeed_infos) {
+    if (!infeed.shape.IsTuple() || infeed.shape.tuple_shapes_size() != 2 ||
+        !infeed.shape.tuple_shapes(0).IsTuple()) {
+      return xla::FailedPrecondition(
+          "Expected the shape of the infeed %s to be of the shape ((shape), "
+          "token[]).",
+          infeed.config.feed_id());
+    }
+    int64 tuple_idx = 0;
+    for (auto shape : infeed.shape.tuple_shapes(0).tuple_shapes()) {
+      if (shape.IsTuple()) {
+        return xla::FailedPrecondition(
+            "Nested tuples in infeed not supported: shape for %s expected to "
+            "be something like ((shape), token[]).",
+            infeed.config.feed_id());
+      }
+      Json::Value feed;
+      feed["index"] = Json::Value::Int64(index);
+      feed["tuple_index"] = Json::Value::Int64(tuple_idx);
+      feed["name"] = infeed.config.feed_id();
+      feed["shape"] = DimensionsToJson(shape.dimensions());
+      feed["data_type"] = PrimitiveType_Name(shape.element_type());
+      infeeds.append(feed);
+
+      tuple_idx++;
+    }
+    index++;
+  }
+
+  Json::Value outfeeds;
+  index = 0;
+  for (auto outfeed : outfeed_infos) {
+    Json::Value feed;
+    feed["index"] = Json::Value::Int64(index++);
+    feed["name"] = outfeed.config.feed_id();
+    feed["data_type"] = PrimitiveType_Name(outfeed.shape.element_type());
+    feed["shape"] = DimensionsToJson(outfeed.shape.dimensions());
+    outfeeds.append(feed);
+  }
+
+  Json::Value root;
+  if (!inputs.empty()) {
+    root["inputs"] = inputs;
+  }
+  if (!outputs.empty()) {
+    root["outputs"] = outputs;
+  }
+  if (!infeeds.empty()) {
+    root["infeeds"] = infeeds;
+  }
+  if (!outfeeds.empty()) {
+    root["outfeeds"] = outfeeds;
+  }
+  Json::StreamWriterBuilder json_builder;
+  json_builder["indentation"] = "";
+  json_builder["commentStyle"] = "None";
+
+  std::string json_msg = Json::writeString(json_builder, root);
+  VLOG(0) << "Metadata: " << json_msg;
+  std::unique_ptr<tensorflow::WritableFile> file;
+  TF_RETURN_IF_ERROR(
+      tensorflow::Env::Default()->NewWritableFile(filename, &file));
+  TF_RETURN_IF_ERROR(file->Append(json_msg));
+  TF_RETURN_IF_ERROR(file->Close());
+  return Status::OK();
+}
 std::string GetTensorMappingJson(const std::string& module_name,
                                  const poplar::Graph& graph,
                                  const TensorMaps& tensor_maps) {

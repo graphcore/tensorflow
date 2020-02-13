@@ -619,8 +619,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   }
 
   std::string cache_filename;
+  const ModuleFilenames filenames =
+      poplar_executor->GetModuleFilenames(*module);
   if (poplar_executor->HaveExecutableCache()) {
-    cache_filename = poplar_executor->CachedExecutableFilename(*module);
+    cache_filename = filenames.CachedExecutableFilename();
 
     if (poplar_executor->HaveCachedExecutable(cache_filename)) {
       TF_ASSIGN_OR_RETURN(PoplarExecutable * poplar_executable,
@@ -1002,8 +1004,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         }
       }
       if (poplar_executor->EnableSerialization()) {
-        std::string filename =
-            poplar_executor->SerializedExecutableFilename(*module);
+        std::string filename = filenames.SerializedExecutableFilename();
         TF_RETURN_IF_ERROR(
             poplar_executor->CreateSerializedExecutableDirIfMissing());
         TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
@@ -1013,6 +1014,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
             resources.annotations.host_embedding_lookup_infos,
             resources.annotations.host_embedding_update_infos,
             replication_factor, poplar_executor->GetReportFlags()));
+        TF_RETURN_IF_ERROR(SaveExecutableMetadataJson(
+            filenames.SerializedMetadataFilename(), resources));
       }
 
       engine.reset(new poplar::Engine(std::move(exec), opts));

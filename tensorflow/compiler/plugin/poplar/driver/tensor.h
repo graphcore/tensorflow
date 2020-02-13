@@ -259,13 +259,6 @@ TensorVector FindExpandedInstructionOutputs(TensorMap& map,
                                             CompilerResources& res,
                                             const HloInstruction* inst,
                                             poplar::program::Sequence& seq);
-
-/* Generate a JSON struture describing the tensor mappings
- */
-std::string GetTensorMappingJson(const std::string& module_name,
-                                 const poplar::Graph& graph,
-                                 const TensorMaps& tensor_map);
-
 }  // namespace poplarplugin
 }  // namespace xla
 

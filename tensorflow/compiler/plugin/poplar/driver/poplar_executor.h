@@ -105,6 +105,19 @@ using ConversionList = std::vector<ConversionFn>;
 
 using OutfeedQueueType = SPSCOutfeedQueue<2048>;
 
+class ModuleFilenames {
+ public:
+  ModuleFilenames(const HloModule& module, int64 device_hash,
+                  const std::string& serialization_folder);
+  std::string CachedExecutableFilename() const;
+  std::string SerializedExecutableFilename() const;
+  std::string SerializedMetadataFilename() const;
+
+ private:
+  const std::string basename_;
+  const std::string serialization_folder_;
+};
+
 class PoplarExecutor : public se::internal::StreamExecutorInterface {
  public:
   explicit PoplarExecutor();
@@ -435,11 +448,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status CreateSerializedExecutableDirIfMissing() const;
 
-  std::string CachedExecutableFilename(const HloModule& module) const;
-
-  std::string SerializedExecutableFilename(const HloModule& module) const;
-
   bool HaveCachedExecutable(const std::string& filename) const;
+
+  ModuleFilenames GetModuleFilenames(const HloModule& module) const;
 
   void AboutToFreeEngine(poplar::Engine* engine);
 
@@ -474,7 +485,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   static std::string GetCycleCounterStream();
 
  private:
-  uint64 HashModuleAndDevice(const HloModule& module) const;
   Status CreatePoplarTarget();
 
   // Compute literal(s) input for ConstantOutputAllocation

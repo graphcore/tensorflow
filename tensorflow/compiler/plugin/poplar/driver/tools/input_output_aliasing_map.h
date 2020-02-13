@@ -53,10 +53,15 @@ class InputOutputAliasingMap {
     };
 
     InputInfo() = delete;
-    InputInfo(const Type type) : type_(type), output_index_(0) {}
-    InputInfo(const Type type, const uint64 output_index)
-        : type_(type), output_index_(output_index) {}
+    InputInfo(const Type type, const std::string& name, const Shape& shape)
+        : type_(type), output_index_(0), name_(name), shape_(shape) {}
+    void ChangeToResourceModified(uint64 output_index) {
+      output_index_ = output_index;
+      type_ = Type::ResourceModified;
+    }
 
+    const std::string& Name() const;
+    const xla::Shape& Shape() const;
     const bool IsStreaming() const;
     const bool IsResource() const;
     const bool IsResourceNotModified() const;
@@ -65,6 +70,8 @@ class InputOutputAliasingMap {
    private:
     Type type_;
     uint64 output_index_;
+    std::string name_;
+    xla::Shape shape_;
   };
 
   // A class which describes the aliasing information of an output
@@ -87,10 +94,14 @@ class InputOutputAliasingMap {
     };
 
     OutputInfo() = delete;
-    OutputInfo(const Type& type) : type_(type), input_index_(0) {}
-    OutputInfo(const Type& type, const uint64 input_index)
-        : type_(type), input_index_(input_index) {}
+    OutputInfo(const Type& type, const std::string& name, const Shape& shape)
+        : type_(type), input_index_(0), name_(name), shape_(shape) {}
+    OutputInfo(const Type& type, const std::string& name, const Shape& shape,
+               const uint64 input_index)
+        : type_(type), input_index_(input_index), name_(name), shape_(shape) {}
 
+    const std::string& Name() const;
+    const xla::Shape& Shape() const;
     const bool IsStreaming() const;
     const bool IsResource() const;
     const bool IsResourceModified() const;
@@ -99,6 +110,8 @@ class InputOutputAliasingMap {
    private:
     Type type_;
     uint64 input_index_;
+    std::string name_;
+    xla::Shape shape_;
   };
 
   InputOutputAliasingMap(const HloModule* module);

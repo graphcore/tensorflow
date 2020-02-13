@@ -60,7 +60,8 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
     const InputInfo::Type type = is_resource
                                      ? InputInfo::Type::ResourceNotModified
                                      : InputInfo::Type::StreamedVariable;
-    entry_input_infos_.push_back(InputInfo(type));
+    entry_input_infos_.push_back(InputInfo(
+        type, inputs[idx]->metadata().op_name(), inputs[idx]->shape()));
   }
 
   /*
@@ -68,8 +69,20 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
    * to a _XlaRun input.
    */
   const auto& root = module->entry_computation()->root_instruction();
-  const uint64 num_outputs =
-      root->shape().IsTuple() ? ShapeUtil::TupleElementCount(root->shape()) : 1;
+  std::vector<Shape> output_shapes;
+  std::vector<std::string> output_names;
+  if (root->shape().IsTuple()) {
+    int64 tuple_index = 0;
+    for (auto shape : root->shape().tuple_shapes()) {
+      output_shapes.push_back(shape);
+      output_names.push_back(root->operand(tuple_index)->metadata().op_name());
+      tuple_index++;
+    }
+  } else {
+    output_shapes.push_back(root->shape());
+    output_names.push_back(root->metadata().op_name());
+  }
+  const uint64 num_outputs = output_shapes.size();
 
   uint64 num_resource_updates = resource_update_to_input_index.size();
   num_streaming_outputs_ = num_outputs - num_resource_updates;
@@ -77,7 +90,8 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
   for (uint64 idx = 0; idx < num_outputs; ++idx) {
     if (idx < num_streaming_outputs_) {
       entry_output_infos_.push_back(
-          OutputInfo(OutputInfo::Type::StreamedVariable));
+          OutputInfo(OutputInfo::Type::StreamedVariable, output_names[idx],
+                     output_shapes[idx]));
     } else {
       const uint64 resource_idx = idx - num_streaming_outputs_;
       const uint64 input_index = resource_update_to_input_index[resource_idx];
@@ -88,16 +102,18 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
 
         if (num_streaming_inputs_ <= parameter_index) {
           entry_output_infos_.push_back(
-              OutputInfo(OutputInfo::Type::ResourceModified, parameter_index));
-          entry_input_infos_[parameter_index] =
-              InputInfo(InputInfo::Type::ResourceModified, idx);
+              OutputInfo(OutputInfo::Type::ResourceModified, output_names[idx],
+                         output_shapes[idx], parameter_index));
+          entry_input_infos_[parameter_index].ChangeToResourceModified(idx);
         } else {
           entry_output_infos_.push_back(
-              OutputInfo(OutputInfo::Type::ResourceOutputOnly));
+              OutputInfo(OutputInfo::Type::ResourceOutputOnly,
+                         output_names[idx], output_shapes[idx]));
         }
       } else {
         entry_output_infos_.push_back(
-            OutputInfo(OutputInfo::Type::ResourceOutputOnly));
+            OutputInfo(OutputInfo::Type::ResourceOutputOnly, output_names[idx],
+                       output_shapes[idx]));
       }
     }
   }
@@ -123,6 +139,20 @@ const uint64& InputOutputAliasingMap::GetNumStreamingOutputs() const {
 
 const bool InputOutputAliasingMap::InputInfo::IsStreaming() const {
   return type_ == InputOutputAliasingMap::InputInfo::Type::StreamedVariable;
+}
+
+const std::string& InputOutputAliasingMap::InputInfo::Name() const {
+  return name_;
+}
+
+const std::string& InputOutputAliasingMap::OutputInfo::Name() const {
+  return name_;
+}
+
+const Shape& InputOutputAliasingMap::InputInfo::Shape() const { return shape_; }
+
+const Shape& InputOutputAliasingMap::OutputInfo::Shape() const {
+  return shape_;
 }
 
 const bool InputOutputAliasingMap::InputInfo::IsResource() const {
@@ -161,30 +191,32 @@ std::string InputOutputAliasingMap::ToString() const {
   ss << "Num streaming = " << num_streaming_inputs_ << "\n";
   for (size_t i = 0; i < entry_input_infos_.size(); i++) {
     auto& ip = entry_input_infos_[i];
-    ss << " " << i << ": ";
+    ss << " " << i << " (" << ip.Name() << "): ";
     if (ip.IsStreaming()) {
-      ss << "streaming\n";
+      ss << "streaming";
     } else {
       ss << (ip.IsResource() ? "resource" : "");
       if (ip.IsResourceNotModified()) {
-        ss << " (not modified)\n";
+        ss << " (not modified)";
       } else {
-        ss << ", output index = " << ip.GetOutputIndex() << "\n";
+        ss << ", output index = " << ip.GetOutputIndex();
       }
     }
+    ss << ", shape = " << ip.Shape().ToString() << "\n";
   }
   ss << "== Output information ==\n";
   ss << "Num streaming = " << num_streaming_outputs_ << "\n";
   for (size_t i = 0; i < entry_output_infos_.size(); i++) {
     auto& op = entry_output_infos_[i];
-    ss << " " << i << ": ";
+    ss << " " << i << " (" << op.Name() << "): ";
     if (op.IsStreaming()) {
-      ss << "streaming\n";
+      ss << "streaming";
     } else if (op.IsResourceModified()) {
-      ss << "modified resource, input index = " << op.GetInputIndex() << "\n";
+      ss << "modified resource, input index = " << op.GetInputIndex();
     } else {
-      ss << "initialized resource\n";
+      ss << "initialized resource";
     }
+    ss << ", shape = " << op.Shape().ToString() << "\n";
   }
 
   return ss.str();
