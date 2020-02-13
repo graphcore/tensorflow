@@ -48,9 +48,9 @@ class GradientAccumulationOptimizer(optimizer.Optimizer):
       num_mini_batches: Number of mini-batches the gradients will be accumulated
         for.
       verify_usage: The current gradient accumulation supports the
-        `GradientDescentOptimizer` optimizer. Any other usages of this optimizer
-        might results in incorrect results. This option can be used to disable
-        this check.
+        `GradientDescentOptimizer` and `MomentumOptimizer` optimizers.
+        Any other usages of this optimizer might results in incorrect results.
+        This option can be used to disable this check.
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "GradientAccumulationOptimizer".
     """
@@ -175,9 +175,9 @@ class CrossReplicaGradientAccumulationOptimizer(optimizer.Optimizer):
       num_mini_batches: Number of mini-batches the gradients will be accumulated
         for.
       verify_usage: The current gradient accumulation supports the
-        `GradientDescentOptimizer` optimizer. Any other usages of this optimizer
-        might results in incorrect results. This option can be used to disable
-        this check.
+        `GradientDescentOptimizer` and `MomentumOptimizer` optimizers.
+        Any other usages of this optimizer might results in incorrect results.
+        This option can be used to disable this check.
       name: Optional name prefix for the operations created when applying
         gradients. Defaults to "CrossReplicaGradientAccumulationOptimizer".
     """

@@ -596,6 +596,7 @@ cc_library(
     name = "graph_optimizer_passes",
     srcs = [
         "graph_optimizer_passes/extract_outside_compilation_pass.cc",
+        "graph_optimizer_passes/gradient_accumulation_optimization_pass.cc",
         "graph_optimizer_passes/graph_optimizer_pass_registration.cc",
         "graph_optimizer_passes/reorder_gradient_accumulation_pass.cc",
         "graph_optimizer_passes/static_shape_inference_pass.cc",
@@ -604,6 +605,7 @@ cc_library(
     ],
     hdrs = [
         "graph_optimizer_passes/extract_outside_compilation_pass.h",
+        "graph_optimizer_passes/gradient_accumulation_optimization_pass.h",
         "graph_optimizer_passes/reorder_gradient_accumulation_pass.h",
         "graph_optimizer_passes/static_shape_inference_pass.h",
         "graph_optimizer_passes/util.h",
@@ -2268,6 +2270,31 @@ tf_cc_test(
     ],
 )
 
+tf_cc_test(
+    name = "gradient_accumulation_optimization_pass_test",
+    size = "small",
+    srcs = [
+        "graph_optimizer_passes/gradient_accumulation_optimization_pass_test.cc",
+    ],
+    deps = [
+        ":graph_optimizer_passes",
+        ":poplar_lib",
+        "//tensorflow/cc:cc_ops",
+        "//tensorflow/cc:cc_ops_internal",
+        "//tensorflow/cc:resource_variable_ops",
+        "//tensorflow/cc:scope",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:framework_internal",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:session_options",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -3575,6 +3602,7 @@ test_suite(
         "fused_batch_norm_test",
         "gather_simplifier_embedding_lookup_test",
         "gradient_accumulation_fuser_test",
+        "gradient_accumulation_optimization_pass_test",
         "graph_compile_io_map_test",
         "group_norm_test",
         "gru_test",

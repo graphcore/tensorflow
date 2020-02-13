@@ -85,6 +85,23 @@ class HloPipelineStatefulGradientAccumulate
 std::unique_ptr<HloInstruction> CreatePipelineStatefulGradientAccumulate(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
 
+class HloStatefulGradientAccumulateWithMomentum
+    : public HloStatefulGradientAccumulate {
+ public:
+  explicit HloStatefulGradientAccumulateWithMomentum(
+      absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
+  uint64 NumberOfInplaceOperands() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateStatefulGradientAccumulateWithMomentum(
+    absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

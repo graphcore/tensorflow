@@ -181,6 +181,120 @@ class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(PipelineStatefulGradientAccumulate,
                    PipelineStatefulGradientAccumulateOp);
 
+class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
+  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
+                                     CompilerResources& res,
+                                     const std::string& name,
+                                     const TensorTarget& tensor_target,
+                                     const TensorMap& tensor_map) override {
+    const HloInstruction* inst = tensor_target.tgt;
+    const int64 input_index = tensor_target.input_index;
+    if (input_index != 0) {
+      return xla::FailedPrecondition(
+          "Trying to allocate StatefulGradientAccumulateWithMomentumOp tensor "
+          "for an index out of range %d.",
+          input_index);
+    }
+    TensorVector outputs =
+        FindInstructionOutputs(tensor_map, res, inst->operand(1));
+
+    if (outputs.size() != 1) {
+      return xla::FailedPrecondition("Could not find layout input for %s",
+                                     GetDebugName(inst));
+    }
+    return graph.clone(outputs[0], GetDebugName(inst));
+  }
+
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    const HloStatefulGradientAccumulateWithMomentum* grad_inst =
+        Cast<HloStatefulGradientAccumulateWithMomentum>(inst);
+
+    poplar::program::Sequence seq;
+
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+    CHECK_EQ(inputs.size(), 2);
+    CHECK_EQ(inputs[0].size(), 1);
+    poplar::Tensor accumulator = inputs[0][0];
+    CHECK_EQ(inputs[1].size(), 1);
+    poplar::Tensor grad = inputs[1][0];
+
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor momentum,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, false));
+
+    poplar::Tensor counter = graph.addVariable(poplar::UNSIGNED_INT, {},
+                                               GetDebugName(inst) + "/Counter");
+    // Map counter to the next tile.
+    MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
+    res.zeroed_tensors.push_back(counter);
+
+    // Apply momentum to the accumulator when counter == 0.
+    {
+      poplar::Tensor apply_momentum =
+          popops::map(graph, pe::Equal(pe::_1, pe::Const(0)), {counter}, seq,
+                      GetDebugName(inst) + "/CheckApplyMomentum");
+      poplar::program::Sequence if_true;
+      {
+        // Apply the momentum.
+        popops::mulInPlace(graph, accumulator, momentum, if_true,
+                           GetDebugName(inst) + "/ApplyMomentum");
+      }
+      // Do nothing in false case.
+      poplar::program::Sequence if_false;
+      seq.add(poplar::program::If(apply_momentum, if_true, if_false));
+    }
+
+    // Add the gradient.
+    popops::addInPlace(graph, accumulator, grad, seq,
+                       GetDebugName(inst) + "/MomentumAddGrad");
+
+    poplar::Tensor output = grad;
+
+    // Output the accumulated gradients if counter == MiniBatchesToAccumulate -
+    // 1 otherwise output all zeros.
+    {
+      poplar::Tensor output_grads = popops::map(
+          graph,
+          pe::Equal(pe::_1,
+                    pe::Const(grad_inst->MiniBatchesToAccumulate() - 1)),
+          {counter}, seq, GetDebugName(inst) + "/CheckOutputGradients");
+
+      poplar::program::Sequence if_true;
+      {
+        // Copy accumulator into output.
+        if_true.add(poplar::program::Copy(accumulator, output));
+
+        // Zero the counter.
+        popops::zero(graph, counter, if_true,
+                     GetDebugName(inst) + "/ZeroCounter");
+      }
+      poplar::program::Sequence if_false;
+      {
+        // Set output to all zeros.
+        popops::zero(graph, output, if_false,
+                     GetDebugName(inst) + "/ZeroOutput");
+        // Increase counter.
+        popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)), {counter},
+                           if_false, GetDebugName(inst) + "/IncreaseCounter");
+      }
+      seq.add(poplar::program::If(output_grads, if_true, if_false));
+    }
+
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, accumulator));
+
+    return seq;
+  }
+};  // namespace
+REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentum,
+                   StatefulGradientAccumulateWithMomentumOp);
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

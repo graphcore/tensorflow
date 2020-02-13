@@ -90,4 +90,57 @@ class PipelineStatefulGradientAccumulate : public StatefulGradientAccumulate {
 REGISTER_IPU_OP("IpuPipelineStatefulGradientAccumulate",
                 PipelineStatefulGradientAccumulate);
 
+class StatefulGradientAccumulateWithMomentum : public XlaOpKernel, IpuOpKernel {
+ public:
+  explicit StatefulGradientAccumulateWithMomentum(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx), IpuOpKernel() {
+    int32 num_mini_batches;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("num_mini_batches", &num_mini_batches));
+    attribute_map_.AddAttribute("num_mini_batches", num_mini_batches);
+  }
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    DataType dtype = output_type(0);
+    xla::XlaBuilder* b = ctx->builder();
+
+    xla::XlaOp accum;
+    TensorShape accum_shape;
+    OP_REQUIRES_OK(ctx, ctx->ReadVariableInput(0, dtype, &accum_shape, &accum));
+
+    TensorShape grad_shape = ctx->InputShape(1);
+
+    OP_REQUIRES(ctx, grad_shape.IsSameSize(accum_shape),
+                errors::InvalidArgument(
+                    "gradient and accum do not have the same shape",
+                    grad_shape.DebugString(), " ", accum_shape.DebugString()));
+
+    TensorShape momentum_shape = ctx->InputShape(2);
+    OP_REQUIRES(ctx, TensorShapeUtils::IsScalar(momentum_shape),
+                errors::InvalidArgument("momentum is not a scalar: ",
+                                        momentum_shape.DebugString()));
+
+    xla::XlaOp grad = ctx->Input(1);
+    xla::XlaOp momentum = ctx->Input(2);
+
+    xla::Shape xla_shape;
+    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, accum_shape, &xla_shape));
+
+    xla::XlaOp output = xla::CustomCall(
+        b, PoplarOp_Name(PoplarOp::StatefulGradientAccumulateWithMomentum),
+        {accum, grad, momentum},
+        xla::ShapeUtil::MakeTupleShape({xla_shape, xla_shape}),
+        attribute_map_.Serialise());
+
+    grad = xla::GetTupleElement(output, 0);
+    accum = xla::GetTupleElement(output, 1);
+    ctx->SetOutput(0, grad);
+    OP_REQUIRES_OK(ctx, ctx->AssignVariable(0, dtype, accum));
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(StatefulGradientAccumulateWithMomentum);
+};
+REGISTER_IPU_OP("IpuStatefulGradientAccumulateWithMomentum",
+                StatefulGradientAccumulateWithMomentum);
+
 }  // namespace tensorflow
