@@ -75,72 +75,6 @@ std::vector<std::vector<HloInstruction*>> Partition(
 
   return result;
 }
-
-template <typename Iter>
-HloInstruction* Combine(HloComputation* comp, Iter begin, Iter end) {
-  auto dist = std::distance(begin, end);
-  // We only have a single instruction, so nothing to combine
-  if (dist == 1) {
-    return *begin;
-  }
-
-  std::vector<Shape> shapes(dist);
-  std::transform(begin, end, shapes.begin(),
-                 [](HloInstruction* inst) { return inst->shape(); });
-
-  // The new output shape
-  auto shape = ShapeUtil::MakeTupleShape(shapes);
-
-  // The new list of operands
-  auto operands = std::accumulate(
-      begin, end, std::vector<HloInstruction*>{},
-      [](std::vector<HloInstruction*>& accum, HloInstruction* inst) {
-        accum.insert(accum.end(), inst->operands().begin(),
-                     inst->operands().end());
-
-        return accum;
-      });
-
-  // Add the new instruction.
-  auto new_inst =
-      comp->AddInstruction((*begin)->CloneWithNewOperands(shape, operands));
-  // Copy the sharding information if there was any.
-  if ((*begin)->has_sharding()) {
-    new_inst->set_sharding((*begin)->sharding());
-  }
-  return new_inst;
-}
-
-template <typename Iter>
-StatusOr<std::vector<HloInstruction*>> Replace(HloComputation* comp, Iter begin,
-                                               Iter end,
-                                               HloInstruction* combined) {
-  auto dist = std::distance(begin, end);
-
-  if (dist == 1) {
-    return std::vector<HloInstruction*>{};
-  }
-
-  std::vector<HloInstruction*> result;
-  result.reserve(dist);
-
-  for (auto itr = begin; itr != end; ++itr) {
-    HloInstruction* inst = *itr;
-    // Add a get tuple to unpack the combined result
-    auto gte = comp->AddInstruction(HloInstruction::CreateGetTupleElement(
-        inst->shape(), combined, std::distance(begin, itr)));
-    MakeUsedInplace(gte);
-    result.push_back(gte);
-    TF_RETURN_IF_ERROR(combined->CopyAllControlDepsFrom(inst));
-    TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
-
-    // Replace the op
-    TF_RETURN_IF_ERROR(inst->ReplaceAllUsesWith(gte));
-    TF_RETURN_IF_ERROR(comp->ForceRemoveInstruction(inst));
-  }
-
-  return result;
-}
 }  // namespace
 
 StatusOr<absl::optional<HloInstructionSequence>>
@@ -181,14 +115,20 @@ CombineInstructions::CombineInstructionsInComputation(
 
     // Create the combined instructions
     for (auto& subregion : subregions) {
-      replacements.push_back(
-          Combine(comp, std::begin(subregion), std::end(subregion)));
-
-      TF_ASSIGN_OR_RETURN(
-          auto ops, Replace(comp, std::begin(subregion), std::end(subregion),
-                            replacements.back()));
-      changed |= ops.size();
-      replacements.insert(replacements.end(), ops.begin(), ops.end());
+      const auto num_insts =
+          std::distance(std::begin(subregion), std::end(subregion));
+      if (num_insts > 1) {
+        auto colocator = GetInstructionColocatorHelper(*std::begin(subregion));
+        CHECK(colocator);
+        TF_ASSIGN_OR_RETURN(
+            auto ops, (*colocator)
+                          ->CombineAndReplaceColocatedInstructions(
+                              {std::begin(subregion), std::end(subregion)}));
+        replacements.insert(replacements.end(), ops.begin(), ops.end());
+        changed = true;
+      } else {
+        replacements.push_back(*std::begin(subregion));
+      }
     }
 
     // Replace the previous instruction in the schedule

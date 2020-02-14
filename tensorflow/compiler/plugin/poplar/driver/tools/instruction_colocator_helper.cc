@@ -85,6 +85,61 @@ bool InstructionColocatorHelperPtrComparator::operator()(
   return lhs->GetID() < rhs->GetID();
 }
 
+StatusOr<std::vector<HloInstruction*>>
+InstructionColocatorHelper::CombineAndReplaceColocatedInstructions(
+    std::vector<HloInstruction*> to_combine) const {
+  const uint64 cluster_size = to_combine.size();
+  if (cluster_size == 1) {
+    return to_combine;
+  }
+
+  HloComputation* comp = to_combine[0]->parent();
+  // Be default merge all the operands.
+  // Combine all the shapes into a single one.
+  std::vector<Shape> shapes(cluster_size);
+  absl::c_transform(to_combine, shapes.begin(),
+                    [](HloInstruction* inst) { return inst->shape(); });
+  auto shape = ShapeUtil::MakeTupleShape(shapes);
+
+  // The new list of operands
+  auto operands = absl::c_accumulate(
+      to_combine, std::vector<HloInstruction*>{},
+      [](std::vector<HloInstruction*>& accum, HloInstruction* inst) {
+        accum.insert(accum.end(), inst->operands().begin(),
+                     inst->operands().end());
+
+        return accum;
+      });
+
+  // Add the new instruction.
+  HloInstruction* new_inst = comp->AddInstruction(
+      to_combine[0]->CloneWithNewOperands(shape, operands));
+  // Copy the sharding information if there was any.
+  if (to_combine[0]->has_sharding()) {
+    new_inst->set_sharding(to_combine[0]->sharding());
+  }
+
+  // Replace all the users.
+  std::vector<HloInstruction*> result(cluster_size + 1);
+  result[0] = new_inst;
+  for (uint64 i = 0; i != cluster_size; ++i) {
+    HloInstruction* inst = to_combine[i];
+    // Add a GTE to unpack the new_inst result.
+    auto gte = comp->AddInstruction(
+        HloInstruction::CreateGetTupleElement(inst->shape(), new_inst, i));
+    // Mark it as inplace.
+    MakeUsedInplace(gte);
+    result[i + 1] = gte;
+
+    // Replace the old inst.
+    TF_RETURN_IF_ERROR(new_inst->CopyAllControlDepsFrom(inst));
+    TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
+    TF_RETURN_IF_ERROR(inst->ReplaceAllUsesWith(gte));
+    TF_RETURN_IF_ERROR(comp->ForceRemoveInstruction(inst));
+  }
+  return result;
+}
+
 namespace {
 // Manager for all the colocators.
 class InstructionColocatorHelperManager {

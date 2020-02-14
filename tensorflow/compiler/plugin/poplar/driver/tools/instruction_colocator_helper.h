@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 
+#include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 
 #include "absl/types/optional.h"
@@ -46,6 +47,10 @@ class InstructionColocatorHelper {
       const CompilerInformation& information) const = 0;
 
   int64 GetID() const;
+
+  virtual StatusOr<std::vector<HloInstruction*>>
+  CombineAndReplaceColocatedInstructions(
+      std::vector<HloInstruction*> to_combine) const;
 
  private:
   // ID used for determinism in scheduling.
