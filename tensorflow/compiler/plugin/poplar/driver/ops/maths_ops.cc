@@ -895,6 +895,21 @@ StatusOr<poplar::program::Program> CreateNonLinearityGradOp(
   return seq;
 }
 
+StatusOr<poplar::program::Program> CreateGeluOp(CompilerResources& res,
+                                                const HloInstruction* inst,
+                                                const xla::Shape& output_shape,
+                                                TensorMap& tensor_map) {
+  return CreateNonLinearityOp(res, inst, popnn::NonLinearityType::GELU,
+                              output_shape, tensor_map);
+}
+
+StatusOr<poplar::program::Program> CreateGeluGradOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  return CreateNonLinearityGradOp(res, inst, popnn::NonLinearityType::GELU,
+                                  output_shape, tensor_map);
+}
+
 StatusOr<poplar::program::Program> CreateReluOp(CompilerResources& res,
                                                 const HloInstruction* inst,
                                                 const xla::Shape& output_shape,

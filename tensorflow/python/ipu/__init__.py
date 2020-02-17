@@ -45,6 +45,8 @@ from tensorflow.python.ipu.ops import embedding_ops
 from tensorflow.python.ipu.ops import embedding_ops_grad
 from tensorflow.python.ipu.ops import internal_ops
 from tensorflow.python.ipu.ops import internal_ops_grad
+from tensorflow.python.ipu.ops import nn_ops
+from tensorflow.python.ipu.ops import nn_ops_grad
 from tensorflow.python.ipu.ops import normalization_ops
 from tensorflow.python.ipu.ops import normalization_ops_grad
 from tensorflow.python.ipu.ops import pipelining_ops
