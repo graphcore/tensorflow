@@ -61,7 +61,12 @@ StatusOr<bool> VerifyGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
       } else if (num_users > 1) {
         const std::string error_msg = absl::StrCat(
             "The ", node->name(), " op (", node->def().op(), " optype) has ",
-            num_users, " users which is not supported.");
+            num_users,
+            " users which is not supported. This usually occurs when the "
+            "`GradientAccumulationOptimizer` is used with another optimizer "
+            "which is not supported. Please note that "
+            "`GradientAccumulationOptimizer` is currently only supported with "
+            "`GradientDescentOptimizer` and `MomentumOptimizer` optimizers.");
         return errors::FailedPrecondition(error_msg);
       }
 

@@ -198,6 +198,46 @@ entry  {
   EXPECT_FALSE(fuser.Run(module0).ValueOrDie());
 }
 
+TEST_F(GradientAccumulationFuserTest,
+       TestAllReduceAndNormalizeAndGradAccumWithMomentum) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  add = f32[] add(x, y)
+}
+
+entry  {
+  %arg0 = f16[4] parameter(0)
+  %a1 = f16[4] all-reduce(arg0), to_apply=add
+  %norm = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
+  %arg1 = f16[4] parameter(1)
+  %arg2 = f16[1] parameter(2)
+  ROOT %ga = (f16[4], f16[4]) custom-call(arg1, norm, arg2), custom_call_target="StatefulGradientAccumulateWithMomentum", backend_config="{\"num_mini_batches\":10}\n"
+}
+  )";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module0);
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
+
+  GradientAccumulationFuser fuser(annotations);
+  EXPECT_TRUE(fuser.Run(module0).ValueOrDie());
+  auto root = module0->entry_computation()->root_instruction();
+  auto ga_and_ar =
+      DynCast<HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm>(
+          root);
+  ASSERT_TRUE(ga_and_ar);
+  EXPECT_EQ(ga_and_ar->MiniBatchesToAccumulate(), 10);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

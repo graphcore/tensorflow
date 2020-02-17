@@ -38,12 +38,32 @@ StatusOr<bool> GradientAccumulationVerifier::Run(HloModule* module) {
       if (inst->opcode() != HloOpcode::kCustomCall) {
         continue;
       }
+
+      if (replication_factor_ > 1 &&
+          IsPoplarInstruction(PoplarOp::StatefulGradientAccumulateWithMomentum)(
+              inst)) {
+        return FailedPrecondition(
+            "Detected a gradient accumulation operation with momentum in a "
+            "replicated graph which should have been fused with all reduce and "
+            "normalisation instructions. Please use the "
+            "`CrossReplicaGradientAccumulationOptimizer` optimizer for "
+            "replicated graphs and gradient accumulation.\n"
+            "This check can be disabled with "
+            "`XLA_FLAGS=\"--xla_disable_hlo_passes=gradient-accumulation-"
+            "verifier\"`, however the compiler cannot guarantee "
+            "correctness of results.");
+      }
+
       // Only do the check for the non-pipelined gradient accumulation ops.
       const bool is_grad_accumulation_op =
           IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(inst) ||
           IsPoplarInstruction(PoplarOp::StatefulGradientAccumulateAndAllReduce)(
               inst) ||
           IsPoplarInstruction(PoplarOp::StatefulGradientAccumulateWithMomentum)(
+              inst) ||
+          IsPoplarInstruction(
+              PoplarOp::
+                  StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm)(
               inst);
 
       if (is_grad_accumulation_op) {
@@ -57,7 +77,11 @@ StatusOr<bool> GradientAccumulationVerifier::Run(HloModule* module) {
           return FailedPrecondition(
               "Detected a gradient accumulation operation which is not inside "
               "a training loop. The model with the gradient accumulation "
-              "operation needs to be wrapped in a training loop");
+              "operation needs to be wrapped in a training loop.\n"
+              "This check can be disabled with "
+              "`XLA_FLAGS=\"--xla_disable_hlo_passes=gradient-accumulation-"
+              "verifier\"`, however the compiler cannot guarantee "
+              "correctness of results.");
         } else if (callsites.size() > 1) {
           return FailedPrecondition(
               "The call graph should have been flattened.");
@@ -77,7 +101,11 @@ StatusOr<bool> GradientAccumulationVerifier::Run(HloModule* module) {
           if (repeat_count % num_mini_batches) {
             return FailedPrecondition(
                 "Detected a gradient accumulation operation with %d number of "
-                "mini batches inside of a loop with %d iterations.",
+                "mini batches inside of a loop with %d iterations.\n"
+                "This check can be disabled with "
+                "`XLA_FLAGS=\"--xla_disable_hlo_passes=gradient-accumulation-"
+                "verifier\"`, however the compiler cannot guarantee "
+                "correctness of results.",
                 num_mini_batches, repeat_count);
           }
         } else if (caller->opcode() == HloOpcode::kWhile) {
@@ -90,7 +118,11 @@ StatusOr<bool> GradientAccumulationVerifier::Run(HloModule* module) {
           return FailedPrecondition(
               "Detected a gradient accumulation operation from an unexpected "
               "callsite. Gradient accumulation operations are only allowed "
-              "inside of training loops.");
+              "inside of training loops.\n"
+              "This check can be disabled with "
+              "`XLA_FLAGS=\"--xla_disable_hlo_passes=gradient-accumulation-"
+              "verifier\"`, however the compiler cannot guarantee "
+              "correctness of results.");
         }
       }
     }

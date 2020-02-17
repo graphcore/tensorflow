@@ -50,10 +50,16 @@ bool InstructionColocatorHelper::CanColocate(const HloInstruction* a,
   if (!CanColocate(a) || !CanColocate(b)) {
     return false;
   }
-  // We don't support tuple shapes.
-  if (a->shape().IsTuple() || b->shape().IsTuple()) {
-    return false;
+
+  // We don't support tuple shapes on inputs.
+  for (const HloInstruction* inst : {a, b}) {
+    for (const HloInstruction* operand : inst->operands()) {
+      if (operand->shape().IsTuple()) {
+        return false;
+      }
+    }
   }
+
   // Make sure a and b have compitable sharding.
   if (!a->has_compatible_sharding(b)) {
     return false;
@@ -252,12 +258,128 @@ class StatefulGradientAccumulationAllReduceColocatorHelper
   }
 };
 
+// Colocator helper which is used to combine multiple gradient accumulations
+// with momentum and all reduce/normalize instructions.
+class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
+    : public InstructionColocatorHelper {
+ public:
+  StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper()
+      : InstructionColocatorHelper() {}
+
+  bool CanColocate(const HloInstruction* inst) const override {
+    return IsPoplarInstruction(
+        PoplarOp::StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm)(
+        inst);
+  }
+
+  int64 GetColocateBufferSize(
+      const CompilerInformation& information) const override {
+    return information.max_all_reduce_buffer_size;
+  }
+
+  StatusOr<std::vector<HloInstruction*>> CombineAndReplaceColocatedInstructions(
+      std::vector<HloInstruction*> to_combine) const override {
+    const uint64 cluster_size = to_combine.size();
+    if (cluster_size == 1) {
+      return to_combine;
+    }
+
+    HloComputation* comp = to_combine[0]->parent();
+    // The inputs to a gradient accumulation with momentum are:
+    // 0 - accumulator
+    // 1 - gradient
+    // 2 - momentum
+    // And outputs are:
+    // 0 - accumulator
+    // 1 - gradient
+    // Given N instructions, the combined instruction inputs are:
+    // 0 to N-1  - accumulators
+    // N to 2N-1 - gradients
+    // 2N        - momentum
+    // And outputs are:
+    // 0 to N-1  - accumulators
+    // N to 2N-1 - gradients
+    std::vector<HloInstruction*> operands(2 * cluster_size + 1);
+    std::vector<Shape> output_shapes(2 * cluster_size);
+    for (uint64 i = 0; i != cluster_size; ++i) {
+      HloInstruction* accum = to_combine[i]->mutable_operand(0);
+      HloInstruction* grad = to_combine[i]->mutable_operand(1);
+      operands[i] = accum;
+      output_shapes[i] = accum->shape();
+      operands[cluster_size + i] = grad;
+      output_shapes[cluster_size + i] = grad->shape();
+    }
+    // Momentum operand.
+    operands[2 * cluster_size] = to_combine[0]->mutable_operand(2);
+
+    auto shape = ShapeUtil::MakeTupleShape(output_shapes);
+
+    // Add the new instruction.
+    HloInstruction* new_inst = comp->AddInstruction(
+        to_combine[0]->CloneWithNewOperands(shape, operands));
+    // Copy the sharding information if there was any.
+    if (to_combine[0]->has_sharding()) {
+      new_inst->set_sharding(to_combine[0]->sharding());
+    }
+
+    // Replace all the users.
+    std::vector<HloInstruction*> result(3 * cluster_size + 1);
+    result[0] = new_inst;
+    for (uint64 i = 0; i != cluster_size; ++i) {
+      HloInstruction* inst = to_combine[i];
+      // GTE to get the new accumulator.
+      auto gte_accum = comp->AddInstruction(
+          HloInstruction::CreateGetTupleElement(output_shapes[i], new_inst, i));
+      MakeUsedInplace(gte_accum);
+      result[i + 1] = gte_accum;
+
+      // GTE to get the new gradient.
+      auto gte_grad =
+          comp->AddInstruction(HloInstruction::CreateGetTupleElement(
+              output_shapes[cluster_size + i], new_inst, cluster_size + i));
+      MakeUsedInplace(gte_grad);
+      result[cluster_size + i + 1] = gte_grad;
+
+      // Create a tuple instruction so that we can easily replace all the users.
+      auto tuple = comp->AddInstruction(
+          HloInstruction::CreateTuple({gte_accum, gte_grad}));
+      MakeUsedInplace(tuple);
+      result[2 * cluster_size + i + 1] = tuple;
+
+      // Replace the old inst.
+      TF_RETURN_IF_ERROR(tuple->CopyAllControlDepsFrom(inst));
+      TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
+      TF_RETURN_IF_ERROR(inst->ReplaceAllUsesWith(tuple));
+      TF_RETURN_IF_ERROR(comp->ForceRemoveInstruction(inst));
+    }
+    return result;
+  }
+
+ protected:
+  bool CanColocateExtra(const HloInstruction* a,
+                        const HloInstruction* b) const override {
+    // Only colocate if they have the same momentum.
+    if (a->operand(2) != b->operand(2)) {
+      return false;
+    }
+    auto a_cast =
+        Cast<HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm>(a);
+    auto b_cast =
+        Cast<HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm>(b);
+    // Make accumulate the same number of batches.
+    return a_cast->MiniBatchesToAccumulate() ==
+           b_cast->MiniBatchesToAccumulate();
+  }
+};
+
 }  // namespace
 
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(InterIpuCopyColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(AllReduceColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
     StatefulGradientAccumulationAllReduceColocatorHelper)
+REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
+    StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper)
 
 const std::vector<const InstructionColocatorHelper*>&
 GetAllInstructionColocatorHelpers() {

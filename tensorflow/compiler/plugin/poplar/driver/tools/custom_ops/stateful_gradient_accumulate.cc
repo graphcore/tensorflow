@@ -25,8 +25,10 @@ namespace poplarplugin {
 namespace {
 Shape GetShape(absl::Span<HloInstruction* const> operands, PoplarOp op) {
   switch (op) {
-    case PoplarOp::StatefulGradientAccumulateWithMomentum: {
-      std::vector<HloInstruction*> shape_insts = {operands[0], operands[1]};
+    case PoplarOp::StatefulGradientAccumulateWithMomentum:
+    case PoplarOp::StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm: {
+      std::vector<HloInstruction*> shape_insts = {operands.begin(),
+                                                  operands.end() - 1};
       return GetHloPoplarInstructionShape(shape_insts);
     }
     default: { return GetHloPoplarInstructionShape(operands); }
@@ -138,6 +140,7 @@ uint64 HloStatefulGradientAccumulateWithMomentum::NumberOfInplaceOperands()
     const {
   return 2;
 }
+
 absl::flat_hash_map<int64, int64>
 HloStatefulGradientAccumulateWithMomentum::LayoutDependencies() const {
   return {{0, 1}};
@@ -154,6 +157,49 @@ HloStatefulGradientAccumulateWithMomentum::CloneWithNewOperandsImpl(
 std::unique_ptr<HloInstruction> CreateStatefulGradientAccumulationWithMomentum(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches) {
   return absl::make_unique<HloStatefulGradientAccumulateWithMomentum>(
+      operands, num_mini_batches);
+}
+
+HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
+    HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm(
+        absl::Span<HloInstruction* const> operands, int32 num_mini_batches)
+    : HloStatefulGradientAccumulate(
+          operands, num_mini_batches,
+          PoplarOp::
+              StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm) {}
+
+uint64 HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
+    NumberOfInplaceOperands() const {
+  return operand_count() - 1;
+}
+
+absl::flat_hash_map<int64, int64>
+HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
+    LayoutDependencies() const {
+  // The layouts of the accumulator depend on the layout of the gradient.
+  absl::flat_hash_map<int64, int64> deps;
+  const uint64 num_grads = operand_count() / 2;
+  for (uint64 i = 0; i != num_grads; ++i) {
+    deps[i] = num_grads + i;
+  }
+  return deps;
+}
+
+std::unique_ptr<HloInstruction>
+HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm::
+    CloneWithNewOperandsImpl(const Shape& shape,
+                             absl::Span<HloInstruction* const> new_operands,
+                             HloCloneContext*) const {
+  return absl::make_unique<
+      HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm>(
+      new_operands, num_mini_batches_);
+}
+
+std::unique_ptr<HloInstruction>
+CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
+    absl::Span<HloInstruction* const> operands, int32 num_mini_batches) {
+  return absl::make_unique<
+      HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm>(
       operands, num_mini_batches);
 }
 
@@ -206,6 +252,23 @@ static HloPoplarInstructionFactory
     stateful_gradient_accumulate_factory_with_momentum(
         PoplarOp::StatefulGradientAccumulateWithMomentum,
         HloStatefulGradientAccumulateWithMomentumFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>>
+HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNormFactoryFunc(
+    HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  // Get the attribute values
+  TF_ASSIGN_OR_RETURN(int32 num_mini_batches,
+                      attribute_map.GetAttributeAsInt("num_mini_batches"));
+
+  return CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
+      call->operands(), num_mini_batches);
+}
+
+static HloPoplarInstructionFactory
+    stateful_gradient_accumulate_factory_with_momentum_and_all_reduce_with_norm(
+        PoplarOp::StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
+        HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNormFactoryFunc);
 
 }  // namespace
 

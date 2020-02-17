@@ -131,8 +131,8 @@ class StatefulGradientAccumulateWithMomentum : public XlaOpKernel, IpuOpKernel {
         xla::ShapeUtil::MakeTupleShape({xla_shape, xla_shape}),
         attribute_map_.Serialise());
 
-    grad = xla::GetTupleElement(output, 0);
-    accum = xla::GetTupleElement(output, 1);
+    accum = xla::GetTupleElement(output, 0);
+    grad = xla::GetTupleElement(output, 1);
     ctx->SetOutput(0, grad);
     OP_REQUIRES_OK(ctx, ctx->AssignVariable(0, dtype, accum));
   }

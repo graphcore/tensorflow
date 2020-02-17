@@ -75,7 +75,11 @@ StatusOr<bool> ProcessMomentumOp(Graph* graph, Node* node) {
 
   if (num_edges > 1) {
     return errors::FailedPrecondition(
-        "Detected a %s node with multiple users, which is not supported.",
+        "Detected a %s node with multiple users, which is not supported. This "
+        "usually occurs when the `GradientAccumulationOptimizer` is used with "
+        "another optimizer which is not supported. Please note that "
+        "`GradientAccumulationOptimizer` is currently only supported with "
+        "`GradientDescentOptimizer` and `MomentumOptimizer` optimizers.",
         kIpuStatefulGradientAccumulate);
   }
 

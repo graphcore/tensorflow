@@ -188,15 +188,17 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
                                      const TensorTarget& tensor_target,
                                      const TensorMap& tensor_map) override {
     const HloInstruction* inst = tensor_target.tgt;
-    const int64 input_index = tensor_target.input_index;
-    if (input_index != 0) {
+    const int64 accumulator_index = tensor_target.input_index;
+    // Expect to allocate for the accumulator.
+    const uint64 num_grads = inst->operand_count() / 2;
+    if (accumulator_index > num_grads) {
       return xla::FailedPrecondition(
           "Trying to allocate StatefulGradientAccumulateWithMomentumOp tensor "
-          "for an index out of range %d.",
-          input_index);
+          "for an index out of range (%d >= %d).",
+          accumulator_index, num_grads);
     }
-    TensorVector outputs =
-        FindInstructionOutputs(tensor_map, res, inst->operand(1));
+    TensorVector outputs = FindInstructionOutputs(
+        tensor_map, res, inst->operand(num_grads + accumulator_index));
 
     if (outputs.size() != 1) {
       return xla::FailedPrecondition("Could not find layout input for %s",
@@ -210,23 +212,44 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    const HloStatefulGradientAccumulateWithMomentum* grad_inst =
-        Cast<HloStatefulGradientAccumulateWithMomentum>(inst);
+    const HloStatefulGradientAccumulate* grad_inst =
+        Cast<HloStatefulGradientAccumulate>(inst);
+
+    const bool do_all_reduce_and_norm =
+        IsPoplarInstruction(
+            PoplarOp::
+                StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm)(
+            inst) &&
+        res.replication_factor > 1;
 
     poplar::program::Sequence seq;
 
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
         FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
-    CHECK_EQ(inputs.size(), 2);
-    CHECK_EQ(inputs[0].size(), 1);
-    poplar::Tensor accumulator = inputs[0][0];
-    CHECK_EQ(inputs[1].size(), 1);
-    poplar::Tensor grad = inputs[1][0];
+    CHECK_EQ(inputs.size(), inst->operand_count() - 1);
+
+    const uint64 num_grads = inst->operand_count() / 2;
+
+    // Combine all the accumulator tensors and gradient tensors into a gradient
+    // and accumulation tensor.
+    std::vector<poplar::Tensor> accumulator_tensors(num_grads);
+    std::vector<poplar::Tensor> grad_tensors(num_grads);
+    for (uint64 i = 0; i != num_grads; ++i) {
+      CHECK_EQ(inputs[i].size(), 1);
+      accumulator_tensors[i] = inputs[i][0];
+
+      CHECK_EQ(inputs[num_grads + i].size(), 1);
+      grad_tensors[i] = inputs[num_grads + i][0];
+    }
+    poplar::Tensor accumulator =
+        FlattenAndConcatenateTensors(accumulator_tensors);
+    poplar::Tensor grad = FlattenAndConcatenateTensors(grad_tensors);
 
     TF_ASSIGN_OR_RETURN(
         poplar::Tensor momentum,
-        FindInstructionInput(tensor_map, res, inst, 2, seq, false));
+        FindInstructionInput(tensor_map, res, inst, inst->operand_count() - 1,
+                             seq, false));
 
     poplar::Tensor counter = graph.addVariable(poplar::UNSIGNED_INT, {},
                                                GetDebugName(inst) + "/Counter");
@@ -267,8 +290,26 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
 
       poplar::program::Sequence if_true;
       {
-        // Copy accumulator into output.
-        if_true.add(poplar::program::Copy(accumulator, output));
+        if (do_all_reduce_and_norm) {
+          // All reduce the accumulator tensor into the output.
+          popops::replicatedAllReduceWithOutput(
+              GetMasterGraph(res), accumulator, output, popops::Operation::ADD,
+              if_true, GetDebugName(inst), GetReplicateAllReduceOptions());
+
+          // Normalize it - we normalize after the all reduce otherwise we risk
+          // the gradients becoming zeros.
+          popops::mapInPlace(
+              graph, pe::Divide(pe::_1, pe::Const(res.replication_factor)),
+              {output}, if_true, GetDebugName(inst) + "/NormalizeAccumulator");
+
+          // Copy the normalized output into accumulator.
+          if_true.add(poplar::program::Copy(output, accumulator));
+
+        } else {
+          // No all reduce (and therefore no norm) - just copy the accumulator
+          // into output.
+          if_true.add(poplar::program::Copy(accumulator, output));
+        }
 
         // Zero the counter.
         popops::zero(graph, counter, if_true,
@@ -286,13 +327,19 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
       seq.add(poplar::program::If(output_grads, if_true, if_false));
     }
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, accumulator));
+    // This op is completely inplace, so just set the input tensors to outputs.
+    for (uint64 i = 0; i != num_grads; ++i) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, accumulator_tensors[i]));
+      TF_CHECK_OK(
+          AddOutputTensor(tensor_map, inst, num_grads + i, grad_tensors[i]));
+    }
 
     return seq;
   }
 };  // namespace
 REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentum,
+                   StatefulGradientAccumulateWithMomentumOp);
+REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
                    StatefulGradientAccumulateWithMomentumOp);
 
 }  // namespace
