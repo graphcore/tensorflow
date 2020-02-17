@@ -440,6 +440,64 @@ static StatusOr<poplar::Tensor> PathTransform(
   return in;
 }
 
+static StatusOr<poplar::Tensor> ReversePathTransform(
+    poplar::Graph& graph, poplar::Tensor in,
+    const std::vector<const HloInstruction*>& path) {
+  // Now apply any transformations required by the path from the source to
+  // the target
+
+  for (auto i = path.rbegin(); i != path.rend(); ++i) {
+    auto& inst = *i;
+    switch (inst->opcode()) {
+      case HloOpcode::kTranspose: {
+        auto optional_permutation =
+            convert_array<std::vector<unsigned>>(inst->dimensions());
+        if (!optional_permutation) {
+          return xla::FailedPrecondition(
+              "PathTransform - cannot cast permutation.");
+        }
+        std::vector<unsigned> permutation = *optional_permutation;
+        std::vector<unsigned> shuffle(permutation.size());
+        for (unsigned int d = 0; d < permutation.size(); d++) {
+          shuffle[d] = permutation[d];
+        }
+        in = in.dimShuffle(shuffle);
+        break;
+      }
+      case HloOpcode::kReshape: {
+        std::vector<size_t> dims(PoplarShapeFromXlaShape(inst->shape()));
+        in = in.reshape(dims);
+        break;
+      }
+      case HloOpcode::kConvert: {
+        TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(inst->shape()));
+        in = graph.clone(poplar_type, in, GetDebugName(inst));
+        break;
+      }
+      case HloOpcode::kConcatenate: {
+        return xla::FailedPrecondition(
+            "ReversePathTransform - Concatenante not supported");
+      }
+      case HloOpcode::kPad: {
+        return xla::FailedPrecondition(
+            "ReversePathTransform - Pad not supported.");
+      }
+      case HloOpcode::kFusion: {
+        if (IsPopOpsFusion(inst, "zero_pad")) {
+          return xla::FailedPrecondition(
+              "ReversePathTransform - 'zero_pad' Fusion not supported.");
+        }
+      }
+      default: {
+        // All other instructions in the path do not modify the shape
+        break;
+      }
+    }
+  }
+
+  return in;
+}
+
 StatusOr<poplar::Tensor> AddDynamicSliceTensor(
     poplar::Graph& graph, const std::string& debug_name,
     const xla::Shape& shape_xla, const xla::Shape& slice_shape_xla) {
@@ -601,6 +659,45 @@ static StatusOr<poplar::Tensor> AddConvolutionWeights(
   return ShuffleConvolutionWeightsToTensorflow(target, out);
 }
 
+static StatusOr<poplar::Tensor> AddConvAddBiasTensor(
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
+    const HloInstruction* layout, uint64 layout_output_idx,
+    std::vector<const HloInstruction*> forward_path,
+    const TensorMap& tensor_map) {
+  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+
+  if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
+    return xla::FailedPrecondition("Convolution %s output not found for %s",
+                                   layout->name(), debug_name);
+  }
+
+  poplar::Tensor acts = outputs[layout_output_idx];
+
+  acts = ShuffleConvolutionOutputToPoplar(layout, acts);
+  TF_ASSIGN_OR_RETURN(acts, ReversePathTransform(graph, acts, forward_path));
+
+  return poplin::createBiases(graph, acts, debug_name);
+}
+
+static StatusOr<poplar::Tensor> AddMatMulAddBiasTensor(
+    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
+    const HloInstruction* layout, uint64 layout_output_idx,
+    std::vector<const HloInstruction*> forward_path,
+    const TensorMap& tensor_map) {
+  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+
+  if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
+    return xla::FailedPrecondition("Matmul %s output not found for %s",
+                                   layout->name(), debug_name);
+  }
+
+  poplar::Tensor acts = outputs[layout_output_idx];
+  TF_ASSIGN_OR_RETURN(acts, ReversePathTransform(graph, acts, forward_path));
+
+  auto name = StrCat(debug_name, "/biases");
+  return graph.clone(acts[0], name);
+}
+
 static StatusOr<poplar::Tensor> AddLeftMatMul(poplar::Graph& graph,
                                               const std::string& debug_name,
                                               const xla::Shape& shape,
@@ -744,18 +841,6 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
                                  graph, resources, debug_name, *optional_layout,
                                  *optional_layout_output_idx, tensor_map));
   } else {
-    auto op = GetPoplibsCustomOp(target);
-
-    if (op) {
-      TF_ASSIGN_OR_RETURN(
-          out, AllocatePoplarOpTensor(graph, resources, debug_name,
-                                      tensor_target, shape, tensor_map));
-
-      TF_ASSIGN_OR_RETURN(out, PathTransform(graph, out, input_index,
-                                             tensor_target.backward_path));
-      return out;
-    }
-
     const std::string error_msg =
         absl::StrCat("Invalid operand for tensor allocation on ", debug_name);
     switch (target->opcode()) {
@@ -778,6 +863,23 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
                                          *optional_layout,
                                          *optional_layout_output_idx,
                                          feature_dimension, tensor_map));
+            break;
+          }
+          default:
+            return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      case HloOpcode::kConvolution: {
+        switch (input_index) {
+          case 0: {
+            TF_ASSIGN_OR_RETURN(
+                out, AddConvolutionInput(graph, debug_name, target, resources));
+            break;
+          }
+          case 1: {
+            TF_ASSIGN_OR_RETURN(out, AddConvolutionWeights(graph, debug_name,
+                                                           target, resources));
             break;
           }
           default:
@@ -873,6 +975,48 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
           }
           default:
             return xla::FailedPrecondition("%s", error_msg);
+        }
+        break;
+      }
+      case HloOpcode::kFusion: {
+        const HloComputation* comp = target->fused_instructions_computation();
+        if (IsPopOpsFusion(comp)) {
+          if (IsPopOpsFusion(comp, "depthwise_conv")) {
+            switch (input_index) {
+              case 0: {
+                TF_ASSIGN_OR_RETURN(
+                    out,
+                    AddConvolutionInput(graph, debug_name, target, resources));
+                break;
+              }
+              case 1: {
+                TF_ASSIGN_OR_RETURN(
+                    out, AddConvolutionWeights(graph, debug_name, target,
+                                               resources));
+                break;
+              }
+              default:
+                return xla::FailedPrecondition("%s", error_msg);
+            }
+          } else if (IsPopOpsFusion(comp, "conv_biasadd")) {
+            TF_ASSIGN_OR_RETURN(
+                out, AddConvAddBiasTensor(graph, resources, debug_name,
+                                          *optional_layout,
+                                          *optional_layout_output_idx,
+                                          forward_path, tensor_map));
+          } else if (IsPopOpsFusion(comp, "matmul_biasadd")) {
+            TF_ASSIGN_OR_RETURN(
+                out, AddMatMulAddBiasTensor(graph, resources, debug_name,
+                                            *optional_layout,
+                                            *optional_layout_output_idx,
+                                            forward_path, tensor_map));
+          } else {
+            return xla::FailedPrecondition(
+                "Unknown poplibs fusion for tensor %s", debug_name.c_str());
+          }
+        } else {
+          TF_ASSIGN_OR_RETURN(
+              out, AddPlainTensor(graph, debug_name, tshape, resources));
         }
         break;
       }

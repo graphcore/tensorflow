@@ -41,20 +41,53 @@ class BaseVisitor : public DfsHloVisitor {
 
   virtual const Shape& GetOutputShape(HloInstruction*) const;
 
-  Status HandlePoplarOp(HloInstruction* inst);
+  Status HandleElementwiseUnary(HloInstruction* inst) override;
 
-  Status HandleTupleSelect(HloInstruction* inst) override;
+  Status HandleElementwiseBinary(HloInstruction* inst) override;
+
+  Status HandleCompare(HloInstruction* inst) override;
 
   Status HandleConvert(HloInstruction* inst) override;
 
+  Status HandleClamp(HloInstruction* inst) override;
+
+  Status HandleSelect(HloInstruction* inst) override;
+
+  Status HandleScatter(HloInstruction* inst) override;
+
+  Status HandleTupleSelect(HloInstruction* inst) override;
+
+  Status HandleConcatenate(HloInstruction* inst) override;
+
   Status HandleBitcastConvert(HloInstruction* inst) override;
+
+  Status HandleCopy(HloInstruction* inst) override;
+
+  Status HandleDot(HloInstruction* inst) override;
+
+  Status HandleConvolution(HloInstruction* inst) override;
 
   Status HandleAllReduce(HloInstruction* crs) override;
 
   Status HandleRng(HloInstruction* inst) override;
+
+  Status HandleReverse(HloInstruction* inst) override;
+
+  Status HandleSort(HloInstruction* inst) override;
+
   Status HandleConstant(HloInstruction* inst) override;
 
   Status HandleGetTupleElement(HloInstruction* inst) override;
+
+  Status HandleReduce(HloInstruction* inst) override;
+
+  Status HandleBitcast(HloInstruction* inst) override;
+
+  Status HandleBroadcast(HloInstruction* inst) override;
+
+  Status HandleReshape(HloInstruction* inst) override;
+
+  Status HandleTranspose(HloInstruction* inst) override;
 
   Status HandleFusion(HloInstruction* inst) override;
 
@@ -62,78 +95,79 @@ class BaseVisitor : public DfsHloVisitor {
 
   Status HandleCustomCall(HloInstruction* inst) override;
 
+  Status HandleSlice(HloInstruction* inst) override;
+
+  Status HandleDynamicSlice(HloInstruction* inst) override;
+
+  Status HandleDynamicUpdateSlice(HloInstruction* inst) override;
+
   Status HandleTuple(HloInstruction* inst) override;
 
   Status HandleMap(HloInstruction* inst) override;
 
+  Status HandleReduceWindow(HloInstruction* inst) override;
+
+  Status HandleSelectAndScatter(HloInstruction* inst) override;
+
+  Status HandleWhile(HloInstruction* inst) override;
+
   Status HandleConditional(HloInstruction* inst) override;
 
+  Status HandlePad(HloInstruction* inst) override;
+
+  Status HandleReducePrecision(HloInstruction* inst) override;
+
   Status HandleInfeed(HloInstruction* inst) override;
+
+  Status HandleOutfeed(HloInstruction* inst) override;
+
+  Status HandleSend(HloInstruction* inst) override;
+
+  Status HandleSendDone(HloInstruction* inst) override;
+
+  Status HandleRecv(HloInstruction* inst) override;
+
+  Status HandleRecvDone(HloInstruction* inst) override;
+
+  Status HandleBatchNormInference(HloInstruction* inst) override;
+
+  Status HandleBatchNormTraining(HloInstruction* inst) override;
+
+  Status HandleBatchNormGrad(HloInstruction* inst) override;
+
+  Status HandleFft(HloInstruction* inst) override;
+
+  Status HandleGather(HloInstruction* inst) override;
 
   Status HandleAfterAll(HloInstruction* inst) override;
 
   Status HandleReal(HloInstruction* inst) override;
 
+  Status HandleIota(HloInstruction* inst) override;
+
   Status HandleAllToAll(HloInstruction* hlo) override;
+
+  Status HandleCollectivePermute(HloInstruction* hlo) override;
+
+  Status HandleGetDimensionSize(HloInstruction* hlo) override;
 
   Status HandleAddDependency(HloInstruction* hlo) override;
 
-#define POPLAR_OP(Name) \
-  Status Name(HloInstruction* inst) override { return HandlePoplarOp(inst); };
+  Status HandleReplicaId(HloInstruction* hlo) override;
 
-  POPLAR_OP(HandleElementwiseUnary)
-  POPLAR_OP(HandleElementwiseBinary)
-  POPLAR_OP(HandleClamp)
-  POPLAR_OP(HandleSelect)
-  POPLAR_OP(HandleCompare)
+  Status HandleTriangularSolve(HloInstruction* hlo) override;
 
-  /*
-   * Operations not processed by this visitor.
-   */
-#define UNIMPLEMENTED(Name) \
-  Status Name(HloInstruction* inst) override { return Unimplemented(inst); };
+  Status HandleCholesky(HloInstruction* hlo) override;
 
-  UNIMPLEMENTED(HandleSlice)
-  UNIMPLEMENTED(HandleDynamicSlice)
-  UNIMPLEMENTED(HandleDynamicUpdateSlice)
-  UNIMPLEMENTED(HandleSelectAndScatter)
-  UNIMPLEMENTED(HandleWhile)
-  UNIMPLEMENTED(HandlePad)
-  UNIMPLEMENTED(HandleReverse)
-  UNIMPLEMENTED(HandleSort)
-  UNIMPLEMENTED(HandleReduce)
-  UNIMPLEMENTED(HandleBitcast)
-  UNIMPLEMENTED(HandleBroadcast)
-  UNIMPLEMENTED(HandleReshape)
-  UNIMPLEMENTED(HandleTranspose)
-  UNIMPLEMENTED(HandleReducePrecision)
-  UNIMPLEMENTED(HandleOutfeed)
-  UNIMPLEMENTED(HandleSend)
-  UNIMPLEMENTED(HandleSendDone)
-  UNIMPLEMENTED(HandleRecv)
-  UNIMPLEMENTED(HandleRecvDone)
-  UNIMPLEMENTED(HandleBatchNormInference)
-  UNIMPLEMENTED(HandleBatchNormTraining)
-  UNIMPLEMENTED(HandleBatchNormGrad)
-  UNIMPLEMENTED(HandleFft)
-  UNIMPLEMENTED(HandleGather)
-  UNIMPLEMENTED(HandleCopy)
-  UNIMPLEMENTED(HandleIota)
-  UNIMPLEMENTED(HandleScatter)
-  UNIMPLEMENTED(HandleCollectivePermute)
-  UNIMPLEMENTED(HandleConcatenate)
-  UNIMPLEMENTED(HandleGetDimensionSize)
-  UNIMPLEMENTED(HandleReplicaId)
-  UNIMPLEMENTED(HandleTriangularSolve)
-  UNIMPLEMENTED(HandleCholesky)
-  UNIMPLEMENTED(HandlePartitionId)
-  UNIMPLEMENTED(HandleRngGetAndUpdateState)
-  UNIMPLEMENTED(HandleCopyStart)
-  UNIMPLEMENTED(HandleCopyDone)
-  UNIMPLEMENTED(HandleSetDimensionSize)
-  UNIMPLEMENTED(HandleDot)
-  UNIMPLEMENTED(HandleConvolution)
-  UNIMPLEMENTED(HandleReduceWindow)
+  Status HandlePartitionId(HloInstruction* hlo) override;
+
+  Status HandleRngGetAndUpdateState(HloInstruction* hlo) override;
+
+  Status HandleCopyStart(HloInstruction* hlo) override;
+
+  Status HandleCopyDone(HloInstruction* hlo) override;
+
+  Status HandleSetDimensionSize(HloInstruction* hlo) override;
 
   Status Preprocess(HloInstruction* hlo) override;
 
