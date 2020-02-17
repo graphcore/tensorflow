@@ -62,7 +62,7 @@ class PoplarOpManager {
   // Registration method
   static void RegsiterOp(PoplarOp op,
                          std::unique_ptr<PoplarOpDef> poplibs_op_def);
-  static StatusOr<PoplarOpDef*> GetOp(const HloCustomCallInstruction* inst);
+  static StatusOr<PoplarOpDef*> GetOp(const HloInstruction* inst);
 
  private:
   PoplarOpManager() = default;

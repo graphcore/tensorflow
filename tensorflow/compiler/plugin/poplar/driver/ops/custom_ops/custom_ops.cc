@@ -45,8 +45,7 @@ StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
     const TensorTarget& tensor_target, const xla::Shape& shape,
     const TensorMap& tensor_map) {
   const HloInstruction* inst = tensor_target.tgt;
-  auto custom_call = Cast<HloCustomCallInstruction>(inst);
-  TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(custom_call));
+  TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(inst));
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor out,
       op_def->Allocator(graph, res, name, tensor_target, tensor_map));
@@ -56,8 +55,7 @@ StatusOr<poplar::Tensor> AllocatePoplarOpTensor(
 StatusOr<poplar::program::Program> CreatePoplarOp(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {
-  auto custom_call = Cast<HloCustomCallInstruction>(inst);
-  TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(custom_call));
+  TF_ASSIGN_OR_RETURN(auto op_def, PoplarOpManager::GetOp(inst));
   TF_ASSIGN_OR_RETURN(
       poplar::program::Program prog,
       op_def->Creator(graph, res, inst, output_shape, tensor_map));

@@ -14,11 +14,12 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include <stdlib.h>
 #include <memory>
 #include <sstream>
 #include <string>
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_computation.h"
 
 #include "include/json/json.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -36,6 +37,40 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+
+namespace {
+
+static inline bool NameSpaceStartsWith(const std::string& name,
+                                       const char* prefix) {
+  return name.find(prefix) != std::string::npos;
+}
+
+static absl::optional<PoplarOp> PoplarOpFromFusionString(
+    const std::string& name) {
+  PoplarOp the_op;
+
+  std::string tmp_name = name;
+
+  if (name.find("_pop_op_") != std::string::npos) {
+    tmp_name = name.substr(8);
+  }
+  *tmp_name.begin() = std::toupper(*tmp_name.begin());
+
+  auto itr = tmp_name.find(".");
+  if (itr != std::string::npos) {
+    tmp_name = tmp_name.substr(0, itr);
+  }
+
+  bool found = PoplarOp_Parse(tmp_name, &the_op);
+
+  if (found) {
+    return the_op;
+  }
+  return absl::nullopt;
+}
+
+}  // namespace
+
 absl::optional<PoplarOp> GetPoplibsCustomOp(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kCustomCall) {
     PoplarOp op;
@@ -44,7 +79,36 @@ absl::optional<PoplarOp> GetPoplibsCustomOp(const HloInstruction* inst) {
       return absl::nullopt;
     }
     return op;
+  } else if (IsPopOpsFusion(inst)) {
+    // Look up the name of the poplar operation based on the name of the
+    // computation.
+    HloComputation* comp = inst->fused_instructions_computation();
+    return PoplarOpFromFusionString(comp->name());
+  } else if (inst->opcode() == HloOpcode::kRng) {
+    // If the RNG is one of the two we support, return them else fall through to
+    // absl::nullopt.
+    switch (inst->random_distribution()) {
+      case RandomDistribution::RNG_UNIFORM:
+        return PoplarOp::RandomUniform;
+      case RandomDistribution::RNG_NORMAL:
+        return PoplarOp::RandomNormal;
+    }
+  } else if (inst->IsElementwise()) {
+    // Find out which type of elementwise operation we are doing.
+    switch (inst->operand_count()) {
+      case 1:
+        return PoplarOp::UnaryOp;
+      case 2:
+        return PoplarOp::Implicit_binary;
+      case 3:
+        return PoplarOp::Implicit_ternary;
+      default:
+        return absl::nullopt;
+    }
+  } else if (inst->opcode() == HloOpcode::kConvolution) {
+    return PoplarOp::Depthwise_conv;
   }
+
   return absl::nullopt;
 }
 
