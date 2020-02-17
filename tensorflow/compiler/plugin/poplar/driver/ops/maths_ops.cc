@@ -353,6 +353,128 @@ StatusOr<ExpressionInputs> GetElementwiseInputs(
 }
 }  // namespace
 
+StatusOr<poplar::program::Program> CreateUnaryElementwiseOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  poplar::program::Sequence seq;
+  TF_ASSIGN_OR_RETURN(auto expression_inputs,
+                      GetElementwiseInputs(res, inst, tensor_map, seq));
+  auto input_tensors = GetTensorsFromExpressionInputs(expression_inputs);
+
+  auto operation = GetElementwiseOp(inst);
+  TF_ASSIGN_OR_RETURN(popops::expr::UnaryOpType op, LookupUnaryFn(operation));
+  auto expr = popops::expr::UnaryOp(op, *expression_inputs[0].expr);
+
+  poplar::Tensor out;
+  const bool is_inplace =
+      AreInplaceOutputTensorsWritable(tensor_map, res, inst);
+  if (is_inplace) {
+    popops::mapInPlace(graph, expr, input_tensors, seq, GetDebugName(inst));
+    out = input_tensors[0];
+  } else {
+    out = popops::map(graph, expr, input_tensors, seq, GetDebugName(inst));
+  }
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateBinaryElementwiseOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  poplar::program::Sequence seq;
+  TF_ASSIGN_OR_RETURN(auto expression_inputs,
+                      GetElementwiseInputs(res, inst, tensor_map, seq));
+  auto input_tensors = GetTensorsFromExpressionInputs(expression_inputs);
+
+  auto operation = GetElementwiseOp(inst);
+  TF_ASSIGN_OR_RETURN(popops::expr::BinaryOpType op, LookupBinaryFn(operation));
+  auto expr = popops::expr::BinaryOp(op, *expression_inputs[0].expr,
+                                     *expression_inputs[1].expr);
+
+  poplar::Tensor out;
+  const bool is_inplace =
+      AreInplaceOutputTensorsWritable(tensor_map, res, inst);
+  if (is_inplace) {
+    switch (operation->opcode()) {
+      case HloOpcode::kAdd:
+      case HloOpcode::kSubtract: {
+        // Specialize for add and subtract when all inputs are tensors.
+        const bool all_inputs_tensors = input_tensors.size() == 2;
+        if (all_inputs_tensors) {
+          ScaledInplaceConstantOrTensor(
+              graph, input_tensors[0], input_tensors[1], 1.0f, seq,
+              operation->opcode(), GetDebugName(inst));
+          break;
+        }
+        // Fall through if we can't specialize.
+      }
+      default: {
+        popops::mapInPlace(graph, expr, input_tensors, seq, GetDebugName(inst));
+        break;
+      }
+    }
+    out = input_tensors[0];
+  } else {
+    out = popops::map(graph, expr, input_tensors, seq, GetDebugName(inst));
+  }
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateTernaryElementwiseOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  // Non of the ternary ops currently support in-placing.
+  const bool is_inplace =
+      AreInplaceOutputTensorsWritable(tensor_map, res, inst);
+  CHECK(!is_inplace);
+
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  poplar::program::Sequence seq;
+  TF_ASSIGN_OR_RETURN(auto expression_inputs,
+                      GetElementwiseInputs(res, inst, tensor_map, seq));
+  auto input_tensors = GetTensorsFromExpressionInputs(expression_inputs);
+
+  // Get the actual ternary operation.
+  auto operation = GetElementwiseOp(inst);
+
+  // Create the expression depending on the operation.
+  std::unique_ptr<popops::expr::TernaryOp> expr;
+  switch (operation->opcode()) {
+    case HloOpcode::kClamp: {
+      expr = absl::make_unique<popops::expr::TernaryOp>(
+          popops::expr::TernaryOpType::CLAMP, *expression_inputs[1].expr,
+          *expression_inputs[0].expr, *expression_inputs[2].expr);
+      break;
+    }
+    case HloOpcode::kSelect: {
+      expr = absl::make_unique<popops::expr::TernaryOp>(
+          popops::expr::TernaryOpType::SELECT, *expression_inputs[1].expr,
+          *expression_inputs[2].expr, *expression_inputs[0].expr);
+      break;
+    }
+    default: {
+      return xla::FailedPrecondition(
+          "Trying to process %s as a ternary operation.",
+          operation->ToString().c_str());
+    }
+  }
+
+  poplar::Tensor out =
+      popops::map(graph, *expr, input_tensors, seq, GetDebugName(inst));
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+  return seq;
+}
+
 StatusOr<poplar::program::Program> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {
@@ -483,6 +605,107 @@ Status ScaledInplaceConstantOrTensor(
                                          scale_b, prog, op_type, name);
 }
 
+StatusOr<poplar::program::Program> CreateScaledInplace(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  poplar::program::Sequence seq;
+  TF_ASSIGN_OR_RETURN(
+      TensorVectors inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor in0 = inputs[0][0];
+
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor in1,
+      FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+
+  const auto* root_inst =
+      inst->fused_instructions_computation()->root_instruction();
+
+  if (inst->operand_count() == 2) {
+    const auto* const_inst = root_inst->operand(1)->operand(1)->operand(0);
+    CHECK_EQ(const_inst->opcode(), HloOpcode::kConstant);
+    // Get the scalar multiplier
+    TF_ASSIGN_OR_RETURN(
+        double scale, LiteralScalarToNativeType<double>(const_inst->literal()));
+
+    TF_CHECK_OK(ScaledInplaceConstantOrTensor(
+        graph, in0, in1, scale, seq, root_inst->opcode(), GetDebugName(inst)));
+  } else if (inst->operand_count() == 3) {
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, false));
+    TF_CHECK_OK(ScaledInplaceConstantOrTensor(
+        graph, in0, in1, scale, seq, root_inst->opcode(), GetDebugName(inst)));
+  } else {
+    return xla::FailedPrecondition("Unsupported use of scaled inplace op: %s",
+                                   root_inst->name().c_str());
+  }
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, in0));
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateScaledInplaceaXbY(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  poplar::program::Sequence seq;
+  TF_ASSIGN_OR_RETURN(
+      TensorVectors inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, true));
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor in0 = inputs[0][0];
+
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor in1,
+      FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+
+  const auto* root_inst =
+      inst->fused_instructions_computation()->root_instruction();
+
+  if (inst->operand_count() == 2) {
+    const auto* const_inst_a = root_inst->operand(0)->operand(1)->operand(0);
+    CHECK_EQ(const_inst_a->opcode(), HloOpcode::kConstant);
+    // Get the scalar multiplier
+    TF_ASSIGN_OR_RETURN(double scale_a, LiteralScalarToNativeType<double>(
+                                            const_inst_a->literal()));
+
+    const auto* const_inst_b = root_inst->operand(1)->operand(1)->operand(0);
+    CHECK_EQ(const_inst_b->opcode(), HloOpcode::kConstant);
+    // Get the scalar multiplier
+    TF_ASSIGN_OR_RETURN(double scale_b, LiteralScalarToNativeType<double>(
+                                            const_inst_b->literal()));
+
+    TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, scale_a, in1, scale_b,
+                                              seq, root_inst->opcode(),
+                                              GetDebugName(inst)));
+  } else if (inst->operand_count() == 4) {
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale_a,
+        FindInstructionInput(tensor_map, res, inst, 2, seq, false));
+
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor scale_b,
+        FindInstructionInput(tensor_map, res, inst, 3, seq, false));
+
+    TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, scale_a, in1, scale_b,
+                                              seq, root_inst->opcode(),
+                                              GetDebugName(inst)));
+  } else {
+    return xla::FailedPrecondition("Unsupported, aXbY scaled inplace op: %s",
+                                   root_inst->name().c_str());
+  }
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, in0));
+  return seq;
+}
+
 StatusOr<poplar::program::Program> CreateMatMulForDotOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {
@@ -563,6 +786,38 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
 
   return seq;
+}
+
+StatusOr<poplar::program::Program> CreateMatMulBiasAddOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map) {
+  // Get the broadcast instruction which is required to get the bias size.
+  const HloInstruction* root =
+      inst->fused_instructions_computation()->root_instruction();
+  const HloInstruction* broadcast = root->operand(1);
+  CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
+
+  poplar::Graph& graph = GetGraph(res, inst);
+
+  poplar::program::Sequence prog;
+
+  TF_ASSIGN_OR_RETURN(
+      TensorVectors inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, prog, false));
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(inputs[0].size(), 1);
+  poplar::Tensor in = inputs[0][0];
+
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor bias,
+      FindInstructionInput(tensor_map, res, inst, 1, prog, false));
+
+  TF_ASSIGN_OR_RETURN(
+      bias, BroadcastTensor(bias, broadcast->shape(), broadcast->dimensions()));
+  popops::addInPlace(graph, in, bias, prog, GetDebugName(inst));
+
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, in));
+  return prog;
 }
 
 StatusOr<poplar::program::Program> CreateCastOp(CompilerResources& res,

@@ -80,6 +80,18 @@ poplar::Tensor AddGroupsDimensionToWeights(const poplin::ConvParams& p,
 std::set<unsigned int> GetPoolingReductionDims(const Window& window);
 /* Ops */
 
+StatusOr<poplar::program::Program> CreateUnaryElementwiseOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateBinaryElementwiseOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateTernaryElementwiseOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateComparisonOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map);
@@ -97,21 +109,25 @@ Status ScaledInplaceConstantOrTensor(poplar::Graph& graph, poplar::Tensor& lhs,
                                      const HloOpcode op_type,
                                      const std::string& name);
 
-Status ScaledInplaceConstantOrTensor(
-    poplar::Graph& graph, poplar::Tensor& tensor_a, const double scale_a,
-    poplar::Tensor& tensor_b, const double scale_b,
-    poplar::program::Sequence& prog, const HloOpcode op_type,
-    const std::string& name);
+StatusOr<poplar::program::Program> CreateScaledInplace(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
 
-Status ScaledInplaceConstantOrTensor(
-    poplar::Graph& graph, poplar::Tensor& tensor_a, poplar::Tensor& scale_a,
-    poplar::Tensor& tensor_b, poplar::Tensor& scale_b,
-    poplar::program::Sequence& prog, const HloOpcode op_type,
-    const std::string& name);
+StatusOr<poplar::program::Program> CreateScaledInplaceaXbY(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateConvScaledInplace(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateMatMulForDotOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateMatMulBiasAddOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
@@ -177,10 +193,6 @@ StatusOr<poplar::program::Program> CreateCustomCallOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreateNonCallPoplarOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map);
-
 StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
                                                   const HloInstruction* inst,
                                                   const xla::Shape& output,
@@ -227,6 +239,11 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
                                                     const xla::Shape& output,
                                                     TensorMap& tensor_map);
 
+StatusOr<poplar::program::Program> CreateConv2D(CompilerResources& res,
+                                                const HloInstruction* inst,
+                                                const xla::Shape& output_shape,
+                                                TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateConvBiasAddOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);
@@ -234,6 +251,24 @@ StatusOr<poplar::program::Program> CreateConvBiasAddOp(
 StatusOr<poplar::program::Program> TruncatedNormal(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> RandomNormalScale(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> RandomUniformScale(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> RandomNormal(CompilerResources& res,
+                                                const HloInstruction* inst,
+                                                const xla::Shape& output_shape,
+                                                TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> RandomUniform(CompilerResources& res,
+                                                 const HloInstruction* inst,
+                                                 const xla::Shape& output_shape,
+                                                 TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateSimpleSelectAndScatter(
     CompilerResources& res, const HloInstruction* inst,
@@ -282,6 +317,22 @@ StatusOr<poplar::program::Program> CreateTanhGradOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);
 
+StatusOr<poplar::program::Program> Create2DConvWithReverse(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateDepthwiseBackpropFilter(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateBiasApply(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateWideConstant(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateIota(CompilerResources& res,
                                               const HloInstruction* inst,
                                               const xla::Shape& output_shape,
@@ -300,6 +351,10 @@ StatusOr<poplar::program::Program> CreateZeroPadOp(CompilerResources& res,
                                                    const HloInstruction* inst,
                                                    const xla::Shape& output,
                                                    TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreatePaddingReduceWindow(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
@@ -361,6 +416,10 @@ StatusOr<poplar::program::Program> CreateMultiUpdate(CompilerResources& res,
 
 StatusOr<poplar::program::Program> CreateMultiUpdateAdd(
     CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateFusedMultiUpdateAddOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output_shape, TensorMap& tensor_map);
 
 StatusOr<poplar::program::Sequence> CreateGather(
     CompilerResources& res, const HloGatherInstruction* inst,

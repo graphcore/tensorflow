@@ -59,33 +59,27 @@ namespace poplarplugin {
 typedef StatusOr<poplar::program::Program> (*CustomCallFn)(
     CompilerResources&, const HloInstruction*, const xla::Shape&, TensorMap&);
 
-Status BaseVisitor::Preprocess(HloInstruction* inst) {
-  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
-                      inst->backend_config<PoplarBackendConfig>());
-  bool new_stochastic_rounding_enabled;
-  switch (poplar_backend_config.stochastic_rounding()) {
-    case NOT_SET:
-      new_stochastic_rounding_enabled =
-          resources_.global_floating_point_behaviour.esr();
-      break;
-    case FORCE_ON:
-      new_stochastic_rounding_enabled = true;
-      break;
-    case FORCE_OFF:
-      new_stochastic_rounding_enabled = false;
-      break;
-    default:
-      return InvalidArgument(
-          "Invalid value for PoplarBackendConfig.stochastic_rounding()");
-  }
-  if (new_stochastic_rounding_enabled != stochastic_rounding_enabled_) {
-    poplar::setStochasticRounding(GetGraph(resources_, inst), sequence,
-                                  new_stochastic_rounding_enabled,
-                                  "Preprocess");
-    stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;
-  }
-  return Status::OK();
-}
+static std::map<std::string, CustomCallFn> custom_call_map = {
+    {"conv_biasadd", CreateConvBiasAddOp},
+    {"matmul_biasadd", CreateMatMulBiasAddOp},
+    {"norm_scale_add", RandomNormalScale},
+    {"uniform_scale_add", RandomUniformScale},
+    {"wide_const", CreateWideConstant},
+    {"depthwise_conv", CreateConv2D},
+    {"conv_with_reverse", Create2DConvWithReverse},
+    {"bias_apply", CreateBiasApply},
+    {"zero_pad", CreateZeroPadOp},
+    {"depthwise_filter", CreateDepthwiseBackpropFilter},
+    {"scaled_inplace", CreateScaledInplace},
+    {"scaled_inplace_axby", CreateScaledInplaceaXbY},
+    {"conv_scaled_inplace", CreateConvScaledInplace},
+    {"padding_reduce_window", CreatePaddingReduceWindow},
+    {"implicit_binary", CreateBinaryElementwiseOp},
+    {"implicit_binary_inplace", CreateBinaryElementwiseOp},
+    {"implicit_ternary", CreateTernaryElementwiseOp},
+    {"implicit_ternary_inplace", CreateTernaryElementwiseOp},
+    {"fused_multi_update_add", CreateFusedMultiUpdateAddOp},
+};
 
 BaseVisitor::BaseVisitor(CompilerResources& res) : resources_(res) {
   stochastic_rounding_enabled_ = res.global_floating_point_behaviour.esr();
@@ -95,13 +89,31 @@ const Shape& BaseVisitor::GetOutputShape(HloInstruction* inst) const {
   return inst->shape();
 }
 
-Status BaseVisitor::HandlePoplarOp(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->ToString();
+Status BaseVisitor::Unimplemented(HloInstruction* inst) {
+  return xla::Unimplemented("%s (%s) not implemented", inst->name().c_str(),
+                            HloOpcodeString(inst->opcode()).c_str());
+}
+
+Status BaseVisitor::HandleElementwiseUnary(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
-                      CreateNonCallPoplarOp(resources_, inst,
-                                            GetOutputShape(inst), tensor_map));
+                      CreateUnaryElementwiseOp(
+                          resources_, inst, GetOutputShape(inst), tensor_map));
   sequence.add(prog);
   return Status::OK();
+}
+
+Status BaseVisitor::HandleElementwiseBinary(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateBinaryElementwiseOp(
+                          resources_, inst, GetOutputShape(inst), tensor_map));
+  sequence.add(prog);
+  return Status::OK();
+}
+
+Status BaseVisitor::HandleCompare(HloInstruction* inst) {
+  return HandleElementwiseBinary(inst);
 }
 
 Status BaseVisitor::HandleConvert(HloInstruction* inst) {
@@ -113,6 +125,28 @@ Status BaseVisitor::HandleConvert(HloInstruction* inst) {
   return Status::OK();
 }
 
+Status BaseVisitor::HandleCopy(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleClamp(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateTernaryElementwiseOp(
+                          resources_, inst, GetOutputShape(inst), tensor_map));
+  sequence.add(prog);
+  return Status::OK();
+}
+
+Status BaseVisitor::HandleSelect(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                      CreateTernaryElementwiseOp(
+                          resources_, inst, GetOutputShape(inst), tensor_map));
+  sequence.add(prog);
+  return Status::OK();
+}
+
 Status BaseVisitor::HandleTupleSelect(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
@@ -120,6 +154,10 @@ Status BaseVisitor::HandleTupleSelect(HloInstruction* inst) {
       CreateTupleSelectOp(resources_, inst, GetOutputShape(inst), tensor_map));
   sequence.add(prog);
   return Status::OK();
+}
+
+Status BaseVisitor::HandleConcatenate(HloInstruction* inst) {
+  return Unimplemented(inst);
 }
 
 Status BaseVisitor::HandleBitcastConvert(HloInstruction* inst) {
@@ -135,6 +173,14 @@ Status BaseVisitor::HandleBitcastConvert(HloInstruction* inst) {
   out = out.reinterpret(type);
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   return Status::OK();
+}
+
+Status BaseVisitor::HandleDot(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleConvolution(HloInstruction* inst) {
+  return Unimplemented(inst);
 }
 
 Status BaseVisitor::HandleAllReduce(HloInstruction* inst) {
@@ -173,14 +219,34 @@ Status BaseVisitor::HandleRng(HloInstruction* inst) {
       LOG(FATAL) << "RNG operand " << op->ToString() << " is not a constant.";
     }
   }
-
-  if (inst->random_distribution() != RandomDistribution::RNG_NORMAL &&
-      inst->random_distribution() != RandomDistribution::RNG_UNIFORM) {
-    LOG(FATAL) << "Unsupported random distribution type "
-               << inst->random_distribution() << ".";
+  poplar::program::Program prog;
+  switch (inst->random_distribution()) {
+    case RandomDistribution::RNG_NORMAL: {
+      TF_ASSIGN_OR_RETURN(prog, RandomNormal(resources_, inst,
+                                             GetOutputShape(inst), tensor_map));
+      break;
+    }
+    case RandomDistribution::RNG_UNIFORM: {
+      TF_ASSIGN_OR_RETURN(
+          prog,
+          RandomUniform(resources_, inst, GetOutputShape(inst), tensor_map));
+      break;
+    }
+    default: {
+      LOG(FATAL) << "Unsupported random distribution type "
+                 << inst->random_distribution() << ".";
+    }
   }
+  sequence.add(prog);
+  return Status::OK();
+}
 
-  return HandlePoplarOp(inst);
+Status BaseVisitor::HandleReverse(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleSort(HloInstruction* inst) {
+  return Unimplemented(inst);
 }
 
 Status BaseVisitor::HandleConstant(HloInstruction* inst) {
@@ -224,6 +290,26 @@ Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
   return Status::OK();
 }
 
+Status BaseVisitor::HandleReduce(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleBitcast(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleBroadcast(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleReshape(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleTranspose(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
 namespace {
 TensorVectors GetFusionInputs(CompilerResources& res,
                               const HloInstruction* inst, TensorMap& tensor_map,
@@ -256,7 +342,19 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
     }
   } else if (IsPopOpsFusion(inst)) {
     // If is is a special fusion-type op
-    return HandlePoplarOp(inst);
+    VLOG(1) << "Processing " << inst->name()
+            << " as Poplibs fusion: " << comp->name();
+    auto end = comp->name().find('.');
+    std::string name = comp->name().substr(8, end - 8);
+
+    if (custom_call_map.count(name) == 1) {
+      TF_ASSIGN_OR_RETURN(
+          prog, custom_call_map.at(name)(resources_, inst, GetOutputShape(inst),
+                                         tensor_map));
+    } else {
+      return xla::FailedPrecondition("Unrecognized special call op %s: %s",
+                                     inst->name().c_str(), name.c_str());
+    }
   } else {
     TF_ASSIGN_OR_RETURN(prog, CreateFusionOp(resources_, inst,
                                              GetOutputShape(inst), tensor_map));
@@ -285,12 +383,28 @@ Status BaseVisitor::HandleCustomCall(HloInstruction* inst) {
   return Status::OK();
 }
 
+Status BaseVisitor::HandleSlice(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleDynamicSlice(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleDynamicUpdateSlice(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
 Status BaseVisitor::HandleTuple(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
                       CreateTuple(resources_, inst, tensor_map));
   sequence.add(prog);
   return Status::OK();
+}
+
+Status BaseVisitor::HandleReduceWindow(HloInstruction* inst) {
+  return Unimplemented(inst);
 }
 
 Status BaseVisitor::HandleMap(HloInstruction* inst) {
@@ -304,6 +418,14 @@ Status BaseVisitor::HandleMap(HloInstruction* inst) {
     sequence.add(prog);
     return Status::OK();
   }
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleSelectAndScatter(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleWhile(HloInstruction* inst) {
   return Unimplemented(inst);
 }
 
@@ -329,6 +451,73 @@ Status BaseVisitor::HandleReal(HloInstruction* inst) {
   return Status::OK();
 }
 
+Status BaseVisitor::HandlePad(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleReducePrecision(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleInfeed(HloInstruction* inst) {
+  return xla::FailedPrecondition(
+      "Unsupported use of infeed operation - it's only supported inside of "
+      "loops.");
+}
+
+Status BaseVisitor::HandleOutfeed(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleSend(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleSendDone(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleRecv(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleRecvDone(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleBatchNormInference(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleBatchNormTraining(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleBatchNormGrad(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleFft(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleGather(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleAfterAll(HloInstruction* inst) {
+  // TODO(shauryas) : figure out how to use this for something useful
+  return Status::OK();
+}
+
+Status BaseVisitor::HandleIota(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleScatter(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
 Status BaseVisitor::HandleAllToAll(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
@@ -338,6 +527,14 @@ Status BaseVisitor::HandleAllToAll(HloInstruction* inst) {
 
   sequence.add(seq);
   return Status::OK();
+}
+
+Status BaseVisitor::HandleCollectivePermute(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleGetDimensionSize(HloInstruction* inst) {
+  return Unimplemented(inst);
 }
 
 Status BaseVisitor::HandleAddDependency(HloInstruction* inst) {
@@ -357,20 +554,61 @@ Status BaseVisitor::HandleAddDependency(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status BaseVisitor::Unimplemented(HloInstruction* inst) {
-  return xla::Unimplemented("%s (%s) not implemented", inst->name().c_str(),
-                            HloOpcodeString(inst->opcode()).c_str());
+Status BaseVisitor::HandleReplicaId(HloInstruction* inst) {
+  return Unimplemented(inst);
 }
 
-Status BaseVisitor::HandleAfterAll(HloInstruction* inst) {
-  // TODO(shauryas) : figure out how to use this for something useful
+Status BaseVisitor::HandleTriangularSolve(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleCholesky(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandlePartitionId(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleRngGetAndUpdateState(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleCopyStart(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::HandleCopyDone(HloInstruction* inst) {
+  return Unimplemented(inst);
+}
+
+Status BaseVisitor::Preprocess(HloInstruction* inst) {
+  TF_ASSIGN_OR_RETURN(auto poplar_backend_config,
+                      inst->backend_config<PoplarBackendConfig>());
+  bool new_stochastic_rounding_enabled;
+  switch (poplar_backend_config.stochastic_rounding()) {
+    case NOT_SET:
+      new_stochastic_rounding_enabled =
+          resources_.global_floating_point_behaviour.esr();
+      break;
+    case FORCE_ON:
+      new_stochastic_rounding_enabled = true;
+      break;
+    case FORCE_OFF:
+      new_stochastic_rounding_enabled = false;
+      break;
+    default:
+      return InvalidArgument(
+          "Invalid value for PoplarBackendConfig.stochastic_rounding()");
+  }
+  if (new_stochastic_rounding_enabled != stochastic_rounding_enabled_) {
+    poplar::setStochasticRounding(GetGraph(resources_, inst), sequence,
+                                  new_stochastic_rounding_enabled,
+                                  "Preprocess");
+    stochastic_rounding_enabled_ = new_stochastic_rounding_enabled;
+  }
   return Status::OK();
 }
 
-Status BaseVisitor::HandleInfeed(HloInstruction* inst) {
-  return xla::FailedPrecondition(
-      "Unsupported use of infeed operation - it's only supported inside of "
-      "loops.");
-}
 }  // namespace poplarplugin
 }  // namespace xla

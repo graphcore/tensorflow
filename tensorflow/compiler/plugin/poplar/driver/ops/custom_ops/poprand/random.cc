@@ -36,18 +36,7 @@ class TruncatedNormalOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    TF_ASSIGN_OR_RETURN(poplar::Tensor ref,
-                        AddTensor(graph, TensorLocation{inst, 0}, output_shape,
-                                  res, tensor_map));
-
-    TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
-
-    poplar::program::Sequence seq;
-    auto out = poprand::truncatedNormal(graph, nullptr, 0, ref, dtype, 0.0, 1.0,
-                                        1.0, seq, GetDebugName(inst));
-
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-    return seq;
+    return TruncatedNormal(res, inst, output_shape, tensor_map);
   }
 };
 REGISTER_POPLAR_OP(TruncatedNormal, TruncatedNormalOp);

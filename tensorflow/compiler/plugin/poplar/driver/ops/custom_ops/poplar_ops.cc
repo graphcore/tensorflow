@@ -50,12 +50,13 @@ PoplarOpManager& PoplarOpManager::GetInstance() {
   return instance;
 }
 
-StatusOr<PoplarOpDef*> PoplarOpManager::GetOp(const HloInstruction* inst) {
+StatusOr<PoplarOpDef*> PoplarOpManager::GetOp(
+    const HloCustomCallInstruction* inst) {
   // Find the poplibs info given a CustomCall instruction.
   auto ret = GetPoplibsCustomOp(inst);
   if (!ret) {
-    return FailedPrecondition("Could not find poplar op %s.",
-                              inst->ToString().c_str());
+    return FailedPrecondition("Could not find custom call target for %s.",
+                              inst->custom_call_target().c_str());
   }
 
   auto& ops = GetInstance().ops;
