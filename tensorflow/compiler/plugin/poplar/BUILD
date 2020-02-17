@@ -183,12 +183,10 @@ cc_library(
         # Place HloPoplarInstructionFactory files below here.
         "driver/tools/conv_util.cc",
         "driver/tools/custom_ops/arg_min_max.cc",
-        "driver/tools/custom_ops/cast_to_gfloat_hlo.cc",
         "driver/tools/custom_ops/all_gather.cc",
         "driver/tools/custom_ops/codelet_expression_op.cc",
         "driver/tools/custom_ops/dropout_hlo.cc",
         "driver/tools/custom_ops/fifo.cc",
-        "driver/tools/custom_ops/arg_min_max.cc",
         "driver/tools/custom_ops/cast_to_gfloat_hlo.cc",
         "driver/tools/custom_ops/gelu.cc",
         "driver/tools/custom_ops/group_norm_infer.cc",
