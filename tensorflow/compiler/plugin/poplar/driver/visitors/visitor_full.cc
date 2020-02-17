@@ -88,12 +88,7 @@ Status FullVisitor::HandleDot(HloInstruction* inst) {
 }
 
 Status FullVisitor::HandleConvolution(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-  TF_ASSIGN_OR_RETURN(
-      poplar::program::Program prog,
-      CreateConv2D(resources_, inst, GetOutputShape(inst), tensor_map));
-  sequence.add(prog);
-  return Status::OK();
+  return HandlePoplarOp(inst);
 }
 
 Status FullVisitor::HandleCopy(HloInstruction* inst) {

@@ -876,40 +876,6 @@ StatusOr<poplar::program::Program> CreateSimpleSelectAndScatter(
   return prog;
 }
 
-StatusOr<poplar::program::Program> CreatePaddingReduceWindow(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map) {
-  poplar::program::Sequence seq;
-
-  poplar::Graph& graph = GetGraph(res, inst);
-
-  const HloInstruction* root =
-      inst->fused_instructions_computation()->root_instruction();
-  const Window& window(root->window());
-
-  TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
-  CHECK_EQ(inputs.size(), 2);
-  CHECK_EQ(inputs[0].size(), 1);
-  poplar::Tensor in = inputs[0][0];
-  CHECK_EQ(inputs[1].size(), 1);
-  poplar::Tensor init_val = inputs[1][0];
-
-  std::vector<std::ptrdiff_t> paddingLower;
-  std::vector<std::ptrdiff_t> paddingUpper;
-  for (auto& d : window.dimensions()) {
-    paddingLower.push_back(d.padding_low());
-    paddingUpper.push_back(d.padding_high());
-  }
-
-  poplar::Tensor out =
-      popops::pad(graph, in, paddingLower, paddingUpper, init_val);
-
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
-  return seq;
-}
-
 StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map) {

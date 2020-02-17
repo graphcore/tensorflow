@@ -117,54 +117,5 @@ StatusOr<poplar::program::Program> CreateMultiUpdateAdd(
   return prog;
 }
 
-StatusOr<poplar::program::Program> CreateFusedMultiUpdateAddOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map) {
-  auto fusion_root = inst->fused_instructions_computation()->root_instruction();
-
-  const bool negate_scale = fusion_root->opcode() == HloOpcode::kSubtract;
-  const bool has_reshape =
-      fusion_root->operand(1)->opcode() == HloOpcode::kReshape;
-  // Get the rhs of the root operation, looking through the reshape.
-  auto rhs_inst = has_reshape ? fusion_root->operand(1)->operand(0)
-                              : fusion_root->operand(1);
-  CHECK_EQ(rhs_inst->opcode(), HloOpcode::kMultiply);
-
-  poplar::program::Sequence prog;
-  poplar::Graph& graph = GetGraph(res, inst);
-
-  TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                      FindInplaceOutputTensors(tensor_map, res, inst, prog));
-  CHECK_EQ(inputs.size(), 1);
-  CHECK_EQ(inputs[0].size(), 1);
-  poplar::Tensor operand = inputs[0][0];
-  TF_ASSIGN_OR_RETURN(poplar::Tensor indices,
-                      FindInstructionInput(tensor_map, res, inst, 1, prog));
-  TF_ASSIGN_OR_RETURN(poplar::Tensor updates,
-                      FindInstructionInput(tensor_map, res, inst, 2, prog));
-  TF_ASSIGN_OR_RETURN(poplar::Tensor scale,
-                      FindInstructionInput(tensor_map, res, inst, 3, prog));
-  scale = negate_scale ? popops::neg(graph, scale, prog,
-                                     GetDebugName(inst) + "/NegateScale")
-                       : scale;
-
-  // A tensor view of the operand which depends on whether there is a reshape or
-  // not.
-  poplar::Tensor operand_reshaped = operand;
-  if (has_reshape) {
-    // Reshape the operand so that the values are scattered into it.
-    std::vector<size_t> dims(PoplarShapeFromXlaShape(rhs_inst->shape()));
-    operand_reshaped = operand_reshaped.reshape(dims);
-  }
-
-  TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
-  TF_RETURN_IF_ERROR(MultiUpdateInternal(
-      graph, *plan, operand_reshaped, indices, updates, prog,
-      GetDebugName(inst), UpdateMode::Accumulate, scale));
-
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
-  return prog;
-}
-
 }  // namespace poplarplugin
 }  // namespace xla

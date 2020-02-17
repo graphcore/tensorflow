@@ -54,11 +54,36 @@ enum PoplarOp {
   SuggestRecompute = 50;
   BlockRecompute = 51;
   ReduceScatter = 52;
-  HostEmbeddingLookup = 53;
-  HostEmbeddingUpdate = 54;
-  StatefulGradientAccumulateWithMomentum = 55;
-  StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm = 56;
-  Gelu = 57;
-  GeluGrad = 58;    
 
+  RandomNormal = 53;
+  RandomUniform= 54;
+  RandomTruncatedNormal=55;
+  UnaryOp=56;
+  HostEmbeddingLookup = 57;
+  HostEmbeddingUpdate = 58;
+  StatefulGradientAccumulateWithMomentum = 59;
+  StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm = 60;
+  Gelu = 61;
+  GeluGrad = 62;
+
+  // Supported Fusions.
+  Conv_biasadd = 200;
+  Matmul_biasadd =201;
+  Fused_multi_update_add = 202;
+  Norm_scale_add = 203;
+  Uniform_scale_add=204;
+  Wide_const = 205;
+  Depthwise_conv=206;
+  Conv_with_reverse =207;
+  Bias_apply = 208;
+  Zero_pad = 209;
+  Depthwise_filter=210;
+  Scaled_inplace =211;
+  Scaled_inplace_axby = 212;
+  Conv_scaled_inplace = 213;
+  Padding_reduce_window=214;
+  Implicit_binary = 215;
+  Implicit_binary_inplace=216;
+  Implicit_ternary =217;
+  Implicit_ternary_inplace=218;  
 }
