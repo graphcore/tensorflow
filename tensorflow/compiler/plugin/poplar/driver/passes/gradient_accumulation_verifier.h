@@ -30,11 +30,17 @@ namespace poplarplugin {
  */
 class GradientAccumulationVerifier : public HloModulePass {
  public:
+  explicit GradientAccumulationVerifier(uint32 replication_factor)
+      : replication_factor_(replication_factor) {}
+
   absl::string_view name() const override {
     return "gradient-accumulation-verifier";
   }
 
   StatusOr<bool> Run(HloModule* module) override;
+
+ private:
+  const uint32 replication_factor_;
 };
 
 }  // namespace poplarplugin

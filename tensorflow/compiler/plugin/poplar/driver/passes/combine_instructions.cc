@@ -83,7 +83,6 @@ CombineInstructions::CombineInstructionsInComputation(
   auto reachability_map = HloReachabilityMap::Build(comp);
   bool changed = false;
   auto instructions = sequence.instructions();
-
   std::vector<const HloInstruction*> result;
   result.reserve(instructions.size());
 

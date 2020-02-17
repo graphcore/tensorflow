@@ -816,10 +816,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<PipelineVerifier>(poplar_executor->RecomputationEnabled());
-    pipeline.AddPass<GradientAccumulationVerifier>();
+    pipeline.AddPass<GradientAccumulationVerifier>(
+        resources.replication_factor);
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
-    pipeline.AddPass<AllocationFinder>(resources.annotations);
-    pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
     if (resources.information.max_all_reduce_buffer_size > 0 ||
         resources.information.max_inter_ipu_copies_buffer_size > 0) {
       pipeline.AddPass<IpuScheduler>(
@@ -827,6 +826,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<CombineInstructions>();
       pipeline.AddPass<HloDescheduler>();
     }
+    pipeline.AddPass<AllocationFinder>(resources.annotations);
+    pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
 
     TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
 

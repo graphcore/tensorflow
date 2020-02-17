@@ -57,4 +57,5 @@ enum PoplarOp {
   HostEmbeddingLookup = 53;
   HostEmbeddingUpdate = 54;
   StatefulGradientAccumulateWithMomentum = 55;
+  StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm = 56;
 }

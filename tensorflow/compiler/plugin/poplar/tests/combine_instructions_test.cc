@@ -301,6 +301,94 @@ add {
 }
 
 TEST_F(CombineInstructionsTest,
+       TestLookAheadSchedulerGradientAccumulationWithMomentum) {
+  std::string hlo_string = R"(
+HloModule top
+
+add {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  add = f32[] add(x, y)
+}
+
+%cluster_1  {
+  %momentum = f16[] parameter(0)
+  %grad0 = f16[4] parameter(1)
+  %accum0 = f16[4] parameter(2)
+  %grad1 = f16[4] parameter(3)
+  %accum1 = f16[4] parameter(4)
+  %grad2 = f16[4] parameter(5)
+  %accum2 = f16[4] parameter(6)
+
+
+  %a0 = f16[4] all-reduce(grad0), to_apply=add
+  %norm0 = f16[4] custom-call(a0), custom_call_target="ReplicationNormalise", backend_config="{}\n"
+  %ga0 = (f16[4], f16[4]) custom-call(accum0, norm0, momentum), custom_call_target="StatefulGradientAccumulateWithMomentum", backend_config="{\"num_mini_batches\":4}\n"
+  %new_grad0 = f16[4] get-tuple-element(ga0), index=0
+  %new_accum0 = f16[4] get-tuple-element(ga0), index=1
+
+  %a1 = f16[4] all-reduce(grad1), to_apply=add
+  %norm1 = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
+  %ga1 = (f16[4], f16[4]) custom-call(accum1, norm1, momentum), custom_call_target="StatefulGradientAccumulateWithMomentum", backend_config="{\"num_mini_batches\":4}\n"
+  %new_grad1 = f16[4] get-tuple-element(ga1), index=0
+  %new_accum1 = f16[4] get-tuple-element(ga1), index=1
+
+  %a2 = f16[4] all-reduce(grad2), to_apply=add
+  %norm2 = f16[4] custom-call(a2), custom_call_target="ReplicationNormalise", backend_config="{}\n"
+  %ga2 = (f16[4], f16[4]) custom-call(accum2, norm2, momentum), custom_call_target="StatefulGradientAccumulateWithMomentum", backend_config="{\"num_mini_batches\":4}\n"
+  %new_grad2 = f16[4] get-tuple-element(ga2), index=0
+  %new_accum2 = f16[4] get-tuple-element(ga2), index=1
+
+  ROOT %tuple = (f16[4], f16[4], f16[4], f16[4], f16[4], f16[4]) tuple(new_grad0, new_accum0, new_grad1, new_accum1, new_grad2, new_accum2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+  CompilerAnnotations annotations(module);
+  auto* entry = module->entry_computation();
+
+  // Replace and fuse the gradient accumulations.
+  EXPECT_EQ(entry->instruction_count(), 23);
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  EXPECT_EQ(entry->instruction_count(), 23);
+  GradientAccumulationFuser fuser(annotations);
+  EXPECT_TRUE(fuser.Run(module).ValueOrDie());
+  EXPECT_EQ(entry->instruction_count(), 17);
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
+          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
+
+  // Check the inplace instructions are set.
+  auto inplace_instructions = GetInplaceInstructions(module);
+  EXPECT_EQ(inplace_instructions.size(), 9);
+
+  auto s = module->schedule().sequence(entry);
+  auto seq = s.instructions();
+  ASSERT_EQ(seq.size(), 24);
+  ASSERT_EQ(
+      absl::c_count_if(
+          seq,
+          IsPoplarInstruction(
+              PoplarOp::
+                  StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm)),
+      1);
+}
+
+TEST_F(CombineInstructionsTest,
        TestLookAheadSchedulerGradientAccumulationDifferentMiniBatches) {
   std::string hlo_string = R"(
 HloModule top
