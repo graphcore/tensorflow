@@ -16,6 +16,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 
 #include <limits>
+#include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -28,8 +30,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
+#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_reachability.h"
@@ -362,14 +366,37 @@ void ForwardAllocation::FlattenInputs(
 // In this graph %arg0 is the input, but we traverse the graph and find that
 // %gte0, %gte1, %gte2.0, %gte2.1, %gte3, %gte4 are the non tuple inputs and we
 // find the forward allocations for those.
-absl::flat_hash_set<HloInstruction*> ForwardAllocation::FindInputs(
-    HloComputation* comp) {
+StatusOr<absl::flat_hash_set<HloInstruction*>> ForwardAllocation::FindInputs(
+    HloComputation* comp, CallGraph* call_graph) {
   absl::flat_hash_set<HloInstruction*> deferred_inputs;
+
+  auto call_graph_node = call_graph->GetNode(comp);
+  auto& callsites = call_graph_node.caller_callsites();
+  std::vector<int64> parameters_to_add;
+  // In pipeliening, do not add a parameter as an input location, unless it was
+  // a parameter in the outter scope too.
+  if (callsites.size() != 1 ||
+      !IsAnyPipelineStageOpOrResourceUpdate(callsites[0].instruction())) {
+    parameters_to_add.resize(comp->num_parameters());
+    absl::c_iota(parameters_to_add, 0);
+  } else {
+    HloInstruction* caller = callsites[0].instruction();
+    for (int64 i = 0; i != comp->num_parameters(); ++i) {
+      const HloInstruction* operand = caller->operand(i);
+      if (operand->opcode() == HloOpcode::kParameter) {
+        parameters_to_add.push_back(i);
+      }
+    }
+  }
+
+  for (int64 param_number : parameters_to_add) {
+    FlattenInputs(comp->parameter_instruction(param_number), deferred_inputs);
+  }
+
   for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
     // Check if it is either a custom call or has already been replaced.
     if (inst->opcode() == HloOpcode::kConstant ||
         inst->opcode() == HloOpcode::kInfeed ||
-        inst->opcode() == HloOpcode::kParameter ||
         inst->opcode() == HloOpcode::kRecvDone ||
         IsPoplarInstruction(PoplarOp::RemapDeduce)(inst)) {
       FlattenInputs(inst, deferred_inputs);
@@ -436,10 +463,12 @@ bool ForwardAllocation::CreateForwardAllocationTarget(
 }
 
 StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
-    HloComputation* comp, std::set<const HloInstruction*>& ops_with_layout) {
+    HloComputation* comp, std::set<const HloInstruction*>& ops_with_layout,
+    CallGraph* call_graph) {
   bool found_target = false;
 
-  auto deferred_allocation_inputs = FindInputs(comp);
+  TF_ASSIGN_OR_RETURN(auto deferred_allocation_inputs,
+                      FindInputs(comp, call_graph));
 
   const auto is_input = [&deferred_allocation_inputs,
                          this](HloInstruction* inst) {
@@ -569,10 +598,11 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
 }
 
 StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
-    HloComputation* comp) {
+    HloComputation* comp, CallGraph* call_graph) {
   bool found_target = false;
 
-  auto deferred_allocation_inputs = FindInputs(comp);
+  TF_ASSIGN_OR_RETURN(auto deferred_allocation_inputs,
+                      FindInputs(comp, call_graph));
 
   const auto is_input = [&deferred_allocation_inputs,
                          this](HloInstruction* inst) {
@@ -659,6 +689,7 @@ ForwardAllocation::ForwardAllocation(CompilerAnnotations& annotations)
     : tensor_allocation_map(annotations.tensor_allocation_map) {}
 
 StatusOr<bool> ForwardAllocation::Run(HloModule* module) {
+  std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
   bool found_target = false;
 
   // Stores all the ops which we have identified to have layouts.
@@ -672,12 +703,13 @@ StatusOr<bool> ForwardAllocation::Run(HloModule* module) {
     if (IsPopOpsFusion(computation)) {
       continue;
     }
-    TF_ASSIGN_OR_RETURN(
-        bool found_sensative_target_in_computation,
-        FindLayoutSensativeTargets(computation, ops_with_layout));
+    TF_ASSIGN_OR_RETURN(bool found_sensative_target_in_computation,
+                        FindLayoutSensativeTargets(computation, ops_with_layout,
+                                                   call_graph.get()));
     found_target |= found_sensative_target_in_computation;
-    TF_ASSIGN_OR_RETURN(bool found_dependent_target_in_computation,
-                        FindLayoutDependentTargets(computation));
+    TF_ASSIGN_OR_RETURN(
+        bool found_dependent_target_in_computation,
+        FindLayoutDependentTargets(computation, call_graph.get()));
     found_target |= found_dependent_target_in_computation;
   }
 

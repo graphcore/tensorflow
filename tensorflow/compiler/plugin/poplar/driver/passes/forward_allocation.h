@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <fstream>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <vector>
 
@@ -27,6 +28,7 @@ limitations under the License.
 
 namespace xla {
 
+class CallGraph;
 class HloModule;
 class HloComputation;
 class HloInstruction;
@@ -52,11 +54,14 @@ class ForwardAllocation : public HloModulePass {
       const std::vector<HloInstruction*>& backward_path);
 
   StatusOr<bool> FindLayoutSensativeTargets(
-      HloComputation* comp, std::set<const HloInstruction*>& ops_with_layout);
+      HloComputation* comp, std::set<const HloInstruction*>& ops_with_layout,
+      CallGraph* call_graph);
 
-  StatusOr<bool> FindLayoutDependentTargets(HloComputation* comp);
+  StatusOr<bool> FindLayoutDependentTargets(HloComputation* comp,
+                                            CallGraph* call_graph);
 
-  absl::flat_hash_set<HloInstruction*> FindInputs(HloComputation* comp);
+  StatusOr<absl::flat_hash_set<HloInstruction*>> FindInputs(
+      HloComputation* comp, CallGraph* call_graph);
 
   void FlattenInputs(HloInstruction* inst,
                      absl::flat_hash_set<HloInstruction*>& deferred_inputs);

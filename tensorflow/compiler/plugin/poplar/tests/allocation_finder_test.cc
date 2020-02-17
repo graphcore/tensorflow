@@ -3792,6 +3792,75 @@ ENTRY top {
   EXPECT_EQ(t.backward_path[1], padded_p3);
 }
 
+TEST_F(AllocationFinderTest, PipelineScopes) {
+  const string& hlo = R"(
+HloModule module
+
+_stage_0 {
+  s0_param0 = f32[] parameter(0), sharding={maximal device=0}
+  ROOT t = (f32[]) tuple(s0_param0), sharding={{maximal device=0}}
+}
+
+_stage_1 {
+  s1_param0 = f32[] parameter(0), sharding={maximal device=1}
+  s1_param1 = f32[] parameter(1), sharding={maximal device=1}
+  add_1 = f32[] add(s1_param0, s1_param1), sharding={maximal device=1}
+  ROOT t = (f32[]) tuple(add_1), sharding={{maximal device=1}}
+}
+
+_stage_2 {
+  s2_param0 = f32[] parameter(0), sharding={maximal device=2}
+  s2_param1 = f32[] parameter(1), sharding={maximal device=2}
+  add_2 = f32[] add(s2_param1, s2_param0), sharding={maximal device=2}
+  ROOT t = (f32[]) tuple(add_2), sharding={{maximal device=2}}
+}
+
+ENTRY pipeline {
+  arg0 = f32[] parameter(0), sharding={maximal device=0}
+  arg1 = f32[] parameter(1), sharding={maximal device=1}
+  arg2 = f32[] parameter(2), sharding={maximal device=2}
+
+  a0 = (f32[]) call(arg0), to_apply=_stage_0, sharding={{maximal device=0}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  gte_a = f32[] get-tuple-element(a0), index=0, sharding={maximal device=0}
+  b0 = (f32[]) call(gte_a, arg1), to_apply=_stage_1, sharding={{maximal device=1}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  gte_b = f32[] get-tuple-element(b0), index=0, sharding={maximal device=1}
+  ROOT c0 = (f32[]) call(gte_b, arg2), to_apply=_stage_2, sharding={{maximal device=2}}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(3);
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  ForwardAllocation fwd_finder(annotations);
+  EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  HloInstruction* s1_param1 = FindInstruction(module0, "s1_param1");
+  HloInstruction* add_1 = FindInstruction(module0, "add_1");
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{s1_param1, 0});
+  EXPECT_EQ(t.tgt, add_1);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 0);
+
+  HloInstruction* s2_param1 = FindInstruction(module0, "s2_param1");
+  HloInstruction* add_2 = FindInstruction(module0, "add_2");
+  t = annotations.tensor_allocation_map.at(TensorLocation{s2_param1, 0});
+  EXPECT_EQ(t.tgt, add_2);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 0);
+}
+
 // // TODO:
 // // - can forward path traverse in-place ops
 // // - is forward path rejected when going through non-layout preserving
