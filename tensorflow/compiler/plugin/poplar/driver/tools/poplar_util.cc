@@ -227,9 +227,9 @@ void DumpIfPoplarOutOfMemoryAllocationException(
     SetFlagIfNotPresent(opts, "showVarStorage", "true");
 
     // Always produce a text report
-    std::ofstream stream(dump_filename);
+    std::ofstream stream(dump_filename + ".txt");
     if (!stream) {
-      LOG(WARNING) << "Unable to open file " << dump_filename
+      LOG(WARNING) << "Unable to open file " << dump_filename << ".txt"
                    << ", the profiler summary will not be saved.";
     } else {
       poplar::printGraphSummary(stream, p_e.graphProfile, opts);
