@@ -15,6 +15,7 @@ py_library(
         "ops/cross_replica_ops.py",
         "ops/embedding_ops.py",
         "ops/internal_ops.py",
+        "ops/nn_ops.py",
         "ops/normalization_ops.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
@@ -43,6 +44,7 @@ py_library(
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
         "ops/internal_ops_grad.py",
+        "ops/nn_ops_grad.py",
         "ops/normalization_ops_grad.py",
         "ops/pipelining_ops_grad.py",
         "ops/rand_ops_grad.py",
@@ -111,6 +113,7 @@ py_library(
         "ops/embedding_ops.py",
         "ops/experimental/popfloat_cast_to_gfloat.py",
         "ops/internal_ops.py",
+        "ops/nn_ops.py",
         "ops/normalization_ops.py",
         "ops/pipelining_ops.py",
         "ops/rand_ops.py",
@@ -186,6 +189,23 @@ tf_py_test(
     name = "dropout_test",
     size = "small",
     srcs = ["tests/dropout_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
+    name = "gelu_test",
+    size = "small",
+    srcs = ["tests/gelu_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
