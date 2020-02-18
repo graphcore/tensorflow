@@ -14,8 +14,12 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/single_hlo_matcher.h"
+
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -24,7 +28,29 @@ bool SingleHloMatcher::HandleMatch(
     HloMatcherMatched& match, const absl::optional<int64> sharding_device) {
   auto& pattern = patterns_[match.pattern_idx];
   std::string name = op_prefix_ + pattern.GetType();
-  OutlineExpressionFromComputation(match, name, sharding_device);
+  HloInstruction* inst =
+      OutlineExpressionFromComputation(match, name, sharding_device);
+
+  PoplarOp tmp;
+
+  if (name.find("_pop_op_") != std::string::npos) {
+    name = name.substr(8);
+  }
+  *name.begin() = std::toupper(*name.begin());
+
+  auto itr = name.find(".");
+  if (itr != std::string::npos) {
+    name = name.substr(0, itr);
+  }
+
+  bool parse = PoplarOp_Parse(name, &tmp);
+
+  if (!parse) {
+    LOG(FATAL)
+        << "Matched fusion is NOT a known poplar operation registered with XLA "
+        << name;
+  }
+
   return true;
 }
 
