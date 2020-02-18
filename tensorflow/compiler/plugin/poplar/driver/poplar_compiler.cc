@@ -1063,8 +1063,16 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     uint64 duration = tensorflow::Env::Default()->NowMicros() - start_micros;
 
     if (report_stream.tellp() > poplar_executor->MaxReportSize()) {
-      LOG(WARNING) << "Dropping Poplar compilation report, size was "
-                   << report_stream.tellp();
+      LOG(INFO)
+          << "Dropping a Poplar compilation report of size "
+          << report_stream.tellp()
+          << " which is larger than the configured maximum report size "
+          << std::to_string(poplar_executor->MaxReportSize())
+          << ". To change the maximum report size use the max_report_size"
+          << " argument in ipu.utils.create_ipu_config.\n"
+          << "Example:\n"
+          << "cfg = ipu.utils.create_ipu_config(max_report_size=0x100000000) "
+          << "Note that the max report size is in bytes.";
       report_stream.str(std::string());
     }
 

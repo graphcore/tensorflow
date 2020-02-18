@@ -2801,8 +2801,18 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
             current_engine_->resetExecutionProfile();
 
             if (report_stream.tellp() > MaxReportSize()) {
-              LOG(WARNING) << "Dropping Poplar execution report, size was "
-                           << report_stream.tellp();
+              LOG(INFO)
+                  << "Dropping a Poplar compilation report of size "
+                  << report_stream.tellp()
+                  << " which is larger than the configured maximum report size "
+                  << std::to_string(MaxReportSize())
+                  << ". To change the maximum report size use the "
+                     "max_report_size"
+                  << " argument in ipu.utils.create_ipu_config.\n"
+                  << "Example:\n"
+                  << "cfg = "
+                     "ipu.utils.create_ipu_config(max_report_size=0x100000000) "
+                  << "Note that the max report size is in bytes.";
               report_stream.str(std::string());
             }
             report = report_stream.str();
