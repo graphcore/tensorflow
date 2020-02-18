@@ -147,6 +147,21 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
   return seq;
 }
 
+StatusOr<poplar::program::Program> CreateNonCallPoplarOp(
+    CompilerResources& res, const HloInstruction* inst,
+    const xla::Shape& output, TensorMap& tensor_map) {
+  VLOG(1) << "Processing " << inst->ToString() << " as Poplibs call";
+  poplar::Graph& graph = GetGraph(res, inst);
+  auto op = GetPoplibsCustomOp(inst);
+  if (op) {
+    return CreatePoplarOp(graph, res, inst, output, tensor_map);
+  } else {
+    return xla::FailedPrecondition(
+        "Unrecognised Non call poplar instruction %s.",
+        inst->ToString().c_str());
+  }
+}
+
 StatusOr<poplar::program::Program> CreateCustomCallOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map) {

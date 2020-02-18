@@ -146,7 +146,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
         ok = [
             '__seed*', 'host-exchange-local-copy-',
-            'Copy_{XLA_Args*/arg1.*/weightsRearranged}',
+            'Copy_{*_input,*_weights}_to_{*actsRearranged,*weightsRearranged}',
             'cnv4*/convolution.*/Conv_8x8_stride4x4', 'ba4*/fusion/Op/Add'
         ]
         report.assert_all_compute_sets_and_list(ok)
