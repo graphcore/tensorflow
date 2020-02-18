@@ -75,7 +75,13 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
     int64 tuple_index = 0;
     for (auto shape : root->shape().tuple_shapes()) {
       output_shapes.push_back(shape);
-      output_names.push_back(root->operand(tuple_index)->metadata().op_name());
+      if (root->opcode() == HloOpcode::kTuple) {
+        output_names.push_back(
+            root->operand(tuple_index)->metadata().op_name());
+      } else {
+        output_names.push_back(
+            absl::StrCat(root->metadata().op_name(), ".", tuple_index));
+      }
       tuple_index++;
     }
   } else {
