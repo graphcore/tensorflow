@@ -336,7 +336,7 @@ class IpuXlaVariableTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'z1/Initializer/truncated_normal/TruncatedNormal/custom-call*/truncatedNormal',
-          'z1/Initializer/truncated_normal/mul/fusion*/Op/Multiply',
+          'z1/Initializer/truncated_normal/fusion*/Op/Multiply',
           'z1/Initializer/truncated_normal/fusion*/Add'
       ]
       # pylint: enable=line-too-long
