@@ -52,8 +52,7 @@ StatusOr<bool> ApplyRecomputeSuggestion::Run(HloModule* module) {
         auto custom_call = Cast<HloCustomCallInstruction>(inst);
 
         // Have we found a recomputation suggestion with more than one user?
-        if (IsRecomputeInstruction(custom_call) &&
-            custom_call->user_count() > 1) {
+        if (IsRecomputeInstruction(custom_call)) {
           auto operand = custom_call->mutable_operand(0);
 
           // If the operand is also a recompute suggestion, remove this one.
@@ -77,6 +76,8 @@ StatusOr<bool> ApplyRecomputeSuggestion::Run(HloModule* module) {
 
             std::unordered_set<const HloInstruction*> unique_users(
                 custom_call->users().begin(), custom_call->users().end());
+
+            VLOG(1) << "Recomputing " << operand->name();
 
             // Deterministicly ordered set of unique users.
             auto inst_post_order = comp->MakeInstructionPostOrder();

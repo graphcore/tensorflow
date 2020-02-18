@@ -146,6 +146,7 @@ cc_library(
         "driver/passes/inplace_finder.cc",
         "driver/passes/inplace_util.cc",
         "driver/passes/inter_ipu_copy_inserter.cc",
+        "driver/passes/lift_recompute_suggestion.cc",
         "driver/passes/lower_frontend_attributes.cc",
         "driver/passes/matmul_combiner.cc",
         "driver/passes/module_flatten.cc",
@@ -269,6 +270,7 @@ cc_library(
         "driver/passes/inplace_finder.h",
         "driver/passes/inplace_util.h",
         "driver/passes/inter_ipu_copy_inserter.h",
+        "driver/passes/lift_recompute_suggestion.h",
         "driver/passes/lower_frontend_attributes.h",
         "driver/passes/matmul_combiner.h",
         "driver/passes/module_flatten.h",
@@ -1305,6 +1307,18 @@ xla_test(
 xla_test(
     name = "apply_recompute_suggestion_test",
     srcs = ["tests/apply_recompute_suggestion_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "lift_recompute_suggestion_test",
+    srcs = ["tests/lift_recompute_suggestion_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -3626,6 +3640,7 @@ test_suite(
         "invalid_scheduler_selection",
         "ipu_model_device_test",
         "layout_strip_test",
+        "lift_recompute_suggestion_test",
         "lstm_test",
         "mapping_test",
         "matmul_combiner_test",

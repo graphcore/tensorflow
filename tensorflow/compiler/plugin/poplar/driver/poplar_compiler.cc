@@ -56,6 +56,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_dependency_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/lift_recompute_suggestion.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/matmul_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
@@ -768,6 +769,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
             "resolve-recompute-suggestions");
 
         pass.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
+        pass.AddPass<HloPassFix<LiftRecomputeSuggestion>>();
         pass.AddPass<ApplyRecomputeSuggestion>();
       }
     }

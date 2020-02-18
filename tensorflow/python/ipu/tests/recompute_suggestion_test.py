@@ -69,8 +69,13 @@ class RecomputeSuggestionTest(test_util.TensorFlowTestCase):
 
       # 5 adds in a graph that only defined 4
       ok = [
-          '__seed*', 'add_1/add.1/Op/Add', 'add_2/add.10/Op/Add',
-          'add/add.4/Op/Add', 'add_1/add.1.clone/AddTo', 'add_3/add.12/AddTo'
+          '__seed*',
+          'add_1/add.1/Op/Add',
+          'add_2/add.10/Op/Add',
+          'add_1/add.1.clone.1/Op/Add',
+          'add/add.4/Op/Add',
+          'add_1/add.1.clone/AddTo',
+          'add_3/add.12/AddTo',
       ]
       report.assert_all_compute_sets_and_list(ok)
 

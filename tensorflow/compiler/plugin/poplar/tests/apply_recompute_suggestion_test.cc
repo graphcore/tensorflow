@@ -89,6 +89,47 @@ ENTRY main {
 }
 
 /**
+ * Check that recomputation propogates past an instruction with a single user.
+ */
+TEST_F(ApplyRecomputeSuggestionTest, SingleUser) {
+  std::string hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  a = f32[] parameter(0)
+  b = f32[] parameter(1)
+  c = f32[] parameter(2)
+  d = f32[] add(a, b)
+  e = f32[] custom-call(f32[] d), custom_call_target="SuggestRecompute", backend_config="{}"
+  ROOT f = f32[] add(e, c)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module = ParseAndReturnVerifiedModule(hlo_string, config).ValueOrDie();
+
+  HloPassPipeline pipeline("test");
+  pipeline.AddPass<CustomOpReplacer>();
+  pipeline.AddPass<ApplyRecomputeSuggestion>();
+
+  EXPECT_TRUE(pipeline.Run(module.get()).ValueOrDie());
+  EXPECT_EQ(module->entry_computation()->instruction_count(), 7);
+
+  auto a = m::Parameter();
+  auto b = m::Parameter();
+  auto c = m::Parameter();
+  auto a_ = m::CustomCall(a);  // Recompute suggestion
+  auto b_ = m::CustomCall(b);  // Recompute suggestion
+  auto d = m::Add(a_, b_);
+  auto e = m::Add(d, c);  // ROOT
+
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(Match(root, e));
+}
+
+/**
  * Check that recompute(recompute(x)) behaves the same as recompute(x).
  */
 TEST_F(ApplyRecomputeSuggestionTest, DuplicateRecompute) {
