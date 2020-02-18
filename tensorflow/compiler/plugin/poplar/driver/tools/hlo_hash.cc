@@ -69,10 +69,14 @@ void HloHash::SanitizeHloModuleProto(HloModuleProto* proto,
   comp_queue.push(module->entry_computation());
   while (!comp_queue.empty()) {
     HloComputation* comp = comp_queue.front();
+    comp_queue.pop();
+
+    if (computation_set.count(comp) != 0) {
+      continue;
+    }
 
     computation_list.push_back(comp);
     computation_set.insert(comp);
-    comp_queue.pop();
 
     for (auto* inst : comp->MakeInstructionPostOrder()) {
       for (auto* called_comp : inst->called_computations()) {
