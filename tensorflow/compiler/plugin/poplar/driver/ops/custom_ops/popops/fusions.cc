@@ -371,7 +371,7 @@ class ZeroPadOp : public PoplarOpDef {
 
 REGISTER_POPLAR_OP(Zero_pad, ZeroPadOp);
 
-class ScaledInplaceOp : public PoplarOpDef {
+class ScaledInplaceabYOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -418,8 +418,64 @@ class ScaledInplaceOp : public PoplarOpDef {
     return seq;
   }
 };
+REGISTER_POPLAR_OP(Scaled_inplace_aby, ScaledInplaceabYOp);
 
-REGISTER_POPLAR_OP(Scaled_inplace, ScaledInplaceOp);
+class ScaledInplaceaXbOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    poplar::program::Sequence seq;
+    TF_ASSIGN_OR_RETURN(
+        TensorVectors inputs,
+        FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
+    CHECK_EQ(inputs.size(), 1);
+    CHECK_EQ(inputs[0].size(), 1);
+    poplar::Tensor in0 = inputs[0][0];
+
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor in1,
+        FindInstructionInput(tensor_map, res, inst, 1, seq, false));
+
+    const auto* root_inst =
+        inst->fused_instructions_computation()->root_instruction();
+
+    if (inst->operand_count() == 2) {
+      const auto* const_inst = root_inst->operand(0)->operand(1)->operand(0);
+      CHECK_EQ(const_inst->opcode(), HloOpcode::kConstant);
+      // Get the scalar multiplier
+      TF_ASSIGN_OR_RETURN(double scale, LiteralScalarToNativeType<double>(
+                                            const_inst->literal()));
+
+      TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, scale, in1, 1.0,
+                                                seq, root_inst->opcode(),
+                                                GetDebugName(inst)));
+    } else if (inst->operand_count() == 3) {
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor scale,
+          FindInstructionInput(tensor_map, res, inst, 2, seq, false));
+
+      const Shape& scalar_shape = inst->operand(2)->shape();
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor one,
+          CreateConstantTensor(
+              graph, LiteralUtil::One(scalar_shape.element_type()),
+              scalar_shape, in1.elementType(), GetDebugName(inst) + "/One"));
+
+      TF_CHECK_OK(ScaledInplaceConstantOrTensor(graph, in0, scale, in1, one,
+                                                seq, root_inst->opcode(),
+                                                GetDebugName(inst)));
+    } else {
+      return xla::FailedPrecondition("Unsupported use of scaled inplace op: %s",
+                                     root_inst->name().c_str());
+    }
+
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, in0));
+    return seq;
+  }
+};
+REGISTER_POPLAR_OP(Scaled_inplace_axb, ScaledInplaceaXbOp);
 
 class ScaledInplaceaXbYOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,

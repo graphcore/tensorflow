@@ -69,22 +69,23 @@ enum PoplarOp {
 
   // Supported Fusions.
   Conv_biasadd = 200;
-  Matmul_biasadd =201;
+  Matmul_biasadd = 201;
   Fused_multi_update_add = 202;
   Norm_scale_add = 203;
-  Uniform_scale_add=204;
+  Uniform_scale_add = 204;
   Wide_const = 205;
-  Depthwise_conv=206;
-  Conv_with_reverse =207;
+  Depthwise_conv = 206;
+  Conv_with_reverse = 207;
   Bias_apply = 208;
   Zero_pad = 209;
-  Depthwise_filter=210;
-  Scaled_inplace =211;
+  Depthwise_filter = 210;
+  Scaled_inplace_aby = 211;
   Scaled_inplace_axby = 212;
   Conv_scaled_inplace = 213;
-  Padding_reduce_window=214;
+  Padding_reduce_window = 214;
   Implicit_binary = 215;
-  Implicit_binary_inplace=216;
-  Implicit_ternary =217;
-  Implicit_ternary_inplace=218;
+  Implicit_binary_inplace= 216;
+  Implicit_ternary = 217;
+  Implicit_ternary_inplace = 218;
+  Scaled_inplace_axb = 219;
 }
