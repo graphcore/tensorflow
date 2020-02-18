@@ -118,7 +118,7 @@ class MultiIpuTest(xla_test.XLATestCase):
 
       ReportJSON(self, sess, device_count_override=2)
 
-      with self.assertRaisesRegex(errors.ResourceExhaustedError,
+      with self.assertRaisesRegex(errors.InternalError,
                                   'Trying to compile a graph for'):
         sess.run(out, {pa: [1., 1.], pb: [0., 1.], pc: [1., 5.]})
 

@@ -666,7 +666,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   // Check that it's divisible.
   if (num_ipus % num_shards) {
-    return xla::ResourceExhaustedStrCat(
+    return xla::InternalErrorStrCat(
         "Trying to compile a graph for an IPU device with ", num_ipus,
         " IPUs and ", num_shards,
         " shards. The number of shards needs to "

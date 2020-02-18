@@ -177,15 +177,15 @@ Status PoplarExceptionToTensorflowStatus(const std::string& origin,
   } catch (const poputil::poplibs_error& e) {
     return tensorflow::errors::Internal(prefix, e.what());
   } catch (const poplar::link_error& e) {
-    return tensorflow::errors::ResourceExhausted(prefix, e.what());
+    return tensorflow::errors::Internal(prefix, e.what());
   } catch (const poplar::stream_memory_allocation_error& e) {
-    return tensorflow::errors::ResourceExhausted(prefix, e.what());
+    return tensorflow::errors::Internal(prefix, e.what());
   } catch (const poplar::graph_memory_allocation_error& e) {
-    return tensorflow::errors::ResourceExhausted(prefix, e.what());
+    return tensorflow::errors::Internal(prefix, e.what());
   } catch (const poplar::tensor_creation_error& e) {
-    return tensorflow::errors::ResourceExhausted(prefix, e.what());
+    return tensorflow::errors::Internal(prefix, e.what());
   } catch (const poplar::memory_elem_constraints_error& e) {
-    return tensorflow::errors::ResourceExhausted(prefix, e.what());
+    return tensorflow::errors::Internal(prefix, e.what());
   } catch (const poplar::index_error& e) {
     return tensorflow::errors::OutOfRange(prefix, e.what());
   } catch (const poplar::poplar_error& e) {
