@@ -1204,12 +1204,12 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       // Device was selected when the target was created: attach or fail.
       if (!ipu_.Device().attach()) {
         if (use_ipu_model) {
-          return xla::ResourceExhausted(
+          return xla::InternalError(
               "Unable to acquire poplar device model for ordinal %d", ordinal_);
         } else {
           const int32 cfg_index =
               current_config_.device_config(ordinal_).cfg_index();
-          return xla::ResourceExhausted(
+          return xla::InternalError(
               "Could not attach to requested device configuration index %d",
               cfg_index);
         }
@@ -1230,7 +1230,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       }
       if (!ipu_.DeviceConfigured()) {
         if (device_list.size()) {
-          return xla::ResourceExhausted(
+          return xla::InternalError(
               "Failed to attach to any of the device(s) with matching configs "
               "for ordinal %d",
               ordinal_);
