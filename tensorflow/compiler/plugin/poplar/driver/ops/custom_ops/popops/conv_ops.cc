@@ -37,10 +37,50 @@ using ::absl::StrCat;
 
 namespace xla {
 namespace poplarplugin {
+namespace {
 
-static StatusOr<poplar::Tensor> AddConvolutionInput(
-    poplar::Graph& graph, const std::string& debug_name,
-    const HloInstruction* target, CompilerResources& resources) {
+// This function operates on the poplibs format weights (GOI...)
+poplar::Tensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
+                                                const poplar::Tensor& t,
+                                                bool flipped) {
+  poplar::Tensor out = t;
+  return out.reshapePartial(0, 2, {out.dim(0) * out.dim(1)});
+}
+
+// This function operates on the poplibs format weights (GOI...)
+poplar::Tensor AddGroupsDimensionToWeights(const poplin::ConvParams& p,
+                                           const poplar::Tensor& t,
+                                           bool flipped) {
+  poplar::Tensor out = t;
+
+  unsigned int out_dim = flipped ? 1 : 0;
+  unsigned int in_dim = 1 - out_dim;
+
+  if (p.getNumConvGroups() == 1) {
+    // Non-grouped case
+    return out.reshapePartial(0, 0, {1});
+  } else {
+    unsigned int chan_div[2];
+    chan_div[in_dim] = out.dim(in_dim) / p.getNumInputChansPerConvGroup();
+    chan_div[out_dim] = out.dim(out_dim) / p.getNumOutputChansPerConvGroup();
+
+    // OI... ->(GO)(GI)...
+    out = out.reshapePartial(0, 2,
+                             {chan_div[0], out.dim(0) / chan_div[0],
+                              chan_div[1], out.dim(1) / chan_div[1]});
+
+    // (GO)(GI)... -> (GG)OI...
+    out = out.dimShufflePartial({2}, {1});
+
+    // (GG)OI... -> GOI...
+    return out.reshapePartial(0, 2, {out.dim(0) * out.dim(1)});
+  }
+}
+
+StatusOr<poplar::Tensor> AddConvolutionInput(poplar::Graph& graph,
+                                             const std::string& debug_name,
+                                             const HloInstruction* target,
+                                             CompilerResources& resources) {
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(target, 0, 1));
 
@@ -56,9 +96,10 @@ static StatusOr<poplar::Tensor> AddConvolutionInput(
   return o;
 }
 
-static StatusOr<poplar::Tensor> AddConvolutionWeights(
-    poplar::Graph& graph, const std::string& debug_name,
-    const HloInstruction* target, CompilerResources& resources) {
+StatusOr<poplar::Tensor> AddConvolutionWeights(poplar::Graph& graph,
+                                               const std::string& debug_name,
+                                               const HloInstruction* target,
+                                               CompilerResources& resources) {
   TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                       GetConvolutionParameters(target, 0, 1));
 
@@ -319,9 +360,8 @@ class ConvScaledInplaceOp : public PoplarOpDef {
     return seq;
   }
 };
-
 REGISTER_POPLAR_OP(Conv_scaled_inplace, ConvScaledInplaceOp);
 
+}  // namespace
 }  // namespace poplarplugin
-
 }  // namespace xla

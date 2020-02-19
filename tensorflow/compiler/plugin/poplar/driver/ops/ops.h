@@ -69,14 +69,6 @@ StatusOr<popops::expr::BinaryOpType> LookupBinaryFn(const HloInstruction*);
 StatusOr<popops::expr::BinaryOpType> LookupComparisonFn(
     const HloInstruction* inst);
 
-poplar::Tensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
-                                                const poplar::Tensor& t,
-                                                bool flipped);
-
-poplar::Tensor AddGroupsDimensionToWeights(const poplin::ConvParams& p,
-                                           const poplar::Tensor& t,
-                                           bool flipped);
-
 std::set<unsigned int> GetPoolingReductionDims(const Window& window);
 /* Ops */
 
