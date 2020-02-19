@@ -71,6 +71,37 @@ REGISTER_OP("IpuDeviceEmbeddingLookup")
       return Status::OK();
     });
 
+REGISTER_OP("IpuDeviceEmbeddingLookupTrainable")
+    .Input("dummy: dtype")
+    .Input("indices: T")
+    .Output("output: dtype")
+    .Attr("embedding_id: string")
+    .Attr("embedding_shape: shape")
+    .Attr("dtype: type")
+    .Attr("T: {int32}")
+    .SetIsStateful()
+    .SetShapeFn([](InferenceContext* c) {
+      PartialTensorShape result_shape;
+      TF_RETURN_IF_ERROR(c->GetAttr("embedding_shape", &result_shape));
+
+      ShapeHandle indices = c->input(1);
+      ShapeHandle out;
+      // Require rank 1 indices
+      TF_RETURN_IF_ERROR(c->WithRank(indices, 1, &out));
+
+      DimensionHandle dim = c->Dim(indices, 0);
+      if (c->ValueKnown(dim)) {
+        result_shape.RemoveDim(0);
+        result_shape.InsertDim(0, c->Value(dim));
+        TF_RETURN_IF_ERROR(
+            c->MakeShapeFromPartialTensorShape(result_shape, &out));
+        c->set_output(0, out);
+      } else {
+        return errors::InvalidArgument("Unknown index tensor shape");
+      }
+      return Status::OK();
+    });
+
 REGISTER_OP("IpuDeviceEmbeddingUpdateAdd")
     .Input("grads: T")
     .Input("indices: Tindices")

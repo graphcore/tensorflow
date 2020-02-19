@@ -398,7 +398,8 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
     if (inst->opcode() == HloOpcode::kConstant ||
         inst->opcode() == HloOpcode::kInfeed ||
         inst->opcode() == HloOpcode::kRecvDone ||
-        IsPoplarInstruction(PoplarOp::RemapDeduce)(inst)) {
+        IsPoplarInstruction(PoplarOp::RemapDeduce)(inst) ||
+        IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst)) {
       FlattenInputs(inst, deferred_inputs);
     }
   }

@@ -22,6 +22,11 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_EXECUTOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_POPLAR_EXECUTOR_H_
 
+#include <condition_variable>
+#include <list>
+#include <memory>
+#include <mutex>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
@@ -60,10 +65,6 @@ limitations under the License.
 #include "tensorflow/core/lib/io/path.h"
 
 #include "absl/types/optional.h"
-
-#include <condition_variable>
-#include <list>
-#include <mutex>
 
 #include <poplar/Device.hpp>
 #include <poplar/DeviceManager.hpp>
@@ -477,6 +478,40 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status DeleteOutfeed(const std::string& feed_id);
 
+  class HostEmbeddingInterface_ {
+   public:
+    virtual ~HostEmbeddingInterface_() = default;
+
+    virtual Status EnqueueLookupIndices(int replica, const int* indices,
+                                        int index_count) = 0;
+    virtual Status DequeueLookupActivations(int replica, void* destination) = 0;
+
+    virtual Status EnqueueUpdateIndices(int replica, const int* indices,
+                                        int index_count) = 0;
+    virtual Status EnqueueUpdateGrads(int replica, const void* grads) = 0;
+
+    virtual bool Done() const = 0;
+  };
+
+  template <typename T>
+  class HostEmbeddingInterface : public HostEmbeddingInterface_ {
+   public:
+    virtual Status DequeueLookupActivations(int replica, T* destination) = 0;
+    virtual Status EnqueueUpdateGrads(int replica, const T* grads) = 0;
+
+    Status DequeueLookupActivations(int replica, void* destination) final {
+      return DequeueLookupActivations(replica, static_cast<T*>(destination));
+    }
+
+    Status EnqueueUpdateGrads(int replica, const void* grads) final {
+      return EnqueueUpdateGrads(replica, static_cast<const T*>(grads));
+    }
+  };
+
+  Status RegisterHostEmbedding(
+      const std::string& embedding_id,
+      std::unique_ptr<HostEmbeddingInterface_> embedding);
+
   tensorflow::Rendezvous* GetRendezvous();
 
   void ResetSeed(int seed);
@@ -764,6 +799,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   absl::flat_hash_map<std::string, std::unique_ptr<OutfeedContext>>
       outfeed_contexts_;
+
+  absl::flat_hash_map<std::string, std::unique_ptr<HostEmbeddingInterface_>>
+      host_embeddings_;
+
+  std::mutex host_embeddings_mutex_;
+  std::condition_variable host_embeddings_cv;
 
   SeedGenerator seed_generator_;
 
