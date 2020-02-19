@@ -428,7 +428,6 @@ cc_library(
     srcs = [
         "driver/ops/cast_to_gfloat_ops.cc",
         "driver/ops/conv_graph_caching.cc",
-        "driver/ops/conv_ops.cc",
         "driver/ops/custom_ops/custom_ops.cc",
         "driver/ops/custom_ops/host_embedding.cc",
         "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
