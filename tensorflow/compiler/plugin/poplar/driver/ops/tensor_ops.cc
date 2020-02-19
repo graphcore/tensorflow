@@ -407,12 +407,12 @@ StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
 StatusOr<poplar::program::Program> CreateTuple(CompilerResources& res,
                                                const HloInstruction* inst,
                                                TensorMap& tensor_map,
-                                               bool expand_constants,
+                                               bool expand_aliasing,
                                                bool preserve_aliases) {
   poplar::program::Sequence seq;
   TF_ASSIGN_OR_RETURN(
       TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, res, inst, seq, expand_constants,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, expand_aliasing,
                                preserve_aliases));
   CHECK_EQ(inputs.size(), inst->operand_count());
   uint64 n = 0;

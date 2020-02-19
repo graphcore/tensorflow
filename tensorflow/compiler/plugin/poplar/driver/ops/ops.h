@@ -369,7 +369,7 @@ StatusOr<poplar::program::Program> CreateUpdateScalarInRows(
 StatusOr<poplar::program::Program> CreateTuple(CompilerResources& res,
                                                const HloInstruction* inst,
                                                TensorMap& tensor_map,
-                                               bool expand_constants = true,
+                                               bool expand_aliasing = true,
                                                bool preserve_aliases = false);
 
 StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
