@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_HLO_MATCHER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_HLO_MATCHER_H_
 
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
@@ -33,6 +35,7 @@ namespace poplarplugin {
 using NodeId = int64;
 using NodeOperands = std::vector<NodeId>;
 using NodeCondition = std::function<bool(const HloInstruction*)>;
+using MatcherGraph = MetaGraph<NodeId>;
 
 enum class HloMatcherOpcode {
   kAnyOpcode,
@@ -119,9 +122,9 @@ class HloMatcherPattern {
 
   const Pattern& GetPatternNodes() const;
 
-  const MetaGraph<NodeId>& GetNodesToOperandsMetaGraph() const;
+  const MatcherGraph& GetNodesToOperandsMatcherGraph() const;
 
-  const MetaGraph<NodeId>& GetOperandsToNodesMetaGraph() const;
+  const MatcherGraph& GetOperandsToNodesMatcherGraph() const;
 
  private:
   // The name to give the extracted fused graph.
@@ -170,13 +173,13 @@ class HloMatcherPattern {
   // Structures used to represent this pattern - the first graph represents the
   // connections between nodes and their operands, the second graph represents
   // the connections between operands and their usage nodes.
-  std::pair<MetaGraph<NodeId>, MetaGraph<NodeId>> pattern_graphs;
+  std::pair<MatcherGraph, MatcherGraph> pattern_graphs;
 
   // This function verifies that the pattern is correct. We define a pattern
   // correct if the following conditions are all met:
   // * It has at least one output.
   // * The graph is connected.
-  std::pair<MetaGraph<NodeId>, MetaGraph<NodeId>> VerifyAndGetGraphs();
+  std::pair<MatcherGraph, MatcherGraph> VerifyAndGetGraphs();
 };
 
 struct InstructionIndex {

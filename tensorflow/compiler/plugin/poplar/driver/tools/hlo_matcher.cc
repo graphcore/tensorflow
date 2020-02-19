@@ -82,7 +82,8 @@ bool IsValidCandidate(
   }
 
   // Check that the operands match up
-  auto operand_ids = pattern.GetNodesToOperandsMetaGraph()[candidate_node_id];
+  auto operand_ids =
+      pattern.GetNodesToOperandsMatcherGraph()[candidate_node_id];
   for (NodeId operand_id : operand_ids) {
     auto operand_idx = *GetOperandIndexForNodeId(matched_node, operand_id);
 
@@ -115,7 +116,7 @@ FindValidCandidates(
     HloMatcherNode matcher_node = pattern.GetPatternNodes()[node_id];
 
     // Go through the operands and check whether they are valid isomorphisms.
-    auto operand_ids = pattern.GetNodesToOperandsMetaGraph()[node_id];
+    auto operand_ids = pattern.GetNodesToOperandsMatcherGraph()[node_id];
     for (NodeId operand_id : operand_ids) {
       auto operand_idx = *GetOperandIndexForNodeId(matcher_node, operand_id);
       HloInstruction* operand_inst = matched_inst->mutable_operand(operand_idx);
@@ -132,7 +133,7 @@ FindValidCandidates(
       NodeId operand_id = iso_pair.first;
       HloInstruction* matched_inst = iso_pair.second;
 
-      auto node_ids = pattern.GetOperandsToNodesMetaGraph()[operand_id];
+      auto node_ids = pattern.GetOperandsToNodesMatcherGraph()[operand_id];
       // We label every possible user with a node_id if the user uses the
       // matched_inst at correct index.
       for (NodeId node_id : node_ids) {
@@ -167,7 +168,7 @@ bool IsValidState(
   // Check that all the predecessors of the proposed pairing make sense.
   // For each operand we need a pairing which is not invalid.
   for (NodeId operand_id :
-       pattern.GetNodesToOperandsMetaGraph()[candidate_node_id]) {
+       pattern.GetNodesToOperandsMatcherGraph()[candidate_node_id]) {
     auto operand_idx = *GetOperandIndexForNodeId(matcher_node, operand_id);
     const HloInstruction* operand_inst = candidate_inst->operand(operand_idx);
     HloMatcherNode operand_node = pattern.GetPatternNodes()[operand_id];
@@ -180,7 +181,7 @@ bool IsValidState(
   // Check that all the successors of the proposed pairing make sense.
   // For each user we need at least one pairing which is not invalid.
   for (NodeId user_id :
-       pattern.GetOperandsToNodesMetaGraph()[candidate_node_id]) {
+       pattern.GetOperandsToNodesMatcherGraph()[candidate_node_id]) {
     bool has_valid_target = false;
     HloMatcherNode user_matcher_node = pattern.GetPatternNodes()[user_id];
     for (const HloInstruction* user_inst : candidate_inst->users()) {
@@ -420,18 +421,15 @@ const Pattern& HloMatcherPattern::GetPatternNodes() const {
   return pattern_nodes;
 };
 
-const MetaGraph<NodeId>& HloMatcherPattern::GetNodesToOperandsMetaGraph()
-    const {
+const MatcherGraph& HloMatcherPattern::GetNodesToOperandsMatcherGraph() const {
   return pattern_graphs.first;
 };
 
-const MetaGraph<NodeId>& HloMatcherPattern::GetOperandsToNodesMetaGraph()
-    const {
+const MatcherGraph& HloMatcherPattern::GetOperandsToNodesMatcherGraph() const {
   return pattern_graphs.second;
 };
 
-std::pair<MetaGraph<NodeId>, MetaGraph<NodeId>>
-HloMatcherPattern::VerifyAndGetGraphs() {
+std::pair<MatcherGraph, MatcherGraph> HloMatcherPattern::VerifyAndGetGraphs() {
   const std::string prefix = "[Pattern " + type + "] ";
 
   // A pattern needs to have an output.
@@ -505,8 +503,8 @@ HloMatcherPattern::VerifyAndGetGraphs() {
   };
 
   // Create a graph.
-  MetaGraph<NodeId> operands_to_nodes(outputs, get_operands);
-  MetaGraph<NodeId> nodes_to_operands = operands_to_nodes.Transpose();
+  MatcherGraph operands_to_nodes(outputs, get_operands);
+  MatcherGraph nodes_to_operands = operands_to_nodes.Transpose();
 
   // Check that an input doesn't have operands.
   for (auto input : inputs) {
@@ -530,7 +528,7 @@ HloMatcherPattern::VerifyAndGetGraphs() {
     to_visit.pop();
     visited.insert(current_node);
 
-    absl::flat_hash_set<NodeId> candidates = operands_to_nodes[current_node];
+    auto candidates = operands_to_nodes[current_node];
     candidates.insert(nodes_to_operands[current_node].begin(),
                       nodes_to_operands[current_node].end());
     for (auto candidate : candidates) {
@@ -979,7 +977,7 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
   // A node can be outlined if all the operands have been outlined and it has
   // not been outlined yet.
   const auto can_outline = [&](NodeId node_id) {
-    for (auto operand_id : pattern.GetNodesToOperandsMetaGraph()[node_id]) {
+    for (auto operand_id : pattern.GetNodesToOperandsMatcherGraph()[node_id]) {
       if (outlined_node_ids.count(operand_id) == 0) {
         return false;
       }
@@ -1000,13 +998,13 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
     outlined_node_ids.insert(node_id);
     arguments.push_back(param_input);
     // Check what we can outline.
-    absl::c_copy_if(pattern.GetOperandsToNodesMetaGraph()[node_id],
+    absl::c_copy_if(pattern.GetOperandsToNodesMatcherGraph()[node_id],
                     std::inserter(to_outline, std::begin(to_outline)),
                     can_outline);
   }
   // Add all the instructions which have no dependencies to be outlined as well
   // (for example constants).
-  for (auto pair : pattern.GetNodesToOperandsMetaGraph()) {
+  for (auto pair : pattern.GetNodesToOperandsMatcherGraph()) {
     NodeId node_id = pair.first;
     auto edges = pair.second;
     if (edges.empty() && outlined_node_ids.count(node_id) == 0) {
@@ -1041,7 +1039,7 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
       TF_CHECK_OK(new_inst->ReplaceOperandWith(operand, outlined[operand_id]));
     }
     // Check if we can outline more instructions.
-    absl::c_copy_if(pattern.GetOperandsToNodesMetaGraph()[node_id],
+    absl::c_copy_if(pattern.GetOperandsToNodesMatcherGraph()[node_id],
                     std::inserter(to_outline, std::begin(to_outline)),
                     can_outline);
   }
@@ -1173,7 +1171,8 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
         continue;
       }
 
-      for (auto operand_id : pattern.GetNodesToOperandsMetaGraph()[node_id]) {
+      for (auto operand_id :
+           pattern.GetNodesToOperandsMatcherGraph()[node_id]) {
         to_visit.push(operand_id);
       }
 
