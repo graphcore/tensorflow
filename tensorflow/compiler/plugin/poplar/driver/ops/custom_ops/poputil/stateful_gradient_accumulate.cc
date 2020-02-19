@@ -118,10 +118,10 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
                          if_false, GetDebugName(inst) + "/IncreaseCounter");
     }
     seq.add(poplar::program::If(output_grads, if_true, if_false));
-    // Unconcat the result and unflatten.
-    auto output_tensors = SliceTensorIntoTensorsLike(output, input_tensors);
-    for (size_t i = 0; i != output_tensors.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensors[i]));
+
+    // This op is completely inplace, so just set the input tensors to outputs.
+    for (size_t i = 0; i < inputs.size(); ++i) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, input_tensors[i]));
     }
 
     return seq;
