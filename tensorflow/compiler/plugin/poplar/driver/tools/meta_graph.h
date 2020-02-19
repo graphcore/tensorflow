@@ -16,27 +16,34 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_META_GRAPH_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_META_GRAPH_H_
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/types/optional.h"
-
+#include <functional>
+#include <map>
 #include <queue>
+#include <set>
 #include <stack>
+
+#include "absl/types/optional.h"
 
 namespace xla {
 namespace poplarplugin {
 
-template <typename T>
+template <typename T, typename Comparator = std::less<T>>
 class MetaGraph {
+ public:
+  template <typename ValueT>
+  using MetaGraphMap = std::map<T, ValueT, Comparator>;
+
+  using MetaGraphSet = std::set<T, Comparator>;
+
  private:
-  using Graph = absl::flat_hash_map<T, absl::flat_hash_set<T>>;
+  using Graph = std::map<T, MetaGraphSet, Comparator>;
 
   MetaGraph(){};
 
   template <typename Predicate>
-  absl::flat_hash_set<T> FindConsumers(T node, Predicate pred, bool inclusive,
-                                       absl::flat_hash_set<T>& visited) const {
-    absl::flat_hash_set<T> consumers;
+  MetaGraphSet FindConsumers(T node, Predicate pred, bool inclusive,
+                             MetaGraphSet& visited) const {
+    MetaGraphSet consumers;
 
     const auto itr = graph_.find(node);
     if (itr != graph_.end()) {
@@ -48,7 +55,10 @@ class MetaGraph {
         if (pred(neighbour) && !already_visited) {
           consumers.insert(neighbour);
           visited.insert(neighbour);
-          consumers.merge(FindConsumers(neighbour, pred, inclusive, visited));
+          MetaGraphSet neighbour_consumers =
+              FindConsumers(neighbour, pred, inclusive, visited);
+          consumers.insert(neighbour_consumers.begin(),
+                           neighbour_consumers.end());
         }
       }
     }
@@ -58,9 +68,9 @@ class MetaGraph {
 
   absl::optional<std::pair<int64_t, std::vector<T>>> ShortestPathImpl(
       T src, T dst) const {
-    absl::flat_hash_map<T, int64_t> dist;
-    absl::flat_hash_map<T, T> prev;
-    absl::flat_hash_set<T> visited;
+    MetaGraphMap<int64_t> dist;
+    MetaGraphMap<T> prev;
+    MetaGraphSet visited;
 
     const auto comp = [&](T a, T b) { return dist[a] < dist[b]; };
 
@@ -82,7 +92,7 @@ class MetaGraph {
       const auto itr = graph_.find(top);
       if (itr != graph_.end()) {
         std::for_each(itr->second.begin(), itr->second.end(), [&](T v) {
-          if (!visited.contains(v)) {
+          if (visited.count(v) == 0) {
             found |= v == dst;
             dist[v] = dist[top] + 1;
             prev[v] = top;
@@ -112,7 +122,7 @@ class MetaGraph {
   MetaGraph(std::vector<T> root_nodes, NodeIt node_iterator_getter) {
     // DF traversal to create the initial graph.
     std::stack<T> to_visit;
-    absl::flat_hash_set<T> visited;
+    MetaGraphSet visited;
     for (T root_node : root_nodes) {
       to_visit.push(root_node);
     }
@@ -146,7 +156,7 @@ class MetaGraph {
   };
 
   MetaGraph Transpose() const {
-    MetaGraph<T> result;
+    MetaGraph<T, Comparator> result;
 
     for (auto& edge : graph_) {
       for (auto v2 : edge.second) {
@@ -157,29 +167,29 @@ class MetaGraph {
     return result;
   }
 
-  absl::flat_hash_set<T> GetVertices() const {
-    absl::flat_hash_set<T> result;
+  MetaGraphSet GetVertices() const {
+    MetaGraphSet result;
 
     for (auto pair : graph_) {
       result.insert(pair.first);
-      result.merge(pair.second);
+      result.insert(pair.second.begin(), pair.second.end());
     }
 
     return result;
   }
 
   template <typename Predicate>
-  absl::flat_hash_set<T> FindConsumers(T node, Predicate pred,
-                                       bool inclusive = false) const {
+  MetaGraphSet FindConsumers(T node, Predicate pred,
+                             bool inclusive = false) const {
     // FindConsumers is a depth first traversal - this is a wrapper for it where
     // we create a set of visited nodes to prevent getting stuck in cycles.
-    absl::flat_hash_set<T> visited;
+    MetaGraphSet visited;
     return FindConsumers(node, pred, inclusive, visited);
   }
 
   template <typename Predicate>
-  absl::flat_hash_set<T> FindVertices(Predicate pred) const {
-    absl::flat_hash_set<T> result;
+  MetaGraphSet FindVertices(Predicate pred) const {
+    MetaGraphSet result;
 
     for (const auto& v : GetVertices()) {
       if (pred(v)) {
@@ -219,11 +229,9 @@ class MetaGraph {
     return true;
   };
 
-  absl::flat_hash_set<T>& operator[](T& key) { return graph_[key]; }
+  MetaGraphSet& operator[](T& key) { return graph_[key]; }
 
-  const absl::flat_hash_set<T>& operator[](const T key) const {
-    return graph_.at(key);
-  }
+  const MetaGraphSet& operator[](const T key) const { return graph_.at(key); }
 
   bool contains(T key) const { return graph_.find(key) != graph_.end(); }
 

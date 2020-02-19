@@ -193,7 +193,7 @@ bool CastsElimination::HandleMatch(HloMatcherMatched& match,
   // A node can be outlined if all the operands have been outlined and it has
   // not been outlined yet.
   const auto can_outline = [&](NodeId node_id) {
-    for (auto operand_id : pattern.GetNodesToOperandsMetaGraph()[node_id]) {
+    for (auto operand_id : pattern.GetNodesToOperandsMatcherGraph()[node_id]) {
       if (outlined_node_ids.count(operand_id) == 0) {
         return false;
       }
@@ -208,12 +208,12 @@ bool CastsElimination::HandleMatch(HloMatcherMatched& match,
     outlined[node_id] = new_pattern_input;
     outlined_node_ids.insert(node_id);
     // Check what we can outline.
-    absl::c_copy_if(pattern.GetOperandsToNodesMetaGraph()[node_id],
+    absl::c_copy_if(pattern.GetOperandsToNodesMatcherGraph()[node_id],
                     std::inserter(to_outline, std::begin(to_outline)),
                     can_outline);
   }
   // Add all the nodes in the pattern which have no dependencies as well.
-  for (auto pair : pattern.GetNodesToOperandsMetaGraph()) {
+  for (auto pair : pattern.GetNodesToOperandsMatcherGraph()) {
     NodeId node_id = pair.first;
     auto edges = pair.second;
     if (edges.empty() && !outlined_node_ids.contains(node_id)) {
@@ -239,7 +239,7 @@ bool CastsElimination::HandleMatch(HloMatcherMatched& match,
       TF_CHECK_OK(new_inst->ReplaceOperandWith(operand, outlined[operand_id]));
     }
     // Check if we can outline more instructions.
-    absl::c_copy_if(pattern.GetOperandsToNodesMetaGraph()[node_id],
+    absl::c_copy_if(pattern.GetOperandsToNodesMatcherGraph()[node_id],
                     std::inserter(to_outline, std::begin(to_outline)),
                     can_outline);
   }

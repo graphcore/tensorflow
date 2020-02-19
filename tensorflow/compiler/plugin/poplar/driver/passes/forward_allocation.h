@@ -24,6 +24,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -31,10 +33,11 @@ namespace xla {
 class CallGraph;
 class HloModule;
 class HloComputation;
-class HloInstruction;
 class HloReachabilityMap;
 
 namespace poplarplugin {
+
+using ForwardAllocationGraph = MetaGraph<HloInstruction*, HloPtrComparator>;
 
 class ForwardAllocation : public HloModulePass {
  public:
@@ -60,11 +63,11 @@ class ForwardAllocation : public HloModulePass {
   StatusOr<bool> FindLayoutDependentTargets(HloComputation* comp,
                                             CallGraph* call_graph);
 
-  StatusOr<absl::flat_hash_set<HloInstruction*>> FindInputs(
+  StatusOr<ForwardAllocationGraph::MetaGraphSet> FindInputs(
       HloComputation* comp, CallGraph* call_graph);
 
   void FlattenInputs(HloInstruction* inst,
-                     absl::flat_hash_set<HloInstruction*>& deferred_inputs);
+                     ForwardAllocationGraph::MetaGraphSet& deferred_inputs);
 
   TensorAllocationMap& tensor_allocation_map;
 };

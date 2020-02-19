@@ -42,18 +42,18 @@ namespace xla {
 namespace poplarplugin {
 
 template <typename Predicate>
-static absl::flat_hash_set<HloInstruction*> reduce(
-    const absl::flat_hash_set<HloInstruction*>& values, Predicate pred) {
+static ForwardAllocationGraph::MetaGraphSet reduce(
+    const ForwardAllocationGraph::MetaGraphSet& values, Predicate pred) {
   // For some reason absl const iterator doesn't define begin and end - we use a
   // copy instead.
-  absl::flat_hash_set<HloInstruction*> result;
+  ForwardAllocationGraph::MetaGraphSet result;
   absl::c_copy_if(values, std::inserter(result, std::begin(result)), pred);
   return result;
 }
 
 template <typename Predicate>
 static absl::optional<HloInstruction*> reduce_to_one(
-    const absl::flat_hash_set<HloInstruction*>& values, Predicate pred) {
+    const ForwardAllocationGraph::MetaGraphSet& values, Predicate pred) {
   auto result = reduce(values, pred);
   return result.size() == 1
              ? absl::optional<HloInstruction*>(*std::begin(result))
@@ -78,10 +78,10 @@ static bool is_independent(const HloInstruction* inst,
 // elementwise ops.
 template <typename Predicate>
 static absl::optional<std::vector<HloInstruction*>> find_all_targets(
-    const absl::flat_hash_set<HloInstruction*>& values,
+    const ForwardAllocationGraph::MetaGraphSet& values,
     const HloReachabilityMap* reachability_map, Predicate pred) {
   auto insts = reduce(values, pred);
-  absl::flat_hash_set<HloInstruction*> has_dependency;
+  ForwardAllocationGraph::MetaGraphSet has_dependency;
   // Check whether this_inst depends on any other instruction from reduction.
   for (auto this_inst : insts) {
     if (!is_independent(this_inst, insts, reachability_map)) {
@@ -165,7 +165,7 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
     }
     return false;
   };
-  return MetaGraph<HloInstruction*>::IsPathOk(path, is_node_ok_on_path);
+  return ForwardAllocationGraph::IsPathOk(path, is_node_ok_on_path);
 }
 
 // TODO - fix this.  it needs to take into account the indices of the path
@@ -197,7 +197,7 @@ static absl::optional<int64> IsSuffixPathOk(
     }
     return false;
   };
-  bool path_ok = MetaGraph<HloInstruction*>::IsPathOk(path, is_node_ok_on_path);
+  bool path_ok = ForwardAllocationGraph::IsPathOk(path, is_node_ok_on_path);
   if (!path_ok) {
     return absl::nullopt;
   }
@@ -294,7 +294,7 @@ static absl::optional<std::pair<int64, int64>> GetLayoutDependentOperandIndices(
 // through GetTupleElement.
 void ForwardAllocation::FlattenInputs(
     HloInstruction* inst,
-    absl::flat_hash_set<HloInstruction*>& deferred_inputs) {
+    ForwardAllocationGraph::MetaGraphSet& deferred_inputs) {
   const Shape& shape = inst->shape();
   if (shape.IsTuple()) {
     // We can only defer allocation of tuples iff all the users of the inst are
@@ -366,9 +366,9 @@ void ForwardAllocation::FlattenInputs(
 // In this graph %arg0 is the input, but we traverse the graph and find that
 // %gte0, %gte1, %gte2.0, %gte2.1, %gte3, %gte4 are the non tuple inputs and we
 // find the forward allocations for those.
-StatusOr<absl::flat_hash_set<HloInstruction*>> ForwardAllocation::FindInputs(
+StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
     HloComputation* comp, CallGraph* call_graph) {
-  absl::flat_hash_set<HloInstruction*> deferred_inputs;
+  ForwardAllocationGraph::MetaGraphSet deferred_inputs;
 
   auto call_graph_node = call_graph->GetNode(comp);
   auto& callsites = call_graph_node.caller_callsites();
@@ -488,8 +488,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
     return inst->operands();
   };
 
-  const auto g =
-      MetaGraph<HloInstruction*>(comp->root_instruction(), get_operands);
+  const auto g = ForwardAllocationGraph(comp->root_instruction(), get_operands);
   const auto layout_producing_ops = g.FindVertices(is_layout_producer);
 
   std::unique_ptr<HloReachabilityMap> reachability_map =
@@ -501,8 +500,8 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
       return !is_layout_producer(inst);
     });
   };
-  const MetaGraph<HloInstruction*> layout_op_consumers(layout_producing_ops,
-                                                       get_consumers);
+  const ForwardAllocationGraph layout_op_consumers(layout_producing_ops,
+                                                   get_consumers);
 
   const auto alloc_dependencies = layout_op_consumers.Transpose();
   const auto source_ops = g.FindVertices(is_input);
@@ -516,12 +515,12 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
                             alloc_dependencies](HloInstruction* inst) {
                              return !is_layout_producer(inst) &&
                                     !alloc_dependencies.contains(inst) &&
-                                    !layout_producing_ops.contains(inst);
+                                    layout_producing_ops.count(inst) == 0;
                            },
                            true);
   };
-  const MetaGraph<HloInstruction*> source_consumers(source_ops,
-                                                    get_source_consumers);
+  const ForwardAllocationGraph source_consumers(source_ops,
+                                                get_source_consumers);
 
   for (const auto& edges : source_consumers) {
     const auto& source = edges.first;
@@ -579,7 +578,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
           const auto prefix_path_ok = IsPrefixPathOk(prefix, source);
           const auto suffix_path_ok = IsSuffixPathOk(suffix);
           if (prefix_path_ok && suffix_path_ok) {
-            if (!source_consumers[source].contains(layout_producer)) {
+            if (source_consumers[source].count(layout_producer) == 0) {
               auto layout_output_idx = *suffix_path_ok;
               const bool created_target = CreateForwardAllocationTarget(
                   reachability_map.get(), source, target, op_idx,
@@ -618,8 +617,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
     return inst->operands();
   };
 
-  const auto g =
-      MetaGraph<HloInstruction*>(comp->root_instruction(), get_operands);
+  const auto g = ForwardAllocationGraph(comp->root_instruction(), get_operands);
 
   std::unique_ptr<HloReachabilityMap> reachability_map =
       HloReachabilityMap::Build(comp);
@@ -630,8 +628,8 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
   const auto get_source_consumers = [g](HloInstruction* inst) {
     return g.FindConsumers(inst, [](HloInstruction*) { return true; }, true);
   };
-  const MetaGraph<HloInstruction*> source_consumers(source_ops,
-                                                    get_source_consumers);
+  const ForwardAllocationGraph source_consumers(source_ops,
+                                                get_source_consumers);
 
   for (const auto& edges : source_consumers) {
     const auto& source = edges.first;
