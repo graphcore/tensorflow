@@ -2940,6 +2940,7 @@ tf_xla_py_test(
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:platform",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 

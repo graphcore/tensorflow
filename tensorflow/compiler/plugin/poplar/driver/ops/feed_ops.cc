@@ -203,9 +203,9 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
     return InvalidArgument("Nested tuple shapes are not supported for outfeed");
   }
 
-  const bool expand_constants = true;
+  const bool expand_aliasing = true;
   TensorVector input_tensors =
-      FindInstructionInputs(tensor_map, res, inst, 0, seq, expand_constants);
+      FindInstructionInputs(tensor_map, res, inst, 0, seq, expand_aliasing);
 
   for (unsigned i = 0; i < input_tensors.size(); ++i) {
     poplar::Tensor& in = input_tensors[i];

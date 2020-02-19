@@ -5,8 +5,9 @@ from __future__ import print_function
 import os
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
+from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.compiler.tests import xla_test
+from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.compiler.xla import xla
 from tensorflow.python.platform import googletest
 from tensorflow.python.framework import ops
@@ -35,7 +36,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
         c = constant_op.constant(4, shape=shape, dtype=dtype, name="c")
         output = a + pb + c
 
-      report = ReportJSON(self, sess)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       sess.run(variables.global_variables_initializer())
@@ -78,7 +79,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
 
-      report = ReportJSON(self, sess)
+      report = tu.ReportJSON(self, sess)
       report.reset()
 
       y = sess.run(r, {y: [10]})
@@ -95,6 +96,42 @@ class WideConstExpansionTest(xla_test.XLATestCase):
 
       report.assert_max_tile_memory(12280)
       report.assert_always_live_memory(4172100)
+
+  def testCheckMaxTileSizePadding(self):
+    with self.session() as sess:
+
+      def my_graph(a, b):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          weights = variable_scope.get_variable(
+              "x",
+              dtype=np.float16,
+              shape=[1024, 1024],
+              initializer=init_ops.constant_initializer(0.0))
+
+        a = array_ops.pad(a, [[0, 0], [23, 1]])
+        a = a - b * 0.1
+        mm1 = math_ops.matmul(a, weights, name="mm1")
+        print(mm1, flush=True)
+        return mm1
+
+      pa = array_ops.placeholder(np.float16, [1024, 1000], name="a")
+      pb = array_ops.placeholder(np.float16, [1024, 1024], name="a")
+
+      with ops.device("/device:IPU:0"):
+        out = ipu_compiler.compile(my_graph, [pa, pb])
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+
+      out = sess.run(out, {pa: np.ones(pa.shape), pb: np.ones(pb.shape)})
+      self.assertAllClose(np.zeros(pb.shape), out[0])
+
+      report.parse_log()
+      report.assert_max_tile_memory(102357)
 
 
 if __name__ == "__main__":

@@ -228,11 +228,11 @@ namespace {
 TensorVectors GetFusionInputs(CompilerResources& res,
                               const HloInstruction* inst, TensorMap& tensor_map,
                               poplar::program::Sequence& seq,
-                              const bool expand_constants = true) {
+                              const bool expand_aliasing = true) {
   TensorVectors args;
   for (int64 i = 0; i < inst->operand_count(); i++) {
     TensorVector t =
-        FindInstructionInputs(tensor_map, res, inst, i, seq, expand_constants);
+        FindInstructionInputs(tensor_map, res, inst, i, seq, expand_aliasing);
     args.push_back(t);
   }
   return args;

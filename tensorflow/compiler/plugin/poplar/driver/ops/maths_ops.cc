@@ -575,6 +575,7 @@ StatusOr<poplar::program::Program> CreateCastOp(CompilerResources& res,
 
   poplar::program::Sequence seq;
 
+  // TODO(T16423) - Do not expand aliasing when casting.
   TF_ASSIGN_OR_RETURN(poplar::Tensor in,
                       FindInstructionInput(tensor_map, res, inst, 0, seq));
 
@@ -628,11 +629,13 @@ StatusOr<poplar::program::Program> CreateNonLinearityGradOp(
 
   poplar::program::Sequence seq;
 
-  TF_ASSIGN_OR_RETURN(poplar::Tensor out,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor out,
+      FindInstructionInput(tensor_map, res, inst, 0, seq, false));
 
-  TF_ASSIGN_OR_RETURN(poplar::Tensor outgrad,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+  TF_ASSIGN_OR_RETURN(
+      poplar::Tensor outgrad,
+      FindInstructionInput(tensor_map, res, inst, 1, seq, false));
 
   poplar::Tensor t = popnn::nonLinearityInputGradient(
       graph, non_linearity_type, out, outgrad, seq, GetDebugName(inst));

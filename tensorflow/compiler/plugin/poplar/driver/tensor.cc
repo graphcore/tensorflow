@@ -66,14 +66,6 @@ using ::tensorflow::str_util::Join;
 namespace xla {
 namespace poplarplugin {
 namespace {
-
-int64 GetNumberOfUsedTiles(poplar::Graph& graph, const poplar::Tensor& tensor) {
-  const auto& mapping = graph.getTileMapping(tensor);
-  return absl::c_count_if(
-      mapping,
-      [](const std::vector<poplar::Interval>& tile) { return tile.size(); });
-}
-
 // Adds a tensor which is linearly mapped across the tiles.
 poplar::Tensor AddLinearlyMappedTensor(poplar::Graph& graph,
                                        const poplar::Type poplar_type,
@@ -99,9 +91,105 @@ poplar::Tensor AddLinearlyMappedTensorWithOffset(
   return out;
 }
 
+bool ShouldRebalanceTensor(poplar::Graph& graph, const poplar::Tensor& tensor) {
+  // Do not rebalance if the tensor doesn't have aliasing.
+  if (tensor.isParallelWriteable()) {
+    return false;
+  }
+
+  // Rebalance if the tensor has more elements than there are tiles.
+  return tensor.numElements() > graph.getTarget().getNumTiles();
+}
+
+poplar::Tensor RebalanceTensorIfRequired(poplar::Graph& graph,
+                                         CompilerResources& res,
+                                         poplar::program::Sequence& seq,
+                                         const poplar::Tensor& tensor,
+                                         bool always_add_copy = false) {
+  poplar::Tensor rebalanced_tensor = tensor;
+  bool rebalance =
+      always_add_copy ? true : ShouldRebalanceTensor(graph, tensor);
+
+  if (rebalance) {
+    poplar::Tensor tensor_flat = tensor.flatten();
+
+    // Get all the intervals, and create new intervals for the aliased ones.
+    std::vector<std::size_t> interval_aliases;
+    std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
+        graph.getSortedContiguousRegions(tensor_flat,
+                                         {{0, tensor_flat.numElements()}},
+                                         false, &interval_aliases);
+
+    // Split the intervals into aliased and unaliased ones.
+    std::vector<bool> is_interval_an_alias;
+    std::vector<poplar::Interval> aliased_intervals;
+    std::vector<poplar::Interval> unaliased_intervals;
+
+    uint64 interval_id = 0;
+    for (auto& intervals : sorted_contiguous_intervals) {
+      for (auto interval : intervals) {
+        const bool is_alias = interval.begin() != interval_aliases[interval_id];
+        is_interval_an_alias.push_back(is_alias);
+        if (is_alias) {
+          aliased_intervals.push_back(interval);
+        } else {
+          unaliased_intervals.push_back(interval);
+        }
+        interval_id++;
+      }
+    }
+    CHECK_EQ(interval_aliases.size(),
+             unaliased_intervals.size() + aliased_intervals.size());
+
+    if (aliased_intervals.size()) {
+      // Clone the intervals into a new tensor.
+      poplar::Tensor aliased_clone =
+          graph.clone(poplar::concat(tensor_flat.slices(aliased_intervals)));
+      poplar::Tensor unaliased_clone =
+          graph.clone(poplar::concat(tensor_flat.slices(unaliased_intervals)));
+
+      // Remap the aliased intervals clone.
+      MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
+                                       aliased_clone);
+
+      // Combine the tensor together from the intervals.
+      auto aliased_intervals_itr = aliased_intervals.begin();
+      uint64 next_idx_aliased_tensor = 0;
+      auto unaliased_intervals_itr = unaliased_intervals.begin();
+      uint64 next_idx_unaliased_tensor = 0;
+
+      std::vector<poplar::Tensor> output_slices(interval_id);
+      for (uint64 i = 0; i != is_interval_an_alias.size(); ++i) {
+        if (is_interval_an_alias[i]) {
+          const uint64 interval_size = aliased_intervals_itr->size();
+          output_slices[i] =
+              aliased_clone.slice({next_idx_aliased_tensor,
+                                   next_idx_aliased_tensor + interval_size});
+          next_idx_aliased_tensor += interval_size;
+          aliased_intervals_itr++;
+        } else {
+          const uint64 interval_size = unaliased_intervals_itr->size();
+          output_slices[i] = unaliased_clone.slice(
+              {next_idx_unaliased_tensor,
+               next_idx_unaliased_tensor + interval_size});
+          next_idx_unaliased_tensor += interval_size;
+          unaliased_intervals_itr++;
+        }
+      }
+      rebalanced_tensor = poplar::concat(output_slices).reshape(tensor.shape());
+    } else {
+      // No aliased intervals, just clone the tensor.
+      rebalanced_tensor = graph.clone(tensor);
+    }
+
+    seq.add(poplar::program::Copy(tensor, rebalanced_tensor));
+  }
+  return rebalanced_tensor;
+}
+
 TensorVector GetTensorsMaybeExpand(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    poplar::program::Sequence& seq, bool expand_constants,
+    poplar::program::Sequence& seq, bool expand_aliasing,
     absl::optional<int64> opt_tensors_start = absl::nullopt,
     absl::optional<int64> opt_tensors_end = absl::nullopt) {
   // Allocate any tensors which were deferred.
@@ -113,26 +201,10 @@ TensorVector GetTensorsMaybeExpand(
                                               opt_tensors_end);
   TensorVector outputs;
   for (auto tensor : tensor_vector) {
-    // Check if we need to expand the constant tensor.
-    if (tensor.tensor.containsConstant() && expand_constants) {
+    if (expand_aliasing) {
       auto& graph = GetGraphWithOutputIndex(
           res, inst, tensor.location.flattened_output_tuple_index);
-
-      // We only expand the constant tensor if it's mapped to 1 tile and it is
-      // not a tensor of scalar shape.
-      const uint64 tiles_used = GetNumberOfUsedTiles(graph, tensor.tensor);
-      const auto& tensor_shape = tensor.tensor.shape();
-      const auto num_elements =
-          std::accumulate(tensor_shape.begin(), tensor_shape.end(),
-                          std::size_t(1), std::multiplies<std::size_t>());
-
-      if (tiles_used == 1 && num_elements > 1) {
-        auto expanded_tensor = AddLinearlyMappedTensorWithOffset(
-            graph, tensor.tensor.elementType(), tensor_shape, "wide_constant",
-            res);
-        seq.add(poplar::program::Copy(tensor.tensor, expanded_tensor));
-        tensor.tensor = expanded_tensor;
-      }
+      tensor.tensor = RebalanceTensorIfRequired(graph, res, seq, tensor.tensor);
     }
     TF_CHECK_OK(map.UpdateTensor(tensor.location, tensor.tensor));
     outputs.push_back(tensor.tensor);
@@ -1301,18 +1373,18 @@ std::pair<int64, int64> FindGetTupleElementTupleIndices(
 TensorVector FindInstructionInputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
-    bool expand_constants) {
+    bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
-  return GetTensorsMaybeExpand(map, res, operand, seq, expand_constants,
+  return GetTensorsMaybeExpand(map, res, operand, seq, expand_aliasing,
                                range.first, range.second);
 }
 
 StatusOr<poplar::Tensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq, bool expand_constants) {
+    int64 input, poplar::program::Sequence& seq, bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
   TensorVector inputs =
-      GetTensorsMaybeExpand(map, res, operand, seq, expand_constants, 0, 1);
+      GetTensorsMaybeExpand(map, res, operand, seq, expand_aliasing, 0, 1);
 
   if (inputs.size() == 0) {
     return tensorflow::errors::Unknown(
@@ -1325,9 +1397,9 @@ StatusOr<poplar::Tensor> FindInstructionInput(
 TensorVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
                                    const HloInstruction* inst, int64 input,
                                    poplar::program::Sequence& seq,
-                                   bool expand_constants) {
+                                   bool expand_aliasing) {
   const HloInstruction* operand = inst->operand(input);
-  return GetTensorsMaybeExpand(map, res, operand, seq, expand_constants);
+  return GetTensorsMaybeExpand(map, res, operand, seq, expand_aliasing);
 }
 
 TensorVector FindInstructionOutputs(const TensorMap& map,
@@ -1414,13 +1486,8 @@ poplar::Tensor GetTensorForInplaceOp(
     const std::string name = GetDebugName(inst) + ".clone";
 
     if (parallel_writeable_output) {
-      poplar::Tensor tensor_clone = graph.clone(tensor, name, clone_method);
-      const uint64 tiles_used = GetNumberOfUsedTiles(graph, tensor);
-      if (tiles_used == 1 && !tensor.isParallelWriteable()) {
-        poputil::mapTensorLinearly(graph, tensor_clone);
-      }
-      seq.add(poplar::program::Copy(tensor, tensor_clone));
-      tensor = tensor_clone;
+      tensor = RebalanceTensorIfRequired(graph, res, seq, tensor,
+                                         /*always_add_copy*/ true);
     } else {
       tensor = poputil::duplicate(graph, tensor, seq, name, clone_method);
     }
@@ -1433,7 +1500,7 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(TensorMap& map,
                                                  CompilerResources& res,
                                                  const HloInstruction* inst,
                                                  poplar::program::Sequence& seq,
-                                                 bool expand_constants,
+                                                 bool expand_aliasing,
                                                  bool always_preserve_aliases) {
   // Check that the instruction description is for an inplace operation.
   auto inplace_description = HloInstructionDescription(inst);
@@ -1456,11 +1523,11 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(TensorMap& map,
     CHECK_EQ(inplace_indexes[0], 0);
     auto gte_tensors_indecies = FindGetTupleElementTupleIndices(inst);
     tensors[0] = FindInstructionInputsInRange(
-        map, res, inst, 0, gte_tensors_indecies, seq, expand_constants);
+        map, res, inst, 0, gte_tensors_indecies, seq, expand_aliasing);
   } else {
     for (uint64 i = 0; i < inplace_indexes.size(); i++) {
       tensors[i] = FindInstructionInputs(map, res, inst, inplace_indexes[i],
-                                         seq, expand_constants);
+                                         seq, expand_aliasing);
     }
   }
 
