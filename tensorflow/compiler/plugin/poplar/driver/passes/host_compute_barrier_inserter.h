@@ -25,13 +25,13 @@ class HloModule;
 namespace poplarplugin {
 
 /**
- * This inserts dependencies between the Send and Recv ops
- * from the same XlaHostCompute op to avoid deadlock.
+ * This inserts a barrier with control dependencies between the Send and Recv
+ * ops from the same XlaHostCompute op to avoid reordering and then deadlock.
  */
-class HostComputeDependencyInserter : public HloModulePass {
+class HostComputeBarrierInserter : public HloModulePass {
  public:
   absl::string_view name() const override {
-    return "host-compute-dependency-inserter";
+    return "host-compute-barrier-inserter";
   }
 
   StatusOr<bool> Run(HloModule* module) override;

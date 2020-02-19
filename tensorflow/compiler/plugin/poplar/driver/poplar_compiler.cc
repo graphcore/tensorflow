@@ -53,7 +53,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_dependency_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lift_recompute_suggestion.h"
@@ -791,7 +791,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
     pipeline.AddPass<HloPassFix<RemoveRecomputeSuggestions>>();
     pipeline.AddPass<DependencyReplacer>(true);
-    pipeline.AddPass<HostComputeDependencyInserter>();
+    pipeline.AddPass<HostComputeBarrierInserter>();
     pipeline.AddPass<ShardingPass>();
     pipeline.AddPass<PipelineFeedHoisting>();
     pipeline.AddPass<PipelineFIFOInserter>();

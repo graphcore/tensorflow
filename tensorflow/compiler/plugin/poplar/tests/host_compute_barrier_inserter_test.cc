@@ -1,4 +1,4 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_dependency_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
 
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -24,9 +24,9 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-using HostComputeDependencyInserterTest = HloTestBase;
+using HostComputeBarrierInserterTest = HloTestBase;
 
-TEST_F(HostComputeDependencyInserterTest, TestInsertOneDependency) {
+TEST_F(HostComputeBarrierInserterTest, TestInsertOneBarrier) {
   std::string hlo_string = R"(
 HloModule top
 
@@ -51,18 +51,24 @@ ENTRY %top (arg: f32[]) -> f32[] {
   auto* module = module_or_status.ValueOrDie().get();
   auto* comp = module->entry_computation();
 
-  HostComputeDependencyInserter inserter;
+  HostComputeBarrierInserter inserter;
   ASSERT_TRUE(inserter.Run(module).ValueOrDie());
 
   auto* send = comp->GetInstructionWithName("send-done");
   ASSERT_NE(send, nullptr);
   auto* recv = comp->GetInstructionWithName("recv-done");
   ASSERT_NE(recv, nullptr);
-  ASSERT_EQ(recv->control_predecessors().size(), 1);
-  ASSERT_EQ(recv->control_predecessors()[0], send);
+  auto* barrier = comp->GetInstructionWithName("host_compute.barrier");
+  ASSERT_NE(barrier, nullptr);
+
+  ASSERT_EQ(barrier->control_predecessors().size(), 1);
+  ASSERT_EQ(barrier->control_predecessors()[0], send);
+
+  ASSERT_EQ(barrier->control_successors().size(), 1);
+  ASSERT_EQ(barrier->control_successors()[0], recv);
 }
 
-TEST_F(HostComputeDependencyInserterTest, TestNoDependencyBetweenDifferentOps) {
+TEST_F(HostComputeBarrierInserterTest, TestNoBarrierBetweenDifferentOps) {
   std::string hlo_string = R"(
 HloModule top
 
@@ -87,17 +93,20 @@ ENTRY %top (arg: f32[]) -> f32[] {
   auto* module = module_or_status.ValueOrDie().get();
   auto* comp = module->entry_computation();
 
-  HostComputeDependencyInserter inserter;
-  ASSERT_TRUE(inserter.Run(module).ValueOrDie());
+  HostComputeBarrierInserter inserter;
+  ASSERT_FALSE(inserter.Run(module).ValueOrDie());
 
   auto* send = comp->GetInstructionWithName("send-done");
   ASSERT_NE(send, nullptr);
   auto* recv = comp->GetInstructionWithName("recv-done");
   ASSERT_NE(recv, nullptr);
   ASSERT_EQ(recv->control_predecessors().size(), 0);
+
+  ASSERT_EQ(nullptr, comp->GetInstructionWithName("host_compute.barrier"));
+  ASSERT_EQ(nullptr, comp->GetInstructionWithName("host_compute_2.barrier"));
 }
 
-TEST_F(HostComputeDependencyInserterTest,
+TEST_F(HostComputeBarrierInserterTest,
        TestInsertDependenciesFromAllSendsToAllRecvs) {
   std::string hlo_string = R"(
 HloModule top
@@ -129,7 +138,7 @@ ENTRY %top (arg: f32[]) -> f32[] {
   auto* module = module_or_status.ValueOrDie().get();
   auto* comp = module->entry_computation();
 
-  HostComputeDependencyInserter inserter;
+  HostComputeBarrierInserter inserter;
   ASSERT_TRUE(inserter.Run(module).ValueOrDie());
 
   auto* send1 = comp->GetInstructionWithName("send-done.1");
@@ -139,15 +148,19 @@ ENTRY %top (arg: f32[]) -> f32[] {
 
   auto* recv1 = comp->GetInstructionWithName("recv-done.1");
   ASSERT_NE(recv1, nullptr);
-  ASSERT_EQ(recv1->control_predecessors().size(), 2);
-  ASSERT_EQ(recv1->control_predecessors()[0], send1);
-  ASSERT_EQ(recv1->control_predecessors()[1], send2);
-
   auto* recv2 = comp->GetInstructionWithName("recv-done.2");
   ASSERT_NE(recv2, nullptr);
-  ASSERT_EQ(recv2->control_predecessors().size(), 2);
-  ASSERT_EQ(recv2->control_predecessors()[0], send1);
-  ASSERT_EQ(recv2->control_predecessors()[1], send2);
+
+  auto* barrier = comp->GetInstructionWithName("host_compute.barrier");
+  ASSERT_NE(barrier, nullptr);
+
+  ASSERT_EQ(barrier->control_predecessors().size(), 2);
+  ASSERT_EQ(barrier->control_predecessors()[0], send1);
+  ASSERT_EQ(barrier->control_predecessors()[1], send2);
+
+  ASSERT_EQ(barrier->control_successors().size(), 2);
+  ASSERT_EQ(barrier->control_successors()[0], recv1);
+  ASSERT_EQ(barrier->control_successors()[1], recv2);
 }
 
 }  // namespace
