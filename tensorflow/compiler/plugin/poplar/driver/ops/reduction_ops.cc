@@ -880,10 +880,10 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map) {
   poplar::program::Sequence seq;
+  poplar::Graph& graph = GetGraph(res, inst);
 
   // If we aren't part of a replicated graph, then just duplicate the tensor.
   if (res.replication_factor < 2) {
-    poplar::Graph& graph = GetGraph(res, inst);
     for (int i = 0; i < inst->operand_count(); ++i) {
       TF_ASSIGN_OR_RETURN(auto in,
                           FindInstructionInput(tensor_map, res, inst, i, seq));
@@ -893,23 +893,26 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
     }
   } else {
-    // Collect all of the input tensors
+    // Collect all of the input tensors and clone them.
     std::vector<poplar::Tensor> input_tensors(inst->operand_count());
+    std::vector<poplar::Tensor> output_tensors(inst->operand_count());
     for (int i = 0; i < inst->operand_count(); ++i) {
       TF_ASSIGN_OR_RETURN(input_tensors[i],
                           FindInstructionInput(tensor_map, res, inst, i, seq));
+      output_tensors[i] =
+          graph.clone(input_tensors[i], StrCat(GetDebugName(inst), "/", i));
     }
 
-    // Create a concatenated and flattened tensor of the input tensors.
-    auto t = FlattenAndConcatenateTensors(input_tensors);
+    // Create a concatenated and flattened tensor of the input and output
+    // tensor.
+    auto input = FlattenAndConcatenateTensors(input_tensors);
+    auto output = FlattenAndConcatenateTensors(output_tensors);
 
-    // Replicated sum the concatenated tensor
-    auto out = popops::replicatedAllReduce(
-        GetMasterGraph(res), t, popops::Operation::ADD, seq, GetDebugName(inst),
-        GetReplicateAllReduceOptions());
+    // Replicated sum the concatenated tensor.
+    popops::replicatedAllReduceWithOutput(
+        GetMasterGraph(res), input, output, popops::Operation::ADD, seq,
+        GetDebugName(inst), GetReplicateAllReduceOptions());
 
-    // Unconcat the result and unflatten
-    auto output_tensors = SliceTensorIntoTensorsLike(out, input_tensors);
     for (size_t i = 0; i != output_tensors.size(); ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensors[i]));
     }
