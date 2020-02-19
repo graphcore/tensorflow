@@ -91,8 +91,10 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
   Status HandleCustomCall(HloInstruction* inst) override {
     const bool is_remap_deduce =
         IsPoplarInstruction(PoplarOp::RemapDeduce)(inst);
+    const bool is_host_embedding_lookup =
+        IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst);
 
-    if (is_remap_deduce) {
+    if (is_remap_deduce || is_host_embedding_lookup) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocating_instructions.push_back(TensorLocation{inst, i});
