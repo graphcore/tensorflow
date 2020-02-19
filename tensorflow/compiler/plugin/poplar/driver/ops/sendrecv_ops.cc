@@ -64,10 +64,6 @@ StatusOr<poplar::program::Program> CreateRecvDone(CompilerResources& res,
       rendezvous_key, tensor.elementType(), tensor.numElements(),
       poplar::ReplicatedStreamMode::BROADCAST);
 
-  // Add an internal sync which essentially functions as a compiler
-  // barrier that avoids merging of host syncs and then reordering
-  // of the Send/Recv stream copies (which would cause a deadlock).
-  seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL));
   seq.add(poplar::program::Copy(stream, tensor));
 
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, tensor));
