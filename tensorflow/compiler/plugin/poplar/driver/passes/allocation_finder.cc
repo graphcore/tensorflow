@@ -220,17 +220,25 @@ void AllocationFinder::FindConsumers(const TensorLocation& src,
         case HloOpcode::kFusion: {
           HloComputation* comp = user->fused_instructions_computation();
           if (IsPopOpsFusion(user)) {
-            auto end = comp->name().find('.');
-            std::string name = comp->name().substr(8, end - 8);
-            if (name == "depthwise_conv") {
+            if (IsPopOpsFusion(user, "depthwise_conv")) {
               auto t = TensorTarget(user, op_index, path);
               auto i = tensor_allocation_map.find(src);
               if (i != tensor_allocation_map.end()) {
                 tensor_allocation_map.erase(src);
               }
               AddTensorTarget(src, t);
-            } else if (name == "zero_pad") {
+            } else if (IsPopOpsFusion(user, "zero_pad")) {
               FindConsumers(src, user, index);
+            } else if (IsPopOpsFusion(user, "scaled_inplace") && op_index < 2) {
+              // Look through the scaled inplace op.
+              FindConsumers(src, user, index);
+            } else if (IsPopOpsFusion(user, "implicit")) {
+              // Look through implicit elementwise ops if the shapes match.
+              auto shapes = FlattenedXlaShape(src.instruction->shape());
+              if (shapes[src.flattened_output_tuple_index] == user->shape() &&
+                  user->shape() == user->operand(op_index)->shape()) {
+                FindConsumers(src, user, index);
+              }
             }
           }
           break;
@@ -251,8 +259,7 @@ void AllocationFinder::FindConsumers(const TensorLocation& src,
             }
           } else {
             auto shapes = FlattenedXlaShape(src.instruction->shape());
-            if (ShapeUtil::Equal(shapes[src.flattened_output_tuple_index],
-                                 user->shape())) {
+            if (shapes[src.flattened_output_tuple_index] == user->shape()) {
               FindConsumers(src, user, index);
             }
           }
@@ -301,8 +308,7 @@ void AllocationFinder::FindConsumers(const TensorLocation& src,
         }
         default: {
           auto shapes = FlattenedXlaShape(src.instruction->shape());
-          if (ShapeUtil::Equal(shapes[src.flattened_output_tuple_index],
-                               user->shape())) {
+          if (shapes[src.flattened_output_tuple_index] == user->shape()) {
             FindConsumers(src, user, index);
           }
           break;

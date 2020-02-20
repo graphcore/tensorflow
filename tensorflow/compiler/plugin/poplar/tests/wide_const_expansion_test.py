@@ -131,7 +131,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       self.assertAllClose(np.zeros(pb.shape), out[0])
 
       report.parse_log()
-      report.assert_max_tile_memory(102357)
+      report.assert_max_tile_memory(103673)
 
 
 if __name__ == "__main__":

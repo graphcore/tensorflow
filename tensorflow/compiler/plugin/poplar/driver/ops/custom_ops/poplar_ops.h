@@ -47,7 +47,7 @@ class PoplarOpDef {
                                              const TensorTarget& tensor_target,
                                              const TensorMap& tensor_map) {
     return xla::FailedPrecondition(
-        "Non-allocating op should not be allocating. {}", name);
+        "Non-allocating op should not be allocating - %s.", name);
   }
 
   virtual StatusOr<poplar::program::Program> Creator(
