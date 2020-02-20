@@ -108,16 +108,23 @@ StatusOr<poplar::program::Program> CreateNormInference(
     TensorMap& tensor_map) {
   poplar::program::Sequence seq;
 
+  // Do not expand aliasing when creating a cached op - the input will be
+  // reallocated if required.
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_operand,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+                      FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_scale,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+                      FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_offset,
-                      FindInstructionInput(tensor_map, res, inst, 2, seq));
+                      FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_mean,
-                      FindInstructionInput(tensor_map, res, inst, 3, seq));
+                      FindInstructionInput(tensor_map, res, inst, 3, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_variance_or_inv_std_dev,
-                      FindInstructionInput(tensor_map, res, inst, 4, seq));
+                      FindInstructionInput(tensor_map, res, inst, 4, seq,
+                                           /*expand_aliasing*/ false));
 
   // Special case - zero sized array
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
@@ -206,12 +213,17 @@ StatusOr<poplar::program::Program> CreateNormTraining(
     TensorMap& tensor_map) {
   poplar::program::Sequence seq;
 
+  // Do not expand aliasing when creating a cached op - the input will be
+  // reallocated if required.
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_operand,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+                      FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_scale,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+                      FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_offset,
-                      FindInstructionInput(tensor_map, res, inst, 2, seq));
+                      FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                           /*expand_aliasing*/ false));
 
   // Special case - zero sized array
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
@@ -323,16 +335,23 @@ StatusOr<poplar::program::Program> CreateNormGrad(
     TensorMap& tensor_map) {
   poplar::program::Sequence seq;
 
+  // Do not expand aliasing when creating a cached op - the input will be
+  // reallocated if required.
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_operand,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+                      FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_scale,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+                      FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_mean,
-                      FindInstructionInput(tensor_map, res, inst, 2, seq));
+                      FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_variance_or_inv_std_dev,
-                      FindInstructionInput(tensor_map, res, inst, 3, seq));
+                      FindInstructionInput(tensor_map, res, inst, 3, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_grad_output,
-                      FindInstructionInput(tensor_map, res, inst, 4, seq));
+                      FindInstructionInput(tensor_map, res, inst, 4, seq,
+                                           /*expand_aliasing*/ false));
   // Special case - zero sized array
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {
     poplar::Tensor operand_grad =
@@ -441,8 +460,11 @@ StatusOr<poplar::program::Program> CreateNormStatistics(
     TensorMap& tensor_map) {
   poplar::program::Sequence seq;
 
+  // Do not expand aliasing when creating a cached op - the input will be
+  // reallocated if required.
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_operand,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+                      FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                           /*expand_aliasing*/ false));
 
   // Special case - zero sized array
   if (ShapeUtil::IsZeroElementArray(inst->operand(0)->shape())) {

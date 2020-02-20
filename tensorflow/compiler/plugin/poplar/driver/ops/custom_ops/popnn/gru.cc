@@ -125,14 +125,20 @@ class GRULayerFwdOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
+    // Do not expand aliasing when creating a cached op - the input will be
+    // reallocated if required.
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_seq,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+                        FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_state,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq));
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_kernel,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq));
+                        FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_biases,
-                        FindInstructionInput(tensor_map, res, inst, 3, seq));
+                        FindInstructionInput(tensor_map, res, inst, 3, seq,
+                                             /*expand_aliasing*/ false));
 
     TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params,
                         GetGruParameters(inst));
@@ -208,24 +214,35 @@ class GRULayerBwdOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
+    // Do not expand aliasing when creating a cached op - the input will be
+    // reallocated if required.
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_seq,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+                        FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_input_state,
-                        FindInstructionInput(tensor_map, res, inst, 1, seq));
+                        FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_kernel,
-                        FindInstructionInput(tensor_map, res, inst, 2, seq));
+                        FindInstructionInput(tensor_map, res, inst, 2, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_biases,
-                        FindInstructionInput(tensor_map, res, inst, 3, seq));
+                        FindInstructionInput(tensor_map, res, inst, 3, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output,
-                        FindInstructionInput(tensor_map, res, inst, 4, seq));
+                        FindInstructionInput(tensor_map, res, inst, 4, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_state,
-                        FindInstructionInput(tensor_map, res, inst, 5, seq));
+                        FindInstructionInput(tensor_map, res, inst, 5, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_intermediates,
-                        FindInstructionInput(tensor_map, res, inst, 6, seq));
+                        FindInstructionInput(tensor_map, res, inst, 6, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_backprop,
-                        FindInstructionInput(tensor_map, res, inst, 7, seq));
+                        FindInstructionInput(tensor_map, res, inst, 7, seq,
+                                             /*expand_aliasing*/ false));
     TF_ASSIGN_OR_RETURN(poplar::Tensor arg_output_state_backprop,
-                        FindInstructionInput(tensor_map, res, inst, 8, seq));
+                        FindInstructionInput(tensor_map, res, inst, 8, seq,
+                                             /*expand_aliasing*/ false));
 
     TF_ASSIGN_OR_RETURN(popnn::gru::GruParams gru_params,
                         GetGruParameters(inst));
