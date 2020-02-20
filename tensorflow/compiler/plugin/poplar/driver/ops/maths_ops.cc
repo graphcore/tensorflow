@@ -493,10 +493,15 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
   poplar::program::Sequence seq;
 
   CHECK_EQ(inst->opcode(), HloOpcode::kDot);
+
+  // Do not expand aliasing when creating a cached op - the input will be
+  // reallocated if required.
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_lhs,
-                      FindInstructionInput(tensor_map, res, inst, 0, seq));
+                      FindInstructionInput(tensor_map, res, inst, 0, seq,
+                                           /*expand_aliasing*/ false));
   TF_ASSIGN_OR_RETURN(poplar::Tensor arg_rhs,
-                      FindInstructionInput(tensor_map, res, inst, 1, seq));
+                      FindInstructionInput(tensor_map, res, inst, 1, seq,
+                                           /*expand_aliasing*/ false));
 
   const DotDimensionNumbers dot_dims = inst->dot_dimension_numbers();
   TF_ASSIGN_OR_RETURN(const std::string dot_type_s, GetMLTypeAsString(inst));
