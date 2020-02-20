@@ -220,7 +220,7 @@ static const std::vector<HloMatcherPattern> patterns = {
 
   // Applying scattered (multiUpdateAdd with scale factor 1) deltas into a tensor with scale.
   HloMatcherPattern(
-    PatternType("fused_multi_update_add"),
+    PatternType("fused_multi_update_with_scale"),
     PatternMetaTarget(3),
     PatternInputs({6, 7, 8, 9}),
     PatternInplaceInputs({6}),
@@ -242,7 +242,7 @@ static const std::vector<HloMatcherPattern> patterns = {
 
   // Applying scattered (multiUpdateAdd with scale factor 1) deltas into a tensor with scale, with a reshape on the update.
   HloMatcherPattern(
-    PatternType("fused_multi_update_add"),
+    PatternType("fused_multi_update_with_scale"),
     PatternMetaTarget(3),
     PatternInputs({7, 8, 9, 10}),
     PatternInplaceInputs({7}),
@@ -265,7 +265,7 @@ static const std::vector<HloMatcherPattern> patterns = {
 
   // Applying scattered (multiUpdate) deltas into a tensor with scale.
   HloMatcherPattern(
-    PatternType("fused_multi_update_add"),
+    PatternType("fused_multi_update_with_scale"),
     PatternMetaTarget(3),
     PatternInputs({6, 7, 8, 9}),
     PatternInplaceInputs({6}),
@@ -286,7 +286,7 @@ static const std::vector<HloMatcherPattern> patterns = {
 
   // Applying scattered (multiUpdate) deltas into a tensor with scale, with a reshape on the update.
   HloMatcherPattern(
-    PatternType("fused_multi_update_add"),
+    PatternType("fused_multi_update_with_scale"),
     PatternMetaTarget(3),
     PatternInputs({7, 8, 9, 10}),
     PatternInplaceInputs({7}),

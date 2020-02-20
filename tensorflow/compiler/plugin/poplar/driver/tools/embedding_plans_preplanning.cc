@@ -175,7 +175,7 @@ Status EmbeddingPlansPreplanning::Plan(const HloModule* module,
        entry_computation->MakeInstructionPostOrder()) {
     if (IsPoplarInstruction(PoplarOp::MultiSlice)(inst)) {
       multi_slices[inst->operand(0)].push_back(inst);
-    } else if (IsPopOpsFusion(inst, "fused_multi_update_add") ||
+    } else if (IsPopOpsFusion(inst, "fused_multi_update_with_scale") ||
                IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst)) {
       multi_update_adds[inst->operand(0)].push_back(inst);
     } else if (IsPoplarInstruction(PoplarOp::MultiUpdate)(inst)) {
