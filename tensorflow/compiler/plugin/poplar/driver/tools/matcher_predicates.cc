@@ -353,6 +353,11 @@ bool IsAddOrSubtract(const HloInstruction* inst) {
          inst->opcode() == HloOpcode::kSubtract;
 }
 
+bool IsMultiplyOrDivide(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kMultiply ||
+         inst->opcode() == HloOpcode::kDivide;
+}
+
 bool IsPopOpsBiasAdd(const HloInstruction* inst) {
   return IsPopOpsFusion(inst, "matmul_biasadd") ||
          IsPopOpsFusion(inst, "conv_biasadd");

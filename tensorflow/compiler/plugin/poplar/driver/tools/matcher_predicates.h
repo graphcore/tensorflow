@@ -53,6 +53,7 @@ bool IsOpWithWindowNoBaseDilation(const HloInstruction*);
 bool IsOpWithWindowNoStride(const HloInstruction*);
 bool IsPaddingReduceWindow(const HloInstruction*);
 bool IsAddOrSubtract(const HloInstruction*);
+bool IsMultiplyOrDivide(const HloInstruction*);
 bool IsBiasAdd(const HloInstruction*);
 bool IsPopOpsBiasAdd(const xla::HloInstruction*);
 bool IsPopOpsElementwise(const xla::HloInstruction*);

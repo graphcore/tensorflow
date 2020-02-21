@@ -61,8 +61,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/matmul_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_slice_combiner.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_apply.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_scale_apply.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_scatter_expander.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
@@ -764,6 +766,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
     }
+    pipeline.AddPass<MultiUpdateScaleApply>(resources.annotations);
+    pipeline.AddPass<MultiUpdateApply>(resources.annotations);
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<SuggestRecompute>();
       pipeline.AddPass<AddBlockRecompute>();

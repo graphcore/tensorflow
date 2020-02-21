@@ -171,8 +171,10 @@ cc_library(
         "driver/passes/matmul_combiner.cc",
         "driver/passes/module_flatten.cc",
         "driver/passes/multi_slice_combiner.cc",
+        "driver/passes/multi_update_apply.cc",
         "driver/passes/multi_update_canonicalize.cc",
         "driver/passes/multi_update_combiner.cc",
+        "driver/passes/multi_update_scale_apply.cc",
         "driver/passes/not_supported_gather_expander.cc",
         "driver/passes/not_supported_scatter_expander.cc",
         "driver/passes/parse_poplar_backend_config.cc",
@@ -296,8 +298,10 @@ cc_library(
         "driver/passes/matmul_combiner.h",
         "driver/passes/module_flatten.h",
         "driver/passes/multi_slice_combiner.h",
+        "driver/passes/multi_update_apply.h",
         "driver/passes/multi_update_canonicalize.h",
         "driver/passes/multi_update_combiner.h",
+        "driver/passes/multi_update_scale_apply.h",
         "driver/passes/not_supported_gather_expander.h",
         "driver/passes/not_supported_scatter_expander.h",
         "driver/passes/parse_poplar_backend_config.h",
@@ -2289,6 +2293,36 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "multi_update_apply_test",
+    size = "small",
+    srcs = ["tests/multi_update_apply_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "multi_update_scale_apply_test",
+    size = "small",
+    srcs = ["tests/multi_update_scale_apply_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 tf_cc_test(
     name = "reorder_gradient_accumulation_pass_test",
     size = "small",
@@ -3649,8 +3683,10 @@ test_suite(
         "multi_ipu_test",
         "multi_run_test",
         "multi_slice_combiner_test",
+        "multi_update_apply_test",
         "multi_update_canonicalize_test",
         "multi_update_combiner_test",
+        "multi_update_scale_apply_test",
         "norm_graph_caching_sharded_test",
         "norm_graph_caching_test",
         "not_supported_gather_expander_test",
