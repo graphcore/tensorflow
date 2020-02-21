@@ -785,6 +785,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'host-exchange-local-copy-*/OnTileCopy-0',
+          'Copy_*/OnTileCopy-0',
           '/Zero',
           'ExpandDims/input/fusion*/multiUpdateAdd',
           'ExpandDims/input/fusion*/NegateScale/Op/Negate',
