@@ -138,12 +138,12 @@ bool IsRandomUniform(const HloInstruction* inst) {
 }
 
 bool IsConstantZero(const HloInstruction* inst) {
-  return !ShapeUtil::IsZeroElementArray(inst->shape()) &&
+  return inst->IsConstant() && !ShapeUtil::IsZeroElementArray(inst->shape()) &&
          inst->literal().IsAll(0);
 }
 
 bool IsConstantOne(const HloInstruction* inst) {
-  return !ShapeUtil::IsZeroElementArray(inst->shape()) &&
+  return inst->IsConstant() && !ShapeUtil::IsZeroElementArray(inst->shape()) &&
          inst->literal().IsAll(1);
 }
 

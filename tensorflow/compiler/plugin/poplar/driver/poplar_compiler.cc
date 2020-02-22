@@ -744,18 +744,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<WhileLoopConditionSimplify>();
       pass.AddPass<PipelineOptimizer>();
       pass.AddPass<HloPassFix<WhileLoopToRepeatSimplify>>();
-    }
-    if (poplar_executor->EnableGatherSimplifier()) {
-      pipeline.AddPass<GatherSimplifier>();
-    }
-    pipeline.AddPass<ScatterSimplifier>();
-    {
-      auto& pass =
-          pipeline.AddPass<HloPassFix<HloPassPipeline>>("scatter-optimizer");
+      if (poplar_executor->EnableGatherSimplifier()) {
+        pass.AddPass<GatherSimplifier>();
+      }
+      pass.AddPass<ScatterSimplifier>();
       pass.AddPass<MultiUpdateCanonicalize>();
-      pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
-      pass.AddPass<HloCSE>(true);
-      pass.AddPass<HloDCE>();
       pass.AddPass<MultiUpdateCombiner>(resources.annotations);
       if (poplar_executor->EnableMultiSliceCombiner()) {
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
@@ -763,9 +756,15 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
     pipeline.AddPass<AllToAllFinder>(resources.annotations,
                                      resources.replication_factor);
-    pipeline.AddPass<MultiUpdateScaleApply>(resources.annotations);
-    pipeline.AddPass<MultiUpdateApply>(resources.annotations);
-    pipeline.AddPass<HloCSE>(true);
+    {
+      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "multi-update-optimizer");
+      pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
+      pass.AddPass<MultiUpdateApply>(resources.annotations);
+      pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
+      pass.AddPass<HloCSE>(true);
+      pass.AddPass<HloDCE>();
+    }
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<SuggestRecompute>();
       pipeline.AddPass<AddBlockRecompute>();
