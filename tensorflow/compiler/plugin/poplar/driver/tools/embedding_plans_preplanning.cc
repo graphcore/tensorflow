@@ -44,7 +44,13 @@ const std::vector<std::size_t> GetLookUps(
   std::vector<std::size_t> lookups(slices.size());
   absl::c_transform(slices, lookups.begin(), [](const HloInstruction* inst) {
     // All the slice instructions have the indices as operand 1.
-    return ShapeUtil::ElementsIn(inst->operand(1)->shape());
+    int64 num_elements = ShapeUtil::ElementsIn(inst->operand(1)->shape());
+    if (IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(inst) ||
+        IsPoplarInstruction(PoplarOp::MultiUpdate)(inst)) {
+      auto* cast_inst = Cast<HloMultiUpdateInstruction>(inst);
+      num_elements = num_elements / cast_inst->GetSerializationFactor();
+    }
+    return num_elements;
   });
   return lookups;
 }

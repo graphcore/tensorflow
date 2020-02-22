@@ -14,6 +14,9 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_combiner.h"
+
+#include <algorithm>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -187,7 +190,9 @@ bool MultiUpdateCombiner::HandleMatch(
           multi_update1->shape(),
           {multi_update1->mutable_operand(0), new_indices, new_updates, one},
           multi_update1->GetIndexVectorDimension(),
-          multi_update1->GetUpdateSliceDimension()));
+          multi_update1->GetUpdateSliceDimension(),
+          std::max(multi_update1->GetSerializationFactor(),
+                   multi_update2->GetSerializationFactor())));
   multi_update1->SetupDerivedInstruction(new_multi_update);
   computation->ReplaceInstruction(pattern_root, new_multi_update);
 

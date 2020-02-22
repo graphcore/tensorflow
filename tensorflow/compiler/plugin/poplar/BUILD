@@ -2323,6 +2323,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "all_to_all_finder_test",
+    size = "small",
+    srcs = ["tests/all_to_all_finder_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 tf_cc_test(
     name = "reorder_gradient_accumulation_pass_test",
     size = "small",
@@ -3620,6 +3635,7 @@ test_suite(
     tests = [
         "64_bit_test",
         "add_block_recompute_test",
+        "all_to_all_finder_test",
         "allocation_finder_test",
         "apply_recompute_suggestion_test",
         "arg_min_max_test",

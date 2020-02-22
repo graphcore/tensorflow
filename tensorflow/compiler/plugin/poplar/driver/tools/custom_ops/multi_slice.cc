@@ -63,13 +63,15 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(
 // MultiUpdate
 HloMultiUpdateInstruction::HloMultiUpdateInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    std::size_t index_vector_dim, std::size_t update_dim, bool is_update)
+    std::size_t index_vector_dim, std::size_t update_dim,
+    uint32 serialization_factor, bool is_update)
     : HloPoplarInstruction(
           shape, operands,
           is_update ? PoplarOp::MultiUpdateAdd : PoplarOp::MultiUpdate,
-          index_vector_dim, update_dim),
+          index_vector_dim, update_dim, serialization_factor),
       index_vector_dim_(index_vector_dim),
-      update_dim_(update_dim) {}
+      update_dim_(update_dim),
+      serialization_factor_(serialization_factor) {}
 
 absl::flat_hash_set<int64> HloMultiUpdateInstruction::AllocatingIndices()
     const {
@@ -89,7 +91,8 @@ std::unique_ptr<HloInstruction>
 HloMultiUpdateInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  return CreateMultiUpdate(shape, new_operands, index_vector_dim_, update_dim_);
+  return CreateMultiUpdate(shape, new_operands, index_vector_dim_, update_dim_,
+                           serialization_factor_);
 }
 
 std::vector<std::string>
@@ -98,36 +101,41 @@ HloMultiUpdateInstruction::ExtraPoplarAttributesToStringImpl(
   std::vector<std::string> attributes;
   attributes.push_back("index_vector_dim=" + std::to_string(index_vector_dim_));
   attributes.push_back("update_dim=" + std::to_string(update_dim_));
+  attributes.push_back("serialization_factor=" +
+                       std::to_string(serialization_factor_));
   return attributes;
 }
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    std::size_t index_vector_dim, std::size_t update_dim) {
+    std::size_t index_vector_dim, std::size_t update_dim,
+    uint32 serialization_factor) {
   return absl::make_unique<HloMultiUpdateInstruction>(
-      shape, operands, index_vector_dim, update_dim);
+      shape, operands, index_vector_dim, update_dim, serialization_factor);
 }
 
 // MultiUpdateAdd
 HloMultiUpdateAddInstruction::HloMultiUpdateAddInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    std::size_t index_vector_dim, std::size_t update_dim)
+    std::size_t index_vector_dim, std::size_t update_dim,
+    uint32 serialization_factor)
     : HloMultiUpdateInstruction(shape, operands, index_vector_dim, update_dim,
-                                true) {}
+                                serialization_factor, true) {}
 
 std::unique_ptr<HloInstruction>
 HloMultiUpdateAddInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
   return CreateMultiUpdateAdd(shape, new_operands, index_vector_dim_,
-                              update_dim_);
+                              update_dim_, serialization_factor_);
 }
 
 std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    std::size_t index_vector_dim, std::size_t update_dim) {
+    std::size_t index_vector_dim, std::size_t update_dim,
+    uint32 serialization_factor) {
   return absl::make_unique<HloMultiUpdateAddInstruction>(
-      shape, operands, index_vector_dim, update_dim);
+      shape, operands, index_vector_dim, update_dim, serialization_factor);
 }
 
 namespace {
@@ -145,7 +153,7 @@ StatusOr<std::unique_ptr<HloInstruction>> HloMultiUpdateInstructionFactoryFunc(
   TF_ASSIGN_OR_RETURN(uint64 update_dim,
                       attribute_map.GetAttributeAsUInt64("update_dim"));
   return CreateMultiUpdate(call->shape(), call->operands(), index_vector_dim,
-                           update_dim);
+                           update_dim, 1);
 }
 
 StatusOr<std::unique_ptr<HloInstruction>>
@@ -156,7 +164,7 @@ HloMultiUpdateAddInstructionFactoryFunc(HloCustomCallInstruction* call) {
   TF_ASSIGN_OR_RETURN(uint64 update_dim,
                       attribute_map.GetAttributeAsUInt64("update_dim"));
   return CreateMultiUpdateAdd(call->shape(), call->operands(), index_vector_dim,
-                              update_dim);
+                              update_dim, 1);
 }
 
 static HloPoplarInstructionFactory multi_slice_factory(
