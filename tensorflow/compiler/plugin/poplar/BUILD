@@ -698,6 +698,7 @@ cc_library(
         "kernels/poputil/stateful_gradient_accumulate.cc",
         "kernels/poputil/user_operation.cc",
         "kernels/sendrecv_kernels.cc",
+        "kernels/training_ops.cc",
     ],
     hdrs = [
         "kernels/ipu_kernels_common.h",
@@ -708,8 +709,10 @@ cc_library(
         ":driver",
         ":rearrange_pipeline_stage_arguments",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
+        "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
         "//tensorflow/compiler/tf2xla/kernels:tensor_list_utils",
+        "//tensorflow/compiler/tf2xla/kernels:xla_ops",
         "//tensorflow/compiler/xla/client/lib:pooling",
         "//tensorflow/compiler/xla/client/lib:prng",
         "//tensorflow/compiler/xla/client/lib:sorting",
