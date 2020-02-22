@@ -81,6 +81,7 @@ StatusOr<bool> ReplaceMultiUpdate(HloInstruction* inst) {
   HloComputation* computation = inst->parent();
   std::size_t index_vector_dim = multi_update->GetIndexVectorDimension();
   std::size_t update_dim = multi_update->GetUpdateSliceDimension();
+  const uint32 serialization_factor = multi_update->GetSerializationFactor();
 
   // First check if we need to add an extra dimension for the index_vector_dim
   // so that it is no longer explicit.
@@ -127,14 +128,14 @@ StatusOr<bool> ReplaceMultiUpdate(HloInstruction* inst) {
   if (changed) {
     HloInstruction* new_inst;
     if (IsMultiUpdate(inst)) {
-      new_inst = computation->AddInstruction(
-          CreateMultiUpdate(operand->shape(), {operand, indices, updates},
-                            index_vector_dim, update_dim));
+      new_inst = computation->AddInstruction(CreateMultiUpdate(
+          operand->shape(), {operand, indices, updates}, index_vector_dim,
+          update_dim, serialization_factor));
     } else {
       HloInstruction* scale = inst->mutable_operand(3);
       new_inst = computation->AddInstruction(CreateMultiUpdateAdd(
           operand->shape(), {operand, indices, updates, scale},
-          index_vector_dim, update_dim));
+          index_vector_dim, update_dim, serialization_factor));
     }
     inst->SetupDerivedInstruction(new_inst);
     TF_RETURN_IF_ERROR(inst->ReplaceAllUsesWith(new_inst));

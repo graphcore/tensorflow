@@ -207,7 +207,8 @@ StatusOr<HloInstruction*> CreateNewMultiUpdate(
   HloInstruction* new_multi_update_add = comp->AddInstruction(
       CreateMultiUpdateAdd(operand->shape(), {operand, indices, updates, scale},
                            multi_update->GetIndexVectorDimension(),
-                           multi_update->GetUpdateSliceDimension()));
+                           multi_update->GetUpdateSliceDimension(),
+                           multi_update->GetSerializationFactor()));
 
   if (shard) {
     new_multi_update_add->set_device_sharding(*shard);

@@ -25,6 +25,9 @@ limitations under the License.
 
 #include <popops/DynamicSlice.hpp>
 #include <popops/ElementWise.hpp>
+#include <poputil/GraphFunction.hpp>
+
+namespace pgf = poputil::graphfn;
 
 namespace xla {
 namespace poplarplugin {
@@ -32,7 +35,7 @@ namespace {
 
 StatusOr<poplar::Tensor> CreateInputTensor(poplar::Graph& graph,
                                            const popops::SlicePlan& plan,
-                                           const xla::Shape& xla_input_shape,
+                                           const Shape& xla_input_shape,
                                            const std::string& name) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(xla_input_shape));
   return popops::createSliceableTensor(graph, type,
@@ -40,10 +43,12 @@ StatusOr<poplar::Tensor> CreateInputTensor(poplar::Graph& graph,
                                        {0}, {1}, plan, {}, name);
 }
 
-StatusOr<poplar::Tensor> CreateUpdatesTensor(
-    poplar::Graph& graph, const popops::SlicePlan& plan,
-    const xla::Shape& xla_input_shape, const xla::Shape& xla_updates_shape,
-    const xla::Shape& xla_indices_shape, const std::string& name) {
+StatusOr<poplar::Tensor> CreateUpdatesTensor(poplar::Graph& graph,
+                                             const popops::SlicePlan& plan,
+                                             const Shape& xla_input_shape,
+                                             const Shape& xla_updates_shape,
+                                             const Shape& xla_indices_shape,
+                                             const std::string& name) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(xla_updates_shape));
   std::vector<size_t> indices_shape =
       PoplarShapeFromXlaShape(xla_indices_shape);
@@ -60,7 +65,7 @@ class MultiSliceOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
+                                             const Shape& output_shape,
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
@@ -115,29 +120,97 @@ enum class UpdateMode { Replace, Accumulate };
 Status MultiUpdateInternal(
     poplar::Graph& graph, const popops::SlicePlan& plan, poplar::Tensor operand,
     const poplar::Tensor& indices, const poplar::Tensor& updates,
-    poplar::program::Sequence& prog, const std::string& debug_prefix,
-    UpdateMode mode, absl::optional<poplar::Tensor> scale = absl::nullopt) {
+    poplar::program::Sequence& prog,
+    const HloMultiUpdateInstruction* multi_update, UpdateMode mode,
+    absl::optional<poplar::Tensor> scale = absl::nullopt) {
   // If the updates tensor is empty, there is no need to update the operand. We
   // can return the operand as is.
   if (updates.numElements() == 0) {
     return Status::OK();
   }
   if (indices.shape().size() != 2 || indices.shape()[1] != 1) {
-    return xla::FailedPrecondition(
+    return FailedPrecondition(
         "Indices should be 2D with the second dimension set to 1.");
   }
-  poplar::Tensor expanded_updates = updates.expand({1});
+  const std::string& debug_prefix = GetDebugName(multi_update);
 
-  if (mode == UpdateMode::Replace) {
-    popops::multiUpdate(graph, operand, expanded_updates,
-                        indices.reinterpret(poplar::UNSIGNED_INT), {0}, {1},
-                        prog, plan, poplar::OptionFlags(), debug_prefix);
-  } else {
-    popops::multiUpdateAdd(graph, operand, expanded_updates,
-                           indices.reinterpret(poplar::UNSIGNED_INT), *scale,
-                           {0}, {1}, prog, plan, poplar::OptionFlags(),
-                           debug_prefix);
+  const std::size_t num_updates = updates.shape()[0];
+  const uint32 serialization_factor = multi_update->GetSerializationFactor();
+
+  if (serialization_factor == 0 || serialization_factor > num_updates) {
+    return FailedPrecondition("Invalid serialization factor %u.",
+                              serialization_factor);
   }
+
+  auto update_fn = [&graph, &plan, &operand, &debug_prefix, &mode, &scale](
+                       poplar::Tensor slice_indices,
+                       poplar::Tensor slice_updates,
+                       poplar::program::Sequence& seq) -> void {
+    slice_indices = slice_indices.reinterpret(poplar::UNSIGNED_INT);
+    slice_updates = slice_updates.expand({1});
+    if (mode == UpdateMode::Replace) {
+      popops::multiUpdate(graph, operand, slice_updates, slice_indices, {0},
+                          {1}, seq, plan, poplar::OptionFlags(), debug_prefix);
+    } else {
+      popops::multiUpdateAdd(graph, operand, slice_updates, slice_indices,
+                             *scale, {0}, {1}, seq, plan, poplar::OptionFlags(),
+                             debug_prefix);
+    }
+  };
+
+  if (serialization_factor == 1) {
+    update_fn(indices, updates, prog);
+  } else {
+    // Do the updates serially and reuse the code to do so.
+    const std::size_t slice_size = num_updates / serialization_factor;
+
+    // Allocate the indices with an ideal layout.
+    Shape indices_shape = multi_update->operand(1)->shape();
+    indices_shape.set_dimensions(0, slice_size);
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor allocated_slice_indices,
+        CreateIndicesTensor(graph, plan, indices_shape,
+                            GetDebugName(multi_update) + "/indices"));
+
+    // Allocate the updates with an ideal layout.
+    Shape update_shape = multi_update->operand(2)->shape();
+    update_shape.set_dimensions(0, slice_size);
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor allocated_slice_updates,
+        CreateUpdatesTensor(graph, plan, multi_update->operand(0)->shape(),
+                            update_shape, indices_shape,
+                            GetDebugName(multi_update) + "/updates"));
+
+    // Wrap the update function in a poplar function so that we can reuse it
+    // between the slices.
+    auto f = pgf::VoidFunction(
+        graph,
+        {pgf::input(allocated_slice_indices, "allocated_slice_indices"),
+         pgf::input(allocated_slice_updates, "allocated_slice_updates")},
+        [&](std::vector<poplar::Tensor>& args, poplar::program::Sequence& seq) {
+          update_fn(args[0], args[1], seq);
+        });
+
+    for (std::size_t i = 0; i != serialization_factor; ++i) {
+      // Slice the indices and updates.
+      const std::size_t slice_begin = i * slice_size;
+      poplar::Tensor slice_indices =
+          indices.slice(slice_begin, slice_begin + slice_size);
+      poplar::Tensor slice_updates =
+          updates.slice(slice_begin, slice_begin + slice_size);
+      // Reuse the multi update function.
+      std::vector<poplar::Tensor> args = {slice_indices, slice_updates};
+      f(args, prog);
+    }
+    if (slice_size * serialization_factor != num_updates) {
+      const std::size_t slice_begin = serialization_factor * slice_size;
+      // Do the remainder.
+      poplar::Tensor slice_indices = indices.slice(slice_begin, num_updates);
+      poplar::Tensor slice_updates = updates.slice(slice_begin, num_updates);
+      update_fn(slice_indices, slice_updates, prog);
+    }
+  }
+
   return Status::OK();
 }
 
@@ -145,8 +218,10 @@ class MultiUpdateOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
+                                             const Shape& output_shape,
                                              TensorMap& tensor_map) override {
+    const HloMultiUpdateInstruction* multi_update =
+        Cast<HloMultiUpdateInstruction>(inst);
     poplar::program::Sequence prog;
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
                         FindInplaceOutputTensors(tensor_map, res, inst, prog));
@@ -160,7 +235,7 @@ class MultiUpdateOp : public PoplarOpDef {
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     TF_RETURN_IF_ERROR(MultiUpdateInternal(graph, *plan, operand, indices,
-                                           updates, prog, GetDebugName(inst),
+                                           updates, prog, multi_update,
                                            UpdateMode::Replace));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
@@ -204,8 +279,10 @@ class MultiUpdateAddOp : public MultiUpdateOp {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
+                                             const Shape& output_shape,
                                              TensorMap& tensor_map) override {
+    const HloMultiUpdateAddInstruction* multi_update_add =
+        Cast<HloMultiUpdateAddInstruction>(inst);
     poplar::program::Sequence prog;
 
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
@@ -222,7 +299,7 @@ class MultiUpdateAddOp : public MultiUpdateOp {
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     TF_RETURN_IF_ERROR(MultiUpdateInternal(graph, *plan, operand, indices,
-                                           updates, prog, GetDebugName(inst),
+                                           updates, prog, multi_update_add,
                                            UpdateMode::Accumulate, scale));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));

@@ -33,7 +33,7 @@ class AllToAllFinder : public HloMatcher {
   bool HandleMatch(HloMatcherMatched& match,
                    const absl::optional<int64>) override;
 
-  uint32 replication_factor;
+  const uint32 replication_factor;
 };
 
 }  // namespace poplarplugin

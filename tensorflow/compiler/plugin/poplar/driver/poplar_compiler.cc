@@ -702,8 +702,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<HloGetDimensionSizeRewriter>();
     pipeline.AddPass<CustomOpReplacer>();
-    pipeline.AddPass<AllToAllFinder>(resources.annotations,
-                                     resources.replication_factor);
     pipeline.AddPass<ParsePoplarBackendConfig>();
     pipeline.AddPass<PipelineFixer>();
     pipeline.AddPass<ReplicationFactorToConstant>(resources.replication_factor);
@@ -763,8 +761,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
       }
     }
+    pipeline.AddPass<AllToAllFinder>(resources.annotations,
+                                     resources.replication_factor);
     pipeline.AddPass<MultiUpdateScaleApply>(resources.annotations);
     pipeline.AddPass<MultiUpdateApply>(resources.annotations);
+    pipeline.AddPass<HloCSE>(true);
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<SuggestRecompute>();
       pipeline.AddPass<AddBlockRecompute>();

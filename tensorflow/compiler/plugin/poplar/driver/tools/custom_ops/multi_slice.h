@@ -49,6 +49,7 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
                                      absl::Span<HloInstruction* const> operands,
                                      std::size_t index_vector_dim,
                                      std::size_t update_dim,
+                                     uint32 serialization_factor,
                                      bool is_update_add = false);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
@@ -60,10 +61,13 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
   // The dimension in indices which contains the starting indices. If it is
   // equal to the indices tensor rank we implicitly consider that tensor to
   // have a trailing 1 dimension.
-  std::size_t GetIndexVectorDimension() const { return index_vector_dim_; };
+  std::size_t GetIndexVectorDimension() const { return index_vector_dim_; }
 
   // The dimension of the update operand which represents the slice.
-  std::size_t GetUpdateSliceDimension() const { return update_dim_; };
+  std::size_t GetUpdateSliceDimension() const { return update_dim_; }
+
+  // Factor used for serializing the multi update.
+  std::size_t GetSerializationFactor() const { return serialization_factor_; }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -71,6 +75,7 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
 
   const std::size_t index_vector_dim_;
   const std::size_t update_dim_;
+  const uint32 serialization_factor_;
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -82,7 +87,8 @@ class HloMultiUpdateAddInstruction : public HloMultiUpdateInstruction {
  public:
   explicit HloMultiUpdateAddInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      std::size_t index_vector_dim, std::size_t update_dim);
+      std::size_t index_vector_dim, std::size_t update_dim,
+      uint32 serialization_factor);
 
  private:
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -96,11 +102,13 @@ std::unique_ptr<HloInstruction> CreateMultiSlice(const Shape& shape,
 
 std::unique_ptr<HloInstruction> CreateMultiUpdate(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    std::size_t index_vector_dim, std::size_t update_dim);
+    std::size_t index_vector_dim, std::size_t update_dim,
+    uint32 serialization_factor = 1);
 
 std::unique_ptr<HloInstruction> CreateMultiUpdateAdd(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
-    std::size_t index_vector_dim, std::size_t update_dim);
+    std::size_t index_vector_dim, std::size_t update_dim,
+    uint32 serialization_factor = 1);
 
 }  // namespace poplarplugin
 }  // namespace xla
