@@ -36,6 +36,11 @@ namespace xla {
 namespace poplarplugin {
 
 namespace {
+bool IsAddOrMultiply(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kAdd ||
+         inst->opcode() == HloOpcode::kMultiply;
+}
+
 // clang-format off
 static const std::vector<HloMatcherPattern> patterns = {
   HloMatcherPattern(
@@ -175,6 +180,37 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
     })
   ),
+
+  HloMatcherPattern(
+    PatternType("multi_update_with_binary"),
+    PatternMetaTarget(1),
+    PatternInputs({4, 5}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 1}), IsAddOrMultiply},
+      {HloOpcode::kCustomCall, NodeOperands({2, 4, 5}), IsPoplarInstruction(PoplarOp::MultiUpdate)},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+    })
+  ),
+
+  HloMatcherPattern(
+    PatternType("multi_update_add_with_binary"),
+    PatternMetaTarget(1),
+    PatternInputs({4, 5, 6}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({1, 1}), IsAddOrMultiply},
+      {HloOpcode::kCustomCall, NodeOperands({2, 4, 5, 6}), IsPoplarInstruction(PoplarOp::MultiUpdateAdd)},
+      {HloOpcode::kBroadcast, NodeOperands({3})},
+      {HloOpcode::kConstant, NodeOperands({}), IsConstantZero},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+    })
+  ),
 };
 // clang-format on
 };  // namespace
@@ -217,14 +253,14 @@ StatusOr<HloInstruction*> CreateNewMultiUpdate(
   return new_multi_update_add;
 }
 
-Status HandleNoReshape(HloMatcherMatched& match,
-                       const absl::optional<int64> shard) {
+StatusOr<bool> HandleNoReshape(HloMatcherMatched& match,
+                               const absl::optional<int64> shard) {
   // Get the inputs.
   HloComputation* comp = match.computation;
   HloInstruction* root = match.instruction_mapping.at(0);
   HloInstruction* multi_update = match.instruction_mapping.at(1);
   HloInstruction* operand = match.instruction_mapping.at(4);
-  HloInstruction* indicies = match.instruction_mapping.at(5);
+  HloInstruction* indices = match.instruction_mapping.at(5);
   HloInstruction* updates = match.instruction_mapping.at(6);
   absl::optional<HloInstruction*> scale;
   if (IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(multi_update)) {
@@ -235,21 +271,22 @@ Status HandleNoReshape(HloMatcherMatched& match,
   const bool negate_scale = root->opcode() == HloOpcode::kSubtract;
   TF_ASSIGN_OR_RETURN(
       HloInstruction * new_multi_update_add,
-      CreateNewMultiUpdate(multi_update, operand, indicies, updates, scale,
+      CreateNewMultiUpdate(multi_update, operand, indices, updates, scale,
                            negate_scale, shard));
 
-  return comp->ReplaceInstruction(root, new_multi_update_add);
+  TF_RETURN_IF_ERROR(comp->ReplaceInstruction(root, new_multi_update_add));
+  return true;
 }
 
-Status HandleReshape(HloMatcherMatched& match,
-                     const absl::optional<int64> shard) {
+StatusOr<bool> HandleReshape(HloMatcherMatched& match,
+                             const absl::optional<int64> shard) {
   // Get the inputs.
   HloComputation* comp = match.computation;
   HloInstruction* root = match.instruction_mapping.at(0);
   HloInstruction* reshape = match.instruction_mapping.at(1);
   HloInstruction* multi_update = match.instruction_mapping.at(2);
   HloInstruction* operand = match.instruction_mapping.at(5);
-  HloInstruction* indicies = match.instruction_mapping.at(6);
+  HloInstruction* indices = match.instruction_mapping.at(6);
   HloInstruction* updates = match.instruction_mapping.at(7);
   absl::optional<HloInstruction*> scale;
   if (IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(multi_update)) {
@@ -265,19 +302,62 @@ Status HandleReshape(HloMatcherMatched& match,
   const bool negate_scale = root->opcode() == HloOpcode::kSubtract;
   TF_ASSIGN_OR_RETURN(
       HloInstruction * new_multi_update_add,
-      CreateNewMultiUpdate(multi_update, operand, indicies, updates, scale,
+      CreateNewMultiUpdate(multi_update, operand, indices, updates, scale,
                            negate_scale, shard));
 
   // Reshape the multi update add to match the reshape.
   new_multi_update_add = comp->AddInstruction(
       HloInstruction::CreateReshape(reshape->shape(), new_multi_update_add));
 
-  return comp->ReplaceInstruction(root, new_multi_update_add);
+  TF_RETURN_IF_ERROR(comp->ReplaceInstruction(root, new_multi_update_add));
+  return true;
+}
+
+StatusOr<bool> HandleBinary(HloMatcherMatched& match,
+                            const absl::optional<int64> shard) {
+  // Converts:
+  // indices = ...
+  // updates = ...
+  // multi_update - MultiUpdate(big_zero, indices, updates)
+  // root = binary(multi_update, multi_update)
+  // (note that the root nary op uses multi_update only)
+  // into:
+  // new_updates = binary(updates, updates)
+  // multi_update = MultiUpdate(big_zero, indices, new_updates)
+
+  // Get the inputs.
+  HloComputation* comp = match.computation;
+  HloInstruction* root = match.instruction_mapping.at(0);
+  HloInstruction* multi_update = match.instruction_mapping.at(1);
+  HloInstruction* operand = match.instruction_mapping.at(2);
+  HloInstruction* indices = match.instruction_mapping.at(4);
+  HloInstruction* updates = match.instruction_mapping.at(5);
+  absl::optional<HloInstruction*> scale;
+  if (IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(multi_update)) {
+    scale = match.instruction_mapping.at(6);
+  }
+
+  // Only do this fusion if the number of updates < number of entries (i.e. it
+  // is sparse).
+  if (updates->shape().dimensions(0) > operand->shape().dimensions(0)) {
+    return false;
+  }
+  CHECK_EQ(root->operand_count(), 2);
+  HloInstruction* new_updates = comp->AddInstruction(
+      root->CloneWithNewOperands(updates->shape(), {updates, updates}));
+
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * new_multi_update_add,
+      CreateNewMultiUpdate(multi_update, operand, indices, new_updates, scale,
+                           /*negate scale*/ false, shard));
+
+  TF_RETURN_IF_ERROR(comp->ReplaceInstruction(root, new_multi_update_add));
+  return true;
 }
 
 bool MultiUpdateApply::HandleMatch(HloMatcherMatched& match,
                                    const absl::optional<int64> shard) {
-  Status s;
+  StatusOr<bool> s;
   switch (match.pattern_idx) {
     case 0:
     case 1:
@@ -293,6 +373,11 @@ bool MultiUpdateApply::HandleMatch(HloMatcherMatched& match,
       s = HandleReshape(match, shard);
       break;
     }
+    case 8:
+    case 9: {
+      s = HandleBinary(match, shard);
+      break;
+    }
     default: {
       s = InternalError("Invalid pattern index.");
       break;
@@ -300,10 +385,9 @@ bool MultiUpdateApply::HandleMatch(HloMatcherMatched& match,
   }
 
   if (!s.ok()) {
-    LOG(FATAL) << s;
+    LOG(FATAL) << s.status();
   }
-  return true;
+  return s.ValueOrDie();
 }
-
 }  // namespace poplarplugin
 }  // namespace xla

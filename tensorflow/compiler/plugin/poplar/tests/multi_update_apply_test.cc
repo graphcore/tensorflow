@@ -674,6 +674,149 @@ ENTRY main {
   EXPECT_EQ(multi_update->operand(3)->opcode(), HloOpcode::kNegate);
   EXPECT_EQ(multi_update->operand(3)->operand(0), scale);
 }
+
+TEST_F(MultiUpdateApplyTest, MultiUpdateWithBinary) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  offsets = s32[24,1] parameter(0)
+  updates = f32[24,16] parameter(1)
+  scale = f32[] parameter(2)
+  zero = f32[] constant(0)
+  big_zero = f32[100,16] broadcast(zero), dimensions={}
+  update = f32[100,16] custom-call(big_zero, offsets, updates), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  ROOT a = f32[100,16] add(update, update)
+}
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  MultiUpdateApply mua(annotations);
+  EXPECT_TRUE(mua.Run(module).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(root));
+  HloInstruction* big_zero = FindInstruction(module, "big_zero");
+  HloInstruction* offsets = FindInstruction(module, "offsets");
+  HloInstruction* updates = FindInstruction(module, "updates");
+  EXPECT_EQ(root->operand(0), big_zero);
+  EXPECT_EQ(root->operand(1), offsets);
+  EXPECT_EQ(root->operand(2)->opcode(), HloOpcode::kAdd);
+  EXPECT_EQ(root->operand(2)->operand(0), updates);
+  EXPECT_EQ(root->operand(2)->operand(1), updates);
+  EXPECT_TRUE(IsConstantOne(root->operand(3)));
+}
+
+TEST_F(MultiUpdateApplyTest, MultiUpdateAddWithBinary) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  offsets = s32[24,1] parameter(0)
+  updates = f32[24,16] parameter(1)
+  scale = f32[] parameter(2)
+  zero = f32[] constant(0)
+  big_zero = f32[100,16] broadcast(zero), dimensions={}
+  update = f32[100,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  ROOT a = f32[100,16] add(update, update)
+}
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  MultiUpdateApply mua(annotations);
+  EXPECT_TRUE(mua.Run(module).ValueOrDie());
+  HloInstruction* root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(root));
+  HloInstruction* big_zero = FindInstruction(module, "big_zero");
+  HloInstruction* offsets = FindInstruction(module, "offsets");
+  HloInstruction* updates = FindInstruction(module, "updates");
+  HloInstruction* scale = FindInstruction(module, "scale");
+  EXPECT_EQ(root->operand(0), big_zero);
+  EXPECT_EQ(root->operand(1), offsets);
+  EXPECT_EQ(root->operand(2)->opcode(), HloOpcode::kAdd);
+  EXPECT_EQ(root->operand(2)->operand(0), updates);
+  EXPECT_EQ(root->operand(2)->operand(1), updates);
+  EXPECT_EQ(root->operand(3), scale);
+}
+
+TEST_F(MultiUpdateApplyTest, MultiUpdateAddWithBinaryNotSupported) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  offsets = s32[24,1] parameter(0)
+  updates = f32[24,16] parameter(1)
+  scale = f32[] parameter(2)
+  zero = f32[] constant(0)
+  big_zero = f32[100,16] broadcast(zero), dimensions={}
+  update = f32[100,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  ROOT a = f32[100,16] subtract(update, update)
+}
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  MultiUpdateApply mua(annotations);
+  EXPECT_FALSE(mua.Run(module).ValueOrDie());
+}
+
+TEST_F(MultiUpdateApplyTest, MultiUpdateAddWithBinaryUpdateTooBig) {
+  const string& hlo_string = R"(
+HloModule main
+
+ENTRY main {
+  offsets = s32[200,1] parameter(0)
+  updates = f32[200,16] parameter(1)
+  scale = f32[] parameter(2)
+  zero = f32[] constant(0)
+  big_zero = f32[100,16] broadcast(zero), dimensions={}
+  update = f32[100,16] custom-call(big_zero, offsets, updates, scale), custom_call_target="MultiUpdateAdd", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  ROOT a = f32[100,16] subtract(update, update)
+}
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  MultiUpdateApply mua(annotations);
+  EXPECT_FALSE(mua.Run(module).ValueOrDie());
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
