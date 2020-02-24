@@ -768,6 +768,17 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<HloCSE>(true);
       pass.AddPass<HloDCE>();
     }
+    if (poplar_executor->EnableMatmulCombiner()) {
+      pipeline.AddPass<MatmulCombiner>(resources.annotations);
+    }
+    pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
+    pipeline.AddPass<ElementwiseBroadcastConverter>();
+    pipeline.AddPass<FuseWideConst>(resources.annotations);
+    pipeline.AddPass<RecomputeInstructions>(
+        poplar_executor->RecomputationEnabled());
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<PipelineResourceUpdateFixer>();
+    // Passes below this point need to respect control dependencies.
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<SuggestRecompute>();
       pipeline.AddPass<AddBlockRecompute>();
@@ -782,17 +793,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
     pipeline.AddPass<HloPassFix<RemoveBlockedRecomputeSuggestions>>();
     pipeline.AddPass<HloPassFix<RemoveRecomputeSuggestions>>();
-    if (poplar_executor->EnableMatmulCombiner()) {
-      pipeline.AddPass<MatmulCombiner>(resources.annotations);
-    }
-    pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
-    pipeline.AddPass<ElementwiseBroadcastConverter>();
-    pipeline.AddPass<FuseWideConst>(resources.annotations);
-    pipeline.AddPass<RecomputeInstructions>(
-        poplar_executor->RecomputationEnabled());
-    pipeline.AddPass<HloDCE>();
-    pipeline.AddPass<PipelineResourceUpdateFixer>();
-    // Passes below this point need to respect control dependencies.
     pipeline.AddPass<DependencyReplacer>(true);
     pipeline.AddPass<HostComputeBarrierInserter>();
     pipeline.AddPass<ShardingPass>();
