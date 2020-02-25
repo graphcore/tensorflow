@@ -3291,6 +3291,24 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "subcomputation_graph_caching_test",
+    size = "medium",
+    srcs = ["tests/subcomputation_graph_caching_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "multi_ipu_test",
     size = "medium",
     srcs = ["tests/multi_ipu_test.py"],
@@ -3750,6 +3768,7 @@ test_suite(
         "sparse_softmax_test",
         "stateful_gradient_accumulate_test",
         "stateful_noop_test",
+        "subcomputation_graph_caching_test",
         "sync_list_scheduler_test",
         "synthetic_data_test",
         "tensor_array_test",

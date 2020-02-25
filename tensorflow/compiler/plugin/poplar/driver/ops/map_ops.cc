@@ -540,7 +540,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor pred = inputs[0][0];
 
-  std::vector<const DeferredVisitor*> bodies(n_branches);
+  std::vector<std::shared_ptr<const DeferredVisitor>> bodies(n_branches);
   const auto& comps = inst->called_computations();
 
   // Compile each branch into a sequence

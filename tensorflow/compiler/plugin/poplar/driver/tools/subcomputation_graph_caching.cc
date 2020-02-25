@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
 
+#include <utility>
+
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/hash/hash.h"
@@ -40,7 +42,7 @@ bool SubcomputationGraphCache::HloComputationEquals::operator()(
   return a->Equal(*b, false, true);
 }
 
-StatusOr<const DeferredVisitor*>
+StatusOr<std::shared_ptr<const DeferredVisitor>>
 SubcomputationGraphCache::GetOrCompileSubcomputation(
     CompilerResources& res, TensorVectors& inputs,
     const HloComputation* computation) {
@@ -49,15 +51,22 @@ SubcomputationGraphCache::GetOrCompileSubcomputation(
   if (itr == table_.end()) {
     VLOG(2) << "Compiling sub-computation " << computation->name();
     XLA_VLOG_LINES(2, computation->ToString());
-    itr = table_
-              .emplace(computation,
-                       absl::make_unique<DeferredVisitor>(res, deferred_inputs))
-              .first;
+
     auto order =
         computation->parent()->schedule().sequence(computation).instructions();
-    TF_RETURN_IF_ERROR(computation->AcceptOrdered(itr->second.get(), order));
+    std::shared_ptr<const DeferredVisitor> deferred_visitor =
+        std::make_shared<const DeferredVisitor>(res, deferred_inputs);
+
+    DeferredVisitor* def_visitor =
+        const_cast<DeferredVisitor*>(deferred_visitor.get());
+    TF_RETURN_IF_ERROR(computation->AcceptOrdered(def_visitor, order));
+
+    if (computation->HasSideEffect()) {
+      return deferred_visitor;
+    }
+    itr = table_.emplace(computation, deferred_visitor).first;
   }
-  return itr->second.get();
+  return itr->second;
 }
 }  // namespace subcomputation_graph_caching
 }  // namespace poplarplugin
