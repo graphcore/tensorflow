@@ -36,7 +36,7 @@ namespace subcomputation_graph_caching {
 class SubcomputationGraphCache {
  public:
   // Get or compile the DeferredVisitor for a computation.
-  StatusOr<const DeferredVisitor*> GetOrCompileSubcomputation(
+  StatusOr<std::shared_ptr<const DeferredVisitor>> GetOrCompileSubcomputation(
       CompilerResources& res, TensorVectors& inputs,
       const HloComputation* computation);
 
@@ -48,8 +48,9 @@ class SubcomputationGraphCache {
   struct HloComputationEquals {
     bool operator()(const HloComputation* a, const HloComputation* b) const;
   };
-  std::unordered_map<const HloComputation*, std::unique_ptr<DeferredVisitor>,
-                     HloComputationHash, HloComputationEquals>
+  std::unordered_map<const HloComputation*,
+                     std::shared_ptr<const DeferredVisitor>, HloComputationHash,
+                     HloComputationEquals>
       table_;
 };
 
