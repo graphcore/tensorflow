@@ -45,8 +45,7 @@ message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
   message IpuModelConfig {
-    bool enable_ipu_model = 1;
-    bool compile_ipu_code = 2;
+    bool compile_ipu_code = 1;
   };
   IpuModelConfig ipu_model_config = 1;
 

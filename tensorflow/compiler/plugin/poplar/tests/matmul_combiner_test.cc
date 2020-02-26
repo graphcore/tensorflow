@@ -50,7 +50,6 @@ se::Platform* GetTestPlatform() {
   xla::poplarplugin::IpuOptions options;
   options.set_creator_id(IpuOptionsCreator::IPU_UTILS);
   options.set_enable_matmul_combiner(true);
-  options.mutable_ipu_model_config()->set_enable_ipu_model(true);
 
   EXPECT_EQ(p->ConfigurePoplarDevices(options), Status::OK());
   return p;
