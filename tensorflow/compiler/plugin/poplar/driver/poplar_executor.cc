@@ -235,14 +235,11 @@ int64 CombinedHash(const std::vector<int64>& components) {
   return hash;
 }
 
-bool UseIpuHardware() {
-  const bool force_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
-  if (!force_ipu_model) {
-    auto device_list = PoplarExecutor::GetDeviceManager().getDevices();
-    for (const auto& d : device_list) {
-      if (d.getTarget().getTargetType() == poplar::TargetType::IPU) {
-        return true;
-      }
+bool HasIpuHardware() {
+  auto device_list = PoplarExecutor::GetDeviceManager().getDevices();
+  for (const auto& d : device_list) {
+    if (d.getTarget().getTargetType() == poplar::TargetType::IPU) {
+      return true;
     }
   }
   return false;
@@ -1122,7 +1119,6 @@ bool PoplarExecutor::PoplarDeviceIsAttached() const { return device_attached_; }
 
 Status PoplarExecutor::AttachToPoplarDevice() {
   const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
-  const bool use_ipu_hardware = UseIpuHardware();
   if (device_attached_) {
     return InternalError("Already attached to device");
   }
@@ -1150,7 +1146,7 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       }
     } else {
       // Poplar device would already be set if we were using the model.
-      CHECK(use_ipu_hardware);
+      CHECK(HasIpuHardware());
       const poplar::Target& target = GetOrCreatePoplarTarget();
       // Hardware devices
       auto device_list = GetDeviceManager().getDevices(target.getTargetType(),
@@ -1199,10 +1195,15 @@ Status PoplarExecutor::AttachToPoplarDevice() {
 
 Status PoplarExecutor::CreatePoplarTarget() {
   bool has_user_config = (current_config_.device_config_size() > 0);
-  const bool use_ipu_model = PoplarXlaFlags::Get().use_ipu_model;
-  const bool use_ipu_hardware = UseIpuHardware();
 
-  if (use_ipu_hardware) {
+  if (!PoplarXlaFlags::Get().use_ipu_model) {
+    if (current_config_.device_connection_type() !=
+            IpuDeviceConnectionType::NEVER &&
+        !HasIpuHardware()) {
+      return InvalidArgument(
+          "Target configuration failed: model disabled and no hardware IPU "
+          "found. (Are you sure you enabled the Poplar driver ?)");
+    }
     // Try to extract info from the user configuration if it was provided.
     absl::optional<int64> device_index;
     absl::optional<int64> num_devices;
@@ -1229,6 +1230,7 @@ Status PoplarExecutor::CreatePoplarTarget() {
     }
 
     if (device_index) {
+      CHECK(HasIpuHardware());
       // A specific device was chosen.
       auto device_list = GetDeviceManager().getDevices();
       ipu_.SetDeviceAndTarget(std::move(device_list.at(*device_index)));
@@ -1243,6 +1245,7 @@ Status PoplarExecutor::CreatePoplarTarget() {
         switch (current_config_.device_connection_type()) {
           case IpuDeviceConnectionType::ALWAYS:
           case IpuDeviceConnectionType::ON_DEMAND: {
+            CHECK(HasIpuHardware());
             // Get target from the available devices.
             auto device_list = GetDeviceManager().getDevices(
                 poplar::TargetType::IPU, *num_devices);
@@ -1267,32 +1270,26 @@ Status PoplarExecutor::CreatePoplarTarget() {
         }
       }
     }
-  } else if (use_ipu_model) {
-    if (current_config_.ipu_model_config().enable_ipu_model()) {
-      int num_ipus = 1;
-      if (has_user_config) {
-        auto device_config = current_config_.device_config(ordinal_);
-
-        if (device_config.selection_case() ==
-            IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
-          return InvalidArgument(
-              "Must specify the number of IPUs using auto_count, not an "
-              "index.");
-        }
-
-        num_ipus = device_config.auto_count();
-      }
-      poplar::IPUModel model;
-      model.numIPUs = num_ipus;
-
-      model.compileIPUCode =
-          current_config_.ipu_model_config().compile_ipu_code();
-      ipu_.SetDeviceAndTarget(model.createDevice());
-    }
   } else {
-    return InvalidArgument(
-        "Target configuration failed: model disabled and no hardware IPU "
-        "found. (Are you sure you enabled the Poplar driver ?)");
+    int num_ipus = 1;
+    if (has_user_config) {
+      auto device_config = current_config_.device_config(ordinal_);
+
+      if (device_config.selection_case() ==
+          IpuOptions::DeviceConfig::SelectionCase::kCfgIndex) {
+        return InvalidArgument(
+            "Must specify the number of IPUs using auto_count, not an "
+            "index.");
+      }
+
+      num_ipus = device_config.auto_count();
+    }
+    poplar::IPUModel model;
+    model.numIPUs = num_ipus;
+
+    model.compileIPUCode =
+        current_config_.ipu_model_config().compile_ipu_code();
+    ipu_.SetDeviceAndTarget(model.createDevice());
   }
   return Status::OK();
 }

@@ -3758,6 +3758,7 @@ test_suite(
         "scatter_simplifier_test",
         "scheduler_tree_test",
         "sendrecv_ops_test",
+        "serialization_test",
         "sharded_inplace_test",
         "sharding_pass_test",
         "shortest_path_scheduler_test",

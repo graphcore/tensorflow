@@ -316,7 +316,6 @@ def create_ipu_config(profiling=False,
 
   # Default initialize IpuOptions() attributes here.
   opts.creator_id = config_pb2.IpuOptionsCreator.IPU_UTILS
-  opts.ipu_model_config.enable_ipu_model = True
   opts.ipu_model_config.compile_ipu_code = True
   opts.enable_multi_slice_combiner = False
   opts.enable_matmul_combiner = False

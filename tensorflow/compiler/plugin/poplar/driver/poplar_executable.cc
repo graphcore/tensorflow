@@ -101,13 +101,14 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   PoplarExecutor* poplarExecutor(
       static_cast<PoplarExecutor*>(executor->implementation()));
 
-  if (poplarExecutor->ConnectionType() == IpuDeviceConnectionType::NEVER) {
-    return InvalidArgument(
-        "Trying to run an executable on a device that was configured for "
-        "compilation only.");
-  }
+  if (!poplarExecutor->PoplarDeviceIsAttached() &&
+      poplar_engine_.get() != nullptr) {
+    if (poplarExecutor->ConnectionType() == IpuDeviceConnectionType::NEVER) {
+      return InvalidArgument(
+          "Trying to run an executable on a device that was configured for "
+          "compilation only.");
+    }
 
-  if (!poplarExecutor->PoplarDeviceIsAttached()) {
     TF_RETURN_IF_ERROR(poplarExecutor->AttachToPoplarDevice());
   }
   se::DeviceMemoryAllocator* memory_allocator = run_options->allocator();
