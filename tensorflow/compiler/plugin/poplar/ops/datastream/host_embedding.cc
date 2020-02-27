@@ -79,6 +79,8 @@ REGISTER_OP("IpuDeviceEmbeddingLookupTrainable")
     .Attr("embedding_shape: shape")
     .Attr("dtype: type")
     .Attr("T: {int32}")
+    .Attr("optimizer: {'SGD'}")
+    .Attr("learning_rate: float")
     .SetIsStateful()
     .SetShapeFn([](InferenceContext* c) {
       PartialTensorShape result_shape;

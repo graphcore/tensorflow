@@ -28,6 +28,8 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
+from tensorflow.python.ipu import embedding_ops
+from tensorflow.python.training import gradient_descent as gd
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 
@@ -39,6 +41,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
     lookup_count = 4096
 
     def my_net(i):
+
       # lookup
       out = gen_pop_datastream_ops.ipu_device_embedding_lookup(
           i,
@@ -129,6 +132,52 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
       report.parse_log()
       report.assert_max_tile_memory(9136, tolerance=0.3)
+
+  @test_util.deprecated_graph_mode_only
+  def testAGIShapeWithClass(self):
+    shape = [100000, 200]
+    lookup_count = 4096
+
+    host_embedding = embedding_ops.create_host_embedding(
+        "my_host_embedding",
+        shape,
+        np.float32,
+        optimizer_spec=embedding_ops.HostEmbeddingOptimizerSpec(0.5))
+
+    def my_net(i):
+      out = host_embedding.lookup(i)
+      out = out * out
+
+      optim = gd.GradientDescentOptimizer(1)
+      train = optim.minimize(out)
+
+      return out, train
+
+    with ops.device('cpu'):
+      i = array_ops.placeholder(np.int32, [lookup_count])
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      r = ipu.ipu_compiler.compile(my_net, inputs=[i])
+
+    cfg = ipu.utils.create_ipu_config(profiling=True,
+                                      always_rearrange_copies_on_the_host=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+    with sl.Session() as sess:
+      i_h = np.arange(0, lookup_count).reshape([lookup_count])
+
+      report = tu.ReportJSON(self, sess, configure_device=False)
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      result = sess.run([r, host_embedding(iteration_count=1)], {i: i_h})
+
+      # Given our "model" and learning rate, we expect the embedding to be
+      # zeroed in the lookup positions.
+      self.assertAllClose(np.zeros([lookup_count, shape[1]]),
+                          np.take(result[1], i_h, axis=0))
+      self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
+      report.parse_log()
+      report.assert_max_tile_memory(14716, tolerance=0.3)
 
 
 if __name__ == "__main__":
