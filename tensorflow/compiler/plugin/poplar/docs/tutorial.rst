@@ -107,9 +107,10 @@ Running on the IPU Model simulator
 ..................................
 
 You can run the graph on IPU hardware or on an IPU Model running on the host.
-The IPU model is an accurate simulation of the behaviour of the IPU hardware.
-It may be easier to debug problems, such as out-of-memory errors, using the
-IPU Model.
+The IPU Model is a simulation of the *behaviour* of the IPU hardware.
+It does not implement every aspect of a real IPU. For example, the
+IPU Model does not support replicated graphs in TensorFlow
+(see :ref:`replicated_graphs`).
 
 When using an IPU Model instead of actual IPU hardware, the runtime operations
 will behave exactly as they would on hardware. However, the profiler will
@@ -123,9 +124,7 @@ If you set the ``set_ipu_model_options`` option ``compile_ipu_code`` to
 that is actually executed by the host). In this case, the reported
 IPU memory usage will include the memory used for code.
 
-Because the IPU Model has access to all the memory of the host CPU it is
-possible to run graphs that would run out of memory on the IPU.
-This makes the IPU Model an important tool for debugging OOM-related issues.
+The IPU Model can be a useful tool for debugging OOM-related issues.
 See :ref:`using_the_ipu_model` for more information.
 
 By default, the code will be run on IPU hardware. To run on the

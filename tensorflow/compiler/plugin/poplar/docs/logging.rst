@@ -247,19 +247,21 @@ field.
 Using the IPU Model device for debugging
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you encounter an out of memory error, it is useful run on the IPU Model
-device to enable more debugging of the problem.
+The IPU Model is an emulator that mimics the IPU
+computational framework on the host device. It is functionally equivalent to the
+IPU, but obviously the compute performance will be completely different.
+
+If you encounter an out of memory error, it may be useful to use the IPU Model
+device to debug the problem.
 
 Consider the situation in which the event trace is
 being used to investigate a graph that creates a tile memory imbalance. In
 this case, running on the IPU will lead to an out of memory exception
 before the report is generated. Running on the IPU Model instead of actual
-hardware allows the code to run to completion so the report can be generated
+hardware will still run out of memory, but the code will run to completion
+so the report can be generated.
 
-The IPU Model is an emulator that mimics the IPU
-computational framework on the host device. It is functionally equivalent to the
-IPU, but obviously the compute performance will be completely different. There are a
-number of ways to target the IPU Model, but the simplest is to pass a flag to
+There are a number of ways to target the IPU Model, but the simplest is to pass a flag to
 TensorFlow using the ``TF_POPLAR_FLAGS`` environment variable. For example:
 
 .. code-block:: console
