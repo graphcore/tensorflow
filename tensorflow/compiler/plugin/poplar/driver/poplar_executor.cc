@@ -444,7 +444,7 @@ Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
               [&] { return static_cast<bool>(embedding_interface); })) {
         return xla::ResourceExhausted(
             "Host embedding interface with id='%s' not registered. Did you run "
-            "the associated host_embedding op in the session?",
+            "the associated host_embedding op?",
             lookup_info.embedding_id);
       }
     }
@@ -495,7 +495,7 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
               [&] { return static_cast<bool>(embedding_interface); })) {
         return xla::ResourceExhausted(
             "Host embedding interface with id='%s' not registered. Did you run "
-            "the associated host_embedding op in the session?",
+            "the associated host_embedding op?",
             update_info.embedding_id);
       }
     }

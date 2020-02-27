@@ -15,7 +15,6 @@
 """Gradients for popops embedding operators."""
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 
@@ -30,15 +29,3 @@ def _ipu_multi_update(op, grads):
                                           scale=array_ops.constant(
                                               1, op.inputs[0].dtype)), None
   ]
-
-
-@ops.RegisterGradient("IpuDeviceEmbeddingLookupTrainable")
-def _ipu_host_embedding_lookup_grad(op, grads):
-  """Gradients for the IpuDeviceEmbeddingLookupTrainable op."""
-  update_op = gen_pop_datastream_ops.ipu_device_embedding_update_add(
-      -grads * op.get_attr("learning_rate"),
-      indices=op.inputs[1],
-      embedding_id=op.get_attr("embedding_id"),
-      embedding_shape=op.get_attr("embedding_shape"))
-  with ops.control_dependencies([update_op]):
-    return [array_ops.zeros_like(op.inputs[0]), None]

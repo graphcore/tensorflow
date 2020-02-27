@@ -131,8 +131,8 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
 
     Status DequeueLookupActivations(int replica, T* destination) {
       for (std::size_t i = 0; i < lookup_indices_[replica].size(); ++i) {
-        std::memcpy(destination + i * encoding_width_,
-                    embedding_rows_[lookup_indices_[replica][i]],
+        std::memcpy(embedding_rows_[lookup_indices_[replica][i]],
+                    destination + i * encoding_width_,
                     encoding_width_ * sizeof(T));
       }
 
