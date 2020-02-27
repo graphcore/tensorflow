@@ -116,13 +116,9 @@ class IPUOutfeedQueue:
     self._io_batch_size = max(1, io_batch_size)
     self._feed_name = str(feed_name)
 
-    self._enqueued = False
+    self._operations = []
     self._structure = None
     self._device_str = '/device:IPU:{}'.format(str(device_ordinal))
-
-    with ops.device('/device:CPU:0'):
-      self._deleter = gen_pop_datastream_ops.ipu_delete_outfeed(
-          feed_id=self._feed_name, device_ordinal=device_ordinal)
 
   def enqueue(self, tensors):
     """Enqueue a tensor, tuple or a dictionary of tensors for being outfed
@@ -198,8 +194,10 @@ class IPUOutfeedQueue:
        ...
 
       """
-    if self.enqueued:
-      raise ValueError("An outfeed can only be enqueued once.")
+    g = ops.get_default_graph()
+    for o in self._operations:
+      if o.graph == g:
+        raise ValueError("An outfeed can only be enqueued once.")
 
     self._structure = _OutfeedStructure(tensors, self._replication_factor)
     with ops.device(self._device_str):
@@ -211,12 +209,12 @@ class IPUOutfeedQueue:
           replication_factor=self._replication_factor,
           io_batch_size=self._io_batch_size)
 
-    self._enqueued = True
+    self._operations.append(outfeed_op)
     return outfeed_op
 
   @property
   def enqueued(self):
-    return self._enqueued
+    return len(self._operations) > 0
 
   def dequeue(self):
     """Generate host side operation to dequeue the outfeed values. The
@@ -376,7 +374,8 @@ class IPUOutfeedQueue:
     Returns:
       A `tf.Operation` that can be run to delete this IPUOutfeedQueue
     """
-    return self._deleter
+    return gen_pop_datastream_ops.ipu_delete_outfeed(
+        feed_id=self._feed_name, device_ordinal=self._device_ordinal)
 
 
 class _OutfeedStructure:
