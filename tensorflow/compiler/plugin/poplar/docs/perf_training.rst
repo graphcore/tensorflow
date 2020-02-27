@@ -99,6 +99,8 @@ array and will contain `x1 - x2` for each iteration in the loop.
 
 See entries in the :ref:`api-section` for more details.
 
+.. _replicated_graphs:
+
 Replicated graphs
 ~~~~~~~~~~~~~~~~~
 
@@ -107,6 +109,8 @@ parallel mode.  The graph is said to be replicated across multiple IPUs.
 See the `Poplar and Poplibs User Guide
 <https://documents.graphcore.ai/documents/UG1/latest>`_ for more background
 about replicated graphs.
+
+**Note:** replicated graphs are not supported when running on an IPU Model.
 
 Selecting the number of replicas
 ________________________________
