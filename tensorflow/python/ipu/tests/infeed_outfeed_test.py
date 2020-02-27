@@ -417,6 +417,56 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertTrue(initial_loss > final_loss)
 
   @test_util.deprecated_graph_mode_only
+  def testMultipleOutfeedEnequeue(self):
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    def body(v):
+      outfeed = outfeed_queue.enqueue(v)
+      outfeed = outfeed_queue.enqueue(v)
+      v = v + 1
+      return (v, outfeed)
+
+    def my_net(v):
+      r = ipu.loops.repeat(20, body, (v))
+      return r
+
+    with ops.device('cpu'):
+      v = array_ops.placeholder(np.float32, [4, 4])
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      with self.assertRaises(ValueError):
+        ipu.ipu_compiler.compile(my_net, inputs=[v])
+
+  @test_util.deprecated_graph_mode_only
+  def testMultipleOutfeedEnequeueDifferentGraphs(self):
+
+    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
+
+    def body(v):
+      outfeed = outfeed_queue.enqueue(v)
+      v = v + 1
+      return (v, outfeed)
+
+    def my_net(v):
+      r = ipu.loops.repeat(20, body, (v))
+      return r
+
+    with ops.Graph().as_default():
+      with ops.device('cpu'):
+        v = array_ops.placeholder(np.float32, [4, 4])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        ipu.ipu_compiler.compile(my_net, inputs=[v])
+
+    with ops.Graph().as_default():
+      with ops.device('cpu'):
+        v = array_ops.placeholder(np.float32, [4, 4])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        ipu.ipu_compiler.compile(my_net, inputs=[v])
+
+  @test_util.deprecated_graph_mode_only
   def testSingleOutfeedRepeatNonTuple(self):
 
     outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())

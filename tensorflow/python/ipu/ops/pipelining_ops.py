@@ -392,7 +392,11 @@ def pipeline(computational_stages,
 
   """
   name = name if name else "pipeline"
-  inputs = inputs if inputs else []
+
+  # Ensure inputs is a list, without casting inputs to a boolean. Casting
+  # a tf.Tensor to a boolean will be interpreted as an operation in the
+  # graph by Autograph.
+  inputs = inputs if not isinstance(inputs, type(None)) else []
   inputs = _convert_to_list(inputs)
   inputs = ops.convert_n_to_tensor(inputs)
 
@@ -721,8 +725,11 @@ def _compile_function(func,
           " of the pipeline." % (t.name))
   captured_args += func_graph.external_captures
 
-  # Add any control outputs.
-  func_graph.control_outputs.extend(control_outputs)
+  # Add any control outputs.  Autograph will add control outputs to the graph
+  # automatically, so only add ones which are not already present.
+  for o in control_outputs:
+    if not o in func_graph.control_outputs:
+      func_graph.control_outputs.extend([o])
 
   # Fix shape inference for the gradients and extract_outside_compilation_pass.
   for op in func_graph.get_operations():
