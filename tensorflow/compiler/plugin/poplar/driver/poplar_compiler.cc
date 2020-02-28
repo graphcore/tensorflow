@@ -684,6 +684,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->DisableGraphOutlining(),
       poplar_executor->MergeInfeedCopies(), replication_factor,
       poplar_executor->GetMaxAllReduceBufferSize(),
+      poplar_executor->GetMaxReduceScatterBufferSize(),
       poplar_executor->GetMaxInterIpuCopyBufferSize(),
       poplar_executor->GetMaxSchedulerLookaheadDepth(),
       poplar_executor->GetMaxSchedulerSearchSpaceSize(), module.get(),

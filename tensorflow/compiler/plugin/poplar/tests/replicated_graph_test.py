@@ -41,6 +41,17 @@ def next_feed_id():
 next_feed_id.feed_count = 0
 
 
+def _configure_replicated_ipu_system():
+  cfg = ipu.utils.create_ipu_config(profiling=True)
+  cfg = ipu.utils.set_optimization_options(
+      cfg,
+      max_cross_replica_sum_buffer_size=10000,
+      max_reduce_scatter_buffer_size=10000)
+  cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+  cfg = ipu.utils.auto_select_ipus(cfg, 2)
+  ipu.utils.configure_ipu_system(cfg)
+
+
 class ReplicatedGraphTest(xla_test.XLATestCase):
   def testCreateSimpleReplicatedGraph(self):
     with self.session() as sess:
@@ -56,11 +67,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       out = ipu.ipu_compiler.compile(my_graph, [inp])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(variables.global_variables_initializer())
 
@@ -90,11 +97,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       out = ipu.ipu_compiler.compile(my_graph, [x, y])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(variables.global_variables_initializer())
 
@@ -123,11 +126,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       out = ipu.ipu_compiler.compile(my_graph, [])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(variables.global_variables_initializer())
 
@@ -161,11 +160,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       outfed = outfeed_queue.dequeue()
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
@@ -213,11 +208,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       outfed = outfeed_queue.dequeue()
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
@@ -276,11 +267,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       outfed = outfeed_queue.dequeue()
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(infeed_queue.initializer)
       result = sess.run(res)
@@ -360,11 +347,8 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
           ]
 
       out = ipu.ipu_compiler.compile(my_graph, [])
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+
+      _configure_replicated_ipu_system()
 
       sess.run(variables.global_variables_initializer())
 
@@ -397,11 +381,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       outfed = outfeed_queue.dequeue()
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(infeed_queue.initializer)
       sess.run(res)
@@ -429,11 +409,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(infeed_queue.initializer)
       with self.assertRaisesRegex(
@@ -461,11 +437,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         res = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       with self.assertRaisesRegex(
           errors.FailedPreconditionError,
@@ -488,11 +460,7 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
 
       [res] = ipu.ipu_compiler.compile(my_net, inputs=[])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, 2)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       # Both replicas should receive 1.
       self.assertEqual(2, sess.run(res))
@@ -532,16 +500,65 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
         gathered_padded = array_ops.reshape(scattered_chunks, shape=[-1])
         gathered = array_ops.slice(gathered_padded, [0], [num_elements])
 
-      cfg = ipu.utils.create_ipu_config(
-          profiling=False, max_cross_replica_sum_buffer_size=10000)
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      cfg = ipu.utils.auto_select_ipus(cfg, replication_factor)
-      ipu.utils.configure_ipu_system(cfg)
+      _configure_replicated_ipu_system()
 
       sess.run(compiled_net)
       gathered_result = sess.run(gathered)
       expected_result = replication_factor * np.arange(num_elements)
       self.assertAllEqual(expected_result, gathered_result)
+
+  def testReplicatedReduceScatterCombining(self):
+
+    with self.session() as sess:
+
+      num_replicas = 2
+
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          feed_name=next_feed_id(), replication_factor=num_replicas)
+
+      def my_net(*xs):
+        y = [
+            ipu.ops.reduce_scatter_op.reduce_scatter(
+                x, replication_factor=num_replicas) for x in xs
+        ]
+        return outfeed_queue.enqueue(y)
+
+      inputs = [i * np.arange(i, dtype=np.float32) for i in range(1, 6)]
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        compiled_net = ipu.ipu_compiler.compile(my_net, inputs=inputs)
+
+      gathered = []
+      with ops.device("/device:CPU:0"):
+        dequeued = outfeed_queue.dequeue()
+        for scattered in dequeued:
+          gathered.append(array_ops.reshape(scattered, shape=[-1]))
+
+      _configure_replicated_ipu_system()
+
+      report = tu.ReportJSON(self, sess, configure_device=False)
+      report.reset()
+
+      sess.run(compiled_net)
+      out = sess.run(gathered)
+
+      # Check that the reduce scatters were combined into one.
+      report.parse_log()
+      report.assert_compute_sets_matches(
+          "IpuReduceScatter*/custom-call*/ReduceScatter", 1)
+
+      # Check padded lengths.
+      self.assertEqual(len(out[0]), np.ceil(1 / num_replicas) * num_replicas)
+      self.assertEqual(len(out[1]), np.ceil(2 / num_replicas) * num_replicas)
+      self.assertEqual(len(out[2]), np.ceil(3 / num_replicas) * num_replicas)
+      self.assertEqual(len(out[3]), np.ceil(4 / num_replicas) * num_replicas)
+      self.assertEqual(len(out[4]), np.ceil(5 / num_replicas) * num_replicas)
+
+      # Check payloads.
+      self.assertAllEqual(1.0 * num_replicas * np.arange(1), out[0][:1])
+      self.assertAllEqual(2.0 * num_replicas * np.arange(2), out[1][:2])
+      self.assertAllEqual(3.0 * num_replicas * np.arange(3), out[2][:3])
+      self.assertAllEqual(4.0 * num_replicas * np.arange(4), out[3][:4])
+      self.assertAllEqual(5.0 * num_replicas * np.arange(5), out[4][:5])
 
 
 if __name__ == "__main__":

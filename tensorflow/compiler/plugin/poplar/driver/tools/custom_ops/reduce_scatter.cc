@@ -25,9 +25,9 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-HloReduceScatterInstruction::HloReduceScatterInstruction(HloInstruction* input,
-                                                         const Shape shape)
-    : HloPoplarInstruction(shape, {input}, PoplarOp::ReduceScatter) {}
+HloReduceScatterInstruction::HloReduceScatterInstruction(
+    absl::Span<HloInstruction* const> inputs, const Shape shape)
+    : HloPoplarInstruction(shape, inputs, PoplarOp::ReduceScatter) {}
 
 absl::flat_hash_set<int64> HloReduceScatterInstruction::AllocatingIndices()
     const {
@@ -45,16 +45,16 @@ uint64 HloReduceScatterInstruction::NumberOfInplaceOperands() const {
 
 bool HloReduceScatterInstruction::IsPopOpsElementwise() const { return false; }
 
-std::unique_ptr<HloInstruction> CreateReduceScatter(HloInstruction* input,
-                                                    const Shape& shape) {
-  return absl::make_unique<HloReduceScatterInstruction>(input, shape);
+std::unique_ptr<HloInstruction> CreateReduceScatter(
+    absl::Span<HloInstruction* const> inputs, const Shape& shape) {
+  return absl::make_unique<HloReduceScatterInstruction>(inputs, shape);
 }
 
 std::unique_ptr<HloInstruction>
 HloReduceScatterInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreateReduceScatter(operands[0], shape);
+  return CreateReduceScatter(operands, shape);
 }
 
 std::vector<std::string>
@@ -69,7 +69,7 @@ static HloPoplarInstructionFactory reduce_scatter_factory(
     PoplarOp::ReduceScatter,
     [](HloCustomCallInstruction* call)
         -> StatusOr<std::unique_ptr<HloInstruction>> {
-      return CreateReduceScatter(call->mutable_operand(0), call->shape());
+      return CreateReduceScatter(call->operands(), call->shape());
     });
 
 }  // namespace

@@ -27,7 +27,7 @@ namespace poplarplugin {
 
 class HloReduceScatterInstruction : public HloPoplarInstruction {
  public:
-  explicit HloReduceScatterInstruction(HloInstruction* input,
+  explicit HloReduceScatterInstruction(absl::Span<HloInstruction* const> inputs,
                                        const Shape outputShape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;

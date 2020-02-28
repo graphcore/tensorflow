@@ -396,6 +396,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.max_cross_replica_sum_buffer_size();
   }
 
+  int64 GetMaxReduceScatterBufferSize() const {
+    return current_config_.max_reduce_scatter_buffer_size();
+  }
+
   int64 GetMaxInterIpuCopyBufferSize() const {
     return current_config_.max_inter_ipu_copies_buffer_size();
   }

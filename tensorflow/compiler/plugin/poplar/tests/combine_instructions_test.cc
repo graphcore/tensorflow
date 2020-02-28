@@ -130,8 +130,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -214,8 +215,9 @@ ENTRY entry () -> f32[2] {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
@@ -277,8 +279,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -366,8 +369,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -439,12 +443,67 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
   EXPECT_EQ(entry->instruction_count(), 10);
+}
+
+TEST_F(CombineInstructionsTest, TestCombineReduceScatter) {
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  %arg0 = f16[4] parameter(0)
+  %r0 = f16[4] custom-call(arg0), custom_call_target="ReduceScatter", backend_config="{}\n"
+  %arg1 = f16[4] parameter(1)
+  %r1 = f16[4] custom-call(arg1), custom_call_target="ReduceScatter", backend_config="{}\n"
+  %arg2 = f16[4] parameter(2)
+  %r2 = f16[4] custom-call(arg2), custom_call_target="ReduceScatter", backend_config="{}\n"
+  ROOT %tuple = (f16[4], f16[4], f16[4]) tuple(r0, r1, r2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  CompilerAnnotations annotations(module);
+  auto* entry = module->entry_computation();
+
+  ASSERT_EQ(absl::c_count_if(entry->instructions(),
+                             IsPoplarInstruction(PoplarOp::ReduceScatter)),
+            3);
+
+  // Schedule and combine.
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  // There should be a single combined reduce scatter.
+  ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceScatter)),
+            1);
 }
 
 TEST_F(CombineInstructionsTest, TestInplace) {
@@ -515,8 +574,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -563,8 +623,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -619,8 +680,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -663,8 +725,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -728,8 +791,9 @@ add {
       [](const BufferValue& buffer) {
         return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
       },
-      ComputationSchedulerToModuleScheduler(IpuToMemorySchedulerAlgorithm(
-          CreateClusteringMemoryScheduler({64 * 1024, 64 * 1024, 0, 0}))));
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
