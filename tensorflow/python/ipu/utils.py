@@ -384,6 +384,7 @@ def set_optimization_options(opts,
                              combine_embedding_lookups=False,
                              combine_matmuls=False,
                              max_cross_replica_sum_buffer_size=0,
+                             max_reduce_scatter_buffer_size=0,
                              max_inter_ipu_copies_buffer_size=0,
                              gather_simplifier=False):
   """Set the IPU options related to performance / optimizations.
@@ -406,6 +407,8 @@ def set_optimization_options(opts,
       the same input.
     max_cross_replica_sum_buffer_size: The maximum number of bytes that can be
       waiting before a cross replica sum op is scheduled.
+    max_reduce_scatter_buffer_size: The maximum number of bytes that can be
+      waiting before a reduce scatter op is scheduled.
     max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
       waiting before a inter IPU copy between IPUs is scheduled.
     gather_simplifier: Will enable more aggressive optimisation
@@ -418,6 +421,7 @@ def set_optimization_options(opts,
   opts.enable_multi_slice_combiner = combine_embedding_lookups
   opts.enable_matmul_combiner = combine_matmuls
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
+  opts.max_reduce_scatter_buffer_size = max_reduce_scatter_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
   opts.enable_gather_simplifier = gather_simplifier
 

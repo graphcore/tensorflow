@@ -25,15 +25,19 @@ namespace poplarplugin {
 // modifications/optimisation of the XLA graph.
 struct CompilerInformation {
   CompilerInformation(int64 max_all_reduce_buffer_size,
+                      int64 max_reduce_scatter_buffer_size,
                       int64 max_inter_ipu_copies_buffer_size,
                       int64 max_scheduler_lookahead_depth_,
                       int64 max_scheduler_search_space_size_)
       : max_all_reduce_buffer_size(max_all_reduce_buffer_size),
+        max_reduce_scatter_buffer_size(max_reduce_scatter_buffer_size),
         max_inter_ipu_copies_buffer_size(max_inter_ipu_copies_buffer_size),
         max_scheduler_lookahead_depth(max_scheduler_lookahead_depth_),
         max_scheduler_search_space_size(max_scheduler_search_space_size_) {}
 
   const int64 max_all_reduce_buffer_size;
+
+  const int64 max_reduce_scatter_buffer_size;
 
   const int64 max_inter_ipu_copies_buffer_size;
 

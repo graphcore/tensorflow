@@ -229,6 +229,20 @@ class InterIpuCopyColocatorHelper : public InstructionColocatorHelper {
   }
 };
 
+class ReduceScatterColocatorHelper : public InstructionColocatorHelper {
+ public:
+  ReduceScatterColocatorHelper() : InstructionColocatorHelper() {}
+
+  bool CanColocate(const HloInstruction* inst) const override {
+    return IsPoplarInstruction(PoplarOp::ReduceScatter)(inst);
+  }
+
+  int64 GetColocateBufferSize(
+      const CompilerInformation& information) const override {
+    return information.max_reduce_scatter_buffer_size;
+  }
+};
+
 // Colocator helper which is used to combine multiple gradient accumulations and
 // all reduce instructions.
 class StatefulGradientAccumulationAllReduceColocatorHelper
@@ -376,6 +390,7 @@ class StatefulGradientAccumulateWithMomentumAndAllReduceWithNormColocatorHelper
 
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(InterIpuCopyColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(AllReduceColocatorHelper)
+REGISTER_INSTRUCTION_COLLOCATOR_HELPER(ReduceScatterColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
     StatefulGradientAccumulationAllReduceColocatorHelper)
 REGISTER_INSTRUCTION_COLLOCATOR_HELPER(
