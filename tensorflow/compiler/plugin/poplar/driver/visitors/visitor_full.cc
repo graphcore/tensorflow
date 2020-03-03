@@ -414,16 +414,18 @@ Status FullVisitor::HandleSendDone(HloInstruction* inst) {
 }
 
 Status FullVisitor::Postprocess(HloInstruction* inst) {
-  std::vector<Shape> shapes = FlattenedXlaShape(inst->shape());
-  for (size_t i = 0; i < shapes.size(); i++) {
-    const Shape shape = shapes[i];
+  std::size_t next_tuple_index = 0;
+  for (auto indexed_shape : ShapeUtil::GetLeafShapes(inst->shape())) {
+    const std::size_t tuple_index = next_tuple_index++;
+    const Shape shape = indexed_shape.shape;
+    const ShapeIndex index = indexed_shape.index;
+
     if (shape.IsToken()) {
       continue;
     }
     // If the current location is a deferred location, then skip this.
-    if (!resources_.deferred_allocation_scopes.empty() &&
-        resources_.deferred_allocation_scopes.top()
-            .IsDeferredAllocationLocation({inst, i})) {
+    if (DeferredAllocations::IsDeferredAllocationLocation(
+            resources_, {inst, tuple_index})) {
       continue;
     }
 
@@ -434,6 +436,7 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
         continue;
       }
       case HloOpcode::kCustomCall: {
+        const int64 output_idx = index[0];
         // Inference RNNs don't output intermediates.
         const bool is_fwd_lstm =
             IsPoplarInstruction(PoplarOp::LstmLayerFwd)(inst);
@@ -442,7 +445,7 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
         const int64 intermediates_idx = is_fwd_gru ? 2 : 3;
         if (is_fwd_lstm || is_fwd_gru) {
           auto rnn_inst = Cast<HloRNNFwdInstruction>(inst);
-          if (!rnn_inst->is_training() && i == intermediates_idx) {
+          if (!rnn_inst->is_training() && output_idx == intermediates_idx) {
             continue;
           }
         }
@@ -452,8 +455,8 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
     }
 
     // Find the tensor for this output location.
-    auto outs =
-        FindInstructionOutputsInRange(tensor_map, resources_, inst, {i, i + 1});
+    auto outs = FindInstructionOutputsInRange(tensor_map, resources_, inst,
+                                              {tuple_index, tuple_index + 1});
     CHECK_EQ(outs.size(), 1);
     auto& out = outs[0];
     if (!PoplarShapeMatchesXLAShape(out, shape)) {

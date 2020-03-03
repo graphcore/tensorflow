@@ -1417,12 +1417,11 @@ TensorVector FindInstructionOutputsInRange(TensorMap& map,
   return map.FindInstructionOutputs(inst, range.first, range.second);
 }
 
-TensorVector FindExpandedInstructionOutputs(TensorMap& map,
-                                            CompilerResources& res,
-                                            const HloInstruction* inst,
-                                            poplar::program::Sequence& seq) {
-  TensorVector outputs = GetTensorsMaybeExpand(map, res, inst, seq, true);
-  return outputs;
+TensorVector FindExpandedInstructionOutputsInRange(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    std::pair<int64, int64> range, poplar::program::Sequence& seq) {
+  return GetTensorsMaybeExpand(map, res, inst, seq, true, range.first,
+                               range.second);
 }
 
 bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
