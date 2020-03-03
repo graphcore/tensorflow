@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
-#include <poplar/ReplicatedStreamMode.hpp>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -23,6 +23,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+
+#include <poplar/ReplicatedStreamMode.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -120,14 +122,14 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
   VLOG(1) << "Processing FinishVisit";
   HloComputation* comp = root->parent();
   if (ShapeUtil::IsEmptyTuple(root->shape())) {
-    VLOG(1) << "Root instruction shape is empty tuple";
+    VLOG(1) << "Root instruction shape is an empty tuple";
     return Status::OK();
   }
 
   poplar::Graph& graph = GetGraph(resources_, root);
 
   auto* layout = comp->parent()->mutable_entry_computation_layout();
-  std::vector<Shape> shapes = FlattenedXlaShape(layout->result_shape());
+  const Shape layout_shape = layout->result_shape();
 
   const auto& entry_outputs =
       resources_.annotations.input_output_aliasing_map.GetEntryOutputInfos();
@@ -136,58 +138,63 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
       root->shape().IsTuple() ? ShapeUtil::TupleElementCount(root->shape()) : 1;
 
   CHECK_EQ(num_outputs, entry_outputs.size());
-  // Go through all the flat tensor outputs
-  // *Reminder* We use depth-first flattening of nested tuples for inputs and
-  // outputs
-  uint64 from_tensor_index = 0;
-  uint64 to_tensor_index = 0;
-  // TODO see T5364
-  auto out_tensors =
-      FindExpandedInstructionOutputs(tensor_map, resources_, root, sequence);
-  for (uint64 idx = 0; idx < entry_outputs.size(); idx++) {
+
+  for (uint64 idx = 0, output_tuple_index = 0; idx != entry_outputs.size();
+       ++idx) {
     auto& out_info = entry_outputs[idx];
+
     poplar::program::Sequence& seq =
         out_info.IsStreaming() ? sequence : device_to_host;
 
     // Flatten the tuple tensor (if required) and iterate over all of them
-    const auto sub_shape =
-        root->shape().IsTuple()
-            ? ShapeUtil::GetTupleElementShape(root->shape(), idx)
-            : root->shape();
-    to_tensor_index +=
-        sub_shape.IsTuple() ? ShapeUtil::TupleElementCount(sub_shape) : 1;
-    // all_outputs_flat_tensor_index is the global index into all the flattened
-    // output tensors
-    // current_output_flat_tensor_index is the local index into all the
-    // flattened tensors for for output idx
-    for (uint64 all_outputs_flat_tensor_index = from_tensor_index,
-                current_output_flat_tensor_index = 0;
-         all_outputs_flat_tensor_index < to_tensor_index;
-         all_outputs_flat_tensor_index++, current_output_flat_tensor_index++) {
-      if (out_info.IsResourceModified()) {
-        // Get the mapped input and make sure they are the same tensor,
-        // otherwise add a on device copy to make sure location of the resource
-        // variable doesn't change between the runs
-        // (the alternative is to reload the graph everytime)
-        auto in_tensors = FindInstructionOutputs(
-            tensor_map, resources_,
-            comp->parameter_instruction(out_info.GetInputIndex()));
-        if (in_tensors[current_output_flat_tensor_index] !=
-            out_tensors[all_outputs_flat_tensor_index]) {
-          sequence.add(poplar::program::Copy(
-              out_tensors[all_outputs_flat_tensor_index],
-              in_tensors[current_output_flat_tensor_index]));
+    const Shape layout_sub_shape =
+        layout_shape.IsTuple()
+            ? ShapeUtil::GetTupleElementShape(layout_shape, idx)
+            : layout_shape;
+
+    const std::vector<Shape> layout_sub_shapes =
+        FlattenedXlaShape(layout_sub_shape);
+
+    // Get the all the tensors for the current output index - work out the
+    // range.
+    const uint64 flat_tuple_index_start = output_tuple_index;
+    const uint64 flat_tuple_index_end =
+        flat_tuple_index_start + layout_sub_shapes.size();
+
+    auto out_tensors = FindExpandedInstructionOutputsInRange(
+        tensor_map, resources_, root,
+        {flat_tuple_index_start, flat_tuple_index_end}, seq);
+
+    // If the output is a modified resource, we want to keep it on the device at
+    // the exact same location it was an input to the graph.
+    if (out_info.IsResourceModified()) {
+      // Get the inputs to the graph, and if the input and output tensors do not
+      // match, add a on device copy to make sure location of the resource
+      // variable doesn't change between the runs (the alternative is to reload
+      // the graph everytime).
+      auto in_tensors = FindInstructionOutputsInRange(
+          tensor_map, resources_,
+          comp->parameter_instruction(out_info.GetInputIndex()),
+          {0, layout_sub_shapes.size()});
+      for (uint64 tuple_index = 0; tuple_index != layout_sub_shapes.size();
+           ++tuple_index) {
+        if (in_tensors[tuple_index] != out_tensors[tuple_index]) {
+          sequence.add(poplar::program::Copy(out_tensors[tuple_index],
+                                             in_tensors[tuple_index]));
         }
       }
+    }
 
-      if (!UseSyntheticData()) {
-        poplar::Tensor out =
-            ConvertFromDeviceLayout(shapes[all_outputs_flat_tensor_index],
-                                    out_tensors[all_outputs_flat_tensor_index]);
+    if (!UseSyntheticData()) {
+      // Add FIFOs to the host for each output tensor.
+      for (uint64 tuple_index = 0; tuple_index != layout_sub_shapes.size();
+           ++tuple_index) {
+        poplar::Tensor out = ConvertFromDeviceLayout(
+            layout_sub_shapes[tuple_index], out_tensors[tuple_index]);
 
-        auto fifo = graph.addDeviceToHostFIFO(
-            GetOutputCopyHandle(idx, current_output_flat_tensor_index),
-            out.elementType(), out.numElements());
+        auto fifo =
+            graph.addDeviceToHostFIFO(GetOutputCopyHandle(idx, tuple_index),
+                                      out.elementType(), out.numElements());
 
         seq.add(poplar::program::Copy(
             out, fifo,
@@ -195,7 +202,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
                 resources_.always_rearrange_copies_on_host));
       }
     }
-    from_tensor_index = to_tensor_index;
+    output_tuple_index = flat_tuple_index_end;
   }
 
   return Status::OK();

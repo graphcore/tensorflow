@@ -252,13 +252,13 @@ TensorVector FindInstructionOutputsInRange(TensorMap& map,
                                            const HloInstruction* inst,
                                            std::pair<int64, int64> range);
 
-/* This returns a vector of poplar tensors which are all of the outputs from
- * the given instruction - any aliasing is expanded - TODO T5364
+/* This returns a vector of all poplar tensors which are outputs of the inst
+ * in range [range.first, range.second) - any aliasing is expanded - TODO
+ * T5364
  */
-TensorVector FindExpandedInstructionOutputs(TensorMap& map,
-                                            CompilerResources& res,
-                                            const HloInstruction* inst,
-                                            poplar::program::Sequence& seq);
+TensorVector FindExpandedInstructionOutputsInRange(
+    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
+    std::pair<int64, int64> range, poplar::program::Sequence& seq);
 }  // namespace poplarplugin
 }  // namespace xla
 
