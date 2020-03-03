@@ -252,7 +252,7 @@ def create_ipu_config(profiling=False,
       The data which is streamed to/from the device might be stored in different
       layouts on the device and on the host. If that is the case the
       rearrangment is performed on the device by default. By enabling this
-      option the rearrangment will be perfomed on the host at the expense of
+      option the rearrangment will be performed on the host at the expense of
       latency.
     merge_infeed_io_copies: When true, this flag will merge the streamed
       host->device input copies into one larger copy.  This may reduce the time
@@ -266,8 +266,8 @@ def create_ipu_config(profiling=False,
       multiplications, which occur in the graph multiple times but with
       different input tensors might be optimised to reduce the total code size
       of the graph at the expense of the execution time. Setting this flag will
-      disable these optimisations. This option is not valid for the convolution 
-      operration (also see disable_graph_convolution_caching)
+      disable these optimisations. This option is not valid for the convolution
+      operation (also see disable_graph_convolution_caching)
     retain_control_dependencies: When set to true, control dependencies from the
       Tensorflow graph are passed through to the backend.  This can result in a
       different memory size due to differing constraints on the operation
@@ -484,18 +484,25 @@ def set_convolution_options(opts, convolution_options=None):
 
   .. code-block:: python
 
-      # Set "tempMemoryBudget" flag to "1000000"
+      # Set "availableMemoryProportion" flag to "0.1"
       opts = create_ipu_config()
       opts = set_convolution_options(opts,
-          convolution_options={"tempMemoryBudget": "1000000"})
+          convolution_options={"availableMemoryProportion": "0.1"})
       ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
   Args:
     opts: An IpuOptions session control protobuf.
-    convolution_options: A dictionary of poplar option flags for the
-      convolutions.
+    convolution_options: A dictionary of poplar option flags for
+      convolutions. The "availableMemoryProportion" flag indicates the
+      proportion of tile memory to be made available asß
+      temporary memory for convolutions (float between 0 and 1.0).
+      Less temporary memory will generally result in a convolution that
+      takes more cycles to complete. However, because always live memory
+      (such as control code and vertex state) is not tracked when planning it,
+      a convolution using less temporary memory may use more memory overall,
+      due to an increase of always live memory.
 
   Returns:
     The IpuOptions configuration protobuf, with convolution options set.
