@@ -197,7 +197,7 @@ def create_host_embedding(name,
                           optimizer_spec=None,
                           initializer=None):
   with ops.device('cpu'):
-    embedding_tensor = variable_scope.get_variable("foo",
+    embedding_tensor = variable_scope.get_variable(name,
                                                    shape=shape,
                                                    dtype=dtype,
                                                    initializer=initializer)
