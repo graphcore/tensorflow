@@ -131,9 +131,12 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
 
     Status DequeueLookupActivations(int replica, T* destination) {
       for (std::size_t i = 0; i < lookup_indices_[replica].size(); ++i) {
-        std::memcpy(destination + i * encoding_width_,
-                    embedding_rows_[lookup_indices_[replica][i]],
-                    encoding_width_ * sizeof(T));
+        if (0 <= lookup_indices_[replica][i] &&
+            lookup_indices_[replica][i] < embedding_rows_.size()) {
+          std::memcpy(destination + i * encoding_width_,
+                      embedding_rows_[lookup_indices_[replica][i]],
+                      encoding_width_ * sizeof(T));
+        }
       }
 
       access_count_.fetch_sub(1);
@@ -155,12 +158,15 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
       std::size_t index_count = update_indices_[replica].size();
 
       for (std::size_t i = 0; i < index_count; ++i) {
-        const T* src_ptr = grads + (encoding_width_ * i);
+        if (0 <= update_indices_[replica][i] &&
+            update_indices_[replica][i] < embedding_rows_.size()) {
+          const T* src_ptr = grads + (encoding_width_ * i);
 
-        std::transform(src_ptr, src_ptr + encoding_width_,
-                       embedding_rows_[lookup_indices_[replica][i]],
-                       embedding_rows_[lookup_indices_[replica][i]],
-                       std::plus<T>{});
+          std::transform(src_ptr, src_ptr + encoding_width_,
+                         embedding_rows_[update_indices_[replica][i]],
+                         embedding_rows_[update_indices_[replica][i]],
+                         std::plus<T>{});
+        }
       }
 
       access_count_.fetch_sub(1);

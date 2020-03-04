@@ -201,5 +201,5 @@ def create_host_embedding(name,
     initializer = array_ops.zeros(shape, dtype)
   with ops.device('cpu'):
     embedding_tensor = variables.RefVariable(initial_value=initializer,
-                                             name="foo")
+                                             name=name)
   return HostEmbedding(name, embedding_tensor, optimizer_spec=optimizer_spec)
