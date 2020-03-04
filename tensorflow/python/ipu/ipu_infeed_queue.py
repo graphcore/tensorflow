@@ -22,6 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
+from tensorflow.python.eager import context
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.data.util import structure
 from tensorflow.python.framework import ops
@@ -139,6 +140,7 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       self._dataset = dataset
       self._structure = dataset_ops.get_structure(self._dataset)
       self._flat_structure = dataset._flat_structure
+      self._device_ordinal = device_ordinal
 
       # We use max to clamp 0/1 to the same value.
       self._io_batch_size = max(1, data_to_prefetch)
@@ -163,15 +165,21 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       # ID used for differentiating between datasets.
       self._id = str(feed_name)
 
-      self._initializer = gen_pop_datastream_ops.ipu_create_dataset_iterator(
-          input_dataset=ds_variant,
-          feed_id=self._id,
-          replication_factor=self._replication_factor,
-          device_ordinal=device_ordinal,
-          **self._dataset._flat_structure)
+      with ops.colocate_with(ds_variant):
+        self._initializer = gen_pop_datastream_ops.ipu_create_dataset_iterator(
+            input_dataset=ds_variant,
+            feed_id=self._id,
+            replication_factor=self._replication_factor,
+            device_ordinal=self._device_ordinal,
+            **self._dataset._flat_structure)  # pylint: disable=protected-access
 
-      self._deleter = gen_pop_datastream_ops.ipu_delete_dataset_iterator(
-          feed_id=self._id, device_ordinal=device_ordinal)
+      # For Estimators, the graph can be frozen at the point when the delter
+      # method is called, so for non-eager mode contexts we need to create the
+      # operation at construction time.  But for eager mode, the op should be
+      # executed later, rather than at construction time.
+      if not context.executing_eagerly():
+        self._deleter = gen_pop_datastream_ops.ipu_delete_dataset_iterator(
+            feed_id=self._id, device_ordinal=self._device_ordinal)
 
     self._dequeued = False
     self._initialized = False
@@ -235,6 +243,10 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     Returns:
       A `tf.Operation` that can be run to delete this IPUInfeedQueue
     """
+    if context.executing_eagerly():
+      return gen_pop_datastream_ops.ipu_delete_dataset_iterator(
+          feed_id=self._id, device_ordinal=self._device_ordinal)
+
     return self._deleter
 
   def get_next(self):
