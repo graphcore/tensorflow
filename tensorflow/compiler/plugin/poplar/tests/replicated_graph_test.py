@@ -19,6 +19,7 @@ from __future__ import print_function
 import numpy as np
 import test_utils as tu
 
+from tensorflow.compiler.plugin.poplar.ops import gen_sendrecv_ops
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.data.ops import dataset_ops
@@ -559,6 +560,41 @@ class ReplicatedGraphTest(xla_test.XLATestCase):
       self.assertAllEqual(3.0 * num_replicas * np.arange(3), out[2][:3])
       self.assertAllEqual(4.0 * num_replicas * np.arange(4), out[3][:4])
       self.assertAllEqual(5.0 * num_replicas * np.arange(5), out[4][:5])
+
+  def testSendToHostConcat(self):
+    with self.session() as sess:
+
+      def device_fn():
+        x = [ipu.ops.replication_ops.replication_index()]
+        return gen_sendrecv_ops.ipu_send_to_host(
+            x,
+            tensor_name="replication_index",
+            send_device="/device:IPU:0",
+            send_device_incarnation=0,
+            recv_device="/device:CPU:0",
+            replica_handling="Concat")
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        send_op = ipu.ipu_compiler.compile(device_fn, inputs=[])
+
+      num_replicas = 2
+
+      with ops.device("/device:CPU:0"):
+        recv_op = gen_sendrecv_ops.ipu_recv_at_host(
+            T=np.int32,
+            tensor_name="replication_index",
+            send_device="/device:IPU:0",
+            send_device_incarnation=0,
+            recv_device="/device:CPU:0")
+
+      _configure_replicated_ipu_system()
+
+      # Test a couple of times to ensure the communication can be repeated.
+      for _ in range(2):
+        _, received = sess.run([send_op, recv_op])
+        self.assertEqual(num_replicas, len(received))
+        self.assertEqual(0, received[0])
+        self.assertEqual(1, received[1])
 
 
 if __name__ == "__main__":

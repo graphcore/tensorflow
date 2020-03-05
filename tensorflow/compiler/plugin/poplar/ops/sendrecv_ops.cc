@@ -25,6 +25,7 @@ REGISTER_OP("IpuSendToHost")
     .Attr("send_device: string")
     .Attr("send_device_incarnation: int")
     .Attr("recv_device: string")
+    .Attr("replica_handling: {'First', 'Concat'} = 'First'")
     .SetShapeFn(shape_inference::NoOutputs);
 
 REGISTER_OP("IpuRecvAtHost")

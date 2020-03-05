@@ -89,6 +89,11 @@ StatusOr<poplar::program::Program> CreateSendDone(CompilerResources& res,
       const string rendezvous_key,
       FindAttribute(send_done->frontend_attributes(), "rendezvous_key"));
 
+  const auto replica_handling =
+      FindAttribute(send_done->frontend_attributes(), "replica_handling");
+  const bool concat_replicas =
+      replica_handling.ok() && replica_handling.ValueOrDie() == "Concat";
+
   // Use the rendezvous key also for the Poplar stream handle.
   const poplar::DataStream stream = graph.addDeviceToHostFIFO(
       rendezvous_key, tensor.elementType(), tensor.numElements());
@@ -98,7 +103,7 @@ StatusOr<poplar::program::Program> CreateSendDone(CompilerResources& res,
   const Shape& shape = send->operand(0)->shape();
 
   res.annotations.send_infos.emplace_back(stream.handle(), rendezvous_key,
-                                          shape);
+                                          shape, concat_replicas);
 
   return seq;
 }
