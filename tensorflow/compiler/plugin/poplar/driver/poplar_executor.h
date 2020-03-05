@@ -396,6 +396,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.use_stable_norm_statistics();
   }
 
+  bool SupportsRemoteBuffers() const;
+
   int64 GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }
@@ -536,6 +538,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     size_t size = 0;
     unsigned int ref_count = 0;
     bool on_device = false;
+    bool in_remote_memory = false;
     std::string input_handle;
     std::string output_handle;
     ConversionFn output_convertor;
@@ -550,12 +553,20 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     TensorControl* tc;
     ConversionFn fn;
     bool streamed;
+    bool remote_parameter;
 
     InputDef() {}
-    InputDef(TensorControl* tc, ConversionFn fn, bool streamed)
-        : tc(tc), fn(fn), streamed(streamed) {}
+    InputDef(TensorControl* tc, ConversionFn fn, bool streamed,
+             bool remote_parameter)
+        : tc(tc),
+          fn(fn),
+          streamed(streamed),
+          remote_parameter(remote_parameter) {}
     InputDef(const InputDef& other)
-        : tc(other.tc), fn(other.fn), streamed(other.streamed) {}
+        : tc(other.tc),
+          fn(other.fn),
+          streamed(other.streamed),
+          remote_parameter(other.remote_parameter) {}
   };
   using InputPairList = std::vector<InputDef>;
   using ArgsHandleMap = std::map<std::string, InputDef>;
@@ -575,7 +586,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   static void FlattenedDeviceMemoryList(
       InputPairList&, const xla::Shape&, void*,
-      const InputOutputAliasingMap::InputInfo&);
+      const InputOutputAliasingMap::InputInfo&, bool is_remote_parameter);
 
   static void FlattenedOutputDeviceMemoryList(
       OutputPairList&, const xla::Shape&, void*,

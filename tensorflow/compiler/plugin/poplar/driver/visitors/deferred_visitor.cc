@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -244,6 +245,14 @@ StatusOr<poplar::program::Sequence*> DeferredVisitor::GetSequenceForInstruction(
 Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   const auto param_num = inst->parameter_number();
+
+  // Check whether this is a remote parameter - if so do not allocate the tensor
+  // as the RemoteParameterLoad will allocate it and add the copy.
+  if (IsRemoteParameter(inst, resources_)) {
+    CHECK(IsInstructionInEntryComputation(inst));
+    CHECK_EQ(inst->user_count(), 0);
+    return Status::OK();
+  }
 
   std::vector<Shape> shapes = FlattenedXlaShape(inst->shape());
   auto& used = used_tensors_[param_num];
@@ -533,6 +542,14 @@ DeferredVisitor::GetInputsForDeferredInplaceInstruction(
   for (int64 operand_idx = 0; operand_idx != inst->operand_count();
        ++operand_idx) {
     const HloInstruction* input_inst = inst->operand(operand_idx);
+
+    // Dummy parameter outputs don't have a tensor.
+    if (IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(input_inst)) {
+      CHECK(IsInstructionInEntryComputation(input_inst));
+      CHECK_EQ(inst->opcode(), HloOpcode::kTuple);
+      continue;
+    }
+
     auto shapes = FlattenedXlaShape(input_inst->shape());
 
     inputs[operand_idx].resize(shapes.size());
@@ -584,7 +601,15 @@ Status DeferredVisitor::HandleDeferredAllocationTuple(HloInstruction* inst) {
   for (int64 operand_idx = 0; operand_idx != inst->operand_count();
        ++operand_idx) {
     const HloInstruction* input_inst = inst->operand(operand_idx);
+
     auto shapes = FlattenedXlaShape(input_inst->shape());
+
+    // Dummy parameter outputs don't set a tensor output.
+    if (IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(input_inst)) {
+      CHECK(IsInstructionInEntryComputation(input_inst));
+      output_tuple_index += shapes.size();
+      continue;
+    }
 
     CHECK_EQ(inputs[operand_idx].size(), shapes.size());
 

@@ -26,6 +26,10 @@ message HostEmbeddingConfig {
   ShapeProto activations_shape = 4;
 }
 
+message RemoteParameterConfig {
+  int64 parameter_number = 1;
+}
+
 message PoplarExecutableProto {
 
   // The serialized Engine
@@ -48,4 +52,6 @@ message PoplarExecutableProto {
 
   repeated HostEmbeddingConfig lookups = 8;
   repeated HostEmbeddingConfig updates = 9;
+
+  repeated RemoteParameterConfig remote_parameters = 10;
 };

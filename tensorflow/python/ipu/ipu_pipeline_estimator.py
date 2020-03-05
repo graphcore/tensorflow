@@ -42,6 +42,7 @@ class IPUPipelineEstimatorSpec(
         'optimizer_function',
         'device_mapping',
         'pipeline_schedule',
+        'offload_weight_update_variables',
     ])):
   """Ops and objects returned from a `model_fn` and passed to
   :class:`.IPUPipelineEstimator`."""
@@ -52,7 +53,8 @@ class IPUPipelineEstimatorSpec(
               eval_metrics_fn=None,
               optimizer_function=None,
               device_mapping=None,
-              pipeline_schedule=None):
+              pipeline_schedule=None,
+              offload_weight_update_variables=False):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
 
     Depending on the value of `mode`, different arguments are required. Namely
@@ -83,6 +85,16 @@ class IPUPipelineEstimatorSpec(
       pipeline_schedule: the scheduling algorithm to use for pipeline lowering.
         Must be of type
         :class:`~tensorflow.python.ipu.ops.pipelining_ops.PipelineSchedule`.
+      offload_weight_update_variables: If True, any `tf.Variable` which is
+        only used by the weight update of the pipeline (for example the
+        accumulator variable when using the `tf.MomentumOptimizer`), will be
+        stored in the remote memory. During the weight update this variable will
+        be streamed onto the device and then streamed back to the remote memory
+        after it has been updated. Requires the machine to be configured with
+        support for `Poplar graph streaming`. Offloading variables into remote
+        memory can reduce maximum memory liveness, but can also increase the
+        computation time of the weight update. Note that this option has no
+        effect for inference only pipelines.
 
     Returns:
       A validated `IPUPipelineEstimatorSpec` object.
@@ -99,14 +111,16 @@ class IPUPipelineEstimatorSpec(
       raise ValueError("`IPUPipelineEstimatorSpec` must contain "
                        "`eval_metrics_fn` when evaluating")
 
-    return super().__new__(cls,
-                           mode=mode,
-                           computational_stages=computational_stages,
-                           eval_metrics_fn=eval_metrics_fn,
-                           pipeline_depth=pipeline_depth,
-                           optimizer_function=optimizer_function,
-                           device_mapping=device_mapping,
-                           pipeline_schedule=pipeline_schedule)
+    return super().__new__(
+        cls,
+        mode=mode,
+        computational_stages=computational_stages,
+        eval_metrics_fn=eval_metrics_fn,
+        pipeline_depth=pipeline_depth,
+        optimizer_function=optimizer_function,
+        device_mapping=device_mapping,
+        pipeline_schedule=pipeline_schedule,
+        offload_weight_update_variables=offload_weight_update_variables)
 
 
 class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: disable=protected-access
@@ -139,6 +153,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
           outfeed_loss=True,
+          offload_weight_update_variables=spec.offload_weight_update_variables,
           name="ipu_pipeline_estimator_train")
 
     return training_pipeline

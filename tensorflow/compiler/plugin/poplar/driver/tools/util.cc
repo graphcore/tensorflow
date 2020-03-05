@@ -281,6 +281,10 @@ bool IsFusionComputationWithPrefix(const HloComputation* comp,
 
 }  //  namespace
 
+bool IsInstructionInEntryComputation(const HloInstruction* inst) {
+  return inst->parent() == inst->GetModule()->entry_computation();
+}
+
 bool IsPopOpsFusion(const HloComputation* comp, const std::string& postfix) {
   return IsFusionComputationWithPrefix(comp,
                                        absl::StrCat("_pop_op_" + postfix));
@@ -356,6 +360,11 @@ bool CallCanBeInlined(const HloInstruction* inst) {
 int64 GetPipelineRepeatCount(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_config().pipeline_depth();
+}
+
+bool GetPipelineOffloadWUVariables(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().pipeline_config().offload_wu_variables();
 }
 
 int64 GetPipelineStageID(const HloInstruction* inst) {

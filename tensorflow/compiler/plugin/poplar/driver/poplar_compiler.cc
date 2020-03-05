@@ -76,6 +76,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_update_fixer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_variables_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
@@ -692,7 +693,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->AlwaysRearrangeCopiesOnTheHost(),
       poplar_executor->GetSchedulerSelection(),
       poplar_executor->RecomputationEnabled(),
-      poplar_executor->UseStableNormStatistics());
+      poplar_executor->UseStableNormStatistics(),
+      poplar_executor->SupportsRemoteBuffers());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -779,6 +781,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         poplar_executor->RecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<PipelineResourceUpdateFixer>();
+    pipeline.AddPass<PipelineResourceVariablesOffload>(
+        resources.annotations, resources.remote_memory_supported);
     // Passes below this point need to respect control dependencies.
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<SuggestRecompute>();
@@ -1001,13 +1005,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           TF_RETURN_IF_ERROR(
               poplar_executor->CreateExecutableCacheDirIfMissing());
           TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
-              cache_filename, exec, resources.annotations.infeed_infos,
-              resources.annotations.outfeed_infos,
-              resources.annotations.send_infos,
-              resources.annotations.recv_infos,
-              resources.annotations.host_embedding_lookup_infos,
-              resources.annotations.host_embedding_update_infos,
-              replication_factor, poplar_executor->GetReportFlags()));
+              cache_filename, exec, resources.annotations, replication_factor,
+              poplar_executor->GetReportFlags()));
         }
       }
       if (poplar_executor->EnableSerialization()) {
@@ -1015,12 +1014,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         TF_RETURN_IF_ERROR(
             poplar_executor->CreateSerializedExecutableDirIfMissing());
         TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
-            filename, exec, resources.annotations.infeed_infos,
-            resources.annotations.outfeed_infos,
-            resources.annotations.send_infos, resources.annotations.recv_infos,
-            resources.annotations.host_embedding_lookup_infos,
-            resources.annotations.host_embedding_update_infos,
-            replication_factor, poplar_executor->GetReportFlags()));
+            filename, exec, resources.annotations, replication_factor,
+            poplar_executor->GetReportFlags()));
         TF_RETURN_IF_ERROR(SaveExecutableMetadataJson(
             filenames.SerializedMetadataFilename(), resources));
       }
@@ -1105,7 +1100,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(resources.annotations.send_infos),
       std::move(resources.annotations.recv_infos),
       std::move(resources.annotations.host_embedding_lookup_infos),
-      std::move(resources.annotations.host_embedding_update_infos));
+      std::move(resources.annotations.host_embedding_update_infos),
+      std::move(resources.annotations.remote_parameter_infos));
 
   executable.reset(poplar_executable);
 

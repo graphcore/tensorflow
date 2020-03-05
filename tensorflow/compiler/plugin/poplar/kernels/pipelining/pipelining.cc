@@ -354,6 +354,8 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weight_update_variables",
+                                     &offload_weight_update_variables_));
     OP_REQUIRES_OK(
         ctx, ctx->GetAttr("pipeline_poplar_config", &pipeline_poplar_config_));
   }
@@ -447,7 +449,7 @@ class PipelineOp : public XlaOpKernel {
                    builder->SetInstructionFrontendAttribute(
                        outputs, FrontendAttributeId_Name(PIPELINE_REPEAT_COUNT),
                        std::to_string(repeat_count_)));
-    // Set the interleave flag.
+    // Set the schedule.
     OP_REQUIRES_OK(ctx,
                    builder->SetInstructionFrontendAttribute(
                        outputs, FrontendAttributeId_Name(PIPELINE_SCHEDULE),
@@ -457,6 +459,12 @@ class PipelineOp : public XlaOpKernel {
         ctx, builder->SetInstructionFrontendAttribute(
                  outputs, FrontendAttributeId_Name(PIPELINE_POPLAR_CONFIG),
                  pipeline_poplar_config_));
+    // Set the offload_weight_update_variables flag.
+    OP_REQUIRES_OK(
+        ctx,
+        builder->SetInstructionFrontendAttribute(
+            outputs, FrontendAttributeId_Name(PIPELINE_OFFLOAD_WU_VARIABLES),
+            std::to_string(offload_weight_update_variables_)));
 
     // A pipeline has no explicit outputs, only updates of resource variables.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
@@ -485,6 +493,7 @@ class PipelineOp : public XlaOpKernel {
   int64 repeat_count_;
   int64 schedule_;
   std::string pipeline_poplar_config_;
+  bool offload_weight_update_variables_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

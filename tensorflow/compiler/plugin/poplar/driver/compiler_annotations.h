@@ -19,6 +19,9 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_COMPILER_ANNOTATIONS_H_
 
+#include <set>
+#include <vector>
+
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
@@ -73,10 +76,23 @@ struct HostEmbeddingInfo {
   Shape activations_shape;
 };
 
+struct RemoteParameterInfo {
+  explicit RemoteParameterInfo(int64 parameter_number)
+      : parameter_number(parameter_number) {}
+  RemoteParameterInfo() = delete;
+
+  const int64 parameter_number;
+
+  bool operator<(const RemoteParameterInfo& other) const {
+    return parameter_number < other.parameter_number;
+  }
+};
+
 using OutfeedInfos = std::vector<FeedInfo>;
 using InfeedInfos = std::vector<FeedInfo>;
 using SendRecvInfos = std::vector<SendRecvInfo>;
 using HostEmbeddingInfos = std::vector<HostEmbeddingInfo>;
+using RemoteParameterInfos = std::set<RemoteParameterInfo>;
 
 // We use this structure to communicate data about the DataStreams between the
 // UserOp custom operation and the PoplarExecutable so it can link the streams
@@ -168,8 +184,11 @@ struct CompilerAnnotations {
 
   SendRecvInfos send_infos;
   SendRecvInfos recv_infos;
+
   HostEmbeddingInfos host_embedding_lookup_infos;
   HostEmbeddingInfos host_embedding_update_infos;
+
+  RemoteParameterInfos remote_parameter_infos;
 
   std::unique_ptr<HloModule> flattened_module;
 

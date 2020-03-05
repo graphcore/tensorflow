@@ -125,7 +125,6 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
     VLOG(1) << "Root instruction shape is an empty tuple";
     return Status::OK();
   }
-
   poplar::Graph& graph = GetGraph(resources_, root);
 
   auto* layout = comp->parent()->mutable_entry_computation_layout();
@@ -155,12 +154,22 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
     const std::vector<Shape> layout_sub_shapes =
         FlattenedXlaShape(layout_sub_shape);
 
-    // Get the all the tensors for the current output index - work out the
-    // range.
     const uint64 flat_tuple_index_start = output_tuple_index;
     const uint64 flat_tuple_index_end =
         flat_tuple_index_start + layout_sub_shapes.size();
+    output_tuple_index = flat_tuple_index_end;
 
+    // Check whether this is a dummy of inserted by a remote buffer - if it is
+    // then we do not add copies/FIFO for it.
+    if (out_info.IsResourceModified()) {
+      const int64 param_number = out_info.GetInputIndex();
+      if (IsRemoteParameter(param_number, resources_)) {
+        continue;
+      }
+    }
+
+    // Get the all the tensors for the current output index - work out the
+    // range.
     auto out_tensors = FindExpandedInstructionOutputsInRange(
         tensor_map, resources_, root,
         {flat_tuple_index_start, flat_tuple_index_end}, seq);
@@ -202,7 +211,6 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
                 resources_.always_rearrange_copies_on_host));
       }
     }
-    output_tuple_index = flat_tuple_index_end;
   }
 
   return Status::OK();

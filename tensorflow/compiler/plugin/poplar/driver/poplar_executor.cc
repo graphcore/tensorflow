@@ -1434,6 +1434,9 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     target_hash.push_back(std::hash<string>()(std::string(env_engine_options)));
   }
 
+  // Get remote memory support.
+  target_hash.push_back(SupportsRemoteBuffers());
+
   poplar_device_hash_ = CombinedHash(target_hash);
 
   return Status::OK();
@@ -1479,6 +1482,17 @@ ModuleFilenames PoplarExecutor::GetModuleFilenames(
 
 bool PoplarExecutor::HaveCachedExecutable(const std::string& filename) const {
   return tensorflow::Env::Default()->FileExists(filename).ok();
+}
+
+bool PoplarExecutor::SupportsRemoteBuffers() const {
+  if (!PoplarDeviceIsAttached()) {
+    return false;
+  }
+  if (ipu_.TargetOrDie().getTargetType() != poplar::TargetType::IPU) {
+    return false;
+  }
+
+  return ipu_.Device().supportsGraphStreaming();
 }
 
 tensorflow::IpuTraceEvent PoplarExecutor::NewTraceEvent() {
@@ -1615,7 +1629,8 @@ Status PoplarExecutor::GetCompilerEvents(
 
 void PoplarExecutor::FlattenedDeviceMemoryList(
     InputPairList& list, const xla::Shape& shape, void* base,
-    const InputOutputAliasingMap::InputInfo& input_info) {
+    const InputOutputAliasingMap::InputInfo& input_info,
+    bool is_remote_parameter) {
   TensorControl* tc = static_cast<TensorControl*>(base);
   if (shape.IsTuple()) {
     void** ptrs = reinterpret_cast<void**>(tc->data);
@@ -1624,11 +1639,11 @@ void PoplarExecutor::FlattenedDeviceMemoryList(
       void* ptr = ptrs[t];
       FlattenedDeviceMemoryList(list,
                                 xla::ShapeUtil::GetTupleElementShape(shape, t),
-                                ptr, input_info);
+                                ptr, input_info, is_remote_parameter);
     }
   } else {
     list.push_back(InputDef(tc, GetInputConversionFunction(shape),
-                            input_info.IsStreaming()));
+                            input_info.IsStreaming(), is_remote_parameter));
   }
 }
 
@@ -1655,8 +1670,11 @@ void PoplarExecutor::UpdateArgsHandleMap(
   for (unsigned int a = 0; a < inputs_info.size(); a++) {
     const auto& input_info = inputs_info[a];
     InputPairList bufs;
+    const bool is_remote_parameter =
+        IsRemoteParameter(a, executable.GeRemoteParameterInfos());
     FlattenedDeviceMemoryList(bufs, shapes[a],
-                              const_cast<void*>(args[a].opaque()), input_info);
+                              const_cast<void*>(args[a].opaque()), input_info,
+                              is_remote_parameter);
     for (unsigned i = 0; i < bufs.size(); i++) {
       InputDef input = bufs[i];
       auto input_handle = GetInputCopyHandle(a, i);
@@ -1672,7 +1690,8 @@ void PoplarExecutor::UpdateArgsHandleMap(
           TensorControl* tc =
               reinterpret_cast<TensorControl*>(allocated.opaque());
           std::memcpy(tc->data, input.tc->data, input.tc->size);
-          input = InputDef(tc, input.fn, input.streamed);
+          input =
+              InputDef(tc, input.fn, input.streamed, input.remote_parameter);
         }
         modified_resources.insert(input.tc);
       }
@@ -2023,7 +2042,17 @@ Status PoplarExecutor::MoveDeviceToHost() {
     for (const auto& tc : allocations_) {
       // Set up streams
       if (tc->on_device == true && !tc->output_handle.empty()) {
-        ConnectReplicatedDeviceToHost(tc->output_handle, tc);
+        if (tc->in_remote_memory) {
+          // We currently only get one copy of the buffer.
+          // Note that only resource variables are on device, hence they must
+          // have the input handle set too.
+          CHECK(tc->input_handle.size());
+          const unsigned replica_id = 0;
+          current_engine_->copyFromRemoteBuffer(tc->input_handle, tc->data, 0,
+                                                replica_id);
+        } else {
+          ConnectReplicatedDeviceToHost(tc->output_handle, tc);
+        }
 
         Json::Value tensor;
         tensor["name"] = Json::Value(tc->output_handle);
@@ -2054,6 +2083,7 @@ Status PoplarExecutor::MoveDeviceToHost() {
         PostProcessBuffer(tc);
       }
 
+      tc->in_remote_memory = false;
       tc->on_device = false;
       tc->output_handle.clear();
       tc->input_handle.clear();
@@ -2080,7 +2110,18 @@ Status PoplarExecutor::MoveHostToDevice() {
       if (!arg.second.streamed) {
         buf = PreProcessBuffer(arg.second);
 
-        current_engine_->connectStream(arg.first, buf);
+        if (arg.second.remote_parameter) {
+          // This is a remote parameter - copy it to the remote buffer for each
+          // replica.
+          tc->in_remote_memory = true;
+          for (int replica_id = 0; replica_id < current_replication_factor_;
+               ++replica_id) {
+            current_engine_->copyToRemoteBuffer(buf, arg.first, 0, replica_id);
+          }
+        } else {
+          tc->in_remote_memory = false;
+          current_engine_->connectStream(arg.first, buf);
+        }
 
         tc->on_device = true;
         tc->input_handle = arg.first;

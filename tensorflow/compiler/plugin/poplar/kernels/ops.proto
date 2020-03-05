@@ -66,6 +66,9 @@ enum PoplarOp {
   GeluGrad = 62;
   Convolution = 63;
   SendRecvBarrier = 64;
+  RemoteParameterLoad = 65;
+  RemoteParameterStore = 66;
+  RemoteParameterDummyOutput = 67;
 
   // Supported Fusions.
   Conv_biasadd = 200;

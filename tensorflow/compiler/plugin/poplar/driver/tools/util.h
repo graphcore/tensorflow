@@ -116,6 +116,7 @@ template <typename NativeT>
 StatusOr<std::vector<NativeT>> WideConstToNativeType(
     const HloInstruction* wide_const);
 
+bool IsInstructionInEntryComputation(const HloInstruction*);
 bool IsPopOpsFusion(const HloComputation*, const std::string& postfix = "");
 bool IsPopOpsFusion(const HloInstruction*, const std::string& postfix = "");
 bool IsArithmeticExpressionFusion(const HloComputation*);
@@ -128,6 +129,7 @@ bool IsPipelineResourceUpdate(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 bool CallCanBeInlined(const HloInstruction*);
 int64 GetPipelineRepeatCount(const HloInstruction*);
+bool GetPipelineOffloadWUVariables(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);

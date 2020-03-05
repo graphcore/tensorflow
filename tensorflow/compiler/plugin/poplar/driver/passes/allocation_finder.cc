@@ -93,13 +93,16 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
         IsPoplarInstruction(PoplarOp::RemapDeduce)(inst);
     const bool is_host_embedding_lookup =
         IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst);
+    const bool is_remote_buffer_load =
+        IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
 
-    if (is_remap_deduce || is_host_embedding_lookup) {
+    if (is_remap_deduce || is_host_embedding_lookup || is_remote_buffer_load) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocating_instructions.push_back(TensorLocation{inst, i});
       }
     }
+
     return Status::OK();
   }
 

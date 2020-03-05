@@ -21,6 +21,7 @@ limitations under the License.
 #include <fstream>
 #include <utility>
 
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
@@ -44,7 +45,8 @@ PoplarExecutable::PoplarExecutable(
     StreamMetaInfos&& stream_meta_info, SendRecvInfos&& send_infos,
     SendRecvInfos&& recv_infos,
     HostEmbeddingInfos&& host_embedding_lookup_infos,
-    HostEmbeddingInfos&& host_embedding_update_infos)
+    HostEmbeddingInfos&& host_embedding_update_infos,
+    RemoteParameterInfos&& remote_parameter_infos)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       poplar_engine_(std::move(engine)),
@@ -64,6 +66,7 @@ PoplarExecutable::PoplarExecutable(
       recv_infos_(std::move(recv_infos)),
       host_embedding_lookup_infos_(std::move(host_embedding_lookup_infos)),
       host_embedding_update_infos_(std::move(host_embedding_update_infos)),
+      remote_parameter_infos_(std::move(remote_parameter_infos)),
       loaded_from_cache_(false) {}
 
 PoplarExecutable::~PoplarExecutable() {
@@ -218,6 +221,12 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
                          Shape(update.activations_shape()));
   }
 
+  RemoteParameterInfos remote_parameter_infos;
+  for (const auto& remote_parameter : proto.remote_parameters()) {
+    remote_parameter_infos.emplace(
+        RemoteParameterInfo{remote_parameter.parameter_number()});
+  }
+
   // Load the poplar compilation options from the serialized executable
   poplar::OptionFlags opts;
   for (const auto& flag : proto.option_flags()) {
@@ -242,7 +251,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
       {}, false, false, {}, replication_factor, std::move(infeeds),
       std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs),
-      std::move(lookups), std::move(updates));
+      std::move(lookups), std::move(updates),
+      std::move(remote_parameter_infos));
 
   executable->loaded_from_cache_ = true;
 
@@ -251,10 +261,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
 /*static*/ Status PoplarExecutable::Serialize(
     const std::string& filename, const poplar::Executable& executable,
-    const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
-    const SendRecvInfos& sends, const SendRecvInfos& recvs,
-    const HostEmbeddingInfos& lookups, const HostEmbeddingInfos& updates,
-    uint32 replication_count, const poplar::OptionFlags& opts) {
+    const CompilerAnnotations& annotations, uint32 replication_count,
+    const poplar::OptionFlags& opts) {
   PoplarExecutableProto proto;
 
   // Write poplar executable to a file
@@ -270,28 +278,28 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   proto.set_replication_factor(replication_count);
 
-  for (const auto& infeed : infeeds) {
+  for (const auto& infeed : annotations.infeed_infos) {
     auto* feed = proto.add_infeeds();
     feed->set_stream_prefix(infeed.stream_prefix);
     *(feed->mutable_config()) = infeed.config;
     *(feed->mutable_shape()) = infeed.shape.ToProto();
   }
 
-  for (const auto& outfeed : outfeeds) {
+  for (const auto& outfeed : annotations.outfeed_infos) {
     auto* feed = proto.add_outfeeds();
     feed->set_stream_prefix(outfeed.stream_prefix);
     *(feed->mutable_config()) = outfeed.config;
     *(feed->mutable_shape()) = outfeed.shape.ToProto();
   }
 
-  for (const auto& send : sends) {
+  for (const auto& send : annotations.send_infos) {
     auto* send_proto = proto.add_sends();
     send_proto->set_stream_handle(send.stream_handle);
     send_proto->set_rendezvous_key(send.rendezvous_key);
     *(send_proto->mutable_shape()) = send.shape.ToProto();
   }
 
-  for (const auto& recv : recvs) {
+  for (const auto& recv : annotations.recv_infos) {
     auto* recv_proto = proto.add_recvs();
     recv_proto->set_stream_handle(recv.stream_handle);
     recv_proto->set_rendezvous_key(recv.rendezvous_key);
@@ -305,7 +313,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     poplar_opt->set_value(flag.second);
   }
 
-  for (const auto lookup : lookups) {
+  for (const auto lookup : annotations.host_embedding_lookup_infos) {
     auto* lookup_proto = proto.add_lookups();
     lookup_proto->set_stream_handle(lookup.stream_handle);
     lookup_proto->set_embedding_id(lookup.embedding_id);
@@ -314,13 +322,19 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
         lookup.activations_shape.ToProto();
   }
 
-  for (const auto update : updates) {
+  for (const auto update : annotations.host_embedding_update_infos) {
     auto* update_proto = proto.add_updates();
     update_proto->set_stream_handle(update.stream_handle);
     update_proto->set_embedding_id(update.embedding_id);
     *update_proto->mutable_indices_shape() = update.indices_shape.ToProto();
     *update_proto->mutable_activations_shape() =
         update.activations_shape.ToProto();
+  }
+
+  for (const auto remote_parameter_info : annotations.remote_parameter_infos) {
+    auto* remote_parameter = proto.add_remote_parameters();
+    remote_parameter->set_parameter_number(
+        remote_parameter_info.parameter_number);
   }
 
   return WriteBinaryProto(tensorflow::Env::Default(), filename, proto);

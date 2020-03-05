@@ -449,6 +449,32 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
             continue;
           }
         }
+
+        // Dummy operation doesn't output tensors.
+        if (IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(inst)) {
+          CHECK(IsInstructionInEntryComputation(inst));
+          continue;
+        }
+        break;
+      }
+      case HloOpcode::kParameter: {
+        if (IsRemoteParameter(inst, resources_)) {
+          CHECK(IsInstructionInEntryComputation(inst));
+          // Remote parameters have no outputs.
+          CHECK_EQ(inst->user_count(), 0);
+          return Status::OK();
+        }
+        break;
+      }
+      case HloOpcode::kTuple: {
+        // Get the operand index to the tuple instruction given the shape index.
+        const int64 operand_idx = index[0];
+        // If the input at this tuple index is RemoteParameterDummyOutput then
+        // we can skip it.
+        if (IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(
+                inst->operand(operand_idx))) {
+          continue;
+        }
         break;
       }
       default: { break; }
@@ -460,18 +486,17 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
     CHECK_EQ(outs.size(), 1);
     auto& out = outs[0];
     if (!PoplarShapeMatchesXLAShape(out, shape)) {
-      return xla::InternalError(
-          "Instruction %s has mismatched Poplar (%s) and XLA (%s) shapes",
-          inst->name().c_str(), Join(out.shape(), ",").c_str(),
-          Join(shape.dimensions(), ",").c_str());
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(), " has mismatched Poplar (",
+          Join(out.shape(), ","), ") and XLA (", Join(shape.dimensions(), ","),
+          ") shapes.");
     }
     TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
     if (expected_type != out.elementType()) {
-      return xla::InternalError(
-          "Instruction %s has mismatched Poplar (%s) and XLA (%s) type",
-          inst->name().c_str(),
-          outs[0].elementType().toString().cloneAsString().c_str(),
-          expected_type.toString().cloneAsString().c_str());
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(), " has mismatched Poplar (",
+          out.elementType().toString().cloneAsString(), ") and XLA (",
+          expected_type.toString().cloneAsString(), ") type.");
     }
   }
   return Status::OK();
