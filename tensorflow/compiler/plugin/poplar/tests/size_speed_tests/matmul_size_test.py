@@ -126,7 +126,7 @@ class MatMulSizeTest(xla_test.XLATestCase):
 
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
-      report.assert_total_tile_memory(20302072)
+      report.assert_total_tile_memory(26157626)
 
 
 if __name__ == "__main__":
