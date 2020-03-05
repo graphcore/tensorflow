@@ -86,12 +86,11 @@ class TopKOp : public XlaOpKernel, IpuOpKernel {
 
     // This is just a sort operation if "K" is the same size as the dimensions
     // we should be looking at.
-    bool is_just_sort = true;
+    const bool is_just_sort = (last_dim_size == num_k);
 
     absl::c_for_each(input_shape,
                      [&dims, &is_just_sort, this](TensorShapeDim dim) {
                        dims.push_back(dim.size);
-                       is_just_sort &= dim.size == this->num_k;
                      });
 
     dims[dims.size() - 1] = num_k;
@@ -112,14 +111,16 @@ class TopKOp : public XlaOpKernel, IpuOpKernel {
     // Should we returned a sorted array?
     attribute_map_.AddAttribute("sorted", sorted);
 
-    is_just_sort = !(input_type(0) == DataType::DT_FLOAT ||
-                     input_type(0) == DataType::DT_INT32 ||
-                     input_type(0) == DataType::DT_UINT32);
-
     // Fallback on existing TF impl if requested type isn't supported by
     // poplar or if this is just a sort operation (they already perform the
     // k==size lower to sort optimization).
-    if (is_just_sort) {
+    const bool fallback =
+        is_just_sort || !(input_type(0) == DataType::DT_FLOAT ||
+                          input_type(0) == DataType::DT_HALF ||
+                          input_type(0) == DataType::DT_INT32 ||
+                          input_type(0) == DataType::DT_UINT32);
+
+    if (fallback) {
       output_tuple = xla::TopK(input, num_k);
     } else {
       output_tuple =

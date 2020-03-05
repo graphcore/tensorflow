@@ -197,32 +197,40 @@ class OneHotTopK(xla_test.XLATestCase):
       executeModel(test_case, result)
 
   def testTopK(self):
-    with self.session() as sess:
+    def doTestTopK(self, dtype):
+      with self.session() as sess:
 
-      n_categories = 1200
-      topn = 24
+        n_categories = 1200
+        topn = 24
 
-      def model(a):
-        _, indices = nn.top_k(a, topn)
-        return indices
+        def model(a):
+          _, indices = nn.top_k(a, topn)
+          return indices
 
-      with ops.device('cpu'):
-        pa = array_ops.placeholder(np.float32, [n_categories], name="a")
+        with ops.device('cpu'):
+          pa = array_ops.placeholder(dtype, [n_categories], name="a")
 
-      with ops.device("/device:IPU:0"):
-        out = model(pa)
+        with ops.device("/device:IPU:0"):
+          out = model(pa)
 
-      report = tu.ReportJSON(self, sess)
-      report.reset()
+        report = tu.ReportJSON(self, sess)
+        report.reset()
 
-      input = np.random.random(n_categories)
-      expected = (-input).argsort()[:topn]
+        # Shuffled set of values of specified dtype in [0:n_categories).
+        # This ensures there is a single unique sort result.
+        pa_input = np.arange(n_categories, dtype=dtype)
+        np.random.shuffle(pa_input)
+        expected = (-pa_input).argsort()[:topn]
 
-      fd = {pa: input}
-      result = sess.run(out, fd)
-      self.assertAllClose(result, expected)
+        fd = {pa: pa_input}
+        result = sess.run(out, fd)
+        self.assertAllClose(result, expected)
 
-      report.parse_log(assert_len=4)
+        report.parse_log(assert_len=4)
+
+    testTypes = [np.float16, np.float32, np.int32]
+    for dtype in testTypes:
+      doTestTopK(self, dtype)
 
   def testInTopK(self):
     with self.session() as sess:
