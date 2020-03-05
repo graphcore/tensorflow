@@ -198,7 +198,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   SendRecvInfos sends;
   for (const auto& send : proto.sends()) {
     sends.emplace_back(send.stream_handle(), send.rendezvous_key(),
-                       Shape(send.shape()));
+                       Shape(send.shape()), send.concat_replicas());
   }
 
   SendRecvInfos recvs;
@@ -296,6 +296,7 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     auto* send_proto = proto.add_sends();
     send_proto->set_stream_handle(send.stream_handle);
     send_proto->set_rendezvous_key(send.rendezvous_key);
+    send_proto->set_concat_replicas(send.concat_replicas);
     *(send_proto->mutable_shape()) = send.shape.ToProto();
   }
 

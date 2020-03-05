@@ -17,6 +17,7 @@ message SendRecvConfig {
   string stream_handle = 1;
   string rendezvous_key = 2;
   ShapeProto shape = 3;
+  bool concat_replicas = 4;
 }
 
 message HostEmbeddingConfig {

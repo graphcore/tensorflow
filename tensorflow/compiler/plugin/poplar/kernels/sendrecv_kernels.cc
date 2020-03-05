@@ -23,8 +23,8 @@ namespace tensorflow {
 
 namespace {
 
-Rendezvous::DoneCallback make_recv_callback(OpKernelContext* ctx,
-                                            AsyncOpKernel::DoneCallback done) {
+Rendezvous::DoneCallback MakeRecvCallback(OpKernelContext* ctx,
+                                          AsyncOpKernel::DoneCallback done) {
   return [ctx, done](const Status& s, const Rendezvous::Args& send_args,
                      const Rendezvous::Args& recv_args, const Tensor& val,
                      bool is_dead) {
@@ -57,6 +57,8 @@ class IpuSendToHostOp : public XlaOpKernel {
     rendezvous_key_ =
         Rendezvous::CreateKey(send_device, send_device_incarnation, recv_device,
                               tensor_name, FrameAndIter{0, 0});
+
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("replica_handling", &replica_handling_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -66,6 +68,11 @@ class IpuSendToHostOp : public XlaOpKernel {
     const xla::XlaOp token = CreateToken(builder);
     const xla::XlaOp input = ctx->Input(0);
     const TensorShape input_shape = ctx->InputShape(0);
+
+    if (replica_handling_ == "Concat" && input_shape.dims() == 0) {
+      ctx->CtxFailure(errors::InvalidArgument("Cannot concatenate scalars"));
+      return;
+    }
 
     const DataType dtype = ctx->input_type(0);
     xla::Shape xla_shape;
@@ -80,10 +87,14 @@ class IpuSendToHostOp : public XlaOpKernel {
 
     builder->SetInstructionFrontendAttribute(send_done, "rendezvous_key",
                                              rendezvous_key_);
+
+    builder->SetInstructionFrontendAttribute(send_done, "replica_handling",
+                                             replica_handling_);
   }
 
  private:
   string rendezvous_key_;
+  string replica_handling_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(IpuSendToHostOp);
 };
@@ -129,7 +140,7 @@ class IpuRecvAtHostOp : public AsyncOpKernel {
 
     poplar_executor->GetRendezvous()->RecvAsync(
         parsed_key_, Rendezvous::Args{},
-        make_recv_callback(ctx, std::move(done)));
+        MakeRecvCallback(ctx, std::move(done)));
   }
 
  private:

@@ -49,15 +49,18 @@ struct FeedInfo {
 
 struct SendRecvInfo {
   SendRecvInfo(const std::string& stream_handle,
-               const std::string& rendezvous_key, const Shape& shape)
+               const std::string& rendezvous_key, const Shape& shape,
+               bool concat_replicas = false)
       : stream_handle(stream_handle),
         rendezvous_key(rendezvous_key),
-        shape(shape) {}
+        shape(shape),
+        concat_replicas(concat_replicas) {}
   SendRecvInfo() = delete;
 
   std::string stream_handle;
   std::string rendezvous_key;
   Shape shape;
+  bool concat_replicas;  // Only used by Send
 };
 
 struct HostEmbeddingInfo {
