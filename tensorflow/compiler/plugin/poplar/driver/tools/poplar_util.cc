@@ -334,6 +334,22 @@ poplar::program::Sequence ZeroTensors(CompilerResources& res) {
   return zero_seq;
 }
 
+bool IsRemoteParameter(int64 parameter_number,
+                       const RemoteParameterInfos& remote_parameter_infos) {
+  return remote_parameter_infos.find(RemoteParameterInfo{parameter_number}) !=
+         remote_parameter_infos.end();
+}
+
+bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res) {
+  return IsRemoteParameter(parameter_number,
+                           res.annotations.remote_parameter_infos);
+}
+
+bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res) {
+  return IsInstructionInEntryComputation(inst) &&
+         IsRemoteParameter(inst->parameter_number(), res);
+}
+
 StatusOr<std::string> GetInstructionCompilationInfo(
     const std::unique_ptr<xla::HloModule>& module, CompilerResources& res) {
   TF_ASSIGN_OR_RETURN(auto ml_type_map, GetAllNotNoneMlTypes(module.get()));

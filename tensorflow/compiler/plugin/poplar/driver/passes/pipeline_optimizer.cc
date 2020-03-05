@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 
 #include <algorithm>
+#include <set>
 #include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
@@ -188,6 +189,48 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
 }
 }  // namespace
 
+StatusOr<HloInstruction*> PipelineOptimizer::OptimizeCallInstruction(
+    HloInstruction* inst, bool* changed) {
+  VLOG(2) << "Optimizing: " << inst->ToString();
+  // Find any duplicate outputs.
+  TF_ASSIGN_OR_RETURN(auto duplicate_outputs, GetDuplicateCallOutputs(inst));
+  if (duplicate_outputs.size()) {
+    VLOG(3) << "Replacing duplicate outputs.";
+    TF_RETURN_IF_ERROR(ReplaceOutputUses(inst, duplicate_outputs));
+  }
+
+  // Find any unused outputs.
+  TF_ASSIGN_OR_RETURN(std::set<int64> unused_outputs,
+                      GetUnusedCallOutputIndices(inst));
+  if (unused_outputs.size()) {
+    VLOG(3) << "Removing unused outputs.";
+    TF_RETURN_IF_ERROR(RemoveOutputsFromCall(inst, unused_outputs));
+    TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(inst->to_apply()).status());
+  }
+
+  // Find any duplicate inputs and change the parameters such that they become
+  // unused.
+  TF_ASSIGN_OR_RETURN(auto duplicate_inputs, GetDuplicateCallInputs(inst));
+  if (duplicate_inputs.size()) {
+    VLOG(3) << "Replacing duplicate inputs.";
+    TF_RETURN_IF_ERROR(ReplaceDuplicateInputs(inst, duplicate_inputs));
+  }
+
+  // Find any unused inputs and remove them.
+  TF_ASSIGN_OR_RETURN(std::set<int64> unused_parameters,
+                      GetUnusedParametersInCall(inst));
+  if (unused_parameters.size()) {
+    VLOG(3) << "Removing unused inputs.";
+    TF_ASSIGN_OR_RETURN(inst,
+                        RemoveParametersFromCall(inst, unused_parameters));
+    TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(inst->to_apply()).status());
+  }
+
+  (*changed) |= (duplicate_outputs.size() || unused_outputs.size() ||
+                 duplicate_inputs.size() || unused_parameters.size());
+  return inst;
+}
+
 StatusOr<bool> PipelineOptimizer::OptimizePipeline(
     HloInstruction* pipeline_op) {
   bool changed = false;
@@ -197,43 +240,9 @@ StatusOr<bool> PipelineOptimizer::OptimizePipeline(
   // For each stage, starting from the last stage to last.
   std::vector<HloInstruction*> ordered = OrderInnerPipelineFunctions(stages);
   for (HloInstruction* call : ordered) {
-    VLOG(2) << "Optimizing: " << call->ToString();
-    // Find any duplicate outputs.
-    TF_ASSIGN_OR_RETURN(auto duplicate_outputs, GetDuplicateCallOutputs(call));
-    if (duplicate_outputs.size()) {
-      VLOG(3) << "Replacing duplicate outputs.";
-      TF_RETURN_IF_ERROR(ReplaceOutputUses(call, duplicate_outputs));
-    }
-
-    // Find any unused outputs.
-    TF_ASSIGN_OR_RETURN(std::set<int64> unused_outputs,
-                        GetUnusedCallOutputIndices(call));
-    if (unused_outputs.size()) {
-      VLOG(3) << "Removing unused outputs.";
-      TF_RETURN_IF_ERROR(RemoveOutputsFromCall(call, unused_outputs));
-      TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call->to_apply()).status());
-    }
-
-    // Find any duplicate inputs and change the parameters such that they become
-    // unused.
-    TF_ASSIGN_OR_RETURN(auto duplicate_inputs, GetDuplicateCallInputs(call));
-    if (duplicate_inputs.size()) {
-      VLOG(3) << "Replacing duplicate inputs.";
-      TF_RETURN_IF_ERROR(ReplaceDuplicateInputs(call, duplicate_inputs));
-    }
-
-    // Find any unused inputs and remove them.
-    TF_ASSIGN_OR_RETURN(std::set<int64> unused_parameters,
-                        GetUnusedParametersInCall(call));
-    if (unused_parameters.size()) {
-      VLOG(3) << "Removing unused inputs.";
-      TF_ASSIGN_OR_RETURN(call,
-                          RemoveParametersFromCall(call, unused_parameters));
-      TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call->to_apply()).status());
-    }
-
-    changed |= (duplicate_outputs.size() || unused_outputs.size() ||
-                duplicate_inputs.size() || unused_parameters.size());
+    bool call_changed = false;
+    TF_ASSIGN_OR_RETURN(call, OptimizeCallInstruction(call, &call_changed));
+    changed |= call_changed;
   }
   TF_ASSIGN_OR_RETURN(bool moved_parameters,
                       MoveParameterInputsToBackwardStages(pipeline_comp));

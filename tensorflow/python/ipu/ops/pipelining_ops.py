@@ -168,6 +168,7 @@ def pipeline(computational_stages,
              forward_propagation_stages_poplar_options=None,
              backward_propagation_stages_poplar_options=None,
              weight_update_poplar_options=None,
+             offload_weight_update_variables=True,
              continuous_weight_updates=False,
              outfeed_loss=False,
              name=None):
@@ -378,6 +379,16 @@ def pipeline(computational_stages,
     weight_update_poplar_options: If provided, a PipelineStageOptions object
       which allows for fine grained control of the Poplar options for the
       weight update stage.
+    offload_weight_update_variables: If True, any `tf.Variable` which is
+      only used by the weight update of the pipeline (for example the
+      accumulator variable when using the `tf.MomentumOptimizer`), will be
+      stored in the remote memory. During the weight update this variable will
+      be streamed onto the device and then streamed back to the remote memory
+      after it has been updated. Requires the machine to be configured with
+      support for `Poplar graph streaming`. Offloading variables into remote
+      memory can reduce maximum memory liveness, but can also increase the
+      computation time of the weight update. Note that this option has no effect
+      for inference only pipelines.
     continuous_weight_updates: ** CURRENTLY UNIMPLEMENTED ** When training,
       this option will apply the gradients to the resource variables
       immediately, rather than accumulating the gradients and applying them
@@ -605,6 +616,7 @@ def pipeline(computational_stages,
           pipeline_depth=pipeline_depth,
           repeat_count=repeat_count,
           schedule=int(pipeline_schedule),
+          offload_weight_update_variables=offload_weight_update_variables,
           pipeline_poplar_config=json_format.MessageToJson(
               pipeline_poplar_config))
     if not isinstance(output, ops.Operation):

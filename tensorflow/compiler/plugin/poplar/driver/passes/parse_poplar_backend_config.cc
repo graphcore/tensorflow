@@ -42,7 +42,7 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
     for (auto instr : comp->instructions()) {
       auto attributes = instr->frontend_attributes();
       PoplarBackendConfig poplar_config;
-      // Check if the calls they have the type field set from tf2xla.
+      // Check if the calls have the type field set from tf2xla.
       if (instr->opcode() == HloOpcode::kCall) {
         auto call_config_type_attribute =
             attributes.map().find(FrontendAttributeId_Name(CALL_CONFIG_TYPE));
@@ -71,13 +71,20 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
               int64 repeat_count = std::stoll(repeat_count_str);
               pipeline_config->set_repeat_count(repeat_count);
 
-              // Get the interleave flag.
+              // Get the schedule.
               TF_ASSIGN_OR_RETURN(std::string schedule_str,
                                   GetAttribute(attributes, PIPELINE_SCHEDULE));
               auto schedule = static_cast<
                   PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>(
                   std::stoi(schedule_str));
               pipeline_config->set_schedule({schedule});
+
+              // Get the offload variables flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string offload_wu_variables_str,
+                  GetAttribute(attributes, PIPELINE_OFFLOAD_WU_VARIABLES));
+              auto offload_wu_variables = std::stoi(offload_wu_variables_str);
+              pipeline_config->set_offload_wu_variables({offload_wu_variables});
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:

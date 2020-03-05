@@ -27,6 +27,8 @@ enum FrontendAttributeId {
   PIPELINE_SCHEDULE = 6;
   // Used to configure the pipeline lowering to Poplar.
   PIPELINE_POPLAR_CONFIG = 7;
+  // Used to indicate whether to offload variables for pipelining.
+  PIPELINE_OFFLOAD_WU_VARIABLES = 8;
 };
 
 enum StochasticRounding {
@@ -90,6 +92,7 @@ message PoplarBackendConfig {
       int64 pipeline_depth = 1;
       int64 repeat_count = 2;
       Schedule schedule = 3;
+      bool offload_wu_variables = 4;
     }
 
     message CallConfig {

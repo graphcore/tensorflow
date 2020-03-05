@@ -36,6 +36,9 @@ class PipelineOptimizer : public HloModulePass {
 
   StatusOr<bool> Run(HloModule* module) override;
 
+  static StatusOr<HloInstruction*> OptimizeCallInstruction(HloInstruction* inst,
+                                                           bool* changed);
+
  private:
   // Optimize a pipeline.
   StatusOr<bool> OptimizePipeline(HloInstruction* pipeline_op);

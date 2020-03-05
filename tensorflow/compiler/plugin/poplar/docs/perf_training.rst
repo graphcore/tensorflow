@@ -232,7 +232,30 @@ By default the pipeline operation will map the pipeline stages onto IPUs in
 order to minimise the inter-IPU communication lengths.  If you need to
 override this order, then you can use the ``device_mapping`` parameter.
 
-DataSet benchmarking
+Variable offloading
+___________________
+
+Depending on the optimizer used, some model parameters/``tf.Variable``s might
+only be used by the weight update, for example the accumulator variables when
+using the `tf.MomentumOptimizer`. To minimize the maximum memory liveness
+pipelining will try to utilise this knowledge and store these parameters in
+remote memory. During the weight update these variables will be streamed onto
+the device and then streamed back to the remote memory after they have been
+updated.
+
+This feature is enabled by default, but it can be disabled by setting the
+``offload_weight_update_variables`` argument of ``pipelining_ops.pipeline`` to
+``False``.
+
+This feature requires the machine to be configured with support for
+`Poplar graph streaming` and if the machine does not support it, it is disabled.
+
+Offloading variables into remote memory can reduce maximum memory liveness, but
+it can also increase the computation time of the weight update as more time is
+spent communicating with the host.
+Note that this option has no effect for inference only pipelines.
+
+Dataset benchmarking
 ~~~~~~~~~~~~~~~~~~~~
 In order to fully utilise the potential of the IPU, the ``tf.data.Dataset`` used
 by the ``IPUInfeedQueue`` needs to be optimised so that the IPU is not constantly

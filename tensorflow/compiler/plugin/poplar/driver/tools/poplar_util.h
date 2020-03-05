@@ -24,6 +24,7 @@ limitations under the License.
 
 #include "absl/container/inlined_vector.h"
 #include "absl/types/optional.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -115,6 +116,11 @@ StatusOr<poplar::OptionFlags> GetMatMulOptionsForInst(
     const HloInstruction* inst, CompilerResources& res);
 
 poplar::program::Sequence ZeroTensors(CompilerResources& res);
+
+bool IsRemoteParameter(int64 parameter_number,
+                       const RemoteParameterInfos& remote_parameter_infos);
+bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res);
+bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res);
 
 StatusOr<std::string> GetInstructionCompilationInfo(
     const std::unique_ptr<xla::HloModule>& module, CompilerResources& res);

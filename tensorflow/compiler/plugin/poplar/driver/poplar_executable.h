@@ -36,6 +36,7 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+struct CompilerAnnotations;
 
 // A Poplar executable is a wrapper around an Engine, with
 // the execution Sequence program, input tensors and output
@@ -57,7 +58,8 @@ class PoplarExecutable : public Executable {
                    StreamMetaInfos&& stream_meta_info,
                    SendRecvInfos&& send_infos, SendRecvInfos&& recv_infos,
                    HostEmbeddingInfos&& host_embedding_lookup_infos,
-                   HostEmbeddingInfos&& host_embedding_update_infos);
+                   HostEmbeddingInfos&& host_embedding_update_infos,
+                   RemoteParameterInfos&& remote_parameter_infos);
 
   ~PoplarExecutable() override;
 
@@ -94,6 +96,10 @@ class PoplarExecutable : public Executable {
     return host_embedding_update_infos_;
   }
 
+  const RemoteParameterInfos& GeRemoteParameterInfos() const {
+    return remote_parameter_infos_;
+  }
+
   const StreamInfos& GetStreamInfos() const { return stream_infos_; }
 
   const StreamMetaInfos& GetStreamMetaInfos() const {
@@ -124,12 +130,11 @@ class PoplarExecutable : public Executable {
       std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
       const std::string& filename);
 
-  static Status Serialize(
-      const std::string& filename, const poplar::Executable& executable,
-      const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
-      const SendRecvInfos& sends, const SendRecvInfos& recvs,
-      const HostEmbeddingInfos& lookups, const HostEmbeddingInfos& updates,
-      uint32 replication_count, const poplar::OptionFlags& opts);
+  static Status Serialize(const std::string& filename,
+                          const poplar::Executable& executable,
+                          const CompilerAnnotations& annotations,
+                          uint32 replication_count,
+                          const poplar::OptionFlags& opts);
 
  private:
   friend class GraphCompileIoMapTest;
@@ -153,6 +158,7 @@ class PoplarExecutable : public Executable {
   SendRecvInfos recv_infos_;
   HostEmbeddingInfos host_embedding_lookup_infos_;
   HostEmbeddingInfos host_embedding_update_infos_;
+  RemoteParameterInfos remote_parameter_infos_;
   bool loaded_from_cache_;
   const bool is_scalar_elementwise_graph_;
 
