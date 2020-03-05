@@ -61,13 +61,13 @@ class _XlaFuncGradGraph(FuncGraph):
 
   def _capture_helper(self, tensor, name):
     if (tensor.graph is not self._forward_graph
-        or tensor in self._forward_graph.outputs):
+        or id(tensor) in map(id, self._forward_graph.outputs)):
       return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
 
     if control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph()):
       # Capture the intermidate so that it can be added as an extra output
       # which will be used in the gradient calculations.
-      if tensor not in self.captures:
+      if id(tensor) not in map(id, self.captures):
         self.xla_intermediates.append(tensor)
         self.op_needs_rewrite = True
     return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
