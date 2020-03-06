@@ -717,6 +717,7 @@ cc_library(
         ":driver",
         ":rearrange_pipeline_stage_arguments",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
+        "//tensorflow/compiler/plugin/poplar/tools:poplar_executable_runner",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
         "//tensorflow/compiler/tf2xla/kernels:tensor_list_utils",
@@ -2594,6 +2595,27 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "poplar_executable_runner_test",
+    size = "large",
+    srcs = ["tests/poplar_executable_runner_test.py"],
+    data = [
+        "//tensorflow/compiler/plugin/poplar/tools:PoplarExecutableRunner",
+        "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor",
+    ],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:constant_op",
+        "//tensorflow/python:nn_ops",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras",
+    ],
+)
+
+tf_xla_py_test(
     name = "serialization_test",
     size = "large",
     srcs = ["tests/serialization_test.py"],
@@ -2606,6 +2628,7 @@ tf_xla_py_test(
         "//tensorflow/python:constant_op",
         "//tensorflow/python:nn_ops",
         "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras",
     ],
 )
 
@@ -3706,6 +3729,7 @@ test_suite(
         "data_initializer_test",
         "deferred_visitor_test",
         "dependency_replacer_test",
+        "device_connection_test",
         "dump_poplar_info",
         "dynamic_slice_layout_test",
         "dynamic_slice_test",
@@ -3770,6 +3794,7 @@ test_suite(
         "pipeline_util_test",
         "pipeline_visitor_test",
         "poplar_algebraic_simplifier_test",
+        "poplar_executable_runner_test",
         "recomputation_test",
         "recompute_suggestion_test",
         "reduce_test",

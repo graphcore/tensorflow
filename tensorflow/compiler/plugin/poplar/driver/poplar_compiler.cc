@@ -966,7 +966,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     // =======================================================================
     // DO NOT CHANGE THE ORDER OF THESE WITHOUT UPDATING PoplarProgramType IN
-    // exectutor.h
+    // poplar_executor.h
     // =======================================================================
     progs.push_back(visitor.GetHostToDevice());
     progs.push_back(main_program);
@@ -1010,11 +1010,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         std::string filename = filenames.SerializedExecutableFilename();
         TF_RETURN_IF_ERROR(
             poplar_executor->CreateSerializedExecutableDirIfMissing());
-        TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
-            filename, exec, resources.annotations, replication_factor,
-            poplar_executor->GetReportFlags()));
-        TF_RETURN_IF_ERROR(SaveExecutableMetadataJson(
-            filenames.SerializedMetadataFilename(), resources));
+
+        TF_RETURN_IF_ERROR(PoplarExecutable::Export(
+            filenames, exec, resources, replication_factor,
+            poplar_executor->GetReportFlags(),
+            poplar_executor->GetOrCreatePoplarTarget()));
       }
 
       engine.reset(new poplar::Engine(std::move(exec), opts));

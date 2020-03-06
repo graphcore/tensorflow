@@ -36,7 +36,7 @@ class SeedGenerator {
   void PrepareSeedsForReplicas(int64 replication_factor);
 
   // Get the seed value for the `replica_idx` IPU replica device.
-  uint64 Get(int64 replica_idx);
+  uint64 Get(int64 replica_idx) const;
 
  private:
   // Used for storage of the values.

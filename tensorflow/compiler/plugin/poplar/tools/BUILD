@@ -35,3 +35,55 @@ tf_cc_binary(
         "//tensorflow/core/common_runtime/data:standalone",
     ],
 )
+
+cc_library(
+    name = "poplar_executable_runner",
+    srcs = [
+        "poplar_executable_runner.cc",
+    ],
+    hdrs = [
+        "poplar_executable_runner.h",
+    ],
+    copts = ["-fexceptions"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//third_party/eigen3",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/strings",
+        "@jsoncpp_git//:jsoncpp",
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+cc_binary(
+    name = "PoplarExecutableRunner",
+    srcs = [
+        "poplar_executable_runner_main.cc",
+    ],
+    copts = ["-fexceptions"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":poplar_executable_runner",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+py_binary(
+    name = "tensorflow_weights_extractor",
+    srcs = ["tensorflow_weights_extractor.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
+py_library(
+    name = "tensorflow_weights_extractor_lib",
+    srcs = ["tensorflow_weights_extractor.py"],
+    srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)

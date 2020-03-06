@@ -403,53 +403,56 @@ Json::Value DimensionsToJson(const absl::Span<const int64> dimensions) {
 }  // namespace
 
 Status SaveExecutableMetadataJson(const std::string& filename,
-                                  const CompilerResources& res) {
+                                  const CompilerResources& res,
+                                  uint32 replication_count,
+                                  const poplar::OptionFlags& opts,
+                                  const poplar::Target& target) {
   const InputOutputAliasingMap& io_map =
       res.annotations.input_output_aliasing_map;
   const InfeedInfos& infeed_infos = res.annotations.infeed_infos;
   const OutfeedInfos& outfeed_infos = res.annotations.outfeed_infos;
 
   Json::Value inputs;
-  int index = 0;
   for (auto input : io_map.GetEntryInputInfos()) {
     Json::Value stream;
+    if (input.Shape().IsTuple()) {
+      return tensorflow::errors::Unimplemented("Tuple inputs not supported");
+    }
 
-    stream["index"] = Json::Value::Int64(index++);
     stream["name"] = UnmangleInputName(input.Name());
+    stream["handle"] = GetInputCopyHandle(inputs.size(), 0);
     stream["data_type"] = PrimitiveType_Name(input.Shape().element_type());
     stream["shape"] = DimensionsToJson(input.Shape().dimensions());
     if (input.IsStreaming()) {
-      // "input data": bias / input (But not streaming)
       stream["type"] = "input_data";
     } else if (input.IsResource()) {
-      // "parameters": weights
       stream["type"] = "parameter";
     }
     inputs.append(stream);
   }
 
-  index = 0;
   Json::Value outputs;
   for (auto output : io_map.GetEntryOutputInfos()) {
-    Json::Value stream;
-
-    stream["index"] = Json::Value::Int64(index++);
-    stream["name"] = output.Name();
     if (output.Shape().IsTuple()) {
       return xla::FailedPrecondition("Nested tuples in output not supported");
     }
+    Json::Value stream;
+    stream["name"] = output.Name();
+    stream["handle"] = GetOutputCopyHandle(outputs.size(), 0);
     stream["data_type"] = PrimitiveType_Name(output.Shape().element_type());
     stream["shape"] = DimensionsToJson(output.Shape().dimensions());
     if (output.IsStreaming()) {
       stream["type"] = "output_data";
     } else if (output.IsResource()) {
       stream["type"] = "parameter_out";
+      if (output.IsResourceModified()) {
+        stream["input_handle"] = GetInputCopyHandle(output.GetInputIndex(), 0);
+      }
     }
     outputs.append(stream);
   }
 
   Json::Value infeeds;
-  index = 0;
   for (auto infeed : infeed_infos) {
     if (!infeed.shape.IsTuple() || infeed.shape.tuple_shapes_size() != 2 ||
         !infeed.shape.tuple_shapes(0).IsTuple()) {
@@ -458,7 +461,9 @@ Status SaveExecutableMetadataJson(const std::string& filename,
           "token[]).",
           infeed.config.feed_id());
     }
-    int64 tuple_idx = 0;
+    Json::Value feed;
+    Json::Value streams;
+    feed["name"] = infeed.config.feed_id();
     for (auto shape : infeed.shape.tuple_shapes(0).tuple_shapes()) {
       if (shape.IsTuple()) {
         return xla::FailedPrecondition(
@@ -466,28 +471,48 @@ Status SaveExecutableMetadataJson(const std::string& filename,
             "be something like ((shape), token[]).",
             infeed.config.feed_id());
       }
-      Json::Value feed;
-      feed["index"] = Json::Value::Int64(index);
-      feed["tuple_index"] = Json::Value::Int64(tuple_idx);
-      feed["name"] = infeed.config.feed_id();
-      feed["shape"] = DimensionsToJson(shape.dimensions());
-      feed["data_type"] = PrimitiveType_Name(shape.element_type());
-      infeeds.append(feed);
-
-      tuple_idx++;
+      Json::Value stream;
+      stream["name"] =
+          absl::StrCat(infeed.config.feed_id(), ".", streams.size());
+      stream["handle"] =
+          GetInfeedCopyHandle(infeed.stream_prefix, streams.size());
+      stream["shape"] = DimensionsToJson(shape.dimensions());
+      stream["data_type"] = PrimitiveType_Name(shape.element_type());
+      streams.append(stream);
     }
-    index++;
+    feed["streams"] = streams;
+    infeeds.append(feed);
   }
 
   Json::Value outfeeds;
-  index = 0;
   for (auto outfeed : outfeed_infos) {
+    if (outfeed.shape.IsTuple()) {
+      return xla::FailedPrecondition(
+          "Nested tuples in outfeed not supported: shape for %s to not be a "
+          "tuple",
+          outfeed.config.feed_id());
+    }
     Json::Value feed;
-    feed["index"] = Json::Value::Int64(index++);
     feed["name"] = outfeed.config.feed_id();
+    feed["handle"] = GetOutfeedCopyHandle(outfeed.stream_prefix, 0);
     feed["data_type"] = PrimitiveType_Name(outfeed.shape.element_type());
     feed["shape"] = DimensionsToJson(outfeed.shape.dimensions());
     outfeeds.append(feed);
+  }
+
+  Json::Value config;
+  Json::Value options;
+  for (auto opt : opts) {
+    options[opt.first] = opt.second;
+  }
+  if (!options.empty()) {
+    config["options"] = options;
+  }
+  config["replication_count"] = Json::Value::Int64(replication_count);
+  config["num_ipus"] = Json::Value::Int64(target.getNumIPUs());
+  if (target.getTargetType() != poplar::TargetType::IPU) {
+    return xla::FailedPrecondition(
+        "The target's type must be poplar::TargetType::IPU");
   }
 
   Json::Value root;
@@ -503,12 +528,14 @@ Status SaveExecutableMetadataJson(const std::string& filename,
   if (!outfeeds.empty()) {
     root["outfeeds"] = outfeeds;
   }
+  root["config"] = config;
+
   Json::StreamWriterBuilder json_builder;
   json_builder["indentation"] = "";
   json_builder["commentStyle"] = "None";
 
   std::string json_msg = Json::writeString(json_builder, root);
-  VLOG(0) << "Metadata: " << json_msg;
+  VLOG(1) << "Module JSON Metadata: " << json_msg;
   std::unique_ptr<tensorflow::WritableFile> file;
   TF_RETURN_IF_ERROR(
       tensorflow::Env::Default()->NewWritableFile(filename, &file));

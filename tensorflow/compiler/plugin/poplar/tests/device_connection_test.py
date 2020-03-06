@@ -2,7 +2,7 @@ import multiprocessing
 import time
 import numpy as np
 
-from tensorflow.compiler.plugin.poplar.driver.config_pb2 import DeviceConnectionType
+from tensorflow.python.ipu.utils import DeviceConnectionType
 from tensorflow.python.ops import variables
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
@@ -73,7 +73,7 @@ class TestDeviceConnection(xla_test.XLATestCase):  # pylint: disable=abstract-me
     def BuildAndRunModelOffline():
       connection_type = DeviceConnectionType.NEVER
       with session.Session() as sess:
-        train, loss = _MyNet()
+        train, loss, _, _ = _MyNet()
         _ConfigureSystem(connection_type)
         train = ipu.ipu_compiler.compile(lambda: (loss, train), [])
 
@@ -95,7 +95,7 @@ class TestDeviceConnection(xla_test.XLATestCase):  # pylint: disable=abstract-me
           "There is no device contention with the model: nothing to test.")
 
     def BuildAndRunModelAlways(first):
-      connection_type = IpuDeviceConnectionType.ALWAYS
+      connection_type = DeviceConnectionType.ALWAYS
       with session.Session() as sess:
         train, loss, inp, bias = _MyNet()
         if first:
@@ -127,7 +127,7 @@ class TestDeviceConnection(xla_test.XLATestCase):  # pylint: disable=abstract-me
           "There is no device contention with the model: nothing to test.")
 
     def BuildAndRunModelOnDemand(first):
-      connection_type = IpuDeviceConnectionType.ON_DEMAND
+      connection_type = DeviceConnectionType.ON_DEMAND
       with session.Session() as sess:
         train, loss, inp, bias = _MyNet()
         if first:

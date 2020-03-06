@@ -40,6 +40,13 @@ from tensorflow.python.training import gradient_descent
 from tensorflow.compiler.xla import xla_data_pb2
 from tensorflow.compiler.xla.python_api import types
 from tensorflow.python.framework import tensor_spec
+from tensorflow.python.platform import test
+
+# Disable the IPU model
+flags = os.environ.get("TF_POPLAR_FLAGS", "")
+new_flags = flags.replace("--use_ipu_model", "")
+if flags != new_flags:
+  os.environ["TF_POPLAR_FLAGS"] = new_flags
 
 
 class FeedId:
@@ -65,6 +72,21 @@ def PrimitiveTypeStringToNumpyDtype(primitive_type_str):
 
 
 class IpuSerializationTest(xla_test.XLATestCase):
+  def _configureIPU(self, serialization_folder):
+    opts = utils.create_ipu_config()
+    opts = utils.set_ipu_connection_type(opts,
+                                         utils.DeviceConnectionType.NEVER, 1)
+    opts = utils.set_serialization_options(opts, serialization_folder)
+    utils.configure_ipu_system(opts)
+
+  def _create_tmp_symlink(self, tmp_folder):
+    tmp = "tempfiles"
+    if os.path.islink(tmp):
+      os.unlink(tmp)
+    # Create a symlink in order for the serialization_folder to be identical for the different tests in the test suite.
+    os.symlink(tmp_folder, tmp)
+    return tmp
+
   def _validateStreams(self,
                        streams,
                        expected_inputs,
@@ -75,7 +97,6 @@ class IpuSerializationTest(xla_test.XLATestCase):
     self.assertEqual(len(inputs), len(expected_inputs or []))
     for idx, stream in enumerate(inputs):
       expected_tensor, expected_type = expected_inputs[idx]
-      self.assertEqual(idx, stream.get("index", -1))
       self.assertEqual(
           expected_tensor.dtype.as_numpy_dtype,
           PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
@@ -87,7 +108,6 @@ class IpuSerializationTest(xla_test.XLATestCase):
     self.assertEqual(len(outputs), len(expected_outputs or []))
     for idx, stream in enumerate(outputs):
       expected_tensor, expected_type = expected_outputs[idx]
-      self.assertEqual(idx, stream.get("index", -1))
       self.assertEqual(
           expected_tensor.dtype.as_numpy_dtype,
           PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
@@ -97,20 +117,21 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
     infeeds = streams.get("infeeds", [])
     self.assertEqual(len(infeeds), len(expected_infeeds or []))
-    for idx, stream in enumerate(infeeds):
+    for idx, infeed in enumerate(infeeds):
       expected_tensor, expected_name = expected_infeeds[idx]
-      self.assertEqual(idx, stream.get("index", -1))
-      self.assertEqual(
-          expected_tensor.dtype.as_numpy_dtype,
-          PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
-      self.assertEqual(expected_name, stream.get("name"))
-      self.assertEqual(expected_tensor.shape, stream.get("shape"))
+      self.assertEqual(expected_name, infeed.get("name"))
+      for stream_idx, stream in enumerate(infeed.get("streams")):
+        self.assertEqual("%s.%d" % (expected_name, stream_idx),
+                         stream.get("name"))
+        self.assertEqual(
+            expected_tensor.dtype.as_numpy_dtype,
+            PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
+        self.assertEqual(expected_tensor.shape, stream.get("shape"))
 
     outfeeds = streams.get("outfeeds", [])
     self.assertEqual(len(outfeeds), len(expected_outfeeds or []))
     for idx, stream in enumerate(outfeeds):
       expected_tensor, expected_name = expected_outfeeds[idx]
-      self.assertEqual(idx, stream.get("index", -1))
       self.assertEqual(
           expected_tensor.dtype,
           PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
@@ -120,15 +141,17 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
   @test_util.deprecated_graph_mode_only
   def testSimpleFeedsInfoSerialization(self):
-    if utils.running_on_ipu_model():
-      self.skipTest(
-          "Serialisation of executables is only supported for IPU targets")
     ndims = 2
     M = 3
     N = 5
     K = 7  # input features per group, output features per group, number of groups
 
-    with self.session() as sess:
+    # Disable the IPU model
+    poplar_flags = os.environ.get("TF_POPLAR_FLAGS",
+                                  "").replace("--use_ipu_model", "")
+    with test.mock.patch.dict(
+        "os.environ",
+        {"TF_POPLAR_FLAGS": poplar_flags}), self.session() as sess:
 
       def my_graph(inp, bias):
         with ops.device("/device:IPU:0"), variable_scope.variable_scope(
@@ -154,16 +177,22 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
       output = ipu.ipu_compiler.compile(my_graph, [inp, bias])
 
-      with tempfile.TemporaryDirectory() as tmp:
+      with tempfile.TemporaryDirectory() as tmp_folder:
+        tmp = self._create_tmp_symlink(tmp_folder)
         folder = os.path.join(tmp, "saved")
-        if os.path.isdir(folder):
-          shutil.rmtree(folder)
 
-        tu.ReportJSON(self, sess, serialization_folder=folder)
+        self._configureIPU(folder)
+
         tu.move_variable_initialization_to_cpu()
 
         sess.run(variables.global_variables_initializer())
-        sess.run(output, {inp: np.ones(inp.shape), bias: np.ones(bias.shape)})
+        with self.assertRaisesRegex(
+            tf.python.framework.errors_impl.InvalidArgumentError,
+            "compilation only"):
+          sess.run(output, {
+              inp: np.ones(inp.shape),
+              bias: np.ones(bias.shape)
+          })
 
         with variable_scope.variable_scope("vs", use_resource=True,
                                            reuse=True):
@@ -171,9 +200,11 @@ class IpuSerializationTest(xla_test.XLATestCase):
         module_hash = None
 
         self.assertTrue(os.path.isdir(folder))
-        for name in filesInFolder(folder):
+        files = filesInFolder(folder)
+        self.assertEqual(len(files), 2, "Expected 2 files, found: %s" % files)
+        for name in files:
           if not module_hash:
-            m = re.match(r"([0-9a-f]{16})\..*", name)
+            m = re.match(r"([0-9a-f]+)\..*", name)
             self.assertTrue(
                 m, "Failed to identify module hash from filename %s" % name)
             module_hash = m.group(1)
@@ -184,24 +215,21 @@ class IpuSerializationTest(xla_test.XLATestCase):
                            (weights, "parameter")],
                 [(tensor_spec.TensorSpec(shape=[],
                                          dtype=tf.float32,
-                                         name="XLA_Retvals:0"), "input_data"),
-                 (tensor_spec.TensorSpec(shape=[8, 8, 3, 35],
-                                         dtype=tf.float32,
-                                         name="XLA_Retvals:0"), "parameter")])
+                                         name="XLA_Retvals:0"), "output_data"),
+                 (tensor_spec.TensorSpec(
+                     shape=[8, 8, 3, 35],
+                     dtype=tf.float32,
+                     name="XLA_Retvals:0"), "parameter_out")])
           else:
-            self.assertTrue(
-                name in [
-                    "%s.ipu_bin" % module_hash,
-                    "%s.ipu_bin.poplar_exec" % module_hash
-                ], "Unexpected file generated: %s" % name)
+            self.assertEqual(name, "%s.ipu_bin.poplar_exec" % module_hash)
 
   @test_util.deprecated_graph_mode_only
   def testInfeedsOutfeedInfoSerialization(self):
-    if utils.running_on_ipu_model():
-      self.skipTest(
-          "Serialisation of executables is only supported for IPU targets")
-
-    with self.session() as sess:
+    poplar_flags = os.environ.get("TF_POPLAR_FLAGS",
+                                  "").replace("--use_ipu_model", "")
+    with test.mock.patch.dict(
+        "os.environ",
+        {"TF_POPLAR_FLAGS": poplar_flags}), self.session() as sess:
       dataset = tu.create_single_increasing_dataset(2, shape=[3, 3])
       infeed_name = FeedId.Next("feed")
       outfeed_name = FeedId.Next("feed")
@@ -227,17 +255,20 @@ class IpuSerializationTest(xla_test.XLATestCase):
         output = ipu.ipu_compiler.compile(my_graph, inputs=[const])
 
       outfed = outfeed_queue.dequeue()
-      with tempfile.TemporaryDirectory() as tmp:
+      with tempfile.TemporaryDirectory() as tmp_folder:
+        tmp = self._create_tmp_symlink(tmp_folder)
         folder = os.path.join(tmp, "saved")
-        if os.path.isdir(folder):
-          shutil.rmtree(folder)
 
-        tu.ReportJSON(self, sess, serialization_folder=folder)
+        self._configureIPU(folder)
+
         tu.move_variable_initialization_to_cpu()
 
         sess.run(infeed_queue.initializer)
         sess.run(variables.global_variables_initializer())
-        sess.run(output, {const: np.ones(const.shape)})
+        with self.assertRaisesRegex(
+            tf.python.framework.errors_impl.InvalidArgumentError,
+            "compilation only"):
+          sess.run(output, {const: np.ones(const.shape)})
         outfed_result = sess.run(outfed)
 
         with variable_scope.variable_scope("vs", use_resource=True,
@@ -246,9 +277,11 @@ class IpuSerializationTest(xla_test.XLATestCase):
         module_hash = None
 
         self.assertTrue(os.path.isdir(folder))
-        for name in filesInFolder(folder):
+        files = filesInFolder(folder)
+        self.assertEqual(len(files), 2, "Expected 2 files, found: %s" % files)
+        for name in files:
           if not module_hash:
-            m = re.match(r"([0-9a-f]{16})\..*", name)
+            m = re.match(r"([0-9a-f]+)\..*", name)
             self.assertTrue(
                 m, "Failed to identify module hash from filename %s" % name)
             module_hash = m.group(1)
@@ -257,16 +290,139 @@ class IpuSerializationTest(xla_test.XLATestCase):
               metadata = json.load(metadata_file)
             self._validateStreams(
                 metadata, [(const, "input_data"), (inp2, "parameter")],
-                [(tensor_spec.TensorSpec(shape=[],
-                                         dtype=tf.float32,
-                                         name="XLA_Retvals:0"), "input_data")],
+                [(tensor_spec.TensorSpec(
+                    shape=[], dtype=tf.float32,
+                    name="XLA_Retvals:0"), "output_data")],
                 [(infeed_spec, infeed_name)], [(outfed_result, outfeed_name)])
           else:
-            self.assertTrue(
-                name in [
-                    "%s.ipu_bin" % module_hash,
-                    "%s.ipu_bin.poplar_exec" % module_hash
-                ], "Unexpected file generated: %s" % name)
+            self.assertEqual(name, "%s.ipu_bin.poplar_exec" % module_hash)
+
+  @test_util.deprecated_graph_mode_only
+  def testSimpleInfeedsDataSerialization(self):
+    with self.session() as sess:
+      num_elements = 10
+      shape = (3, 5)
+      dataset = tu.create_single_increasing_dataset(num_elements, shape=shape)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, FeedId.Next("infeed"))
+
+      with tempfile.TemporaryDirectory() as tmp_folder:
+        output_folder = self._create_tmp_symlink(tmp_folder)
+        output_file = os.path.join(output_folder, "infeed.json")
+
+        sess.run(infeed_queue.initializer)
+
+        utils.export_dataset_to_file(infeed_queue, output_file, num_elements)
+
+        files = filesInFolder(output_folder)
+        self.assertEqual(len(files), 1, "Expected 1 file, found: %s" % files)
+
+  @test_util.deprecated_graph_mode_only
+  def testSimpleDatasetDataSerialization(self):
+    num_elements = 10
+    shape = (3, 5)
+    dataset = tu.create_single_increasing_dataset(num_elements, shape=shape)
+
+    with tempfile.TemporaryDirectory() as tmp_folder:
+      output_folder = self._create_tmp_symlink(tmp_folder)
+      output_file = os.path.join(output_folder, "dataset.json")
+
+      utils.export_dataset_to_file(dataset, output_file, num_elements)
+
+      files = filesInFolder(output_folder)
+      self.assertEqual(len(files), 1, "Expected 1 file, found: %s" % files)
+
+  @test_util.deprecated_graph_mode_only
+  def testTupleInfeedsDataSerialization(self):
+    with self.session() as sess:
+      num_elements = 10
+      shape = (4, 8)
+      shape_2 = (2, 4, 2, 2)
+      dataset = tu.create_single_increasing_dataset(num_elements, shape=shape)
+
+      def dataset_parser(value):
+        image_1 = value
+        image_2 = (value + 10.) / 2.0
+        return (image_1, tf.reshape(image_2, shape_2))
+
+      dataset = dataset.map(dataset_parser)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, FeedId.Next("infeed"))
+
+      with tempfile.TemporaryDirectory() as tmp_folder:
+        output_folder = self._create_tmp_symlink(tmp_folder)
+        output_file = os.path.join(output_folder, "infeed.bin")
+
+        sess.run(infeed_queue.initializer)
+
+        utils.export_dataset_to_file(infeed_queue, output_file, num_elements)
+
+        files = filesInFolder(output_folder)
+        self.assertEqual(
+            len(files), 2,
+            "Expected 2 files (One for each tuple element), found: %s" % files)
+
+  @test_util.deprecated_graph_mode_only
+  def testNamedInfeedsDataSerialization(self):
+    with self.session() as sess:
+      num_elements = 10
+      shape = (4, 8)
+      shape_2 = (2, 4, 2, 2)
+      dataset = tu.create_single_increasing_dataset(num_elements, shape=shape)
+
+      def dataset_parser(value):
+        image_1 = value
+        image_2 = (value + 10.) / 2.0
+        return {"a": image_1, "b": tf.reshape(image_2, shape_2)}
+
+      dataset = dataset.map(dataset_parser)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, FeedId.Next("infeed"))
+
+      with tempfile.TemporaryDirectory() as tmp_folder:
+        output_folder = self._create_tmp_symlink(tmp_folder)
+        output_file = os.path.join(output_folder, "infeed.bin")
+
+        sess.run(infeed_queue.initializer)
+
+        utils.export_dataset_to_file(infeed_queue, output_file, num_elements)
+
+        files = filesInFolder(output_folder)
+        self.assertEqual(
+            len(files), 2,
+            "Expected 2 files (One for feed 'a', and one for 'b'), found: %s" %
+            files)
+
+  @test_util.deprecated_graph_mode_only
+  def testNamedInfeedsDataSerializationStep(self):
+    with self.session() as sess:
+      num_elements = 1000
+      shape = (224, 224, 3)
+      shape_2 = (224, 3, 224)
+      dataset = tu.create_single_increasing_dataset(num_elements, shape=shape)
+
+      def dataset_parser(value):
+        image_1 = value
+        image_2 = (value + 10.) / 2.0
+        return {"a": image_1, "b": tf.reshape(image_2, shape_2)}
+
+      dataset = dataset.map(dataset_parser)
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
+          dataset, FeedId.Next("infeed"))
+
+      with tempfile.TemporaryDirectory() as tmp_folder:
+        output_folder = self._create_tmp_symlink(tmp_folder)
+        output_file = os.path.join(output_folder, "infeed.bin")
+
+        sess.run(infeed_queue.initializer)
+
+        utils.export_dataset_to_file(infeed_queue, output_file, num_elements)
+
+        files = filesInFolder(output_folder)
+        self.assertEqual(
+            len(files), 2,
+            "Expected 2 files (One for feed 'a', and one for 'b'), found: %s" %
+            files)
 
 
 if __name__ == "__main__":
