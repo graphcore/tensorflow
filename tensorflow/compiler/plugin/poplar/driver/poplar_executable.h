@@ -38,6 +38,8 @@ namespace xla {
 namespace poplarplugin {
 struct CompilerAnnotations;
 
+class CompilerResources;
+
 // A Poplar executable is a wrapper around an Engine, with
 // the execution Sequence program, input tensors and output
 // tensor recorded.
@@ -135,6 +137,13 @@ class PoplarExecutable : public Executable {
                           const CompilerAnnotations& annotations,
                           uint32 replication_count,
                           const poplar::OptionFlags& opts);
+
+  static Status Export(const ModuleFilenames& filenames,
+                       const poplar::Executable& executable,
+                       const CompilerResources& resources,
+                       uint32 replication_count,
+                       const poplar::OptionFlags& opts,
+                       const poplar::Target& target);
 
  private:
   friend class GraphCompileIoMapTest;

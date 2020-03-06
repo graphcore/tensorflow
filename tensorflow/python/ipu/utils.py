@@ -19,17 +19,25 @@ General utility functions
 
 from enum import Enum
 
-import numpy as np
+import os
 import time
 
+import numpy as np
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.driver import config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
+# pylint: disable=unused-import
+from tensorflow.compiler.plugin.poplar.tools.tensorflow_weights_extractor import export_variables_from_live_session, export_variables_from_live_model
+# pylint: enable=unused-import
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.distribute import values
 from tensorflow.python.framework import ops
+from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.util import deprecation
+from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.ipu import ipu_infeed_queue
+from tensorflow.python.ipu import dataset_extractor
 
 
 class SelectionOrder(Enum):
@@ -185,23 +193,14 @@ def configure_ipu_system(config, device="cpu"):
     sess.run(cfg_op)
 
 
-def running_on_ipu_model(device="cpu"):
+def running_on_ipu_model():
   """ Check if XLA is configured to run on the ipu model.
-
-  Args:
-    device: The CPU device which is local to the IPU hardware
 
   Returns:
     True if XLA is configured to run on the ipu model.
     False if XLA is configured to run on real hardware.
   """
-  g = ops.Graph()
-  with g.as_default():
-    with ops.device(device):
-      op = gen_ipu_ops.ipu_model_used()
-
-  with session_lib.Session(graph=g) as sess:
-    return sess.run(op)[0]
+  return "--use_ipu_model" in os.environ.get("TF_POPLAR_FLAGS", "")
 
 
 @deprecation.deprecated_args(None, "Use set_optimization_options() instead.",
@@ -1155,6 +1154,8 @@ def move_variable_initialization_to_cpu(graph=None):
   if not graph:
     graph = ops.get_default_graph()
 
+  with ops.device("/device:CPU:0"):
+    control_flow_ops.no_op(name="cpu")
   variables = []
   for v in graph.get_collection('variables'):
     # We assume a distribution strategy knows better how to
@@ -1185,3 +1186,33 @@ def move_variable_initialization_to_cpu(graph=None):
   # pylint: enable=protected-access
 
   return
+
+
+def export_dataset_to_file(dataset_or_infeed, output_filename, num_elements):
+  """Export as binary `num_elements` from the given `infeed` to the specified
+  `output_filename`.
+
+  If the infeed elements are tuples then one file per tuple element will be
+  created.
+  For example if `dataset` looks like
+  [{ "a": A_0, "b": B_0}, { "a": A_1, "b": B_1}, ...]
+  Then `export_dataset_to_file(dataset, "my_dataset.bin", 100)` will generate:
+    my_dataset.0.bin   # Contains tensors [ A_0, A_1, ..., A_99]
+    my_dataset.1.bin   # Contains tensors [ B_0, B_1, ..., B_99]
+
+  Args:
+    dataset_or_infeed: An unary dataset with the same input and output
+    structure or an `IPUInfeedQueue`.
+    output_filename: Where to export the tensors to.
+    num_elements: Number of elements to export from the dataset.
+  """
+  assert isinstance(dataset_or_infeed,
+                    (dataset_ops.Dataset, ipu_infeed_queue.IPUInfeedQueue))
+  if isinstance(dataset_or_infeed, ipu_infeed_queue.IPUInfeedQueue):
+    dataset = dataset_or_infeed._dataset  # pylint: disable=protected-access
+  else:
+    dataset = dataset_or_infeed
+  extractor = dataset_extractor.dataset_extractor(dataset, num_elements,
+                                                  output_filename)
+  with ops.device("cpu"), session_lib.Session() as sess:
+    sess.run(extractor)

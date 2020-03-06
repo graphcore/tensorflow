@@ -1,0 +1,803 @@
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_runner.h"
+
+#include <algorithm>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <numeric>
+#include <random>
+#include <utility>
+
+#include "absl/algorithm/container.h"
+#include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "third_party/eigen3/Eigen/Core"
+
+namespace ipu {
+
+namespace {
+
+std::string GetRandomNumberSeedStream() { return "__seed_stream"; }
+
+enum PoplarProgramType {
+  HOST_TO_DEVICE,
+  MAIN_SEQUENCE,
+  DEVICE_TO_HOST,
+};
+
+class DataTypeInfo {
+  struct TypeInfo {
+    DataType type;
+    int64_t element_size;
+    std::string type_str;
+  };
+
+ public:
+  static DataType FromString(const std::string& type_str);
+  static const std::string& ToString(DataType type);
+  static int64_t SizeInBytes(DataType type);
+  static std::vector<DataTypeInfo::TypeInfo> CreateInfo();
+
+ private:
+  static const std::vector<TypeInfo> info_;
+};
+
+const std::vector<DataTypeInfo::TypeInfo> DataTypeInfo::info_ =
+    DataTypeInfo::CreateInfo();
+
+/* static */ std::vector<DataTypeInfo::TypeInfo> DataTypeInfo::CreateInfo() {
+  std::vector<DataTypeInfo::TypeInfo> m;
+#define ADD_MAPPING(type, elt_size) \
+  m.emplace_back(DataTypeInfo::TypeInfo{type, elt_size, #type});
+
+  ADD_MAPPING(F16, 2);
+  ADD_MAPPING(S32, 4);
+  ADD_MAPPING(F32, 4);
+#undef ADD_MAPPING
+  return m;
+}
+
+/* static */ DataType DataTypeInfo::FromString(const std::string& type_str) {
+  auto it = absl::c_find_if(info_, [type_str](const TypeInfo& info) {
+    return info.type_str == type_str;
+  });
+  ERROR_ON_MSG(it == info_.end(), "Unknown DataType '" << type_str << "'");
+  return it->type;
+}
+
+/* static */ const std::string& DataTypeInfo::ToString(DataType type) {
+  auto it = absl::c_find_if(
+      info_, [type](const TypeInfo& info) { return info.type == type; });
+  ERROR_ON_MSG(it == info_.end(), "Unknown DataType '" << type << "'");
+  return it->type_str;
+}
+/* static */ int64_t DataTypeInfo::SizeInBytes(DataType type) {
+  auto it = absl::c_find_if(
+      info_, [type](const TypeInfo& info) { return info.type == type; });
+  ERROR_ON_MSG(it == info_.end(), "Unknown DataType '" << type << "'");
+  return it->element_size;
+}
+
+class DataIterator {
+ public:
+  DataIterator(DataType type, uint8_t* start, int64_t num_elements)
+      : element_size_(DataTypeInfo::SizeInBytes(type)),
+        current_(start),
+        buffer_size_(num_elements * element_size_),
+        end_(current_ + buffer_size_) {}
+  template <typename T>
+  T Get() const {
+    ERROR_ON(sizeof(T) != element_size_);
+    ERROR_ON_MSG(!IsValid(),
+                 "Failed to get iterator's value: the iterator is pointing "
+                 "past the end of the buffer of size "
+                     << buffer_size_
+                     << " bytes (Element size: " << element_size_ << ")");
+    return *reinterpret_cast<T*>(current_);
+  }
+  template <typename T>
+  void Set(T value) {
+    ERROR_ON(sizeof(T) != element_size_);
+    ERROR_ON_MSG(!IsValid(),
+                 "Failed to set iterator's value: the iterator is pointing "
+                 "past the end of the buffer of size "
+                     << buffer_size_
+                     << " bytes (Element size: " << element_size_ << ")");
+    *reinterpret_cast<T*>(current_) = value;
+  }
+  void Increment() {
+    ERROR_ON_MSG(
+        !IsValid(),
+        "Failed to increment iterator: reached the end of buffer of size "
+            << buffer_size_ << " bytes (Element size: " << element_size_
+            << ")");
+    current_ += element_size_;
+  }
+  DataIterator& operator++(int) {
+    Increment();
+    return *this;
+  }
+  bool IsValid() const { return current_ < end_; }
+  void ErrorIfIsValid() const {
+    ERROR_ON_MSG(
+        IsValid(),
+        "Iterator should point at the end of the file but current position is "
+            << end_ - current_ << " bytes from the end (Buffer size "
+            << buffer_size_ << " Element size " << element_size_ << ")");
+  }
+
+ private:
+  int64_t element_size_;
+  int64_t buffer_size_;
+  uint8_t* current_;
+  uint8_t* end_;
+};
+
+void AppendToJsonArray(Json::Value& values, DataType type,
+                       const DataIterator& current) {
+  switch (type) {
+    case S32: {
+      values.append(current.Get<int32_t>());
+      break;
+    }
+    case F32: {
+      values.append(current.Get<float>());
+      break;
+    }
+    case F16: {
+      values.append(static_cast<float>(current.Get<Eigen::half>()));
+      break;
+    }
+    default: { ERROR("DataType " << type << " not supported"); }
+  }
+}
+
+void SetIteratorToJsonValue(const Json::Value& value, DataType type,
+                            DataIterator& current) {
+  switch (type) {
+    case S32: {
+      ERROR_ON(!value.isInt());
+      current.Set(static_cast<int32_t>(value.asInt()));
+      break;
+    }
+    case F32: {
+      ERROR_ON(!value.isDouble());
+      current.Set(value.asFloat());
+      break;
+    }
+    case F16: {
+      ERROR_ON(!value.isDouble());
+      current.Set(Eigen::half(value.asFloat()));
+      break;
+    }
+    default: { ERROR("DataType " << type << " not supported"); }
+  }
+}
+
+TensorType ParseTensorType(const std::string& str) {
+  if (str == "parameter") {
+    return TensorType::Parameter;
+  } else if (str == "input_data") {
+    return TensorType::InputData;
+  } else if (str == "infeed") {
+    return TensorType::Infeed;
+  } else if (str == "outfeed") {
+    return TensorType::Outfeed;
+  }
+  ERROR("Unknown TensorType '" << str << "'");
+}
+
+std::string TensorTypeToString(TensorType type) {
+  switch (type) {
+    case TensorType::Parameter: {
+      return "parameter";
+    }
+    case TensorType::InputData: {
+      return "input";
+    }
+    case TensorType::OutputData: {
+      return "output";
+    }
+    case TensorType::Infeed: {
+      return "infeed";
+    }
+    case TensorType::Outfeed: {
+      return "outfeed";
+    }
+    default: { ERROR("Unknown TensorType"); }
+  }
+}
+poplar::OptionFlags ParseOptionFlags(const Json::Value& options) {
+  poplar::OptionFlags opts;
+  if (!options.isNull()) {
+    for (auto key : options.getMemberNames()) {
+      std::string value = options[key].asString();
+      opts.set(key, value);
+    }
+  }
+  return opts;
+}
+
+/* Recursively parse a JSON array of floats, validating the shape against the
+ * expected shape and storing the values in a 1D array. */
+class NDArrayParser {
+ public:
+  void operator()(const Json::Value& array, const TensorShape& expected_shape,
+                  ByteVector& out);
+
+ private:
+  void ProcessDimension(int64_t dim, const Json::Value& array,
+                        const TensorShape& expected_shape, DataIterator& out);
+};
+
+void NDArrayParser::operator()(const Json::Value& array,
+                               const TensorShape& expected_shape,
+                               ByteVector& out) {
+  ERROR_ON(out.size() != 0);
+  PRINT_INFO("Expected shape " << expected_shape.ToString() << " NumElements "
+                               << expected_shape.NumElements()
+                               << " SizeInBytes "
+                               << expected_shape.DataSizeInBytes());
+  out.resize(expected_shape.DataSizeInBytes());
+  DataIterator it{expected_shape.Type(), out.data(),
+                  expected_shape.NumElements()};
+  ProcessDimension(0, array, expected_shape, it);
+  it.ErrorIfIsValid();
+}
+
+void NDArrayParser::ProcessDimension(int64_t dim, const Json::Value& array,
+                                     const TensorShape& expected_shape,
+                                     DataIterator& out) {
+  ERROR_ON(!array.isArray());
+  ERROR_ON(array.size() != expected_shape[dim]);
+
+  // Last dimension: parse the values
+  if (dim == expected_shape.NumDimensions() - 1) {
+    for (auto& value : array) {
+      SetIteratorToJsonValue(value, expected_shape.Type(), out);
+      out++;
+    }
+  } else {
+    // Recursively process other dimensions.
+    for (auto subarray : array) {
+      ProcessDimension(dim + 1, subarray, expected_shape, out);
+    }
+  }
+}
+
+/* Create a ND array from a given tensor shape and an iterator over a 1D array
+ * of float values. */
+Json::Value DimensionToJson(int dimension, const TensorShape& shape,
+                            DataIterator& current) {
+  int64_t num_elements = shape[dimension];
+  Json::Value values{Json::arrayValue};
+
+  // Last dimension: parse the values
+  if (dimension == shape.NumDimensions() - 1) {
+    for (int64_t i = 0; i < num_elements; i++) {
+      AppendToJsonArray(values, shape.Type(), current);
+    }
+    return values;
+  } else {
+    // Recursively process other dimensions.
+    for (int64_t i = 0; i < num_elements; i++) {
+      values.append(DimensionToJson(dimension + 1, shape, current));
+    }
+    return values;
+  }
+}
+
+class InfeedPrefetchCallback : public poplar::StreamCallback {
+ public:
+  explicit InfeedPrefetchCallback(const InfeedStream& stream)
+      : stream_(stream), next_idx_(0) {}
+
+  poplar::StreamCallback::Result prefetch(void* dest) noexcept override {
+    if (next_idx_ >= stream_.NumTensors()) {
+      return poplar::StreamCallback::Result::NotAvailable;
+    }
+    std::memcpy(dest, stream_.TensorData(next_idx_),
+                stream_.Info().Shape().DataSizeInBytes());
+    return poplar::StreamCallback::Result::Success;
+  }
+
+  void fetch(void* dest) noexcept override {
+    ERROR_ON_MSG(next_idx_ >= stream_.NumTensors(),
+                 "Infeed dataset iterator out of range. Are you trying to "
+                 "dequeue more elements than are in the dataset?");
+
+    std::memcpy(dest, stream_.TensorData(next_idx_),
+                stream_.Info().Shape().DataSizeInBytes());
+  }
+
+  void complete() noexcept override { next_idx_++; }
+
+ private:
+  const InfeedStream& stream_;
+  int64_t next_idx_;
+};
+}  // namespace
+
+LogContext::LogContext(const std::string& context) : saved_context_(context_) {
+  context_ = absl::StrCat(saved_context_, " ", context);
+}
+LogContext::~LogContext() { context_ = saved_context_; }
+/* static */ const std::string& LogContext::Context() { return context_; }
+
+/* static */ bool LogContext::InfoEnabled() { return info_enabled_; }
+
+/* static */ void LogContext::EnableInfo(bool enabled) {
+  info_enabled_ = enabled;
+}
+
+std::string LogContext::context_ = "";  // NOLINT
+bool LogContext::info_enabled_ = false;
+
+int64_t TensorShape::ElementSizeInBytes() const {
+  return DataTypeInfo::SizeInBytes(type_);
+}
+
+int64_t TensorShape::NumDimensions() const { return shape_.size(); }
+
+int64_t TensorShape::operator[](int64_t idx) const { return shape_.at(idx); }
+
+int64_t TensorShape::NumElements() const {
+  return absl::c_accumulate(shape_, 1, std::multiplies<int64_t>());
+}
+
+DataType TensorShape::Type() const { return type_; }
+
+TensorShape::TensorShape(DataType type, const Json::Value& array)
+    : type_(type) {
+  ERROR_ON(!array.isArray());
+  shape_.reserve(array.size());
+  absl::c_transform(array, std::back_inserter(shape_),
+                    [](const Json::Value& value) {
+                      ERROR_ON(!value.isInt64());
+                      return value.asInt64();
+                    });
+  ERROR_ON(shape_.size() != array.size());
+}
+
+std::string TensorShape::ToString() const {
+  return absl::StrCat("[", absl::StrJoin(shape_, ", "),
+                      "] type = ", DataTypeInfo::ToString(type_));
+}
+
+void TensorShape::ToStream(StreamWriter& out) const {
+  out.WriteInt64(type_);
+  out.WriteInt64Array(shape_);
+}
+TensorShape::TensorShape(StreamReader& in)
+    : type_(static_cast<DataType>(in.ReadInt64())),
+      shape_(in.ReadInt64Array()) {}
+
+TensorShape::TensorShape(const std::vector<int64_t>& shape, DataType type)
+    : shape_(shape), type_(type) {}
+
+std::string Tensor::ToString() const {
+  std::stringstream ss;
+  SaveDataToJsonStream(&ss);
+  return absl::StrCat(info_.ToString(), " data = ", ss.str());
+}
+
+void Tensor::SaveDataToJsonFile(const std::string& filename) const {
+  std::ofstream out(filename);
+  SaveDataToJsonStream(&out);
+  out.close();
+  std::cout << "Saved content of " << info_.Name() << " to " << filename
+            << std::endl;
+}
+
+void Tensor::SaveDataToJsonStream(std::ostream* sout) const {
+  // Use a const_cast here to avoid having to create a ConstDataIterator: it's
+  // safe because the iterator will only be used for reading.
+  DataIterator it(info_.Shape().Type(), const_cast<uint8_t*>(&data_[0]),
+                  info_.Shape().NumElements());
+
+  Json::Value root = DimensionToJson(0, info_.Shape(), it);
+  Json::StreamWriterBuilder json_builder;
+  json_builder["indentation"] = "";
+  json_builder["commentStyle"] = "None";
+
+  std::unique_ptr<Json::StreamWriter> writer(json_builder.newStreamWriter());
+  writer->write(root, sout);
+}
+
+Executable::Executable(const std::string& executable_filename) {
+  try {
+    std::ifstream file(executable_filename, std::ios::binary);
+    poplar::Executable poplar_executable =
+        poplar::Executable::deserialize(file);
+    engine_.reset(new poplar::Engine(std::move(poplar_executable)));
+  } catch (const std::exception& e) {
+    ERROR("Failed to deserialize " << executable_filename << " : " << e.what());
+  }
+}
+
+poplar::Engine& Executable::Engine() { return *engine_; }
+StreamList::StreamList(const std::vector<std::string>& poplar_streams)
+    : streams_([&poplar_streams]() {
+        std::vector<Stream> streams;
+        absl::c_transform(poplar_streams, std::back_inserter(streams),
+                          [](const std::string& stream) {
+                            char last_char = stream[stream.size() - 1];
+                            const std::string name =
+                                stream.substr(0, stream.size() - 1);
+                            ERROR_ON(last_char != '+' && last_char != '-');
+                            return Stream{name, last_char == '+'};
+                          });
+        return streams;
+      }()) {}
+const std::vector<Stream>& StreamList::Streams() const { return streams_; }
+
+const Stream& StreamList::operator[](int idx) const {
+  ERROR_ON(idx >= streams_.size());
+  return streams_.at(idx);
+}
+
+StreamList Executable::GetStreams() const {
+  return StreamList{engine_->listStreams()};
+}
+
+void Executable::PrintStreams() const {
+  int idx = 0;
+  for (auto stream : engine_->listStreams()) {
+    std::cout << "[" << idx++ << "] " << stream << std::endl;
+  }
+}
+
+void Executable::LoadAndRun(const poplar::Device& device) {
+  std::cout << "Loading program onto the device\n";
+  engine_->load(device);
+  std::cout << "Running HOST_TO_DEVICE\n";
+  engine_->run(PoplarProgramType::HOST_TO_DEVICE);
+  std::cout << "Running MAIN_SEQUENCE\n";
+  engine_->run(PoplarProgramType::MAIN_SEQUENCE);
+  std::cout << "Running DEVICE_TO_HOST\n";
+  engine_->run(PoplarProgramType::DEVICE_TO_HOST);
+}
+
+DeviceManager::DeviceManager()
+    : manager_(poplar::DeviceManager::createDeviceManager()) {
+  ERROR_ON_MSG(absl::c_none_of(manager_.getDevices(),
+                               [](const poplar::Device& d) {
+                                 return d.getTarget().getTargetType() ==
+                                        poplar::TargetType::IPU;
+                               }),
+               "No physical IPU detected on this host");
+}
+
+poplar::Device DeviceManager::GetDevice(int64_t num_ipus,
+                                        const poplar::OptionFlags& opts) {
+  auto device_list =
+      manager_.getDevices(poplar::TargetType::IPU, num_ipus, opts);
+  ERROR_ON_MSG(
+      device_list.size() == 0,
+      "Failed to find any IPU device that match the requested config: num_ipus="
+          << num_ipus << " OptionFlags="
+          << absl::StrJoin(opts, ", ", absl::PairFormatter("=")));
+
+  std::cout << "Found " << device_list.size()
+            << " devices matching the requested configuration.\n";
+  int attempt = 1;
+  for (auto& d : device_list) {
+    std::cout << "[" << attempt << "/" << device_list.size()
+              << "]Trying to attach...";
+    if (d.attach()) {
+      std::cout << " OK!\n";
+      unsigned mj, mn, pt;
+      d.getDriverVersion(mj, mn, pt);
+      const auto& ids = d.getDriverIDs();
+      std::cout << "Poplar driver: " << mj << "." << mn << "." << pt
+                << std::endl;
+      std::cout << "Successfully attached to IPU" << (ids.size() > 1 ? "s" : "")
+                << ": " << absl::StrJoin(ids, ",") << std::endl;
+      return std::move(d);
+    }
+    std::cout << " Failed.\n";
+    attempt++;
+  }
+  ERROR("Failed to attach to any of the IPU devices");
+}
+
+TensorInfo::TensorInfo(const Json::Value& info, TensorType type)
+    : TensorInfo(
+          info["name"].asString(), info["handle"].asString(),
+          TensorShape{DataTypeInfo::FromString(info["data_type"].asString()),
+                      info["shape"]},
+          type) {
+  std::cout << "Found " << ToString() << std::endl;
+}
+
+TensorInfo::TensorInfo(const Json::Value& info)
+    : TensorInfo(info, ParseTensorType(info["type"].asString())) {}
+
+TensorInfo::TensorInfo(StreamReader& in)
+    : name_(in.ReadString()),
+      handle_(in.ReadString()),
+      shape_(in),
+      type_(static_cast<TensorType>(in.ReadInt64())) {}
+
+TensorInfo::TensorInfo(const std::string& name, const std::string& handle,
+                       const TensorShape& shape, TensorType type)
+    : name_(name), handle_(handle), shape_(shape), type_(type) {}
+
+bool TensorInfo::TypeAndShapeMatch(const TensorInfo& other) const {
+  return type_ == other.type_ && shape_ == other.shape_;
+}
+void TensorInfo::ToStream(StreamWriter& out) const {
+  out.WriteString(name_);
+  out.WriteString(handle_);
+  shape_.ToStream(out);
+  out.WriteInt64(static_cast<int64_t>(type_));
+}
+
+std::string TensorInfo::ToString() const {
+  return absl::StrCat("name = ", name_, " type = ", TensorTypeToString(type_),
+                      " shape = ", shape_.ToString());
+}
+
+int64_t TensorShape::DataSizeInBytes() const {
+  return NumElements() * ElementSizeInBytes();
+}
+const TensorShape& TensorInfo::Shape() const { return shape_; }
+
+bool TensorShape::operator==(const TensorShape& other) const {
+  return type_ == other.type_ && shape_ == other.shape_;
+}
+
+const std::string& TensorInfo::Name() const { return name_; }
+const std::string& TensorInfo::Handle() const { return handle_; }
+TensorType TensorInfo::Type() const { return type_; }
+
+Tensor::Tensor(const TensorInfo& info) : info_(info) {
+  data_.resize(info_.Shape().NumElements());
+}
+
+std::string TensorInfo::ParameterFilename() const {
+  ERROR_ON(type_ != TensorType::Parameter);
+  std::string data_filename = name_;
+  std::replace(data_filename.begin(), data_filename.end(), '/', '_');
+  return absl::StrCat(data_filename, ".data");
+}
+
+IpuConfig::IpuConfig(const Json::Value& config)
+    : replication_count_(config["replication_count"].asInt64()),
+      num_ipus_(config["num_ipus"].asInt64()),
+      option_flags_(ParseOptionFlags(config["options"])) {}
+
+int64_t IpuConfig::NumIpus() const { return num_ipus_; }
+int64_t IpuConfig::ReplicationCount() const { return replication_count_; }
+
+poplar::OptionFlags IpuConfig::OptionFlags() const { return option_flags_; }
+
+JsonParser::JsonParser(const std::string& filename) {
+  std::ifstream json_file(filename);
+  ERROR_ON_MSG(!json_file.is_open(), "Failed to open file " << filename);
+
+  Json::CharReaderBuilder builder;
+  JSONCPP_STRING errs;
+  ERROR_ON_MSG(!parseFromStream(builder, json_file, &root_, &errs), errs);
+}
+
+const Json::Value& JsonParser::Root() const { return root_; }
+
+TensorManager::TensorManager(const JsonParser& metadata)
+    : config_(metadata.Root()["config"]) {
+  config_ = IpuConfig(metadata.Root()["config"]);
+  absl::c_transform(
+      metadata.Root()["inputs"], std::back_inserter(inputs_),
+      [](const Json::Value& input) { return Tensor{TensorInfo{input}}; });
+  absl::c_transform(metadata.Root()["outputs"], std::back_inserter(outputs_),
+                    [](const Json::Value& output) {
+                      return Tensor{TensorInfo{output, TensorType::OutputData}};
+                    });
+  absl::c_transform(metadata.Root()["infeeds"], std::back_inserter(infeeds_),
+                    [](const Json::Value& infeed) { return Infeed{infeed}; });
+}
+
+const TensorInfo& Tensor::Info() const { return info_; }
+
+const std::vector<Tensor>& TensorManager::Inputs() const { return inputs_; }
+const std::vector<Tensor>& TensorManager::Outputs() const { return outputs_; }
+const std::vector<Infeed>& TensorManager::Infeeds() const { return infeeds_; }
+std::vector<Infeed>& TensorManager::MutableInfeeds() { return infeeds_; }
+
+void Tensor::LoadDataFromJson(const std::string& data_filename) {
+  LogContext ctx(absl::StrCat("from JSON file '", data_filename, "'"));
+  NDArrayParser parser;
+  data_.clear();
+  JsonParser js(data_filename);
+  parser(js.Root(), info_.Shape(), data_);
+}
+
+void TensorManager::LoadParameters(const std::string& path) {
+  for (auto& input : inputs_) {
+    if (input.Info().Type() == TensorType::Parameter) {
+      LogContext ctx(
+          absl::StrCat("Loading parameter '", input.Info().Name(), "'"));
+      input.LoadDataFromJson(
+          absl::StrCat(path, "/", input.Info().ParameterFilename()));
+    }
+  }
+}
+
+std::list<Tensor*> TensorManager::InputDataTensors() {
+  std::list<Tensor*> out;
+  for (auto& input : inputs_) {
+    if (input.Info().Type() == TensorType::InputData) {
+      out.push_back(&input);
+    }
+  }
+  return out;
+}
+
+const IpuConfig& TensorManager::Config() const { return config_; }
+
+void* Tensor::Data() { return data_.data(); }
+void* Tensor::DataEnd() { return data_.data() + data_.size(); }
+
+void TensorManager::ConnectStreams(Executable& executable) {
+  auto& engine = executable.Engine();
+
+  for (auto& input : inputs_) {
+    engine.connectStream(input.Info().Handle(), input.Data(), input.DataEnd());
+  }
+
+  for (auto& output : outputs_) {
+    for (int replica_id = 0; replica_id < config_.ReplicationCount();
+         replica_id++) {
+      auto callback = [&output, replica_id](void* ptr) {
+        if (replica_id == 0) {
+          std::memcpy(output.Data(), ptr,
+                      output.Info().Shape().DataSizeInBytes());
+        }
+      };
+      engine.connectStreamToCallback(output.Info().Handle(), replica_id,
+                                     callback);
+    }
+  }
+
+  for (auto& infeed : infeeds_) {
+    for (auto& infeed_stream : infeed.Streams()) {
+      for (int replica_id = 0; replica_id < config_.ReplicationCount();
+           replica_id++) {
+        auto callback =
+            absl::make_unique<InfeedPrefetchCallback>(infeed_stream);
+        engine.connectStreamToCallback(infeed_stream.Info().Handle(),
+                                       replica_id, std::move(callback));
+      }
+    }
+  }
+}
+
+SeedManager::SeedManager(const IpuConfig& config) {
+  int replication_count = config.ReplicationCount();
+  seeds_.resize(replication_count);
+  std::mt19937_64 seed_generator;
+  for (auto& seed : seeds_) {
+    seed = seed_generator();
+  }
+}
+
+void SeedManager::ConnectStreams(Executable& executable) {
+  for (int replica_id = 0; replica_id < seeds_.size(); replica_id++) {
+    auto callback = [this, replica_id](void* ptr) mutable {
+      reinterpret_cast<uint64_t*>(ptr)[0] = this->seeds_[replica_id];
+    };
+
+    executable.Engine().connectStreamToCallback(GetRandomNumberSeedStream(),
+                                                replica_id, callback);
+  }
+}
+
+void StreamWriter::WriteInt64(int64_t value) {
+  WriteData(&value, sizeof(value));
+}
+void StreamWriter::WriteInt64Array(const std::vector<int64_t>& values) {
+  WriteInt64(values.size());
+  WriteData(values.data(), sizeof(int64_t) * values.size());
+}
+void StreamWriter::WriteData(const void* data, size_t size) {
+  fd_.write(reinterpret_cast<const char*>(data), size);
+}
+void StreamWriter::WriteString(const std::string& value) {
+  WriteInt64(value.size());
+  WriteData(value.c_str(), value.size());
+}
+std::string StreamReader::ReadString() {
+  int64_t len = ReadInt64();
+  std::string out{len};
+  ReadData(const_cast<char*>(out.c_str()), len);
+}
+StreamWriter::StreamWriter(const std::string& filename)
+    : fd_(filename, std::ostream::binary) {}
+void StreamWriter::Close() { fd_.close(); }
+
+StreamReader::StreamReader(const std::string& filename)
+    : fd_(filename, std::ostream::binary) {}
+
+void StreamReader::ReadData(void* dst, int64_t length) {
+  fd_.read(reinterpret_cast<char*>(dst), length);
+}
+
+int64_t StreamReader::ReadInt64() {
+  int64_t value;
+  ReadData(&value, sizeof(value));
+  return value;
+}
+
+std::vector<int64_t> StreamReader::ReadInt64Array() {
+  int64_t len = ReadInt64();
+  std::vector<int64_t> out{len};
+  ReadData(out.data(), len * sizeof(int64_t));
+  return out;
+}
+
+InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {}
+
+const TensorInfo& InfeedStream::Info() const { return info_; }
+
+const int8_t* InfeedStream::TensorData(int64_t tensor_idx) const {
+  return &data_.at(tensor_idx * info_.Shape().DataSizeInBytes());
+}
+
+void InfeedStream::LoadDataFromBin(const std::string& filename) {
+  StreamReader reader{filename};
+  TensorInfo info{reader};
+  ERROR_ON(info_.TypeAndShapeMatch(info));
+  num_tensors_ = reader.ReadInt64();
+  data_.resize(num_tensors_ * info_.Shape().DataSizeInBytes());
+  reader.ReadData(data_.data(), data_.size());
+}
+
+int64_t InfeedStream::NumTensors() const { return num_tensors_; }
+
+const std::vector<InfeedStream>& Infeed::Streams() const { return streams_; }
+
+const std::string& Infeed::Name() const { return name_; }
+
+Infeed::Infeed(const Json::Value& infeed) : name_(infeed["name"].asString()) {
+  absl::c_transform(
+      infeed["streams"], std::back_inserter(streams_),
+      [](const Json::Value& stream) {
+        return InfeedStream{TensorInfo{stream, TensorType::Infeed}};
+      });
+}
+
+void Infeed::LoadDataFromBin(const std::string& filename) {
+  int64_t prev_num_elements;
+  for (int i = 0; i < streams_.size(); i++) {
+    streams_[i].LoadDataFromBin(Infeed::StreamFilename(filename, i));
+  }
+  ERROR_ON(!absl::c_all_of(streams_, [this](const InfeedStream& stream) {
+    return stream.NumTensors() == this->streams_[0].NumTensors();
+  }));
+}
+
+/* static */ std::string Infeed::StreamFilename(const std::string& filename,
+                                                int64_t stream_idx) {
+  size_t dot_pos = filename.rfind(".");
+  ERROR_ON_MSG(dot_pos == std::string::npos, "Invalid filename: no extension");
+  std::string basename = filename.substr(0, dot_pos);
+  std::string extension = filename.substr(dot_pos);
+  return absl::StrCat(basename, ".", stream_idx, extension);
+}
+}  // namespace ipu

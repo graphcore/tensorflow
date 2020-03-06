@@ -32,4 +32,15 @@ REGISTER_OP("DatasetBenchmark")
     .SetIsStateful()
     .Output("out: string");
 
+REGISTER_OP("DatasetExtractor")
+    .Input("input_dataset: variant")
+    .Attr("print_stats: bool")
+    .Attr("num_elements: int")
+    .Attr("filename: string")
+    .Attr("names: list(string)")
+    .Attr("output_types: list(type) >= 1")
+    .Attr("output_shapes: list(shape) >= 1")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
+
 }  // namespace tensorflow

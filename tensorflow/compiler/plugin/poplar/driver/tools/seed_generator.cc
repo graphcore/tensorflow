@@ -29,9 +29,9 @@ void SeedGenerator::PrepareSeedsForReplicas(int64 replication_factor) {
   }
 }
 
-uint64 SeedGenerator::Get(int64 replica_idx) {
+uint64 SeedGenerator::Get(int64 replica_idx) const {
   CHECK(static_cast<size_t>(replica_idx) < buffer_.size());
-  return buffer_[replica_idx];
+  return buffer_.at(replica_idx);
 }
 }  // namespace poplarplugin
 }  // namespace xla

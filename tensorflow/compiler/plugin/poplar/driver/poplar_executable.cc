@@ -22,6 +22,7 @@ limitations under the License.
 #include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
@@ -257,6 +258,48 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   executable->loaded_from_cache_ = true;
 
   return executable;
+}
+
+/*static*/ Status PoplarExecutable::Export(const ModuleFilenames& filenames,
+                                           const poplar::Executable& executable,
+                                           const CompilerResources& resources,
+                                           uint32 replication_count,
+                                           const poplar::OptionFlags& opts,
+                                           const poplar::Target& target) {
+  if (!resources.annotations.send_infos.empty()) {
+    return tensorflow::errors::FailedPrecondition(
+        "Failed to export the PoplarExecutable because it contains Sends "
+        "operations.");
+  }
+  if (!resources.annotations.recv_infos.empty()) {
+    return tensorflow::errors::FailedPrecondition(
+        "Failed to export the PoplarExecutable because it contains Receives "
+        "operations.");
+  }
+  if (!resources.annotations.host_embedding_lookup_infos.empty()) {
+    return tensorflow::errors::FailedPrecondition(
+        "Failed to export the PoplarExecutable because it contains Host "
+        "embedding lookups.");
+  }
+  if (!resources.annotations.host_embedding_update_infos.empty()) {
+    return tensorflow::errors::FailedPrecondition(
+        "Failed to export the PoplarExecutable because it contains Host "
+        "embedding updates.");
+  }
+
+  // Write poplar executable to a file
+  std::string poplar_executable_filename =
+      filenames.SerializedExecutableFilename() + ".poplar_exec";
+  try {
+    auto file = std::ofstream(poplar_executable_filename, std::ios::binary);
+    executable.serialize(file);
+  } catch (const std::exception& e) {
+    return PoplarExceptionToTensorflowStatus("[Serialize] ", e);
+  }
+
+  TF_RETURN_IF_ERROR(
+      SaveExecutableMetadataJson(filenames.SerializedMetadataFilename(),
+                                 resources, replication_count, opts, target));
 }
 
 /*static*/ Status PoplarExecutable::Serialize(

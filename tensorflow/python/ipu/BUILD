@@ -69,6 +69,7 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
+        "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/distribute:values",
     ],
@@ -97,6 +98,7 @@ py_library(
         "autoshard.py",
         "autoshard_cnn.py",
         "dataset_benchmark.py",
+        "dataset_extractor.py",
         "gradient_accumulation_optimizer.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
