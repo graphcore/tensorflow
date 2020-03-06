@@ -22,6 +22,7 @@ from operator import mul
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.util import deprecation
@@ -149,17 +150,24 @@ class HostEmbedding:
         update_count=iteration_count * self._update_count,
         replication_factor=replication_factor)
 
-  def lookup(self, indices, count=1):
+  def lookup(self, indices, count=1, clip_indices=True):
     """ Perform a host embedding lookup on an IPU.
 
         Args:
           indices: The indices to lookup.
           count: The number of times, per iteration, that this op will be
                  executed.
+          clip_indices: Whether to enforce a the valid range on the lookup
+                        indices with clipping. When False, out-of-range values
+                        have undefined behaviour.
         Returns:
           A Tensor containing the elements requested by the user indices.
     """
     indices_shape = indices.shape.as_list()
+
+    if clip_indices:
+      indices = clip_ops.clip_by_value(indices, 0,
+                                       self._embedding_tensor.shape[0] - 1)
 
     # Flatten all the indices.
     num_indices = reduce(mul, indices_shape, 1)
