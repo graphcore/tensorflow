@@ -203,6 +203,7 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         self.assertAllClose(reference_values, runner_values)
 
   @test_util.deprecated_graph_mode_only
+  @test_util.run_v2_only
   def testWeightsExportersNoMetadata(self):
     """ Check that the weights extractor produces the same output with
      TF v1 and v2 models."""
