@@ -45,6 +45,7 @@ cc_library(
         "poplar_executable_runner.h",
     ],
     copts = ["-fexceptions"],
+    linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
         "//third_party/eigen3",
