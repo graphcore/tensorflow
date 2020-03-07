@@ -34,6 +34,7 @@ constexpr char kXlaSeparateCompiledGradients[] =
 constexpr char kXlaCompile[] = "_XlaCompile";
 constexpr char kXlaScope[] = "_XlaScope";
 
+constexpr char kStatelessWhile[] = "StatelessWhile";
 constexpr char kWhile[] = "While";
 constexpr char kWhileBodyArg[] = "body";
 }  // namespace
@@ -54,7 +55,7 @@ StatusOr<bool> CallFunctionForWhileLoopBodies(
   std::list<Node*> while_loop_nodes;
   // Optimize any while loops as well.
   for (Node* node : graph->op_nodes()) {
-    if (node->def().op() == kWhile) {
+    if (node->def().op() == kStatelessWhile || node->def().op() == kWhile) {
       while_loop_nodes.push_back(node);
     }
   }

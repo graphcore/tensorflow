@@ -2419,7 +2419,7 @@ py_library(
     deps = [
         ":ipu_ops_py",
         "//tensorflow/compiler/tf2xla/python:xla",
-        "//tensorflow/python/ipu:utils",
+        "//tensorflow/python/ipu:ipu_lib",
     ],
 )
 
