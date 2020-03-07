@@ -1,4 +1,4 @@
-load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
+load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_copts")
 
 filegroup(
     name = "all_files",
@@ -61,7 +61,10 @@ cc_binary(
     srcs = [
         "poplar_executable_runner_main.cc",
     ],
-    copts = ["-fexceptions"],
+    copts = tf_copts() + [
+        "-fexceptions",
+    ],
+    linkopts = ["-ldl"],
     visibility = ["//visibility:public"],
     deps = [
         ":poplar_executable_runner",

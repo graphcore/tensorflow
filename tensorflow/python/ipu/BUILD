@@ -62,20 +62,6 @@ py_library(
 )
 
 py_library(
-    name = "utils",
-    srcs = [
-        "utils.py",
-    ],
-    srcs_version = "PY2AND3",
-    deps = [
-        "//tensorflow/compiler/plugin/poplar:backend_protos_py",
-        "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",
-        "//tensorflow/compiler/xla:xla_data_proto_py",
-        "//tensorflow/python/distribute:values",
-    ],
-)
-
-py_library(
     name = "data",
     srcs = [
         "data/__init__.py",
@@ -139,6 +125,7 @@ py_library(
         "sharded_optimizer.py",
         "sharding.py",
         "sharding_utils.py",
+        "utils.py",
         "vertex_edsl.py",
     ],
     srcs_version = "PY2AND3",
@@ -146,12 +133,13 @@ py_library(
         ":data",
         ":ipu_grad_ops_lib",
         ":ipu_ops_lib",
-        ":utils",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:sendrecv_ops_py",
+        "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/compiler/xla:compiler_py",
+        "//tensorflow/python/distribute:values",
         "//tensorflow/python/estimator:estimator_py",
     ],
 )

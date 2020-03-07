@@ -21,6 +21,7 @@ import tempfile
 import glob
 import os
 import subprocess
+import sys
 
 import numpy as np
 import tensorflow as tf
@@ -139,6 +140,11 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
     self.assertTrue(out.returncode == 0, out.stdout.decode("utf-8"))
     logging.info(out.stdout.decode("utf-8"))
 
+  def runPythonCommand(self, cmd):
+    python_cmd = cmd
+    python_cmd.insert(0, sys.executable)
+    self.runCommand(python_cmd)
+
   def getSingleFileWithExt(self, folder, extension):
     all_files = glob.glob("%s/*.%s" % (folder, extension))
     logging.info("%s files in %s: %s", extension, folder, all_files)
@@ -184,9 +190,10 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
       executable_file = self.getSingleFileWithExt(poplar_binaries_folder,
                                                   "poplar_exec")
 
-      self.runCommand((("./tensorflow/compiler/plugin/poplar/tools/"
-                        "tensorflow_weights_extractor.py -o %s -s %s -m %s") %
-                       (weights_path, model_path, metadata_file)).split())
+      self.runPythonCommand(
+          (("./tensorflow/compiler/plugin/poplar/tools/"
+            "tensorflow_weights_extractor.py -o %s -s %s -m %s") %
+           (weights_path, model_path, metadata_file)).split())
 
       self.runCommand(
           (("./tensorflow/compiler/plugin/poplar/tools/PoplarExecutableRunner"
@@ -228,13 +235,14 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         tf.saved_model.save(model, model_path_keras)
         Saver().save(sess, model_path_session)
 
-      self.runCommand((("./tensorflow/compiler/plugin/poplar/tools/"
-                        "tensorflow_weights_extractor.py -o %s -s %s") %
-                       (weights_path_keras, model_path_keras)).split())
+      self.runPythonCommand((("./tensorflow/compiler/plugin/poplar/tools/"
+                              "tensorflow_weights_extractor.py -o %s -s %s") %
+                             (weights_path_keras, model_path_keras)).split())
 
-      self.runCommand((("./tensorflow/compiler/plugin/poplar/tools/"
-                        "tensorflow_weights_extractor.py -o %s -s %s") %
-                       (weights_path_session, model_path_session)).split())
+      self.runPythonCommand(
+          (("./tensorflow/compiler/plugin/poplar/tools/"
+            "tensorflow_weights_extractor.py -o %s -s %s") %
+           (weights_path_session, model_path_session)).split())
 
       keras_files = sorted(glob.glob("%s/*" % weights_path_keras))
       session_files = sorted(glob.glob("%s/*" % weights_path_session))

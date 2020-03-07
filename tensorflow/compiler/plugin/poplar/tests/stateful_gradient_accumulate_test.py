@@ -83,9 +83,8 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with ops.device("/device:IPU:0"):
         r = xla.compile(my_net, inputs=[y])
 
-      with self.assertRaisesRegex(
-          errors.FailedPreconditionError,
-          "The while/IpuStatefulGradientAccumulate op"):
+      with self.assertRaisesRegex(errors.FailedPreconditionError,
+                                  "The .*IpuStatefulGradientAccumulate op"):
         sess.run(r, {y: [10]})
 
   def testLoopRepeatCountDoesntDivide(self):
