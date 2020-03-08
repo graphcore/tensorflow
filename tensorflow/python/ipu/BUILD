@@ -667,7 +667,7 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
-    shard_count = 16,
+    shard_count = 17,
 )
 
 tf_py_test(
