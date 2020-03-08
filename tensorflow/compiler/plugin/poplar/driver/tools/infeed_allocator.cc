@@ -15,10 +15,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 
-#ifdef __unix__
-#include <unistd.h>
-#endif
-
 #include "tensorflow/core/platform/mem.h"
 
 namespace xla {
@@ -26,10 +22,7 @@ namespace poplarplugin {
 std::string InfeedAllocator::Name() { return "infeed-allocator"; }
 
 void* InfeedAllocator::AllocateRaw(size_t alignment, size_t num_bytes) {
-  size_t min_alignment = 64;
-#ifdef __unix__
-  min_alignment = sysconf(_SC_PAGESIZE);
-#endif
+  const size_t min_alignment = 64;
   alignment = alignment < min_alignment ? min_alignment : alignment;
   return tensorflow::port::AlignedMalloc(num_bytes, min_alignment);
 }
