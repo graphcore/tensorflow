@@ -94,7 +94,7 @@ StatusOr<bool> InsertReadOnlyVariableCopies(HloInstruction* pipeline_op) {
       if (user == root) {
         continue;
       }
-      CHECK(IsPipelineStageOrBackwardOp(user));
+      CHECK(IsAnyPipelineStageOpOrResourceUpdate(user));
       // Go through each use of the parameter in the user and insert kCopy
       // instructions if necessary.
       for (int64 index : user->OperandIndices(param_inst)) {

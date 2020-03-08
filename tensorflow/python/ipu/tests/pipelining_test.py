@@ -1229,6 +1229,81 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       self.assertEqual(1, len(optimizer.applied_gradients))
       self.assertEqual(variable_shape, optimizer.applied_gradients[0].shape)
 
+  @test_util.deprecated_graph_mode_only
+  def testVariableInOptimizer(self):
+
+    with tu.ipu_session() as sess:
+
+      def stage1(x):
+        with variable_scope.variable_scope("stage1", use_resource=True):
+          w = variable_scope.get_variable(name="w", initializer=1.0)
+          return w * x
+
+      def identity(x):
+        return x
+
+      class MockOptimizer(gradient_descent.GradientDescentOptimizer):  # pylint: disable=abstract-method
+        def __init__(self, lr):
+          super(MockOptimizer, self).__init__(lr)
+          with variable_scope.variable_scope("optimizer", use_resource=True):
+            self.p = variable_scope.get_variable(name="p",
+                                                 initializer=2.0,
+                                                 trainable=False)
+
+        def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+          grads_and_vars = [(g + self.p, v) for (g, v) in grads_and_vars]
+          return super().apply_gradients(grads_and_vars, global_step, name)
+
+      def optimizer_function(x):
+        opt = MockOptimizer(0.5)
+        return pipelining_ops.OptimizerFunctionOutput(opt, x)
+
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed15")
+
+      def my_net(x):
+        return pipelining_ops.pipeline([stage1, identity],
+                                       pipeline_depth=8,
+                                       inputs=[x],
+                                       outfeed_queue=outfeed_queue,
+                                       optimizer_function=optimizer_function,
+                                       outfeed_loss=True)
+
+      with ops.device("/device:IPU:0"):
+        pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 2)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      sess.run(variables.global_variables_initializer())
+      sess.run(pipeline)
+
+      # Accumulate 8 lots of gradient of 1.0 => 8.0, then add 2.0 then
+      # apply LR and subtract from the original weight:
+      #
+      # 1.0 - (8.0 + 2.0) * 0.5 = -4.0
+      for v in ops.get_default_graph().get_collection('variables'):
+        if v.name == "stage1/w:0":
+          new_v = sess.run(v)
+          self.assertEqual(new_v, -4.0)
+
+      # Now change the optimizer variable
+      for v in ops.get_default_graph().get_collection('variables'):
+        if v.name == "optimizer/p:0":
+          sess.run(v.assign(4.0))
+
+      sess.run(pipeline)
+
+      # Accumulate 8 lots of gradient of 1.0 => -8.0, then add 30.0 then
+      # apply LR and subtract from the original weight:
+      #
+      # -4.0 - (8.0 + 4.0) * 0.5 = -10.0
+      for v in ops.get_default_graph().get_collection('variables'):
+        if v.name == "stage1/w:0":
+          new_v = sess.run(v)
+          self.assertEqual(new_v, -10.0)
+
 
 if __name__ == "__main__":
   googletest.main()

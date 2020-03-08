@@ -172,8 +172,9 @@ class PipelineStageOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
-    VLOG(2) << "Building PipelineStage function with " << input_types_.size()
-            << " inputs including " << num_resource_args << " resources.";
+    VLOG(2) << "Building PipelineStage (" << ctx->op_kernel().name()
+            << ") function with " << input_types_.size() << " inputs including "
+            << num_resource_args << " resources.";
     XlaCompiler::CompileOptions compile_options = GetDefaultCompileOptions();
     compile_options.return_updated_values_for_all_resources = false;
 
@@ -276,9 +277,9 @@ class PipelineResourceUpdateOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
-    VLOG(2) << "Building PipelineResourceUpdate function with "
-            << input_types_.size() << " inputs including " << num_resource_args
-            << " resources.";
+    VLOG(2) << "Building PipelineResourceUpdate (" << ctx->op_kernel().name()
+            << ") function with " << input_types_.size() << " inputs including "
+            << num_resource_args << " resources.";
 
     // Rewrite the PipelineResourceUpdate function such that arguments to
     // PipelineResourceUpdate ops are rearranged and resource variables
@@ -313,14 +314,15 @@ class PipelineResourceUpdateOp : public XlaOpKernel {
                  PoplarBackendConfig_CallConfig_Type_Name(
                      PoplarBackendConfig::CallConfig::PipelineResourceUpdate)));
 
-    // We expect the resource update stage to only resource outputs.
+    // We expect the resource update stage to only have resource outputs. This
+    // code assumes that the outputs are all of the resource variables in the
+    // same order as the inputs. The `return_updated_values_for_all_resources`
+    // flag ensures this. Therefore we must update all resources, regardless
+    // of if they are updated by the function or not.
     for (size_t i = 0; i < result.resource_updates.size(); ++i) {
       const XlaCompiler::ResourceUpdate& update = result.resource_updates[i];
       XlaResource* resource;
       OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
-      OP_REQUIRES(
-          ctx, update.modified,
-          errors::Internal("Expected the resource output to be modified."));
       OP_REQUIRES_OK(ctx,
                      resource->SetFromPack(
                          arguments[update.input_index].tensor_array_gradients,
@@ -368,8 +370,9 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
-    VLOG(2) << "Building Pipeline function with " << input_types_.size()
-            << " inputs including " << num_resource_args << " resources.";
+    VLOG(2) << "Building Pipeline (" << ctx->op_kernel().name()
+            << ") function with " << input_types_.size() << " inputs including "
+            << num_resource_args << " resources.";
 
     // Rewrite the Pipeline function such that arguments to PipelineStage ops
     // are rearranged and resource variables moved to the back.
@@ -467,6 +470,8 @@ class PipelineOp : public XlaOpKernel {
             std::to_string(offload_weight_update_variables_)));
 
     // A pipeline has no explicit outputs, only updates of resource variables.
+    // We can use the input index to index into the outputs because we have
+    // ensured that the inputs and outputs are aligned.
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
       XlaResource* resource;
       OP_REQUIRES_OK(ctx, ctx->GetResourceInput(update.input_index, &resource));
