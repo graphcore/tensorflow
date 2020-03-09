@@ -54,7 +54,7 @@ class IPUDropoutTest(test.TestCase):
     # Test rates
     rates = [0.0, 0.1, 0.3, 0.5, 0.7, 1.0]
     for r in rates:
-      keras_result = kerasIPUDropout(self, x, r)[0]
+      keras_result = _kerasIPUDropout(self, x, r)[0]
       num_non_zero = np.count_nonzero(keras_result)
       percent_drop = num_non_zero / num_elements
       self.assertAllClose(1 - percent_drop, r, rtol=0.05)
@@ -63,9 +63,9 @@ class IPUDropoutTest(test.TestCase):
     num_elements = 100
     x = np.random.rand((num_elements)).astype(dataType)
 
-    keras_result_a = kerasIPUDropout(self, x, seed=[42, 42])[0]
+    keras_result_a = _kerasIPUDropout(self, x, seed=[42, 42])[0]
     for _ in range(0, 6):
-      keras_result_b = kerasIPUDropout(self, x, seed=[42, 42])[0]
+      keras_result_b = _kerasIPUDropout(self, x, seed=[42, 42])[0]
       self.assertAllEqual(keras_result_b, keras_result_a)
 
     num_elements = 50
@@ -73,12 +73,12 @@ class IPUDropoutTest(test.TestCase):
     # Test scale
     scales = [2, 0.5]
     for s in scales:
-      original_scale = kerasIPUDropout(
+      original_scale = _kerasIPUDropout(
           self,
           x,
           seed=[42, 42],
       )[0]
-      keras_result = kerasIPUDropout(self, x, seed=[42, 42], scale=s)[0]
+      keras_result = _kerasIPUDropout(self, x, seed=[42, 42], scale=s)[0]
       self.assertAllClose(original_scale * s, keras_result)
 
 
