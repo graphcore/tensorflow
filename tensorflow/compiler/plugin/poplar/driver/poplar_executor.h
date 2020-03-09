@@ -288,7 +288,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   const poplar::OptionFlags& GetOptionsFlags() const { return option_flags_; }
 
-  const poplar::OptionFlags& GetReportFlags() const { return report_options_; }
+  const poplar::OptionFlags& GetReportGraphFlags() const {
+    return graph_options_;
+  }
+
+  const poplar::OptionFlags& GetReportExecutionFlags() const {
+    return execution_options_;
+  }
 
   tensorflow::CancellationManager* cancellation_manager() { return cm_.get(); }
 
@@ -779,7 +785,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   poplar::OptionFlags pooling_options_;
 
-  poplar::OptionFlags report_options_;
+  poplar::OptionFlags graph_options_;
+
+  poplar::OptionFlags execution_options_;
 
   std::list<TensorControl*> allocations_;
 

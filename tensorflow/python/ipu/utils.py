@@ -595,34 +595,67 @@ def set_pooling_options(opts, pooling_options=None):
   return opts
 
 
-def set_report_options(opts, report_options=None):
-  """Set the options used to influence Poplar report generation.
+@deprecation.deprecated_args(
+    None, "report_options is deprecated, use graph_options and"
+    " execution_options instead", "report_options")
+def set_report_options(opts,
+                       report_options=None,
+                       graph_options=None,
+                       execution_options=None):
+  """Set the options used to influence Poplar graph and execution reports
+     generation.
 
-  The options are added to both the compile and execution report generations.
 
   .. code-block:: python
 
       opts = create_ipu_config()
       opts = set_report_options(opts,
-          report_options={"reportOption1": "false"})
+          report_options={"reportOption1": "false"},
+          graph_options={"graphOptions": "false"},
+          execution_options={"executionOptions": "false"})
       ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
   Args:
     opts: An IpuOptions session control protobuf.
-    report_options: A dictionary of poplar option flags for the report
+    report_options: (Deprecated) A dictionary of poplar option flags for
+      the report generation.
+    graph_options: A dictionary of poplar option flags for the graph report
       generation.
+    execution_options: A dictionary of poplar option flags for the execution
+      report generation.
 
   Returns:
     The IpuOptions configuration protobuf, with convolution options set.
   """
-  if report_options:
-    if not isinstance(report_options, dict):
-      raise Exception("`report_options` must be a dictionary")
+  def use_report_options():
+    if report_options:
+      if not isinstance(report_options, dict):
+        raise Exception("`report_options` must be a dictionary")
+    return report_options
 
-    for (option_name, value) in report_options.items():
-      opt = opts.profiling.options.add()
+  if not graph_options:
+    graph_options = use_report_options()
+
+  if graph_options:
+    if not isinstance(graph_options, dict):
+      raise Exception("`graph_options` must be a dictionary")
+
+    for (option_name, value) in graph_options.items():
+      opt = opts.profiling.graph_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  if not execution_options:
+    execution_options = use_report_options()
+
+  if execution_options:
+    if not isinstance(execution_options, dict):
+      raise Exception("`execution_options` must be a dictionary")
+
+    for (option_name, value) in execution_options.items():
+      opt = opts.profiling.execution_options.add()
       opt.option = option_name
       opt.value = value
 
