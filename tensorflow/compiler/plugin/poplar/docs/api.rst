@@ -41,6 +41,18 @@ Python API
 .. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
   :members: IPUMultiWorkerStrategy
 
+.. automodule:: tensorflow.python.ipu.keras.layers.dropout
+  :members:
+
+.. automodule:: tensorflow.python.ipu.keras.layers.embedding_lookup
+  :members:
+
+.. automodule:: tensorflow.python.ipu.keras.layers.normalization
+  :members:
+
+.. automodule:: tensorflow.python.ipu.keras.layers.rnn
+  :members:
+
 .. automodule:: tensorflow.python.ipu.loops
   :members:
 

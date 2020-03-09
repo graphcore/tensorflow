@@ -25,6 +25,7 @@ from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_multi_worker_strategy
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import ipu_run_config
+from tensorflow.python.ipu import keras
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu import scopes
 from tensorflow.python.ipu import sharding
@@ -54,6 +55,8 @@ from tensorflow.python.ipu.ops import replication_ops
 from tensorflow.python.ipu.ops import rnn_ops
 from tensorflow.python.ipu.ops import rnn_ops_grad
 from tensorflow.python.ipu.ops import summary_ops
+
+from tensorflow.python.ipu.keras import layers
 
 from tensorflow.python.ipu.ops.experimental import popfloat_cast_to_gfloat
 
