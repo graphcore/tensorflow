@@ -1003,7 +1003,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
               poplar_executor->CreateExecutableCacheDirIfMissing());
           TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
               cache_filename, exec, resources.annotations, replication_factor,
-              poplar_executor->GetReportFlags()));
+              poplar_executor->GetReportExecutionFlags()));
         }
       }
       if (poplar_executor->EnableSerialization()) {
@@ -1013,7 +1013,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
         TF_RETURN_IF_ERROR(PoplarExecutable::Export(
             filenames, exec, resources, replication_factor,
-            poplar_executor->GetReportFlags(),
+            poplar_executor->GetReportExecutionFlags(),
             poplar_executor->GetOrCreatePoplarTarget()));
       }
 
@@ -1041,7 +1041,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       try {
         auto rep = engine->getGraphProfile();
         if (poplar_executor->CompilerReportingTextFormat()) {
-          auto opts = poplar_executor->GetReportFlags();
+          auto opts = poplar_executor->GetReportGraphFlags();
           SetFlagIfNotPresent(opts, "showVarStorage", "true");
           poplar::printGraphSummary(report_stream, rep, opts);
         } else if (poplar_executor->CompilerReportingCborFormat()) {
@@ -1051,7 +1051,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         }
 
         if (PoplarXlaFlags::Get().dump_text_reports_to_stdio) {
-          auto opts = poplar_executor->GetReportFlags();
+          auto opts = poplar_executor->GetReportGraphFlags();
           SetFlagIfNotPresent(opts, "showVarStorage", "true");
           poplar::printGraphSummary(std::cout, rep, opts);
         }

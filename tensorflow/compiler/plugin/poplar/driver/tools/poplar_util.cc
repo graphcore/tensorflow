@@ -225,7 +225,7 @@ void DumpIfPoplarOutOfMemoryAllocationException(
 
   if (p_e.graphProfile.type() == poplar::ProfileValue::Type::MAP &&
       p_e.graphProfile.size() != 0) {
-    auto opts = poplarExecutor->GetReportFlags();
+    auto opts = poplarExecutor->GetReportGraphFlags();
     SetFlagIfNotPresent(opts, "showVarStorage", "true");
 
     // Always produce a text report

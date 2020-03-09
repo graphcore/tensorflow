@@ -1461,8 +1461,12 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     pooling_options_.set(opt.option(), opt.value());
   }
 
-  for (const auto& opt : current_config_.profiling().options()) {
-    report_options_.set(opt.option(), opt.value());
+  for (const auto& opt : current_config_.profiling().graph_options()) {
+    graph_options_.set(opt.option(), opt.value());
+  }
+
+  for (const auto& opt : current_config_.profiling().execution_options()) {
+    execution_options_.set(opt.option(), opt.value());
   }
 
   const auto max_compilation_threads =
@@ -1492,8 +1496,12 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     VLOG(1) << "Pooling option: " << opt.first << " = " << opt.second;
   }
 
-  for (auto opt : report_options_) {
-    VLOG(1) << "Report option: " << opt.first << " = " << opt.second;
+  for (auto opt : graph_options_) {
+    VLOG(1) << "Graph report option: " << opt.first << " = " << opt.second;
+  }
+
+  for (auto opt : execution_options_) {
+    VLOG(1) << "Execution report option: " << opt.first << " = " << opt.second;
   }
 
   // Generate Target hash
@@ -2853,14 +2861,14 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
             auto exec_profile = current_engine_->getExecutionProfile();
 
             if (PoplarXlaFlags::Get().dump_text_reports_to_stdio) {
-              auto opts = GetReportFlags();
+              auto opts = GetReportExecutionFlags();
               SetFlagIfNotPresent(opts, "showExecutionSteps", "true");
               poplar::printExecutionSummary(std::cout, graph_profile,
                                             exec_profile, opts);
             }
 
             if (CompilerReportingTextFormat()) {
-              auto opts = GetReportFlags();
+              auto opts = GetReportExecutionFlags();
               SetFlagIfNotPresent(opts, "showExecutionSteps", "true");
 
               poplar::printExecutionSummary(report_stream, graph_profile,

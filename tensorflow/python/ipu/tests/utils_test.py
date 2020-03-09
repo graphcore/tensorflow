@@ -98,10 +98,10 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
         cfg, pooling_options={"poolUseIntrospectiveMapping": "false"})
     self.assertTrue(cfg.pooling_options)
 
-    self.assertFalse(cfg.profiling.options)
+    self.assertFalse(cfg.profiling.graph_options)
     cfg = ipu.utils.set_report_options(
         cfg, report_options={"reportOption1": "false"})
-    self.assertTrue(cfg.profiling.options)
+    self.assertTrue(cfg.profiling.graph_options)
 
     self.assertFalse(cfg.speed_size_config.allow_recompute)
     cfg = ipu.utils.set_recomputation_options(cfg)
@@ -527,6 +527,94 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
       result = sess.run(z, {x: [[2., 2.], [2., 2.]]})
       self.assertAllEqual(result, [[2., 2.], [2., 2.]])
+
+  @test_util.deprecated_graph_mode_only
+  def testCreateConfig1(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+    cfg = ipu.utils.set_report_options(
+        cfg, report_options={"reportOption1": "false"})
+    self.assertTrue(cfg.profiling.graph_options)
+    self.assertTrue(cfg.profiling.execution_options)
+
+  @test_util.deprecated_graph_mode_only
+  def testCreateConfig2(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+    cfg = ipu.utils.set_report_options(
+        cfg, graph_options={"reportOption2": "false"})
+    self.assertTrue(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+
+  @test_util.deprecated_graph_mode_only
+  def testCreateConfig3(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+    cfg = ipu.utils.set_report_options(
+        cfg, execution_options={"reportOption3": "false"})
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertTrue(cfg.profiling.execution_options)
+
+  @test_util.deprecated_graph_mode_only
+  def testCreateConfig4(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+    cfg = ipu.utils.set_report_options(
+        cfg,
+        graph_options={"reportOption4a": "false"},
+        execution_options={"reportOption4b": "false"})
+    self.assertTrue(cfg.profiling.graph_options)
+    self.assertTrue(cfg.profiling.execution_options)
+
+  @test_util.deprecated_graph_mode_only
+  def testCreateConfig5(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+    cfg = ipu.utils.set_report_options(
+        cfg,
+        report_options={"reportOption5a": "false"},
+        execution_options={"reportOption5b": "false"})
+    self.assertTrue(cfg.profiling.graph_options)
+    self.assertTrue(cfg.profiling.execution_options)
+
+  @test_util.deprecated_graph_mode_only
+  def testCreateConfig6(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+    cfg = ipu.utils.set_report_options(
+        cfg,
+        report_options={"reportOption6a": "false"},
+        graph_options={"reportOption6b": "false"})
+    self.assertTrue(cfg.profiling.graph_options)
+    self.assertTrue(cfg.profiling.execution_options)
+
+  @test_util.deprecated_graph_mode_only
+  def testCreateConfig7(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+    cfg = ipu.utils.set_report_options(
+        cfg,
+        report_options={"reportOption7a": "false"},
+        graph_options={"reportOption7b": "false"},
+        execution_options={"reportOption7c": "false"})
+    self.assertTrue(cfg.profiling.graph_options)
+    self.assertTrue(cfg.profiling.execution_options)
+
+  @test_util.deprecated_graph_mode_only
+  def testCreateConfig8(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
+    cfg = ipu.utils.set_report_options(cfg)
+    self.assertFalse(cfg.profiling.graph_options)
+    self.assertFalse(cfg.profiling.execution_options)
 
 
 if __name__ == "__main__":
