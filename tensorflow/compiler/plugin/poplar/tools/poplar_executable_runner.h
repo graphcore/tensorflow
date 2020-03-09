@@ -77,6 +77,7 @@ class LogContext {
 class StreamReader;
 class StreamWriter;
 class Infeed;
+class Outfeed;
 enum DataType {
   F32,
   F16,
@@ -222,7 +223,8 @@ class JsonParser {
 
 class TensorManager {
  public:
-  explicit TensorManager(const JsonParser& metadata);
+  explicit TensorManager(const JsonParser& metadata,
+                         const std::string& output_folder);
   const std::vector<Tensor>& Inputs() const;
   const std::vector<Tensor>& Outputs() const;
   const std::vector<Infeed>& Infeeds() const;
@@ -237,6 +239,7 @@ class TensorManager {
   std::vector<Tensor> inputs_;
   std::vector<Tensor> outputs_;
   std::vector<Infeed> infeeds_;
+  std::vector<Outfeed> outfeeds_;
   IpuConfig config_;
 };
 
@@ -253,28 +256,60 @@ class InfeedStream {
  public:
   explicit InfeedStream(const TensorInfo& info);
   const TensorInfo& Info() const;
-  void LoadDataFromBin(const std::string& filename);
-  const int8_t* TensorData(int64_t tensor_idx) const;
+  void IntializeDataSource(const std::string& filename);
+  void LoadTensor(void* dst);
+  void ResetToFirstTensor();
+  void MoveToNextTensor();
   int64_t NumTensors() const;
+  int64_t TensorIndex() const;
 
  private:
   TensorInfo info_;
-  std::vector<int8_t> data_;
+  bool current_tensor_loaded_;
+  std::ios::streampos first_tensor_pos_;
   int64_t num_tensors_;
+  int64_t tensor_idx_;
+  std::shared_ptr<StreamReader> reader_;
 };
 
 class Infeed {
  public:
   explicit Infeed(const Json::Value& infeed);
-  void LoadDataFromBin(const std::string& filename);
+  void IntializeDataSources(const std::string& filename);
   const std::string& Name() const;
-  const std::vector<InfeedStream>& Streams() const;
+  std::vector<InfeedStream>& Streams();
   static std::string StreamFilename(const std::string& filename,
                                     int64_t stream_idx);
 
  private:
   const std::string name_;
   std::vector<InfeedStream> streams_;
+};
+
+class OutfeedStream {
+ public:
+  explicit OutfeedStream(const TensorInfo& info,
+                         const std::string& output_folder);
+  const TensorInfo& Info() const;
+  void WriteTensor(void* src, int64_t replication_count);
+  int64_t NumTensors() const;
+
+ private:
+  TensorInfo info_;
+  int64_t num_tensors_;
+  std::shared_ptr<StreamWriter> writer_;
+};
+
+class Outfeed {
+ public:
+  explicit Outfeed(const Json::Value& Outfeed,
+                   const std::string& output_folder);
+  const std::string& Name() const;
+  std::vector<OutfeedStream>& Streams();
+
+ private:
+  const std::string name_;
+  std::vector<OutfeedStream> streams_;
 };
 
 class StreamWriter {
@@ -293,13 +328,18 @@ class StreamWriter {
 class StreamReader {
  public:
   explicit StreamReader(const std::string& filename);
+  int64_t NumBytesLeft();
   std::string ReadString();
   void ReadData(void* dst, int64_t length);
+  void MoveRelative(std::ios::streamoff offset);
+  void MoveAbsolute(std::ios::streampos position);
+  std::ios::streampos CurrentPosition();
   int64_t ReadInt64();
   std::vector<int64_t> ReadInt64Array();
 
  private:
   std::ifstream fd_;
+  std::streampos end_;
 };
 
 }  // namespace ipu

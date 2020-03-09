@@ -242,10 +242,23 @@ int main(int argc, char** argv) {
     std::cout << "ERROR: --weights_path needs to be set to a valid folder\n";
     return -1;
   }
+  if (!output_folder.empty()) {
+    DIR* dp = opendir(output_folder.c_str());
+    if (dp == NULL) {
+      if (mkdir(output_folder.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) !=
+          0) {
+        std::cout << "Failed to create output folder '" << output_folder
+                  << "'\n";
+        return -1;
+      }
+    } else {
+      closedir(dp);
+    }
+  }
 
   std::cout << "\n[Parsing Graph's metadata]\n";
   ipu::JsonParser metadata{metadata_filename};
-  ipu::TensorManager tensors{metadata};
+  ipu::TensorManager tensors{metadata, output_folder};
 
   std::cout << "\n[Initialising IPU]\n";
   ipu::DeviceManager manager;
@@ -269,16 +282,14 @@ int main(int argc, char** argv) {
       inputs_missing.push_back(input->Info().Name());
     } else {
       ipu::LogContext ctx{
-          absl::StrCat("Loading input '", input->Info().Name(), "' from ",
-                       input_data.files.at(input->Info().Name()))};
+          absl::StrCat("Loading input '", input->Info().Name())};
       extra_inputs.erase(absl::c_find(extra_inputs, input->Info().Name()));
       input->LoadDataFromJson(input_data.files.at(input->Info().Name()));
     }
   }
   if (strict && (!inputs_missing.empty() || !extra_inputs.empty())) {
     absl::c_for_each(inputs_missing, [](const std::string& input) {
-      std::cout << "ERROR: No data provided for input_data '" << input
-                << std::endl
+      std::cout << "ERROR: No data provided for input_data '" << input << "'\n"
                 << std::flush;
     });
     absl::c_for_each(extra_inputs, [](const std::string& input) {
@@ -310,17 +321,15 @@ int main(int argc, char** argv) {
     if (!infeed_data.Contains(infeed.Name())) {
       infeeds_missing.push_back(infeed.Name());
     } else {
-      ipu::LogContext ctx{absl::StrCat("Loading infeed '", infeed.Name(),
-                                       "' from ",
-                                       infeed_data.files.at(infeed.Name()))};
+      ipu::LogContext ctx{absl::StrCat("Loading infeed '", infeed.Name(), "'")};
       extra_infeeds.erase(absl::c_find(extra_infeeds, infeed.Name()));
-      infeed.LoadDataFromBin(infeed_data.files.at(infeed.Name()));
+      infeed.IntializeDataSources(infeed_data.files.at(infeed.Name()));
     }
   }
   if (strict && (!infeeds_missing.empty() || !extra_infeeds.empty())) {
     absl::c_for_each(infeeds_missing, [](const std::string& infeed) {
       std::cout << "ERROR: No data provided for infeed_data '" << infeed
-                << std::endl
+                << "'\n"
                 << std::flush;
     });
     absl::c_for_each(extra_infeeds, [](const std::string& infeed) {
@@ -358,17 +367,6 @@ int main(int argc, char** argv) {
     }
   }
   if (!output_folder.empty()) {
-    DIR* dp = opendir(output_folder.c_str());
-    if (dp == NULL) {
-      if (mkdir(output_folder.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) !=
-          0) {
-        std::cout << "Failed to create output folder '" << output_folder
-                  << "'\n";
-        return -1;
-      }
-    } else {
-      closedir(dp);
-    }
     for (auto& output : tensors.Outputs()) {
       output.SaveDataToJsonFile(
           absl::StrCat(output_folder, "/", output.Info().Name(), ".data"));

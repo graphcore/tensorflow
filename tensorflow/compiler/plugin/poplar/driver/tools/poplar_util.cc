@@ -486,17 +486,31 @@ Status SaveExecutableMetadataJson(const std::string& filename,
 
   Json::Value outfeeds;
   for (auto outfeed : outfeed_infos) {
-    if (outfeed.shape.IsTuple()) {
+    if (!outfeed.shape.IsTuple()) {
       return xla::FailedPrecondition(
-          "Nested tuples in outfeed not supported: shape for %s to not be a "
-          "tuple",
+          "Expected the shape of the outfeed %s to be a tuple.",
           outfeed.config.feed_id());
     }
+    Json::Value streams;
     Json::Value feed;
     feed["name"] = outfeed.config.feed_id();
-    feed["handle"] = GetOutfeedCopyHandle(outfeed.stream_prefix, 0);
-    feed["data_type"] = PrimitiveType_Name(outfeed.shape.element_type());
-    feed["shape"] = DimensionsToJson(outfeed.shape.dimensions());
+    for (auto shape : outfeed.shape.tuple_shapes()) {
+      if (shape.IsTuple()) {
+        return xla::FailedPrecondition(
+            "Nested tuples in outfeed not supported: shape for tuple %d in %s "
+            "is a tuple %s",
+            streams.size(), outfeed.config.feed_id(), shape.ToString());
+      }
+      Json::Value stream;
+      stream["name"] =
+          absl::StrCat(outfeed.config.feed_id(), ".", streams.size());
+      stream["handle"] =
+          GetOutfeedCopyHandle(outfeed.stream_prefix, streams.size());
+      stream["data_type"] = PrimitiveType_Name(shape.element_type());
+      stream["shape"] = DimensionsToJson(shape.dimensions());
+      streams.append(stream);
+    }
+    feed["streams"] = streams;
     outfeeds.append(feed);
   }
 
