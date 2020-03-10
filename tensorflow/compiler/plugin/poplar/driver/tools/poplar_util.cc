@@ -486,15 +486,13 @@ Status SaveExecutableMetadataJson(const std::string& filename,
 
   Json::Value outfeeds;
   for (auto outfeed : outfeed_infos) {
-    if (!outfeed.shape.IsTuple()) {
-      return xla::FailedPrecondition(
-          "Expected the shape of the outfeed %s to be a tuple.",
-          outfeed.config.feed_id());
-    }
+    auto shapes = outfeed.shape.IsTuple()
+                      ? outfeed.shape.tuple_shapes()
+                      : std::vector<xla::Shape>({outfeed.shape});
     Json::Value streams;
     Json::Value feed;
     feed["name"] = outfeed.config.feed_id();
-    for (auto shape : outfeed.shape.tuple_shapes()) {
+    for (auto shape : shapes) {
       if (shape.IsTuple()) {
         return xla::FailedPrecondition(
             "Nested tuples in outfeed not supported: shape for tuple %d in %s "
