@@ -130,14 +130,17 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
     outfeeds = streams.get("outfeeds", [])
     self.assertEqual(len(outfeeds), len(expected_outfeeds or []))
-    for idx, stream in enumerate(outfeeds):
+    for idx, outfeed in enumerate(outfeeds):
       expected_tensor, expected_name = expected_outfeeds[idx]
-      self.assertEqual(
-          expected_tensor.dtype,
-          PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
-      self.assertEqual(expected_name, stream.get("name"))
-      # First dimension is the number of tensors in the feed: ignore it
-      self.assertEqual(list(expected_tensor.shape[1:]), stream.get("shape"))
+      self.assertEqual(expected_name, outfeed.get("name"))
+      for stream_idx, stream in enumerate(outfeed.get("streams")):
+        self.assertEqual("%s.%d" % (expected_name, stream_idx),
+                         stream.get("name"))
+        self.assertEqual(
+            expected_tensor.dtype,
+            PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
+        # First dimension is the number of tensors in the feed: ignore it
+        self.assertEqual(list(expected_tensor.shape[1:]), stream.get("shape"))
 
   @test_util.deprecated_graph_mode_only
   def testSimpleFeedsInfoSerialization(self):
