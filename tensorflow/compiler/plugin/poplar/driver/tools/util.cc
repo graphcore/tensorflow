@@ -98,6 +98,10 @@ HloSharding GetShardingForOperand(const HloInstruction* inst, int operand) {
         return comp->parameter_instruction(0)->sharding();
       }
     }
+    case HloOpcode::kSendDone: {
+      // Sharding decided by the input to Send.
+      return inst->operand(0)->operand(0)->sharding();
+    }
     case HloOpcode::kTuple: {
       auto s = inst->sharding();
       return s.GetSubSharding(inst->shape(), {operand});

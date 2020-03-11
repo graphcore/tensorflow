@@ -1648,6 +1648,83 @@ ENTRY e {
   }
 }
 
+TEST_F(ShardingPassTest, TestSendSharding) {
+  std::string hlo_string = R"(
+HloModule root
+
+ENTRY e {
+  arg0 = f32[] constant(0), sharding={maximal device=0}
+  arg1 = f32[] constant(1), sharding={maximal device=1}
+  send0_token = token[] after-all()
+  send0 = (f32[], u32[], token[]) send(f32[] arg0, token[] send0_token), channel_id=1, is_host_transfer=true
+  send0_done = token[] send-done((f32[], u32[], token[]) send0), channel_id=1, is_host_transfer=true
+  send1_token = token[] after-all()
+  send1 = (f32[], u32[], token[]) send(f32[] arg1, token[] send1_token), channel_id=2, is_host_transfer=true
+  send1_done = token[] send-done((f32[], u32[], token[]) send1), channel_id=2, is_host_transfer=true
+  ROOT ret = (f32[], f32[]) tuple(f32[] arg0, f32[] arg1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  EXPECT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  HloInstruction* send0 = FindInstruction(module, "send0_done");
+  ASSERT_NE(send0, nullptr);
+  EXPECT_EQ(send0->sharding().GetUniqueDevice(), 0);
+
+  HloInstruction* send1 = FindInstruction(module, "send1_done");
+  ASSERT_NE(send1, nullptr);
+  EXPECT_EQ(send1->sharding().GetUniqueDevice(), 1);
+}
+
+TEST_F(ShardingPassTest, TestRecvSharding) {
+  std::string hlo_string = R"(
+HloModule root
+
+ENTRY e {
+  arg0 = f32[] constant(0), sharding={maximal device=0}
+  arg1 = f32[] constant(1), sharding={maximal device=1}
+  recv0_token = token[] after-all()
+  recv0 = (f32[], u32[], token[]) recv(token[] recv0_token), channel_id=1, is_host_transfer=true
+  recv0_done = (f32[], token[]) recv-done((f32[], u32[], token[]) recv0), channel_id=1, is_host_transfer=true
+  recv0_data = f32[] get-tuple-element((f32[], token[]) recv0_done), index=0
+  recv0_mul = f32[] multiply(f32[] arg0, f32[] recv0_data)
+  recv1_token = token[] after-all()
+  recv1 = (f32[], u32[], token[]) recv(token[] recv1_token), channel_id=2, is_host_transfer=true
+  recv1_done = (f32[], token[]) recv-done((f32[], u32[], token[]) recv1), channel_id=2, is_host_transfer=true
+  recv1_data = f32[] get-tuple-element((f32[], token[]) recv1_done), index=0
+  recv1_mul = f32[] multiply(f32[] arg1, f32[] recv1_data)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  EXPECT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  HloInstruction* recv0 = FindInstruction(module, "recv0_done");
+  ASSERT_NE(recv0, nullptr);
+  EXPECT_EQ(recv0->sharding().GetUniqueDevice(), 0);
+
+  HloInstruction* recv1 = FindInstruction(module, "recv1_done");
+  ASSERT_NE(recv1, nullptr);
+  EXPECT_EQ(recv1->sharding().GetUniqueDevice(), 1);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

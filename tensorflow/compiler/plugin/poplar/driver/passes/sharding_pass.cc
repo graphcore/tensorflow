@@ -95,6 +95,11 @@ bool HasShardingForOperand(const HloInstruction* inst, int operand) {
       }
       break;
     }
+    case HloOpcode::kSendDone: {
+      // Sharding decided by the input to Send.
+      sharding_inst = inst->operand(0)->operand(0);
+      break;
+    }
     case HloOpcode::kGetTupleElement: {
       // A GTE must be processed in collection with other GTEs, so claim that
       // there is no sharding information available on its input. See the fn
@@ -169,37 +174,41 @@ bool CopyShardingFromUsers(HloInstruction* inst) {
     return false;
   }
 
-  // Otherwise we need to find all of the GTEs that make up the tuple.  We don't
-  // need to a GTE for every tuple output, just all of the ones that are present
-  // in the graph.  A Tuple may have some of its outputs unused.
-  int size = ShapeUtil::TupleElementCount(inst->shape());
-  std::vector<HloInstruction*> gtes(size);
+  // Otherwise we need to find the consumer of each element that makes
+  // up the tuple. A tuple may have some of its elements unused.
+  const int tuple_size = ShapeUtil::TupleElementCount(inst->shape());
+  std::vector<HloInstruction*> tuple_users(tuple_size);
   for (auto* u : inst->users()) {
     if (u->opcode() == HloOpcode::kGetTupleElement) {
-      if (u->tuple_index() < size) {
-        gtes[u->tuple_index()] = u;
+      if (u->tuple_index() < tuple_size) {
+        tuple_users[u->tuple_index()] = u;
       }
+    } else if (u->opcode() == HloOpcode::kRecvDone) {
+      // All the tuple elements from Recv are consumed by RecvDone.
+      CHECK_EQ(inst->opcode(), HloOpcode::kRecv);
+      CHECK_EQ(inst->user_count(), 1);
+      tuple_users.assign(tuple_size, u);
     }
   }
 
-  std::vector<HloSharding> gte_sharding;
-  for (int gte = 0; gte < size; gte++) {
-    auto* user = gtes[gte];
+  std::vector<HloSharding> tuple_sharding;
+  for (int tuple_index = 0; tuple_index < tuple_size; ++tuple_index) {
+    auto* user = tuple_users[tuple_index];
     if (user == nullptr) {
       // Unused tuple outputs are just assigned a default sharding
       auto s = GetDefaultSharding(
-          ShapeUtil::GetTupleElementShape(inst->shape(), gte));
-      gte_sharding.push_back(s);
+          ShapeUtil::GetTupleElementShape(inst->shape(), tuple_index));
+      tuple_sharding.push_back(s);
     } else {
       if (user->has_sharding()) {
-        gte_sharding.push_back(GetShardingForOperand(user, 0));
+        tuple_sharding.push_back(GetShardingForOperand(user, 0));
       } else {
         return false;
       }
     }
   }
 
-  SetTupleShardingFromVector(inst, gte_sharding);
+  SetTupleShardingFromVector(inst, tuple_sharding);
   return true;
 }
 
