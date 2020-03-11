@@ -145,8 +145,3 @@ http_archive(
         "https://storage.googleapis.com/download.tensorflow.org/models/speech_commands_v0.01.zip",
     ],
 )
-
-local_repository(
-    name = "poprithms",
-    path = "../poprithms/poprithms/poprithms",
-)
