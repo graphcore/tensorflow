@@ -297,6 +297,8 @@ ABSL_FLAG(int, ckpt_frequency, 1, "Frequency at which to create checkpoints");
 ABSL_FLAG(bool, print_output, false,
           "Print the content of the output buffers to stdout");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
+ABSL_FLAG(bool, load_ckpt, false,
+          "Load the checkpoint config from the weights folder");
 ABSL_FLAG(bool, strict, false,
           "Enable strict mode: all the input data files must be provided by "
           "--input_data.");
@@ -338,6 +340,7 @@ int main(int argc, char** argv) {
   const InfeedFiles infeed_data = absl::GetFlag(FLAGS_infeed_data);
   const bool print_output = absl::GetFlag(FLAGS_print_output);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
+  const bool load_ckpt = absl::GetFlag(FLAGS_load_ckpt);
   const bool strict = absl::GetFlag(FLAGS_strict);
   const int iterations = absl::GetFlag(FLAGS_iterations);
   const int ckpt_frequency = absl::GetFlag(FLAGS_ckpt_frequency);
@@ -372,7 +375,6 @@ int main(int argc, char** argv) {
   tensors.LoadParameters(weights_path);
   std::list<ipu::Tensor*> inputs = tensors.InputDataTensors();
   std::list<std::string> extra_inputs, inputs_missing;
-  std::map<ipu::Tensor*, std::shared_ptr<ipu::InfeedStream>> variable_inputs;
   absl::c_transform(input_data.files, std::back_inserter(extra_inputs),
                     [](const std::pair<std::string, std::string>& pair) {
                       return pair.first;
@@ -388,8 +390,7 @@ int main(int argc, char** argv) {
         input->LoadDataFromJson(filename);
       } else {
         // If the file isn't a JSON file then assume it is an InfeedStream
-        variable_inputs.emplace(input,
-                                std::make_shared<ipu::InfeedStream>(filename));
+        tensors.MakeInputVariable(*input, filename);
       }
     }
   }
@@ -457,6 +458,11 @@ int main(int argc, char** argv) {
     });
   }
 
+  if (load_ckpt) {
+    tensors.LoadCheckpointMetadataFromJson(
+        absl::StrCat(weights_path, "/ckpt.json"));
+  }
+
   tensors.ConnectStreams(exe);
 
   ipu::SeedManager seeds{tensors.Config()};
@@ -486,14 +492,14 @@ int main(int argc, char** argv) {
                    "Failed to create output folder '" << iteration_folder);
     }
     if (create_ckpt) {
+      tensors.CreateCheckpointMetadataJson(
+          absl::StrCat(iteration_folder, "/ckpt.json"));
       tensors.SetOutfeedsFolder(iteration_folder);
     } else {
       tensors.IgnoreOutfeeds();
     }
-    for (auto input : variable_inputs) {
-      input.second->LoadTensor(input.first->Data());
-      input.second->MoveToNextTensor();
-    }
+    tensors.UpdateVariableInputs();
+
     exe.Run();
 
     if (print_output || create_ckpt) {
