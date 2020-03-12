@@ -58,6 +58,51 @@ def _poputil_block_recompute_backward(op, grads):
   return grads
 
 
+@ops.RegisterGradient("IpuUserReadWriteOp")
+def _poputil_cpu_user_operation_layer_backward(op, *grads):
+  library_path = op.get_attr("library_path").decode("utf-8")
+  op_name = op.get_attr("op_name").decode("utf-8")
+
+  separate_grads = op.get_attr("separate_gradients")
+
+  result = []
+  if separate_grads:
+    for t in enumerate(op.inputs):
+      outs = {
+          "output_types": [t[1].dtype],
+          "output_shapes": [t[1].shape],
+      }
+      o = gen_poputil_ops.ipu_user_read_write_op(list(grads) +
+                                                 list(op.outputs) +
+                                                 list(op.inputs),
+                                                 library_path=library_path,
+                                                 op_name=op_name + "_grad",
+                                                 name=op.name + "_grad",
+                                                 separate_gradients=True,
+                                                 is_gradient=True,
+                                                 partial_derivative_index=t[0],
+                                                 **outs)[0]
+      result.append(o)
+  else:
+    outs = {
+        "output_types": [t.dtype for t in op.inputs],
+        "output_shapes": [t.shape for t in op.inputs],
+    }
+
+    result = gen_poputil_ops.ipu_user_read_write_op(list(grads) +
+                                                    list(op.outputs) +
+                                                    list(op.inputs),
+                                                    library_path=library_path,
+                                                    op_name=op_name + "_grad",
+                                                    name=op.name + "_grad",
+                                                    separate_gradients=False,
+                                                    is_gradient=True,
+                                                    partial_derivative_index=0,
+                                                    **outs)
+
+  return result
+
+
 @ops.RegisterGradient("IpuUserOp")
 def _poputil_precompiled_user_op_layer_backward(op, *grads):
   library_path = op.get_attr("library_path").decode("utf-8")

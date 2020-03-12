@@ -593,6 +593,16 @@ cc_binary(
 )
 
 cc_binary(
+    name = "libadd_tensors_custom.so",
+    srcs = ["tests/add_tensors_custom.cc"],
+    copts = ["-fexceptions"],
+    linkshared = True,
+    deps = [
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+cc_binary(
     name = "libadd_incrementing_custom_with_metadata.so",
     srcs = ["tests/add_incrementing_custom_with_metadata.cc"],
     copts = ["-fexceptions"],
@@ -620,6 +630,7 @@ tf_py_test(
     data = [
         ":libadd_incrementing_custom.so",
         ":libadd_incrementing_custom_with_metadata.so",
+        ":libadd_tensors_custom.so",
     ],
 )
 

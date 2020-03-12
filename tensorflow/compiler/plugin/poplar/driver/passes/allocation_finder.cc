@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_location.h"
@@ -95,8 +96,13 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
         IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst);
     const bool is_remote_buffer_load =
         IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
+    const bool is_rw_user_op =
+        IsPoplarInstruction(PoplarOp::UserOp)(inst)
+            ? Cast<HloUserOpInstruction>(inst)->IsReadWrite()
+            : false;
 
-    if (is_remap_deduce || is_host_embedding_lookup || is_remote_buffer_load) {
+    if (is_remap_deduce || is_host_embedding_lookup || is_remote_buffer_load ||
+        is_rw_user_op) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocating_instructions.push_back(TensorLocation{inst, i});
