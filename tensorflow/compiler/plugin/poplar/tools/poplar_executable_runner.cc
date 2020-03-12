@@ -337,6 +337,16 @@ class InfeedCallback : public poplar::StreamCallback {
  private:
   InfeedStream& stream_;
 };
+
+void WriteJsonToStream(const Json::Value& root, std::ostream* sout) {
+  Json::StreamWriterBuilder json_builder;
+  json_builder["indentation"] = "";
+  json_builder["commentStyle"] = "None";
+
+  std::unique_ptr<Json::StreamWriter> writer(json_builder.newStreamWriter());
+  writer->write(root, sout);
+}
+
 }  // namespace
 
 LogContext::LogContext(const std::string& context) : saved_context_(context_) {
@@ -421,12 +431,8 @@ void Tensor::SaveDataToJsonStream(std::ostream* sout) const {
   } else {
     root = DimensionToJson(0, info_.Shape(), it);
   }
-  Json::StreamWriterBuilder json_builder;
-  json_builder["indentation"] = "";
-  json_builder["commentStyle"] = "None";
 
-  std::unique_ptr<Json::StreamWriter> writer(json_builder.newStreamWriter());
-  writer->write(root, sout);
+  WriteJsonToStream(root, sout);
 }
 
 Executable::Executable(const std::string& executable_filename) {
@@ -477,11 +483,11 @@ std::string Executable::StreamsList() const {
 void Executable::Load(const poplar::Device& device) {
   std::cout << "Loading program onto the device\n";
   engine_->load(device);
-  PRINT_INFO("Running HOST_TO_DEVICE");
-  engine_->run(PoplarProgramType::HOST_TO_DEVICE);
 }
 
 void Executable::Run() {
+  PRINT_INFO("Running HOST_TO_DEVICE");
+  engine_->run(PoplarProgramType::HOST_TO_DEVICE);
   PRINT_INFO("Running MAIN_SEQUENCE");
   engine_->run(PoplarProgramType::MAIN_SEQUENCE);
 }
@@ -533,6 +539,8 @@ poplar::Device DeviceManager::GetDevice(int64_t num_ipus,
   }
   ERROR("Failed to attach to any of the IPU devices");
 }
+
+void TensorInfo::SetType(TensorType type) { type_ = type; }
 
 TensorInfo::TensorInfo(const Json::Value& info, TensorType type)
     : TensorInfo(
@@ -632,12 +640,66 @@ TensorManager::TensorManager(const JsonParser& metadata)
       [](const Json::Value& outfeed) { return Outfeed{outfeed}; });
 }
 
+void TensorManager::LoadCheckpointMetadataFromJson(
+    const std::string& filename) {
+  LogContext ctx(
+      absl::StrCat("Loading checkpoint metadata from JSON file ", filename));
+  JsonParser parser(filename);
+  const Json::Value& infeed_positions = parser.Root()["infeeds"];
+  absl::c_for_each(infeeds_, [&infeed_positions](Infeed& infeed) {
+    absl::c_for_each(
+        infeed.MutableStreams(), [&infeed_positions](InfeedStream& stream) {
+          auto index = infeed_positions[stream.Info().Handle()];
+          ERROR_ON_MSG(index.isNull(), "Can't find any information for stream '"
+                                           << stream.Info().Handle()
+                                           << "'in the checkpoint metadata");
+          stream.JumpToTensor(index.asInt64());
+        });
+  });
+  const Json::Value& variable_inputs = parser.Root()["variable_inputs"];
+  absl::c_for_each(variable_inputs_, [&variable_inputs](VariableInput& input) {
+    auto index = variable_inputs[input.Handle()];
+    ERROR_ON_MSG(index.isNull(),
+                 "Can't find any information for variable input '"
+                     << input.Handle() << "'in the checkpoint metadata");
+    input.JumpToTensor(index.asInt64());
+  });
+}
+
+void TensorManager::CreateCheckpointMetadataJson(
+    const std::string& filename) const {
+  std::ofstream out(filename);
+  Json::Value root;
+  Json::Value infeeds;
+  absl::c_for_each(infeeds_, [&infeeds](const Infeed& infeed) {
+    absl::c_for_each(infeed.Streams(), [&infeeds](const InfeedStream& stream) {
+      infeeds[stream.Info().Handle()] = stream.TensorIndex();
+    });
+  });
+  if (!infeeds.empty()) {
+    root["infeeds"] = infeeds;
+  }
+  Json::Value variable_inputs;
+  absl::c_for_each(variable_inputs_,
+                   [&variable_inputs](const VariableInput& input) {
+                     variable_inputs[input.Handle()] = input.TensorIndex();
+                   });
+  if (!variable_inputs.empty()) {
+    root["variable_inputs"] = variable_inputs;
+  }
+  WriteJsonToStream(root, &out);
+  out.close();
+}
 void TensorManager::SetOutfeedsFolder(const std::string& output_folder) {
   absl::c_for_each(outfeeds_, [&output_folder](Outfeed& outfeed) {
     outfeed.SetOutputFolder(output_folder);
   });
 }
 
+void TensorManager::UpdateVariableInputs() {
+  absl::c_for_each(variable_inputs_,
+                   [](VariableInput& var) { var.CopyTensorAndIncrement(); });
+}
 void TensorManager::IgnoreOutfeeds() {
   absl::c_for_each(outfeeds_, [](Outfeed& outfeed) { outfeed.IgnoreOutput(); });
 }
@@ -708,6 +770,32 @@ void* Tensor::Data() {
 }
 void* Tensor::DataEnd() { return data_.data() + data_.size(); }
 
+InfeedStream& VariableInput::Stream() { return stream_; }
+
+VariableInput::VariableInput(Tensor& input, const std::string& data_filename)
+    : dst_(input), stream_(input.Info()) {
+  stream_.InitializeDataSource(data_filename);
+}
+
+void VariableInput::CopyTensorAndIncrement() {
+  stream_.LoadTensor(dst_.Data());
+  stream_.MoveToNextTensor();
+}
+
+const std::string& VariableInput::Handle() const {
+  return dst_.Info().Handle();
+}
+
+int64_t VariableInput::TensorIndex() const { return stream_.TensorIndex(); }
+void VariableInput::JumpToTensor(int64_t tensor_index) {
+  stream_.JumpToTensor(tensor_index);
+}
+
+void TensorManager::MakeInputVariable(Tensor& input,
+                                      const std::string& filename) {
+  variable_inputs_.emplace_back(input, filename);
+}
+
 void TensorManager::ConnectStreams(Executable& executable) {
   auto& engine = executable.Engine();
 
@@ -732,7 +820,7 @@ void TensorManager::ConnectStreams(Executable& executable) {
   }
 
   for (auto& infeed : infeeds_) {
-    for (auto& infeed_stream : infeed.Streams()) {
+    for (auto& infeed_stream : infeed.MutableStreams()) {
       for (int replica_id = 0; replica_id < config_.ReplicationCount();
            replica_id++) {
         auto callback = absl::make_unique<InfeedCallback>(infeed_stream);
@@ -849,7 +937,9 @@ void StreamReader::MoveAbsolute(std::ios::streampos position) {
 }
 std::ios::streampos StreamReader::CurrentPosition() { return fd_.tellg(); }
 
-InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {}
+InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {
+  info_.SetType(TensorType::Infeed);
+}
 
 InfeedStream::InfeedStream(const std::string& filename) {
   InitializeDataSource(filename);
@@ -911,6 +1001,14 @@ void InfeedStream::LoadTensor(void* dst) {
   }
   reader_->ReadData(dst, info_.Shape().DataSizeInBytes());
   current_tensor_loaded_ = true;
+}
+
+void InfeedStream::JumpToTensor(int64_t tensor_index) {
+  ERROR_ON(tensor_index >= num_tensors_);
+  reader_->MoveAbsolute(first_tensor_pos_ +
+                        info_.Shape().DataSizeInBytes() * tensor_index);
+  tensor_idx_ = tensor_index;
+  current_tensor_loaded_ = false;
 }
 
 void InfeedStream::MoveToNextTensor() {
@@ -984,7 +1082,9 @@ void Outfeed::IgnoreOutput() {
                    [](OutfeedStream& stream) { stream.IgnoreOutput(); });
 }
 
-std::vector<InfeedStream>& Infeed::Streams() { return streams_; }
+std::vector<InfeedStream>& Infeed::MutableStreams() { return streams_; }
+const std::vector<InfeedStream>& Infeed::Streams() const { return streams_; }
+
 const std::string& Infeed::Name() const { return name_; }
 
 Infeed::Infeed(const Json::Value& infeed) : name_(infeed["name"].asString()) {

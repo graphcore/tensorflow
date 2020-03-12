@@ -74,10 +74,12 @@ class LogContext {
   const std::string saved_context_;
 };
 
-class StreamReader;
-class StreamWriter;
 class Infeed;
 class Outfeed;
+class StreamReader;
+class StreamWriter;
+class VariableInput;
+
 enum DataType {
   F32,
   F16,
@@ -183,6 +185,7 @@ class TensorInfo {
   const TensorShape& Shape() const;
   const std::string& Name() const;
   const std::string& Handle() const;
+  void SetType(TensorType type);
   TensorType Type() const;
   std::string ToString() const;
   void ToStream(StreamWriter& out) const;
@@ -239,6 +242,8 @@ class TensorManager {
   const std::vector<Tensor>& Inputs() const;
   const std::vector<Tensor>& Outputs() const;
   const std::vector<Infeed>& Infeeds() const;
+  void CreateCheckpointMetadataJson(const std::string& filename) const;
+  void LoadCheckpointMetadataFromJson(const std::string& filename);
   void SetOutfeedsFolder(const std::string& output_folder);
   void IgnoreOutfeeds();
   std::vector<Infeed>& MutableInfeeds();
@@ -246,6 +251,8 @@ class TensorManager {
   void AllocateTensors();
   std::list<Tensor*> InputDataTensors();
   void LoadParameters(const std::string& path);
+  void MakeInputVariable(Tensor& input, const std::string& filename);
+  void UpdateVariableInputs();
   void SaveOutputsToJsonFile(const std::string& path);
   void ConnectStreams(Executable& executable);
 
@@ -254,6 +261,7 @@ class TensorManager {
   std::vector<Tensor> outputs_;
   std::vector<Infeed> infeeds_;
   std::vector<Outfeed> outfeeds_;
+  std::vector<VariableInput> variable_inputs_;
   IpuConfig config_;
 };
 
@@ -275,6 +283,7 @@ class InfeedStream {
   void LoadTensor(void* dst);
   void ResetToFirstTensor();
   void MoveToNextTensor();
+  void JumpToTensor(int64_t tensor_index);
   int64_t NumTensors() const;
   int64_t TensorIndex() const;
   std::string ToString();
@@ -288,12 +297,27 @@ class InfeedStream {
   std::shared_ptr<StreamReader> reader_;
 };
 
+class VariableInput {
+ public:
+  VariableInput(Tensor& input, const std::string& data_filename);
+  void CopyTensorAndIncrement();
+  InfeedStream& Stream();
+  const std::string& Handle() const;
+  int64_t TensorIndex() const;
+  void JumpToTensor(int64_t tensor_index);
+
+ private:
+  Tensor& dst_;
+  InfeedStream stream_;
+};
+
 class Infeed {
  public:
   explicit Infeed(const Json::Value& infeed);
   void InitializeDataSources(const std::string& filename);
   const std::string& Name() const;
-  std::vector<InfeedStream>& Streams();
+  std::vector<InfeedStream>& MutableStreams();
+  const std::vector<InfeedStream>& Streams() const;
   static std::string StreamFilename(const std::string& filename,
                                     int64_t stream_idx);
 
