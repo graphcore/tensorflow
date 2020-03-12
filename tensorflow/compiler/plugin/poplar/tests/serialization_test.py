@@ -213,16 +213,15 @@ class IpuSerializationTest(xla_test.XLATestCase):
             module_hash = m.group(1)
           if name == module_hash + ".json":
             metadata = json.load(open(os.path.join(folder, name), "r"))
-            self._validateStreams(
-                metadata, [(bias, "input_data"), (inp, "input_data"),
-                           (weights, "parameter")],
-                [(tensor_spec.TensorSpec(shape=[],
-                                         dtype=tf.float32,
-                                         name="XLA_Retvals:0"), "output_data"),
-                 (tensor_spec.TensorSpec(
-                     shape=[8, 8, 3, 35],
-                     dtype=tf.float32,
-                     name="XLA_Retvals:0"), "parameter_out")])
+            self._validateStreams(metadata, [
+                (bias, "input_data"), (inp, "input_data"),
+                (weights, "parameter")
+            ], [(tensor_spec.TensorSpec(shape=[],
+                                        dtype=tf.float32,
+                                        name="XLA_Retvals:0"), "output_data"),
+                (tensor_spec.TensorSpec(
+                    shape=[8, 8, 3, 35], dtype=tf.float32,
+                    name="vs/weights:0"), "parameter_out")])
           else:
             self.assertEqual(name, "%s.ipu_bin.poplar_exec" % module_hash)
 

@@ -88,6 +88,7 @@ using ByteVector = std::vector<uint8_t>;
 
 class TensorShape {
  public:
+  TensorShape() = default;
   explicit TensorShape(DataType type, const Json::Value& array);
   explicit TensorShape(StreamReader& in);
   TensorShape(const std::vector<int64_t>& shape, DataType type);
@@ -125,9 +126,11 @@ class Executable {
  public:
   explicit Executable(const std::string& executable_filename);
   poplar::Engine& Engine();
-  void PrintStreams() const;
+  std::string StreamsList() const;
   StreamList GetStreams() const;
-  void LoadAndRun(const poplar::Device& device);
+  void Load(const poplar::Device& device);
+  void Run();
+  void DeviceToHostCopy();
 
  private:
   std::unique_ptr<poplar::Engine> engine_;
@@ -144,7 +147,9 @@ class DeviceManager {
 
 /* Tensor types to connect to the Poplar binary:
  *
+ * NotSet: Used to detect uninitialized Tensors
  * Parameter: Parameter to an op, e.g weights.
+ * ParameterOut: Parameters produced by the graph. e.g updated weights.
  * InputData: Data to feed to the input of the graph.
  * OutputData: Data produced by the graph, e.g label probabilities.
  * Infeed: Similar to InputData but represents a collection of inputs. Loops are
@@ -152,21 +157,28 @@ class DeviceManager {
  * OutputData but if you use an infeed as an input you will usually get a feed
  * as an output.
  */
-enum class TensorType { Parameter, InputData, OutputData, Infeed, Outfeed };
+enum class TensorType {
+  NotSet,
+  Parameter,
+  ParameterOut,
+  InputData,
+  OutputData,
+  Infeed,
+  Outfeed
+};
 
 class TensorInfo {
  public:
+  TensorInfo() = default;
   explicit TensorInfo(const Json::Value& info);
   TensorInfo(const Json::Value& info, TensorType type);
   TensorInfo(const std::string& name, const std::string& handle,
              const TensorShape& shape, TensorType type);
   explicit TensorInfo(StreamReader& in);
 
-  /* Return the filename where the values for this parameter are stored.
-   *
-   * TensorType must be Parameter.
+  /* Return the filename where the values for this Tensors are stored.
    */
-  std::string ParameterFilename() const;
+  std::string Filename() const;
 
   const TensorShape& Shape() const;
   const std::string& Name() const;
@@ -180,7 +192,7 @@ class TensorInfo {
   std::string name_;
   std::string handle_;
   TensorShape shape_;
-  TensorType type_;
+  TensorType type_{TensorType::NotSet};
 };
 
 class Tensor {
@@ -223,16 +235,18 @@ class JsonParser {
 
 class TensorManager {
  public:
-  explicit TensorManager(const JsonParser& metadata,
-                         const std::string& output_folder);
+  explicit TensorManager(const JsonParser& metadata);
   const std::vector<Tensor>& Inputs() const;
   const std::vector<Tensor>& Outputs() const;
   const std::vector<Infeed>& Infeeds() const;
+  void SetOutfeedsFolder(const std::string& output_folder);
+  void IgnoreOutfeeds();
   std::vector<Infeed>& MutableInfeeds();
   const IpuConfig& Config() const;
   void AllocateTensors();
   std::list<Tensor*> InputDataTensors();
   void LoadParameters(const std::string& path);
+  void SaveOutputsToJsonFile(const std::string& path);
   void ConnectStreams(Executable& executable);
 
  private:
@@ -254,14 +268,16 @@ class SeedManager {
 
 class InfeedStream {
  public:
+  explicit InfeedStream(const std::string& filename);
   explicit InfeedStream(const TensorInfo& info);
   const TensorInfo& Info() const;
-  void IntializeDataSource(const std::string& filename);
+  void InitializeDataSource(const std::string& filename);
   void LoadTensor(void* dst);
   void ResetToFirstTensor();
   void MoveToNextTensor();
   int64_t NumTensors() const;
   int64_t TensorIndex() const;
+  std::string ToString();
 
  private:
   TensorInfo info_;
@@ -275,7 +291,7 @@ class InfeedStream {
 class Infeed {
  public:
   explicit Infeed(const Json::Value& infeed);
-  void IntializeDataSources(const std::string& filename);
+  void InitializeDataSources(const std::string& filename);
   const std::string& Name() const;
   std::vector<InfeedStream>& Streams();
   static std::string StreamFilename(const std::string& filename,
@@ -288,24 +304,24 @@ class Infeed {
 
 class OutfeedStream {
  public:
-  explicit OutfeedStream(const TensorInfo& info,
-                         const std::string& output_folder);
+  explicit OutfeedStream(const TensorInfo& info);
   const TensorInfo& Info() const;
   void WriteTensor(void* src, int64_t replication_count);
-  int64_t NumTensors() const;
+  void SetOutputFolder(const std::string& output_folder);
+  void IgnoreOutput();
 
  private:
   TensorInfo info_;
-  int64_t num_tensors_;
   std::shared_ptr<StreamWriter> writer_;
 };
 
 class Outfeed {
  public:
-  explicit Outfeed(const Json::Value& Outfeed,
-                   const std::string& output_folder);
+  explicit Outfeed(const Json::Value& Outfeed);
   const std::string& Name() const;
   std::vector<OutfeedStream>& Streams();
+  void SetOutputFolder(const std::string& output_folder);
+  void IgnoreOutput();
 
  private:
   const std::string name_;

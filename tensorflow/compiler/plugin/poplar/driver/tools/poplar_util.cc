@@ -17,6 +17,7 @@ limitations under the License.
 #include <algorithm>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <regex>
 
 #include "absl/container/inlined_vector.h"
@@ -413,6 +414,7 @@ Status SaveExecutableMetadataJson(const std::string& filename,
   const OutfeedInfos& outfeed_infos = res.annotations.outfeed_infos;
 
   Json::Value inputs;
+  std::map<std::string, std::string> params_handle_map;
   for (auto input : io_map.GetEntryInputInfos()) {
     Json::Value stream;
     if (input.Shape().IsTuple()) {
@@ -427,6 +429,8 @@ Status SaveExecutableMetadataJson(const std::string& filename,
       stream["type"] = "input_data";
     } else if (input.IsResource()) {
       stream["type"] = "parameter";
+      params_handle_map[GetInputCopyHandle(inputs.size(), 0)] =
+          UnmangleInputName(input.Name());
     }
     inputs.append(stream);
   }
@@ -446,7 +450,11 @@ Status SaveExecutableMetadataJson(const std::string& filename,
     } else if (output.IsResource()) {
       stream["type"] = "parameter_out";
       if (output.IsResourceModified()) {
-        stream["input_handle"] = GetInputCopyHandle(output.GetInputIndex(), 0);
+        const std::string input_handle =
+            GetInputCopyHandle(output.GetInputIndex(), 0);
+        stream["input_handle"] = input_handle;
+        // Override the name to make sure it matches the one from the input.
+        stream["name"] = params_handle_map.at(input_handle);
       }
     }
     outputs.append(stream);
