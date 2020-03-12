@@ -14,39 +14,52 @@
 # =============================================================================
 
 import numpy as np
-import tensorflow as tf
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
 
+from tensorflow.python.client import session
+from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import dtypes
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import gen_stateless_random_ops
+from tensorflow.python.ops import init_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.ops import variables
+from tensorflow.python.ops import variable_scope
 from tensorflow.python import ipu
 
 
 class PoprandSameSeedTest(xla_test.XLATestCase):
   def testUserOpMetadata(self):
     def my_net():
-      x = tf.get_variable(
+      x = variable_scope.get_variable(
           op.__name__ + 'x',
           shape=[3],
-          dtype=tf.int32,
-          initializer=tf.constant_initializer(5),
+          dtype=dtypes.int32,
+          initializer=init_ops.constant_initializer(5),
           use_resource=True)
-      x_as_array = tf.TensorArray(tf.int32, 3, element_shape=[]).unstack(x)
+      x_as_array = tensor_array_ops.TensorArray(dtypes.int32,
+                                                3,
+                                                element_shape=[]).unstack(x)
 
       def get_random_numbers():
         def loop_body(i, _):
           epsilon = op([5],
-                       seed=tf.stack([0, x_as_array.read(i)]),
-                       dtype=tf.float32)
-          return tf.add(i, 1), epsilon
+                       seed=array_ops.stack([0, x_as_array.read(i)]),
+                       dtype=dtypes.float32)
+          return math_ops.add(i, 1), epsilon
 
         condition = lambda i, _: i < 1
 
-        _, epsilon = tf.while_loop(
+        _, epsilon = control_flow_ops.while_loop(
             cond=condition,
             body=loop_body,
-            loop_vars=(tf.constant(0, dtype=tf.int32),
-                       tf.constant(0.0, shape=[5], dtype=tf.float32)),
+            loop_vars=(constant_op.constant(0, dtype=dtypes.int32),
+                       constant_op.constant(0.0,
+                                            shape=[5],
+                                            dtype=dtypes.float32)),
             parallel_iterations=1,
             maximum_iterations=1,
             back_prop=True)
@@ -60,8 +73,9 @@ class PoprandSameSeedTest(xla_test.XLATestCase):
       return output
 
     ops = [
-        tf.random.stateless_normal, tf.random.stateless_truncated_normal,
-        tf.random.stateless_uniform
+        gen_stateless_random_ops.random.stateless_normal,
+        gen_stateless_random_ops.random.stateless_truncated_normal,
+        gen_stateless_random_ops.random.stateless_uniform
     ]
     for op in ops:
       with ipu.scopes.ipu_scope('/device:IPU:0'):
@@ -70,7 +84,7 @@ class PoprandSameSeedTest(xla_test.XLATestCase):
       cfg = ipu.utils.create_ipu_config()
       ipu.utils.configure_ipu_system(cfg)
 
-      with tf.Session() as sess:
+      with session.Session() as sess:
         sess.run(variables.global_variables_initializer())
         res = sess.run(model)
 

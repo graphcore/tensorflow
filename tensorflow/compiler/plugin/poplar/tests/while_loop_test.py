@@ -10,6 +10,7 @@ import test_utils as tu
 
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import random_seed
@@ -21,13 +22,13 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
+from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import momentum
 from tensorflow.python.platform import googletest
 from tensorflow.compat.v1 import disable_v2_behavior
-import tensorflow as tf
 
 disable_v2_behavior()
 
@@ -378,23 +379,23 @@ class WhileLoopTest(xla_test.XLATestCase):
   def testWhileLoopInplaceAlias(self):
     def my_net():
 
-      coordinates = tf.constant(0.1, shape=[5], dtype=tf.float32)
-      ta = tf.TensorArray(coordinates.dtype,
-                          coordinates.get_shape()[0],
-                          element_shape=[]).unstack(coordinates)
+      coordinates = constant_op.constant(0.1, shape=[5], dtype=dtypes.float32)
+      ta = tensor_array_ops.TensorArray(coordinates.dtype,
+                                        coordinates.get_shape()[0],
+                                        element_shape=[]).unstack(coordinates)
 
       def loop_body(i, summation):
         factor = 0.5
-        summand = ta.read(i) * factor * tf.constant(1., shape=[2])
+        summand = ta.read(i) * factor * constant_op.constant(1., shape=[2])
         # if we don't use the TensorArray but just hardcode the constant 0.01 the problem goes away
-        return tf.add(i, 1), tf.add(summation, summand)
+        return math_ops.add(i, 1), math_ops.add(summation, summand)
 
-      return tf.while_loop(cond=lambda i, _: i < 5,
-                           body=loop_body,
-                           loop_vars=(tf.constant(0, dtype=tf.int32),
-                                      tf.constant(0.0,
-                                                  shape=[2],
-                                                  dtype=tf.float32)))[1]
+      return control_flow_ops.while_loop(
+          cond=lambda i, _: i < 5,
+          body=loop_body,
+          loop_vars=(constant_op.constant(0, dtype=dtypes.int32),
+                     constant_op.constant(0.0, shape=[2],
+                                          dtype=dtypes.float32)))[1]
 
     # Checks that the 'add' is not in-place. Output 0 is an identical
     # copy of input 1, and output 1 is not an alias of anything.

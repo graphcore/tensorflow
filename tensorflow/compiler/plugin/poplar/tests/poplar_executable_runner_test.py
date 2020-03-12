@@ -24,16 +24,18 @@ import subprocess
 import sys
 
 import numpy as np
-import tensorflow as tf
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.platform import googletest
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.compat.v1.train import Saver
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import utils
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.platform import test
 from tensorflow.python.ops.variables import global_variables_initializer
+from tensorflow.python.saved_model import saved_model
 
 
 def filesInFolder(folder):
@@ -48,7 +50,7 @@ class MyInitializer:
     self.value = value
 
   def __call__(self, shape, dtype=None):
-    assert dtype in [None, tf.float32]
+    assert dtype in [None, dtypes.float32]
 
     def generator(*args):
       return self.value + sum([10 * idx + v for idx, v in enumerate(args)])
@@ -184,7 +186,7 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         reference_values = sess.run(out, {inp: input_values})
 
         # Export the model & weights.
-        tf.saved_model.save(model, model_path)
+        saved_model.save(model, model_path)
 
       metadata_file = self.getSingleFileWithExt(poplar_binaries_folder, "json")
       executable_file = self.getSingleFileWithExt(poplar_binaries_folder,
@@ -233,7 +235,7 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         sess.run(global_variables_initializer())
 
         # Export the model & weights.
-        tf.saved_model.save(model, model_path_keras)
+        saved_model.save(model, model_path_keras)
         Saver().save(sess, model_path_session)
 
       self.runPythonCommand((("./tensorflow/compiler/plugin/poplar/tools/"
@@ -281,7 +283,7 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         # Run the model once to generate the poplar binaries.
         try:
           sess.run(out, {inp: np.ones((1, 32, 32, 1))})
-        except tf.python.framework.errors_impl.InvalidArgumentError:
+        except errors.InvalidArgumentError:
           pass
 
       metadata_file = self.getSingleFileWithExt(poplar_binaries_folder, "json")
