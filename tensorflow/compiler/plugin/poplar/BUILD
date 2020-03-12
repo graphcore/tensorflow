@@ -2722,6 +2722,29 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "synthetic_data_with_outfeeds_test",
+    size = "small",
+    srcs = ["tests/synthetic_data_with_outfeeds_test.py"],
+    enabled_backends = ["poplar"],
+    shard_count = 2,
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:random_ops",
+        "//tensorflow/python:resource_variable_ops",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+tf_xla_py_test(
     name = "multi_run_test",
     size = "small",
     srcs = ["tests/multi_run_test.py"],
@@ -3797,6 +3820,7 @@ test_suite(
         "subcomputation_graph_caching_test",
         "sync_list_scheduler_test",
         "synthetic_data_test",
+        "synthetic_data_with_outfeeds_test",
         "tensor_array_test",
         "topk_onehot_test",
         "update_op_dependencies_test",
