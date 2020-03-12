@@ -32,6 +32,100 @@ limitations under the License.
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 
+bool FileExists(const std::string& filename) {
+  return std::ifstream(filename).is_open();
+}
+
+bool IsDir(const std::string& path) {
+  DIR* dirp = opendir(path.c_str());
+  if (dirp) {
+    closedir(dirp);
+  }
+  return dirp != NULL;
+}
+
+std::string SecondsToTimeString(int64_t sec) {
+  int hours = sec / 3600;
+  int minutes = (sec - hours * 3600) / 60;
+  sec -= hours * 3600 + minutes * 60;
+  std::stringstream ss;
+  if (hours > 0) {
+    ss << hours << "h ";
+  }
+  if (minutes > 0) {
+    ss << minutes << "m ";
+  }
+  ss << sec << "s";
+  return ss.str();
+}
+
+std::string FileExtension(const std::string& filename,
+                          bool no_extension_allowed = false) {
+  size_t dot_pos = filename.rfind(".");
+  if (dot_pos == std::string::npos) {
+    ERROR_ON_MSG(!no_extension_allowed,
+                 "Invalid filename '" << filename << "': no extension");
+    return "";
+  }
+  return filename.substr(dot_pos + 1);
+}
+
+std::vector<std::string> ListFiles(const std::string& folder,
+                                   std::string* error) {
+  std::vector<std::string> files;
+  DIR* dirp = opendir(folder.c_str());
+  if (dirp == NULL) {
+    *error = absl::StrCat("Can't open folder '", folder, "'");
+    return {};
+  }
+  struct dirent* dp;
+  while ((dp = readdir(dirp)) != NULL) {
+    files.push_back(dp->d_name);
+  }
+  closedir(dirp);
+  return files;
+}
+bool ContainsFilesWithExtension(const std::string& folder,
+                                const std::string& extension,
+                                std::string* error) {
+  auto files = ListFiles(folder, error);
+  if (!error->empty()) {
+    return false;
+  }
+  for (auto file : files) {
+    if (FileExtension(file, true) == extension) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string GetOnlyFileWithExtension(const std::string& folder,
+                                     const std::string& extension,
+                                     std::string* error) {
+  std::string retval;
+  auto files = ListFiles(folder, error);
+  if (!error->empty()) {
+    return {};
+  }
+  for (auto file : files) {
+    if (FileExtension(file, true) == extension) {
+      if (!retval.empty()) {
+        *error =
+            absl::StrCat("More than one file have the extension '", extension,
+                         "': [", absl::StrJoin(files, ", "), "]");
+        return {};
+      }
+      retval = file;
+    }
+  }
+  if (retval.empty()) {
+    *error = absl::StrCat("No file was found with the extension '", extension,
+                          "': [", absl::StrJoin(files, ", "), "]");
+  }
+  return retval;
+}
+
 struct MetadataFile {
   std::string filename;
 };
@@ -91,7 +185,7 @@ bool AbslParseFlag(absl::string_view text, InputFiles* f, std::string* error) {
                             "' in --input_data value '", text, "'");
       return false;
     }
-    if (!std::ifstream(pair[1]).is_open()) {
+    if (!FileExists(pair[1])) {
       *error = absl::StrCat("Cannot open input_data file '", pair[1],
                             "' from --input_data '", text, "'");
       return false;
@@ -125,7 +219,17 @@ bool AbslParseFlag(absl::string_view text, MetadataFile* f,
   if (!absl::ParseFlag(text, &f->filename, error)) {
     return false;
   }
-  if (!std::ifstream(f->filename).is_open()) {
+  if (IsDir(f->filename)) {
+    ERROR_ON(!error->empty());
+    const std::string folder = f->filename;
+    const std::string filename =
+        GetOnlyFileWithExtension(folder, "json", error);
+    if (filename.empty()) {
+      return false;
+    }
+    f->filename = absl::StrCat(folder, "/", filename);
+  }
+  if (!FileExists(f->filename)) {
     *error = absl::StrCat("Could not open metadata file '", f->filename, "'.");
     return false;
   }
@@ -137,7 +241,17 @@ bool AbslParseFlag(absl::string_view text, ExecutableFile* f,
   if (!absl::ParseFlag(text, &f->filename, error)) {
     return false;
   }
-  if (!std::ifstream(f->filename).is_open()) {
+  if (IsDir(f->filename)) {
+    ERROR_ON(!error->empty());
+    const std::string folder = f->filename;
+    const std::string filename =
+        GetOnlyFileWithExtension(folder, "poplar_exec", error);
+    if (filename.empty()) {
+      return false;
+    }
+    f->filename = absl::StrCat(folder, "/", filename);
+  }
+  if (!FileExists(f->filename)) {
     *error = absl::StrCat("Could not open Poplar Executable file '",
                           f->filename, "'");
     return false;
@@ -150,32 +264,18 @@ bool AbslParseFlag(absl::string_view text, WeightsFolder* f,
   if (!absl::ParseFlag(text, &f->folder, error)) {
     return false;
   }
-  DIR* dp = opendir(f->folder.c_str());
-  if (dp == NULL) {
+  if (!IsDir(f->folder)) {
     *error = absl::StrCat("'", f->folder, "' is not a valid directory");
     return false;
   }
-  struct dirent* dirp;
-  bool found_data = false;
-  auto name_ends_with = [](const std::string& name,
-                           const std::string& to_match) {
-    return name.size() >= to_match.size() &&
-           name.compare(name.size() - to_match.size(), to_match.size(),
-                        to_match) == 0;
-  };
-  while ((dirp = readdir(dp)) != NULL) {
-    std::string file(dirp->d_name);
-    if (name_ends_with(file, ".data")) {
-      found_data = true;
-      break;
+  if (!ContainsFilesWithExtension(f->folder, "data", error)) {
+    if (error->empty()) {
+      *error = absl::StrCat("Couldn't find any .data file in the directory '",
+                            f->folder, "'");
     }
+    return false;
   }
-  if (!found_data) {
-    *error = absl::StrCat("Couldn't find any .data file in the directory '",
-                          f->folder, "'");
-  }
-  closedir(dp);
-  return found_data;
+  return true;
 }
 
 ABSL_FLAG(MetadataFile, model_metadata, MetadataFile(),
@@ -192,6 +292,8 @@ ABSL_FLAG(InfeedFiles, infeed_data, InfeedFiles(),
           "List of infeed_name=infeed_file pairs for the given model. e.g "
           "--infeed_data=\"training_feed=/tmp/data/training_feed.bin\". "
           "(Note: the tuple index will automatically be added by the Runner.)");
+ABSL_FLAG(int, iterations, 1, "Number of times to run the executable");
+ABSL_FLAG(int, ckpt_frequency, 1, "Frequency at which to create checkpoints");
 ABSL_FLAG(bool, print_output, false,
           "Print the content of the output buffers to stdout");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
@@ -205,7 +307,20 @@ bool HelpFilter(absl::string_view filename) {
   return filename.find(__FILE__) != absl::string_view::npos;
 }
 
+bool CreateDirIfNeeded(const std::string& dir) {
+  DIR* dp = opendir(dir.c_str());
+  if (dp == NULL) {
+    if (mkdir(dir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0) {
+      return false;
+    }
+  } else {
+    closedir(dp);
+  }
+  return true;
+}
+
 int main(int argc, char** argv) {
+  using seconds = std::chrono::duration<float>;
   // Setting a custom filter is required for the help to be displayed when
   // --help is passed.
   absl::FlagsUsageConfig config;
@@ -224,41 +339,27 @@ int main(int argc, char** argv) {
   const bool print_output = absl::GetFlag(FLAGS_print_output);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
   const bool strict = absl::GetFlag(FLAGS_strict);
+  const int iterations = absl::GetFlag(FLAGS_iterations);
+  const int ckpt_frequency = absl::GetFlag(FLAGS_ckpt_frequency);
   const std::string output_folder = absl::GetFlag(FLAGS_output_folder);
 
   ipu::LogContext::EnableInfo(verbose);
 
-  if (poplar_executable_filename.empty()) {
-    std::cout << "ERROR: --model_executable needs to be set to a valid "
-                 "ipu_bin.poplar_exec file\n";
-    return -1;
-  }
-  if (metadata_filename.empty()) {
-    std::cout << "ERROR: --model_metadata needs to be set to a valid "
-                 "json file\n";
-    return -1;
-  }
-  if (weights_path.empty()) {
-    std::cout << "ERROR: --weights_path needs to be set to a valid folder\n";
-    return -1;
-  }
-  if (!output_folder.empty()) {
-    DIR* dp = opendir(output_folder.c_str());
-    if (dp == NULL) {
-      if (mkdir(output_folder.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) !=
-          0) {
-        std::cout << "Failed to create output folder '" << output_folder
-                  << "'\n";
-        return -1;
-      }
-    } else {
-      closedir(dp);
-    }
-  }
+  ERROR_ON_MSG(poplar_executable_filename.empty(),
+               "--model_executable needs to be set to a valid "
+               "ipu_bin.poplar_exec file");
+  ERROR_ON_MSG(metadata_filename.empty(),
+               ": --model_metadata needs to be set to a valid "
+               "json file");
+  ERROR_ON_MSG(weights_path.empty(),
+               "--weights_path needs to be set to a valid folder");
+  ERROR_ON_MSG(!output_folder.empty() && !CreateDirIfNeeded(output_folder),
+               "Failed to create output folder '" << output_folder << "'");
 
+  auto init_start = std::chrono::high_resolution_clock::now();
   std::cout << "\n[Parsing Graph's metadata]\n";
   ipu::JsonParser metadata{metadata_filename};
-  ipu::TensorManager tensors{metadata, output_folder};
+  ipu::TensorManager tensors{metadata};
 
   std::cout << "\n[Initialising IPU]\n";
   ipu::DeviceManager manager;
@@ -266,12 +367,12 @@ int main(int argc, char** argv) {
                                             tensors.Config().OptionFlags());
   std::cout << "\n[Loading Poplar executable]\n";
   ipu::Executable exe{poplar_executable_filename};
-  std::cout << "List of streams:\n";
-  exe.PrintStreams();
+  PRINT_INFO("List of streams:\n" << exe.StreamsList());
 
   tensors.LoadParameters(weights_path);
   std::list<ipu::Tensor*> inputs = tensors.InputDataTensors();
   std::list<std::string> extra_inputs, inputs_missing;
+  std::map<ipu::Tensor*, std::shared_ptr<ipu::InfeedStream>> variable_inputs;
   absl::c_transform(input_data.files, std::back_inserter(extra_inputs),
                     [](const std::pair<std::string, std::string>& pair) {
                       return pair.first;
@@ -281,10 +382,15 @@ int main(int argc, char** argv) {
     if (!input_data.Contains(input->Info().Name())) {
       inputs_missing.push_back(input->Info().Name());
     } else {
-      ipu::LogContext ctx{
-          absl::StrCat("Loading input '", input->Info().Name())};
       extra_inputs.erase(absl::c_find(extra_inputs, input->Info().Name()));
-      input->LoadDataFromJson(input_data.files.at(input->Info().Name()));
+      const std::string filename = input_data.files.at(input->Info().Name());
+      if (FileExtension(filename) == "json") {
+        input->LoadDataFromJson(filename);
+      } else {
+        // If the file isn't a JSON file then assume it is an InfeedStream
+        variable_inputs.emplace(input,
+                                std::make_shared<ipu::InfeedStream>(filename));
+      }
     }
   }
   if (strict && (!inputs_missing.empty() || !extra_inputs.empty())) {
@@ -323,7 +429,7 @@ int main(int argc, char** argv) {
     } else {
       ipu::LogContext ctx{absl::StrCat("Loading infeed '", infeed.Name(), "'")};
       extra_infeeds.erase(absl::c_find(extra_infeeds, infeed.Name()));
-      infeed.IntializeDataSources(infeed_data.files.at(infeed.Name()));
+      infeed.InitializeDataSources(infeed_data.files.at(infeed.Name()));
     }
   }
   if (strict && (!infeeds_missing.empty() || !extra_infeeds.empty())) {
@@ -356,23 +462,53 @@ int main(int argc, char** argv) {
   ipu::SeedManager seeds{tensors.Config()};
   seeds.ConnectStreams(exe);
 
+  auto init_end = std::chrono::high_resolution_clock::now();
+  std::cout << "Done in "
+            << SecondsToTimeString(seconds(init_end - init_start).count())
+            << std::endl;
   std::cout << "\n[Executing]\n";
-  exe.LoadAndRun(device);
+  exe.Load(device);
+  for (int iteration = 0; iteration < iterations; iteration++) {
+    auto now = std::chrono::high_resolution_clock::now();
+    float elapsed = static_cast<float>(seconds(now - init_end).count());
+    float remaining =
+        iteration > 0 ? ((elapsed * iterations) / iteration) - elapsed : 0.0;
+    std::cout << "Iteration " << iteration << "/" << iterations - 1
+              << " Elapsed: " << SecondsToTimeString(elapsed)
+              << ", Estimated remaining: " << SecondsToTimeString(remaining)
+              << std::endl;
+    std::string iteration_folder = output_folder;
+    bool create_ckpt =
+        !output_folder.empty() && iteration % ckpt_frequency == 0;
+    if (create_ckpt && iterations > 1) {
+      iteration_folder = absl::StrCat(iteration_folder, "/", iteration);
+      ERROR_ON_MSG(!CreateDirIfNeeded(iteration_folder),
+                   "Failed to create output folder '" << iteration_folder);
+    }
+    if (create_ckpt) {
+      tensors.SetOutfeedsFolder(iteration_folder);
+    } else {
+      tensors.IgnoreOutfeeds();
+    }
+    for (auto input : variable_inputs) {
+      input.second->LoadTensor(input.first->Data());
+      input.second->MoveToNextTensor();
+    }
+    exe.Run();
 
+    if (print_output || create_ckpt) {
+      exe.DeviceToHostCopy();
+      if (print_output) {
+        std::cout << "Outputs:\n";
+        for (auto& output : tensors.Outputs()) {
+          std::cout << output.ToString() << std::endl;
+        }
+      }
+      if (create_ckpt) {
+        tensors.SaveOutputsToJsonFile(iteration_folder);
+      }
+    }
+  }
   std::cout << "\nExecution complete!\n";
-  if (print_output) {
-    std::cout << "Outputs:\n";
-    for (auto& output : tensors.Outputs()) {
-      std::cout << output.ToString() << std::endl;
-    }
-  }
-  if (!output_folder.empty()) {
-    for (auto& output : tensors.Outputs()) {
-      output.SaveDataToJsonFile(
-          absl::StrCat(output_folder, "/", output.Info().Name(), ".data"));
-    }
-  }
-
-  std::cout << "Run successful\n";
   return 0;
 }
