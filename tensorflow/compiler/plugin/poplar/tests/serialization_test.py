@@ -24,17 +24,18 @@ import shutil
 import numpy as np
 import test_utils as tu
 
-import tensorflow as tf
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python import ipu
 from tensorflow.python.platform import googletest
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ipu import utils
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.training import gradient_descent
 from tensorflow.compiler.xla import xla_data_pb2
@@ -189,9 +190,8 @@ class IpuSerializationTest(xla_test.XLATestCase):
         tu.move_variable_initialization_to_cpu()
 
         sess.run(variables.global_variables_initializer())
-        with self.assertRaisesRegex(
-            tf.python.framework.errors_impl.InvalidArgumentError,
-            "compilation only"):
+        with self.assertRaisesRegex(errors.InvalidArgumentError,
+                                    "compilation only"):
           sess.run(output, {
               inp: np.ones(inp.shape),
               bias: np.ones(bias.shape)
@@ -213,15 +213,16 @@ class IpuSerializationTest(xla_test.XLATestCase):
             module_hash = m.group(1)
           if name == module_hash + ".json":
             metadata = json.load(open(os.path.join(folder, name), "r"))
-            self._validateStreams(metadata, [
-                (bias, "input_data"), (inp, "input_data"),
-                (weights, "parameter")
-            ], [(tensor_spec.TensorSpec(shape=[],
-                                        dtype=tf.float32,
-                                        name="XLA_Retvals:0"), "output_data"),
-                (tensor_spec.TensorSpec(
-                    shape=[8, 8, 3, 35], dtype=tf.float32,
-                    name="vs/weights:0"), "parameter_out")])
+            self._validateStreams(
+                metadata, [(bias, "input_data"), (inp, "input_data"),
+                           (weights, "parameter")],
+                [(tensor_spec.TensorSpec(shape=[],
+                                         dtype=dtypes.float32,
+                                         name="XLA_Retvals:0"), "output_data"),
+                 (tensor_spec.TensorSpec(shape=[8, 8, 3, 35],
+                                         dtype=dtypes.float32,
+                                         name="vs/weights:0"), "parameter_out")
+                 ])
           else:
             self.assertEqual(name, "%s.ipu_bin.poplar_exec" % module_hash)
 
@@ -267,9 +268,8 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
         sess.run(infeed_queue.initializer)
         sess.run(variables.global_variables_initializer())
-        with self.assertRaisesRegex(
-            tf.python.framework.errors_impl.InvalidArgumentError,
-            "compilation only"):
+        with self.assertRaisesRegex(errors.InvalidArgumentError,
+                                    "compilation only"):
           sess.run(output, {const: np.ones(const.shape)})
         outfed_result = sess.run(outfed)
 
@@ -293,7 +293,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
             self._validateStreams(
                 metadata, [(const, "input_data"), (inp2, "parameter")],
                 [(tensor_spec.TensorSpec(
-                    shape=[], dtype=tf.float32,
+                    shape=[], dtype=dtypes.float32,
                     name="XLA_Retvals:0"), "output_data")],
                 [(infeed_spec, infeed_name)], [(outfed_result, outfeed_name)])
           else:
@@ -345,7 +345,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
       def dataset_parser(value):
         image_1 = value
         image_2 = (value + 10.) / 2.0
-        return (image_1, tf.reshape(image_2, shape_2))
+        return (image_1, array_ops.reshape(image_2, shape_2))
 
       dataset = dataset.map(dataset_parser)
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
@@ -375,7 +375,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
       def dataset_parser(value):
         image_1 = value
         image_2 = (value + 10.) / 2.0
-        return {"a": image_1, "b": tf.reshape(image_2, shape_2)}
+        return {"a": image_1, "b": array_ops.reshape(image_2, shape_2)}
 
       dataset = dataset.map(dataset_parser)
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(
@@ -406,7 +406,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
       def dataset_parser(value):
         image_1 = value
         image_2 = (value + 10.) / 2.0
-        return {"a": image_1, "b": tf.reshape(image_2, shape_2)}
+        return {"a": image_1, "b": array_ops.reshape(image_2, shape_2)}
 
       dataset = dataset.map(dataset_parser)
       infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(

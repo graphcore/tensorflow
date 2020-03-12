@@ -26,6 +26,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops as nn
 from tensorflow.python.platform import googletest
@@ -36,17 +37,15 @@ from tensorflow.python.ops import variables
 from tensorflow.python.framework import constant_op
 from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 
-import tensorflow as tf
-
 WEIGHT_DECAY = 0.01
 
 
 def map_fn_quadratic(grad, var):
-  return tf.math.square(grad)
+  return math_ops.square(grad)
 
 
 def map_fn_clipping_7_and_14(grad, var):
-  return tf.clip_by_value(grad, 7, 14, name=None)
+  return clip_ops.clip_by_value(grad, 7, 14, name=None)
 
 
 def map_fn_decay(grad, var):
@@ -123,7 +122,7 @@ class MapGradientOptimizerTest(test_util.TensorFlowTestCase):
       values = [1.0, 2.0, 3.0]
       vars_ = [variables.Variable([v], dtype=dtypes.float32) for v in values]
       map_optimizer = map_gradient_optimizer.MapGradientOptimizer(
-          optimizer, lambda grad_lamb, var_lamb: tf.math.square(grad_lamb))
+          optimizer, lambda grad_lamb, var_lamb: math_ops.square(grad_lamb))
       grads_and_vars = map_optimizer.compute_gradients(
           vars_[0] * vars_[1] + vars_[0] * vars_[2] + vars_[1] * vars_[2],
           vars_)

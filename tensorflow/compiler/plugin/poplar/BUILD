@@ -1743,7 +1743,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -2872,7 +2871,6 @@ tf_xla_py_test(
     deps = [
         ":sendrecv_ops_py",
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -2889,7 +2887,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3306,7 +3303,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3324,7 +3320,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3342,7 +3337,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3361,7 +3355,6 @@ tf_xla_py_test(
     tags = ["exclusive"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3380,7 +3373,6 @@ tf_xla_py_test(
     tags = ["exclusive"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3398,7 +3390,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3417,7 +3408,6 @@ tf_xla_py_test(
     shard_count = 2,
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3435,7 +3425,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3454,7 +3443,6 @@ tf_xla_py_test(
     shard_count = 2,
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3472,7 +3460,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework",
@@ -3490,7 +3477,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
     ],
@@ -3503,7 +3489,6 @@ tf_xla_py_test(
     enabled_backends = ["poplar"],
     deps = [
         ":test_utils_py",
-        "//tensorflow:tensorflow_py",
         "//tensorflow/compiler/tests:xla_test",
         "//tensorflow/python/ipu:ipu_lib",
     ],
