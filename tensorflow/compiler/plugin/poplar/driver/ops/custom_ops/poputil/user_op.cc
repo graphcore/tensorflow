@@ -160,21 +160,17 @@ class UserOpImpl : public PoplarOpDef {
       // above as there is an invisble dependency in the callback.
       seq.add(poplar::program::Sync(poplar::SyncType::INTERNAL));
 
-      // Track the index of the output within the tuple.
-      std::uint32_t output_index = 0;
       outputs.resize(number_of_outputs);
 
       // Now go over and add a copy from the device back to the host for each
       // output.
-      for (xla::Shape shape : output_shape.tuple_shapes()) {
-        // Convert the XLA output node into a poplar tensor.
-        TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(shape));
-        std::vector<size_t> poplar_shape = PoplarShapeFromXlaShape(shape);
-
-        // Add the output variable to the graph.
-        poplar::Tensor output_tensor = graph.addVariable(
-            poplar_type, poplar_shape,
-            instruction_name + "_output_" + std::to_string(output_index));
+      for (std::uint32_t output_index = 0; output_index < number_of_outputs;
+           output_index++) {
+        xla::Shape shape = output_shape.tuple_shapes()[output_index];
+        // Create a new tensor using "AddTensor" to get a good layout.
+        TF_ASSIGN_OR_RETURN(poplar::Tensor output_tensor,
+                            AddTensor(graph, TensorLocation{inst, output_index},
+                                      shape, res, tensor_map));
 
         // Add stream ID for each output tensor.
         const std::string stream_name =

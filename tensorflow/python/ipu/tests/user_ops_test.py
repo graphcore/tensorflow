@@ -194,6 +194,43 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(np.full([10], 3.0), gradients[2][0])
 
   @test_util.deprecated_graph_mode_only
+  def testUserReadWriteOpBackwards(self):
+    with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32],
+          "output_shapes": [tensor_shape.TensorShape([10])],
+      }
+      lib_path = cwd + "/tensorflow/python/ipu/libadd_tensors_custom.so"
+
+      def my_net(x, y):
+        output = ipu.custom_ops.cpu_user_operation([x, y],
+                                                   lib_path,
+                                                   outs=outputs)
+
+        opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
+        gradients = opt.compute_gradients(output[0], [x, y])
+
+        return [output, gradients]
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[10])
+        y = array_ops.placeholder(np.float32, shape=[10])
+
+        model = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
+
+      sess.run(variables.global_variables_initializer())
+      res = sess.run(model, {
+          x: np.ones([10]),
+          y: np.full([10], 6.0),
+      })
+
+      self.assertAllEqual(np.full([10], 7.0), res[0])
+
+      gradients = res[1]
+      self.assertAllEqual(np.ones([10]), gradients[0][0])
+
+  @test_util.deprecated_graph_mode_only
   def testUserOpBackwardsSeparateOps(self):
     with tu.ipu_session() as sess:
       cwd = os.getcwd()

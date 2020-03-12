@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
@@ -394,13 +395,20 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
   }
 
   for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+    // Check if instruction is read write user op
+    const bool is_rw_user_op =
+        IsPoplarInstruction(PoplarOp::UserOp)(inst)
+            ? Cast<HloUserOpInstruction>(inst)->IsReadWrite()
+            : false;
+
     // Check if it is either a custom call or has already been replaced.
     if (inst->opcode() == HloOpcode::kConstant ||
         inst->opcode() == HloOpcode::kInfeed ||
         inst->opcode() == HloOpcode::kRecvDone ||
         IsPoplarInstruction(PoplarOp::RemapDeduce)(inst) ||
-        IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst) ||
-        IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst)) {
+        IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst) ||
+        is_rw_user_op ||
+        IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst)) {
       FlattenInputs(inst, deferred_inputs);
     }
   }
