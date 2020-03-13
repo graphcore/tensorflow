@@ -101,6 +101,7 @@ py_library(
         "keras/layers/embedding_lookup.py",
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
+        "keras/pipeline.py",
         "keras/sequential.py",
         "loops.py",
         "ops/all_to_all_op.py",
@@ -258,6 +259,20 @@ tf_py_test(
     size = "medium",
     srcs = ["tests/keras/keras_rnn_test.py"],
     additional_deps = [
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+)
+
+tf_py_test(
+    name = "keras_pipeline_test",
+    size = "medium",
+    srcs = ["tests/keras/keras_pipeline_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
         "//tensorflow/python/keras:layers",
         "//third_party/py/numpy",
         "//tensorflow/python/ipu:ipu_lib",
@@ -823,6 +838,7 @@ test_suite(
         "keras_dropout_test",
         "keras_embedding_lookup_test",
         "keras_normalization_test",
+        "keras_pipeline_test",
         "keras_rnn_test",
         "map_gradient_optimizer_test",
         "pipelining_conv_classify_test",

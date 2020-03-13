@@ -108,3 +108,6 @@ class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstrac
   def _experimental_distribute_dataset(self, dataset):
     return input_lib.get_distributed_dataset(dataset, self._input_workers,
                                              self._container_strategy())
+
+  def non_slot_devices(self, var_list):
+    return self._ipu_device

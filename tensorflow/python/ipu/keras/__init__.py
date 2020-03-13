@@ -19,3 +19,4 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.python.ipu.keras import layers
+from tensorflow.python.ipu.keras.pipeline import PipelinedModel

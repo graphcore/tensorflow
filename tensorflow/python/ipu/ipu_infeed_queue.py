@@ -158,26 +158,28 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
       # Apply the dataset and take ownership.
       self._dataset = self._dataset._apply_options()
 
-      try:
-        ds_variant = self._dataset._variant_tensor
-      except TypeError:
-        ds_variant = self._dataset._as_variant_tensor
       # ID used for differentiating between datasets.
       self._id = str(feed_name)
 
-      with ops.colocate_with(ds_variant):
-        self._initializer = gen_pop_datastream_ops.ipu_create_dataset_iterator(
-            input_dataset=ds_variant,
-            feed_id=self._id,
-            replication_factor=self._replication_factor,
-            device_ordinal=self._device_ordinal,
-            **self._dataset._flat_structure)  # pylint: disable=protected-access
+      try:
+        ds_variant = self._dataset._variant_tensor  # pylint: disable=protected-access
+      except TypeError:
+        ds_variant = self._dataset._as_variant_tensor  # pylint: disable=protected-access
 
-      # For Estimators, the graph can be frozen at the point when the delter
-      # method is called, so for non-eager mode contexts we need to create the
-      # operation at construction time.  But for eager mode, the op should be
-      # executed later, rather than at construction time.
       if not context.executing_eagerly():
+        # For Estimators, the graph can be frozen before the estimator calls
+        # the initilizer or deleter methods.  So we need to create the
+        # initialize and delete operations early.  For eager execution in
+        # TF2, the operations execute eagerly, so they don't exist in any
+        # frozen graph.
+        with ops.colocate_with(ds_variant):
+          self._init_op = gen_pop_datastream_ops.ipu_create_dataset_iterator(
+              input_dataset=ds_variant,
+              feed_id=self._id,
+              replication_factor=self._replication_factor,
+              device_ordinal=self._device_ordinal,
+              **self._dataset._flat_structure)  # pylint: disable=protected-access
+
         self._deleter = gen_pop_datastream_ops.ipu_delete_dataset_iterator(
             feed_id=self._id, device_ordinal=self._device_ordinal)
 
@@ -227,12 +229,26 @@ tf.Dataset.batch, set `drop_remainder=True`.""".format(output_shape))
     Raises:
       ValueError: if the function `initializer` has already been called.
     """
+    if context.executing_eagerly():
+      try:
+        ds_variant = self._dataset._variant_tensor  # pylint: disable=protected-access
+      except TypeError:
+        ds_variant = self._dataset._as_variant_tensor  # pylint: disable=protected-access
+
+      with ops.colocate_with(ds_variant):
+        return gen_pop_datastream_ops.ipu_create_dataset_iterator(
+            input_dataset=ds_variant,
+            feed_id=self._id,
+            replication_factor=self._replication_factor,
+            device_ordinal=self._device_ordinal,
+            **self._dataset._flat_structure)  # pylint: disable=protected-access
+
     if self._initialized:
       raise ValueError(
           """The IPUInfeedQueue `initializer` function can only be accessed once."""
       )
     self._initialized = True
-    return self._initializer
+    return self._init_op
 
   @property
   def deleter(self):

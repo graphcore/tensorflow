@@ -100,6 +100,14 @@ class PipelineTester(object):
       return losses
 
   @staticmethod
+  def run_on_cpu(test_wrapper, stages, inputs_fn, input_values, repeat_count,
+                 pipeline_depth, dataset_fn, optimizer):
+    return PipelineTester._cpu_with_grad_accum(test_wrapper, stages, inputs_fn,
+                                               input_values, repeat_count,
+                                               pipeline_depth, dataset_fn,
+                                               optimizer)
+
+  @staticmethod
   def _sharded_on_ipu(stages, inputs_fn, input_values, repeat_count,
                       pipeline_depth, dataset_fn, optimizer, test_wrapper,
                       recomp):
