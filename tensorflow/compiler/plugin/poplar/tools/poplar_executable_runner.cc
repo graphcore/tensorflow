@@ -483,11 +483,11 @@ std::string Executable::StreamsList() const {
 void Executable::Load(const poplar::Device& device) {
   std::cout << "Loading program onto the device\n";
   engine_->load(device);
+  PRINT_INFO("Running HOST_TO_DEVICE");
+  engine_->run(PoplarProgramType::HOST_TO_DEVICE);
 }
 
 void Executable::Run() {
-  PRINT_INFO("Running HOST_TO_DEVICE");
-  engine_->run(PoplarProgramType::HOST_TO_DEVICE);
   PRINT_INFO("Running MAIN_SEQUENCE");
   engine_->run(PoplarProgramType::MAIN_SEQUENCE);
 }
@@ -893,11 +893,14 @@ std::string StreamReader::ReadString() {
   return out;
 }
 StreamWriter::StreamWriter(const std::string& filename)
-    : fd_(filename, std::ostream::binary) {}
+    : fd_(filename, std::ostream::binary) {
+  ERROR_ON_MSG(!fd_.is_open(), "Failed to open file '" << filename << "'");
+}
 void StreamWriter::Close() { fd_.close(); }
 
 StreamReader::StreamReader(const std::string& filename)
-    : fd_(filename, std::ostream::binary) {
+    : fd_(filename, std::istream::binary) {
+  ERROR_ON_MSG(!fd_.is_open(), "Failed to open file '" << filename << "'");
   std::streampos begin = fd_.tellg();
   fd_.seekg(0, std::ios::end);
   end_ = fd_.tellg();
