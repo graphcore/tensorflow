@@ -540,8 +540,6 @@ poplar::Device DeviceManager::GetDevice(int64_t num_ipus,
   ERROR("Failed to attach to any of the IPU devices");
 }
 
-void TensorInfo::SetType(TensorType type) { type_ = type; }
-
 TensorInfo::TensorInfo(const Json::Value& info, TensorType type)
     : TensorInfo(
           info["name"].asString(), info["handle"].asString(),
@@ -656,14 +654,6 @@ void TensorManager::LoadCheckpointMetadataFromJson(
           stream.JumpToTensor(index.asInt64());
         });
   });
-  const Json::Value& variable_inputs = parser.Root()["variable_inputs"];
-  absl::c_for_each(variable_inputs_, [&variable_inputs](VariableInput& input) {
-    auto index = variable_inputs[input.Handle()];
-    ERROR_ON_MSG(index.isNull(),
-                 "Can't find any information for variable input '"
-                     << input.Handle() << "'in the checkpoint metadata");
-    input.JumpToTensor(index.asInt64());
-  });
 }
 
 void TensorManager::CreateCheckpointMetadataJson(
@@ -679,14 +669,6 @@ void TensorManager::CreateCheckpointMetadataJson(
   if (!infeeds.empty()) {
     root["infeeds"] = infeeds;
   }
-  Json::Value variable_inputs;
-  absl::c_for_each(variable_inputs_,
-                   [&variable_inputs](const VariableInput& input) {
-                     variable_inputs[input.Handle()] = input.TensorIndex();
-                   });
-  if (!variable_inputs.empty()) {
-    root["variable_inputs"] = variable_inputs;
-  }
   WriteJsonToStream(root, &out);
   out.close();
 }
@@ -696,10 +678,6 @@ void TensorManager::SetOutfeedsFolder(const std::string& output_folder) {
   });
 }
 
-void TensorManager::UpdateVariableInputs() {
-  absl::c_for_each(variable_inputs_,
-                   [](VariableInput& var) { var.CopyTensorAndIncrement(); });
-}
 void TensorManager::IgnoreOutfeeds() {
   absl::c_for_each(outfeeds_, [](Outfeed& outfeed) { outfeed.IgnoreOutput(); });
 }
@@ -769,32 +747,6 @@ void* Tensor::Data() {
   return data_.data();
 }
 void* Tensor::DataEnd() { return data_.data() + data_.size(); }
-
-InfeedStream& VariableInput::Stream() { return stream_; }
-
-VariableInput::VariableInput(Tensor& input, const std::string& data_filename)
-    : dst_(input), stream_(input.Info()) {
-  stream_.InitializeDataSource(data_filename);
-}
-
-void VariableInput::CopyTensorAndIncrement() {
-  stream_.LoadTensor(dst_.Data());
-  stream_.MoveToNextTensor();
-}
-
-const std::string& VariableInput::Handle() const {
-  return dst_.Info().Handle();
-}
-
-int64_t VariableInput::TensorIndex() const { return stream_.TensorIndex(); }
-void VariableInput::JumpToTensor(int64_t tensor_index) {
-  stream_.JumpToTensor(tensor_index);
-}
-
-void TensorManager::MakeInputVariable(Tensor& input,
-                                      const std::string& filename) {
-  variable_inputs_.emplace_back(input, filename);
-}
 
 void TensorManager::ConnectStreams(Executable& executable) {
   auto& engine = executable.Engine();
@@ -941,7 +893,6 @@ void StreamReader::MoveAbsolute(std::ios::streampos position) {
 std::ios::streampos StreamReader::CurrentPosition() { return fd_.tellg(); }
 
 InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {
-  info_.SetType(TensorType::Infeed);
 }
 
 InfeedStream::InfeedStream(const std::string& filename) {

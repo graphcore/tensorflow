@@ -386,12 +386,7 @@ int main(int argc, char** argv) {
     } else {
       extra_inputs.erase(absl::c_find(extra_inputs, input->Info().Name()));
       const std::string filename = input_data.files.at(input->Info().Name());
-      if (FileExtension(filename) == "json") {
-        input->LoadDataFromJson(filename);
-      } else {
-        // If the file isn't a JSON file then assume it is an InfeedStream
-        tensors.MakeInputVariable(*input, filename);
-      }
+      input->LoadDataFromJson(filename);
     }
   }
   if (strict && (!inputs_missing.empty() || !extra_inputs.empty())) {
@@ -485,7 +480,8 @@ int main(int argc, char** argv) {
               << std::endl;
     std::string iteration_folder = output_folder;
     bool create_ckpt =
-        !output_folder.empty() && iteration % ckpt_frequency == 0;
+        !output_folder.empty() &&
+        (iteration == (iterations - 1) || (iteration % ckpt_frequency == 0));
     if (create_ckpt && iterations > 1) {
       iteration_folder = absl::StrCat(iteration_folder, "/", iteration);
       ERROR_ON_MSG(!CreateDirIfNeeded(iteration_folder),
@@ -498,7 +494,6 @@ int main(int argc, char** argv) {
     } else {
       tensors.IgnoreOutfeeds();
     }
-    tensors.UpdateVariableInputs();
 
     exe.Run();
 
