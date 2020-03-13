@@ -164,7 +164,7 @@ class UserOpImpl : public PoplarOpDef {
 
       // Now go over and add a copy from the device back to the host for each
       // output.
-      for (std::uint32_t output_index = 0; output_index < number_of_outputs;
+      for (std::uint32_t output_index = 0; output_index != number_of_outputs;
            output_index++) {
         xla::Shape shape = output_shape.tuple_shapes()[output_index];
         // Create a new tensor using "AddTensor" to get a good layout.
@@ -200,7 +200,6 @@ class UserOpImpl : public PoplarOpDef {
         seq.add(poplar::program::Copy(stream, output_tensor));
 
         outputs[output_index] = output_tensor;
-        output_index++;
       }
     } else {
       if (!is_gradient) {

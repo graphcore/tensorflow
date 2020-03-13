@@ -225,7 +225,7 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
           y: np.full([10], 6.0),
       })
 
-      self.assertAllEqual(np.full([10], 7.0), res[0])
+      self.assertAllEqual(np.full([1, 10], 7.0), res[0])
 
       gradients = res[1]
       self.assertAllEqual(np.ones([10]), gradients[0][0])
