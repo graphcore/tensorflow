@@ -36,8 +36,9 @@ def automatic_sharding(num_shards,
     input_ts: tensor closest to the datafeed in graph.
     loss_ts: tensor closest to the loss in graph.
     edge_filter: a callable predicate, with the signature fn(edge), where edge
-      is a tuple with the name of the source op, and the name of the destination
-      op.
+      is a tuple containing the name of the source op and the name of the
+      destination op. If the predicate returns True then the graph will not be
+      split at that edge. Only used if frozen_inference is False.
     frozen_inference: Flag set to True if running inference on a frozen graph.
 
   """
@@ -48,7 +49,7 @@ def automatic_sharding(num_shards,
 @tf_contextlib.contextmanager
 def ipu_autoshard():
   """Provides a context for autosharding.  All operations created within this
-  context will have automatically sharded.
+  context will be automatically sharded.
   """
 
   attrs = {"_IpuAutoshard": attr_value_pb2.AttrValue(s=b"ON")}
