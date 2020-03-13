@@ -211,11 +211,14 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # Both BackpropFilter should be shared
       # pylint: disable=line-too-long
       ok = [
-          '__seed*', 'host-exchange-local-copy-', 'Copy_',
+          '__seed*',
+          'host-exchange-local-copy-',
+          'Copy_',
           'vs/conv1/Conv2D/convolution.*/Conv_1x1',
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4/*',
-          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo'
+          'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
+          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/fusion/attemptRegroup/Transpose',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -270,6 +273,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
+          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/attemptRegroup/Transpose',
           'vs/conv*/Conv2D/convolution*/Conv_1x1',
       ]
       # pylint: enable=line-too-long
