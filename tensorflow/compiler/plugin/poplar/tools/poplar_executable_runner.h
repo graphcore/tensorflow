@@ -78,7 +78,6 @@ class Infeed;
 class Outfeed;
 class StreamReader;
 class StreamWriter;
-class VariableInput;
 
 enum DataType {
   F32,
@@ -185,7 +184,6 @@ class TensorInfo {
   const TensorShape& Shape() const;
   const std::string& Name() const;
   const std::string& Handle() const;
-  void SetType(TensorType type);
   TensorType Type() const;
   std::string ToString() const;
   void ToStream(StreamWriter& out) const;
@@ -251,8 +249,6 @@ class TensorManager {
   void AllocateTensors();
   std::list<Tensor*> InputDataTensors();
   void LoadParameters(const std::string& path);
-  void MakeInputVariable(Tensor& input, const std::string& filename);
-  void UpdateVariableInputs();
   void SaveOutputsToJsonFile(const std::string& path);
   void ConnectStreams(Executable& executable);
 
@@ -261,7 +257,6 @@ class TensorManager {
   std::vector<Tensor> outputs_;
   std::vector<Infeed> infeeds_;
   std::vector<Outfeed> outfeeds_;
-  std::vector<VariableInput> variable_inputs_;
   IpuConfig config_;
 };
 
@@ -295,20 +290,6 @@ class InfeedStream {
   int64_t num_tensors_;
   int64_t tensor_idx_;
   std::shared_ptr<StreamReader> reader_;
-};
-
-class VariableInput {
- public:
-  VariableInput(Tensor& input, const std::string& data_filename);
-  void CopyTensorAndIncrement();
-  InfeedStream& Stream();
-  const std::string& Handle() const;
-  int64_t TensorIndex() const;
-  void JumpToTensor(int64_t tensor_index);
-
- private:
-  Tensor& dst_;
-  InfeedStream stream_;
 };
 
 class Infeed {
