@@ -2724,11 +2724,15 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         }
       }
 
-      TF_RETURN_IF_ERROR(
-          ConnectSendCallbacksToRendezvous(executable.GetSendInfos()));
-
-      TF_RETURN_IF_ERROR(
-          ConnectRecvCallbacksToRendezvous(executable.GetRecvInfos()));
+      // The send/recv callbacks only need to be re-connected when the engine
+      // has changed as they do not depend on any external state and are
+      // designed to be re-used.
+      if (engine_changed) {
+        TF_RETURN_IF_ERROR(
+            ConnectSendCallbacksToRendezvous(executable.GetSendInfos()));
+        TF_RETURN_IF_ERROR(
+            ConnectRecvCallbacksToRendezvous(executable.GetRecvInfos()));
+      }
 
       const auto& infeed_infos = executable.GetInfeedInfos();
       if (!infeed_infos.empty()) {
