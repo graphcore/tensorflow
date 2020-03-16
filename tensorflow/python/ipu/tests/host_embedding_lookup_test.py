@@ -140,7 +140,50 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       report.assert_max_tile_memory(9136, tolerance=0.3)
 
   @test_util.deprecated_graph_mode_only
-  def testAGIShapeWithClass(self):
+  def testTrainNoExec(self):
+    shape = [100000, 200]
+    lookup_count = 4096
+
+    host_embedding = embedding_ops.create_host_embedding(
+        "my_host_embedding",
+        shape,
+        np.float32,
+        optimizer_spec=embedding_ops.HostEmbeddingOptimizerSpec(0.5))
+
+    # Inject an update that would cause a hang
+    host_embedding._update_count = 1  # pylint: disable=W0212
+
+    def my_net(i):
+      out = host_embedding.lookup(i)
+
+      return out
+
+    with ops.device('cpu'):
+      i = array_ops.placeholder(np.int32, [lookup_count])
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      r = ipu.ipu_compiler.compile(my_net, inputs=[i])
+
+    cfg = ipu.utils.create_ipu_config(profiling=True,
+                                      always_rearrange_copies_on_the_host=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+    with sl.Session() as sess:
+      i_h = np.arange(0, lookup_count).reshape([lookup_count])
+
+      report = tu.ReportJSON(self, sess, configure_device=False)
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+
+      # training=False should ignore the number of expected updates.
+      result = sess.run(
+          [r, host_embedding(iteration_count=1, training=False)], {i: i_h})
+
+      # Check the lookup resolt, but we are really interested that it doesn't hang.
+      self.assertAllClose(result[0][0], np.take(result[1], i_h, axis=0))
+
+  @test_util.deprecated_graph_mode_only
+  def testNoLookup(self):
     shape = [100000, 200]
     lookup_count = 4096
 
@@ -151,13 +194,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
         optimizer_spec=embedding_ops.HostEmbeddingOptimizerSpec(0.5))
 
     def my_net(i):
-      out = host_embedding.lookup(i)
-      out = out * out
-
-      optim = gd.GradientDescentOptimizer(1)
-      train = optim.minimize(out)
-
-      return out, train
+      return i
 
     with ops.device('cpu'):
       i = array_ops.placeholder(np.int32, [lookup_count])
@@ -177,13 +214,8 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       report.reset()
       result = sess.run([r, host_embedding(iteration_count=1)], {i: i_h})
 
-      # Given our "model" and learning rate, we expect the embedding to be
-      # zeroed in the lookup positions.
-      self.assertAllClose(np.zeros([lookup_count, shape[1]]),
-                          np.take(result[1], i_h, axis=0))
-      self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
-      report.parse_log()
-      report.assert_max_tile_memory(14716, tolerance=0.3)
+      # Check the indices are correct, but the real test is no timeout.
+      self.assertAllClose(result[0][0], i_h)
 
 
 if __name__ == "__main__":
