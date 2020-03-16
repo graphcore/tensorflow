@@ -68,7 +68,10 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
                     AsyncOpKernel::DoneCallback done) override {
     ctx->forward_ref_input_to_ref_output(0, 0);
 
-    if (xla::poplarplugin::UseSyntheticData()) {
+    // If we are either using synthetica data or never performa a lookup/update,
+    // then immediately complete the async op.
+    if (xla::poplarplugin::UseSyntheticData() ||
+        (lookup_count_init_ + update_count_init_ == 0)) {
       done();
     } else {
       auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");

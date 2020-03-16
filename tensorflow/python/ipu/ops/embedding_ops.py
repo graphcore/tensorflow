@@ -129,12 +129,16 @@ class HostEmbedding:
     self._update_count = 0
     self._optimizer_spec = optimizer_spec
 
-  def __call__(self, iteration_count, replication_factor=1):
+  def __call__(self, iteration_count, replication_factor=1, training=True):
     """ Register the host embedding with the session.
 
         Args:
           iteration_count: The number of iterations in the user model.
           replication_factor: The replication count of the user graph.
+          training: Whether this host embedding will be trained on this run.
+                    This allows the user to specify that the embedding won't be
+                    updated, despite the construction of gradient operations.
+                    This is useful for validation, using the training graph.
         Returns:
           A TensorFlow op which will serve the embedding to the device.
     """
@@ -146,7 +150,7 @@ class HostEmbedding:
         self._embedding_tensor,
         self._name,
         lookup_count=iteration_count * self._lookup_count,
-        update_count=iteration_count * self._update_count,
+        update_count=(iteration_count * self._update_count if training else 0),
         replication_factor=replication_factor)
 
   def lookup(self, indices, count=1, clip_indices=True):
