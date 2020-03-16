@@ -543,7 +543,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
           'Copy_',
           'host-exchange*',
           'vs/cnv/convolution*/Conv_8x8_stride4x4/Convolve',
-          'vs/cnv/convolution*/Conv_8x8_stride4x4/Reduce0',
+          'vs/cnv/convolution*/Conv_8x8_stride4x4/Reduce',
           'vs/gradients/vs/cnv_grad/Conv2DBackpropFilter/fusion*/Conv_5x5',
           'vs/gradients/vs/cnv_grad/Conv2DBackpropFilter/fusion*/AddTo',
           'vs/gradients/vs/Square_grad/Mul/fusion*/Op/Multiply',
