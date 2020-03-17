@@ -208,6 +208,14 @@ bool CopyShardingFromUsers(HloInstruction* inst) {
     }
   }
 
+  // See HloSharding::RequiredLeaves, empty Tuples need one sharding entry
+  // and since they don't have any actual tensors associated with them, it
+  // doesn't matter which shard they are on.
+  if (tuple_size == 0) {
+    auto s = GetDefaultSharding(inst->shape());
+    tuple_sharding.push_back(s);
+  }
+
   SetTupleShardingFromVector(inst, tuple_sharding);
   return true;
 }
