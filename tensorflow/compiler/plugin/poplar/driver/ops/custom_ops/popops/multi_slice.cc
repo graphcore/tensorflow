@@ -79,7 +79,9 @@ class MultiSliceOp : public PoplarOpDef {
     poplar::Tensor output = popops::multiSlice(
         graph, input,
         indices.flatten().expand({1}).reinterpret(poplar::UNSIGNED_INT), {0},
-        {1}, seq, *plan, {}, absl::StrCat(GetDebugName(inst), "/output"));
+        {1}, seq,
+        SlicePlanHasAllocation(res, plan) ? *plan : popops::SlicePlan{}, {},
+        absl::StrCat(GetDebugName(inst), "/output"));
     auto poplar_output_shape = PoplarShapeFromXlaShape(output_shape);
 
     // Unflatten the output:
@@ -99,6 +101,7 @@ class MultiSliceOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     switch (input_index) {
       case 0: {
+        NotifySlicePlanAllocation(res, plan);
         return CreateInputTensor(graph, *plan, inst->operand(0)->shape(),
                                  GetDebugName(inst) + "/input");
       }
@@ -234,9 +237,9 @@ class MultiUpdateOp : public PoplarOpDef {
                         FindInstructionInput(tensor_map, res, inst, 2, prog));
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
-    TF_RETURN_IF_ERROR(MultiUpdateInternal(graph, *plan, operand, indices,
-                                           updates, prog, multi_update,
-                                           UpdateMode::Replace));
+    TF_RETURN_IF_ERROR(MultiUpdateInternal(
+        graph, SlicePlanHasAllocation(res, plan) ? *plan : popops::SlicePlan{},
+        operand, indices, updates, prog, multi_update, UpdateMode::Replace));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
 
@@ -253,6 +256,7 @@ class MultiUpdateOp : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
     switch (input_index) {
       case 0: {
+        NotifySlicePlanAllocation(res, plan);
         return CreateInputTensor(graph, *plan, inst->operand(0)->shape(),
                                  GetDebugName(inst) + "/input");
       }
@@ -298,9 +302,10 @@ class MultiUpdateAddOp : public MultiUpdateOp {
                         FindInstructionInput(tensor_map, res, inst, 3, prog));
 
     TF_ASSIGN_OR_RETURN(const popops::SlicePlan* plan, GetSlicePlan(res, inst));
-    TF_RETURN_IF_ERROR(MultiUpdateInternal(graph, *plan, operand, indices,
-                                           updates, prog, multi_update_add,
-                                           UpdateMode::Accumulate, scale));
+    TF_RETURN_IF_ERROR(MultiUpdateInternal(
+        graph, SlicePlanHasAllocation(res, plan) ? *plan : popops::SlicePlan{},
+        operand, indices, updates, prog, multi_update_add,
+        UpdateMode::Accumulate, scale));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand));
     return prog;

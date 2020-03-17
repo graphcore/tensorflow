@@ -843,7 +843,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          '/Zero',
           'GradientDescent/update_vs/w/Neg/negate*/Op/Negate',
           'GradientDescent/update_vs/w/mul/fusion*/Op/Multiply',
           'GradientDescent/update_vs/w/ResourceScatterAdd/custom-call*/multiUpdateAdd',
@@ -910,7 +909,6 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'host-exchange-local-copy-*/OnTileCopy-0',
-          '/Zero',
           'gradients/vs/absolute_difference/Abs_grad/Sign',
           'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
           '/negate/Op/Negate',
