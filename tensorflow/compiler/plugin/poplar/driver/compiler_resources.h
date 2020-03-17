@@ -60,6 +60,7 @@ struct CompilerResources {
       slice_plan_mappings;
 
   std::list<popops::SlicePlan> slice_plans;
+  absl::flat_hash_set<const popops::SlicePlan*> used_slice_plan;
 
   CompilerAnnotations annotations;
 

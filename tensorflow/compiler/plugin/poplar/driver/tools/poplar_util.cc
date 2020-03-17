@@ -653,6 +653,18 @@ poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
   return seq;
 }
 
+void NotifySlicePlanAllocation(CompilerResources& res,
+                               const popops::SlicePlan* plan) {
+  if (plan != nullptr) {
+    res.used_slice_plan.insert(plan);
+  }
+}
+
+bool SlicePlanHasAllocation(CompilerResources& res,
+                            const popops::SlicePlan* plan) {
+  return res.used_slice_plan.count(plan) == 1;
+}
+
 StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
                                                 const HloInstruction* inst) {
   auto plan = res.slice_plan_mappings.find(inst);

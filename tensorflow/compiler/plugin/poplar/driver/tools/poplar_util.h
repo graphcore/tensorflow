@@ -130,6 +130,16 @@ poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
                                                  const poplar::Tensor& src,
                                                  const poplar::Tensor& dst);
 
+// Modify the compiler resources to indicate the embedding associated with a
+// slice plan has been allocated with the given plan.
+void NotifySlicePlanAllocation(CompilerResources& res,
+                               const popops::SlicePlan* plan);
+
+// Test whether the given slice plan has been used to allocate the embedding
+// input.
+bool SlicePlanHasAllocation(CompilerResources& res,
+                            const popops::SlicePlan* plan);
+
 // Get a slice plan for an instruction.
 StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
                                                 const HloInstruction* inst);

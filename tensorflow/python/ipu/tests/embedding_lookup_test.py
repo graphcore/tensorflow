@@ -26,6 +26,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import random_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
@@ -249,6 +250,37 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       result = sess.run(r, {i: i_h, w: w_h})
       self.assertAllClose(result[0], np.take(w_h, i_h, axis=0))
       self.assertEqual(result[0].shape, (8, 2, 200, 4))
+
+  @test_util.deprecated_graph_mode_only
+  def testEmbeddingUpdateWithMatMul(self):
+    def my_net(i):
+      w = variable_scope.get_variable(
+          "w",
+          shape=[1000, 200],
+          dtype=np.float32,
+          initializer=init_ops.random_normal_initializer(stddev=0.1))
+      out = ipu.ops.embedding_ops.embedding_lookup(w, i)
+      out = math_ops.matmul(w, out, transpose_b=True)
+
+      optimizer = gradient_descent.GradientDescentOptimizer(1e-3)
+      training_op = optimizer.minimize(out)
+      return training_op
+
+    with ops.device('cpu'):
+      i = array_ops.placeholder(np.int32, [8])
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      r = ipu.ipu_compiler.compile(my_net, inputs=[i])
+
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+    with sl.Session() as sess:
+      i_h = np.arange(0, 8)
+
+      sess.run(variables.global_variables_initializer())
+      # Just checking that graph construction succeeds and the program runs
+      sess.run(r, {i: i_h})
 
 
 if __name__ == "__main__":
