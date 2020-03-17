@@ -1725,6 +1725,50 @@ ENTRY e {
   EXPECT_EQ(recv1->sharding().GetUniqueDevice(), 1);
 }
 
+TEST_F(ShardingPassTest, TestCondWithZeroArgs) {
+  std::string hlo_string = R"(
+HloModule root
+
+cond_true {
+  aa = () parameter(0)
+  ca = f32[] constant(0.001)
+  ROOT ta = (f32[]) tuple(ca)
+}
+
+cond_false  {
+  ab = () parameter(0)
+  cb = f32[] constant(0.01)
+  ROOT tb = (f32[]) tuple(cb)
+}
+
+ENTRY main {
+  a = (pred[]) parameter(0)
+  g = pred[] get-tuple-element(a), index=0
+  t = () tuple()
+  c = (f32[]) conditional(g, t, t), true_computation=cond_true, false_computation=cond_false
+  o = f32[] get-tuple-element(c), index=0
+  ROOT s = f32[] sine(o), sharding={maximal device=1}
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  EXPECT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  auto* comp = module->entry_computation();
+  auto insts = comp->instructions();
+  for (auto* inst : insts) {
+    EXPECT_TRUE(inst->has_sharding());
+  }
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
