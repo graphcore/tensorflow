@@ -27,6 +27,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
+from tensorflow.python.framework import function
 
 # This implementation is based on:
 # tensorflow/contrib/layers/python/layers/normalization_test.py
@@ -311,6 +312,28 @@ class PopnnGroupNormTest(test_util.TensorFlowTestCase):
                       channels_axis=1,
                       reduction_axes=[2, 3, 4],
                       groups=2)
+
+  @test_util.deprecated_graph_mode_only
+  def testDefunInput(self):
+    shape = [10, 10, 10, 30]
+
+    @function.Defun()
+    def f():
+      return array_ops.ones(shape)
+
+    inputs = f()
+    inputs.set_shape(shape)
+    output_op = normalization_ops.group_norm(inputs,
+                                             groups=5,
+                                             center=False,
+                                             scale=False,
+                                             channels_axis=-1,
+                                             reduction_axes=[-3, -2],
+                                             training=True)
+    with self.cached_session() as sess:
+      sess.run(variables.global_variables_initializer())
+      outputs = sess.run(output_op)
+      self.assertAllClose(outputs, np.zeros(shape))
 
 
 class PopnnInstanceNormTest(test_util.TensorFlowTestCase):

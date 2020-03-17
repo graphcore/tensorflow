@@ -26,19 +26,22 @@ REGISTER_OP("IpuReduceScatter")
     .Attr("replication_factor: int")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       int32 replication_factor;
-      TF_RETURN_IF_ERROR(
-          c->GetAttr<int32>("replication_factor", &replication_factor));
+      TF_RETURN_IF_ERROR(c->GetAttr("replication_factor", &replication_factor));
 
       shape_inference::ShapeHandle input_shape;
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 1, &input_shape));
 
-      const int64 input_length = c->Value(c->Dim(input_shape, 0));
-      const int64 output_length =
-          MathUtil::CeilOfRatio<int64>(input_length, replication_factor);
+      shape_inference::DimensionHandle d = c->Dim(input_shape, 0);
+      if (c->ValueKnown(d)) {
+        const int64 input_length = c->Value(d);
+        const int64 output_length =
+            MathUtil::CeilOfRatio<int64>(input_length, replication_factor);
 
-      c->set_output(0, c->MakeShape({output_length}));
-
-      return Status::OK();
+        c->set_output(0, c->MakeShape({output_length}));
+        return Status::OK();
+      } else {
+        return errors::InvalidArgument("Unknown input tensor shape.");
+      }
     });
 
 }  // namespace tensorflow
