@@ -33,11 +33,6 @@ Status GetMeanAndVarianceDimension(
                                        data_format_str.c_str());
   }
 
-  if (c->Rank(in_shape) == -1) {
-    num_groups_time_batches = -1;
-    return Status::OK();
-  }
-
   const int batch_index =
       GetTensorBatchDimIndex(c->Rank(in_shape), data_format);
   auto batch_size = c->Dim(in_shape, batch_index);
