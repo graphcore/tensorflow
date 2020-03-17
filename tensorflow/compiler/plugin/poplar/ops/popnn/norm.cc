@@ -20,8 +20,9 @@ limitations under the License.
 
 namespace tensorflow {
 namespace {
-Status GetMeanAndVarianceSize(shape_inference::InferenceContext* c,
-                              int64& num_groups_time_batches) {
+Status GetMeanAndVarianceDimension(
+    shape_inference::InferenceContext* c,
+    shape_inference::DimensionHandle* out_handle) {
   auto in_shape = c->input(0);
   // Get the number of batches.
   std::string data_format_str;
@@ -33,11 +34,13 @@ Status GetMeanAndVarianceSize(shape_inference::InferenceContext* c,
   }
   const int batch_index =
       GetTensorBatchDimIndex(c->Rank(in_shape), data_format);
-  auto batch_size = c->Value(c->Dim(in_shape, batch_index));
+  auto batch_size = c->Dim(in_shape, batch_index);
 
-  int32 num_groups;
-  TF_RETURN_IF_ERROR(c->GetAttr("num_groups", &num_groups));
-  num_groups_time_batches = num_groups * batch_size;
+  int32 num_groups_val;
+  TF_RETURN_IF_ERROR(c->GetAttr("num_groups", &num_groups_val));
+  shape_inference::DimensionOrConstant num_groups(num_groups_val);
+
+  TF_RETURN_IF_ERROR(c->Multiply(batch_size, num_groups, out_handle));
   return Status::OK();
 }
 }  // namespace
@@ -76,11 +79,10 @@ REGISTER_OP("PopnnGroupNormTraining")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
 
-      int64 num_groups_time_batch;
-      TF_RETURN_IF_ERROR(GetMeanAndVarianceSize(c, num_groups_time_batch));
-      shape_inference::DimensionOrConstant doc_num_groups_time_batch(
-          num_groups_time_batch);
-      auto mean_inv_std_dev_shape = c->MakeShape({doc_num_groups_time_batch});
+      shape_inference::DimensionHandle num_groups_time_batch;
+      TF_RETURN_IF_ERROR(
+          GetMeanAndVarianceDimension(c, &num_groups_time_batch));
+      auto mean_inv_std_dev_shape = c->MakeShape({num_groups_time_batch});
 
       c->set_output(0, in_shape);
       c->set_output(1, mean_inv_std_dev_shape);
@@ -125,11 +127,10 @@ REGISTER_OP("PopnnGroupNormStatistics")
     .Attr("num_groups: int")
     .Attr("dtype: {float16, float32}")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
-      int64 num_groups_time_batch;
-      TF_RETURN_IF_ERROR(GetMeanAndVarianceSize(c, num_groups_time_batch));
-      shape_inference::DimensionOrConstant doc_num_groups_time_batch(
-          num_groups_time_batch);
-      auto mean_inv_std_dev_shape = c->MakeShape({doc_num_groups_time_batch});
+      shape_inference::DimensionHandle num_groups_time_batch;
+      TF_RETURN_IF_ERROR(
+          GetMeanAndVarianceDimension(c, &num_groups_time_batch));
+      auto mean_inv_std_dev_shape = c->MakeShape({num_groups_time_batch});
 
       c->set_output(0, mean_inv_std_dev_shape);
       c->set_output(1, mean_inv_std_dev_shape);

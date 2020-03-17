@@ -27,7 +27,7 @@ REGISTER_OP("IpuAllGather")
       shape_inference::ShapeHandle output;
 
       int32 replication_factor = 0;
-      c->GetAttr<int32>("replication_factor", &replication_factor);
+      TF_RETURN_IF_ERROR(c->GetAttr("replication_factor", &replication_factor));
 
       TF_RETURN_IF_ERROR(c->Concatenate(
           c->input(0), c->MakeShape({replication_factor}), &output));
