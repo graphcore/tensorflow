@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import numpy as np
 
+from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python import keras
@@ -108,6 +109,13 @@ def fixed_weight_pipeline():
               kernel_initializer=keras.initializers.Constant(0.1)),
       ],
   ]
+
+
+def _count_host_to_device_events(evts):
+  evt_types = ipu.utils.extract_all_types_from_event_trace(evts)
+  evt_types = filter(lambda x: x == IpuTraceEvent.HOST_TO_DEVICE_TRANSFER,
+                     evt_types)
+  return len(list(evt_types))
 
 
 class BatchCallbackCounter(keras.callbacks.Callback):
@@ -226,7 +234,7 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=12)
 
-      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
@@ -249,7 +257,7 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
 
-      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
@@ -291,7 +299,7 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
 
-      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
@@ -318,7 +326,7 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
 
-      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
@@ -346,7 +354,7 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
 
-      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
@@ -374,7 +382,7 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
 
-      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
@@ -401,7 +409,7 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
 
-      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
@@ -429,7 +437,7 @@ class IPUPipelineTest(test.TestCase):
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
 
-      cfg = ipu.utils.create_ipu_config()
+      cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
@@ -448,6 +456,97 @@ class IPUPipelineTest(test.TestCase):
       print(logs[0].keys())
       self.assertTrue("num_steps" in logs[0].keys())
       self.assertEqual(logs[0]['num_steps'], 3)
+
+  @test_util.run_v2_only
+  def testFitWithLearningRateDecay(self):
+
+    dataset = test_dataset(length=72)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      # Clear old reports
+      ipu.ops.summary_ops.get_ipu_reports()
+
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Compile model with SGD optimizer
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001,
+                                                    decay=0.1)
+      m.compile(opt, loss='mse')
+
+      # Fit the weights to the dataset
+      m.fit(dataset, epochs=6)
+
+      # Ensure that we are not downloading the weights each time even though
+      # the 'learning rate' hyper is being updated
+      evts = ipu.ops.summary_ops.get_ipu_reports()
+      self.assertEqual(1, _count_host_to_device_events(evts))
+
+  @test_util.run_v2_only
+  def testFitWithExponentialDecayLearningRateSchedule(self):
+
+    dataset = test_dataset(length=72)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      # Clear old reports
+      ipu.ops.summary_ops.get_ipu_reports()
+
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Compile model with SGD optimizer
+      lrs = keras.optimizer_v2.learning_rate_schedule.ExponentialDecay(
+          0.001, 4, 0.1, staircase=True)
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=lrs)
+      m.compile(opt, loss='mse')
+
+      # Fit the weights to the dataset
+      m.fit(dataset, epochs=6)
+
+      # Ensure that we are not downloading the weights each time even though
+      # the 'learning rate' hyper is being updated
+      evts = ipu.ops.summary_ops.get_ipu_reports()
+      self.assertEqual(1, _count_host_to_device_events(evts))
+
+  @test_util.run_v2_only
+  def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
+    # Clear old reports
+    ipu.ops.summary_ops.get_ipu_reports()
+
+    dataset = test_dataset(length=72)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      # Clear old reports
+      ipu.ops.summary_ops.get_ipu_reports()
+
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Compile model with SGD optimizer
+      lrs = keras.optimizer_v2.learning_rate_schedule.PiecewiseConstantDecay(
+          boundaries=[8, 16], values=[0.001, 0.0005, 0.0001])
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=lrs)
+      m.compile(opt, loss='mse')
+
+      # Fit the weights to the dataset
+      m.fit(dataset, epochs=6)
+
+      # Ensure that we are not downloading the weights each time even though
+      # the 'learning rate' hyper is being updated
+      evts = ipu.ops.summary_ops.get_ipu_reports()
+      self.assertEqual(1, _count_host_to_device_events(evts))
 
 
 if __name__ == '__main__':
