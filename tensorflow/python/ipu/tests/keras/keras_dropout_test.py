@@ -26,11 +26,11 @@ from tensorflow.python import ipu
 dataType = np.float32
 
 
-def kerasIPUDropout(x, rate=0.5, scale=1.0, seed=None):
+def kerasIPUDropout(x, rate=0.5, scale=1.0, seed=None, training=True):
   layer = ipu.layers.Dropout(dtype=dataType, rate=rate, scale=scale, seed=seed)
   layer.build(input_shape=None)
 
-  return layer(inputs=x)
+  return layer(inputs=x, training=training)
 
 
 class IPUDropoutTest(test.TestCase):
@@ -68,6 +68,10 @@ class IPUDropoutTest(test.TestCase):
       )[0].numpy()
       keras_result = kerasIPUDropout(x, seed=[42, 42], scale=s)[0].numpy()
       self.assertAllClose(original_scale * s, keras_result)
+
+    # Test inference
+    inf_output = kerasIPUDropout(x, seed=[42, 42], training=False)
+    self.assertAllClose(inf_output, x)
 
 
 if __name__ == '__main__':

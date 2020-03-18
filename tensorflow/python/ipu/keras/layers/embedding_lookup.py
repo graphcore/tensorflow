@@ -24,59 +24,79 @@ from functools import reduce
 from operator import mul
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+from tensorflow.python.keras import initializers
 from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
-from tensorflow.python.util.tf_export import keras_export
 
 
-@keras_export(v1=['keras.ipu.layers.Embedding'])
 class Embedding(Layer):
-  def __init__(self, name=None):
-    """
-    This is designed to be a replacement for the typical use cases of the
-    Keras Embedding layer.
+  """
+  This is designed to be a replacement for the typical use cases of the
+  Keras Embedding layer.
 
-    Args:
-        name: A name for the operation.
-    """
+  Args:
+    input_dim: int > 0. Size of the vocabulary,
+      i.e. maximum integer index + 1.
+    output_dim: int >= 0. Dimension of the dense embedding.
+    embeddings_initializer: Initializer for the `embeddings` matrix.
 
-    name = name or "embedding_lookup"
+  Input shape:
+    2D tensor with shape: `(batch_size, input_length)`.
 
-    super(Embedding, self).__init__(name=name)
+  Output shape:
+    3D tensor with shape: `(batch_size, input_length, output_dim)`.
 
-  def saveable(self):
-    raise NotImplementedError(
-        "This cell does not yet support object-based saving. File a feature "
-        "request if this limitation bothers you.")
+  """
 
   # pylint: disable=useless-super-delegation
+  def __init__(self,
+               input_dim,
+               output_dim,
+               embeddings_initializer='uniform',
+               **kwargs):
+    kwargs['autocast'] = False
+    super(Embedding, self).__init__(**kwargs)
+
+    self.input_dim = input_dim
+    self.output_dim = output_dim
+    self.embeddings_initializer = initializers.get(embeddings_initializer)
+
+  @tf_utils.shape_type_conversion
   def build(self, input_shape):
-    super(Embedding, self).build(input_shape)
+    if len(input_shape) != 2:
+      raise ValueError(
+          "The input shape should be a tensor of shape [batch, input_length]")
+
+    self.embeddings = self.add_weight(shape=(self.input_dim, self.output_dim),
+                                      initializer=self.embeddings_initializer,
+                                      name='embeddings')
+    self.built = True
 
   # pylint: disable=arguments-differ
-  def call(self, params, ids):
+  def call(self, inputs):
     """
     Perform an embedding lookup.
 
     Args:
-        params: An embedding tensor.
-        ids: An integer tensor of indices into the params tensor.
+        inputs: An integer tensor of indices into the embedding variable.
 
     Returns:
         The entries of the embedding tensor corresponding to the ids tensor
         indices.
     """
-    ids_shape = ids.shape.as_list()
-    params_shape = params.shape.as_list()
+    ids_shape = inputs.shape.as_list()
+    params_shape = self.embeddings.shape.as_list()
 
     # Flatten all the indices.
     num_ids = reduce(mul, ids_shape, 1)
-    ids_flat = array_ops.reshape(ids, [num_ids])
+    ids_flat = array_ops.reshape(inputs, [num_ids])
 
     # Flatten params into a 2D shape.
     slice_dim_size = params_shape.pop(0)
     embedding_size = reduce(mul, params_shape, 1)
-    params_2d = array_ops.reshape(params, [slice_dim_size, embedding_size])
+    params_2d = array_ops.reshape(self.embeddings,
+                                  [slice_dim_size, embedding_size])
 
     # Do the lookup.
     result = gen_popops_ops.ipu_multi_slice(params_2d,
@@ -85,3 +105,19 @@ class Embedding(Layer):
 
     # Reshape into [ids[0], ... , ids[n - 1], params[1], ..., params[n - 1]]
     return array_ops.reshape(result, list(ids_shape) + list(params_shape))
+
+  @tf_utils.shape_type_conversion
+  def compute_output_shape(self, input_shape):
+    return input_shape + (self.output_dim,)
+
+  def get_config(self):
+    config = {
+        'input_dim':
+        self.input_dim,
+        'output_dim':
+        self.output_dim,
+        'embeddings_initializer':
+        initializers.serialize(self.embeddings_initializer)
+    }
+    base_config = super(Embedding, self).get_config()
+    return dict(list(base_config.items()) + list(config.items()))

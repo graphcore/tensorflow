@@ -160,10 +160,6 @@ class PipelinedModel(Model):
     self.history = None
     self.stages = stages
 
-  def saveable(self):
-    raise NotImplementedError(
-        "PipelinedModel does not yet support object-based saving.")
-
   def build(self, input_shape):
     pass
 
