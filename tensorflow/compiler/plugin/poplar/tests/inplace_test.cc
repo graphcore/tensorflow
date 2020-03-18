@@ -17,12 +17,9 @@
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
-#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
+#include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -478,6 +475,37 @@ TEST_F(HloInplaceDependencyTest, InplaceInputOuputStreamedAndResourceVariable) {
   }
 }
 
+TEST_F(HloInplaceDependencyTest, InplaceAddCopyForInplaceReadOnly) {
+  std::string hlo = R"(
+    HloModule top
+
+    ENTRY c1 {
+      p0 = f32[20] parameter(0)
+      a = f32[40] concatenate(p0, p0), dimensions={0}
+      b = f32[20] negate(p0)
+      c = f32[40] reshape(a)
+      d = f32[40] log(a)
+      ROOT t = (f32[20], f32[40], f32[40]) tuple(b, c, d)
+     }
+    )";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  InplaceFinder inplaceFinder;
+  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
+  auto inplace_instructions = GetInplaceInstructions(module0);
+
+  EXPECT_THAT(inplace_instructions.size(), 3);
+  // Neither a or c can be inplace.
+  std::set<std::string> in_place_ops = {"b", "d", "t"};
+  for (auto i : inplace_instructions) {
+    EXPECT_TRUE(in_place_ops.count(i->name()));
+  }
+}
+
 TEST_F(HloInplaceDependencyTest, InplaceElementwiseBinary) {
   std::string hlo = R"(
     HloModule top
@@ -764,6 +792,12 @@ TEST_F(HloInplaceDependencyTest, TestInplaceMultipleReadOnlyClusters) {
   std::string hlo = R"(
 HloModule top
 
+%to_apply_func {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT add = f32[] add(x, y)
+}
+
 ENTRY c1 {
   p0 = f32[20] parameter(0)
   a = f32[10, 2] reshape(p0)
@@ -776,9 +810,9 @@ ENTRY c1 {
   f = f32[20] slice(b), slice={[0:20]}
   g = f32[20] slice(b), slice={[20:40]}
 
-  h = f32[20] add(d, d)
-  i = f32[20] add(f, f)
-  j = f32[20] add(g, g)
+  h = f32[20] all-reduce(d), to_apply=%to_apply_func
+  i = f32[20] all-reduce(f), to_apply=%to_apply_func
+  j = f32[20] all-reduce(g), to_apply=%to_apply_func
   k = f32[20] add(h, i)
   l = f32[20] add(j, k)
   ROOT t = (f32[20], f32[10,2]) tuple(l, e)
@@ -795,8 +829,9 @@ ENTRY c1 {
   InplaceFinder inplaceFinder;
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
   auto inplace_instructions = GetInplaceInstructions(module0);
-  EXPECT_THAT(inplace_instructions.size(), 8);
-  std::set<std::string> in_place_ops = {"c", "d", "e", "f", "g", "k", "l", "t"};
+  EXPECT_THAT(inplace_instructions.size(), 9);
+  std::set<std::string> in_place_ops = {"add", "c", "d", "e", "f",
+                                        "g",   "k", "l", "t"};
   for (auto i : inplace_instructions) {
     EXPECT_TRUE(in_place_ops.count(i->name()));
   }

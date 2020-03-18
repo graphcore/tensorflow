@@ -243,7 +243,7 @@ bool IsInplaceReadOnly(HloInstruction* inst,
   // * Not inplace users - j, k
   // In Cluster 1, we mark d as inplace read-only iff h can be executed before
   // e (which is inplace read/write).
-  // In CLuster 2, we mark f and g as inplace read-only as there are no inplace
+  // In Cluster 2, we mark f and g as inplace read-only as there are no inplace
   // read/write users.
   auto inplace_desc = HloInstructionDescription(inst);
 
@@ -291,11 +291,9 @@ bool IsInplaceReadOnly(HloInstruction* inst,
           // input, then we want to add it to the cluster.
           to_visit.push(user);
         } else if (IsUsedAsInplace(user, node,
-                                   HloInstructionType::kInplaceReadWrite) &&
-                   IsLoweredInplace(user)) {
+                                   HloInstructionType::kInplaceReadWrite)) {
           // If a kInplaceReadWrite user is using the current node as an inplace
-          // input and the user is actually inplace, then add it to
-          // inplace_read_write_users.
+          // input, then add it to inplace_read_write_users.
           inplace_read_write_users[user]++;
         } else if (node_description.GetType() ==
                    HloInstructionType::kInplaceReadOnly) {
