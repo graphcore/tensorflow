@@ -182,7 +182,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         report.parse_log()
 
         ok = [
-            '__seed*', 'host-exchange-local-copy-',
+            '__seed*', 'host-exchange-local-copy-', 'Copy_',
             'cnv5*/convolution.*/Conv_1x1', 'ba5*/fusion/Op/Add'
         ]
         report.assert_all_compute_sets_and_list(ok)
@@ -364,6 +364,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*',
+          'Copy_',
           'DepthwiseConv2dNativeBackpropInput/fusion*/WeightTranspose',
           'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_1x1',
       ]
