@@ -338,6 +338,20 @@ static const std::vector<HloMatcherPattern> patterns = {
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
     })
   ),
+
+  // Reduction from FP16 to F32.
+  HloMatcherPattern(
+    PatternType("reduction_fp16_input"),
+    PatternMetaTarget(0),
+    PatternInputs({2, 3}),
+    PatternOutputs({0}),
+    Pattern({
+      {HloOpcode::kReduce, NodeOperands({1, 3}), IsF32},
+      {HloOpcode::kConvert, NodeOperands({2}), IsF16ToF32Convert},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
+      {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32}
+    })
+  ),
 };
 // clang-format on
 

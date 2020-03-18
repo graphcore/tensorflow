@@ -323,10 +323,16 @@ static popnn::pooling::PoolParams GetPoplibsPoolParams(
           stride,       padding_lower,     padding_upper,
           num_channels, batch_size,        input_data_type};
 }
-
 StatusOr<poplar::program::Program> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {
+  return CreateSimpleReduction(res, inst, inst, output_shape, tensor_map);
+}
+
+StatusOr<poplar::program::Program> CreateSimpleReduction(
+    CompilerResources& res, const HloInstruction* inst,
+    const HloInstruction* reduce_inst, const xla::Shape& output_shape,
+    TensorMap& tensor_map) {
   poplar::program::Sequence seq;
   poplar::Tensor out;
 
@@ -336,17 +342,16 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
     TF_ASSIGN_OR_RETURN(out,
                         FindInstructionInput(tensor_map, res, inst, 1, seq));
     TF_ASSIGN_OR_RETURN(out, BroadcastTensor(out, inst->shape(), {}));
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   } else {
     // Find the input tensors
     TF_ASSIGN_OR_RETURN(poplar::Tensor to_reduce,
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
 
-    HloInstruction* root(inst->to_apply()->root_instruction());
+    const HloInstruction* root = reduce_inst->to_apply()->root_instruction();
     popops::Operation op = PoplibsReductionOperation(root);
 
     std::vector<std::size_t> reduction_dims;
-    for (auto d : inst->dimensions()) {
+    for (auto d : reduce_inst->dimensions()) {
       reduction_dims.push_back(d);
     }
 
@@ -384,9 +389,8 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
       popops::mapInPlace(graph, op, out, init_val, seq,
                          GetDebugName(inst) + "_initval");
     }
-
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   }
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
 
   return seq;
 }
