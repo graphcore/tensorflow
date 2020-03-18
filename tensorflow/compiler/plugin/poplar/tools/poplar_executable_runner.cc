@@ -22,6 +22,7 @@ limitations under the License.
 #include <memory>
 #include <numeric>
 #include <random>
+#include <regex>
 #include <utility>
 
 #include "absl/algorithm/container.h"
@@ -40,6 +41,21 @@ enum PoplarProgramType {
   HOST_TO_DEVICE,
   MAIN_SEQUENCE,
   DEVICE_TO_HOST,
+};
+
+class BinaryVersion {
+ public:
+  void ToStream(StreamWriter& out);
+  /* A stream is compatible with the current binary version if the major
+   * versions are identical and the stream's minor version is less or equal to
+   * the current version. */
+  void ErrorIfNotCompatible(StreamReader& in);
+
+ private:
+  // Increment minor only when backward compatibility is maintained (e.g new
+  // features are added) Increment major and reset minor to 0 otherwise.
+  int major{0};
+  int minor{1};
 };
 
 class DataTypeInfo {
@@ -88,6 +104,7 @@ const std::vector<DataTypeInfo::TypeInfo> DataTypeInfo::info_ =
   ERROR_ON_MSG(it == info_.end(), "Unknown DataType '" << type << "'");
   return it->type_str;
 }
+
 /* static */ int64_t DataTypeInfo::SizeInBytes(DataType type) {
   auto it = absl::c_find_if(
       info_, [type](const TypeInfo& info) { return info.type == type; });
@@ -230,6 +247,7 @@ std::string TensorTypeToString(TensorType type) {
     default: { ERROR("Unknown TensorType"); }
   }
 }
+
 poplar::OptionFlags ParseOptionFlags(const Json::Value& options) {
   poplar::OptionFlags opts;
   if (!options.isNull()) {
@@ -347,11 +365,31 @@ void WriteJsonToStream(const Json::Value& root, std::ostream* sout) {
   writer->write(root, sout);
 }
 
+void BinaryVersion::ToStream(StreamWriter& out) {
+  std::stringstream ss;
+  ss << "v" << major << "." << minor;
+  out.WriteString(ss.str());
+}
+
+void BinaryVersion::ErrorIfNotCompatible(StreamReader& in) {
+  LogContext ctx("checking version number");
+  std::string version_str = in.ReadString(10);
+  const std::regex expr("v([0-9]+)\\.([0-9]+)");
+  std::smatch matches;
+  ERROR_ON(!std::regex_match(version_str, matches, expr));
+  ERROR_ON(matches.size() != 3);
+  int stream_major = std::stoi(matches[1].str());
+  int stream_minor = std::stoi(matches[2].str());
+  ERROR_ON(stream_major != major);
+  ERROR_ON(stream_minor > minor);
+}
+
 }  // namespace
 
 LogContext::LogContext(const std::string& context) : saved_context_(context_) {
   context_ = absl::StrCat(saved_context_, " ", context);
 }
+
 LogContext::~LogContext() { context_ = saved_context_; }
 /* static */ const std::string& LogContext::Context() { return context_; }
 
@@ -399,6 +437,7 @@ void TensorShape::ToStream(StreamWriter& out) const {
   out.WriteInt64(type_);
   out.WriteInt64Array(shape_);
 }
+
 TensorShape::TensorShape(StreamReader& in)
     : type_(static_cast<DataType>(in.ReadInt64())),
       shape_(in.ReadInt64Array()) {}
@@ -565,6 +604,7 @@ TensorInfo::TensorInfo(const std::string& name, const std::string& handle,
 bool TensorInfo::TypeAndShapeMatch(const TensorInfo& other) const {
   return type_ == other.type_ && shape_ == other.shape_;
 }
+
 void TensorInfo::ToStream(StreamWriter& out) const {
   out.WriteString(name_);
   out.WriteString(handle_);
@@ -581,6 +621,7 @@ std::string TensorInfo::ToString() const {
 int64_t TensorShape::DataSizeInBytes() const {
   return NumElements() * ElementSizeInBytes();
 }
+
 const TensorShape& TensorInfo::Shape() const { return shape_; }
 
 bool TensorShape::operator==(const TensorShape& other) const {
@@ -672,6 +713,7 @@ void TensorManager::CreateCheckpointMetadataJson(
   WriteJsonToStream(root, &out);
   out.close();
 }
+
 void TensorManager::SetOutfeedsFolder(const std::string& output_folder) {
   absl::c_for_each(outfeeds_, [&output_folder](Outfeed& outfeed) {
     outfeed.SetOutputFolder(output_folder);
@@ -746,6 +788,7 @@ void* Tensor::Data() {
                                     << info_.Shape().DataSizeInBytes());
   return data_.data();
 }
+
 void* Tensor::DataEnd() { return data_.data() + data_.size(); }
 
 void TensorManager::ConnectStreams(Executable& executable) {
@@ -818,24 +861,30 @@ void SeedManager::ConnectStreams(Executable& executable) {
 void StreamWriter::WriteInt64(int64_t value) {
   WriteData(&value, sizeof(value));
 }
+
 void StreamWriter::WriteInt64Array(const std::vector<int64_t>& values) {
   WriteInt64(values.size());
   if (values.size() > 0) {
     WriteData(values.data(), sizeof(int64_t) * values.size());
   }
 }
+
 void StreamWriter::WriteData(const void* data, size_t size) {
   ERROR_ON(size == 0);
   fd_.write(reinterpret_cast<const char*>(data), size);
 }
+
 void StreamWriter::WriteString(const std::string& value) {
   WriteInt64(value.size());
   if (value.size() > 0) {
     WriteData(value.c_str(), value.size());
   }
 }
-std::string StreamReader::ReadString() {
+
+std::string StreamReader::ReadString(int64_t max_len) {
   int64_t len = ReadInt64();
+  ERROR_ON_MSG(max_len > 0 && len > max_len,
+               "Invalid string (Len " << len << "> max " << max_len << ")");
   if (len == 0) {
     return "";
   }
@@ -844,19 +893,38 @@ std::string StreamReader::ReadString() {
   ReadData(const_cast<char*>(out.c_str()), len);
   return out;
 }
+
 StreamWriter::StreamWriter(const std::string& filename)
-    : fd_(filename, std::ostream::binary) {
+    : fd_(filename, std::ostream::binary | std::ostream::out) {
   ERROR_ON_MSG(!fd_.is_open(), "Failed to open file '" << filename << "'");
+  fd_.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+  BinaryVersion().ToStream(*this);
 }
+
 void StreamWriter::Close() { fd_.close(); }
 
+void StreamWriter::MoveAbsolute(std::ios::streampos position) {
+  fd_.seekg(position);
+}
+
+std::ios::streampos StreamWriter::CurrentPosition() { return fd_.tellg(); }
+
 StreamReader::StreamReader(const std::string& filename)
-    : fd_(filename, std::istream::binary) {
+    : fd_(filename, std::istream::binary), filename_(filename) {
   ERROR_ON_MSG(!fd_.is_open(), "Failed to open file '" << filename << "'");
+  fd_.exceptions(std::ifstream::eofbit | std::ifstream::failbit |
+                 std::ifstream::badbit);
   std::streampos begin = fd_.tellg();
   fd_.seekg(0, std::ios::end);
   end_ = fd_.tellg();
   fd_.seekg(0, std::ios::beg);
+  BinaryVersion().ErrorIfNotCompatible(*this);
+}
+
+StreamReader StreamReader::Clone() {
+  StreamReader clone{filename_};
+  clone.MoveAbsolute(CurrentPosition());
+  return clone;
 }
 
 int64_t StreamReader::NumBytesLeft() { return end_ - fd_.tellg(); }
@@ -890,14 +958,15 @@ void StreamReader::MoveRelative(std::ios::streamoff offset) {
 void StreamReader::MoveAbsolute(std::ios::streampos position) {
   fd_.seekg(position);
 }
+
 std::ios::streampos StreamReader::CurrentPosition() { return fd_.tellg(); }
 
-InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {
-}
+InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {}
 
 InfeedStream::InfeedStream(const std::string& filename) {
   InitializeDataSource(filename);
 }
+
 const TensorInfo& InfeedStream::Info() const { return info_; }
 
 std::string InfeedStream::ToString() {
@@ -917,9 +986,12 @@ std::string InfeedStream::ToString() {
   tensor_idx_ = tensor_idx;
   return absl::StrCat("[", absl::StrJoin(tensors, "\n"), "]");
 }
+
 void InfeedStream::InitializeDataSource(const std::string& filename) {
   LogContext ctx{absl::StrCat("from file ", filename)};
   reader_ = std::make_shared<StreamReader>(filename);
+  ERROR_ON(StreamObjectType::Feed !=
+           static_cast<StreamObjectType>(reader_->ReadInt64()));
   TensorInfo info{*reader_};
   // If there is no metadata then keep these ones.
   if (info_.Type() == TensorType::NotSet) {
@@ -932,11 +1004,7 @@ void InfeedStream::InitializeDataSource(const std::string& filename) {
             << " don't match those from binary file: " << info.ToString());
   }
   num_tensors_ = reader_->ReadInt64();
-  // Num tensors not provided: deduce it from the file size.
-  if (num_tensors_ == 0) {
-    num_tensors_ = reader_->NumBytesLeft() / info_.Shape().DataSizeInBytes();
-  }
-  ERROR_ON(num_tensors_ == 0);
+  ERROR_ON(num_tensors_ <= 0);
   ERROR_ON(reader_->NumBytesLeft() !=
            num_tensors_ * info_.Shape().DataSizeInBytes());
   first_tensor_pos_ = reader_->CurrentPosition();
@@ -986,23 +1054,40 @@ int64_t InfeedStream::TensorIndex() const { return tensor_idx_; }
 
 OutfeedStream::OutfeedStream(const TensorInfo& info) : info_(info), writer_() {}
 
+void OutfeedStream::UpdateNumTensorsAndClose() {
+  auto end = writer_->CurrentPosition();
+  writer_->MoveAbsolute(num_tensors_pos_);
+  int64_t num_bytes = end - num_tensors_pos_ - sizeof(int64_t);
+  ERROR_ON(num_bytes % info_.Shape().DataSizeInBytes() != 0);
+  writer_->WriteInt64(num_bytes / info_.Shape().DataSizeInBytes());
+  writer_->MoveAbsolute(end);
+  writer_->Close();
+}
+
 void OutfeedStream::SetOutputFolder(const std::string& output_folder) {
   const std::string filename =
       absl::StrCat(output_folder, "/", info_.Name(), ".bin");
   if (writer_) {
-    writer_->Close();
+    UpdateNumTensorsAndClose();
   }
   writer_ = std::make_shared<StreamWriter>(filename);
+  writer_->WriteInt64(static_cast<int64_t>(StreamObjectType::Feed));
   info_.ToStream(*writer_);
   // Set num_tensors to 0: we don't know how many elements we're going to write.
+  num_tensors_pos_ = writer_->CurrentPosition();
   writer_->WriteInt64(0);
 }
 
 void OutfeedStream::IgnoreOutput() {
   if (writer_) {
-    writer_->Close();
+    UpdateNumTensorsAndClose();
   }
   writer_ = nullptr;
+}
+
+OutfeedStream::~OutfeedStream() {
+  // Close the file.
+  IgnoreOutput();
 }
 
 const TensorInfo& OutfeedStream::Info() const { return info_; }
@@ -1068,4 +1153,5 @@ void Infeed::InitializeDataSources(const std::string& filename) {
   std::string extension = filename.substr(dot_pos);
   return absl::StrCat(basename, ".", stream_idx, extension);
 }
+
 }  // namespace ipu
