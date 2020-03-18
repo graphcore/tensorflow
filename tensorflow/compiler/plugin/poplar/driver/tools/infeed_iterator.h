@@ -109,7 +109,7 @@ class InfeedQueue {
 
  private:
   SPSCQueue<T, 2048> queue_;
-  static constexpr T kEndOfQueueSentinel = nullptr;
+  static constexpr T kEndOfQueueSentinel{nullptr};
   TF_DISALLOW_COPY_AND_ASSIGN(InfeedQueue);
 };
 

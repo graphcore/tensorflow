@@ -111,6 +111,7 @@ class ModuleFilenames {
   ModuleFilenames(const HloModule& module, int64 device_hash,
                   const std::string& serialization_folder);
   std::string CachedExecutableFilename() const;
+  std::string CachedEngineFilename() const;
   std::string SerializedExecutableFilename() const;
   std::string SerializedMetadataFilename() const;
 
@@ -461,7 +462,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   Status CreateSerializedExecutableDirIfMissing() const;
 
-  bool HaveCachedExecutable(const std::string& filename) const;
+  bool HaveCachedExecutable(const ModuleFilenames& filenames) const;
 
   ModuleFilenames GetModuleFilenames(const HloModule& module) const;
 

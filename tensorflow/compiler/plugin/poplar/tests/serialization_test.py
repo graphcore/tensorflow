@@ -224,7 +224,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
                                          name="vs/weights:0"), "parameter_out")
                  ])
           else:
-            self.assertEqual(name, "%s.ipu_bin.poplar_exec" % module_hash)
+            self.assertEqual(name, "%s.ipu_bin" % module_hash)
 
   @test_util.deprecated_graph_mode_only
   def testInfeedsOutfeedInfoSerialization(self):
@@ -297,7 +297,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
                     name="XLA_Retvals:0"), "output_data")],
                 [(infeed_spec, infeed_name)], [(outfed_result, outfeed_name)])
           else:
-            self.assertEqual(name, "%s.ipu_bin.poplar_exec" % module_hash)
+            self.assertEqual(name, "%s.ipu_bin" % module_hash)
 
   @test_util.deprecated_graph_mode_only
   def testSimpleInfeedsDataSerialization(self):

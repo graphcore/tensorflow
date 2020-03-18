@@ -159,7 +159,9 @@ std::string GetTensorMappingJson(const std::string& module_name,
  * file.
  */
 Status SaveExecutableMetadataJson(const std::string& filename,
-                                  const CompilerResources& res,
+                                  const InputOutputAliasingMap& io_map,
+                                  const InfeedInfos& infeed_infos,
+                                  const OutfeedInfos& outfeed_infos,
                                   uint32 replication_count,
                                   const poplar::OptionFlags& opts,
                                   const poplar::Target& target);
