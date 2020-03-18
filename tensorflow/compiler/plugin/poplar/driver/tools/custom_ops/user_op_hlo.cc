@@ -117,7 +117,7 @@ std::unique_ptr<HloInstruction> HloUserOpInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return CreateUserOp(new_operands, shape, GetPath(), function_ptr_,
                       metadata_function_ptr_, allocator_function_ptr_,
-                      partial_derivative_index_, is_gradient_,
+                      is_gradient_, partial_derivative_index_,
                       is_user_read_write_);
 }
 
