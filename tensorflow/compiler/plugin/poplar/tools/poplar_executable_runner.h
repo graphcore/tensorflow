@@ -146,6 +146,8 @@ class DeviceManager {
   poplar::DeviceManager manager_;
 };
 
+enum class StreamObjectType { Feed, Tensor };
+
 /* Tensor types to connect to the Poplar binary:
  *
  * NotSet: Used to detect uninitialized Tensors
@@ -314,10 +316,13 @@ class OutfeedStream {
   void WriteTensor(void* src, int64_t replication_count);
   void SetOutputFolder(const std::string& output_folder);
   void IgnoreOutput();
+  ~OutfeedStream();
 
  private:
+  void UpdateNumTensorsAndClose();
   TensorInfo info_;
   std::shared_ptr<StreamWriter> writer_;
+  std::ios::streampos num_tensors_pos_;
 };
 
 class Outfeed {
@@ -340,17 +345,20 @@ class StreamWriter {
   void WriteInt64(int64_t value);
   void WriteInt64Array(const std::vector<int64_t>& values);
   void WriteData(const void* data, size_t size);
+  void MoveAbsolute(std::ios::streampos position);
+  std::ios::streampos CurrentPosition();
   void Close();
 
  private:
-  std::ofstream fd_;
+  std::fstream fd_;
 };
 
 class StreamReader {
  public:
   explicit StreamReader(const std::string& filename);
+  StreamReader Clone();
   int64_t NumBytesLeft();
-  std::string ReadString();
+  std::string ReadString(int64_t max_len = 0);
   void ReadData(void* dst, int64_t length);
   void MoveRelative(std::ios::streamoff offset);
   void MoveAbsolute(std::ios::streampos position);
@@ -359,6 +367,7 @@ class StreamReader {
   std::vector<int64_t> ReadInt64Array();
 
  private:
+  const std::string filename_;
   std::ifstream fd_;
   std::streampos end_;
 };

@@ -85,6 +85,7 @@ std::vector<std::string> ListFiles(const std::string& folder,
   closedir(dirp);
   return files;
 }
+
 bool ContainsFilesWithExtension(const std::string& folder,
                                 const std::string& extension,
                                 std::string* error) {
@@ -155,6 +156,7 @@ struct InfeedFiles {
 std::string AbslUnparseFlag(ExecutableFile f) {
   return absl::UnparseFlag(f.filename);
 }
+
 std::string AbslUnparseFlag(MetadataFile f) {
   return absl::UnparseFlag(f.filename);
 }
