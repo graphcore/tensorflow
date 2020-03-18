@@ -53,8 +53,8 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # Would fail if there were two convolutions in the graph as they would be
       # called conv2d and conv2d_1
       ok = [
-          '__seed*', 'host-exchange-local-copy-',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1', 'Copy_'
+          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          'Copy_'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -90,7 +90,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'Copy_*weightsRearranged', 'host-exchange-local-copy-',
+          '__seed*', 'Copy_*weightsRearranged', 'Copy_',
           'Copy_vs/*/OnTileCopy-0', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/Cast/convert.*/Cast', 'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
       ]
@@ -126,8 +126,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'host-exchange-local-copy-',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -162,8 +161,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'host-exchange-local-copy-',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1'
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -212,13 +210,13 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'host-exchange-local-copy-',
           'Copy_',
           'vs/conv1/Conv2D/convolution.*/Conv_1x1',
+          'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4/*',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/fusion/attemptRegroup/Transpose',
+          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/fusion*/WeightTranspose',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -268,13 +266,13 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'host-exchange-local-copy-',
           'Copy_',
+          'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/attemptRegroup/Transpose',
           'vs/conv*/Conv2D/convolution*/Conv_1x1',
+          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion*/WeightTranspose',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)

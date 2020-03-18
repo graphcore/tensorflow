@@ -61,7 +61,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       # Would fail if there were two batch norms in the graph
       ok = [
-          '__seed*', 'host-exchange-local-copy', 'Copy_',
+          '__seed*', 'Copy_',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
       ]
@@ -101,8 +101,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       # Matches two convolutions
       ok = [
-          '__seed*', 'host-exchange-local-copy-', 'Copy_',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
           'vs/Cast/convert.*/Cast',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
@@ -143,8 +142,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       report.parse_log()
       # Matches two convolutions
       ok = [
-          '__seed*', 'host-exchange-local-copy-', 'Copy_',
-          'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
+          '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
           'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/'
@@ -201,10 +199,10 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'host-exchange-local-copy-',
           'Copy*',
           'vs/conv1/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-training.*/',
+          'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'gradients/vs/batch_normalization_2/FusedBatchNorm*_grad/FusedBatchNormGrad*/batch-norm-grad.*/',
           'GradientDescent/update_vs/batch_normalization/',
@@ -212,7 +210,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'GradientDescent/update_vs/batch_normalization_2/',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/attemptRegroup/Transpose',
+          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/WeightTranspose',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -268,7 +266,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       # Would fail if there were two batch norms in the graph
       ok = [
-          '__seed*', 'host-exchange-local-copy', 'Copy_',
+          '__seed*', 'Copy_',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
           'vs/PopnnGroupNormInference/custom-call*/'
       ]
@@ -327,7 +325,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       # Would fail if there were two batch norms in the graph
       ok = [
-          '__seed*', 'host-exchange-local-copy', 'Copy_',
+          '__seed*', 'Copy_',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
           'vs/PopnnGroupNormStatistics/custom-call*/',
           'vs/PopnnGroupNormInference/custom-call*/'
@@ -378,7 +376,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       # Would fail if there were two batch norms in the graph
       ok = [
-          '__seed*', 'host-exchange-local-copy', 'Copy_',
+          '__seed*', 'Copy_',
           'vs/conv2d/Conv2D/convolution.*/Conv_1x1/Convolve',
           'vs/PopnnGroupNormInference/custom-call*/',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/'
@@ -451,7 +449,6 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       # pylint: disable=line-too-long
       ok = [
           '__seed*',
-          'host-exchange-local-copy-',
           'Copy_',
           'vs/conv1/Conv2D/convolution*/Conv_1x1/Convolve',
           'vs/PopnnGroupNormTraining/custom-call*/Norm',
@@ -460,7 +457,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'Sum/reduce.*/*/Reduce',
           'gradients/vs/PopnnGroupNormTraining_2_grad/PopnnGroupNormGrad/custom-call*/',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*',
-          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/attemptRegroup/Transpose',
+          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/WeightTranspose',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)

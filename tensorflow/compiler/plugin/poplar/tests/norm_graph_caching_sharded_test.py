@@ -83,6 +83,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'vs/conv3/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-training.*/',
           'vs/batch_normalization_2/FusedBatchNorm*/batch-norm-training.*/',
+          'Sum/reduce.*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce.*/ReduceFinalStage/IntermediateToOutput/Reduce',
           'gradients/vs/batch_normalization_2/FusedBatchNorm*_grad/FusedBatchNormGrad*/batch-norm-grad.*/',
           'gradients/vs/batch_normalization_1/FusedBatchNorm*_grad/FusedBatchNormGrad*/batch-norm-grad.*/',
@@ -91,8 +92,8 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'GradientDescent/update_vs/batch_normalization_2/',
           'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/fusion/attemptRegroup/Transpose',
-          'gradients/vs/conv2/Conv2D_grad/Conv2DBackpropInput/fusion.*/attemptRegroup/Transpose',
+          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/fusion/WeightTranspose',
+          'gradients/vs/conv2/Conv2D_grad/Conv2DBackpropInput/fusion.*/WeightTranspose',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
       ]
