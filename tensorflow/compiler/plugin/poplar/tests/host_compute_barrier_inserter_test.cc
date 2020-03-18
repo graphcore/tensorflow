@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -35,101 +36,8 @@ HloModule top
 
 ENTRY %top (arg: f32[]) -> f32[] {
   %arg = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
-  %send-token = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send = (f32[], u32[], token[]) send(f32[] %arg, token[] %send-token), channel_id=1, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send-done = token[] send-done((f32[], u32[], token[]) %send), channel_id=1, is_host_transfer=true, frontend_attributes={rendezvous_key=send_key}, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv-token = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv = (f32[], u32[], token[]) recv(token[] %recv-token), channel_id=2, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv-done = (f32[], token[]) recv-done((f32[], u32[], token[]) %recv), channel_id=2, is_host_transfer=true, frontend_attributes={rendezvous_key=recv_key}, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  ROOT %get-tuple-element = f32[] get-tuple-element((f32[], token[]) %recv-done), index=0, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-}
-)";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
-  EXPECT_TRUE(module_or_status.ok());
-
-  auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
-
-  HostComputeBarrierInserter inserter;
-  ASSERT_TRUE(inserter.Run(module).ValueOrDie());
-
-  auto* send = comp->GetInstructionWithName("send-done");
-  ASSERT_NE(send, nullptr);
-  auto* recv = comp->GetInstructionWithName("recv-done");
-  ASSERT_NE(recv, nullptr);
-  auto* barrier = comp->GetInstructionWithName("host_compute.barrier");
-  ASSERT_NE(barrier, nullptr);
-
-  ASSERT_EQ(barrier->control_predecessors().size(), 1);
-  ASSERT_EQ(barrier->control_predecessors()[0], send);
-
-  ASSERT_EQ(barrier->control_successors().size(), 1);
-  ASSERT_EQ(barrier->control_successors()[0], recv);
-}
-
-TEST_F(HostComputeBarrierInserterTest, TestNoBarrierBetweenDifferentOps) {
-  std::string hlo_string = R"(
-HloModule top
-
-ENTRY %top (arg: f32[]) -> f32[] {
-  %arg = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
-  %send-token = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send = (f32[], u32[], token[]) send(f32[] %arg, token[] %send-token), channel_id=1, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send-done = token[] send-done((f32[], u32[], token[]) %send), channel_id=1, is_host_transfer=true, frontend_attributes={rendezvous_key=send_key}, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv-token = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute_2"}
-  %recv = (f32[], u32[], token[]) recv(token[] %recv-token), channel_id=2, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute_2"}
-  %recv-done = (f32[], token[]) recv-done((f32[], u32[], token[]) %recv), channel_id=2, is_host_transfer=true, frontend_attributes={rendezvous_key=recv_key}, metadata={op_type="XlaHostCompute" op_name="host_compute_2"}
-  ROOT %get-tuple-element = f32[] get-tuple-element((f32[], token[]) %recv-done), index=0, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-}
-)";
-
-  HloModuleConfig config;
-  config.set_debug_options(GetDebugOptionsForTest());
-
-  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
-  EXPECT_TRUE(module_or_status.ok());
-
-  auto* module = module_or_status.ValueOrDie().get();
-  auto* comp = module->entry_computation();
-
-  HostComputeBarrierInserter inserter;
-  ASSERT_FALSE(inserter.Run(module).ValueOrDie());
-
-  auto* send = comp->GetInstructionWithName("send-done");
-  ASSERT_NE(send, nullptr);
-  auto* recv = comp->GetInstructionWithName("recv-done");
-  ASSERT_NE(recv, nullptr);
-  ASSERT_EQ(recv->control_predecessors().size(), 0);
-
-  ASSERT_EQ(nullptr, comp->GetInstructionWithName("host_compute.barrier"));
-  ASSERT_EQ(nullptr, comp->GetInstructionWithName("host_compute_2.barrier"));
-}
-
-TEST_F(HostComputeBarrierInserterTest,
-       TestInsertDependenciesFromAllSendsToAllRecvs) {
-  std::string hlo_string = R"(
-HloModule top
-
-ENTRY %top (arg: f32[]) -> f32[] {
-  %arg = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
-  %send-token.1 = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send.1 = (f32[], u32[], token[]) send(f32[] %arg, token[] %send-token.1), channel_id=1, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send-done.1 = token[] send-done((f32[], u32[], token[]) %send.1), channel_id=1, is_host_transfer=true, frontend_attributes={rendezvous_key=send_key}, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send-token.2 = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send.2 = (f32[], u32[], token[]) send(f32[] %arg, token[] %send-token.2), channel_id=2, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %send-done.2 = token[] send-done((f32[], u32[], token[]) %send.2), channel_id=2, is_host_transfer=true, frontend_attributes={rendezvous_key=send_key}, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv-token.1 = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv.1 = (f32[], u32[], token[]) recv(token[] %recv-token.1), channel_id=3, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv-done.1 = (f32[], token[]) recv-done((f32[], u32[], token[]) %recv.1), channel_id=3, is_host_transfer=true, frontend_attributes={rendezvous_key=recv_key}, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv-token.2 = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv.2 = (f32[], u32[], token[]) recv(token[] %recv-token.2), channel_id=4, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv-done.2 = (f32[], token[]) recv-done((f32[], u32[], token[]) %recv.2), channel_id=4, is_host_transfer=true, frontend_attributes={rendezvous_key=recv_key}, metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  %recv-from-host = f32[] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"test_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
-  ROOT %get-tuple-element = f32[] get-tuple-element((f32[], token[]) %recv-done.2), index=0, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  %send = () custom-call(f32[] %arg), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"send_key\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  ROOT %recv = f32[] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"recv_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
 }
 )";
 
@@ -147,34 +55,124 @@ ENTRY %top (arg: f32[]) -> f32[] {
   HostComputeBarrierInserter inserter;
   ASSERT_TRUE(inserter.Run(module).ValueOrDie());
 
-  auto* send1 = comp->GetInstructionWithName("send-done.1");
-  ASSERT_NE(send1, nullptr);
-  auto* send2 = comp->GetInstructionWithName("send-done.2");
-  ASSERT_NE(send2, nullptr);
-
-  auto* recv1 = comp->GetInstructionWithName("recv-done.1");
-  ASSERT_NE(recv1, nullptr);
-  auto* recv2 = comp->GetInstructionWithName("recv-done.2");
-  ASSERT_NE(recv2, nullptr);
-
-  // Renamed to custom-call, make sure information is kept.
-  auto* recv3 = comp->GetInstructionWithName("custom-call");
-  ASSERT_NE(recv3, nullptr);
-  ASSERT_NE(Cast<HloRecvFromHostInstruction>(recv3), nullptr);
-  ASSERT_EQ(Cast<HloRecvFromHostInstruction>(recv3)->RendezvousKey(),
-            "test_key");
-
   auto* barrier = comp->GetInstructionWithName("host_compute.barrier");
   ASSERT_NE(barrier, nullptr);
 
-  ASSERT_EQ(barrier->control_predecessors().size(), 2);
-  ASSERT_EQ(barrier->control_predecessors()[0], send1);
-  ASSERT_EQ(barrier->control_predecessors()[1], send2);
+  int num_sends = 0;
+  int num_recvs = 0;
 
-  ASSERT_EQ(barrier->control_successors().size(), 3);
-  ASSERT_EQ(barrier->control_successors()[0], recv1);
-  ASSERT_EQ(barrier->control_successors()[1], recv2);
-  ASSERT_EQ(barrier->control_successors()[2], recv3);
+  for (HloInstruction* inst : comp->instructions()) {
+    if (IsPoplarInstruction(SendToHost)(inst)) {
+      ++num_sends;
+      ASSERT_EQ(inst->control_successors().size(), 1);
+      ASSERT_EQ(inst->control_successors()[0], barrier);
+    } else if (IsPoplarInstruction(RecvFromHost)(inst)) {
+      ++num_recvs;
+      ASSERT_EQ(inst->control_predecessors().size(), 1);
+      ASSERT_EQ(inst->control_predecessors()[0], barrier);
+    }
+  }
+
+  ASSERT_EQ(num_sends, 1);
+  ASSERT_EQ(num_recvs, 1);
+}
+
+TEST_F(HostComputeBarrierInserterTest, TestNoBarrierBetweenDifferentOps) {
+  std::string hlo_string = R"(
+HloModule top
+
+ENTRY %top (arg: f32[]) -> f32[] {
+  %arg = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  %send = () custom-call(f32[] %arg), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"send_key\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  ROOT %recv = f32[] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"recv_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute_2"}
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  ASSERT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+
+  HostComputeBarrierInserter inserter;
+  ASSERT_FALSE(inserter.Run(module).ValueOrDie());
+
+  ASSERT_EQ(nullptr, comp->GetInstructionWithName("host_compute.barrier"));
+  ASSERT_EQ(nullptr, comp->GetInstructionWithName("host_compute_2.barrier"));
+
+  int num_sends = 0;
+  int num_recvs = 0;
+
+  for (HloInstruction* inst : comp->instructions()) {
+    if (IsPoplarInstruction(SendToHost)(inst)) {
+      ++num_sends;
+      ASSERT_EQ(inst->control_successors().size(), 0);
+    } else if (IsPoplarInstruction(RecvFromHost)(inst)) {
+      ++num_recvs;
+      ASSERT_EQ(inst->control_predecessors().size(), 0);
+    }
+  }
+
+  ASSERT_EQ(num_sends, 1);
+  ASSERT_EQ(num_recvs, 1);
+}
+
+TEST_F(HostComputeBarrierInserterTest,
+       TestInsertDependenciesFromAllSendsToAllRecvs) {
+  std::string hlo_string = R"(
+HloModule top
+
+ENTRY %top (arg: f32[]) -> (f32[], f32[]) {
+  %arg = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  %send1 = () custom-call(f32[] %arg), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"send1_key\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  %send2 = () custom-call(f32[] %arg), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"send2_key\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  %recv1 = f32[] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"recv1_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  %recv2 = f32[] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"recv2_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  ROOT %tuple = (f32[], f32[]) tuple(%recv1, %recv2)
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  ASSERT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+
+  HostComputeBarrierInserter inserter;
+  ASSERT_TRUE(inserter.Run(module).ValueOrDie());
+
+  auto* barrier = comp->GetInstructionWithName("host_compute.barrier");
+  ASSERT_NE(barrier, nullptr);
+  ASSERT_EQ(barrier->control_predecessors().size(), 2);
+  ASSERT_EQ(barrier->control_successors().size(), 2);
+
+  int num_sends = 0;
+  int num_recvs = 0;
+
+  for (HloInstruction* inst : comp->instructions()) {
+    if (IsPoplarInstruction(SendToHost)(inst)) {
+      ++num_sends;
+      ASSERT_EQ(inst->control_successors().size(), 1);
+      ASSERT_EQ(inst->control_successors()[0], barrier);
+    } else if (IsPoplarInstruction(RecvFromHost)(inst)) {
+      ++num_recvs;
+      ASSERT_EQ(inst->control_predecessors().size(), 1);
+      ASSERT_EQ(inst->control_predecessors()[0], barrier);
+    }
+  }
+
+  ASSERT_EQ(num_sends, 2);
+  ASSERT_EQ(num_recvs, 2);
 }
 
 }  // namespace

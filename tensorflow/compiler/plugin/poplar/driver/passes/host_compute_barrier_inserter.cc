@@ -36,7 +36,7 @@ namespace {
 static constexpr char kHostComputeOp[] = "XlaHostCompute";
 
 struct SendRecvs {
-  std::vector<HloSendDoneInstruction*> sends;
+  std::vector<HloInstruction*> sends;
   std::vector<HloInstruction*> recvs;
 };
 
@@ -45,15 +45,15 @@ using OpSendRecvs = std::unordered_map<string, SendRecvs>;
 OpSendRecvs GroupSendRecvsByHostComputeOp(const HloComputation* comp) {
   OpSendRecvs result;
 
-  auto is_recv_from_host = IsPoplarInstruction(RecvFromHost);
+  auto is_send = IsPoplarInstruction(SendToHost);
+  auto is_recv = IsPoplarInstruction(RecvFromHost);
 
   for (HloInstruction* inst : comp->instructions()) {
     if (inst->metadata().op_type() == kHostComputeOp) {
       const auto& op_name = inst->metadata().op_name();
-      if (inst->opcode() == HloOpcode::kSendDone) {
-        result[op_name].sends.push_back(Cast<HloSendDoneInstruction>(inst));
-      } else if (inst->opcode() == HloOpcode::kRecvDone ||
-                 is_recv_from_host(inst)) {
+      if (is_send(inst)) {
+        result[op_name].sends.push_back(inst);
+      } else if (is_recv(inst)) {
         result[op_name].recvs.push_back(inst);
       }
     }

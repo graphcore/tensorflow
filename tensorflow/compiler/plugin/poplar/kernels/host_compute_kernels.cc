@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
+#include "tensorflow/compiler/xla/shape_util.h"
 
 namespace tensorflow {
 
@@ -125,7 +126,7 @@ class XlaHostComputeOp : public XlaOpKernel {
       OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(ctx->input_type(i),
                                                 ctx->InputShape(i), &shape));
       send_shapes.push_back(shape);
-      BuildSend(ctx, i, shape);
+      BuildSendToHost(ctx, i, shape);
     }
 
     for (int i = 0; i < ctx->num_outputs(); ++i) {
@@ -139,24 +140,18 @@ class XlaHostComputeOp : public XlaOpKernel {
   }
 
  private:
-  void BuildSend(XlaOpKernelContext* ctx, int index, const xla::Shape& shape) {
-    xla::XlaBuilder* builder = ctx->builder();
-    XlaCompiler* compiler = ctx->compiler();
-
-    const xla::XlaOp send_token = CreateToken(builder);
+  void BuildSendToHost(XlaOpKernelContext* ctx, int index,
+                       const xla::Shape& shape) {
     const xla::XlaOp input = ctx->Input(index);
 
     const auto rendezvous_key = CreateSendRendezvousKey(key_, index);
 
-    xla::ChannelHandle send_channel;
-    OP_REQUIRES_OK(ctx, compiler->GetDeviceToHostChannelHandle(rendezvous_key,
-                                                               &send_channel));
+    xla::poplarplugin::IPUCustomKernelsUtil::AttributeMap attributes;
+    attributes.AddAttribute("rendezvous_key", rendezvous_key);
 
-    const xla::XlaOp send_done =
-        xla::SendToHost(input, send_token, shape, send_channel);
-
-    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
-                            send_done, "rendezvous_key", rendezvous_key));
+    const xla::XlaOp send_to_host = xla::CustomCall(
+        ctx->builder(), PoplarOp_Name(PoplarOp::SendToHost), {input},
+        xla::ShapeUtil::MakeNil(), attributes.Serialise());
   }
 
   void BuildRecvFromHost(XlaOpKernelContext* ctx, int index,
