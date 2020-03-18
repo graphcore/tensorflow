@@ -72,24 +72,6 @@ static const std::vector<HloMatcherPattern> patterns = {
     })
   ),
 
-  // Remove convert to/from F32 before/after average pool
-  HloMatcherPattern(
-      PatternType("reduction_no_convert_with_divide"),
-      PatternMetaTarget(4),
-      PatternInputs({7}),
-      PatternOutputs({0}),
-      Pattern({
-          {HloOpcode::kConvert, NodeOperands({1}), IsF32ToF16Convert},
-          {HloOpcode::kDivide, NodeOperands({4, 2}), IsF32},
-          {HloOpcode::kBroadcast, NodeOperands({3}), IsF32},
-          {HloOpcode::kConstant, NodeOperands({}), IsF32},
-          {HloOpcode::kReduce, NodeOperands({5, 6}), IsF32},
-          {HloOpcode::kConvert, NodeOperands({7}), IsF16ToF32Convert},
-          {HloOpcode::kConstant, NodeOperands({}), IsF32},
-          {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16}
-      })
-  ),
-
   // Remove convert to/from F32 before reshape and after reduction, where
   // initial value is a constant
   HloMatcherPattern(

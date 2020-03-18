@@ -147,6 +147,28 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
 
+  def testReduceMean(self):
+    with self.session() as sess:
+      shape = [2, 10000]
+      with ops.device("/device:IPU:0"):
+        pa = array_ops.placeholder(np.float16, shape)
+        output = math_ops.reduce_mean(pa, axis=[1])
+
+      report = ReportJSON(self, sess)
+      report.reset()
+
+      val = np.finfo(np.float16).max / 2
+      result = sess.run(output, {pa: np.full(shape, val)})
+      self.assertAllClose(result, [val, val])
+
+      report.parse_log(assert_len=4)
+
+      ok = [
+          '__seed*', 'host-exchange-local-copy-', 'Mean/fusion/Reduce',
+          'Mean/fusion*/Op/Multiply', 'Mean/convert*/Cast'
+      ]
+      report.assert_all_compute_sets_and_list(ok)
+
 
 if __name__ == "__main__":
   os.environ['TF_XLA_FLAGS'] = ('--tf_xla_min_cluster_size=2 ' +

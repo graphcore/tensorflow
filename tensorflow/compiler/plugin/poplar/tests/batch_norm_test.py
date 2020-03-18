@@ -97,7 +97,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      bl = ['*convert*/Cast*']
+      bl = ['*FusedBatchNorm*/Cast*']
       report.assert_compute_sets_not_in_blacklist(bl)
       report.assert_tensor_input_names("input_a", "x", "y")
 
@@ -182,7 +182,7 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
 
         report.parse_log()
 
-        bl = ['*convert*/Cast*']
+        bl = ['*FusedBatchNorm*/Cast*']
         report.assert_compute_sets_not_in_blacklist(bl)
         report.assert_tensor_input_names("input_a", "x", "y")
 

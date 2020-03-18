@@ -12,21 +12,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-
-#include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
-
-#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
-#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/service/hlo_instruction.h"
-#include "tensorflow/core/lib/core/errors.h"
-
-#include "absl/strings/str_cat.h"
-
 #include <poplar/Graph.hpp>
 #include <poplin/MatMul.hpp>
 #include <popnn/NonLinearity.hpp>
@@ -37,6 +22,18 @@ limitations under the License.
 #include <popops/Pad.hpp>
 #include <popops/Reduce.hpp>
 #include <popops/ScaledAdd.hpp>
+
+#include "absl/strings/str_cat.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/core/lib/core/errors.h"
 
 using ::absl::StrCat;
 
@@ -574,6 +571,23 @@ class PaddingReduceWindowOp : public PoplarOpDef {
 };
 
 REGISTER_POPLAR_OP(Padding_reduce_window, PaddingReduceWindowOp)
+
+class ReductionFp16InputOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    const HloInstruction* reduce_inst =
+        inst->fused_instructions_computation()->root_instruction();
+    TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
+                        CreateSimpleReduction(res, inst, reduce_inst,
+                                              output_shape, tensor_map));
+    return prog;
+  }
+};
+
+REGISTER_POPLAR_OP(Reduction_fp16_input, ReductionFp16InputOp)
 
 }  // namespace poplarplugin
 }  // namespace xla

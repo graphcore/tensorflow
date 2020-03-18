@@ -118,6 +118,14 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map);
 
+// Same as above, but allows the instruction for which we get the inputs for
+// (`inst`) and the instruction from which we take the reduction parameters from
+// (`reduce_inst`) to be different.
+StatusOr<poplar::program::Program> CreateSimpleReduction(
+    CompilerResources& res, const HloInstruction* inst,
+    const HloInstruction* reduce_inst, const xla::Shape& output,
+    TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateSimpleWindowReduction(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);

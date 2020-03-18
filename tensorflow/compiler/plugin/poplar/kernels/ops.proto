@@ -91,4 +91,5 @@ enum PoplarOp {
   Implicit_ternary = 217;
   Implicit_ternary_inplace = 218;
   Scaled_inplace_axb = 219;
+  Reduction_fp16_input = 220;
 }
