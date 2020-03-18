@@ -35,7 +35,7 @@ class PopopsAllGather : public XlaOpKernel, IpuOpKernel {
   void Compile(XlaOpKernelContext* ctx) override {
     // Just create the XLA instruction directly, we will catch this in the
     // vistors and lower it to poplar from there. The last parameter, replica
-    // groups is ignored because for IPU we asusme that we are always targetting
+    // groups is ignored because for IPU we assume that we are always targeting
     // all replicas likewise we ignore the split count.
     //   ctx->SetOutput(0, xla::AllToAll(ctx->Input(0), split_dimension,
     //                                    concat_dimension, 2, {}));
@@ -88,7 +88,7 @@ class PopopsAllToAll : public XlaOpKernel {
   void Compile(XlaOpKernelContext* ctx) override {
     // Just create the XLA instruction directly, we will catch this in the
     // vistors and lower it to poplar from there. The last parameter, replica
-    // groups is ignored because for IPU we asusme that we are always targetting
+    // groups is ignored because for IPU we assume that we are always targeting
     // all replicas likewise we ignore the split count.
     ctx->SetOutput(0, xla::AllToAll(ctx->Input(0), split_dimension,
                                     concat_dimension, number_of_replicas, {}));

@@ -16,7 +16,9 @@ IPUStrategy
 
 Distribution strategies are a more advanced and flexible version of device
 tagging. The ``IPUStrategy`` is a sub-class of distribution strategy which
-specifically targets the IPU.
+specifically targets a system with one or more IPUs attached.  A separate
+class ``IPUMultiWorkerStrategy`` is for targeting a multiple system
+configuration.
 
 Use the ``strategy.scope()`` context to ensure that everything within that
 context will be compiled for the IPU device.  You should do this instead

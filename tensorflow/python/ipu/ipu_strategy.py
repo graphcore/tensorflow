@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===================================================================
+"""
+Distribution strategy for a single system
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import input_lib
 from tensorflow.python.distribute import values
@@ -21,7 +26,46 @@ from tensorflow.python.util import nest
 
 
 class IPUStrategy(distribute_lib.StrategyV1):
+  """This is a distribution strategy for targeting a system with one
+  or more IPUs.
+
+  Creating variables and Keras models within the scope of the
+  IPUStrategy will ensure that they are placed on the IPU.
+
+  A tf.function can be executed on the IPU by calling it from the
+  `experimental_run_v2` function.
+
+  Variables will automatically be placed onto the IPUs, but the
+  initializers for the variables will be performed on the CPU
+  device.
+
+  .. code-block:: python
+
+    from tensorflow.python import ipu
+
+    # Create an IPU distribution strategy
+    strategy = ipu.ipu_strategy.IPUStrategy()
+
+    with strategy.scope():
+        
+        # Instantiate a keras model here
+        m = MyModel()
+
+        # And train it
+        m.fit(...)
+
+        # Or call a tf.function
+        res = strategy.experimental_run_v2(my_fn, [...])
+  
+
+  """
   def __init__(self, ipu_device="/device:IPU:0", cpu_device="/device:CPU:0"):
+    """Create a new IPUStrategy.
+
+    Args:
+      ipu_device: The Tensorflow device representing the IPUs.
+      cpu_device: The Tensorflow device for the CPU.
+    """
     super().__init__(IPUExtended(self, ipu_device, cpu_device))
 
 
