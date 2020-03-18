@@ -622,31 +622,45 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         CreateHloProfilePrinterData(*profile_index_map, cost_analysis, name);
   }
 
-  std::string cache_filename;
   const ModuleFilenames filenames =
       poplar_executor->GetModuleFilenames(*module);
   if (poplar_executor->HaveExecutableCache()) {
-    cache_filename = filenames.CachedExecutableFilename();
-
-    if (poplar_executor->HaveCachedExecutable(cache_filename)) {
+    if (poplar_executor->HaveCachedExecutable(filenames)) {
       TF_ASSIGN_OR_RETURN(PoplarExecutable * poplar_executable,
                           PoplarExecutable::Deserialize(
                               std::move(module), std::move(profile_printer),
-                              std::move(profile_index_map), cache_filename));
+                              std::move(profile_index_map), filenames));
       // When restoring the executable we still need to make sure all the
       // outfeeds are unique.
       TF_RETURN_IF_ERROR(poplar_executor->RegisterOutfeeds(
           poplar_executable->GetOutfeedInfos()));
 
+      if (poplar_executor->EnableSerialization()) {
+        TF_RETURN_IF_ERROR(
+            poplar_executor->CreateSerializedExecutableDirIfMissing());
+        try {
+          std::ifstream file(filenames.CachedExecutableFilename(),
+                             std::ios::binary);
+          auto poplar_binary = poplar::Executable::deserialize(file);
+
+          TF_RETURN_IF_ERROR(PoplarExecutable::Export(
+              filenames, poplar_binary, *poplar_executable,
+              poplar_executor->GetReportExecutionFlags(),
+              poplar_executor->GetOrCreatePoplarTarget()));
+        } catch (const std::exception& e) {
+          return PoplarExceptionToTensorflowStatus("[Deserialize] ", e);
+        }
+      }
       std::unique_ptr<Executable> executable;
       executable.reset(poplar_executable);
 
       VLOG(1) << "Loaded " << executable->module().name() << " from "
-              << cache_filename;
+              << filenames.CachedEngineFilename();
 
       return std::move(executable);
     } else {
-      VLOG(1) << "Couldn't find " << cache_filename << " in executable cache";
+      VLOG(1) << "Couldn't find " << filenames.CachedEngineFilename()
+              << " in executable cache";
     }
   }
 
@@ -998,16 +1012,15 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           poplar::compileGraph(main_graph, progs, opts, progress_logging);
 
       if (poplar_executor->HaveExecutableCache()) {
-        if (!poplar_executor->HaveCachedExecutable(cache_filename)) {
+        if (!poplar_executor->HaveCachedExecutable(filenames)) {
           TF_RETURN_IF_ERROR(
               poplar_executor->CreateExecutableCacheDirIfMissing());
           TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
-              cache_filename, exec, resources.annotations, replication_factor,
+              filenames, exec, resources.annotations, replication_factor,
               poplar_executor->GetReportExecutionFlags()));
         }
       }
       if (poplar_executor->EnableSerialization()) {
-        std::string filename = filenames.SerializedExecutableFilename();
         TF_RETURN_IF_ERROR(
             poplar_executor->CreateSerializedExecutableDirIfMissing());
 

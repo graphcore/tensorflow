@@ -245,7 +245,7 @@ bool AbslParseFlag(absl::string_view text, ExecutableFile* f,
     ERROR_ON(!error->empty());
     const std::string folder = f->filename;
     const std::string filename =
-        GetOnlyFileWithExtension(folder, "poplar_exec", error);
+        GetOnlyFileWithExtension(folder, "ipu_bin", error);
     if (filename.empty()) {
       return false;
     }
@@ -281,7 +281,7 @@ bool AbslParseFlag(absl::string_view text, WeightsFolder* f,
 ABSL_FLAG(MetadataFile, model_metadata, MetadataFile(),
           "Path to the json file containing the metadata of the model to run.");
 ABSL_FLAG(ExecutableFile, model_executable, ExecutableFile(),
-          "Path to the ipu_bin.poplar_exec file containing the Poplar binaries "
+          "Path to the ipu_bin file containing the Poplar binaries "
           "of the model to run");
 ABSL_FLAG(WeightsFolder, weights_path, WeightsFolder(),
           "Path to the folder where the weights (.data files) can be found.");
@@ -350,7 +350,7 @@ int main(int argc, char** argv) {
 
   ERROR_ON_MSG(poplar_executable_filename.empty(),
                "--model_executable needs to be set to a valid "
-               "ipu_bin.poplar_exec file");
+               "ipu_bin file");
   ERROR_ON_MSG(metadata_filename.empty(),
                ": --model_metadata needs to be set to a valid "
                "json file");

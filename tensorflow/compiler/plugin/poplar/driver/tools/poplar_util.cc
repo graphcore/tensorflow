@@ -404,15 +404,12 @@ Json::Value DimensionsToJson(const absl::Span<const int64> dimensions) {
 }  // namespace
 
 Status SaveExecutableMetadataJson(const std::string& filename,
-                                  const CompilerResources& res,
+                                  const InputOutputAliasingMap& io_map,
+                                  const InfeedInfos& infeed_infos,
+                                  const OutfeedInfos& outfeed_infos,
                                   uint32 replication_count,
                                   const poplar::OptionFlags& opts,
                                   const poplar::Target& target) {
-  const InputOutputAliasingMap& io_map =
-      res.annotations.input_output_aliasing_map;
-  const InfeedInfos& infeed_infos = res.annotations.infeed_infos;
-  const OutfeedInfos& outfeed_infos = res.annotations.outfeed_infos;
-
   Json::Value inputs;
   std::map<std::string, std::string> params_handle_map;
   for (auto input : io_map.GetEntryInputInfos()) {

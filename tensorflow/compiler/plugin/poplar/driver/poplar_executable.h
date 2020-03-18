@@ -130,9 +130,9 @@ class PoplarExecutable : public Executable {
       std::unique_ptr<HloModule> hlo_module,
       std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
       std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map,
-      const std::string& filename);
+      const ModuleFilenames& filenames);
 
-  static Status Serialize(const std::string& filename,
+  static Status Serialize(const ModuleFilenames& filenames,
                           const poplar::Executable& executable,
                           const CompilerAnnotations& annotations,
                           uint32 replication_count,
@@ -142,6 +142,11 @@ class PoplarExecutable : public Executable {
                        const poplar::Executable& executable,
                        const CompilerResources& resources,
                        uint32 replication_count,
+                       const poplar::OptionFlags& opts,
+                       const poplar::Target& target);
+  static Status Export(const ModuleFilenames& filenames,
+                       const poplar::Executable& executable,
+                       const PoplarExecutable& poplar_executable,
                        const poplar::OptionFlags& opts,
                        const poplar::Target& target);
 

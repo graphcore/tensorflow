@@ -372,12 +372,6 @@ class DatasetExtractor : public OpKernel {
 
         for (size_t j = 0; j < outputs.size(); ++j) {
           TensorBuffer* tb = tensorflow::DMAHelper::buffer(&outputs[j]);
-          DataType type;
-          TensorShape shape;
-          TF_ASSIGN_OR_RETURN(
-              type, EncodePrimitiveTypeAsDataType(shapes_[j].element_type()));
-          TF_RETURN_IF_ERROR(XLAShapeToTensorShape(shapes_[j], &shape));
-          Tensor output(type, shape, tb);
           output_streams[j].WriteData(tb->data(), buffer_sizes[j]);
         }
       }

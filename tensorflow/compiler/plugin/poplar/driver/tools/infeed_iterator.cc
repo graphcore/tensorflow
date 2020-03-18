@@ -60,6 +60,8 @@ std::string GetTaskName(const tensorflow::Device* device) {
 
 namespace xla {
 namespace poplarplugin {
+
+/* static */ constexpr InfeedQueue::T InfeedQueue::kEndOfQueueSentinel;
 InfeedQueue::InfeedQueue()
     : queue_(nullptr, [](tensorflow::TensorBuffer*& buffer) {
         if (buffer) {

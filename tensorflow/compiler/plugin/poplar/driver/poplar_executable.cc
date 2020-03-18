@@ -175,11 +175,11 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     std::unique_ptr<HloModule> hlo_module,
     std::unique_ptr<HloProfilePrinterData> profile_printer,
     std::unique_ptr<HloProfileIndexMap> profile_index_map,
-    const std::string& filename) {
+    const ModuleFilenames& filenames) {
   PoplarExecutableProto proto;
 
-  TF_RETURN_IF_ERROR(
-      ReadBinaryProto(tensorflow::Env::Default(), filename, &proto));
+  TF_RETURN_IF_ERROR(ReadBinaryProto(tensorflow::Env::Default(),
+                                     filenames.CachedEngineFilename(), &proto));
 
   // Load metadata
   int replication_factor = proto.replication_factor();
@@ -236,6 +236,12 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   // Load the executable
   std::string poplar_executable_filename = proto.engine();
+  if (poplar_executable_filename != filenames.CachedExecutableFilename()) {
+    return tensorflow::errors::InvalidArgument(
+        "Filename mismatch between module expected filename '",
+        filenames.CachedExecutableFilename(), "' and file stored in proto '",
+        poplar_executable_filename, "'");
+  }
   std::unique_ptr<poplar::Engine> engine;
   try {
     std::ifstream file(poplar_executable_filename, std::ios::binary);
@@ -259,65 +265,97 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
   return executable;
 }
-
-/*static*/ Status PoplarExecutable::Export(const ModuleFilenames& filenames,
-                                           const poplar::Executable& executable,
-                                           const CompilerResources& resources,
-                                           uint32 replication_count,
-                                           const poplar::OptionFlags& opts,
-                                           const poplar::Target& target) {
-  if (!resources.annotations.send_infos.empty()) {
+namespace {
+Status ExportInternal(const ModuleFilenames& filenames,
+                      const poplar::Executable& executable,
+                      const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
+                      const SendRecvInfos& sends, const SendRecvInfos& recvs,
+                      const HostEmbeddingInfos& lookups,
+                      const HostEmbeddingInfos& updates,
+                      const InputOutputAliasingMap& io_map,
+                      uint32 replication_count, const poplar::OptionFlags& opts,
+                      const poplar::Target& target) {
+  if (!sends.empty()) {
     return tensorflow::errors::FailedPrecondition(
         "Failed to export the PoplarExecutable because it contains Sends "
         "operations.");
   }
-  if (!resources.annotations.recv_infos.empty()) {
+  if (!recvs.empty()) {
     return tensorflow::errors::FailedPrecondition(
         "Failed to export the PoplarExecutable because it contains Receives "
         "operations.");
   }
-  if (!resources.annotations.host_embedding_lookup_infos.empty()) {
+  if (!lookups.empty()) {
     return tensorflow::errors::FailedPrecondition(
         "Failed to export the PoplarExecutable because it contains Host "
         "embedding lookups.");
   }
-  if (!resources.annotations.host_embedding_update_infos.empty()) {
+  if (!updates.empty()) {
     return tensorflow::errors::FailedPrecondition(
         "Failed to export the PoplarExecutable because it contains Host "
         "embedding updates.");
   }
 
   // Write poplar executable to a file
-  std::string poplar_executable_filename =
-      filenames.SerializedExecutableFilename() + ".poplar_exec";
   try {
-    auto file = std::ofstream(poplar_executable_filename, std::ios::binary);
+    auto file = std::ofstream(filenames.SerializedExecutableFilename(),
+                              std::ios::binary);
     executable.serialize(file);
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Serialize] ", e);
   }
 
-  TF_RETURN_IF_ERROR(
-      SaveExecutableMetadataJson(filenames.SerializedMetadataFilename(),
-                                 resources, replication_count, opts, target));
+  return SaveExecutableMetadataJson(filenames.SerializedMetadataFilename(),
+                                    io_map, infeeds, outfeeds,
+                                    replication_count, opts, target);
 }
 
+}  // namespace
+/*static*/ Status PoplarExecutable::Export(const ModuleFilenames& filenames,
+                                           const poplar::Executable& executable,
+                                           const CompilerResources& resources,
+                                           uint32 replication_count,
+                                           const poplar::OptionFlags& opts,
+                                           const poplar::Target& target) {
+  TF_RETURN_IF_ERROR(ExportInternal(
+      filenames, executable, resources.annotations.infeed_infos,
+      resources.annotations.outfeed_infos, resources.annotations.send_infos,
+      resources.annotations.recv_infos,
+      resources.annotations.host_embedding_lookup_infos,
+      resources.annotations.host_embedding_update_infos,
+      resources.annotations.input_output_aliasing_map, replication_count, opts,
+      target));
+}
+
+/*static*/ Status PoplarExecutable::Export(
+    const ModuleFilenames& filenames, const poplar::Executable& executable,
+    const PoplarExecutable& poplar_executable, const poplar::OptionFlags& opts,
+    const poplar::Target& target) {
+  TF_RETURN_IF_ERROR(ExportInternal(
+      filenames, executable, poplar_executable.GetInfeedInfos(),
+      poplar_executable.GetOutfeedInfos(), poplar_executable.GetSendInfos(),
+      poplar_executable.GetRecvInfos(),
+      poplar_executable.GetHostEmbeddingLookupInfos(),
+      poplar_executable.GetHostEmbeddingUpdateInfos(),
+      poplar_executable.GetInputOutputAliasingMap(),
+      poplar_executable.GetReplicationFactor(), opts, target));
+}
 /*static*/ Status PoplarExecutable::Serialize(
-    const std::string& filename, const poplar::Executable& executable,
+    const ModuleFilenames& filenames, const poplar::Executable& executable,
     const CompilerAnnotations& annotations, uint32 replication_count,
     const poplar::OptionFlags& opts) {
   PoplarExecutableProto proto;
 
   // Write poplar executable to a file
-  std::string poplar_executable_filename = filename + ".poplar_exec";
   try {
-    auto file = std::ofstream(poplar_executable_filename, std::ios::binary);
+    auto file = std::ofstream(filenames.SerializedExecutableFilename(),
+                              std::ios::binary);
     executable.serialize(file);
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Serialize] ", e);
   }
 
-  proto.set_engine(poplar_executable_filename);
+  proto.set_engine(filenames.CachedExecutableFilename());
 
   proto.set_replication_factor(replication_count);
 
@@ -381,7 +419,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
         remote_parameter_info.parameter_number);
   }
 
-  return WriteBinaryProto(tensorflow::Env::Default(), filename, proto);
+  return WriteBinaryProto(tensorflow::Env::Default(),
+                          filenames.CachedEngineFilename(), proto);
 }
 
 }  // namespace poplarplugin
