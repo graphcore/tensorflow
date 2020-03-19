@@ -29,6 +29,31 @@ from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 
 # We implement all three algorithms through a common generic group norm algorithm.
 class GroupNorm(Layer):
+  """Group normalization layer optimized for running on the IPU.
+
+  This layer is used like the standard Keras BatchNormalization layer.
+  However, it has beta and gamma trainable parameters, but no statistics
+  gathering.
+
+  Group normalization is described in this paper:
+  https://arxiv.org/abs/1803.08494.
+
+  Arguments:
+    dtype: The data type for the trainable weights.
+    groups: The number of groups to use in the normalization.
+    channels_axis: Integer, the axis that should be normalized
+      (typically the features axis).
+    reduction_axes: List of integers, the axes that should be reduced
+      across.  (typically the spatial axes).
+    center: If True, add offset of `beta` to normalized tensor.
+      If False, `beta` is ignored.
+    scale: If True, multiply by `gamma`.
+      If False, `gamma` is not used.
+    epsilon: Small float added to variance to avoid dividing by zero.
+    beta_initializer: Initializer for the beta weight.
+    gamma_initializer: Initializer for the gamma weight.
+    name: Optional name for the layer.
+  """
   def __init__(self,
                dtype=dtypes.float32,
                groups=2,
@@ -159,6 +184,31 @@ class GroupNorm(Layer):
 
 
 class InstanceNorm(GroupNorm):
+  """Instance normalization layer optimized for use on the IPU.
+
+  This layer is used like the standard Keras BatchNormalization layer.
+  However, it has beta and gamma trainable parameters, but no statistics
+  gathering.
+
+  Instance normalization is described in this paper:
+  https://arxiv.org/abs/1607.08022.
+
+  Arguments:
+    dtype: The data type for the trainable weights.
+    groups: The number of groups to use in the normalization.
+    channels_axis: Integer, the axis that should be normalized
+      (typically the features axis).
+    reduction_axes: List of integers, the axes that should be reduced
+      across.  (typically the spatial axes).
+    center: If True, add offset of `beta` to normalized tensor.
+      If False, `beta` is ignored.
+    scale: If True, multiply by `gamma`.
+      If False, `gamma` is not used.
+    epsilon: Small float added to variance to avoid dividing by zero.
+    beta_initializer: Initializer for the beta weight.
+    gamma_initializer: Initializer for the gamma weight.
+    name: Optional name for the layer.
+  """
   def __init__(self,
                dtype=dtypes.float32,
                channels_axis=-1,
@@ -190,6 +240,31 @@ class InstanceNorm(GroupNorm):
 
 
 class LayerNorm(GroupNorm):
+  """Layer normalization layer optimized for use on the IPU.
+
+  This layer is used like the standard Keras BatchNormalization layer.
+  However, it has beta and gamma trainable parameters, but no statistics
+  gathering.
+
+  Layer normalization is described in this paper:
+  https://arxiv.org/abs/1607.06450.
+
+  Arguments:
+    dtype: The data type for the trainable weights.
+    groups: The number of groups to use in the normalization.
+    channels_axis: Integer, the axis that should be normalized
+      (typically the features axis).
+    reduction_axes: List of integers, the axes that should be reduced
+      across.  (typically the spatial axes).
+    center: If True, add offset of `beta` to normalized tensor.
+      If False, `beta` is ignored.
+    scale: If True, multiply by `gamma`.
+      If False, `gamma` is not used.
+    epsilon: Small float added to variance to avoid dividing by zero.
+    beta_initializer: Initializer for the beta weight.
+    gamma_initializer: Initializer for the gamma weight.
+    name: Optional name for the layer.
+  """
   def __init__(self,
                dtype=dtypes.float32,
                channels_axis=-1,

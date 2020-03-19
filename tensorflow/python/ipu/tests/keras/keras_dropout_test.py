@@ -30,16 +30,20 @@ from tensorflow.python.ops import array_ops
 dataType = np.float32
 
 
-def _kerasIPUDropout(instance, x_val, rate=0.5, scale=1.0, seed=None):
+def _kerasIPUDropout(instance,
+                     x_val,
+                     rate=0.5,
+                     scale=1.0,
+                     seed=None,
+                     training=True):
   with ops.device('/device:IPU:0'):
     x = array_ops.placeholder(x_val.dtype, x_val.shape)
     output = ipu.layers.Dropout(dtype=dataType,
                                 rate=rate,
                                 scale=scale,
-                                seed=seed)(inputs=x)
+                                seed=seed)(inputs=x, training=training)
 
   with instance.test_session() as sess:
-    sess.run(variables.global_variables_initializer())
     return sess.run(output, {x: x_val})
 
 
@@ -80,6 +84,10 @@ class IPUDropoutTest(test.TestCase):
       )[0]
       keras_result = _kerasIPUDropout(self, x, seed=[42, 42], scale=s)[0]
       self.assertAllClose(original_scale * s, keras_result)
+
+    # Test inference
+    inf_output = _kerasIPUDropout(self, x, seed=[42, 42], training=False)
+    self.assertAllClose(inf_output, x)
 
 
 if __name__ == '__main__':

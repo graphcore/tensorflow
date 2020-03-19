@@ -27,7 +27,6 @@ from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 
-from tensorflow.python.util.tf_export import keras_export
 from tensorflow.python.ops import rnn_cell
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 
@@ -44,34 +43,30 @@ __all__ = ["PopnnLSTM", "PopnnGRU"]
 
 class _PopnnRNN(Layer):
   """Base class for implementing XLA and Popnn compatible RNN layers.
-    """
+  """
   def __init__(self,
                num_units,
-               dtype=dtypes.float32,
                partials_dtype=dtypes.float32,
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
-               name=None):
-    """Creates a _PopnnRNN layer from layer spec.
+               dtype=dtypes.float32,
+               **kwargs):
+    """Creates a _PopnnRNN model from model spec.
 
-    Args:
-      num_units: the number of units within the RNN layer.
-      dtype: tf.float16 or tf.float32
-      partials_dtype: the type used by Popnn to perform partial
-                      calculations.
-        Either tf.float16 or tf.float32.
-      seed: A Python integer. Used to create the default Glorot uniform
-        initializer weights_initializer.
-      weights_initializer: starting value to initialize the weight
-        (default is all zeros).
-      bias_initializer: starting value to initialize the bias
-        (default is all zeros).
-      name: VariableScope for the created subgraph; defaults to class name.
-        This only serves the default scope if later no scope is specified
-        when invoking ``__call__()``.
+        Args:
+          num_units: the number of units within the RNN model.
+          partials_dtype: the type used by Popnn to perform partial
+                          calculations.
+            Either tf.float16 or tf.float32.
+          seed: A Python integer. Used to create the default Glorot uniform
+            initializer weights_initializer.
+          weights_initializer: starting value to initialize the weight
+            (default is all zeros).
+          bias_initializer: starting value to initialize the bias
+            (default is all zeros).
     """
-    super(_PopnnRNN, self).__init__(dtype=dtype, name=name)
+    super(_PopnnRNN, self).__init__(dtype=dtype, **kwargs)
 
     if dtype not in [dtypes.float16, dtypes.float32]:
       raise ValueError("Only support float16, float32, provided %s" % dtype)
@@ -101,12 +96,6 @@ class _PopnnRNN(Layer):
       raise ValueError(
           "\'input_size\' is unknown since layer has not been built.")
     return self._input_size
-
-  @property
-  def saveable(self):
-    raise NotImplementedError(
-        "This cell does not yet support object-based saving. File a feature "
-        "request if this limitation bothers you.")
 
   @property
   def canonical_weight_shape(self):
@@ -140,7 +129,7 @@ class _PopnnRNN(Layer):
         Raises:
           ValueError: if input_shape has wrong dimension or unknown 3rd
           dimension.
-        """
+    """
     if self.built:
       return
 
@@ -238,7 +227,6 @@ class _PopnnRNN(Layer):
     return [self._num_gates_per_layer, self._num_units]
 
 
-@keras_export(v1=['keras.ipu.layers.PopnnLSTM'])
 class PopnnLSTM(_PopnnRNN):
   # pylint:disable=line-too-long
   """XLA compatible, time-major Popnn implementation of an LSTM layer.
@@ -252,27 +240,10 @@ class PopnnLSTM(_PopnnRNN):
 
         outputs, output_states = lstm(inputs, initial_states, training=True)
 
-    """
-  # pylint:enable=line-too-long
-  _rnn_mode = POPNN_LSTM
-  _num_gates_per_layer = POPNN_LSTM_NUM_GATES
-
-  def __init__(self,
-               num_units,
-               dtype=dtypes.float32,
-               partials_dtype=dtypes.float32,
-               seed=None,
-               weights_initializer=None,
-               bias_initializer=None,
-               recurrent_weight_initializer=None,
-               name=None):
-    """Creates a PopnnLSTM layer.
-    Note that the the layer built expects input to be time_major.
-
     Args:
-      num_units: the number of units within the RNN layer.
-      dtype: tf.float16 or tf.float32
-      partials_dtype: the type used by Popnn to perform partial calculations.
+      num_units: the number of units within the RNN model.
+      partials_dtype: the type used by Popnn to perform partial
+                      calculations.
         Either tf.float16 or tf.float32.
       seed: A Python integer. Used to create the default Glorot uniform
         initializer weights_initializer.
@@ -282,28 +253,39 @@ class PopnnLSTM(_PopnnRNN):
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
       recurrent_weight_initializer: This optional parameter will partition
-        weight initialization into two stages, first initalizing the input
-        kernel using weights_initializer then will initialize a kernel for the
-        recurrent state. Default is None, which means that weights and bias
-        initializers are used instead.
-      name: VariableScope for the created subgraph; defaults to class name.
-        This only serves the default scope if later no scope is specified
-        when invoking ``__call__()``.
-    """
+                                    weight initialization into two stages,
+                                    first initalizing the input kernel
+                                    using weights_initializer then will
+                                    initalize a kernel for the recurrent
+                                    state. This partitioning is what the
+                                    keras LSTM layer does.
+                                    (default is None, meaning off)
 
+  """
+  # pylint:enable=line-too-long
+  _rnn_mode = POPNN_LSTM
+  _num_gates_per_layer = POPNN_LSTM_NUM_GATES
+
+  def __init__(self,
+               units,
+               partials_dtype=dtypes.float32,
+               seed=None,
+               weights_initializer=None,
+               bias_initializer=None,
+               recurrent_weight_initializer=None,
+               **kwargs):
     if recurrent_weight_initializer is not None:
       self.recurrent_weight_initializer = initializers.get(
           recurrent_weight_initializer)
     else:
       self.recurrent_weight_initializer = None
 
-    super(PopnnLSTM, self).__init__(num_units=num_units,
-                                    dtype=dtype,
+    super(PopnnLSTM, self).__init__(num_units=units,
                                     partials_dtype=partials_dtype,
                                     seed=seed,
                                     weights_initializer=weights_initializer,
                                     bias_initializer=bias_initializer,
-                                    name=name)
+                                    **kwargs)
 
   def build(self, input_shape):
     """Create variables of the PopnnLSTM.
@@ -333,13 +315,6 @@ class PopnnLSTM(_PopnnRNN):
 
     Returns:
       tuple of output and output states:
-
-      * output: a tensor of shape [time_len, batch_size, num_units].
-      * output_states: An `LSTMStateTuple` of the same shape and structure
-          as initial_state.
-
-    Raises:
-      ValueError: if initial_state is not valid.
 
     """
     dtype = self.dtype
@@ -399,14 +374,7 @@ class PopnnLSTM(_PopnnRNN):
         name=self._name)
     return output, rnn_cell.LSTMStateTuple(output_c, output_h)
 
-  @property
-  def saveable(self):
-    raise NotImplementedError(
-        "This cell does not yet support object-based saving. File a "
-        "feature request if this limitation bothers you.")
 
-
-@keras_export(v1=['keras.ipu.layers.PopnnGRU'])
 class PopnnGRU(_PopnnRNN):
   # pylint:disable=line-too-long
   """XLA compatible, time-major Popnn implementation of an GRU layer.
@@ -426,38 +394,18 @@ class PopnnGRU(_PopnnRNN):
   _num_gates_per_layer = POPNN_GRU_NUM_GATES
 
   def __init__(self,
-               num_units,
-               dtype=dtypes.float32,
+               units,
                partials_dtype=dtypes.float32,
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
-               name=None):
-    """Creates a PopnnGRU layer.
-    Note that the the layer built expects input to be time_major.
-
-    Args:
-      num_units: the number of units within the RNN layer.
-      dtype: tf.float16 or tf.float32
-      partials_dtype: the type used by Popnn to perform partial calculations.
-        Either tf.float16 or tf.float32.
-      seed: A Python integer. Used to create the default Glorot uniform
-        initializer weights_initializer.
-      weights_initializer: starting value to initialize the weight
-        (default isipu Glorot uniform initializer).
-      bias_initializer: starting value to initialize the bias (default is all
-        zeros).
-      name: VariableScope for the created subgraph; defaults to class name.
-        This only serves the default scope if later no scope is specified
-        when invoking ``__call__()``.
-    """
-    super(PopnnGRU, self).__init__(num_units=num_units,
-                                   dtype=dtype,
+               **kwargs):
+    super(PopnnGRU, self).__init__(num_units=units,
                                    partials_dtype=partials_dtype,
                                    seed=seed,
                                    weights_initializer=weights_initializer,
                                    bias_initializer=bias_initializer,
-                                   name=name)
+                                   **kwargs)
 
   def build(self, input_shape):
     """Create variables of the PopnnGRU.
@@ -533,9 +481,3 @@ class PopnnGRU(_PopnnRNN):
         partials_dtype=self._partials_dtype,
         name=self._name)
     return output, output_c
-
-  @property
-  def saveable(self):
-    raise NotImplementedError(
-        "This cell does not yet support object-based saving. File a feature "
-        "request if this limitation bothers you.")

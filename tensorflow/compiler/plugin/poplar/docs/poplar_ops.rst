@@ -59,3 +59,12 @@ The original paper on layer normalisation is
 <https://arxiv.org/abs/1607.06450>`_.
 
 See :py:func:`tensorflow.python.ipu.normalization_ops.layer_norm`.
+
+GeLU activation
+~~~~~~~~~~~~~~~
+
+GeLU, gaussian error linear units, is an alternative to the ReLU
+non-lineaity.  The paper at https://arxiv.org/pdf/1606.08415.pdf
+describes it.
+
+See :py:func:`tensorflow.python.ipu.nn_ops.gelu`.

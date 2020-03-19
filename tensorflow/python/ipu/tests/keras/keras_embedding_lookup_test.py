@@ -20,12 +20,14 @@ from __future__ import print_function
 
 import numpy as np
 
-from tensorflow.python.framework import test_util
-from tensorflow.python.platform import test
-from tensorflow.python.ops import array_ops
 from tensorflow.python import ipu
-from tensorflow.python.ops import nn
+from tensorflow.python import keras
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import test_util
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import nn
+from tensorflow.python.ops import variables
+from tensorflow.python.platform import test
 
 dataType = np.float32
 
@@ -41,64 +43,53 @@ def _embeddingLookup(instance, params_val, ids_val):
 
 
 def kerasIPUEmbeddingLookup(instance, params_val, ids_val):
+  input_dim = params_val.shape[0]
+  output_dim = params_val.shape[1]
   with ops.device('/device:IPU:0'):
-    params = array_ops.placeholder(dataType, params_val.shape)
+    layer = ipu.layers.Embedding(
+        input_dim,
+        output_dim,
+        embeddings_initializer=keras.initializers.constant(params_val))
+    layer.build(ids_val.shape)
+
     ids = array_ops.placeholder(np.int32, ids_val.shape)
-    output = ipu.layers.Embedding()(params, ids)
+    output = layer(ids)
 
   with instance.test_session() as sess:
-    return sess.run(output, {params: params_val, ids: ids_val})
+    sess.run(variables.global_variables_initializer())
+    return sess.run(output, {ids: ids_val})
 
 
 class IPUEmbeddingLookupTest(test.TestCase):
   @test_util.deprecated_graph_mode_only
   def testEmbeddingLookup(self):
-    params = np.array([10, 20, 80, 40])
-    ids = np.array([1, 2, 3])
-    emb_lookup_tf = _embeddingLookup(self, params, ids)
-    emb_lookup_ipu = kerasIPUEmbeddingLookup(self, params, ids)
-
+    ids = np.array([[1, 2, 3]])
+    paras = np.array([[10], [20], [80], [40]])
+    emb_lookup_tf = _embeddingLookup(self, paras, ids)
+    emb_lookup_ipu = kerasIPUEmbeddingLookup(self, paras, ids)
     self.assertAllClose(emb_lookup_tf, emb_lookup_ipu)
 
-  @test_util.deprecated_graph_mode_only
-  def testEmbeddingLookupGather(self):
-    ids = np.arange(0, 8, dtype=np.int32)
-    params = np.arange(2400000, dtype=dataType).reshape([12000, 200])
-    result_ipu = kerasIPUEmbeddingLookup(self, params, ids)
-    result_np = np.take(params, ids, axis=0)
-    np.take(params, ids, axis=0)
-    self.assertAllClose(result_ipu, result_np)
-    self.assertEqual(result_ipu.shape, (8, 200))
-
-  @test_util.deprecated_graph_mode_only
-  def testEmbeddingLookupAutoFlatten(self):
-    ids = np.array([[[10, 11], [12, 13], [14, 15], [16, 17]],
-                    [[20, 21], [22, 23], [24, 25], [26, 27]],
-                    [[30, 31], [32, 33], [34, 35], [36, 37]]],
-                   dtype=np.int32)
-    params = np.random.uniform(0.0, 1.0, size=(100, 16))
-    emb_lookup_tf = _embeddingLookup(self, params, ids)
-    emb_lookup_ipu = kerasIPUEmbeddingLookup(self, params, ids)
-    self.assertEqual(emb_lookup_ipu.shape, (3, 4, 2, 16))
-    self.assertAllClose(emb_lookup_ipu, emb_lookup_tf)
-
-  @test_util.deprecated_graph_mode_only
-  def testEmbeddingLookup3(self):
-    ids = np.array([4, 8, 15, 16, 23, 42, 8, 4, 15, 16], dtype=np.int32)
-    params = np.random.uniform(0.0, 1.0, size=(100, 16))
-    emb_lookup_tf = _embeddingLookup(self, params, ids)
-    emb_lookup_ipu = kerasIPUEmbeddingLookup(self, params, ids)
-    self.assertEqual(emb_lookup_ipu.shape, (10, 16))
+  def testEmbeddingLookupBatchSize2(self):
+    ids = np.array([[1, 2, 3], [3, 4, 5]])
+    paras = np.array([[10], [20], [80], [40], [50], [60]])
+    emb_lookup_tf = nn.embedding_lookup(paras, ids)
+    emb_lookup_ipu = kerasIPUEmbeddingLookup(self, paras, ids)
     self.assertAllClose(emb_lookup_tf, emb_lookup_ipu)
 
-  @test_util.deprecated_graph_mode_only
-  def testEmbedding4D(self):
-    ids = np.arange(0, 16, dtype=np.int32).reshape([8, 2])
-    params = np.arange(25600, dtype=dataType).reshape([32, 200, 4])
-    result_ipu = kerasIPUEmbeddingLookup(self, params, ids)
-    result_np = np.take(params, ids, axis=0)
-    self.assertEqual(result_ipu.shape, (8, 2, 200, 4))
+  # Based on ipu/tests/embedding_lookup_test.py
+  def testEmbeddingLookupBigGather(self):
+    ids = np.arange(0, 8, dtype=np.int32).reshape([1, 8])
+    paras = np.arange(2400000, dtype=dataType).reshape([12000, 200])
+    result_ipu = kerasIPUEmbeddingLookup(self, paras, ids)
+    result_np = np.take(paras, ids, axis=0)
     self.assertAllClose(result_ipu, result_np)
+    self.assertEqual(result_ipu.shape, (1, 8, 200))
+
+  def testEmbeddingBadInputShape(self):
+    ids = np.arange(0, 16, dtype=np.int32)
+    paras = np.arange(25600, dtype=dataType).reshape([32, 200, 4])
+    with self.assertRaisesRegexp(ValueError, r'The input shape should be a'):
+      kerasIPUEmbeddingLookup(self, paras, ids)
 
 
 if __name__ == '__main__':
