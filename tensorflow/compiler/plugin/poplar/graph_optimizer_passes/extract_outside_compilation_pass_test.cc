@@ -43,7 +43,7 @@ class ExtractOutsideCompilationPassTest : public ::testing::Test {
     std::vector<std::unique_ptr<Device>> devices;
     TF_CHECK_OK(DeviceFactory::AddDevices(
         session_options_, "/job:localhost/replica:0/task:0", &devices));
-    device_mgr_ = absl::make_unique<DeviceMgr>(std::move(devices));
+    device_mgr_ = absl::make_unique<StaticDeviceMgr>(std::move(devices));
     for (Device* d : device_mgr_->ListDevices()) {
       device_set_.AddDevice(d);
     }
