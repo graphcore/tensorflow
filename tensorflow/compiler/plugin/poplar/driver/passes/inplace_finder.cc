@@ -240,6 +240,7 @@ StatusOr<bool> InplaceFinder::Run(HloModule* module) {
                                                    worklist_)) {
             MakeUsedInplace(inst);
             changed = true;
+            VLOG(1) << "Inplacing " << inst->ToString();
           }
         }
       }
