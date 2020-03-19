@@ -2342,6 +2342,32 @@ xla_test(
 )
 
 tf_cc_test(
+    name = "extract_outside_compilation_pass_test",
+    size = "small",
+    srcs = [
+        "graph_optimizer_passes/extract_outside_compilation_pass_test.cc",
+    ],
+    deps = [
+        ":graph_optimizer_passes",
+        ":poplar_lib",
+        "//tensorflow/cc:cc_ops",
+        "//tensorflow/cc:cc_ops_internal",
+        "//tensorflow/cc:function_ops",
+        "//tensorflow/cc:ops",
+        "//tensorflow/cc:scope",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:framework_internal",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:session_options",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core:testlib",
+    ],
+)
+
+tf_cc_test(
     name = "reorder_gradient_accumulation_pass_test",
     size = "small",
     srcs = [
@@ -3742,6 +3768,7 @@ test_suite(
         "dynamic_slice_test",
         "elementwise_broadcast_converter_test",
         "expression_outliner_test",
+        "extract_outside_compilation_pass_test",
         "f16_constant_folding_test",
         "f16_test",
         "find_all_users_test",
