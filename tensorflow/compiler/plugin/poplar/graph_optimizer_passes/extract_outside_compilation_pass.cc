@@ -43,6 +43,7 @@ namespace tensorflow {
 namespace {
 
 constexpr char kFunctionToApplyAttrName[] = "to_apply";
+constexpr char kInputTypesAttrName[] = "Tinputs";
 constexpr char kKeyAttrName[] = "key";
 constexpr char kOutputTypesAttrName[] = "Toutputs";
 constexpr char kXlaClusterAttrName[] = "_XlaCluster";
@@ -61,6 +62,10 @@ bool IsXlaLaunchNode(const Node& n) { return n.type_string() == "XlaLaunch"; }
 
 bool IsXlaRecvAtHostNode(const Node& n) {
   return n.type_string() == "_XlaRecvAtHost";
+}
+
+bool IsXlaSendFromHostNode(const Node& n) {
+  return n.type_string() == "_XlaSendFromHost";
 }
 
 Status ReplaceKeyPlaceholdersWithConstants(Graph* g) {
@@ -220,12 +225,77 @@ Status SplitXlaRecvAtHostNodes(Graph* g) {
   return Status::OK();
 }
 
+// Splits a node with N inputs into N - 1 nodes with 2 inputs each (the last
+// original input is connected to all the new nodes).
+Status SplitXlaSendFromHostNode(Graph* g, Node* n) {
+  // Create a template based on the original node and clear attributes that must
+  // be unique for the split nodes.
+  NodeDef node_def_template(n->def());
+  node_def_template.clear_name();
+  node_def_template.mutable_attr()->erase(kKeyAttrName);
+  node_def_template.mutable_attr()->erase(kInputTypesAttrName);
+
+  CHECK_EQ(n->num_outputs(), 0);
+  CHECK_GT(n->num_inputs(), 1);
+
+  // Grab attributes needed to set unique attributes for the split nodes.
+  string key;
+  TF_RETURN_IF_ERROR(GetNodeAttr(n->attrs(), kKeyAttrName, &key));
+  std::vector<DataType> input_types;
+  TF_RETURN_IF_ERROR(
+      GetNodeAttr(n->attrs(), kInputTypesAttrName, &input_types));
+  TF_RET_CHECK(static_cast<int32>(input_types.size()) == n->num_inputs() - 1);
+
+  const Edge* last_edge;
+  TF_RETURN_IF_ERROR(n->input_edge(n->num_inputs() - 1, &last_edge));
+
+  // Add the new split nodes based on the template.
+  for (int32 i = 0; i < n->num_inputs() - 1; ++i) {
+    NodeDef new_node_def(node_def_template);
+    new_node_def.set_name(strings::StrCat(n->name(), i));
+
+    // Refer to CreateRecvRendezvousKey in host_compute_kernels.cc.
+    const string new_key = strings::StrCat(key, ":", i);
+    AddNodeAttr(kKeyAttrName, new_key, &new_node_def);
+    AddNodeAttr(kInputTypesAttrName, {input_types[i]}, &new_node_def);
+
+    Status s;
+    Node* new_node = g->AddNode(new_node_def, &s);
+    if (!s.ok()) {
+      return s;
+    }
+
+    const Edge* in_edge;
+    TF_RETURN_IF_ERROR(n->input_edge(i, &in_edge));
+    g->AddEdge(in_edge->src(), in_edge->src_output(), new_node,
+               /*dst_input=*/0);
+    g->AddEdge(last_edge->src(), last_edge->src_output(), new_node,
+               /*dst_input=*/1);
+  }
+
+  // Remove the original node.
+  g->RemoveNode(n);
+
+  return Status::OK();
+}
+
+Status SplitXlaSendFromHostNodes(Graph* g) {
+  for (Node* n : g->op_nodes()) {
+    if (IsXlaSendFromHostNode(*n)) {
+      TF_RETURN_IF_ERROR(SplitXlaSendFromHostNode(g, n));
+    }
+  }
+
+  return Status::OK();
+}
+
 }  // namespace
 
 Status ExtractOutsideCompilationPass::Run(
     const GraphOptimizationPassOptions& options) {
   FunctionLibraryDefinition* flib_def = options.flib_def;
   TF_RET_CHECK(flib_def != nullptr);
+  TF_RET_CHECK(options.session_options != nullptr);
 
   auto pflr = absl::make_unique<ProcessFunctionLibraryRuntime>(
       nullptr, options.session_options->env, TF_GRAPH_DEF_VERSION, flib_def,
@@ -237,7 +307,7 @@ Status ExtractOutsideCompilationPass::Run(
 
   FunctionLibraryRuntime* flr =
       pflr->GetFLR(ProcessFunctionLibraryRuntime::kDefaultFLRDevice);
-  TF_RET_CHECK(flr);
+  TF_RET_CHECK(flr != nullptr);
 
   bool modified = false;
 
@@ -283,6 +353,10 @@ Status ExtractOutsideCompilationPass::Run(
   // of a single node that waits for all the necessary data to satisfy all of
   // its outputs. The split nodes can complete when only their data is ready.
   TF_RETURN_IF_ERROR(SplitXlaRecvAtHostNodes(graph));
+
+  // Do the same for XlaSendFromHost nodes such that we can start sending
+  // data as soon as it is ready instead of waiting for all of it.
+  TF_RETURN_IF_ERROR(SplitXlaSendFromHostNodes(graph));
 
   // Run the placer again to assign devices to the nodes added by this pass.
   // Make sure the default local device is used when in a distributed context.

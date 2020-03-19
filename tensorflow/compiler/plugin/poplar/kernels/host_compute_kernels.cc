@@ -56,13 +56,16 @@ string CreateSendRendezvousKey(const string& key) {
   return CreateRendezvousKey(key, "/device:IPU:0", "/device:CPU:0");
 }
 
+string CreateRecvRendezvousKey(const string& key) {
+  return CreateRendezvousKey(key, "/device:CPU:0", "/device:IPU:0");
+}
+
 string CreateSendRendezvousKey(const string& key, int index) {
   return CreateSendRendezvousKey(strings::StrCat(key, ":", index));
 }
 
 string CreateRecvRendezvousKey(const string& key, int index) {
-  return CreateRendezvousKey(strings::StrCat(key, ":", index), "/device:CPU:0",
-                             "/device:IPU:0");
+  return CreateRecvRendezvousKey(strings::StrCat(key, ":", index));
 }
 
 Rendezvous::DoneCallback MakeRecvCallback(OpKernelContext* ctx,
@@ -221,15 +224,15 @@ class XlaSendFromHostOp : public OpKernel {
                 errors::InvalidArgument("Need device_ordinal >= 0, got ",
                                         device_ordinal_));
 
+    OP_REQUIRES(
+        ctx, ctx->num_inputs() == 2,
+        errors::InvalidArgument("Must have 2 inputs, got ", ctx->num_inputs()));
+
     string key;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("key", &key));
 
-    for (int i = 0; i < ctx->num_inputs(); ++i) {
-      const string full_key = CreateRecvRendezvousKey(key, i);
-      Rendezvous::ParsedKey parsed_key;
-      OP_REQUIRES_OK(ctx, Rendezvous::ParseKey(full_key, &parsed_key));
-      parsed_keys_.push_back(std::move(parsed_key));
-    }
+    const string full_key = CreateRecvRendezvousKey(key);
+    OP_REQUIRES_OK(ctx, Rendezvous::ParseKey(full_key, &parsed_key_));
   }
 
   void Compute(OpKernelContext* ctx) override {
@@ -237,16 +240,14 @@ class XlaSendFromHostOp : public OpKernel {
     OP_REQUIRES_OK(ctx, poplar_executor.status());
     auto* rendezvous = poplar_executor.ValueOrDie()->GetRendezvous();
 
-    for (int i = 0; i < ctx->num_inputs(); ++i) {
-      const Tensor& tensor = ctx->input(i);
-      rendezvous->Send(parsed_keys_[i], Rendezvous::Args{}, tensor,
-                       /*is_dead=*/false);
-    }
+    const Tensor& tensor = ctx->input(0);
+    rendezvous->Send(parsed_key_, Rendezvous::Args{}, tensor,
+                     /*is_dead=*/false);
   }
 
  private:
   int device_ordinal_;
-  std::vector<Rendezvous::ParsedKey> parsed_keys_;
+  Rendezvous::ParsedKey parsed_key_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(XlaSendFromHostOp);
 };
