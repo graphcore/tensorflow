@@ -1469,6 +1469,7 @@ xla_test(
     timeout = "long",
     srcs = ["select_and_scatter_test.cc"],
     tags = [
+        "no_rocm",
         "optonly",
     ],
     deps = [
