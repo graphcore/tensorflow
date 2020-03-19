@@ -182,8 +182,8 @@ class IpuXlaConvTest(xla_test.XLATestCase):
         report.parse_log()
 
         ok = [
-            '__seed*', 'host-exchange-local-copy-', 'Copy_',
-            'cnv5*/convolution.*/Conv_1x1', 'ba5*/fusion/Op/Add'
+            '__seed*', 'Copy_', 'cnv5*/convolution.*/Conv_1x1',
+            'ba5*/fusion/Op/Add'
         ]
         report.assert_all_compute_sets_and_list(ok)
 
@@ -305,10 +305,8 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
       # pylint: disable=line-too-long
       ok = [
-          '__seed*', 'host-exchange-local-copy-', 'Copy_',
-          'depthwise/convolution.*/Conv_1x1',
-          'Copy_depthwise/convolution.*/Conv_1x1/partials_to_depthwise/convolution.*/Conv_1x1/partials[[]cloned[]]',
-          'add/fusion*/Add'
+          '__seed*', 'host-exchange-local-copy-',
+          'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -335,7 +333,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       report.parse_log()
 
       ok = [
-          '__seed*',
+          '__seed*', 'host-exchange-local-copy-',
           'DepthwiseConv2dNativeBackpropInput/fusion*/WeightTranspose',
           'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_3x3', 'Copy_'
       ]
@@ -365,6 +363,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'Copy_',
+          'host-exchange-local-copy-',
           'DepthwiseConv2dNativeBackpropInput/fusion*/WeightTranspose',
           'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_1x1',
       ]
