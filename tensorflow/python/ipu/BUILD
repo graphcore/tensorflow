@@ -268,7 +268,7 @@ tf_py_test(
 
 tf_py_test(
     name = "keras_pipeline_test",
-    size = "medium",
+    size = "large",
     srcs = ["tests/keras/keras_pipeline_test.py"],
     additional_deps = [
         ":pipelining_test_util",
