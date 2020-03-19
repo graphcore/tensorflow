@@ -83,7 +83,7 @@ StatusOr<poplar::program::Program> CreateSendDone(CompilerResources& res,
   const auto* send = Cast<HloSendInstruction>(send_done->operand(0));
 
   TF_ASSIGN_OR_RETURN(const poplar::Tensor tensor,
-                      FindInstructionInput(tensor_map, res, send, 0, seq));
+                      FindInstructionInput(tensor_map, res, send_done, 0, seq));
 
   TF_ASSIGN_OR_RETURN(
       const string rendezvous_key,

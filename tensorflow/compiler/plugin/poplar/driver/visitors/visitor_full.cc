@@ -19,6 +19,12 @@ limitations under the License.
 #include <string.h>
 
 #include <map>
+#include <poplar/Engine.hpp>
+#include <poplar/GraphElements.hpp>
+#include <poplar/Tensor.hpp>
+#include <poplar/exceptions.hpp>
+#include <popops/Zero.hpp>
+#include <poputil/Util.hpp>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -42,13 +48,6 @@ limitations under the License.
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/stream_executor/lib/initialize.h"
-
-#include <poplar/Engine.hpp>
-#include <poplar/GraphElements.hpp>
-#include <poplar/Tensor.hpp>
-#include <poplar/exceptions.hpp>
-#include <popops/Zero.hpp>
-#include <poputil/Util.hpp>
 
 using ::tensorflow::str_util::Join;
 
@@ -403,6 +402,12 @@ Status FullVisitor::HandleRecvDone(HloInstruction* inst) {
 
 Status FullVisitor::HandleSend(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
+  TF_ASSIGN_OR_RETURN(
+      TensorVectors inputs,
+      FindInplaceOutputTensors(tensor_map, resources_, inst, sequence));
+  CHECK_EQ(inputs.size(), 1);
+  CHECK_EQ(inputs[0].size(), 1);
+  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, inputs[0][0]));
   return Status::OK();
 }
 
@@ -431,9 +436,14 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
 
     // Handle special cases which do not have outputs at certain locations.
     switch (inst->opcode()) {
-      case HloOpcode::kRecv:
-      case HloOpcode::kSend: {
+      case HloOpcode::kRecv: {
         continue;
+      }
+      case HloOpcode::kSend: {
+        if (tuple_index > 0) {
+          continue;
+        }
+        break;
       }
       case HloOpcode::kCustomCall: {
         const int64 output_idx = index[0];
