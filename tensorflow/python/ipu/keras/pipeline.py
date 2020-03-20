@@ -123,15 +123,76 @@ class _KerasOptimizerWrapper(Optimizer):
 class PipelinedModel(Model):
   """Model for encapsulating a pipeline of stages to be run in parallel on an
   IPU system.
+
+  A pipelined model will execute multiple sections (stages) of a model on more
+  than one IPU at the same time, by pipelining mini-batches of data through
+  the stages.
+
+  It encapsulates the ipu.pipelining_ops.pipeline operation and the associated
+  InFeed and OutFeed queues into a class which resembles the Keras Model class
+  and provides the `fit` API for training the model.
+
+  The different stages are specified, similarly to the Keras Sequential model,
+  as a list in the constructor.  With the PipelinedModel class the list of
+  layers becomes a list of lists of layers, where each list contains the layers
+  for a particular stage.
+
+  The pipeline depth argument describes the number of mini-batches which are
+  sent through the pipeline in a single operation of the pipeline.  The
+  effective batch size is therefore the mini-batch size multipled by the
+  pipeline depth.
+
+  There are some limitations with the PipelinedModel compared to the standard
+  Keras Model.
+
+  - The input must be provided by a tf.DataSet.
+  - Keras V1 optimizers cannot be used.
+  - Loss weightings can only be specified as a list, not a callable.
+  - Weighted metrics, target tensors and sample weight mode are not supported.
+  - Validation cannot be performed as part of the `fit` loop.
+  - The model cannot be called using the __call__() interface.
+
+  The model will only be constructed after the first call to the `fit` method,
+  so a summary of the model will net be possible until after some training
+  has occurred.  Related this this, the `build` method does not build the
+  model.
+
+  Example:
+
+  .. code-block:: python
+
+    dataset = ...
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel([
+        [
+          keras.layers.Dense(4),
+          keras.layers.Dense(4),
+          keras.layers.Dense(4),
+        ],
+        [
+          keras.layers.Dense(8),
+        ],
+      ], pipeline_depth=24)
+
+      m.compile('sgd', loss='mse')
+
+      m.fit(dataset, steps_per_epoch=144)
+
   """
   def __init__(self, stages=None, pipeline_depth=None, **kwargs):
-    """Creates a pipelined model.
+    """
+    Creates a pipelined model.
 
-        Args:
-            stages: A python list of lists of Layers.
-            pipeline_depth: The number of batches processed by the pipeline on
-                            each iteration.
-            name: Optional op name.
+    Args:
+        stages: A python list of lists of Layers.
+        pipeline_depth: The number of mini-batches processed by the
+                        pipeline on each iteration.
+        name: Optional name for the pipeline operation.
+
+    Other arguments are passed to the pipeline operator, for instance
+    device_mapping or pipeline_schedule.
     """
     name = kwargs.pop("name", None)
     super(PipelinedModel, self).__init__(dtype=None, name=name)
@@ -180,6 +241,15 @@ class PipelinedModel(Model):
               target_tensors=None,
               distribute=None,
               **kwargs):
+    """
+    This provides the same functionality as the Keras Model ``compile``
+    method.
+
+    Certain features are not supported by the IPU PipelinedModel:
+    - sample_weight_mode
+    - weighted_metrics
+    - target_tensors
+    """
 
     if isinstance(optimizer, optimizers.Optimizer):
       raise ValueError(
@@ -362,6 +432,17 @@ class PipelinedModel(Model):
           use_multiprocessing=False,
           steps_per_run=None,
           **kwargs):
+    """
+    This provides the same functionality as the Keras Model `fit` method.
+
+    The pipeline itself can be wrapped in a loop in order to execute a larger
+    training run in a single call to hardware.  The `steps_per_run` argument
+    is needed to describe how many steps should be performed on each hardware
+    execution.  The dataset should be able to provide enough samples to run
+    for the mini-batch size multiplied by the pipeline depth multiplied by the
+    steps_per_run value.  If the dataset is infinite, because it has been
+    repeated indefinitely, then this will be ok.
+    """
 
     if not isinstance(x, dataset_ops.DatasetV2):
       raise ValueError(
