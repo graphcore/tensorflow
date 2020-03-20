@@ -348,8 +348,8 @@ Status ExportInternal(const ModuleFilenames& filenames,
 
   // Write poplar executable to a file
   try {
-    auto file = std::ofstream(filenames.SerializedExecutableFilename(),
-                              std::ios::binary);
+    auto file =
+        std::ofstream(filenames.CachedExecutableFilename(), std::ios::binary);
     executable.serialize(file);
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Serialize] ", e);

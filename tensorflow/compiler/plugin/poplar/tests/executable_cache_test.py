@@ -14,12 +14,23 @@ from tensorflow.python import ops
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import model_fn
+from tensorflow.python.framework import errors
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import metrics_impl
 from tensorflow.python.platform import googletest
 from tensorflow.python.platform import test
 from tensorflow.python.summary import summary_iterator
+
+offline_compilation_needed = "--use_ipu_model" in os.environ.get(
+    "TF_POPLAR_FLAGS", "")
+
+
+def _use_offline_compilation_if_needed(opts):
+  if offline_compilation_needed:
+    return ipu.utils.set_ipu_connection_type(
+        opts, ipu.utils.DeviceConnectionType.NEVER, 1)
+  return opts
 
 
 @contextlib.contextmanager
@@ -29,19 +40,10 @@ def _temporary_executable_cache():
     cache_dir = os.path.join(temp_dir, "cache")
     poplar_flags = "--executable_cache_path={} {}".format(
         cache_dir, os.environ.get("TF_POPLAR_FLAGS", ""))
+    # Disable the IPU model
+    poplar_flags = poplar_flags.replace("--use_ipu_model", "")
     with test.mock.patch.dict("os.environ", {"TF_POPLAR_FLAGS": poplar_flags}):
       yield
-
-
-def _run_in_new_process(fn):
-  q = multiprocessing.Queue()
-  p = multiprocessing.Process(target=lambda: q.put(fn()))
-  p.start()
-  # Get from queue before joining to avoid deadlock if the queue is full and
-  # blocks the producer.
-  ret = q.get()
-  p.join()
-  return ret
 
 
 def _count_ipu_compilations_in_summary(summary):
@@ -75,6 +77,26 @@ def _count_ipu_compilations(events):
 
 
 class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-method
+  def _run_in_new_process(self, fn):
+    q = multiprocessing.Queue()
+
+    def process_fn():
+      try:
+        q.put(fn())
+      except:
+        # To avoid dead lock on q.get()
+        q.put(None)
+        raise
+
+    p = multiprocessing.Process(target=process_fn)
+    p.start()
+    # Get from queue before joining to avoid deadlock if the queue is full and
+    # blocks the producer.
+    ret = q.get()
+    p.join()
+    self.assertEqual(p.exitcode, 0)
+    return ret
+
   @test_util.deprecated_graph_mode_only
   def test_basic_model(self):
     def build_and_run_model():
@@ -86,14 +108,22 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = ReportJSON(self, sess)
-        res = sess.run(result, {v: [2.0]})
+        report = ReportJSON(self,
+                            sess,
+                            set_opts_fn=_use_offline_compilation_if_needed)
+        try:
+          res = sess.run(result, {v: [2.0]})
+        except errors.InvalidArgumentError as e:
+          if offline_compilation_needed and "compilation only" in e.message:
+            res = []
+          else:
+            raise
         events = report.get_event_trace(sess)
         return res, events
 
     with _temporary_executable_cache():
-      result0, report0 = _run_in_new_process(build_and_run_model)
-      result1, report1 = _run_in_new_process(build_and_run_model)
+      result0, report0 = self._run_in_new_process(build_and_run_model)
+      result1, report1 = self._run_in_new_process(build_and_run_model)
       self.assertEqual(result0, result1)
       self.assertEqual(1, _count_ipu_compilations(report0))
       self.assertEqual(0, _count_ipu_compilations(report1))
@@ -121,15 +151,26 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         dequeued = outfeed_queue.dequeue()
 
       with session.Session() as sess:
-        report = ReportJSON(self, sess)
+        report = ReportJSON(self,
+                            sess,
+                            set_opts_fn=_use_offline_compilation_if_needed)
         sess.run(infeed_queue.initializer)
-        res, deq = sess.run([result, dequeued], {v: 0.0})
+        try:
+          res, deq = sess.run([result, dequeued], {v: 0.0})
+        except errors.InvalidArgumentError as e:
+          if offline_compilation_needed and "compilation only" in e.message:
+            res = []
+            deq = []
+          else:
+            raise
         events = report.get_event_trace(sess)
         return res, deq, events
 
     with _temporary_executable_cache():
-      result0, dequeued0, events0 = _run_in_new_process(build_and_run_model)
-      result1, dequeued1, events1 = _run_in_new_process(build_and_run_model)
+      result0, dequeued0, events0 = self._run_in_new_process(
+          build_and_run_model)
+      result1, dequeued1, events1 = self._run_in_new_process(
+          build_and_run_model)
       self.assertAllEqual(dequeued0, dequeued1)
       self.assertEqual(result0, result1)
       self.assertEqual(1, _count_ipu_compilations(events0))
@@ -137,6 +178,9 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
 
   @test_util.deprecated_graph_mode_only
   def test_model_with_send_to_host_op(self):
+    if offline_compilation_needed:
+      self.skipTest("Compilation only mode makes CPU op hang")
+
     def build_and_run_model():
       def my_net(x):
         return gen_sendrecv_ops.ipu_send_to_host(x,
@@ -163,8 +207,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         return received, events
 
     with _temporary_executable_cache():
-      received0, events0 = _run_in_new_process(build_and_run_model)
-      received1, events1 = _run_in_new_process(build_and_run_model)
+      received0, events0 = self._run_in_new_process(build_and_run_model)
+      received1, events1 = self._run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 1.0)
       self.assertEqual(1, _count_ipu_compilations(events0))
@@ -181,8 +225,16 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         [result] = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
       with session.Session() as sess:
-        report = ReportJSON(self, sess)
-        res = sess.run(result, {v: [2.0]})
+        report = ReportJSON(self,
+                            sess,
+                            set_opts_fn=_use_offline_compilation_if_needed)
+        try:
+          res = sess.run(result, {v: [2.0]})
+        except errors.InvalidArgumentError as e:
+          if offline_compilation_needed and "compilation only" in e.message:
+            res = []
+          else:
+            raise
         events = report.get_event_trace(sess)
         return res, events
 
@@ -201,6 +253,9 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(0, _count_ipu_compilations(events1))
 
   def test_ipu_estimator(self):
+    if offline_compilation_needed:
+      self.skipTest("Estimator doesn't support offline compilation")
+
     def my_model_fn(features, labels, mode):
       loss = features + labels
       # Make different graphs for train and eval
@@ -257,10 +312,13 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
       self.assertEqual(2, _count_ipu_compilations_in_dir(log_dir))
 
     with _temporary_executable_cache():
-      _run_in_new_process(build_and_run_model)
+      self._run_in_new_process(build_and_run_model)
 
   @test_util.deprecated_graph_mode_only
   def test_model_with_outside_compilation_scope(self):
+    if offline_compilation_needed:
+      self.skipTest("Compilation only mode makes outside compilation hang")
+
     def build_and_run_model():
       def my_net(x):
         y = x * x
@@ -279,8 +337,8 @@ class TestExecutableCache(xla_test.XLATestCase):  # pylint: disable=abstract-met
         return received, events
 
     with _temporary_executable_cache():
-      received0, events0 = _run_in_new_process(build_and_run_model)
-      received1, events1 = _run_in_new_process(build_and_run_model)
+      received0, events0 = self._run_in_new_process(build_and_run_model)
+      received1, events1 = self._run_in_new_process(build_and_run_model)
       self.assertEqual(received0, received1)
       self.assertEqual(received0, 4.0)
       self.assertEqual(1, _count_ipu_compilations(events0))
