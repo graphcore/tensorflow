@@ -3767,6 +3767,7 @@ test_suite(
         "dynamic_slice_layout_test",
         "dynamic_slice_test",
         "elementwise_broadcast_converter_test",
+        "executable_cache_test",
         "expression_outliner_test",
         "extract_outside_compilation_pass_test",
         "f16_constant_folding_test",

@@ -181,7 +181,8 @@ class ReportJSON(object):
                estimator_hook=False,
                eager_mode=False,
                allow_recompute=False,
-               use_stable_norm_statistics=False):
+               use_stable_norm_statistics=False,
+               set_opts_fn=None):
     self.report = None
     self.test = test
     self.sess = sess
@@ -227,6 +228,9 @@ class ReportJSON(object):
 
       opts = utils.set_norm_options(
           opts, use_stable_statistics=use_stable_norm_statistics)
+
+      if set_opts_fn:
+        opts = set_opts_fn(opts)
 
       if not estimator_hook:
         utils.configure_ipu_system(opts)

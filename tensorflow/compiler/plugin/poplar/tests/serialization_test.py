@@ -43,13 +43,6 @@ from tensorflow.compiler.xla.python_api import types
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.platform import test
 
-# Disable the IPU model
-flags = os.environ.get("TF_POPLAR_FLAGS", "")
-new_flags = flags.replace("--use_ipu_model", "")
-if flags != new_flags:
-  os.environ["TF_POPLAR_FLAGS"] = new_flags
-
-
 class FeedId:
   next_feed_id = 0
 
