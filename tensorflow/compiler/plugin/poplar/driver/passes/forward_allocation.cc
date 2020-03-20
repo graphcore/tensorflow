@@ -408,7 +408,8 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
         IsPoplarInstruction(PoplarOp::RemapDeduce)(inst) ||
         IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst) ||
         is_rw_user_op ||
-        IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst)) {
+        IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst) ||
+        IsPoplarInstruction(PoplarOp::RecvFromHost)(inst)) {
       FlattenInputs(inst, deferred_inputs);
     }
   }

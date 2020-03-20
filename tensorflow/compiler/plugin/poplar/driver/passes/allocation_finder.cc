@@ -100,9 +100,11 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
         IsPoplarInstruction(PoplarOp::UserOp)(inst)
             ? Cast<HloUserOpInstruction>(inst)->IsReadWrite()
             : false;
+    const bool is_recv_from_host =
+        IsPoplarInstruction(PoplarOp::RecvFromHost)(inst);
 
     if (is_remap_deduce || is_host_embedding_lookup || is_remote_buffer_load ||
-        is_rw_user_op) {
+        is_rw_user_op || is_recv_from_host) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocating_instructions.push_back(TensorLocation{inst, i});

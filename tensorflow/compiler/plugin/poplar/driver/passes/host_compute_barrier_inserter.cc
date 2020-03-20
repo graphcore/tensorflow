@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/send_recv_barrier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -36,7 +37,7 @@ static constexpr char kHostComputeOp[] = "XlaHostCompute";
 
 struct SendRecvs {
   std::vector<HloSendDoneInstruction*> sends;
-  std::vector<HloRecvDoneInstruction*> recvs;
+  std::vector<HloInstruction*> recvs;
 };
 
 using OpSendRecvs = std::unordered_map<string, SendRecvs>;
@@ -44,13 +45,16 @@ using OpSendRecvs = std::unordered_map<string, SendRecvs>;
 OpSendRecvs GroupSendRecvsByHostComputeOp(const HloComputation* comp) {
   OpSendRecvs result;
 
+  auto is_recv_from_host = IsPoplarInstruction(RecvFromHost);
+
   for (HloInstruction* inst : comp->instructions()) {
     if (inst->metadata().op_type() == kHostComputeOp) {
       const auto& op_name = inst->metadata().op_name();
       if (inst->opcode() == HloOpcode::kSendDone) {
         result[op_name].sends.push_back(Cast<HloSendDoneInstruction>(inst));
-      } else if (inst->opcode() == HloOpcode::kRecvDone) {
-        result[op_name].recvs.push_back(Cast<HloRecvDoneInstruction>(inst));
+      } else if (inst->opcode() == HloOpcode::kRecvDone ||
+                 is_recv_from_host(inst)) {
+        result[op_name].recvs.push_back(inst);
       }
     }
   }

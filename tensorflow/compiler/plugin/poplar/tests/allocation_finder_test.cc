@@ -2647,6 +2647,123 @@ ENTRY top {
   ASSERT_EQ(t.backward_path.size(), 0);
 }
 
+TEST_F(AllocationFinderTest, FindRecvFromHostAllocation) {
+  // Check that allocation finder works with tensors from RecvFromHost.
+  std::string hlo = R"(
+HloModule top
+
+ENTRY %top (arg: f32[1,1,2,2]) -> f32[1,1,2,2] {
+  %recv-from-host = f32[1,1,2,2]{3,2,1,0} custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"key\"}"
+  %arg = f32[1,1,2,2]{3,2,1,0} parameter(0), parameter_replication={false}
+  ROOT %convolution = f32[1,1,2,2]{3,2,1,0} convolution(f32[1,1,2,2]{3,2,1,0} %recv-from-host, f32[1,1,2,2]{3,2,1,0} %arg), window={size=1x1}, dim_labels=b01f_01io->b01f
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto status_module = ParseAndReturnVerifiedModule(hlo, config);
+  ASSERT_TRUE(status_module.ok()) << status_module.status().error_message();
+
+  auto* module = status_module.ValueOrDie().get();
+  ASSERT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+
+  const auto* convolution = module->entry_computation()->root_instruction();
+  const auto* recv_from_host = convolution->operand(0);
+
+  CompilerAnnotations annotations(module);
+  ASSERT_TRUE(AllocationFinder(annotations).Run(module).ValueOrDie());
+
+  // Will have both of the convolution arguments (input and weights)
+  ASSERT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  // The RecvFromHost should have the convolution as allocation target
+  auto t =
+      annotations.tensor_allocation_map.at(TensorLocation{recv_from_host, 0});
+  ASSERT_EQ(t.tgt, convolution);
+  ASSERT_EQ(t.input_index, 0);
+}
+
+TEST_F(AllocationFinderTest, FindRecvFromHostForwardAllocation) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY top {
+ p0 = f32[1,4,4,8] parameter(0)
+ p1 = f32[1,1,8,8] parameter(1)
+ conv = f32[1,4,4,8] convolution(p0, p1), window={size=1x1}, dim_labels=b01f_01io->b01f
+ p2 = f32[1,8] parameter(2)
+ p2_r = f32[8] reshape(p2)
+ c0 = f32[] constant(1)
+ recv-from-host = f32[8] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"key\"}"
+ p4 = f32[8] parameter(3)
+ p5 = f32[8] parameter(4)
+ ROOT batch-norm-inf = f32[1,4,4,8] batch-norm-inference(conv, p2_r, recv-from-host, p4, p5), epsilon=0.001, feature_index=3
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(5);
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1, 2, 3, 4});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+  EXPECT_TRUE(CustomOpReplacer().Run(module0).ValueOrDie());
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* bn = root;
+  const auto* conv = bn->operand(0);
+  const auto* ip0 = conv->operand(0);
+  const auto* ip1 = conv->operand(1);
+  const auto* p2_r = bn->operand(1);
+  const auto* ip2 = p2_r->operand(0);
+  const auto* recv_from_host = bn->operand(2);
+
+  CompilerAnnotations annotations(module0);
+
+  InplaceFinder inplace_finder;
+  ASSERT_TRUE(inplace_finder.Run(module0).ValueOrDie());
+
+  AllocationFinder finder(annotations);
+  ASSERT_TRUE(finder.Run(module0).ValueOrDie());
+
+  // Will have both of the convolution parameters
+  ASSERT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
+  ASSERT_EQ(t.tgt, conv);
+  ASSERT_EQ(t.input_index, 0);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip1, 0});
+  ASSERT_EQ(t.tgt, conv);
+  ASSERT_EQ(t.input_index, 1);
+
+  ForwardAllocation fwd_finder(annotations);
+  ASSERT_TRUE(fwd_finder.Run(module0).ValueOrDie());
+
+  // We have added one new entry for the bias add
+  ASSERT_EQ(annotations.tensor_allocation_map.size(), 4);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
+  ASSERT_EQ(t.tgt, bn);
+  ASSERT_EQ(t.input_index, 1);
+  ASSERT_EQ(t.layout, conv);
+  ASSERT_EQ(t.layout_output_idx, 0);
+  ASSERT_EQ(t.forward_path.size(), 0);
+  ASSERT_EQ(t.backward_path.size(), 1);
+  ASSERT_EQ(t.backward_path[0], p2_r);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{recv_from_host, 0});
+  ASSERT_EQ(t.tgt, bn);
+  ASSERT_EQ(t.input_index, 2);
+  ASSERT_EQ(t.layout, conv);
+  ASSERT_EQ(t.layout_output_idx, 0);
+  ASSERT_EQ(t.forward_path.size(), 0);
+  ASSERT_EQ(t.backward_path.size(), 0);
+}
+
 TEST_F(AllocationFinderTest, InputTupleBiasAdd) {
   std::string hlo = R"(
 HloModule top

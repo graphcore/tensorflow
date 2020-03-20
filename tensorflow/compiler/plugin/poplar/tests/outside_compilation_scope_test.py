@@ -136,6 +136,32 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       self.assertEqual(2.0, res1)
       self.assertEqual(12.0, res2)
 
+  def testSentTensorIsUsedAfterReceive(self):
+    with self.session() as sess:
+
+      def device_fn(x):
+        with ipu_scope("/device:IPU:0"):
+          x *= x  # 4
+
+          with outside_compilation_scope():
+            y = x + 1.0  # 5
+
+          # Use `x` after receiving `y` and make sure that we still have the correct
+          # value of `x` (i.e. it is not overwritten by the receive, in which case
+          # we would get 25).
+          z = x * y  # 20
+
+          return z
+
+      inputs = array_ops.placeholder(dtype=dtypes.float32, shape=())
+      [out] = ipu_compiler.compile(device_fn, inputs=[inputs])
+
+      opts = utils.create_ipu_config()
+      utils.configure_ipu_system(opts)
+
+      res = sess.run(out, feed_dict={inputs: 2.0})
+      self.assertEqual(20.0, res)
+
   def testVectorInputOutput(self):
     with self.session() as sess:
 
