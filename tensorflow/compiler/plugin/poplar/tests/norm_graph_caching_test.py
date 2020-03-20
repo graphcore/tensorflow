@@ -208,8 +208,9 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'GradientDescent/update_vs/batch_normalization/',
           'GradientDescent/update_vs/batch_normalization_1/',
           'GradientDescent/update_vs/batch_normalization_2/',
-          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
+          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
+          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Transpose',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion/WeightTranspose',
       ]
       # pylint: enable=line-too-long
