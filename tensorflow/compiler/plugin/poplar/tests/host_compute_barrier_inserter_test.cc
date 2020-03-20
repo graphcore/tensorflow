@@ -15,6 +15,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -125,6 +128,7 @@ ENTRY %top (arg: f32[]) -> f32[] {
   %recv-token.2 = token[] after-all(), metadata={op_type="XlaHostCompute" op_name="host_compute"}
   %recv.2 = (f32[], u32[], token[]) recv(token[] %recv-token.2), channel_id=4, is_host_transfer=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
   %recv-done.2 = (f32[], token[]) recv-done((f32[], u32[], token[]) %recv.2), channel_id=4, is_host_transfer=true, frontend_attributes={rendezvous_key=recv_key}, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  %recv-from-host = f32[] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"test_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
   ROOT %get-tuple-element = f32[] get-tuple-element((f32[], token[]) %recv-done.2), index=0, metadata={op_type="XlaHostCompute" op_name="host_compute"}
 }
 )";
@@ -137,6 +141,8 @@ ENTRY %top (arg: f32[]) -> f32[] {
 
   auto* module = module_or_status.ValueOrDie().get();
   auto* comp = module->entry_computation();
+
+  ASSERT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
 
   HostComputeBarrierInserter inserter;
   ASSERT_TRUE(inserter.Run(module).ValueOrDie());
@@ -151,6 +157,13 @@ ENTRY %top (arg: f32[]) -> f32[] {
   auto* recv2 = comp->GetInstructionWithName("recv-done.2");
   ASSERT_NE(recv2, nullptr);
 
+  // Renamed to custom-call, make sure information is kept.
+  auto* recv3 = comp->GetInstructionWithName("custom-call");
+  ASSERT_NE(recv3, nullptr);
+  ASSERT_NE(Cast<HloRecvFromHostInstruction>(recv3), nullptr);
+  ASSERT_EQ(Cast<HloRecvFromHostInstruction>(recv3)->RendezvousKey(),
+            "test_key");
+
   auto* barrier = comp->GetInstructionWithName("host_compute.barrier");
   ASSERT_NE(barrier, nullptr);
 
@@ -158,9 +171,10 @@ ENTRY %top (arg: f32[]) -> f32[] {
   ASSERT_EQ(barrier->control_predecessors()[0], send1);
   ASSERT_EQ(barrier->control_predecessors()[1], send2);
 
-  ASSERT_EQ(barrier->control_successors().size(), 2);
+  ASSERT_EQ(barrier->control_successors().size(), 3);
   ASSERT_EQ(barrier->control_successors()[0], recv1);
   ASSERT_EQ(barrier->control_successors()[1], recv2);
+  ASSERT_EQ(barrier->control_successors()[2], recv3);
 }
 
 }  // namespace

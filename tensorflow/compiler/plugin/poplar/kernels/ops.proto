@@ -69,6 +69,7 @@ enum PoplarOp {
   RemoteParameterLoad = 65;
   RemoteParameterStore = 66;
   RemoteParameterDummyOutput = 67;
+  RecvFromHost = 68;
 
   // Supported Fusions.
   Conv_biasadd = 200;

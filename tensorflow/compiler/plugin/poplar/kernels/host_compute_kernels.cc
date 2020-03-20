@@ -17,6 +17,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
@@ -117,27 +119,32 @@ class XlaHostComputeOp : public XlaOpKernel {
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
-    for (int i = 0; i < ctx->num_inputs(); ++i) {
-      BuildInput(ctx, i);
+    std::vector<xla::Shape> send_shapes;
+    for (size_t i = 0; i < ctx->num_inputs(); ++i) {
+      xla::Shape shape;
+      OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(ctx->input_type(i),
+                                                ctx->InputShape(i), &shape));
+      send_shapes.push_back(shape);
+      BuildSend(ctx, i, shape);
     }
 
     for (int i = 0; i < ctx->num_outputs(); ++i) {
-      BuildOutput(ctx, i);
+      if (i < send_shapes.size() && send_shapes[i] == recv_shapes_[i]) {
+        // Pass the matching input tensor that can potentially be used in-place.
+        BuildRecvFromHost(ctx, i, {ctx->Input(i)});
+      } else {
+        BuildRecvFromHost(ctx, i);
+      }
     }
   }
 
  private:
-  void BuildInput(XlaOpKernelContext* ctx, int index) {
+  void BuildSend(XlaOpKernelContext* ctx, int index, const xla::Shape& shape) {
     xla::XlaBuilder* builder = ctx->builder();
     XlaCompiler* compiler = ctx->compiler();
 
     const xla::XlaOp send_token = CreateToken(builder);
     const xla::XlaOp input = ctx->Input(index);
-    const TensorShape input_shape = ctx->InputShape(index);
-
-    const DataType dtype = ctx->input_type(index);
-    xla::Shape xla_shape;
-    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, input_shape, &xla_shape));
 
     const auto rendezvous_key = CreateSendRendezvousKey(key_, index);
 
@@ -146,30 +153,23 @@ class XlaHostComputeOp : public XlaOpKernel {
                                                                &send_channel));
 
     const xla::XlaOp send_done =
-        xla::SendToHost(input, send_token, xla_shape, send_channel);
+        xla::SendToHost(input, send_token, shape, send_channel);
 
     OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
                             send_done, "rendezvous_key", rendezvous_key));
   }
 
-  void BuildOutput(XlaOpKernelContext* ctx, int index) {
-    xla::XlaBuilder* builder = ctx->builder();
-    XlaCompiler* compiler = ctx->compiler();
-
+  void BuildRecvFromHost(XlaOpKernelContext* ctx, int index,
+                         absl::Span<const xla::XlaOp> inputs = {}) {
     const auto rendezvous_key = CreateRecvRendezvousKey(key_, index);
 
-    xla::ChannelHandle recv_channel;
-    OP_REQUIRES_OK(ctx, compiler->GetHostToDeviceChannelHandle(rendezvous_key,
-                                                               &recv_channel));
+    xla::poplarplugin::IPUCustomKernelsUtil::AttributeMap attributes;
+    attributes.AddAttribute("rendezvous_key", rendezvous_key);
 
-    const xla::XlaOp recv_token = CreateToken(builder);
-    const xla::XlaOp recv_done =
-        xla::RecvFromHost(recv_token, recv_shapes_[index], recv_channel);
+    const xla::XlaOp output =
+        xla::CustomCall(ctx->builder(), PoplarOp_Name(PoplarOp::RecvFromHost),
+                        inputs, recv_shapes_[index], attributes.Serialise());
 
-    OP_REQUIRES_OK(ctx, builder->SetInstructionFrontendAttribute(
-                            recv_done, "rendezvous_key", rendezvous_key));
-
-    const xla::XlaOp output = xla::GetTupleElement(recv_done, 0);
     ctx->SetOutput(index, output);
   }
 
