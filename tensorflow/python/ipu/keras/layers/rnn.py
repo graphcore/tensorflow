@@ -51,6 +51,7 @@ class _PopnnRNN(Layer):
                weights_initializer=None,
                bias_initializer=None,
                dtype=dtypes.float32,
+               return_state=False,
                **kwargs):
     """Creates a _PopnnRNN model from model spec.
 
@@ -65,6 +66,9 @@ class _PopnnRNN(Layer):
             (default is all zeros).
           bias_initializer: starting value to initialize the bias
             (default is all zeros).
+          return_state: When True, the layer returns a tuple containing the
+            output and the state tensors.  Otherwise it returns only the
+            output tensor.
     """
     super(_PopnnRNN, self).__init__(dtype=dtype, **kwargs)
 
@@ -78,6 +82,7 @@ class _PopnnRNN(Layer):
     self._weights_initializer = weights_initializer
     self._bias_initializer = bias_initializer
     self._seed = seed
+    self._return_state = return_state
     # Init input_size to None, which will be set after build().
     self._input_size = None
     self._saveable = None
@@ -260,7 +265,9 @@ class PopnnLSTM(_PopnnRNN):
                                     state. This partitioning is what the
                                     keras LSTM layer does.
                                     (default is None, meaning off)
-
+      return_state: When True, the layer returns a tuple containing the
+        output and the state tensors.  Otherwise it returns only the
+        output tensor.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_LSTM
@@ -273,6 +280,7 @@ class PopnnLSTM(_PopnnRNN):
                weights_initializer=None,
                bias_initializer=None,
                recurrent_weight_initializer=None,
+               return_state=False,
                **kwargs):
     if recurrent_weight_initializer is not None:
       self.recurrent_weight_initializer = initializers.get(
@@ -285,6 +293,7 @@ class PopnnLSTM(_PopnnRNN):
                                     seed=seed,
                                     weights_initializer=weights_initializer,
                                     bias_initializer=bias_initializer,
+                                    return_state=return_state,
                                     **kwargs)
 
   def build(self, input_shape):
@@ -334,6 +343,13 @@ class PopnnLSTM(_PopnnRNN):
 
     batch_size = array_ops.shape(inputs)[1]
 
+    # PopnnLSTM doesn't support a dynamic training parameter.
+    if not isinstance(training, bool):
+      raise ValueError(
+          "PopnnLSTM does not support a dynamic training argument.  Please "
+          "pass a boolean True/False to the call method.  If you are using "
+          "keras.Sequential, you should change to another model type.")
+
     if initial_state is None:
       # Create a zero state.
       initial_state = self._zero_state(batch_size)
@@ -352,7 +368,10 @@ class PopnnLSTM(_PopnnRNN):
     output, output_state = self._forward(inputs, h, c, self.kernel,
                                          self.biases, training)
 
-    return output, output_state
+    if self._return_state:
+      return output, output_state
+    else:
+      return output
 
   def state_shape(self, batch_size):
     """Shape of Popnn LSTM states.
@@ -410,6 +429,9 @@ class PopnnGRU(_PopnnRNN):
         (default isipu Glorot uniform initializer).
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
+      return_state: When True, the layer returns a tuple containing the
+        output and the state tensors.  Otherwise it returns only the
+        output tensor.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_GRU
@@ -421,12 +443,14 @@ class PopnnGRU(_PopnnRNN):
                seed=None,
                weights_initializer=None,
                bias_initializer=None,
+               return_state=False,
                **kwargs):
     super(PopnnGRU, self).__init__(num_units=units,
                                    partials_dtype=partials_dtype,
                                    seed=seed,
                                    weights_initializer=weights_initializer,
                                    bias_initializer=bias_initializer,
+                                   return_state=return_state,
                                    **kwargs)
 
   def build(self, input_shape):
@@ -469,13 +493,25 @@ class PopnnGRU(_PopnnRNN):
 
     batch_size = array_ops.shape(inputs)[1]
 
+    # PopnnGRU doesn't support a dynamic training parameter.
+    if not isinstance(training, bool):
+      raise ValueError(
+          "PopnnGRU does not support a dynamic training argument.  Please pass "
+          "a boolean True/False to the call method.  If you are using "
+          "keras.Sequential, you should change to another model type.")
+
     if initial_state is None:
       # Create a zero state.
       initial_state = self._zero_state(batch_size)
 
     initial_state = ops.convert_to_tensor(initial_state, dtype=dtype)
-    return self._forward(inputs, initial_state, self.kernel, self.biases,
-                         training)
+    output, output_state = self._forward(inputs, initial_state, self.kernel,
+                                         self.biases, training)
+
+    if self._return_state:
+      return output, output_state
+    else:
+      return output
 
   def state_shape(self, batch_size):
     """Shape of Popnn GRU state.
