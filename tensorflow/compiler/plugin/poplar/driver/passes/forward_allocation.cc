@@ -404,7 +404,6 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
     // Check if it is either a custom call or has already been replaced.
     if (inst->opcode() == HloOpcode::kConstant ||
         inst->opcode() == HloOpcode::kInfeed ||
-        inst->opcode() == HloOpcode::kRecvDone ||
         IsPoplarInstruction(PoplarOp::RemapDeduce)(inst) ||
         IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst) ||
         is_rw_user_op ||

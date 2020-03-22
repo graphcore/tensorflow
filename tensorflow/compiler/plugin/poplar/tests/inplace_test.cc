@@ -950,42 +950,6 @@ ENTRY c1 {
   }
 }
 
-TEST_F(HloInplaceDependencyTest, TestInplaceAddDependsOnSendAndSendDone) {
-  std::string hlo = R"(
-HloModule top
-
-ENTRY %top (arg: f32[]) -> f32[] {
-  %arg = f32[] parameter(0)
-  %constant = f32[] constant(2)
-  ROOT %add = f32[] add(f32[] %arg, f32[] %constant)
-  %after-all = token[] after-all()
-  %send = (f32[], u32[], token[]) send(f32[] %arg, token[] %after-all), channel_id=1, is_host_transfer=true
-  %send-done = token[] send-done((f32[], u32[], token[]) %send), channel_id=1, is_host_transfer=true
-}
-
-)";
-
-  auto config = GetModuleConfigForTest();
-  auto module = ParseAndReturnVerifiedModule(hlo, config);
-  EXPECT_TRUE(module.ok());
-  auto* module0 = module.ValueOrDie().get();
-  auto* comp = module0->entry_computation();
-
-  InplaceFinder inplaceFinder;
-  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
-
-  const auto* add = comp->GetInstructionWithName("add");
-  ASSERT_NE(add, nullptr);
-
-  const auto actual_predecessors = add->control_predecessors();
-  const auto expected_predecessors = std::set<string>{"send", "send-done"};
-  ASSERT_EQ(actual_predecessors.size(), expected_predecessors.size());
-  for (const auto* p : actual_predecessors) {
-    ASSERT_EQ(1, expected_predecessors.count(p->name()))
-        << "Unexpected control predecessor " << p->name();
-  }
-}
-
 TEST_F(HloInplaceDependencyTest, OperandIsRootInstruction) {
   std::string hlo = R"(
 HloModule top
