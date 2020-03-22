@@ -506,6 +506,41 @@ TEST_F(HloInplaceDependencyTest, InplaceAddCopyForInplaceReadOnly) {
   }
 }
 
+TEST_F(HloInplaceDependencyTest, InplaceDontAddCopyForInplaceReadOnly) {
+  std::string hlo = R"(
+    HloModule top
+
+    ENTRY c1 {
+      p0 = f32[20] parameter(0)
+      a = f32[40] concatenate(p0, p0), dimensions={0}
+      b = f32[20] negate(p0)
+      c = f32[40] add(a, a)
+      ROOT t = (f32[20], f32[40]) tuple(b, c)
+     }
+    )";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+  auto* comp = module0->entry_computation();
+
+  InplaceFinder inplaceFinder;
+  EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
+  auto inplace_instructions = GetInplaceInstructions(module0);
+
+  EXPECT_THAT(inplace_instructions.size(), 3);
+  // b can be inplace as long as a is executed after b and c.
+  std::set<std::string> in_place_ops = {"a", "b", "t"};
+  for (auto i : inplace_instructions) {
+    EXPECT_TRUE(in_place_ops.count(i->name()));
+  }
+  auto* a = comp->GetInstructionWithName("a");
+  auto* b = comp->GetInstructionWithName("b");
+  auto* c = comp->GetInstructionWithName("c");
+  EXPECT_THAT(b->control_predecessors(), ::testing::UnorderedElementsAre(a, c));
+}
+
 TEST_F(HloInplaceDependencyTest, InplaceElementwiseBinary) {
   std::string hlo = R"(
     HloModule top

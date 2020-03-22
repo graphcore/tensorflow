@@ -14,18 +14,17 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
+
+#include <queue>
+#include <stack>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
-
-#include <queue>
-#include <stack>
 
 namespace xla {
 namespace poplarplugin {
@@ -292,9 +291,15 @@ bool IsInplaceReadOnly(HloInstruction* inst,
           to_visit.push(user);
         } else if (IsUsedAsInplace(user, node,
                                    HloInstructionType::kInplaceReadWrite)) {
-          // If a kInplaceReadWrite user is using the current node as an inplace
-          // input, then add it to inplace_read_write_users.
-          inplace_read_write_users[user]++;
+          if (IsLoweredInplace(user)) {
+            // If a kInplaceReadWrite user is using the current node as an
+            // inplace input, then add it to inplace_read_write_users.
+            inplace_read_write_users[user]++;
+          } else {
+            // If the inplace read/write instruction is marked as not inplace,
+            // then we mark it as not inplace.
+            not_inplace_users.insert(user);
+          }
         } else if (node_description.GetType() ==
                    HloInstructionType::kInplaceReadOnly) {
           // Otherwise, if the current node is kInplaceReadOnly, then we add the
