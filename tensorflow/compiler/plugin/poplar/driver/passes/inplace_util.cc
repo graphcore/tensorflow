@@ -519,14 +519,6 @@ HloInstructionDescription::HloInstructionDescription(
       break;
     }
 
-    case HloOpcode::kSend: {
-      // Inplace since the data is passed as a reference to the SendDone
-      // instruction, so it must not be modified in between.
-      type_ = HloInstructionType::kInplaceReadOnly;
-      inplace_operands_ = {0};
-      break;
-    }
-
     // Inplace read-only ops.
     // These ops are implemented as inplace ops on operand 0.
     case HloOpcode::kAddDependency:
@@ -585,8 +577,6 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kIsFinite:
     case HloOpcode::kOutfeed:
     case HloOpcode::kParameter:
-    case HloOpcode::kRecv:
-    case HloOpcode::kRecvDone:
     case HloOpcode::kReduce:
     case HloOpcode::kReducePrecision:
     case HloOpcode::kReduceWindow:
@@ -594,7 +584,6 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kRoundNearestAfz:
     case HloOpcode::kSelect:
     case HloOpcode::kSelectAndScatter:
-    case HloOpcode::kSendDone:
     case HloOpcode::kTupleSelect: {
       type_ = HloInstructionType::kNotInplace;
       break;

@@ -95,11 +95,6 @@ bool HasShardingForOperand(const HloInstruction* inst, int operand) {
       }
       break;
     }
-    case HloOpcode::kSendDone: {
-      // Sharding decided by the input to Send.
-      sharding_inst = inst->operand(0)->operand(0);
-      break;
-    }
     case HloOpcode::kGetTupleElement: {
       // A GTE must be processed in collection with other GTEs, so claim that
       // there is no sharding information available on its input. See the fn
@@ -183,11 +178,6 @@ bool CopyShardingFromUsers(HloInstruction* inst) {
       if (u->tuple_index() < tuple_size) {
         tuple_users[u->tuple_index()] = u;
       }
-    } else if (u->opcode() == HloOpcode::kRecvDone) {
-      // All the tuple elements from Recv are consumed by RecvDone.
-      CHECK_EQ(inst->opcode(), HloOpcode::kRecv);
-      CHECK_EQ(inst->user_count(), 1);
-      tuple_users.assign(tuple_size, u);
     }
   }
 

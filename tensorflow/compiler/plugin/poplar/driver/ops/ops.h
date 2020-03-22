@@ -383,14 +383,6 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
                                                 const xla::Shape& output_shape,
                                                 poplar::Tensor tensor);
 
-StatusOr<poplar::program::Program> CreateRecvDone(CompilerResources& res,
-                                                  const HloInstruction* inst,
-                                                  TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateSendDone(CompilerResources& res,
-                                                  const HloInstruction* inst,
-                                                  TensorMap& tensor_map);
-
 /* Op Creation Helpers */
 
 StatusOr<poplar::program::Sequence> CreateSort(

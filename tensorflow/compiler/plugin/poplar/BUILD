@@ -493,7 +493,6 @@ cc_library(
         "driver/ops/norm_ops.cc",
         "driver/ops/reduction_ops.cc",
         "driver/ops/scatter_ops.cc",
-        "driver/ops/sendrecv_ops.cc",
         "driver/ops/sort_ops.cc",
         "driver/ops/tensor_ops.cc",
         "driver/poplar_compiler.cc",
