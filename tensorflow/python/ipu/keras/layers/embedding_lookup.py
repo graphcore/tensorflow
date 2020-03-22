@@ -85,26 +85,9 @@ class Embedding(Layer):
         The entries of the embedding tensor corresponding to the ids tensor
         indices.
     """
-    ids_shape = inputs.shape.as_list()
-    params_shape = self.embeddings.shape.as_list()
-
-    # Flatten all the indices.
-    num_ids = reduce(mul, ids_shape, 1)
-    ids_flat = array_ops.reshape(inputs, [num_ids])
-
-    # Flatten params into a 2D shape.
-    slice_dim_size = params_shape.pop(0)
-    embedding_size = reduce(mul, params_shape, 1)
-    params_2d = array_ops.reshape(self.embeddings,
-                                  [slice_dim_size, embedding_size])
-
-    # Do the lookup.
-    result = gen_popops_ops.ipu_multi_slice(params_2d,
-                                            ids_flat,
-                                            name=self.name)
-
-    # Reshape into [ids[0], ... , ids[n - 1], params[1], ..., params[n - 1]]
-    return array_ops.reshape(result, list(ids_shape) + list(params_shape))
+    return gen_popops_ops.ipu_multi_slice(self.embeddings,
+                                          inputs,
+                                          name=self.name)
 
   @tf_utils.shape_type_conversion
   def compute_output_shape(self, input_shape):

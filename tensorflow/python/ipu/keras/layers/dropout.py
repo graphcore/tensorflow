@@ -82,9 +82,12 @@ class Dropout(Layer):
     super(Dropout, self).build(input_shape)
 
   # pylint: disable=arguments-differ
-  def call(self, x, training=None):
-    if training is None:
-      training = K.learning_phase()
+  def call(self, x, training=True):
+    if not isinstance(training, bool):
+      raise ValueError(
+          "ipu.keras.Dropout does not support a dynamic training parameter.  "
+          "Pass a boolean True or False.  If you are using keras Sequential, "
+          "then use a different model class.")
 
     def dropped_inputs():
       return gen_poprand_ops.ipu_dropout(
@@ -97,8 +100,11 @@ class Dropout(Layer):
           is_using_user_seed=self.is_using_user_seed,
           seed_modifier=self.seed_modifier)
 
-    output = tf_utils.smart_cond(training, dropped_inputs,
-                                 lambda: array_ops.identity(x))
+    if training:
+      output = dropped_inputs()
+    else:
+      output = array_ops.identity(x)
+
     return output
 
   @tf_utils.shape_type_conversion

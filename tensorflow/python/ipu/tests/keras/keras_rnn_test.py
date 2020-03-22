@@ -21,6 +21,7 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.python.framework import test_util
+from tensorflow.python.framework import ops
 from tensorflow.python.platform import test
 from tensorflow.python.ops import array_ops
 from tensorflow.python.framework import ops
@@ -62,7 +63,12 @@ def _tfLSTM(instance, x_val, h_val, c_val):
     return sess.run(output, {x: x_val, h: h_val, c: c_val})
 
 
-def _new_kerasLSTM(instance, x_val, h_val, c_val):
+def _new_kerasLSTM(instance,
+                   x_val,
+                   h_val,
+                   c_val,
+                   training=True,
+                   return_state=True):
   with ops.device('/device:IPU:0'):
     x = array_ops.placeholder(x_val.dtype, x_val.shape)
     h = array_ops.placeholder(h_val.dtype, h_val.shape)
@@ -73,8 +79,10 @@ def _new_kerasLSTM(instance, x_val, h_val, c_val):
         dtype=dataType,
         weights_initializer=init_ops.ones_initializer(dtype=dataType),
         recurrent_weight_initializer=None,
-        bias_initializer=init_ops.zeros_initializer(dtype=dataType))(
-            inputs=x, initial_state=state)
+        bias_initializer=init_ops.zeros_initializer(dtype=dataType),
+        return_state=return_state)(inputs=x,
+                                   initial_state=state,
+                                   training=training)
 
   with instance.test_session() as sess:
     sess.run(variables.global_variables_initializer())
@@ -103,7 +111,11 @@ def _tfGRU(instance, x_val, initial_state_val):
     return sess.run(output, {x: x_val, initial_state: initial_state_val})
 
 
-def _new_kerasGRU(instance, x_val, initial_state_val):
+def _new_kerasGRU(instance,
+                  x_val,
+                  initial_state_val,
+                  training=True,
+                  return_state=True):
   with ops.device('/device:IPU:0'):
     x = array_ops.placeholder(x_val.dtype, x_val.shape)
     initial_state = array_ops.placeholder(initial_state_val.dtype,
@@ -112,8 +124,10 @@ def _new_kerasGRU(instance, x_val, initial_state_val):
         num_hidden,
         dtype=dataType,
         weights_initializer=init_ops.zeros_initializer(dtype=dataType),
-        bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType))(
-            inputs=x, initial_state=initial_state)
+        bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType),
+        return_state=return_state)(inputs=x,
+                                   initial_state=initial_state,
+                                   training=training)
 
   with instance.test_session() as sess:
     sess.run(variables.global_variables_initializer())
@@ -137,6 +151,33 @@ class IpuLstmTest(test.TestCase):
                         np.ones((batch_size, num_hidden), dtype=dataType))
     self.assertAllClose(keras_result, result_tf)
 
+  def test_lstm_no_state(self):
+    np.random.seed(42)
+    x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
+
+    np.random.seed(42)
+    keras_result = _new_kerasLSTM(self,
+                                  x,
+                                  np.ones((batch_size, num_hidden),
+                                          dtype=dataType),
+                                  np.ones((batch_size, num_hidden),
+                                          dtype=dataType),
+                                  training=True,
+                                  return_state=False)
+    self.assertTrue(isinstance(keras_result, np.ndarray))
+
+  def test_no_dynamic_training(self):
+    np.random.seed(42)
+    x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
+    # Get the "normal" tensorflow result
+    with self.assertRaisesRegex(ValueError,
+                                'PopnnLSTM does not support a dynamic'):
+      _new_kerasLSTM(self,
+                     x,
+                     np.ones((batch_size, num_hidden), dtype=dataType),
+                     array_ops.ones((batch_size, num_hidden), dtype=dataType),
+                     training=None)
+
 
 class IpuGruTest(test.TestCase):
   @test_util.deprecated_graph_mode_only
@@ -150,6 +191,29 @@ class IpuGruTest(test.TestCase):
                        np.ones((batch_size, num_hidden), dtype=dataType))
     # Check they are the same.
     self.assertAllClose(keras_result, result_tf)
+
+  def test_lstm_no_state(self):
+    np.random.seed(42)
+    x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
+
+    np.random.seed(42)
+    keras_result = _new_kerasGRU(self,
+                                 x,
+                                 np.ones((batch_size, num_hidden),
+                                         dtype=dataType),
+                                 return_state=False)
+    self.assertTrue(isinstance(keras_result, np.ndarray))
+
+  def test_no_dynamic_training(self):
+    np.random.seed(42)
+    x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
+    # Get the "normal" tensorflow result
+    with self.assertRaisesRegex(ValueError,
+                                'PopnnGRU does not support a dynamic'):
+      _new_kerasGRU(self,
+                    x,
+                    np.ones((batch_size, num_hidden), dtype=dataType),
+                    training=None)
 
 
 if __name__ == '__main__':

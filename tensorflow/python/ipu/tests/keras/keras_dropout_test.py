@@ -85,9 +85,23 @@ class IPUDropoutTest(test.TestCase):
       keras_result = _kerasIPUDropout(self, x, seed=[42, 42], scale=s)[0]
       self.assertAllClose(original_scale * s, keras_result)
 
+  def testInference(self):
+    # Test user seed
+    num_elements = 100
+    x = np.random.rand((num_elements)).astype(dataType)
+
     # Test inference
     inf_output = _kerasIPUDropout(self, x, seed=[42, 42], training=False)
     self.assertAllClose(inf_output, x)
+
+  def testNoDynamicTraining(self):
+    # Test user seed
+    num_elements = 100
+    x = np.random.rand((num_elements)).astype(dataType)
+
+    with self.assertRaisesRegex(
+        ValueError, 'ipu.keras.Dropout does not support a dynamic'):
+      _kerasIPUDropout(self, x, seed=[42, 42], training=None)
 
 
 if __name__ == '__main__':
