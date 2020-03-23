@@ -57,14 +57,15 @@ def _tfLSTM(x, h, c):
   return impl(lstm_cell, x, state)
 
 
-def _new_kerasLSTM(x, h, c, training=True, return_state=True):
+def _new_kerasLSTM(x, h, c, training=True, return_state=True, dropout=0.):
   layer = ipu.layers.PopnnLSTM(
       num_hidden,
       dtype=dataType,
-      weights_initializer=init_ops.random_uniform_initializer(seed=42,
-                                                              dtype=dataType),
-      recurrent_weight_initializer=None,
+      kernel_initializer=init_ops.random_uniform_initializer(seed=42,
+                                                             dtype=dataType),
+      recurrent_initializer=None,
       bias_initializer=init_ops.zeros_initializer(dtype=dataType),
+      dropout=dropout,
       return_state=return_state)
   layer.build(x.shape)
 
@@ -80,7 +81,7 @@ def _tfGRU(x, initial_state):
   gru_cell = rnn_cell.GRUCell(
       num_hidden,
       name='gru_cell',
-      kernel_initializer=init_ops.zeros_initializer(dtype=dataType),
+      kernel_initializer=init_ops.ones_initializer(dtype=dataType),
       bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType))
 
   @def_function.function
@@ -94,12 +95,17 @@ def _tfGRU(x, initial_state):
   return impl(x, initial_state, gru_cell)
 
 
-def _new_kerasGRU(x, initial_state, training=True, return_state=True):
+def _new_kerasGRU(x,
+                  initial_state,
+                  training=True,
+                  return_state=True,
+                  dropout=0.):
   layer = ipu.layers.PopnnGRU(
       num_hidden,
       dtype=dataType,
-      weights_initializer=init_ops.zeros_initializer(dtype=dataType),
+      kernel_initializer=init_ops.ones_initializer(dtype=dataType),
       bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType),
+      dropout=dropout,
       return_state=return_state)
   layer.build(x.shape)
 
@@ -125,9 +131,7 @@ class IpuLstmTest(test.TestCase):
         x, array_ops.ones((batch_size, num_hidden), dtype=dataType),
         array_ops.ones((batch_size, num_hidden), dtype=dataType))
 
-    # Check they are the same.
     self.assertAllClose(keras_result[0], result_tf[0], rtol=0.01)
-
     self.assertAllClose(keras_result[1], result_tf[1], rtol=0.2)
 
   def test_lstm_no_state(self):
@@ -146,7 +150,6 @@ class IpuLstmTest(test.TestCase):
   def test_no_dynamic_training(self):
     np.random.seed(42)
     x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
-    # Get the "normal" tensorflow result
     with self.assertRaisesRegex(ValueError,
                                 'PopnnLSTM does not support a dynamic'):
       _new_kerasLSTM(x,
@@ -154,16 +157,42 @@ class IpuLstmTest(test.TestCase):
                      array_ops.ones((batch_size, num_hidden), dtype=dataType),
                      training=None)
 
+  def test_class_alias(self):
+    self.assertTrue(isinstance(ipu.layers.LSTM, type))
+    self.assertEqual(ipu.layers.PopnnLSTM, ipu.layers.LSTM)
+
+  def test_lstm_dropout(self):
+    np.random.seed(42)
+    x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
+
+    np.random.seed(42)
+    dropout_result = _new_kerasLSTM(x,
+                                    array_ops.ones((batch_size, num_hidden),
+                                                   dtype=dataType),
+                                    array_ops.ones((batch_size, num_hidden),
+                                                   dtype=dataType),
+                                    return_state=False,
+                                    dropout=0.)
+
+    np.random.seed(42)
+    clear_result = _new_kerasLSTM(x,
+                                  array_ops.ones((batch_size, num_hidden),
+                                                 dtype=dataType),
+                                  array_ops.ones((batch_size, num_hidden),
+                                                 dtype=dataType),
+                                  return_state=False,
+                                  dropout=1.)
+
+    self.assertNotAllClose(clear_result, dropout_result)
+
 
 class IpuGruTest(test.TestCase):
   def test_gru(self):
     np.random.seed(42)
     x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
-    # Get the "normal" tensorflow result
     keras_result = _new_kerasGRU(
         x, np.ones((batch_size, num_hidden), dtype=dataType))
     result_tf = _tfGRU(x, np.ones((batch_size, num_hidden), dtype=dataType))
-    # Check they are the same.
     self.assertAllClose(keras_result, result_tf)
 
   def test_lstm_no_state(self):
@@ -180,12 +209,32 @@ class IpuGruTest(test.TestCase):
   def test_no_dynamic_training(self):
     np.random.seed(42)
     x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
-    # Get the "normal" tensorflow result
     with self.assertRaisesRegex(ValueError,
                                 'PopnnGRU does not support a dynamic'):
       _new_kerasGRU(x,
                     np.ones((batch_size, num_hidden), dtype=dataType),
                     training=None)
+
+  def test_class_alias(self):
+    self.assertTrue(isinstance(ipu.layers.GRU, type))
+    self.assertEqual(ipu.layers.PopnnGRU, ipu.layers.GRU)
+
+  def test_gru_dropout(self):
+    np.random.seed(42)
+    x = np.random.rand(timesteps * 4, batch_size, num_input).astype(dataType)
+
+    dropout_result = _new_kerasGRU(x,
+                                   np.ones((batch_size, num_hidden),
+                                           dtype=dataType),
+                                   dropout=1.,
+                                   return_state=False)
+    clear_result = _new_kerasGRU(x,
+                                 np.ones((batch_size, num_hidden),
+                                         dtype=dataType),
+                                 dropout=0.,
+                                 return_state=False)
+
+    self.assertNotAllClose(clear_result, dropout_result)
 
 
 if __name__ == '__main__':

@@ -22,5 +22,5 @@ from tensorflow.python.ipu.keras.layers.embedding_lookup import Embedding
 from tensorflow.python.ipu.keras.layers.normalization import GroupNorm
 from tensorflow.python.ipu.keras.layers.normalization import InstanceNorm
 from tensorflow.python.ipu.keras.layers.normalization import LayerNorm
-from tensorflow.python.ipu.keras.layers.rnn import PopnnLSTM
-from tensorflow.python.ipu.keras.layers.rnn import PopnnGRU
+from tensorflow.python.ipu.keras.layers.rnn import PopnnLSTM, LSTM
+from tensorflow.python.ipu.keras.layers.rnn import PopnnGRU, GRU
