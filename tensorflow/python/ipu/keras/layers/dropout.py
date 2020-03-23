@@ -89,8 +89,8 @@ class Dropout(Layer):
           "Pass a boolean True or False.  If you are using keras Sequential, "
           "then use a different model class.")
 
-    def dropped_inputs():
-      return gen_poprand_ops.ipu_dropout(
+    if training:
+      output, _ = gen_poprand_ops.ipu_dropout(
           x,
           seed=self.seed,
           user_seed=1,
@@ -99,9 +99,6 @@ class Dropout(Layer):
           name=self.name,
           is_using_user_seed=self.is_using_user_seed,
           seed_modifier=self.seed_modifier)
-
-    if training:
-      output = dropped_inputs()
     else:
       output = array_ops.identity(x)
 
