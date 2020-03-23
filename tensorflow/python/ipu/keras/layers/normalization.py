@@ -43,8 +43,6 @@ class GroupNorm(Layer):
     groups: The number of groups to use in the normalization.
     channels_axis: Integer, the axis that should be normalized
       (typically the features axis).
-    reduction_axes: List of integers, the axes that should be reduced
-      across.  (typically the spatial axes).
     center: If True, add offset of `beta` to normalized tensor.
       If False, `beta` is ignored.
     scale: If True, multiply by `gamma`.
@@ -58,7 +56,6 @@ class GroupNorm(Layer):
                dtype=dtypes.float32,
                groups=2,
                channels_axis=-1,
-               reduction_axes=(-3, -2),
                center=True,
                scale=True,
                epsilon=1e-6,
@@ -69,7 +66,6 @@ class GroupNorm(Layer):
 
     self.groups = groups
     self.channels_axis = channels_axis
-    self.reduction_axes = reduction_axes
     self.center = center
     self.scale = scale
     self.epsilon = epsilon
@@ -95,20 +91,6 @@ class GroupNorm(Layer):
       self.channels_axis = len(input_shape) + self.channels_axis
     self.channels = input_shape[self.channels_axis]
 
-    # Standardize the reduction_axes to be positive.
-    self.reduction_axes = list(self.reduction_axes)
-    for i, _ in enumerate(self.reduction_axes):
-      if self.reduction_axes[i] < 0:
-        self.reduction_axes[i] += len(input_shape)
-
-    for a in self.reduction_axes:
-      if a > len(input_shape):
-        raise ValueError('Axis is out of bounds.')
-      if input_shape[a] is None:
-        raise ValueError('Input has undefined dimensions.')
-      if self.channels_axis == a:
-        raise ValueError('reduction_axis must be mutually exclusive '
-                         'with channels_axis')
     if self.groups > self.channels:
       raise ValueError('Invalid groups %d for %d channels.' %
                        (self.groups, self.channels))
@@ -198,8 +180,6 @@ class InstanceNorm(GroupNorm):
     groups: The number of groups to use in the normalization.
     channels_axis: Integer, the axis that should be normalized
       (typically the features axis).
-    reduction_axes: List of integers, the axes that should be reduced
-      across.  (typically the spatial axes).
     center: If True, add offset of `beta` to normalized tensor.
       If False, `beta` is ignored.
     scale: If True, multiply by `gamma`.
@@ -212,7 +192,6 @@ class InstanceNorm(GroupNorm):
   def __init__(self,
                dtype=dtypes.float32,
                channels_axis=-1,
-               reduction_axes=(-3, -2),
                center=True,
                scale=True,
                epsilon=1e-6,
@@ -222,7 +201,6 @@ class InstanceNorm(GroupNorm):
     super(InstanceNorm, self).__init__(dtype=dtype,
                                        groups=1,
                                        channels_axis=channels_axis,
-                                       reduction_axes=reduction_axes,
                                        center=center,
                                        scale=scale,
                                        epsilon=epsilon,
@@ -254,8 +232,6 @@ class LayerNorm(GroupNorm):
     groups: The number of groups to use in the normalization.
     channels_axis: Integer, the axis that should be normalized
       (typically the features axis).
-    reduction_axes: List of integers, the axes that should be reduced
-      across.  (typically the spatial axes).
     center: If True, add offset of `beta` to normalized tensor.
       If False, `beta` is ignored.
     scale: If True, multiply by `gamma`.
@@ -268,7 +244,6 @@ class LayerNorm(GroupNorm):
   def __init__(self,
                dtype=dtypes.float32,
                channels_axis=-1,
-               reduction_axes=(-3, -2),
                center=True,
                scale=True,
                epsilon=1e-6,
@@ -280,7 +255,6 @@ class LayerNorm(GroupNorm):
         # We set this in the build function, once we know what the shape is.
         groups=0,
         channels_axis=channels_axis,
-        reduction_axes=reduction_axes,
         center=center,
         scale=scale,
         epsilon=epsilon,

@@ -26,6 +26,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import variable_scope
+from tensorflow.python.util import deprecation
 
 # This implementation is based on:
 # tensorflow/contrib/layers/python/layers/normalization.py
@@ -50,7 +51,6 @@ def _get_variable_collections(variables_collections, name):
 def _group_norm_impl(inputs,
                      groups=2,
                      channels_axis=-1,
-                     reduction_axes=(-3, -2),
                      center=True,
                      scale=True,
                      epsilon=1e-6,
@@ -87,21 +87,6 @@ def _group_norm_impl(inputs,
     raise ValueError('Inputs %s has undefined channel dimension: %d.' %
                      (inputs.name, channels_axis))
 
-  # Standardize the reduction_axes to be positive.
-  reduction_axes = list(reduction_axes)
-  for i, _ in enumerate(reduction_axes):
-    if reduction_axes[i] < 0:
-      reduction_axes[i] += inputs.shape.ndims
-
-  for a in reduction_axes:
-    if a > inputs.shape.ndims:
-      raise ValueError('Axis is out of bounds.')
-    if inputs.shape.as_list()[a] is None:
-      raise ValueError('Inputs %s has undefined dimensions %d.' %
-                       (inputs.name, a))
-    if channels_axis == a:
-      raise ValueError('reduction_axis must be mutually exclusive '
-                       'with channels_axis')
   if groups > channels:
     raise ValueError('Invalid groups %d for %d channels.' % (groups, channels))
   if channels % groups != 0:
@@ -175,10 +160,13 @@ def _group_norm_impl(inputs,
     return outputs
 
 
+@deprecation.deprecated_args(
+    None, "reduction_axes is deprecated as it has no effect.",
+    "reduction_axes")
 def group_norm(inputs,
                groups=2,
                channels_axis=-1,
-               reduction_axes=(-3, -2),
+               reduction_axes=None,
                center=True,
                scale=True,
                epsilon=1e-6,
@@ -202,20 +190,9 @@ def group_norm(inputs,
       with the number of channels in `inputs`.
     channels_axis: An integer. Specifies index of channels axis which will be
       broken into `groups`, each of which whose statistics will be computed
-      across. Must be mutually exclusive with `reduction_axes`. Preferred usage
-      is to specify negative integers to be agnostic as to whether a batch
-      dimension is included.
-    reduction_axes: Tuple of integers. Specifies dimensions over which
-       statistics will be accumulated. Must be mutually exclusive with
-       `channels_axis`. Statistics will not be accumulated across axes not
-       specified in `reduction_axes` nor `channel_axis`. Preferred usage is to
-       specify negative integers to be agnostic to whether a batch dimension is
-       included.
-
-      Some sample usage cases:
-        NHWC format: channels_axis=-1, reduction_axes=[-3, -2]
-        NCHW format: channels_axis=-3, reduction_axes=[-2, -1]
-
+      across. Preferred usage is to specify negative integers to be agnostic as
+      to whether a batch dimension is included.
+    reduction_axes: Deprecated.
     center: If True, add offset of `beta` to normalized tensor. If False, `beta`
       is ignored.
     scale: If True, multiply by `gamma`. If False, `gamma` is
@@ -242,18 +219,19 @@ def group_norm(inputs,
     ValueError: If rank or channels dimension of `inputs` is undefined.
     ValueError: If channels dimension is not 1 or 3.
     ValueError: If number of groups is not commensurate with number of channels.
-    ValueError: If reduction_axes or channels_axis are out of bounds.
-    ValueError: If reduction_axes are not mutually exclusive with channels_axis.
   """
-  return _group_norm_impl(inputs, groups, channels_axis, reduction_axes,
-                          center, scale, epsilon, param_initializers, reuse,
+  return _group_norm_impl(inputs, groups, channels_axis, center, scale,
+                          epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
                           "GroupNorm")
 
 
+@deprecation.deprecated_args(
+    None, "reduction_axes is deprecated as it has no effect.",
+    "reduction_axes")
 def layer_norm(inputs,
                channels_axis=-1,
-               reduction_axes=(-3, -2),
+               reduction_axes=None,
                center=True,
                scale=True,
                epsilon=1e-6,
@@ -292,20 +270,9 @@ def layer_norm(inputs,
      shape dimensions must be fully defined.
     channels_axis: An integer. Specifies index of channels axis which will be
       broken into `groups`, each of which whose statistics will be computed
-      across. Must be mutually exclusive with `reduction_axes`. Preferred usage
-      is to specify negative integers to be agnostic as to whether a batch
-      dimension is included.
-    reduction_axes: Tuple of integers. Specifies dimensions over which
-       statistics will be accumulated. Must be mutually exclusive with
-       `channels_axis`. Statistics will not be accumulated across axes not
-       specified in `reduction_axes` nor `channel_axis`. Preferred usage is to
-       specify negative integers to be agnostic to whether a batch dimension is
-       included.
-
-      Some sample usage cases:
-        NHWC format: channels_axis=-1, reduction_axes=[-3, -2]
-        NCHW format: channels_axis=-3, reduction_axes=[-2, -1]
-
+      across. Preferred usage is to specify negative integers to be agnostic as
+      to whether a batch dimension is included.
+    reduction_axes: Deprecated.
     center: If True, add offset of `beta` to normalized tensor. If False, `beta`
       is ignored.
     scale: If True, multiply by `gamma`. If False, `gamma` is
@@ -341,15 +308,18 @@ def layer_norm(inputs,
     channels_axis = inputs.shape.ndims + channels_axis
   groups = inputs.shape.as_list()[channels_axis]
 
-  return _group_norm_impl(inputs, groups, channels_axis, reduction_axes,
-                          center, scale, epsilon, param_initializers, reuse,
+  return _group_norm_impl(inputs, groups, channels_axis, center, scale,
+                          epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
                           "LayerNorm")
 
 
+@deprecation.deprecated_args(
+    None, "reduction_axes is deprecated as it has no effect.",
+    "reduction_axes")
 def instance_norm(inputs,
                   channels_axis=-1,
-                  reduction_axes=(-3, -2),
+                  reduction_axes=None,
                   center=True,
                   scale=True,
                   epsilon=1e-6,
@@ -371,20 +341,9 @@ def instance_norm(inputs,
       shape dimensions must be fully defined.
     channels_axis: An integer. Specifies index of channels axis which will be
       broken into `groups`, each of which whose statistics will be computed
-      across. Must be mutually exclusive with `reduction_axes`. Preferred usage
-      is to specify negative integers to be agnostic as to whether a batch
-      dimension is included.
-    reduction_axes: Tuple of integers. Specifies dimensions over which
-      statistics will be accumulated. Must be mutually exclusive with
-      `channels_axis`. Statistics will not be accumulated across axes not
-      specified in `reduction_axes` nor `channel_axis`. Preferred usage is to
-      specify negative integers to be agnostic to whether a batch dimension is
-      included.
-
-      Some sample usage cases:
-        NHWC format: channels_axis=-1, reduction_axes=[-3, -2]
-        NCHW format: channels_axis=-3, reduction_axes=[-2, -1]
-
+      across. Preferred usage is to specify negative integers to be agnostic as
+      to whether a batch dimension is included.
+    reduction_axes: Deprecated.
     center: If True, add offset of `beta` to normalized tensor. If False, `beta`
       is ignored.
     scale: If True, multiply by `gamma`. If False, `gamma` is
@@ -411,7 +370,7 @@ def instance_norm(inputs,
     ValueError: If rank or channels dimension of `inputs` is undefined.
   """
   groups = 1
-  return _group_norm_impl(inputs, groups, channels_axis, reduction_axes,
-                          center, scale, epsilon, param_initializers, reuse,
+  return _group_norm_impl(inputs, groups, channels_axis, center, scale,
+                          epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
                           "InstanceNorm")

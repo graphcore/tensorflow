@@ -106,7 +106,6 @@ class GroupNorm(test.TestCase):
                           center=False,
                           scale=False,
                           channels_axis=channels_axis,
-                          reduction_axes=reduction_axes,
                           training=True)
 
     # Make sure that there are no NaNs
@@ -214,7 +213,6 @@ class InstanceTest(test.TestCase):
                             center=False,
                             scale=False,
                             channels_axis=channels_axis,
-                            reduction_axes=reduction_axes,
                             training=True)
     # Make sure that there are no NaNs
     self.assertFalse(np.isnan(result).any())
@@ -306,7 +304,6 @@ class LayerTest(test.TestCase):
                           center=False,
                           scale=False,
                           channels_axis=channels_axis,
-                          reduction_axes=reduction_axes,
                           training=True)
 
     # Implementation detail - in Poplibs group norm, the groups are not
