@@ -29,6 +29,7 @@ from tensorflow.python.ops import init_ops
 
 from tensorflow.python.ops import rnn_cell
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
 
 from tensorflow.python.keras import initializers
 
@@ -48,9 +49,10 @@ class _PopnnRNN(Layer):
                num_units,
                partials_dtype=dtypes.float32,
                seed=None,
-               weights_initializer=None,
+               kernel_initializer=None,
                bias_initializer=None,
                dtype=dtypes.float32,
+               dropout=0.,
                return_state=False,
                **kwargs):
     """Creates a _PopnnRNN model from model spec.
@@ -61,11 +63,14 @@ class _PopnnRNN(Layer):
                           calculations.
             Either tf.float16 or tf.float32.
           seed: A Python integer. Used to create the default Glorot uniform
-            initializer weights_initializer.
-          weights_initializer: starting value to initialize the weight
+            initializer kernel_initializer.
+          kernel_initializer: starting value to initialize the weight
             (default is all zeros).
           bias_initializer: starting value to initialize the bias
             (default is all zeros).
+          dropout: Float between 0 and 1.
+            Fraction of the units to drop for
+            the linear transformation of the inputs.
           return_state: When True, the layer returns a tuple containing the
             output and the state tensors.  Otherwise it returns only the
             output tensor.
@@ -79,8 +84,9 @@ class _PopnnRNN(Layer):
     self._partials_dtype = partials_dtype
     self._num_layers = 1
     self._num_units = num_units
-    self._weights_initializer = weights_initializer
+    self._kernel_initializer = kernel_initializer
     self._bias_initializer = bias_initializer
+    self._dropout = dropout
     self._seed = seed
     self._return_state = return_state
     # Init input_size to None, which will be set after build().
@@ -149,8 +155,8 @@ class _PopnnRNN(Layer):
     self._input_size = input_shape[-1]
 
     # Create the variables
-    if self._weights_initializer is None:
-      self._weights_initializer = init_ops.glorot_uniform_initializer(
+    if self._kernel_initializer is None:
+      self._kernel_initializer = init_ops.glorot_uniform_initializer(
           self._seed, dtype=self._plain_dtype)
     if self._bias_initializer is None:
       self._bias_initializer = init_ops.constant_initializer(
@@ -165,7 +171,7 @@ class _PopnnRNN(Layer):
     if recurrent_weight_init is None:
       self.kernel = self.add_weight("kernel",
                                     dtype=self._plain_dtype,
-                                    initializer=self._weights_initializer,
+                                    initializer=self._kernel_initializer,
                                     shape=self.canonical_weight_shape)
       self.recurrent_kernel = None
     else:
@@ -174,7 +180,7 @@ class _PopnnRNN(Layer):
       input_kernel_shape[0] -= self.num_units
       self.kernel = self.add_weight("kernel",
                                     dtype=self._plain_dtype,
-                                    initializer=self._weights_initializer,
+                                    initializer=self._kernel_initializer,
                                     shape=input_kernel_shape)
 
       # Initialize the recurrent weight tensor.
@@ -231,6 +237,29 @@ class _PopnnRNN(Layer):
     """Shapes of Popnn canonical bias tensors for given layer."""
     return [self._num_gates_per_layer, self._num_units]
 
+  def _apply_dropout(self, inputs, training):
+    if not training:
+      return inputs
+
+    if self._seed is None:
+      # User did not provide a seed
+      self._seed = [0, 0]
+      is_using_user_seed = False
+    else:
+      # User provided a seed
+      is_using_user_seed = True
+
+    inputs = gen_poprand_ops.ipu_dropout(inputs,
+                                         seed=self._seed,
+                                         user_seed=1,
+                                         rate=(1.0 - self._dropout),
+                                         scale=1.,
+                                         name=self.name + "_dropout",
+                                         is_using_user_seed=is_using_user_seed,
+                                         seed_modifier=1)
+
+    return inputs[0]
+
 
 class PopnnLSTM(_PopnnRNN):
   # pylint:disable=line-too-long
@@ -250,24 +279,26 @@ class PopnnLSTM(_PopnnRNN):
       partials_dtype: the type used by Popnn to perform partial
                       calculations.
         Either tf.float16 or tf.float32.
-      seed: A Python integer. Used to create the default Glorot uniform
-        initializer weights_initializer.
-      recurrent_weight_initializer=None,
-      weights_initializer: starting value to initialize the weight
+      kernel_initializer: starting value to initialize the weight
         (default is all zeros).
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
-      recurrent_weight_initializer: This optional parameter will partition
-                                    weight initialization into two stages,
-                                    first initalizing the input kernel
-                                    using weights_initializer then will
-                                    initalize a kernel for the recurrent
-                                    state. This partitioning is what the
-                                    keras LSTM layer does.
-                                    (default is None, meaning off)
+      recurrent_initializer: This optional parameter will partition
+                             weight initialization into two stages,
+                             first initalizing the input kernel
+                             using kernel_initializer then will
+                             initalize a kernel for the recurrent
+                             state. This partitioning is what the
+                             keras LSTM layer does.
+                             (default is None, meaning off)
+      dropout: Float between 0 and 1.
+        Fraction of the units to drop for
+        the linear transformation of the inputs.
       return_state: When True, the layer returns a tuple containing the
         output and the state tensors.  Otherwise it returns only the
         output tensor.
+      seed: A Python integer. Used to create the default Glorot uniform
+        initializer kernel_initializer.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_LSTM
@@ -275,24 +306,110 @@ class PopnnLSTM(_PopnnRNN):
 
   def __init__(self,
                units,
+               activation='tanh',
+               recurrent_activation='hard_sigmoid',
+               use_bias=True,
+               kernel_initializer='glorot_uniform',
+               recurrent_initializer='orthogonal',
+               bias_initializer='zeros',
+               unit_forget_bias=True,
+               kernel_regularizer=None,
+               recurrent_regularizer=None,
+               bias_regularizer=None,
+               activity_regularizer=None,
+               kernel_constraint=None,
+               recurrent_constraint=None,
+               bias_constraint=None,
+               dropout=0.,
+               recurrent_dropout=0.,
+               implementation=1,
+               return_sequences=False,
+               return_state=False,
+               go_backwards=False,
+               stateful=False,
+               unroll=False,
                partials_dtype=dtypes.float32,
                seed=None,
-               weights_initializer=None,
-               bias_initializer=None,
-               recurrent_weight_initializer=None,
-               return_state=False,
                **kwargs):
-    if recurrent_weight_initializer is not None:
-      self.recurrent_weight_initializer = initializers.get(
-          recurrent_weight_initializer)
+    if recurrent_initializer is not None:
+      self.recurrent_initializer = initializers.get(recurrent_initializer)
     else:
-      self.recurrent_weight_initializer = None
+      self.recurrent_initializer = None
+
+    if activation != 'tanh':
+      raise ValueError(
+          "IPU custom LSTM layer does not support alternative activations.")
+
+    if recurrent_activation != 'hard_sigmoid':
+      raise ValueError(
+          "IPU custom LSTM layer does not support alternative recurrent "
+          "activations.")
+
+    if not use_bias:
+      raise ValueError(
+          "IPU custom LSTM layer does not support use_bias = False.")
+
+    if not unit_forget_bias:
+      raise ValueError(
+          "IPU custom LSTM layer does not support unit_forget_bias = False.")
+
+    if kernel_regularizer:
+      raise ValueError(
+          "IPU custom LSTM layer does not support kernel_regularizer.")
+
+    if recurrent_regularizer:
+      raise ValueError(
+          "IPU custom LSTM layer does not support recurrent_regularizer.")
+
+    if bias_regularizer:
+      raise ValueError(
+          "IPU custom LSTM layer does not support bias_regularizer.")
+
+    if activity_regularizer:
+      raise ValueError(
+          "IPU custom LSTM layer does not support activity_regularizer.")
+
+    if kernel_constraint:
+      raise ValueError(
+          "IPU custom LSTM layer does not support kernel_constraint.")
+
+    if recurrent_constraint:
+      raise ValueError(
+          "IPU custom LSTM layer does not support recurrent_constraint.")
+
+    if bias_constraint:
+      raise ValueError(
+          "IPU custom LSTM layer does not support bias_constraint.")
+
+    if recurrent_dropout != 0.:
+      raise ValueError(
+          "IPU custom LSTM layer does not support recurrent_dropout.")
+
+    if implementation != 1:
+      raise ValueError(
+          "IPU custom LSTM layer does not support implementation != 1.")
+
+    if return_sequences:
+      raise ValueError(
+          "IPU custom LSTM layer does not support return_sequences = True.")
+
+    if go_backwards:
+      raise ValueError(
+          "IPU custom LSTM layer does not support go_backwards = True.")
+
+    if stateful:
+      raise ValueError(
+          "IPU custom LSTM layer does not support stateful = True.")
+
+    if unroll:
+      raise ValueError("IPU custom LSTM layer does not support unroll = True.")
 
     super(PopnnLSTM, self).__init__(num_units=units,
                                     partials_dtype=partials_dtype,
                                     seed=seed,
-                                    weights_initializer=weights_initializer,
+                                    kernel_initializer=kernel_initializer,
                                     bias_initializer=bias_initializer,
+                                    dropout=dropout,
                                     return_state=return_state,
                                     **kwargs)
 
@@ -310,7 +427,7 @@ class PopnnLSTM(_PopnnRNN):
       ValueError: if input_shape has wrong dimension or unknown 3rd
                   dimension.
     """
-    self._build(input_shape, self.recurrent_weight_initializer)
+    self._build(input_shape, self.recurrent_initializer)
 
   def call(self, inputs, initial_state=None, training=True):
     """Runs the forward step for the LSTM layer.
@@ -353,8 +470,21 @@ class PopnnLSTM(_PopnnRNN):
     h = ops.convert_to_tensor(h, dtype=dtype)
     c = ops.convert_to_tensor(c, dtype=dtype)
 
-    output, output_state = self._forward(inputs, h, c, self.kernel,
-                                         self.biases, training)
+    if self._dropout > 0.:
+      inputs = self._apply_dropout(inputs, training)
+
+    output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
+        inputs=inputs,
+        num_channels=self._num_units,
+        kernel=self.kernel,
+        biases=self.biases,
+        input_h_state=h,
+        input_c_state=c,
+        is_training=training,
+        partials_dtype=self._partials_dtype,
+        name=self._name)
+
+    output_state = rnn_cell.LSTMStateTuple(output_c, output_h)
 
     if self._return_state:
       return output, output_state
@@ -380,19 +510,6 @@ class PopnnLSTM(_PopnnRNN):
       res.append(array_ops.zeros(sp, dtype=self.dtype))
     return rnn_cell.LSTMStateTuple(*res)
 
-  def _forward(self, inputs, h, c, kernel, biases, training):
-    output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
-        inputs=inputs,
-        num_channels=self._num_units,
-        kernel=kernel,
-        biases=biases,
-        input_h_state=h,
-        input_c_state=c,
-        is_training=training,
-        partials_dtype=self._partials_dtype,
-        name=self._name)
-    return output, rnn_cell.LSTMStateTuple(output_c, output_h)
-
 
 class PopnnGRU(_PopnnRNN):
   # pylint:disable=line-too-long
@@ -411,15 +528,18 @@ class PopnnGRU(_PopnnRNN):
     units: the number of units within the RNN model.
     partials_dtype: the type used by Popnn to perform partial
       calculations. Either tf.float16 or tf.float32.
-    seed: A Python integer. Used to create the default Glorot uniform
-      initializer weights_initializer.
-    weights_initializer: starting value to initialize the weight
+    kernel_initializer: starting value to initialize the weight
       (default isipu Glorot uniform initializer).
     bias_initializer: starting value to initialize the bias
       (default is all zeros).
+    dropout: Float between 0 and 1.
+      Fraction of the units to drop for
+      the linear transformation of the inputs.
     return_state: When True, the layer returns a tuple containing the
       output and the state tensors.  Otherwise it returns only the
       output tensor.
+    seed: A Python integer. Used to create the default Glorot uniform
+      initializer kernel_initializer.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_GRU
@@ -427,17 +547,105 @@ class PopnnGRU(_PopnnRNN):
 
   def __init__(self,
                units,
+               activation='tanh',
+               recurrent_activation='hard_sigmoid',
+               use_bias=True,
+               kernel_initializer='glorot_uniform',
+               recurrent_initializer='orthogonal',
+               bias_initializer='zeros',
+               kernel_regularizer=None,
+               recurrent_regularizer=None,
+               bias_regularizer=None,
+               activity_regularizer=None,
+               kernel_constraint=None,
+               recurrent_constraint=None,
+               bias_constraint=None,
+               dropout=0.,
+               recurrent_dropout=0.,
+               implementation=1,
+               return_sequences=False,
+               return_state=False,
+               go_backwards=False,
+               stateful=False,
+               unroll=False,
+               reset_after=False,
                partials_dtype=dtypes.float32,
                seed=None,
-               weights_initializer=None,
-               bias_initializer=None,
-               return_state=False,
                **kwargs):
+
+    if activation != 'tanh':
+      raise ValueError("IPU custom GRU layer does not support activation.")
+
+    if recurrent_activation != 'hard_sigmoid':
+      raise ValueError(
+          "IPU custom GRU layer does not support recurrent_activation.")
+
+    if not use_bias:
+      raise ValueError(
+          "IPU custom GRU layer does not support use_bias = True.")
+
+    if recurrent_initializer != 'orthogonal':
+      raise ValueError(
+          "IPU custom GRU layer does not support recurrent_initializer.")
+
+    if kernel_regularizer:
+      raise ValueError(
+          "IPU custom GRU layer does not support kernel_regularizer.")
+
+    if recurrent_regularizer:
+      raise ValueError(
+          "IPU custom GRU layer does not support recurrent_regularizer.")
+
+    if bias_regularizer:
+      raise ValueError(
+          "IPU custom GRU layer does not support bias_regularizer.")
+
+    if activity_regularizer:
+      raise ValueError(
+          "IPU custom GRU layer does not support activity_regularizer.")
+
+    if kernel_constraint:
+      raise ValueError(
+          "IPU custom GRU layer does not support kernel_constraint.")
+
+    if recurrent_constraint:
+      raise ValueError(
+          "IPU custom GRU layer does not support recurrent_constraint.")
+
+    if bias_constraint:
+      raise ValueError(
+          "IPU custom GRU layer does not support bias_constraint.")
+
+    if recurrent_dropout != 0.:
+      raise ValueError(
+          "IPU custom GRU layer does not support recurrent_dropout != 0.")
+
+    if implementation != 1:
+      raise ValueError(
+          "IPU custom GRU layer does not support implementation != 1.")
+
+    if return_sequences:
+      raise ValueError(
+          "IPU custom GRU layer does not support return_sequences.")
+
+    if go_backwards:
+      raise ValueError("IPU custom GRU layer does not support go_backwards.")
+
+    if stateful:
+      raise ValueError("IPU custom GRU layer does not support stateful.")
+
+    if unroll:
+      raise ValueError("IPU custom GRU layer does not support unroll.")
+
+    if reset_after:
+      raise ValueError("IPU custom GRU layer does not support reset_after.")
+
     super(PopnnGRU, self).__init__(num_units=units,
                                    partials_dtype=partials_dtype,
                                    seed=seed,
-                                   weights_initializer=weights_initializer,
+                                   kernel_initializer=kernel_initializer,
                                    bias_initializer=bias_initializer,
+                                   dropout=dropout,
                                    return_state=return_state,
                                    **kwargs)
 
@@ -492,8 +700,19 @@ class PopnnGRU(_PopnnRNN):
       initial_state = self._zero_state(batch_size)
 
     initial_state = ops.convert_to_tensor(initial_state, dtype=dtype)
-    output, output_state = self._forward(inputs, initial_state, self.kernel,
-                                         self.biases, training)
+
+    if self._dropout > 0.:
+      inputs = self._apply_dropout(inputs, training)
+
+    output, output_state, _ = gen_popnn_ops.popnn_gru_layer(
+        inputs=inputs,
+        num_channels=self._num_units,
+        kernel=self.kernel,
+        biases=self.biases,
+        initial_state=initial_state,
+        is_training=training,
+        partials_dtype=self._partials_dtype,
+        name=self._name)
 
     if self._return_state:
       return output, output_state
@@ -516,14 +735,7 @@ class PopnnGRU(_PopnnRNN):
   def _zero_state(self, batch_size):
     return array_ops.zeros(self.state_shape(batch_size), dtype=self.dtype)
 
-  def _forward(self, inputs, initial_state, kernel, biases, training):
-    output, output_c, _ = gen_popnn_ops.popnn_gru_layer(
-        inputs=inputs,
-        num_channels=self._num_units,
-        kernel=kernel,
-        biases=biases,
-        initial_state=initial_state,
-        is_training=training,
-        partials_dtype=self._partials_dtype,
-        name=self._name)
-    return output, output_c
+
+# Alias the 2 classes without the Popnn prefix
+LSTM = PopnnLSTM
+GRU = PopnnGRU
