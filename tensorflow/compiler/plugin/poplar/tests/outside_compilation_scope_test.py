@@ -19,6 +19,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import logging_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
+from tensorflow.compiler.plugin.poplar.tests.test_utils import ReportJSON
 
 
 class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
@@ -130,11 +131,80 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       out1, out2 = ipu_compiler.compile(device_fn, inputs=[input1, input2])
 
       opts = utils.create_ipu_config()
+      opts = utils.set_optimization_options(opts, max_send_recv_cluster_size=8)
       utils.configure_ipu_system(opts)
 
       res1, res2 = sess.run([out1, out2], feed_dict={input1: 1.0, input2: 2.0})
       self.assertEqual(2.0, res1)
       self.assertEqual(12.0, res2)
+
+  def testCombineStreamCopies(self):
+    with self.session() as sess:
+
+      def with_outside_scope(x1, x2):
+        with ipu_scope("/device:IPU:0"):
+          with outside_compilation_scope():
+            y1 = constant_op.constant(1.0, dtype=dtypes.float32)
+            y1 += x1
+            y2 = constant_op.constant(2.0, dtype=dtypes.float32)
+            y2 += x2
+          x1 += y1
+          x2 += y2
+          return x1, x2
+
+      def without_outside_scope(x1, x2):
+        with ipu_scope("/device:IPU:0"):
+          y1 = constant_op.constant(1.0, dtype=dtypes.float32)
+          y1 += x1
+          y2 = constant_op.constant(2.0, dtype=dtypes.float32)
+          y2 += x2
+          x1 += y1
+          x2 += y2
+          return x1, x2
+
+      input1 = array_ops.placeholder(dtype=dtypes.float32, shape=(2,))
+      input2 = array_ops.placeholder(dtype=dtypes.float32, shape=(2,))
+
+      compiled_with_outside_scope = ipu_compiler.compile(
+          with_outside_scope, inputs=[input1, input2])
+
+      compiled_without_outside_scope = ipu_compiler.compile(
+          without_outside_scope, inputs=[input1, input2])
+
+      opts = utils.create_ipu_config(profiling=True)
+      opts = utils.set_optimization_options(opts, max_send_recv_cluster_size=8)
+      utils.configure_ipu_system(opts)
+
+      report = ReportJSON(self, sess, configure_device=False)
+
+      def count_stream_copies(compiled_func):
+        report.reset()
+        out1, out2 = sess.run(compiled_func, {
+            input1: [1.0, 1.0],
+            input2: [2.0, 2.0]
+        })
+        self.assertAllEqual(out1, [3.0, 3.0])
+        self.assertAllEqual(out2, [6.0, 6.0])
+        report.parse_log()
+
+        main_program_index = report.get_first_program_of_type(
+            'Switch')['children'][1]
+        main_program_seq = map(
+            report.get_program,
+            report.get_program(main_program_index)['children'])
+        stream_copies = [
+            p for p in main_program_seq if p['type'] == 'StreamCopy'
+        ]
+        return len(stream_copies)
+
+      num_copies_without_outside_scope = count_stream_copies(
+          compiled_without_outside_scope)
+      num_copies_with_outside_scope = count_stream_copies(
+          compiled_with_outside_scope)
+
+      # There should be one additional SendToHost and one RecvFromHost stream copy.
+      self.assertEqual(num_copies_with_outside_scope,
+                       num_copies_without_outside_scope + 2)
 
   def testSentTensorIsUsedAfterReceive(self):
     with self.session() as sess:

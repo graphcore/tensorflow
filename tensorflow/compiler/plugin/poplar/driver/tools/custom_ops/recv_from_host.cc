@@ -28,9 +28,13 @@ namespace poplarplugin {
 
 HloRecvFromHostInstruction::HloRecvFromHostInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape shape,
-    const std::string& rendezvous_key)
+    const std::vector<std::string>& rendezvous_keys)
     : HloPoplarInstruction(shape, inputs, PoplarOp::RecvFromHost),
-      rendezvous_key_(rendezvous_key) {}
+      rendezvous_keys_(rendezvous_keys) {
+  if (!inputs.empty()) {
+    CHECK_EQ(inputs.size(), rendezvous_keys.size());
+  }
+}
 
 absl::flat_hash_set<int64> HloRecvFromHostInstruction::AllocatingIndices()
     const {
@@ -48,32 +52,46 @@ uint64 HloRecvFromHostInstruction::NumberOfInplaceOperands() const {
 
 bool HloRecvFromHostInstruction::IsPopOpsElementwise() const { return false; }
 
-const std::string& HloRecvFromHostInstruction::RendezvousKey() const {
-  return rendezvous_key_;
+const std::vector<std::string>& HloRecvFromHostInstruction::RendezvousKeys()
+    const {
+  return rendezvous_keys_;
 }
 
 std::unique_ptr<HloInstruction> CreateRecvFromHost(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
-    const std::string& rendezvous_key) {
+    const std::vector<std::string>& rendezvous_keys) {
   return absl::make_unique<HloRecvFromHostInstruction>(inputs, shape,
-                                                       rendezvous_key);
+                                                       rendezvous_keys);
 }
 
 std::unique_ptr<HloInstruction>
 HloRecvFromHostInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  CHECK_LE(operands.size(), 1);
-  return CreateRecvFromHost(operands, shape, rendezvous_key_);
+  return CreateRecvFromHost(operands, shape, rendezvous_keys_);
+}
+
+std::unique_ptr<HloInstruction>
+HloRecvFromHostInstruction::CloneWithNewOperandsAndRendezvousKeys(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    const std::vector<std::string>& rendezvous_keys) const {
+  auto cloned = CreateRecvFromHost(operands, shape, rendezvous_keys);
+  SetupDerivedInstruction(cloned.get());
+  cloned->set_raw_backend_config_string(raw_backend_config_string());
+  return cloned;
 }
 
 std::vector<std::string>
 HloRecvFromHostInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
+  Json::Value rendezvous_keys_val;
+  for (const std::string& key : rendezvous_keys_) {
+    rendezvous_keys_val.append(Json::Value(key));
+  }
+
   Json::FastWriter writer;
   writer.omitEndingLineFeed();
-  return {absl::StrCat("rendezvous_key=",
-                       writer.write(Json::Value(rendezvous_key_)))};
+  return {absl::StrCat("rendezvous_keys=", writer.write(rendezvous_keys_val))};
 }
 
 namespace {
@@ -88,7 +106,7 @@ static HloPoplarInstructionFactory recv_from_host_factory(
                           attributes.GetAttributeAsString("rendezvous_key"));
 
       return CreateRecvFromHost(call->operands(), call->shape(),
-                                rendezvous_key);
+                                {rendezvous_key});
     });
 
 }  // namespace

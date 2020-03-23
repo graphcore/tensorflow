@@ -19,6 +19,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "include/json/json.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -27,10 +28,11 @@ namespace poplarplugin {
 
 HloSendToHostInstruction::HloSendToHostInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape shape,
-    const std::string& rendezvous_key, bool concat_replicas)
+    const std::vector<std::string>& rendezvous_keys, bool concat_replicas)
     : HloPoplarInstruction(shape, inputs, PoplarOp::SendToHost),
-      rendezvous_key_(rendezvous_key),
+      rendezvous_keys_(rendezvous_keys),
       concat_replicas_(concat_replicas) {
+  CHECK_EQ(inputs.size(), rendezvous_keys.size());
   set_custom_call_has_side_effect(true);
 }
 
@@ -47,8 +49,9 @@ uint64 HloSendToHostInstruction::NumberOfInplaceOperands() const { return 0; }
 
 bool HloSendToHostInstruction::IsPopOpsElementwise() const { return false; }
 
-const std::string& HloSendToHostInstruction::RendezvousKey() const {
-  return rendezvous_key_;
+const std::vector<std::string>& HloSendToHostInstruction::RendezvousKeys()
+    const {
+  return rendezvous_keys_;
 }
 
 bool HloSendToHostInstruction::ConcatReplicas() const {
@@ -57,24 +60,43 @@ bool HloSendToHostInstruction::ConcatReplicas() const {
 
 std::unique_ptr<HloInstruction> CreateSendToHost(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
-    const std::string& rendezvous_key, bool concat_replicas) {
+    const std::vector<std::string> rendezvous_keys, bool concat_replicas) {
   return absl::make_unique<HloSendToHostInstruction>(
-      inputs, shape, rendezvous_key, concat_replicas);
+      inputs, shape, rendezvous_keys, concat_replicas);
 }
 
 std::unique_ptr<HloInstruction>
 HloSendToHostInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  CHECK_EQ(operands.size(), 1);
-  return CreateSendToHost(operands, shape, rendezvous_key_, concat_replicas_);
+  return CreateSendToHost(operands, shape, rendezvous_keys_, concat_replicas_);
+}
+
+std::unique_ptr<HloInstruction>
+HloSendToHostInstruction::CloneWithNewOperandsAndRendezvousKeys(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    const std::vector<std::string>& rendezvous_keys) const {
+  auto cloned =
+      CreateSendToHost(operands, shape, rendezvous_keys, concat_replicas_);
+  SetupDerivedInstruction(cloned.get());
+  cloned->set_raw_backend_config_string(raw_backend_config_string());
+  return cloned;
 }
 
 std::vector<std::string>
 HloSendToHostInstruction::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
-  return {absl::StrCat("rendezvous_key=", rendezvous_key_),
-          absl::StrCat("concat_replicas=", concat_replicas_)};
+  Json::Value rendezvous_keys_val;
+  for (const std::string& key : rendezvous_keys_) {
+    rendezvous_keys_val.append(Json::Value(key));
+  }
+
+  Json::Value concat_replicas_val(concat_replicas_);
+
+  Json::FastWriter writer;
+  writer.omitEndingLineFeed();
+  return {absl::StrCat("rendezvous_keys=", writer.write(rendezvous_keys_val)),
+          absl::StrCat("concat_replicas=", writer.write(concat_replicas_val))};
 }
 
 namespace {
@@ -93,7 +115,7 @@ static HloPoplarInstructionFactory send_to_host_factory(
       const bool concat_replicas =
           concat_replicas_attr.ok() && concat_replicas_attr.ValueOrDie();
 
-      return CreateSendToHost(call->operands(), call->shape(), rendezvous_key,
+      return CreateSendToHost(call->operands(), call->shape(), {rendezvous_key},
                               concat_replicas);
     });
 

@@ -190,7 +190,7 @@ StatusOr<bool> CombineInstructions::Run(HloModule* module) {
   TF_RETURN_IF_ERROR(new_schedule.Verify());
   module->set_schedule(new_schedule);
 
-  VLOG(1) << "Combined all reduce schedule " << new_schedule.ToString();
+  VLOG(1) << "Combined schedule " << new_schedule.ToString();
 
   return changed;
 }
