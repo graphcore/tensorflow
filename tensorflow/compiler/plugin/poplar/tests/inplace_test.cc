@@ -168,7 +168,7 @@ ENTRY c1 {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -240,7 +240,7 @@ TEST_F(HloInplaceDependencyTest, MultipleUpdateInPlacePeers) {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -300,7 +300,7 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithInterdependency) {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -362,7 +362,7 @@ TEST_F(HloInplaceDependencyTest, MultipleInplaceWithRightOrder) {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 
@@ -420,7 +420,7 @@ TEST_F(HloInplaceDependencyTest, InplaceCorrectDependencies) {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module0).ValueOrDie());
 

@@ -485,26 +485,10 @@ void ClusteringScheduler::ClusterHelper::ClusterNodes() {
   BuildDependencyGraph();
 }
 
-namespace {
-int64 ByteSizeOfIncludingTuple(const Shape& shape) {
-  if (shape.IsTuple()) {
-    int64 result = 0;
-
-    for (auto i = 0; i < shape.tuple_shapes_size(); ++i) {
-      result += ByteSizeOfIncludingTuple(shape.tuple_shapes(i));
-    }
-
-    return result;
-  }
-
-  return ShapeUtil::ByteSizeOf(shape);
-}
-}  // namespace
-
 void ClusteringScheduler::AddToReady(Cluster::Ref node_to_add) {
   if (node_to_add->colocator) {
-    int64 size =
-        ByteSizeOfIncludingTuple((*node_to_add->nodes.begin())->shape());
+    const int64 size =
+        (*node_to_add->colocator)->ByteSizeOf(node_to_add->nodes.front());
 
     QueueIterator colocator_cluster = FindColocatorInQueue(node_to_add);
     // Add the cluster so that it is colocated, making sure to indicate if the

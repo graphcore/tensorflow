@@ -15,14 +15,12 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_INSTRUCTION_COLLOCATOR_HELPER_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_INSTRUCTION_COLLOCATOR_HELPER_H_
 
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
-
-#include "tensorflow/compiler/xla/statusor.h"
-#include "tensorflow/compiler/xla/types.h"
+#include <vector>
 
 #include "absl/types/optional.h"
-
-#include <vector>
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
+#include "tensorflow/compiler/xla/statusor.h"
+#include "tensorflow/compiler/xla/types.h"
 
 namespace xla {
 
@@ -47,6 +45,10 @@ class InstructionColocatorHelper {
       const CompilerInformation& information) const = 0;
 
   int64 GetID() const;
+
+  // Returns size in bytes of the given instruction, to be compared with the
+  // remaining buffer size to determine whether to include it in the cluster.
+  virtual int64 ByteSizeOf(const HloInstruction* inst) const;
 
   virtual StatusOr<std::vector<HloInstruction*>>
   CombineAndReplaceColocatedInstructions(

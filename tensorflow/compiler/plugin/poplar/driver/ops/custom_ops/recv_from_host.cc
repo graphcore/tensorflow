@@ -26,6 +26,44 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
+std::vector<xla::Shape> GetOutputShapes(const xla::Shape& output_shape,
+                                        int64 num_outputs) {
+  if (num_outputs > 1) {
+    CHECK(output_shape.IsTuple());
+    return output_shape.tuple_shapes();
+  }
+
+  CHECK(output_shape.IsArray());
+  return {output_shape};
+}
+
+StatusOr<TensorVector> GetOutputTensors(
+    poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
+    const std::vector<xla::Shape>& output_shapes, int64 num_outputs,
+    TensorMap& tensor_map, poplar::program::Sequence& seq) {
+  TensorVector result(num_outputs);
+
+  // If inputs provided and lowered in-place, use the input tensors.
+  if (inst->operand_count() > 0 && IsLoweredInplace(inst)) {
+    TF_ASSIGN_OR_RETURN(TensorVectors nested,
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    CHECK_EQ(nested.size(), num_outputs);
+    for (int64 i = 0; i < num_outputs; ++i) {
+      CHECK_EQ(nested[i].size(), 1);
+      result[i] = nested[i][0];
+    }
+  } else {
+    // Otherwise, allocate new tensors matching layout desired by consumer.
+    for (int64 i = 0; i < num_outputs; ++i) {
+      TF_ASSIGN_OR_RETURN(
+          result[i], AddTensor(graph, TensorLocation{inst, i}, output_shapes[i],
+                               res, tensor_map));
+    }
+  }
+
+  return result;
+}
+
 class RecvFromHostOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
@@ -35,36 +73,45 @@ class RecvFromHostOp : public PoplarOpDef {
     poplar::program::Sequence seq;
 
     const auto* recv = Cast<HloRecvFromHostInstruction>(inst);
+    const int64 num_outputs = recv->RendezvousKeys().size();
+    CHECK_GT(num_outputs, 0);
 
-    poplar::Tensor dst_tensor;
-    if (IsLoweredInplace(recv) && inst->operand_count() > 0) {
-      CHECK_EQ(inst->operand_count(), 1);
-      // Input provided and lowered in-place: Use the provided input tensor for
-      // the output.
-      TF_ASSIGN_OR_RETURN(dst_tensor,
-                          FindInstructionInput(tensor_map, res, inst, 0, seq));
-    } else {
-      // Either:
-      // 1. No input provided: Must allocate new tensor for output.
-      // 2. Input provided but not in-place: Allocate new tensor for output
-      //    (rather than copying the input tensor and using that) to get a
-      //    layout desired by the consumer.
-      TF_ASSIGN_OR_RETURN(dst_tensor, AddTensor(graph, TensorLocation{inst, 0},
-                                                output_shape, res, tensor_map));
+    // Either none or all inputs must be provided.
+    if (inst->operand_count() > 0) {
+      CHECK_EQ(inst->operand_count(), num_outputs);
     }
 
-    // Use the rendezvous key also for the Poplar stream handle.
-    const poplar::DataStream src_stream = graph.addHostToDeviceFIFO(
-        recv->RendezvousKey(), dst_tensor.elementType(),
-        dst_tensor.numElements(), poplar::ReplicatedStreamMode::BROADCAST);
+    // Get the individual output shapes.
+    const std::vector<xla::Shape> output_shapes =
+        GetOutputShapes(output_shape, num_outputs);
+    CHECK_EQ(output_shapes.size(), num_outputs);
 
-    seq.add(poplar::program::Copy(src_stream, dst_tensor,
-                                  res.always_rearrange_copies_on_host));
+    // Get/allocate output tensors according to in-placeness.
+    TF_ASSIGN_OR_RETURN(TensorVector output_tensors,
+                        GetOutputTensors(graph, res, inst, output_shapes,
+                                         num_outputs, tensor_map, seq));
+    CHECK_EQ(output_tensors.size(), num_outputs);
 
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, dst_tensor));
+    // As long as the stream copies are scheduled right after each other,
+    // Poplar will attempt to merge them according to `opt.maxCopyMergeSize`.
+    for (int64 i = 0; i < num_outputs; ++i) {
+      const std::string& rendezvous_key = recv->RendezvousKeys()[i];
+      const xla::Shape& shape = output_shapes[i];
+      poplar::Tensor& tensor = output_tensors[i];
 
-    res.annotations.recv_infos.emplace_back(
-        src_stream.handle(), recv->RendezvousKey(), output_shape);
+      // Use the rendezvous key also for the Poplar stream handle.
+      const poplar::DataStream stream = graph.addHostToDeviceFIFO(
+          rendezvous_key, tensor.elementType(), tensor.numElements(),
+          poplar::ReplicatedStreamMode::BROADCAST);
+
+      seq.add(poplar::program::Copy(stream, tensor,
+                                    res.always_rearrange_copies_on_host));
+
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, tensor));
+
+      res.annotations.recv_infos.emplace_back(stream.handle(), rendezvous_key,
+                                              shape);
+    }
 
     return seq;
   }

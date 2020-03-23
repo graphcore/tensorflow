@@ -66,7 +66,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -126,7 +126,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -174,7 +174,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -225,7 +225,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -284,7 +284,7 @@ cluster_1  {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -340,7 +340,7 @@ cluster_1  {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -406,7 +406,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -503,7 +503,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -593,7 +593,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -690,7 +690,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -737,7 +737,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -773,7 +773,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -821,7 +821,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 
@@ -877,7 +877,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
 

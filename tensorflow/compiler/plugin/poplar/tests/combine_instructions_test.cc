@@ -15,24 +15,29 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/combine_instructions.h"
 
+#include <algorithm>
+
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_information.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/clustering_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/sync_list_scheduler.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recv_from_host.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/send_to_host.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
-
-#include <algorithm>
 
 namespace xla {
 namespace poplarplugin {
@@ -132,7 +137,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -217,7 +222,7 @@ ENTRY entry () -> f32[2] {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
@@ -281,7 +286,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -371,7 +376,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -445,7 +450,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -492,7 +497,7 @@ HloModule top
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
 
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
@@ -504,6 +509,247 @@ HloModule top
   // There should be a single combined reduce scatter.
   ASSERT_EQ(absl::c_count_if(seq, IsPoplarInstruction(PoplarOp::ReduceScatter)),
             1);
+}
+
+TEST_F(CombineInstructionsTest, TestCombineSendToHost) {
+  std::string hlo_string = R"(
+HloModule top
+
+ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
+  %arg1 = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  %arg2 = f32[] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  %send1 = () custom-call(f32[] %arg1), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"arg1\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  %send2 = () custom-call(f32[] %arg2), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"arg2\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  ROOT %ret = () tuple()
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  const int64 max_send_recv_cluster_size = 8;
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {0, 0, 0, max_send_recv_cluster_size, 0, 0}))));
+  ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(SendToHost)), 1);
+
+  auto send_inst = Cast<HloSendToHostInstruction>(
+      *absl::c_find_if(seq, IsPoplarInstruction(SendToHost)));
+
+  // Check that it was merged correctly.
+  EXPECT_EQ(send_inst->operand_count(), 2);
+  EXPECT_EQ(send_inst->RendezvousKeys().size(), 2);
+  EXPECT_EQ(send_inst->RendezvousKeys()[0], send_inst->operand(0)->name());
+  EXPECT_EQ(send_inst->RendezvousKeys()[1], send_inst->operand(1)->name());
+
+  // Check that various other state was maintained. The metadata is maintained
+  // on a best-effort basis, as it might not have been the same for all merged
+  // instructions. But if they were, as in this test, it should be kept.
+  EXPECT_TRUE(send_inst->custom_call_has_side_effect());
+  EXPECT_EQ(send_inst->metadata().op_type(), "XlaHostCompute");
+  EXPECT_EQ(send_inst->metadata().op_name(), "host_compute");
+}
+
+TEST_F(CombineInstructionsTest, TestSendToHostNotCombinedWhenBufferTooSmall) {
+  std::string hlo_string = R"(
+HloModule top
+
+ENTRY %top (arg1: f32[], arg2: f32[]) -> () {
+  %arg1 = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  %send1 = () custom-call(f32[] %arg1), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"arg1\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  %arg2 = f32[] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  %send2 = () custom-call(f32[] %arg2), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"arg2\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  ROOT %tuple = () tuple()
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+
+  const int64 max_send_recv_cluster_size = 4;
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {0, 0, 0, max_send_recv_cluster_size, 0, 0}))));
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(SendToHost)), 2);
+}
+
+TEST_F(CombineInstructionsTest, TestCombineRecvFromHost) {
+  std::string hlo_string = R"(
+HloModule top
+
+ENTRY %top () -> (f32[], f32[]) {
+  %recv1 = f32[] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"recv1_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  %recv2 = f32[] custom-call(), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"recv2_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}
+  ROOT %tuple = (f32[], f32[]) tuple(%recv1, %recv2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  const int64 max_send_recv_cluster_size = 8;
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {0, 0, 0, max_send_recv_cluster_size, 0, 0}))));
+  ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(RecvFromHost)), 1);
+
+  auto recv_inst = Cast<HloRecvFromHostInstruction>(
+      *absl::c_find_if(seq, IsPoplarInstruction(RecvFromHost)));
+
+  // Check that it was merged correctly.
+  EXPECT_EQ(recv_inst->operand_count(), 0);
+  EXPECT_EQ(recv_inst->RendezvousKeys().size(), 2);
+
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_EQ(root->opcode(), HloOpcode::kTuple);
+  EXPECT_EQ(root->operand(0)->opcode(), HloOpcode::kGetTupleElement);
+  EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kGetTupleElement);
+
+  const int64 ret0_index =
+      Cast<HloGetTupleElementInstruction>(root->operand(0))->tuple_index();
+  const int64 ret1_index =
+      Cast<HloGetTupleElementInstruction>(root->operand(1))->tuple_index();
+
+  EXPECT_EQ(recv_inst->RendezvousKeys()[ret0_index], "recv1_key");
+  EXPECT_EQ(recv_inst->RendezvousKeys()[ret1_index], "recv2_key");
+}
+
+TEST_F(CombineInstructionsTest, TestCombineSendRecvFromHostInplace) {
+  std::string hlo_string = R"(
+HloModule top
+
+ENTRY %top (arg1: f32[], arg2: f32[2]) -> (f32[], f32[2]) {
+  %arg1 = f32[] parameter(0), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  %arg2 = f32[2] parameter(1), parameter_replication={false}, metadata={op_name="XLA_Args"}
+  %send1 = () custom-call(f32[] %arg1), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"send1_key\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}, sharding={maximal device=1}
+  %send2 = () custom-call(f32[2] %arg2), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"send2_key\"}", custom_call_has_side_effect=true, metadata={op_type="XlaHostCompute" op_name="host_compute"}, sharding={maximal device=1}
+  %recv1 = f32[] custom-call(f32[] %arg1), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"recv1_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}, sharding={maximal device=1}
+  %recv2 = f32[2] custom-call(f32[2] %arg2), custom_call_target="RecvFromHost", backend_config="{\"rendezvous_key\":\"recv2_key\"}", metadata={op_type="XlaHostCompute" op_name="host_compute"}, sharding={maximal device=1}
+  ROOT %tuple = (f32[], f32[2]) tuple(%recv1, %recv2)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  EXPECT_TRUE(CustomOpReplacer().Run(module).ValueOrDie());
+  EXPECT_TRUE(InplaceFinder().Run(module).ValueOrDie());
+  EXPECT_TRUE(HostComputeBarrierInserter().Run(module).ValueOrDie());
+
+  const int64 max_send_recv_cluster_size = 12;
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
+              {0, 0, 0, max_send_recv_cluster_size, 0, 0}))));
+  ASSERT_TRUE(scheduler.Run(module).ValueOrDie());
+  CombineInstructions combine_instructions;
+  ASSERT_TRUE(combine_instructions.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(SendToHost)), 1);
+  EXPECT_EQ(absl::c_count_if(seq, IsPoplarInstruction(RecvFromHost)), 1);
+
+  auto send_inst = Cast<HloSendToHostInstruction>(
+      *absl::c_find_if(seq, IsPoplarInstruction(SendToHost)));
+
+  auto recv_inst = Cast<HloRecvFromHostInstruction>(
+      *absl::c_find_if(seq, IsPoplarInstruction(RecvFromHost)));
+
+  auto* barrier_inst = module->entry_computation()->GetInstructionWithName(
+      "host_compute.barrier");
+  ASSERT_NE(barrier_inst, nullptr);
+
+  // Check that they were merged.
+  EXPECT_EQ(send_inst->operand_count(), 2);
+  EXPECT_EQ(send_inst->RendezvousKeys().size(), 2);
+  EXPECT_EQ(recv_inst->operand_count(), 2);
+  EXPECT_EQ(recv_inst->RendezvousKeys().size(), 2);
+
+  // Check that the shapes match up.
+  EXPECT_EQ(recv_inst->operand(0)->shape(), recv_inst->shape().tuple_shapes(0));
+  EXPECT_EQ(recv_inst->operand(1)->shape(), recv_inst->shape().tuple_shapes(1));
+
+  // Check that in-placeness and sharding was kept.
+  EXPECT_TRUE(IsLoweredInplace(recv_inst));
+  EXPECT_TRUE(send_inst->has_sharding());
+  EXPECT_TRUE(recv_inst->has_sharding());
+  EXPECT_EQ(recv_inst->sharding_unique_device().value(), 1);
+  EXPECT_EQ(send_inst->sharding_unique_device().value(), 1);
+
+  // Check that control dependencies wrt. barrier are kept.
+  EXPECT_EQ(barrier_inst->control_predecessors().size(), 1);
+  EXPECT_EQ(barrier_inst->control_predecessors()[0], send_inst);
+  EXPECT_EQ(barrier_inst->control_successors().size(), 1);
+  EXPECT_EQ(barrier_inst->control_successors()[0], recv_inst);
 }
 
 TEST_F(CombineInstructionsTest, TestInplace) {
@@ -576,7 +822,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -625,7 +871,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -682,7 +928,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_FALSE(combine_instructions.Run(module).ValueOrDie());
@@ -727,7 +973,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());
@@ -793,7 +1039,7 @@ add {
       },
       ComputationSchedulerToModuleScheduler(
           IpuToMemorySchedulerAlgorithm(CreateClusteringMemoryScheduler(
-              {64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
   EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
   CombineInstructions combine_instructions;
   EXPECT_TRUE(combine_instructions.Run(module).ValueOrDie());

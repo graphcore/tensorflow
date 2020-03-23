@@ -384,6 +384,7 @@ def set_optimization_options(opts,
                              max_cross_replica_sum_buffer_size=0,
                              max_reduce_scatter_buffer_size=0,
                              max_inter_ipu_copies_buffer_size=0,
+                             max_send_recv_cluster_size=0,
                              gather_simplifier=False):
   """Set the IPU options related to performance / optimizations.
 
@@ -409,6 +410,9 @@ def set_optimization_options(opts,
       waiting before a reduce scatter op is scheduled.
     max_inter_ipu_copies_buffer_size: The maximum number of bytes that can be
       waiting before a inter IPU copy between IPUs is scheduled.
+    max_send_recv_cluster_size: The maximum number of bytes that can be waiting
+      before a cluster of send/recv instructions to/from the host is scheduled.
+      These are lowered to stream copies that can be merged by Poplar.
     gather_simplifier: Will enable more aggressive optimisation
       for embedding lookups.
 
@@ -421,6 +425,7 @@ def set_optimization_options(opts,
   opts.max_cross_replica_sum_buffer_size = max_cross_replica_sum_buffer_size
   opts.max_reduce_scatter_buffer_size = max_reduce_scatter_buffer_size
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
+  opts.max_send_recv_cluster_size = max_send_recv_cluster_size
   opts.enable_gather_simplifier = gather_simplifier
 
   return opts

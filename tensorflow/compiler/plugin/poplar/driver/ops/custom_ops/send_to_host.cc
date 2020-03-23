@@ -36,20 +36,27 @@ class SendToHostOp : public PoplarOpDef {
 
     const auto* send = Cast<HloSendToHostInstruction>(inst);
 
-    CHECK_EQ(send->operand_count(), 1);
-    TF_ASSIGN_OR_RETURN(const poplar::Tensor tensor,
-                        FindInstructionInput(tensor_map, res, inst, 0, seq));
+    const int64 num_inputs = send->operand_count();
 
-    // Use the rendezvous key also for the Poplar stream handle.
-    const poplar::DataStream stream = graph.addDeviceToHostFIFO(
-        send->RendezvousKey(), tensor.elementType(), tensor.numElements());
+    // As long as the stream copies are scheduled right after each other,
+    // Poplar will attempt to merge them according to `opt.maxCopyMergeSize`.
+    for (int64 i = 0; i < num_inputs; ++i) {
+      TF_ASSIGN_OR_RETURN(const poplar::Tensor tensor,
+                          FindInstructionInput(tensor_map, res, inst, i, seq));
 
-    seq.add(poplar::program::Copy(tensor, stream,
-                                  res.always_rearrange_copies_on_host));
+      const std::string& rendezvous_key = send->RendezvousKeys()[i];
 
-    const Shape& shape = inst->operand(0)->shape();
-    res.annotations.send_infos.emplace_back(
-        stream.handle(), send->RendezvousKey(), shape, send->ConcatReplicas());
+      // Use the rendezvous key also for the Poplar stream handle.
+      const poplar::DataStream stream = graph.addDeviceToHostFIFO(
+          rendezvous_key, tensor.elementType(), tensor.numElements());
+
+      seq.add(poplar::program::Copy(tensor, stream,
+                                    res.always_rearrange_copies_on_host));
+
+      const Shape& shape = inst->operand(0)->shape();
+      res.annotations.send_infos.emplace_back(stream.handle(), rendezvous_key,
+                                              shape, send->ConcatReplicas());
+    }
 
     return seq;
   }

@@ -701,6 +701,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->GetMaxAllReduceBufferSize(),
       poplar_executor->GetMaxReduceScatterBufferSize(),
       poplar_executor->GetMaxInterIpuCopyBufferSize(),
+      poplar_executor->GetMaxSendRecvClusterSize(),
       poplar_executor->GetMaxSchedulerLookaheadDepth(),
       poplar_executor->GetMaxSchedulerSearchSpaceSize(), module.get(),
       poplar_executor->FloatingPointBehaviour(),
@@ -844,7 +845,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         resources.replication_factor);
     pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     if (resources.information.max_all_reduce_buffer_size > 0 ||
-        resources.information.max_inter_ipu_copies_buffer_size > 0) {
+        resources.information.max_inter_ipu_copies_buffer_size > 0 ||
+        resources.information.max_send_recv_cluster_size > 0) {
       pipeline.AddPass<IpuScheduler>(
           SizeFunction, CreateClusteringMemoryScheduler(resources.information));
       pipeline.AddPass<CombineInstructions>();

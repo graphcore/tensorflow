@@ -27,10 +27,10 @@ namespace poplarplugin {
 
 class HloSendToHostInstruction : public HloPoplarInstruction {
  public:
-  explicit HloSendToHostInstruction(absl::Span<HloInstruction* const> inputs,
-                                    const Shape shape,
-                                    const std::string& rendezvous_key,
-                                    bool concat_replicas = false);
+  explicit HloSendToHostInstruction(
+      absl::Span<HloInstruction* const> inputs, const Shape shape,
+      const std::vector<std::string>& rendezvous_keys,
+      bool concat_replicas = false);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -40,9 +40,13 @@ class HloSendToHostInstruction : public HloPoplarInstruction {
 
   bool IsPopOpsElementwise() const;
 
-  const std::string& RendezvousKey() const;
+  const std::vector<std::string>& RendezvousKeys() const;
 
   bool ConcatReplicas() const;
+
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsAndRendezvousKeys(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      const std::vector<std::string>& rendezvous_keys) const;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -53,8 +57,8 @@ class HloSendToHostInstruction : public HloPoplarInstruction {
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 
-  const std::string rendezvous_key_;
-  const bool concat_replicas_;
+  std::vector<std::string> rendezvous_keys_;
+  bool concat_replicas_;
 };
 
 std::unique_ptr<HloInstruction> CreateSendToHost(HloInstruction* input,

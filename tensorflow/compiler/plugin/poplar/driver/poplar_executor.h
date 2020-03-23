@@ -422,6 +422,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                            current_config_.max_scheduler_search_space_size());
   }
 
+  int64 GetMaxSendRecvClusterSize() const {
+    return current_config_.max_send_recv_cluster_size();
+  }
+
   IpuSelectionOrder GetSelectionOrder() const {
     return current_config_.selection_order();
   }

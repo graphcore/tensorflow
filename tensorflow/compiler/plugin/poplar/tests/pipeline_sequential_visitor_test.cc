@@ -67,7 +67,7 @@ std::unique_ptr<CompilerResources> GetMockResources(
   auto resources = absl::make_unique<CompilerResources>(
       poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
       false, false, false, merge_infeeds, 1, 0, 0,
-      max_inter_ipu_copies_buffer_size, 1, 64, module,
+      max_inter_ipu_copies_buffer_size, 0, 1, 64, module,
       IpuOptions::FloatingPointBehaviour(), false, "", false, false, false);
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
