@@ -305,7 +305,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
       # pylint: disable=line-too-long
       ok = [
-          '__seed*', 'host-exchange-local-copy-',
+          '__seed*', 'host-exchange-local-copy-', 'Copy_',
           'depthwise/convolution.*/Conv_1x1', 'add/fusion*/Add'
       ]
       # pylint: enable=line-too-long
@@ -333,9 +333,10 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       report.parse_log()
 
       ok = [
-          '__seed*', 'host-exchange-local-copy-',
+          '__seed*',
+          'Copy_',
           'DepthwiseConv2dNativeBackpropInput/fusion*/WeightTranspose',
-          'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_3x3', 'Copy_'
+          'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_3x3',
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -363,7 +364,6 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'Copy_',
-          'host-exchange-local-copy-',
           'DepthwiseConv2dNativeBackpropInput/fusion*/WeightTranspose',
           'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_1x1',
       ]
