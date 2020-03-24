@@ -135,7 +135,7 @@ class UpdateOpDependenciesTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*', 'Copy_XLA_Args*/arg*_to_Slice*/slice*.clone',
-          'add/add.*/AddTo', 'truediv/fusion*/Op/Divide', 'add_1/add.*/AddTo'
+          'add/add.*/Add', 'truediv/fusion*/Op/Divide', 'add_1/add.*/Add'
       ]
       report.assert_all_compute_sets_and_list(ok)
 

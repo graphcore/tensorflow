@@ -89,7 +89,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*', 'Copy_*_to_*', 'Slice/dynamic-slice*/dynamicSlice',
-          'Mean/reduce', 'Mean/multiply', 'add*/add*/AddTo',
+          'Mean/reduce', 'Mean/multiply', 'add*/add*/Add',
           'add_*/fusion/Op/Add'
       ]
       report.assert_all_compute_sets_and_list(ok)

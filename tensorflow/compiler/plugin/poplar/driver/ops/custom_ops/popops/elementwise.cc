@@ -12,19 +12,18 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <poplar/Graph.hpp>
+#include <popops/Cast.hpp>
+#include <popops/ElementWise.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops/expression_helpers.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
-
-#include <poplar/Graph.hpp>
-#include <popops/Cast.hpp>
-#include <popops/ElementWise.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -87,25 +86,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
     const bool is_inplace =
         AreInplaceOutputTensorsWritable(tensor_map, res, inst);
     if (is_inplace) {
-      switch (operation->opcode()) {
-        case HloOpcode::kAdd:
-        case HloOpcode::kSubtract: {
-          // Specialize for add and subtract when all inputs are tensors.
-          const bool all_inputs_tensors = input_tensors.size() == 2;
-          if (all_inputs_tensors) {
-            ScaledInplaceConstantOrTensor(
-                graph, input_tensors[0], input_tensors[1], 1.0f, seq,
-                operation->opcode(), GetDebugName(inst));
-            break;
-          }
-          // Fall through if we can't specialize.
-        }
-        default: {
-          popops::mapInPlace(graph, expr, input_tensors, seq,
-                             GetDebugName(inst));
-          break;
-        }
-      }
+      popops::mapInPlace(graph, expr, input_tensors, seq, GetDebugName(inst));
       out = input_tensors[0];
     } else {
       out = popops::map(graph, expr, input_tensors, seq, GetDebugName(inst));

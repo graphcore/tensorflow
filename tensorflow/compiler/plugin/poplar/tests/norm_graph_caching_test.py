@@ -518,7 +518,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
           'Copy_',
           'moments/SquaredDifference/multiply',
           'a/batch-norm-inference',
-          'add/add*/AddTo',
+          'add/add*/Add',
       ]
       report.assert_all_compute_sets_and_list(ok)
 

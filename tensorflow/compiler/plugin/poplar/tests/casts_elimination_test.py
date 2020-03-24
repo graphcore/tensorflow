@@ -102,7 +102,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*', 'host-exchange-local-copy-', 'Sum/reduce*/Reduce',
-          'Sum_1/reduce*/Reduce', 'add/add*/AddTo'
+          'Sum_1/reduce*/Reduce', 'add/add*/Add'
       ]
       report.assert_all_compute_sets_and_list(ok)
 

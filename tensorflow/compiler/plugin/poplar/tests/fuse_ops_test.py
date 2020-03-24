@@ -69,7 +69,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'Copy_XLA_Args*/arg0.*_to_Sigmoid/custom-call/Nonlinearity/out/OnTileCopy-0',
-          'Sigmoid/custom-call/Nonlinearity', 'add/add.*/AddTo'
+          'Sigmoid/custom-call/Nonlinearity', 'add/add.*/Add'
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -130,7 +130,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'Copy_XLA_Args*/arg0.*_to_Relu/custom-call/Nonlinearity/out/OnTileCopy-0',
-          'Relu/custom-call/Nonlinearity', 'add/add.*/AddTo'
+          'Relu/custom-call/Nonlinearity', 'add/add.*/Add'
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -409,7 +409,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion.3/ReduceFinalStage/IntermediateToOutput/Reduce',
           'GradientDescent/update_vs/conv2d/bias/ResourceApplyGradientDescent/fusion*/negate/Op/Negate',
           'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/multiply*/Op/Multiply',
-          'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/fusion*/AddTo',
+          'GradientDescent/update_vs/conv2d_1/bias/ResourceApplyGradientDescent/fusion*/Subtract',
           'vs/conv2d/BiasAdd/fusion*/Op/Add',
           'Sum/reduce*/ReduceOnTile/InToIntermediateNoExchange/Reduce',
           'Sum/reduce*/ReduceFinalStage/IntermediateToOutput/Reduce',
@@ -726,7 +726,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'ExpandDims/input/custom-call.3/multiUpdateAdd',
           'Copy_*/OnTileCopy',
           'vs/Gather*/gather.*/multiSlice',
-          'vs/add/add*/AddTo',
+          'vs/add/add*/Add',
           'vs/Sum/reduce*/Reduce',
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -790,7 +790,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'ExpandDims/input/custom-call.3/multiUpdateAdd',
           'Copy_*/OnTileCopy-0',
           'vs/Gather*/gather.*/multiSlice',
-          'vs/add/add*/AddTo',
+          'vs/add/add*/Add',
           'vs/Sum/reduce*/Reduce',
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -847,7 +847,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'gradients/vs/absolute_difference/Abs_grad/Sign',
           'gradients/vs/absolute_difference/Abs_grad/mul/fusion',
           'vs/embedding_lookup/gather.*/multiSlice',
-          'vs/absolute_difference/Sub/subtract.*/AddTo',
+          'vs/absolute_difference/Sub/subtract.*/Subtract',
           'vs/absolute_difference/Abs/abs.*/Op/Absolute',
           'vs/absolute_difference/Sum/reduce',
           'vs/absolute_difference/value/multiply',
@@ -913,7 +913,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           'gradients/vs/Reshape_grad/Reshape/tensor/custom*/multiUpdateAdd',
           'vs/embedding_lookup/gather.*/multiSlice',
           'vs/embedding_lookup_1/gather.*/multiSlice',
-          'vs/absolute_difference/Sub/subtract.*/AddTo',
+          'vs/absolute_difference/Sub/subtract.*/Subtract',
           'vs/absolute_difference/Abs/abs.*/Op/Absolute',
           'vs/absolute_difference/Sum/reduce',
           'vs/absolute_difference/value/multiply',
