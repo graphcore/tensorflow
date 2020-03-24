@@ -185,6 +185,25 @@ class IpuLstmTest(test.TestCase):
     self.assertTrue(isinstance(ipu.layers.LSTM, type))
     self.assertEqual(ipu.layers.PopnnLSTM, ipu.layers.LSTM)
 
+  def test_can_call_without_state_change(self):
+    np.random.seed(42)
+    x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
+
+    layer = ipu.layers.PopnnLSTM(
+        num_hidden,
+        dtype=dataType,
+        kernel_initializer=init_ops.random_uniform_initializer(seed=42,
+                                                               dtype=dataType),
+        recurrent_initializer=init_ops.random_uniform_initializer(
+            seed=42, dtype=dataType),
+        bias_initializer=init_ops.zeros_initializer(dtype=dataType))
+    layer.build(x.shape)
+
+    self.assertEqual(layer.kernel.shape, [num_input, num_hidden * 4])
+    layer(x)
+    self.assertEqual(layer.kernel.shape, [num_input, num_hidden * 4])
+    layer(x)
+
 
 class IpuGruTest(test.TestCase):
   @test_util.deprecated_graph_mode_only

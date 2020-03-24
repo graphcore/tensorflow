@@ -57,23 +57,23 @@ class _PopnnRNN(Layer):
                **kwargs):
     """Creates a _PopnnRNN model from model spec.
 
-        Args:
-          num_units: the number of units within the RNN model.
-          partials_dtype: the type used by Popnn to perform partial
-                          calculations.
-            Either tf.float16 or tf.float32.
-          seed: A Python integer. Used to create the default Glorot uniform
-            initializer kernel_initializer.
-          kernel_initializer: starting value to initialize the weight
-            (default is all zeros).
-          bias_initializer: starting value to initialize the bias
-            (default is all zeros).
-          dropout: Float between 0 and 1.
-            Fraction of the units to drop for
-            the linear transformation of the inputs.
-          return_state: When True, the layer returns a tuple containing the
-            output and the state tensors.  Otherwise it returns only the
-            output tensor.
+    Args:
+      num_units: the number of units within the RNN model.
+      partials_dtype: the type used by Popnn to perform partial
+                      calculations.
+        Either tf.float16 or tf.float32.
+      seed: A Python integer. Used to create the default Glorot uniform
+        initializer kernel_initializer.
+      kernel_initializer: starting value to initialize the weight
+        (default is all zeros).
+      bias_initializer: starting value to initialize the bias
+        (default is all zeros).
+      dropout: Float between 0 and 1.
+        Fraction of the units to drop for
+        the linear transformation of the inputs.
+      return_state: When True, the layer returns a tuple containing the
+        output and the state tensors.  Otherwise it returns only the
+        output tensor.
     """
     super(_PopnnRNN, self).__init__(dtype=dtype, **kwargs)
 
@@ -130,16 +130,16 @@ class _PopnnRNN(Layer):
   def _build(self, input_shape, recurrent_weight_init=None):
     """Create variables of the Popnn RNN.
 
-        It can be called manually before `__call__()` or automatically through
-        `__call__()`. In the former case, any subsequent `__call__()` will skip
-        creating variables.
+    It can be called manually before `__call__()` or automatically through
+    `__call__()`. In the former case, any subsequent `__call__()` will skip
+    creating variables.
 
-        Args:
-          input_shape: a TensorShape object with 3 dimensions.
+    Args:
+      input_shape: a TensorShape object with 3 dimensions.
 
-        Raises:
-          ValueError: if input_shape has wrong dimension or unknown 3rd
-          dimension.
+    Raises:
+      ValueError: if input_shape has wrong dimension or unknown 3rd
+      dimension.
     """
     if self.built:
       return
@@ -463,7 +463,10 @@ class PopnnLSTM(_PopnnRNN):
     # the recurrent state with the normal kernel applying to the inputs)
     # was provided then we combine it to create the full kernel.
     if self.recurrent_kernel is not None:
-      self.kernel = array_ops.concat([self.kernel, self.recurrent_kernel], 0)
+      combined_kernel = array_ops.concat([self.kernel, self.recurrent_kernel],
+                                         0)
+    else:
+      combined_kernel = self.kernel
 
     c, h = initial_state
 
@@ -476,7 +479,7 @@ class PopnnLSTM(_PopnnRNN):
     output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
         inputs=inputs,
         num_channels=self._num_units,
-        kernel=self.kernel,
+        kernel=combined_kernel,
         biases=self.biases,
         input_h_state=h,
         input_c_state=c,
