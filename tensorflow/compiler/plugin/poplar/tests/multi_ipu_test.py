@@ -66,7 +66,7 @@ class MultiIpuTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*',
-          'add*/add*/AddTo',
+          'add*/add*/Add',
           'switchControlBroadcast2/*OnTileCopy',
           'Copy_XLA_Args*/arg0.1_to_/custom-call*/OnTileCopy',
           'Copy_/custom-call_to_/custom-call*/OnTileCopy',
