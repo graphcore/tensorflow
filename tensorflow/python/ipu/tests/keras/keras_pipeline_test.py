@@ -54,6 +54,18 @@ def test_dataset(length=None, batch_size=1):
   return ds
 
 
+def test_language_dataset(length=None, batch_size=1):
+
+  constant_d = constant_op.constant(1, shape=[32], dtype=np.int32)
+  constant_l = constant_op.constant(2, shape=[32], dtype=np.int32)
+
+  ds = dataset_ops.Dataset.from_tensors((constant_d, constant_l))
+  ds = ds.repeat(length)
+  ds = ds.batch(batch_size, drop_remainder=True)
+
+  return ds
+
+
 # Run a 2 stage model on the CPU
 @def_function.function
 def run_model_on_cpu(test_wrapper, model, input_values, repeat_count,
@@ -109,6 +121,14 @@ def fixed_weight_pipeline():
               kernel_initializer=keras.initializers.Constant(0.1)),
       ],
   ]
+
+
+def pipeline_with_lstm():
+  return [[ipu.keras.layers.Embedding(8000, 128)],
+          [
+              ipu.keras.layers.PopnnLSTM(128, dropout=0.2),
+              keras.layers.Dense(1, activation='sigmoid')
+          ]]
 
 
 def _count_host_to_device_events(evts):
@@ -547,6 +567,29 @@ class IPUPipelineTest(test.TestCase):
       # the 'learning rate' hyper is being updated
       evts = ipu.ops.summary_ops.get_ipu_reports()
       self.assertEqual(1, _count_host_to_device_events(evts))
+
+  @test_util.run_v2_only
+  def testTrainPipelineWithLstm(self):
+
+    dataset = test_language_dataset(length=72)
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(pipeline_with_lstm(), pipeline_depth=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Compile model with SGD optimizer
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Fit the weights to the dataset
+      history = m.fit(dataset, epochs=3, verbose=0)
+
+      losses = history.history['loss']
+      self.assertTrue(losses[0] > losses[-1])
 
 
 if __name__ == '__main__':
