@@ -185,6 +185,32 @@ class IpuLstmTest(test.TestCase):
 
     self.assertNotAllClose(clear_result, dropout_result)
 
+  def test_can_call_without_state_change(self):
+    np.random.seed(42)
+    x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
+    c = np.ones([batch_size, num_hidden], dataType)
+    h = np.ones([batch_size, num_hidden], dataType)
+
+    layer = ipu.layers.PopnnLSTM(
+        num_hidden,
+        dtype=dataType,
+        kernel_initializer=init_ops.random_uniform_initializer(seed=42,
+                                                               dtype=dataType),
+        recurrent_initializer=init_ops.random_uniform_initializer(
+            seed=42, dtype=dataType),
+        bias_initializer=init_ops.zeros_initializer(dtype=dataType))
+    layer.build(x.shape)
+
+    @def_function.function
+    def impl(x, c, h):
+      state = rnn_cell.LSTMStateTuple(c, h)
+      return layer(inputs=x, initial_state=state)
+
+    self.assertEqual(layer.kernel.shape, [3, 12])
+    _ = impl(x, c, h)
+    self.assertEqual(layer.kernel.shape, [3, 12])
+    _ = impl(x, c, h)
+
 
 class IpuGruTest(test.TestCase):
   def test_gru(self):

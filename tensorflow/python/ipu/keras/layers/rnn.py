@@ -57,23 +57,23 @@ class _PopnnRNN(Layer):
                **kwargs):
     """Creates a _PopnnRNN model from model spec.
 
-        Args:
-          num_units: the number of units within the RNN model.
-          partials_dtype: the type used by Popnn to perform partial
-                          calculations.
-            Either tf.float16 or tf.float32.
-          seed: A Python integer. Used to create the default Glorot uniform
-            initializer kernel_initializer.
-          kernel_initializer: starting value to initialize the weight
-            (default is all zeros).
-          bias_initializer: starting value to initialize the bias
-            (default is all zeros).
-          dropout: Float between 0 and 1.
-            Fraction of the units to drop for
-            the linear transformation of the inputs.
-          return_state: When True, the layer returns a tuple containing the
-            output and the state tensors.  Otherwise it returns only the
-            output tensor.
+    Args:
+      num_units: the number of units within the RNN model.
+      partials_dtype: the type used by Popnn to perform partial
+                      calculations.
+        Either tf.float16 or tf.float32.
+      seed: A Python integer. Used to create the default Glorot uniform
+        initializer kernel_initializer.
+      kernel_initializer: starting value to initialize the weight
+        (default is all zeros).
+      bias_initializer: starting value to initialize the bias
+        (default is all zeros).
+      dropout: Float between 0 and 1.
+        Fraction of the units to drop for
+        the linear transformation of the inputs.
+      return_state: When True, the layer returns a tuple containing the
+        output and the state tensors.  Otherwise it returns only the
+        output tensor.
     """
     super(_PopnnRNN, self).__init__(dtype=dtype, **kwargs)
 
@@ -130,16 +130,16 @@ class _PopnnRNN(Layer):
   def _build(self, input_shape, recurrent_weight_init=None):
     """Create variables of the Popnn RNN.
 
-        It can be called manually before `__call__()` or automatically through
-        `__call__()`. In the former case, any subsequent `__call__()` will skip
-        creating variables.
+    It can be called manually before `__call__()` or automatically through
+    `__call__()`. In the former case, any subsequent `__call__()` will skip
+    creating variables.
 
-        Args:
-          input_shape: a TensorShape object with 3 dimensions.
+    Args:
+      input_shape: a TensorShape object with 3 dimensions.
 
-        Raises:
-          ValueError: if input_shape has wrong dimension or unknown 3rd
-          dimension.
+    Raises:
+      ValueError: if input_shape has wrong dimension or unknown 3rd
+      dimension.
     """
     if self.built:
       return
@@ -416,43 +416,31 @@ class PopnnLSTM(_PopnnRNN):
   def build(self, input_shape):
     """Create variables of the PopnnLSTM.
 
-        It can be called manually before `__call__()` or automatically through
-        `__call__()`. In the former case, any subsequent `__call__()` will skip
-        creating variables.
+    It can be called manually before `__call__()` or automatically through
+    `__call__()`. In the former case, any subsequent `__call__()` will skip
+    creating variables.
 
-        Args:
-          input_shape: a TensorShape object with 3 dimensions.
+    Args:
+      input_shape: a TensorShape object with 3 dimensions.
 
-        Raises:
-          ValueError: if input_shape has wrong dimension or unknown 3rd
-                      dimension.
+    Raises:
+      ValueError: if input_shape has wrong dimension or unknown 3rd
+                  dimension.
     """
     self._build(input_shape, self.recurrent_initializer)
 
   def call(self, inputs, initial_state=None, training=True):
-    """Runs the forward step for the LSTM model.
+    """Runs the forward step for the LSTM layer.
 
-        Args:
-          inputs: 3-D tensor with shape [time_len, batch_size, input_size].
-          initial_state: An `LSTMStateTuple` of state tensors, each shaped
-            `[batch_size, num_units]`. If not provided, the state is
-            initialized to zeros.
-            DEPRECATED a tuple of tensor (input_h_state, input_c_state)
-            each of shape [batch_size, num_units].
-          training: whether this operation will be used in training
-                    or inference.
+    Args:
+      inputs: 3-D tensor with shape [time_len, batch_size, input_size].
+      initial_state: An `LSTMStateTuple` of state tensors, each shaped
+        `[batch_size, num_units]`. If not provided, the state is initialized to
+        zeros.
+      training: whether this operation will be used in training or inference.
 
-        Returns:
-          tuple of output and output states:
-
-          * output: a tensor of shape [time_len, batch_size, num_units].
-          * output_states: An `LSTMStateTuple` of the same shape and structure
-              as initial_state. If the initial state used the deprecated
-              behaviour of not passing `LSTMStateTuple`, then a tuple
-              (output_h_state, output_c_state) is returned.
-
-        Raises:
-          ValueError: if initial_state is not valid.
+    Returns:
+      tuple of output and output states:
 
     """
     dtype = self.dtype
@@ -475,7 +463,10 @@ class PopnnLSTM(_PopnnRNN):
     # the recurrent state with the normal kernel applying to the inputs)
     # was provided then we combine it to create the full kernel.
     if self.recurrent_kernel is not None:
-      self.kernel = array_ops.concat([self.kernel, self.recurrent_kernel], 0)
+      combined_kernel = array_ops.concat([self.kernel, self.recurrent_kernel],
+                                         0)
+    else:
+      combined_kernel = self.kernel
 
     c, h = initial_state
 
@@ -488,7 +479,7 @@ class PopnnLSTM(_PopnnRNN):
     output, output_h, output_c, _ = gen_popnn_ops.popnn_lstm_layer(
         inputs=inputs,
         num_channels=self._num_units,
-        kernel=self.kernel,
+        kernel=combined_kernel,
         biases=self.biases,
         input_h_state=h,
         input_c_state=c,
@@ -500,19 +491,19 @@ class PopnnLSTM(_PopnnRNN):
 
     if self._return_state:
       return output, output_state
-    else:
-      return output
+
+    return output
 
   def state_shape(self, batch_size):
     """Shape of Popnn LSTM states.
 
-        Shape is a 2-element tuple. Each is [batch_size, num_units]
+    Shape is a 2-element tuple. Each is [batch_size, num_units]
 
-        Args:
-          batch_size: an int
+    Args:
+      batch_size: an int
 
-        Returns:
-          a tuple of python arrays.
+    Returns:
+      a tuple of python arrays.
     """
     return ([batch_size, self.num_units], [batch_size, self.num_units])
 
@@ -527,31 +518,31 @@ class PopnnGRU(_PopnnRNN):
   # pylint:disable=line-too-long
   """XLA compatible, time-major Popnn implementation of an GRU layer.
 
-    Below is a typical workflow:
+  Below is a typical workflow:
 
-    .. code-block:: python
+  .. code-block:: python
 
-      with tf.Graph().as_default():
-        lstm = PopnnGRU(num_units, ...)
+    with tf.Graph().as_default():
+      lstm = PopnnGRU(num_units, ...)
 
-        outputs, output_state = lstm(inputs, initial_state, training=True)
+      outputs, output_state = lstm(inputs, initial_state, training=True)
 
-    Args:
-      units: the number of units within the RNN model.
-      partials_dtype: the type used by Popnn to perform partial
-        calculations. Either tf.float16 or tf.float32.
-      kernel_initializer: starting value to initialize the weight
-        (default isipu Glorot uniform initializer).
-      bias_initializer: starting value to initialize the bias
-        (default is all zeros).
-      dropout: Float between 0 and 1.
-        Fraction of the units to drop for
-        the linear transformation of the inputs.
-      return_state: When True, the layer returns a tuple containing the
-        output and the state tensors.  Otherwise it returns only the
-        output tensor.
-      seed: A Python integer. Used to create the default Glorot uniform
-        initializer kernel_initializer.
+  Args:
+    units: the number of units within the RNN model.
+    partials_dtype: the type used by Popnn to perform partial
+      calculations. Either tf.float16 or tf.float32.
+    kernel_initializer: starting value to initialize the weight
+      (default isipu Glorot uniform initializer).
+    bias_initializer: starting value to initialize the bias
+      (default is all zeros).
+    dropout: Float between 0 and 1.
+      Fraction of the units to drop for
+      the linear transformation of the inputs.
+    return_state: When True, the layer returns a tuple containing the
+      output and the state tensors.  Otherwise it returns only the
+      output tensor.
+    seed: A Python integer. Used to create the default Glorot uniform
+      initializer kernel_initializer.
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_GRU
@@ -664,35 +655,34 @@ class PopnnGRU(_PopnnRNN):
   def build(self, input_shape):
     """Create variables of the PopnnGRU.
 
-        It can be called manually before `__call__()` or automatically through
-        `__call__()`. In the former case, any subsequent `__call__()` will skip
-        creating variables.
+    It can be called manually before `__call__()` or automatically through
+    `__call__()`. In the former case, any subsequent `__call__()` will skip
+    creating variables.
 
-        Args:
-          input_shape: a TensorShape object with 3 dimensions.
+    Args:
+      input_shape: a TensorShape object with 3 dimensions.
 
-        Raises:
-          ValueError: if input_shape has wrong dimension or unknown 3rd
-                      dimension.
+    Raises:
+      ValueError: if input_shape has wrong dimension or unknown 3rd
+                  dimension.
     """
     self._build(input_shape)
 
   def call(self, inputs, initial_state=None, training=True):
-    """Runs the forward step for the GRU model.
+    """Runs the forward step for the GRU layer.
 
-        Args:
-          inputs: 3-D tensor with shape [time_len, batch_size, input_size].
-          initial_state: Initial state tensor, shaped `[batch_size, num_units]`
-                         If not provided, the state is initialized to zeros.
-          training: whether this operation will be used in training or
-                    inference.
+    Args:
+      inputs: 3-D tensor with shape [time_len, batch_size, input_size].
+      initial_state: Initial state tensor, shaped `[batch_size, num_units]`
+        If not provided, the state is initialized to zeros.
+      training: whether this operation will be used in training or inference.
 
-        Returns:
-          output: a tensor of shape [time_len, batch_size, num_units].
-          output_state: The output state of the last cell.
+    Returns:
+      output: a tensor of shape [time_len, batch_size, num_units].
+      output_state: The output state of the last cell.
 
-        Raises:
-          ValueError: if initial_state is not valid.
+    Raises:
+      ValueError: if initial_state is not valid.
 
     """
 
@@ -729,19 +719,19 @@ class PopnnGRU(_PopnnRNN):
 
     if self._return_state:
       return output, output_state
-    else:
-      return output
+
+    return output
 
   def state_shape(self, batch_size):
     """Shape of Popnn GRU state.
 
-        State shape is [batch_size, num_units].
+    State shape is [batch_size, num_units].
 
-        Args:
-          batch_size: an int
+    Args:
+      batch_size: an int
 
-        Returns:
-          A python array.
+    Returns:
+      A python array.
     """
     return [batch_size, self.num_units]
 
