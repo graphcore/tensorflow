@@ -160,10 +160,8 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       report.parse_log()
 
       ok = [
-          '__seed*', 'Copy_', 'Conv3DBackpropInputV2/fusion*/Conv_2x2x2',
-          'Conv3DBackpropInputV2/fusion/WeightTranspose',
-          'Conv3DBackpropInputV2/fusion/WeightTranspose/PreArrange-0',
-          'Conv3DBackpropInputV2/fusion/WeightTranspose/PostArrange-0'
+          '__seed*', 'Copy_', 'Conv3DBackpropInputV2/fusion*/WeightTranspose',
+          'Conv3DBackpropInputV2/fusion*/Conv_2x2x2'
       ]
 
       report.assert_all_compute_sets_and_list(ok)
