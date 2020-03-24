@@ -153,8 +153,8 @@ class PipelinedModel(Model):
   - The model cannot be called using the __call__() interface.
 
   The model will only be constructed after the first call to the `fit` method,
-  so a summary of the model will net be possible until after some training
-  has occurred.  Related this this, the `build` method does not build the
+  so a summary of the model will not be possible until after some training
+  has occurred.  Related to this, the `build` method does not build the
   model.
 
   Example:
