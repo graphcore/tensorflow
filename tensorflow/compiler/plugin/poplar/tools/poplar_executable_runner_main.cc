@@ -44,6 +44,18 @@ bool IsDir(const std::string& path) {
   return dirp != NULL;
 }
 
+bool CreateDirIfNeeded(const std::string& dir) {
+  DIR* dp = opendir(dir.c_str());
+  if (dp == NULL) {
+    if (mkdir(dir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0) {
+      return false;
+    }
+  } else {
+    closedir(dp);
+  }
+  return true;
+}
+
 std::string SecondsToTimeString(int64_t sec) {
   int hours = sec / 3600;
   int minutes = (sec - hours * 3600) / 60;
@@ -135,20 +147,12 @@ struct CkptFile {
   std::string filename;
 };
 
-struct OutputFolder {
-  std::string folder;
-};
-
 std::string AbslUnparseFlag(BinaryFiles f) {
   return absl::UnparseFlag(f.filenames);
 }
 
 std::string AbslUnparseFlag(CkptFile f) {
   return absl::UnparseFlag(f.filename);
-}
-
-std::string AbslUnparseFlag(OutputFolder f) {
-  return absl::UnparseFlag(f.folder);
 }
 
 bool AbslParseFlag(absl::string_view text, BinaryFiles* f, std::string* error) {
@@ -195,18 +199,6 @@ bool AbslParseFlag(absl::string_view text, CkptFile* f, std::string* error) {
   return true;
 }
 
-bool AbslParseFlag(absl::string_view text, OutputFolder* f,
-                   std::string* error) {
-  if (!absl::ParseFlag(text, &f->folder, error)) {
-    return false;
-  }
-  if (!IsDir(f->folder)) {
-    *error = absl::StrCat("'", f->folder, "' is not a valid output directory");
-    return false;
-  }
-  return true;
-}
-
 ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
           "List of binary files containing metadata, binaries, weights,"
           " inputs, feeds, etc. Note if this flag is set then the flags "
@@ -222,23 +214,11 @@ ABSL_FLAG(CkptFile, ckpt, CkptFile(),
 ABSL_FLAG(bool, strict, false,
           "Enable strict mode: all the input data files must be provided by "
           "--input_data.");
-ABSL_FLAG(OutputFolder, output_folder, OutputFolder(),
+ABSL_FLAG(std::string, output_folder, "",
           "Where to save the content of the output tensors");
 
 bool HelpFilter(absl::string_view filename) {
   return filename.find(__FILE__) != absl::string_view::npos;
-}
-
-bool CreateDirIfNeeded(const std::string& dir) {
-  DIR* dp = opendir(dir.c_str());
-  if (dp == NULL) {
-    if (mkdir(dir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0) {
-      return false;
-    }
-  } else {
-    closedir(dp);
-  }
-  return true;
 }
 
 int main(int argc, char** argv) {
@@ -258,7 +238,7 @@ int main(int argc, char** argv) {
   const bool strict = absl::GetFlag(FLAGS_strict);
   const int iterations = absl::GetFlag(FLAGS_iterations);
   const int ckpt_frequency = absl::GetFlag(FLAGS_ckpt_frequency);
-  const std::string output_folder = absl::GetFlag(FLAGS_output_folder).folder;
+  const std::string output_folder = absl::GetFlag(FLAGS_output_folder);
 
   ipu::LogContext::EnableInfo(verbose);
 
