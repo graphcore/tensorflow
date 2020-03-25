@@ -57,6 +57,23 @@ cc_library(
 )
 
 cc_binary(
+    name = "PoplarBinaryReader",
+    srcs = [
+        "poplar_binary_reader.cc",
+    ],
+    copts = tf_copts() + [
+        "-fexceptions",
+    ],
+    linkopts = ["-ldl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":poplar_executable_runner",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+cc_binary(
     name = "PoplarExecutableRunner",
     srcs = [
         "poplar_executable_runner_main.cc",

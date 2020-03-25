@@ -56,21 +56,6 @@ bool CreateDirIfNeeded(const std::string& dir) {
   return true;
 }
 
-std::string SecondsToTimeString(int64_t sec) {
-  int hours = sec / 3600;
-  int minutes = (sec - hours * 3600) / 60;
-  sec -= hours * 3600 + minutes * 60;
-  std::stringstream ss;
-  if (hours > 0) {
-    ss << hours << "h ";
-  }
-  if (minutes > 0) {
-    ss << minutes << "m ";
-  }
-  ss << sec << "s";
-  return ss.str();
-}
-
 std::string FileExtension(const std::string& filename,
                           bool no_extension_allowed = false) {
   size_t dot_pos = filename.rfind(".");
@@ -102,16 +87,8 @@ struct BinaryFiles {
   std::vector<std::string> filenames;
 };
 
-struct CkptFile {
-  std::string filename;
-};
-
 std::string AbslUnparseFlag(BinaryFiles f) {
   return absl::UnparseFlag(f.filenames);
-}
-
-std::string AbslUnparseFlag(CkptFile f) {
-  return absl::UnparseFlag(f.filename);
 }
 
 bool AbslParseFlag(absl::string_view text, BinaryFiles* f, std::string* error) {
@@ -142,46 +119,28 @@ bool AbslParseFlag(absl::string_view text, BinaryFiles* f, std::string* error) {
   return true;
 }
 
-bool AbslParseFlag(absl::string_view text, CkptFile* f, std::string* error) {
-  if (!absl::ParseFlag(text, &f->filename, error)) {
-    return false;
-  }
-  if (IsDir(f->filename)) {
-    ERROR_ON(!error->empty());
-    f->filename = absl::StrCat(f->filename, "/ckpt.json");
-  }
-
-  if (!FileExists(f->filename)) {
-    *error = absl::StrCat("Could not open checkpoint file '", f->filename, "'");
-    return false;
-  }
-  return true;
-}
-
 ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
           "List of binary files containing metadata, binaries, weights,"
           " inputs, feeds, etc. Note if this flag is set then the flags "
           "model_metadata, model_executable, weights_path, input_data, "
           "infeed_data are ignored.");
-ABSL_FLAG(int, iterations, 1, "Number of times to run the executable");
-ABSL_FLAG(int, ckpt_frequency, 1, "Frequency at which to create checkpoints");
 ABSL_FLAG(bool, print_output, false,
-          "Print the content of the output buffers to stdout");
+          "Print the content of the tensors to stdout");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
-ABSL_FLAG(CkptFile, ckpt, CkptFile(),
-          "Load the checkpoint config from the given file");
-ABSL_FLAG(bool, strict, false,
-          "Enable strict mode: all the input data files must be provided by "
-          "--input_data.");
+ABSL_FLAG(bool, list_tensors, false,
+          "List the names of the tensors present in --binaries");
+ABSL_FLAG(bool, list_feeds, false,
+          "List the names of the feeds present in --binaries");
 ABSL_FLAG(std::string, output_folder, "",
-          "Where to save the content of the output tensors");
+          "Where to export the content of the tensors");
+ABSL_FLAG(std::string, tensor, "", "Name of the tensor to export");
+ABSL_FLAG(std::string, feed, "", "Name of the feed to export");
 
 bool HelpFilter(absl::string_view filename) {
   return filename.find(__FILE__) != absl::string_view::npos;
 }
 
 int main(int argc, char** argv) {
-  using seconds = std::chrono::duration<float>;
   // Setting a custom filter is required for the help to be displayed when
   // --help is passed.
   absl::FlagsUsageConfig config;
@@ -193,15 +152,14 @@ int main(int argc, char** argv) {
   const BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
   const bool print_output = absl::GetFlag(FLAGS_print_output);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
-  const std::string ckpt_file = absl::GetFlag(FLAGS_ckpt).filename;
-  const bool strict = absl::GetFlag(FLAGS_strict);
-  const int iterations = absl::GetFlag(FLAGS_iterations);
-  const int ckpt_frequency = absl::GetFlag(FLAGS_ckpt_frequency);
+  const bool list_tensors = absl::GetFlag(FLAGS_list_tensors);
+  const bool list_feeds = absl::GetFlag(FLAGS_list_feeds);
   const std::string output_folder = absl::GetFlag(FLAGS_output_folder);
+  const std::string tensor_name = absl::GetFlag(FLAGS_tensor);
+  const std::string feed_name = absl::GetFlag(FLAGS_feed);
 
   ipu::LogContext::EnableInfo(verbose);
 
-  auto init_start = std::chrono::high_resolution_clock::now();
   ERROR_ON_MSG(!output_folder.empty() && !CreateDirIfNeeded(output_folder),
                "Failed to create output folder '" << output_folder << "'");
 
@@ -213,81 +171,58 @@ int main(int argc, char** argv) {
   for (auto file : binaries.filenames) {
     loader.LoadFile(file);
   }
-
-  std::unique_ptr<ipu::TensorManager> tensors = loader.CreateTensorManager();
-  std::unique_ptr<ipu::Executable> exe = loader.CreateExecutable();
-
-  if (strict) {
-    tensors->AssertAllTensorsProvided(loader);
-  }
-  tensors->LoadInputsAndParameters(loader);
-  tensors->LoadInfeeds(loader);
-
-  if (!ckpt_file.empty()) {
-    tensors->LoadCheckpointMetadataFromJson(ckpt_file);
-  }
-
-  PRINT_INFO("List of streams:\n" << exe->StreamsList());
-  tensors->ConnectStreams(*exe);
-
-  ipu::SeedManager seeds{tensors->Config()};
-  seeds.ConnectStreams(*exe);
-
-  std::cout << "\n[Initialising IPU]\n";
-  ipu::DeviceManager manager;
-  poplar::Device device = manager.GetDevice(tensors->Config().NumIpus(),
-                                            tensors->Config().OptionFlags());
-  auto init_end = std::chrono::high_resolution_clock::now();
-  std::cout << "Done in "
-            << SecondsToTimeString(seconds(init_end - init_start).count())
-            << std::endl;
-  std::cout << "\n[Executing]\n";
-  exe->Load(device);
-  for (int iteration = 0; iteration < iterations; iteration++) {
-    auto now = std::chrono::high_resolution_clock::now();
-    float elapsed = static_cast<float>(seconds(now - init_end).count());
-    float remaining =
-        iteration > 0 ? ((elapsed * iterations) / iteration) - elapsed : 0.0;
-    std::cout << "Iteration " << iteration << "/" << iterations - 1
-              << " Elapsed: " << SecondsToTimeString(elapsed)
-              << ", Estimated remaining: " << SecondsToTimeString(remaining)
-              << std::endl;
-    std::string iteration_folder = output_folder;
-    bool create_ckpt =
-        !output_folder.empty() &&
-        (iteration == (iterations - 1) || (iteration % ckpt_frequency == 0));
-    if (create_ckpt && iterations > 1) {
-      iteration_folder = absl::StrCat(iteration_folder, "/", iteration);
-      ERROR_ON_MSG(!CreateDirIfNeeded(iteration_folder),
-                   "Failed to create output folder '" << iteration_folder);
+  if (list_tensors || list_feeds) {
+    if (list_tensors) {
+      std::cout << "List of tensors:\n"
+                << absl::StrJoin(loader.GetObjectNames(ipu::ObjectType::Tensor),
+                                 "\n")
+                << std::endl;
     }
-    if (create_ckpt) {
-      tensors->CreateCheckpointMetadataJson(
-          absl::StrCat(iteration_folder, "/ckpt.json"));
-      tensors->SetOutfeedsFolder(iteration_folder);
-    } else {
-      tensors->IgnoreOutfeeds();
+    if (list_feeds) {
+      std::cout << "List of feeds:\n"
+                << absl::StrJoin(loader.GetObjectNames(ipu::ObjectType::Feed),
+                                 "\n")
+                << std::endl;
     }
+    return 0;
+  }
+  ERROR_ON_MSG(!tensor_name.empty() && !feed_name.empty(),
+               "Only one of --tensor or --feed can be provided");
+  ERROR_ON_MSG(tensor_name.empty() && feed_name.empty(),
+               "At least one of --tensor or --feed must be provided");
 
-    exe->Run();
+  if (!tensor_name.empty()) {
+    std::unique_ptr<ipu::StreamReader> reader =
+        loader.GetTensorStream(tensor_name);
+    ipu::Tensor out{*reader};
+    if (print_output) {
+      std::cout << "Value of " << tensor_name << ":\n";
+      std::cout << out.ToString() << std::endl;
+    }
+    if (!output_folder.empty()) {
+      out.SaveDataToJsonFile(
+          absl::StrCat(output_folder, "/", tensor_name, ".json"));
+    }
+  }
+  if (!feed_name.empty()) {
+    std::shared_ptr<ipu::StreamReader> reader =
+        loader.CreateInfeedStreamReader(feed_name);
+    ipu::InfeedStream feed{reader};
+    ipu::Tensor tensor{feed.Info()};
 
-    if (print_output || create_ckpt) {
-      exe->DeviceToHostCopy();
+    for (int64_t i = 0; i < feed.NumTensors(); i++) {
+      feed.LoadTensor(tensor.Data());
       if (print_output) {
-        std::cout << "Outputs:\n";
-        for (auto& output : tensors->Outputs()) {
-          std::cout << output.ToString() << std::endl;
-        }
+        std::cout << "Value of " << feed_name << " tensor=" << i << ":\n";
+        std::cout << tensor.ToString() << std::endl;
       }
-      if (create_ckpt) {
-        ipu::BinaryWriter parameters_writer(
-            absl::StrCat(iteration_folder, "/parameters.bin"));
-        tensors->SaveOutputs(ipu::TensorType::ParameterOut, parameters_writer);
-        tensors->SaveOutputsToJson(ipu::TensorType::OutputData,
-                                   iteration_folder);
+      if (!output_folder.empty()) {
+        tensor.SaveDataToJsonFile(
+            absl::StrCat(output_folder, "/", feed_name, ".", i, ".json"));
       }
+      feed.MoveToNextTensor();
     }
   }
-  std::cout << "\nExecution complete!\n";
+  std::cout << "\nExport complete!\n";
   return 0;
 }
