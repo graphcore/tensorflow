@@ -26,6 +26,7 @@ import numpy as np
 
 from tensorflow.compat.v1 import disable_v2_behavior
 from tensorflow.core.protobuf import config_pb2
+from tensorflow.python import keras
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import cross_device_utils
@@ -37,6 +38,7 @@ from tensorflow.python.distribute.cluster_resolver.tfconfig_cluster_resolver imp
 from tensorflow.python.distribute.reduce_util import ReduceOp
 from tensorflow.python.estimator import estimator_lib
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import random_seed
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -945,6 +947,87 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
   def test_pipelining(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_pipelining, cluster_spec)
+
+  def _test_pipelining_example_with_keras_layers(self, _task_id):
+    strategy, sess_target, sess_config = self._create_test_objects(
+        variables_on_host=False)
+
+    random_seed.set_random_seed(random_seed.DEFAULT_GRAPH_SEED)
+    prev_loss = np.inf
+    pipeline_depth = 4
+
+    features = np.ones((1, 20), dtype=np.float32)
+    labels = np.ones((1), dtype=np.int32)
+    dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+    dataset = dataset.repeat().batch(4, drop_remainder=True)
+
+    # Start of verbatim copy of example from ipu_multi_worker_strategy.py.
+
+    with strategy.scope():
+
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+
+      def stage1(lr, images, labels):
+        partial = keras.layers.Dense(256, activation="relu")(images)
+        partial = keras.layers.Dense(128, activation="relu")(partial)
+        return lr, partial, labels
+
+      def stage2(lr, partial, labels):
+        logits = keras.layers.Dense(10)(partial)
+        cross_entropy = keras.losses.sparse_categorical_crossentropy(
+            y_true=labels, y_pred=logits, from_logits=True)
+        loss = math_ops.reduce_mean(cross_entropy)
+        return lr, loss
+
+      def optimizer_function(lr, loss):
+        optimizer = GradientDescentOptimizer(lr)
+        return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
+
+      def model(lr):
+        pipeline_op = pipelining_ops.pipeline(
+            computational_stages=[stage1, stage2],
+            pipeline_depth=pipeline_depth,
+            inputs=[lr],
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            optimizer_function=optimizer_function,
+            name="Pipeline")
+        return pipeline_op
+
+      def compiled_model(lr):
+        return ipu_compiler.compile(model, inputs=[lr])
+
+      with ops.device("cpu"):
+        lr = array_ops.placeholder(np.float32, [])
+
+      train_op = strategy.experimental_run_v2(compiled_model, args=[lr])
+      outfeed_op = outfeed_queue.dequeue()
+
+      config = ipu_utils.create_ipu_config()
+      config = ipu_utils.auto_select_ipus(config, num_ipus=2)
+      ipu_utils.configure_ipu_system(config)
+
+      with session_lib.Session(target=sess_target, config=sess_config) as sess:
+        sess.run(infeed_queue.initializer)
+        sess.run(variables.global_variables_initializer())
+
+        for _ in range(10):
+          sess.run(train_op, {lr: 0.01})
+          lr_out, loss_out = sess.run(outfeed_op)
+
+          # End of example code.
+
+          # Check that the loss decreases monotonically.
+          np.testing.assert_almost_equal([0.01] * pipeline_depth, lr_out)
+          mean_loss = np.mean(loss_out)
+          self.assertLess(mean_loss, prev_loss)
+          prev_loss = mean_loss
+
+  def test_pipelining_example_with_keras_layers(self):
+    cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
+    self._run_workers_in_processes(
+        self._test_pipelining_example_with_keras_layers, cluster_spec)
 
   def _test_ipu_pipeline_estimator(self, task_id):
     # The estimator library starts the server when configured in TF_CONFIG.

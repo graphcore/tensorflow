@@ -81,7 +81,11 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   the gradients to be streamed to the host of each worker, allreduced
   between the workers, and then streamed back to the IPU of each worker,
   where identical weight updates are performed (keeping the workers in
-  sync).
+  sync). This is done even when the call to `optimizer.apply_gradients()`
+  is inside a function passed to `ipu_compiler.compile()`, as the allreduce
+  is extracted from the compiled XLA cluster and placed on the host in
+  the outside graph (by internally using an
+  :func:`~tensorflow.python.ipu.scopes.outside_compilation_scope`).
 
   When variables are placed on the host, the weight updates should
   also be placed on the host. In other words, the
@@ -91,6 +95,99 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   the "slot" variables used by the optimizer (e.g. the momentum
   accumulator) are then also kept only in host memory and never
   used on the IPU, saving IPU memory.
+
+  **Compatibility**
+
+  `IPUEstimator`: Pass the `IPUMultiWorkerStrategy` instance to the
+  :class:`~tensorflow.python.ipu.ipu_run_config.RunConfig` as the
+  `train_distribute` argument. When variables are placed on the host,
+  the `optimizer.apply_gradients()` call should also be placed on the
+  host by using the
+  :class:`~tensorflow.python.ipu.ipu_estimator.IPUEstimatorSpec`
+  `host_call` argument. See full example: :any:`distributed_training_example`.
+
+  `IPUPipelineEstimator`: Pass the `IPUMultiWorkerStrategy` instance to
+  the :class:`~tensorflow.python.ipu.ipu_run_config.RunConfig` as the
+  `train_distribute` argument. Placing variables on the host is not
+  currently supported here.
+
+  Keras `Model.fit`: Not currently supported.
+
+  Custom training loop: Pass the training step function to
+  `IPUMultiWorkerStrategy.experimental_run_v2()`. With variables on
+  the IPU, the `optimizer.apply_gradients()` call can be done from
+  an XLA compiled IPU function, and the inter-host allreduce will
+  be automatically extracted from the compiled XLA cluster and placed
+  on the host. With variables on the host, the `optimizer.apply_gradients()`
+  call must be explicitly placed on the host.
+
+  **Example using a custom training loop with pipelining**
+
+  .. code-block:: python
+
+    cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
+    strategy = IPUMultiWorkerStrategy(cluster_resolver)
+
+    sess_config = tf.ConfigProto()
+    sess_config = strategy.update_config_proto(sess_config)
+    server = tf.distribute.Server(cluster_resolver.cluster_spec(),
+                                  job_name=cluster_resolver.task_type,
+                                  task_index=cluster_resolver.task_id,
+                                  config=sess_config)
+    sess_target = server.target
+
+    with strategy.scope():
+
+      infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "infeed")
+      outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+
+      def stage1(lr, images, labels):
+        partial = keras.layers.Dense(256, activation="relu")(images)
+        partial = keras.layers.Dense(128, activation="relu")(partial)
+        return lr, partial, labels
+
+      def stage2(lr, partial, labels):
+        logits = keras.layers.Dense(10)(partial)
+        cross_entropy = keras.losses.sparse_categorical_crossentropy(
+            y_true=labels, y_pred=logits, from_logits=True)
+        loss = math_ops.reduce_mean(cross_entropy)
+        return lr, loss
+
+      def optimizer_function(lr, loss):
+        optimizer = GradientDescentOptimizer(lr)
+        return pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
+
+      def model(lr):
+        pipeline_op = pipelining_ops.pipeline(
+            computational_stages=[stage1, stage2],
+            pipeline_depth=pipeline_depth,
+            inputs=[lr],
+            infeed_queue=infeed_queue,
+            outfeed_queue=outfeed_queue,
+            optimizer_function=optimizer_function,
+            name="Pipeline")
+        return pipeline_op
+
+      def compiled_model(lr):
+        return ipu_compiler.compile(model, inputs=[lr])
+
+      with ops.device("cpu"):
+        lr = array_ops.placeholder(np.float32, [])
+
+      train_op = strategy.experimental_run_v2(compiled_model, args=[lr])
+      outfeed_op = outfeed_queue.dequeue()
+
+      config = ipu_utils.create_ipu_config()
+      config = ipu_utils.auto_select_ipus(config, num_ipus=2)
+      ipu_utils.configure_ipu_system(config)
+
+      with session_lib.Session(target=sess_target, config=sess_config) as sess:
+        sess.run(infeed_queue.initializer)
+        sess.run(variables.global_variables_initializer())
+
+        for _ in range(10):
+          sess.run(train_op, {lr: 0.01})
+          lr_out, loss_out = sess.run(outfeed_op)
   """
   def __init__(self,
                cluster_resolver,
