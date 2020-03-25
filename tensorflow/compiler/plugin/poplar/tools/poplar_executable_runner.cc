@@ -583,11 +583,15 @@ void Tensor::ToStream(StreamWriter& out) const {
 
 void Tensor::LoadDataFromStream(StreamReader& in) {
   TensorInfo info{in};
-  ERROR_ON_MSG(
-      !info_.TypeAndShapeMatch(info),
-      "Type and Shape from metadata JSON file: "
-          << info_.ToString()
-          << " don't match those from binary file: " << info.ToString());
+  if (info_.Type() == TensorType::NotSet) {
+    info_ = std::move(info);
+  } else {
+    ERROR_ON_MSG(
+        !info_.TypeAndShapeMatch(info),
+        "Type and Shape from metadata JSON file: "
+            << info_.ToString()
+            << " don't match those from binary file: " << info.ToString());
+  }
   data_.resize(info_.Shape().DataSizeInBytes());
   in.ReadData(data_.data(), info_.Shape().DataSizeInBytes());
 }
@@ -621,29 +625,6 @@ Executable::Executable(StreamReader& stream, int64_t length) {
 }
 
 poplar::Engine& Executable::Engine() { return *engine_; }
-StreamList::StreamList(const std::vector<std::string>& poplar_streams)
-    : streams_([&poplar_streams]() {
-        std::vector<Stream> streams;
-        absl::c_transform(poplar_streams, std::back_inserter(streams),
-                          [](const std::string& stream) {
-                            char last_char = stream[stream.size() - 1];
-                            const std::string name =
-                                stream.substr(0, stream.size() - 1);
-                            ERROR_ON(last_char != '+' && last_char != '-');
-                            return Stream{name, last_char == '+'};
-                          });
-        return streams;
-      }()) {}
-const std::vector<Stream>& StreamList::Streams() const { return streams_; }
-
-const Stream& StreamList::operator[](int idx) const {
-  ERROR_ON(idx >= streams_.size());
-  return streams_.at(idx);
-}
-
-StreamList Executable::GetStreams() const {
-  return StreamList{engine_->listStreams()};
-}
 
 std::string Executable::StreamsList() const {
   int idx = 0;
@@ -778,6 +759,8 @@ bool TensorShape::operator==(const TensorShape& other) const {
 const std::string& TensorInfo::Name() const { return name_; }
 const std::string& TensorInfo::Handle() const { return handle_; }
 TensorType TensorInfo::Type() const { return type_; }
+
+Tensor::Tensor(StreamReader& reader) { LoadDataFromStream(reader); }
 
 Tensor::Tensor(const TensorInfo& info) : info_(info) {
   data_.resize(info_.Shape().DataSizeInBytes());
@@ -1217,6 +1200,10 @@ std::string InfeedStream::ToString() {
   return absl::StrCat("[", absl::StrJoin(tensors, "\n"), "]");
 }
 
+InfeedStream::InfeedStream(std::shared_ptr<StreamReader> in) {
+  InitializeDataSource(in);
+}
+
 void InfeedStream::InitializeDataSource(std::shared_ptr<StreamReader> in) {
   reader_ = in;
   TensorInfo info{*reader_};
@@ -1283,6 +1270,9 @@ OutfeedStream::OutfeedStream(const TensorInfo& info) : info_(info), writer_() {}
 
 void OutfeedStream::UpdateNumTensorsAndClose() {
   auto end = writer_->CurrentPosition();
+  writer_->MoveAbsolute(data_size_pos_);
+  writer_->WriteInt64(static_cast<int64_t>(end) -
+                      static_cast<int64_t>(data_size_pos_) - sizeof(int64_t));
   writer_->MoveAbsolute(num_tensors_pos_);
   int64_t num_bytes = end - num_tensors_pos_ - sizeof(int64_t);
   ERROR_ON(num_bytes % info_.Shape().DataSizeInBytes() != 0);
@@ -1298,8 +1288,12 @@ void OutfeedStream::SetOutputFolder(const std::string& output_folder) {
     UpdateNumTensorsAndClose();
   }
   writer_ = std::make_shared<StreamWriter>(filename);
+  // Must match the information in BinaryWriter::CreateFeed
   writer_->WriteInt64(static_cast<int64_t>(ObjectType::Feed));
   writer_->WriteString(info_.Name());
+  // Set data size to 0: we don't know how many elements we're going to write.
+  data_size_pos_ = writer_->CurrentPosition();
+  writer_->WriteInt64(0);
   info_.ToStream(*writer_);
   // Set num_tensors to 0: we don't know how many elements we're going to write.
   num_tensors_pos_ = writer_->CurrentPosition();

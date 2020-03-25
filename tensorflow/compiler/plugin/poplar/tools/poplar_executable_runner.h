@@ -112,27 +112,11 @@ class TensorShape {
   std::vector<int64_t> shape_;
 };
 
-struct Stream {
-  const std::string name;
-  bool is_input_stream;
-};
-
-class StreamList {
- public:
-  explicit StreamList(const std::vector<std::string>& poplar_streams);
-  const std::vector<Stream>& Streams() const;
-  const Stream& operator[](int idx) const;
-
- private:
-  const std::vector<Stream> streams_;
-};
-
 class Executable {
  public:
   explicit Executable(StreamReader& stream, int64_t length = 0);
   poplar::Engine& Engine();
   std::string StreamsList() const;
-  StreamList GetStreams() const;
   void Load(const poplar::Device& device);
   void Run();
   void DeviceToHostCopy();
@@ -202,6 +186,7 @@ class TensorInfo {
 
 class Tensor {
  public:
+  explicit Tensor(StreamReader& reader);
   explicit Tensor(const TensorInfo& info);
   explicit Tensor(const TensorInfo& info, const void* data);
   const TensorInfo& Info() const;
@@ -276,6 +261,7 @@ class SeedManager {
 
 class InfeedStream {
  public:
+  explicit InfeedStream(std::shared_ptr<StreamReader> in);
   explicit InfeedStream(const TensorInfo& info);
   const TensorInfo& Info() const;
   void InitializeDataSource(const std::string& filename);
@@ -326,6 +312,7 @@ class OutfeedStream {
   TensorInfo info_;
   std::shared_ptr<StreamWriter> writer_;
   std::ios::streampos num_tensors_pos_;
+  std::ios::streampos data_size_pos_;
 };
 
 class Outfeed {
