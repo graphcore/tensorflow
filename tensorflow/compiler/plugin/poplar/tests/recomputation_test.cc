@@ -382,18 +382,30 @@ TEST_F(NormInputRecomputationTest, RecomputeRelu) {
   EXPECT_TRUE(module_or_status.ok());
   auto* module = module_or_status.ValueOrDie().get();
 
+  CompilerAnnotations annotations(module);
+  ModuleFlatten flatten(annotations);
+  ConvolutionClassifier classifier(annotations);
+  CustomOpReplacer replacer{};
+
+  auto replacer_res = replacer.Run(module);
+
+  EXPECT_TRUE(replacer_res.ok());
+  EXPECT_TRUE(replacer_res.ValueOrDie());
+
   HloInstruction* input1 = FindInstruction(module, "convolution.11");
-  HloInstruction* bn1 = FindInstruction(module, "batch-norm-training.13");
-  HloInstruction* bn_grad1 = FindInstruction(module, "batch-norm-grad.76");
-  HloInstruction* relu1 = FindInstruction(module, "relu.1");
-
   HloInstruction* input2 = FindInstruction(module, "convolution.23");
-  HloInstruction* bn2 = FindInstruction(module, "batch-norm-training.25");
-  HloInstruction* bn_grad2 = FindInstruction(module, "batch-norm-grad.50");
-  HloInstruction* relu_grad2 = FindInstruction(module, "relugrad.2");
 
-  std::cout << "RELU: " << relu1 << " grad " << relu_grad2 << " in " << input1
-            << "\n";
+  HloInstruction* bn1 = FindInstruction(module, "batch-norm-training.13");
+  HloInstruction* bn2 = FindInstruction(module, "batch-norm-training.25");
+
+  HloInstruction* bn_grad1 = FindInstruction(module, "batch-norm-grad.76");
+  HloInstruction* bn_grad2 = FindInstruction(module, "batch-norm-grad.50");
+
+  HloInstruction* relu1 = input2->mutable_operand(0);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Relu)(relu1));
+
+  HloInstruction* relu_grad2 = bn_grad1->mutable_operand(4);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ReluGrad)(relu_grad2));
 
   ASSERT_EQ(input1->users().size(), 2);
   ASSERT_EQ(bn1->operand(0), input1);
@@ -404,16 +416,6 @@ TEST_F(NormInputRecomputationTest, RecomputeRelu) {
   ASSERT_EQ(bn_grad2->operand(0), input2);
 
   ASSERT_EQ(relu_grad2->operand(0), relu1);
-
-  CompilerAnnotations annotations(module);
-  ModuleFlatten flatten(annotations);
-  ConvolutionClassifier classifier(annotations);
-  CustomOpReplacer replacer{};
-
-  auto replacer_res = replacer.Run(module);
-
-  EXPECT_TRUE(replacer_res.ok());
-  EXPECT_TRUE(replacer_res.ValueOrDie());
 
   EXPECT_TRUE(flatten.Run(module).ValueOrDie());
   auto res = classifier.Run(module);
