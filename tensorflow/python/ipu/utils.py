@@ -1226,7 +1226,10 @@ def move_variable_initialization_to_cpu(graph=None):
   return
 
 
-def export_dataset_to_file(dataset_or_infeed, output_filename, num_elements):
+def export_dataset_to_file(dataset_or_infeed,
+                           output_filename,
+                           num_elements,
+                           feed_name=""):
   """Export as binary `num_elements` from the given `infeed` to the specified
   `output_filename`.
 
@@ -1243,14 +1246,31 @@ def export_dataset_to_file(dataset_or_infeed, output_filename, num_elements):
     structure or an `IPUInfeedQueue`.
     output_filename: Where to export the tensors to.
     num_elements: Number of elements to export from the dataset.
+    feed_name: Specify the feed name
   """
   assert isinstance(dataset_or_infeed,
                     (dataset_ops.Dataset, ipu_infeed_queue.IPUInfeedQueue))
   if isinstance(dataset_or_infeed, ipu_infeed_queue.IPUInfeedQueue):
     dataset = dataset_or_infeed._dataset  # pylint: disable=protected-access
+    feed_name = feed_name or dataset_or_infeed._id  # pylint: disable=protected-access
   else:
     dataset = dataset_or_infeed
   extractor = dataset_extractor.dataset_extractor(dataset, num_elements,
-                                                  output_filename)
+                                                  output_filename, feed_name)
   with ops.device("cpu"), session_lib.Session() as sess:
     sess.run(extractor)
+
+
+def export_inputs_to_file(inputs, output_filename, feed_dict):
+  """Export as binary the list of `inputs` provided to the specified
+  `output_filename`.
+
+  Args:
+    inputs: List of graph inputs to export.
+    output_filename: Where to export the tensors to.
+    feed_dict: Feed dictionary containing the inputs' values.
+  """
+
+  with ops.device("cpu"), session_lib.Session() as sess:
+    sess.run(dataset_extractor.export_variables(inputs, output_filename),
+             feed_dict)

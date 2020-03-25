@@ -1551,6 +1551,8 @@ std::string ModuleFilenames::SerializedExecutableFilename() const {
                                   basename_ + ".ipu_bin");
 }
 
+std::string ModuleFilenames::Name() const { return basename_; }
+
 std::string ModuleFilenames::SerializedMetadataFilename() const {
   return tensorflow::io::JoinPath(serialization_folder_, basename_ + ".json");
 }

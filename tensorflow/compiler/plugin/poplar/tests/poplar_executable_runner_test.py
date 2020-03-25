@@ -166,21 +166,21 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
     with tempfile.TemporaryDirectory() as tmp:
       poplar_binaries_folder = os.path.join(tmp, "poplar")
       model_path = os.path.join(tmp, "model")
-      weights_path = os.path.join(tmp, "weights")
+      weights_file = os.path.join(tmp, "weights.bin")
       output_path = os.path.join(tmp, "output")
       input_values = np.random.uniform(size=(1, 32, 32, 1))
-      input_file = "%s/input.data" % tmp
-
-      with open(input_file, 'w') as f:
-        json.dump(input_values.tolist(), f)
+      input_file = "%s/input.bin" % tmp
 
       with self.session() as sess:
+
         self.configureIPU(poplar_binaries_folder, False)
         with ops.device("/device:IPU:0"):
           out, inp, model = instantiate_lenet()
 
         utils.move_variable_initialization_to_cpu()
         sess.run(global_variables_initializer())
+
+        utils.export_inputs_to_file([inp], input_file, {inp: input_values})
 
         # Run the model once to generate the poplar binaries.
         reference_values = sess.run(out, {inp: input_values})
@@ -190,19 +190,22 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
 
       metadata_file = self.getSingleFileWithExt(poplar_binaries_folder, "json")
       executable_file = self.getSingleFileWithExt(poplar_binaries_folder,
-                                                  "poplar_exec")
+                                                  "ipu_bin")
 
       self.runPythonCommand(
           (("./tensorflow/compiler/plugin/poplar/tools/"
             "tensorflow_weights_extractor.py -o %s -s %s -m %s") %
-           (weights_path, model_path, metadata_file)).split())
+           (weights_file, model_path, metadata_file)).split())
 
       self.runCommand(
           (("./tensorflow/compiler/plugin/poplar/tools/PoplarExecutableRunner"
-            " --model_executable %s --model_metadata %s --weights_path %s "
-            "--output_folder=%s --input_data=input_1=%s --strict") %
-           (executable_file, metadata_file, weights_path, output_path,
-            input_file)).split())
+            " --binaries %s,%s,%s "
+            "--output_folder=%s --strict") % (
+                executable_file,
+                weights_file,
+                input_file,
+                output_path,
+            )).split())
 
       output_file = self.getSingleFileWithExt(output_path, "data")
       with open(output_file, 'r') as f:
@@ -212,7 +215,6 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         self.assertAllClose(reference_values, runner_values)
 
   @test_util.deprecated_graph_mode_only
-  @test_util.run_v2_only
   def testWeightsExportersNoMetadata(self):
     """ Check that the weights extractor produces the same output with
      TF v1 and v2 models."""
@@ -224,8 +226,8 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
                                }), tempfile.TemporaryDirectory() as tmp:
       model_path_keras = os.path.join(tmp, "model_keras")
       model_path_session = os.path.join(tmp, "model_session")
-      weights_path_keras = os.path.join(tmp, "weights_keras")
-      weights_path_session = os.path.join(tmp, "weights_session")
+      weights_keras = os.path.join(tmp, "weights_keras.bin")
+      weights_session = os.path.join(tmp, "weights_session.bin")
 
       with self.session() as sess:
         self.configureIPU()
@@ -240,24 +242,14 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
 
       self.runPythonCommand((("./tensorflow/compiler/plugin/poplar/tools/"
                               "tensorflow_weights_extractor.py -o %s -s %s") %
-                             (weights_path_keras, model_path_keras)).split())
+                             (weights_keras, model_path_keras)).split())
 
-      self.runPythonCommand(
-          (("./tensorflow/compiler/plugin/poplar/tools/"
-            "tensorflow_weights_extractor.py -o %s -s %s") %
-           (weights_path_session, model_path_session)).split())
+      self.runPythonCommand((("./tensorflow/compiler/plugin/poplar/tools/"
+                              "tensorflow_weights_extractor.py -o %s -s %s") %
+                             (weights_session, model_path_session)).split())
 
-      keras_files = sorted(glob.glob("%s/*" % weights_path_keras))
-      session_files = sorted(glob.glob("%s/*" % weights_path_session))
-      logging.info("Keras weights files: %s" % keras_files)
-      logging.info("Session weights files: %s" % session_files)
-      self.assertEqual(len(keras_files), len(session_files))
-      for idx, keras_file in enumerate(keras_files):
-        session_file = session_files[idx]
-        self.assertEqual(os.path.basename(session_file),
-                         os.path.basename(keras_file))
-        with open(session_file, 'r') as s, open(keras_file, 'r') as k:
-          self.assertEqual(s.read(), k.read())
+      with open(weights_session, 'rb') as s, open(weights_keras, 'rb') as k:
+        self.assertEqual(s.read(), k.read())
 
   @test_util.deprecated_graph_mode_only
   def testWeightsExportersMetadataLive(self):
@@ -269,8 +261,8 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
                               {"TF_POPLAR_FLAGS": poplar_flags
                                }), tempfile.TemporaryDirectory() as tmp:
       poplar_binaries_folder = os.path.join(tmp, "poplar")
-      weights_path_keras = os.path.join(tmp, "weights_keras")
-      weights_path_session = os.path.join(tmp, "weights_session")
+      weights_keras = os.path.join(tmp, "weights_keras.bin")
+      weights_session = os.path.join(tmp, "weights_session.bin")
 
       with self.session() as sess:
         self.configureIPU(poplar_binaries_folder)
@@ -296,7 +288,7 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         utils.move_variable_initialization_to_cpu()
         sess.run(global_variables_initializer())
 
-        utils.export_variables_from_live_session(sess, weights_path_session,
+        utils.export_variables_from_live_session(sess, weights_session,
                                                  metadata_file)
 
       with self.session() as sess:
@@ -306,21 +298,11 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
 
         utils.move_variable_initialization_to_cpu()
         sess.run(global_variables_initializer())
-        utils.export_variables_from_live_model(model, weights_path_keras,
+        utils.export_variables_from_live_model(model, weights_keras,
                                                metadata_file)
 
-      keras_files = sorted(glob.glob("%s/*" % weights_path_keras))
-      session_files = sorted(glob.glob("%s/*" % weights_path_session))
-      logging.info("Keras weights files: %s" % keras_files)
-      logging.info("Session weights files: %s" % session_files)
-      self.assertEqual(len(keras_files), 10)
-      self.assertEqual(len(session_files), 10)
-      for idx, keras_file in enumerate(keras_files):
-        session_file = session_files[idx]
-        self.assertEqual(os.path.basename(session_file),
-                         os.path.basename(keras_file))
-        with open(session_file, 'r') as s, open(keras_file, 'r') as k:
-          self.assertEqual(s.read(), k.read())
+      with open(weights_session, 'rb') as s, open(weights_keras, 'rb') as k:
+        self.assertEqual(s.read(), k.read())
 
 
 if __name__ == "__main__":

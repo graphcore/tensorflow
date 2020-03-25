@@ -158,13 +158,10 @@ std::string GetTensorMappingJson(const std::string& module_name,
 /* Save the inputs / outputs metadata from the compiler resources in a Json
  * file.
  */
-Status SaveExecutableMetadataJson(const std::string& filename,
-                                  const InputOutputAliasingMap& io_map,
-                                  const InfeedInfos& infeed_infos,
-                                  const OutfeedInfos& outfeed_infos,
-                                  uint32 replication_count,
-                                  const poplar::OptionFlags& opts,
-                                  const poplar::Target& target);
+StatusOr<std::string> CreateExecutableMetadataJson(
+    const InputOutputAliasingMap& io_map, const InfeedInfos& infeed_infos,
+    const OutfeedInfos& outfeed_infos, uint32 replication_count,
+    const poplar::OptionFlags& opts, const poplar::Target& target);
 }  // namespace poplarplugin
 }  // namespace xla
 

@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
+#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_runner.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -298,16 +299,24 @@ Status ExportInternal(const ModuleFilenames& filenames,
 
   // Write poplar executable to a file
   try {
-    auto file = std::ofstream(filenames.SerializedExecutableFilename(),
-                              std::ios::binary);
-    executable.serialize(file);
+    TF_ASSIGN_OR_RETURN(
+        std::string json_metadata,
+        CreateExecutableMetadataJson(io_map, infeeds, outfeeds,
+                                     replication_count, opts, target));
+    ipu::BinaryWriter writer(filenames.SerializedExecutableFilename());
+    writer.WriteMetadata(filenames.Name(), json_metadata);
+    writer.WriteExecutable(filenames.Name(), executable);
+    writer.Close();
+
+    std::unique_ptr<tensorflow::WritableFile> file;
+    TF_RETURN_IF_ERROR(tensorflow::Env::Default()->NewWritableFile(
+        filenames.SerializedMetadataFilename(), &file));
+    TF_RETURN_IF_ERROR(file->Append(json_metadata));
+    TF_RETURN_IF_ERROR(file->Close());
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Serialize] ", e);
   }
-
-  return SaveExecutableMetadataJson(filenames.SerializedMetadataFilename(),
-                                    io_map, infeeds, outfeeds,
-                                    replication_count, opts, target);
+  return Status::OK();
 }
 
 }  // namespace
@@ -317,28 +326,28 @@ Status ExportInternal(const ModuleFilenames& filenames,
                                            uint32 replication_count,
                                            const poplar::OptionFlags& opts,
                                            const poplar::Target& target) {
-  TF_RETURN_IF_ERROR(ExportInternal(
+  return ExportInternal(
       filenames, executable, resources.annotations.infeed_infos,
       resources.annotations.outfeed_infos, resources.annotations.send_infos,
       resources.annotations.recv_infos,
       resources.annotations.host_embedding_lookup_infos,
       resources.annotations.host_embedding_update_infos,
       resources.annotations.input_output_aliasing_map, replication_count, opts,
-      target));
+      target);
 }
 
 /*static*/ Status PoplarExecutable::Export(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
     const PoplarExecutable& poplar_executable, const poplar::OptionFlags& opts,
     const poplar::Target& target) {
-  TF_RETURN_IF_ERROR(ExportInternal(
+  return ExportInternal(
       filenames, executable, poplar_executable.GetInfeedInfos(),
       poplar_executable.GetOutfeedInfos(), poplar_executable.GetSendInfos(),
       poplar_executable.GetRecvInfos(),
       poplar_executable.GetHostEmbeddingLookupInfos(),
       poplar_executable.GetHostEmbeddingUpdateInfos(),
       poplar_executable.GetInputOutputAliasingMap(),
-      poplar_executable.GetReplicationFactor(), opts, target));
+      poplar_executable.GetReplicationFactor(), opts, target);
 }
 /*static*/ Status PoplarExecutable::Serialize(
     const ModuleFilenames& filenames, const poplar::Executable& executable,

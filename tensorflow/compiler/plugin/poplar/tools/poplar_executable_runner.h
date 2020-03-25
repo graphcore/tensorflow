@@ -19,7 +19,9 @@ limitations under the License.
 #include <fstream>
 #include <iostream>
 #include <list>
+#include <map>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -74,6 +76,8 @@ class LogContext {
   const std::string saved_context_;
 };
 
+class BinaryLoader;
+class BinaryWriter;
 class Infeed;
 class Outfeed;
 class StreamReader;
@@ -125,7 +129,7 @@ class StreamList {
 
 class Executable {
  public:
-  explicit Executable(const std::string& executable_filename);
+  explicit Executable(StreamReader& stream, int64_t length = 0);
   poplar::Engine& Engine();
   std::string StreamsList() const;
   StreamList GetStreams() const;
@@ -145,8 +149,6 @@ class DeviceManager {
  private:
   poplar::DeviceManager manager_;
 };
-
-enum class StreamObjectType { Feed, Tensor };
 
 /* Tensor types to connect to the Poplar binary:
  *
@@ -201,13 +203,15 @@ class TensorInfo {
 class Tensor {
  public:
   explicit Tensor(const TensorInfo& info);
+  explicit Tensor(const TensorInfo& info, const void* data);
   const TensorInfo& Info() const;
-  void LoadDataFromJson(const std::string& data_filename);
   void SaveDataToJsonFile(const std::string& filename) const;
   void SaveDataToJsonStream(std::ostream* sout) const;
+  void LoadDataFromStream(StreamReader& in);
+  void LoadDataFromJson(const std::string& data_filename);
   void* Data();
-  void* DataEnd();
   std::string ToString() const;
+  void ToStream(StreamWriter& out) const;
 
  private:
   TensorInfo info_;
@@ -227,18 +231,12 @@ class IpuConfig {
   poplar::OptionFlags option_flags_;
 };
 
-class JsonParser {
- public:
-  explicit JsonParser(const std::string& filename);
-  const Json::Value& Root() const;
-
- private:
-  Json::Value root_;
-};
+Json::Value LoadJsonFromFile(const std::string& filename);
+Json::Value LoadJsonFromString(const std::string& json_content);
 
 class TensorManager {
  public:
-  explicit TensorManager(const JsonParser& metadata);
+  explicit TensorManager(const Json::Value& root);
   const std::vector<Tensor>& Inputs() const;
   const std::vector<Tensor>& Outputs() const;
   const std::vector<Infeed>& Infeeds() const;
@@ -250,8 +248,13 @@ class TensorManager {
   const IpuConfig& Config() const;
   void AllocateTensors();
   std::list<Tensor*> InputDataTensors();
-  void LoadParameters(const std::string& path);
-  void SaveOutputsToJsonFile(const std::string& path);
+  void AssertAllTensorsProvided(const BinaryLoader& loader);
+  void LoadInputsAndParameters(const BinaryLoader& loader);
+  void LoadInputs(const BinaryLoader& loader);
+  void LoadInfeeds(const BinaryLoader& loader);
+  void SaveOutputs(TensorType type, BinaryWriter& writer,
+                   bool allow_duplicates = false) const;
+  void SaveOutputsToJson(TensorType type, const std::string& folder) const;
   void ConnectStreams(Executable& executable);
 
  private:
@@ -273,10 +276,10 @@ class SeedManager {
 
 class InfeedStream {
  public:
-  explicit InfeedStream(const std::string& filename);
   explicit InfeedStream(const TensorInfo& info);
   const TensorInfo& Info() const;
   void InitializeDataSource(const std::string& filename);
+  void InitializeDataSource(std::shared_ptr<StreamReader> in);
   void LoadTensor(void* dst);
   void ResetToFirstTensor();
   void MoveToNextTensor();
@@ -297,7 +300,7 @@ class InfeedStream {
 class Infeed {
  public:
   explicit Infeed(const Json::Value& infeed);
-  void InitializeDataSources(const std::string& filename);
+  void InitializeDataSources(const BinaryLoader& loader);
   const std::string& Name() const;
   std::vector<InfeedStream>& MutableStreams();
   const std::vector<InfeedStream>& Streams() const;
@@ -348,6 +351,7 @@ class StreamWriter {
   void MoveAbsolute(std::ios::streampos position);
   std::ios::streampos CurrentPosition();
   void Close();
+  std::fstream& Stream();
 
  private:
   std::fstream fd_;
@@ -355,7 +359,7 @@ class StreamWriter {
 
 class StreamReader {
  public:
-  explicit StreamReader(const std::string& filename);
+  explicit StreamReader(const std::string& filename, bool is_versioned = true);
   StreamReader Clone();
   int64_t NumBytesLeft();
   std::string ReadString(int64_t max_len = 0);
@@ -365,11 +369,67 @@ class StreamReader {
   std::ios::streampos CurrentPosition();
   int64_t ReadInt64();
   std::vector<int64_t> ReadInt64Array();
+  std::ifstream& Stream();
+  const std::string& Filename() const;
 
  private:
   const std::string filename_;
   std::ifstream fd_;
   std::streampos end_;
+};
+
+enum class ObjectType { Feed, Tensor, PoplarExecutable, PoplarMetadata };
+
+class FeedWriter {
+ public:
+  FeedWriter(std::shared_ptr<StreamWriter> writer, int64_t tensor_size,
+             int64_t num_tensors);
+  void AppendTensor(const void* data);
+
+ private:
+  std::shared_ptr<StreamWriter> writer_;
+  int64_t tensor_size_;
+  std::ios::streampos end_pos_;
+  std::ios::streampos current_pos_;
+};
+
+class BinaryWriter {
+ public:
+  explicit BinaryWriter(const std::string& filename);
+  FeedWriter CreateFeed(const std::string& name, const TensorInfo& info,
+                        int64_t num_elements);
+  void WriteExecutable(const std::string& name,
+                       const poplar::Executable& executable);
+  void WriteMetadata(const std::string& name, const std::string& json_metadata);
+  void WriteTensor(const Tensor& tensor, const std::string override_name = "");
+  void Close();
+  ~BinaryWriter();
+
+ private:
+  std::shared_ptr<StreamWriter> writer_;
+};
+
+class BinaryLoader {
+ public:
+  void LoadFile(const std::string& filename);
+  std::unique_ptr<TensorManager> CreateTensorManager(
+      const std::string metadata_name = "") const;
+  std::unique_ptr<Executable> CreateExecutable(
+      const std::string executable_name = "") const;
+  std::unique_ptr<StreamReader> CreateInfeedStreamReader(
+      const std::string infeed_name) const;
+  std::unique_ptr<StreamReader> GetTensorStream(const std::string& name) const;
+  std::set<std::string> GetObjectNames(ObjectType type) const;
+  bool ContainsObject(ObjectType type, const std::string& name) const;
+
+ private:
+  struct Object {
+    std::string filename;
+    std::ios::streampos offset;
+    std::ios::streampos end;
+  };
+  const Object GetObject(ObjectType type, const std::string& name) const;
+  std::map<ObjectType, std::map<std::string, Object>> objects_;
 };
 
 }  // namespace ipu

@@ -13,9 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <fstream>
-#include <string>
-
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
@@ -25,7 +22,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_runner.h"
 
 #include "tensorflow/core/common_runtime/dma_helper.h"
 #include "tensorflow/core/framework/dataset.h"
@@ -186,20 +182,6 @@ xla::poplarplugin::IOFunction ProducerThread(
   };
 }
 
-xla::StatusOr<ipu::DataType> PrimitiveTypeToDataType(xla::PrimitiveType type) {
-  switch (type) {
-    case xla::PrimitiveType::F32:
-      return ipu::F32;
-    case xla::PrimitiveType::F16:
-      return ipu::F16;
-    case xla::PrimitiveType::S32:
-      return ipu::S32;
-    default:
-      return tensorflow::errors::InvalidArgument("Unsupported PrimitiveType ",
-                                                 xla::PrimitiveType_Name(type));
-  }
-}
-
 }  // namespace
 
 class DatasetBenchmark : public OpKernel {
@@ -271,127 +253,4 @@ class DatasetBenchmark : public OpKernel {
 
 REGISTER_KERNEL_BUILDER(Name("DatasetBenchmark").Device(DEVICE_CPU),
                         DatasetBenchmark);
-
-class DatasetExtractor : public OpKernel {
- public:
-  explicit DatasetExtractor(OpKernelConstruction* ctx) : OpKernel(ctx) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("print_stats", &print_stats_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("num_elements", &num_elements_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("filename", &filename_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("names", &names_));
-    XlaShapesFromAttr(ctx, shapes_);
-  }
-
-  ~DatasetExtractor() override {}
-
-  void Compute(OpKernelContext* ctx) override {
-    // Get the flr and create base parameters.
-    FunctionLibraryRuntime* flr = ctx->function_library();
-    IteratorContext::Params params(ctx);
-
-    // Get the dataset
-    DatasetBase* dataset;
-    OP_REQUIRES_OK(ctx, GetDatasetFromVariantTensor(ctx->input(0), &dataset));
-
-    CancellationManager cancellation_manager;
-    xla::poplarplugin::InfeedAllocator infeed_allocator;
-    xla::poplarplugin::InfeedIterator infeed_iterator(
-        flr, params, dataset, &cancellation_manager, &infeed_allocator,
-        /* replication factor */ 1, shapes_, "extractor");
-
-    // We only ever have a single replica.
-    const size_t replica_id = 0;
-    auto queues = infeed_iterator.GetInfeedQueues();
-    const std::vector<xla::Shape>& shapes_ = infeed_iterator.GetShapes();
-    int output_idx = 0;
-
-    std::vector<size_t> buffer_sizes(shapes_.size());
-    std::vector<ipu::StreamWriter> output_streams;
-    OP_REQUIRES_OK(ctx, [&]() {
-      for (uint64 i = 0; i != shapes_.size(); ++i) {
-        try {
-          output_streams.emplace_back(
-              ipu::Infeed::StreamFilename(filename_, i));
-        } catch (const std::runtime_error& err) {
-          return xla::InvalidArgument(err.what());
-        }
-
-        const xla::Shape& xla_shape = shapes_[i];
-        if (!xla::LayoutUtil::IsDenseArray(xla_shape)) {
-          return xla::InvalidArgument(
-              "All shapes in a feed element must be dense arrays");
-        }
-        TF_ASSIGN_OR_RETURN(ipu::DataType data_type,
-                            PrimitiveTypeToDataType(xla_shape.element_type()));
-        std::vector<int64_t> dimensions;
-        absl::c_transform(xla_shape.dimensions(),
-                          std::back_inserter(dimensions),
-                          [](int64 dim) { return dim; });
-        ipu::TensorShape shape(dimensions, data_type);
-        std::string name;
-        if (names_.empty()) {
-          name = "infeed";
-        } else {
-          name = names_[i];
-        }
-        name = absl::StrCat(name, ".", i);
-        ipu::TensorInfo info{name, "", shape, ipu::TensorType::Infeed};
-        info.ToStream(output_streams.back());
-        output_streams.back().WriteInt64(num_elements_);
-        buffer_sizes[i] = xla::ShapeUtil::ByteSizeOf(shapes_[i]);
-      }
-
-      using seconds = std::chrono::duration<float>;
-      auto t0 = std::chrono::high_resolution_clock::now();
-      for (int64_t remaining_elements = num_elements_; remaining_elements > 0;
-           remaining_elements--) {
-        if (queues[0][0]->IsFull()) {
-          VLOG(1) << "Infeed queue is full.";
-          continue;
-        }
-
-        if (queues[0][0]->IsEmpty()) {
-          VLOG(1) << "Infeed queue is empty.";
-        }
-
-        std::vector<tensorflow::Tensor> outputs;
-        bool end_of_sequence = false;
-        TF_RETURN_IF_ERROR(infeed_iterator.GetNext(&outputs, &end_of_sequence));
-
-        if (end_of_sequence) {
-          return tensorflow::errors::OutOfRange(
-              "The dataset iterator has reached the end of the dataset.");
-        }
-        if (print_stats_ && (remaining_elements % 1000 == 0)) {
-          auto t1 = std::chrono::high_resolution_clock::now();
-          LOG(INFO) << "Exported " << (num_elements_ - remaining_elements)
-                    << " out of " << num_elements_ << " in "
-                    << static_cast<float>(seconds(t1 - t0).count())
-                    << " seconds";
-        }
-
-        for (size_t j = 0; j < outputs.size(); ++j) {
-          TensorBuffer* tb = tensorflow::DMAHelper::buffer(&outputs[j]);
-          output_streams[j].WriteData(tb->data(), buffer_sizes[j]);
-        }
-      }
-      for (auto& output : output_streams) {
-        output.Close();
-      }
-      return Status::OK();
-    }());
-  }
-
- private:
-  bool print_stats_;
-  std::string filename_;
-  int num_elements_;
-  std::vector<std::string> names_;
-  std::vector<xla::Shape> shapes_;
-
-  TF_DISALLOW_COPY_AND_ASSIGN(DatasetExtractor);
-};  // namespace tensorflow
-
-REGISTER_KERNEL_BUILDER(Name("DatasetExtractor").Device(DEVICE_CPU),
-                        DatasetExtractor);
 }  // namespace tensorflow
