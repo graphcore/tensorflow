@@ -18,14 +18,25 @@ limitations under the License.
 
 namespace tensorflow {
 
-REGISTER_OP("DatasetBenchmark")
+REGISTER_OP("DatasetExtractor")
     .Input("input_dataset: variant")
     .Attr("print_stats: bool")
-    .Attr("number_of_epochs: int")
-    .Attr("elements_per_epochs: int")
+    .Attr("num_elements: int")
+    .Attr("filename: string")
+    .Attr("feed_name: string")
     .Attr("output_types: list(type) >= 1")
     .Attr("output_shapes: list(shape) >= 1")
     .SetIsStateful()
-    .Output("out: string");
+    .SetShapeFn(shape_inference::NoOutputs);
+
+REGISTER_OP("VariablesExporter")
+    .Input("inputs: output_types")
+    .Attr("print_stats: bool")
+    .Attr("is_input: bool")
+    .Attr("filename: string")
+    .Attr("names: list(string)")
+    .Attr("output_types: list(type) >= 1")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::NoOutputs);
 
 }  // namespace tensorflow

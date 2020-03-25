@@ -403,13 +403,10 @@ Json::Value DimensionsToJson(const absl::Span<const int64> dimensions) {
 
 }  // namespace
 
-Status SaveExecutableMetadataJson(const std::string& filename,
-                                  const InputOutputAliasingMap& io_map,
-                                  const InfeedInfos& infeed_infos,
-                                  const OutfeedInfos& outfeed_infos,
-                                  uint32 replication_count,
-                                  const poplar::OptionFlags& opts,
-                                  const poplar::Target& target) {
+StatusOr<std::string> CreateExecutableMetadataJson(
+    const InputOutputAliasingMap& io_map, const InfeedInfos& infeed_infos,
+    const OutfeedInfos& outfeed_infos, uint32 replication_count,
+    const poplar::OptionFlags& opts, const poplar::Target& target) {
   Json::Value inputs;
   std::map<std::string, std::string> params_handle_map;
   for (auto input : io_map.GetEntryInputInfos()) {
@@ -553,13 +550,9 @@ Status SaveExecutableMetadataJson(const std::string& filename,
 
   std::string json_msg = Json::writeString(json_builder, root);
   VLOG(1) << "Module JSON Metadata: " << json_msg;
-  std::unique_ptr<tensorflow::WritableFile> file;
-  TF_RETURN_IF_ERROR(
-      tensorflow::Env::Default()->NewWritableFile(filename, &file));
-  TF_RETURN_IF_ERROR(file->Append(json_msg));
-  TF_RETURN_IF_ERROR(file->Close());
-  return Status::OK();
+  return json_msg;
 }
+
 std::string GetTensorMappingJson(const std::string& module_name,
                                  const poplar::Graph& graph,
                                  const TensorMaps& tensor_maps) {

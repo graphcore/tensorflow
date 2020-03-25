@@ -23,6 +23,7 @@ limitations under the License.
 #include <numeric>
 #include <random>
 #include <regex>
+#include <streambuf>
 #include <utility>
 
 #include "absl/algorithm/container.h"
@@ -54,8 +55,8 @@ class BinaryVersion {
  private:
   // Increment minor only when backward compatibility is maintained (e.g new
   // features are added) Increment major and reset minor to 0 otherwise.
-  int major{0};
-  int minor{1};
+  int major{1};
+  int minor{0};
 };
 
 class DataTypeInfo {
@@ -224,6 +225,25 @@ TensorType ParseTensorType(const std::string& str) {
   ERROR("Unknown TensorType '" << str << "'");
 }
 
+std::string ObjectTypeToString(ObjectType type) {
+  switch (type) {
+    case ObjectType::Feed: {
+      return "feed";
+    }
+    case ObjectType::Tensor: {
+      return "tensor";
+    }
+    case ObjectType::PoplarExecutable: {
+      return "Poplar executable";
+    }
+    case ObjectType::PoplarMetadata: {
+      return "Poplar metadata";
+    }
+    default:
+      ERROR("Unknown ObjectType " << static_cast<int64_t>(type));
+  }
+}
+
 std::string TensorTypeToString(TensorType type) {
   switch (type) {
     case TensorType::Parameter: {
@@ -384,6 +404,104 @@ void BinaryVersion::ErrorIfNotCompatible(StreamReader& in) {
   ERROR_ON(stream_minor > minor);
 }
 
+class DeferredSizeWriter {
+ public:
+  explicit DeferredSizeWriter(std::shared_ptr<StreamWriter> writer)
+      : writer_(writer), start_(writer->CurrentPosition()) {
+    writer->WriteInt64(0);
+  }
+  ~DeferredSizeWriter() {
+    std::ios::streampos end = writer_->CurrentPosition();
+    ERROR_ON(static_cast<int64_t>(start_) + sizeof(int64_t) > end);
+    writer_->MoveAbsolute(start_);
+    writer_->WriteInt64(static_cast<int64_t>(end) -
+                        static_cast<int64_t>(start_) - sizeof(int64_t));
+    writer_->MoveAbsolute(end);
+  }
+
+ private:
+  std::shared_ptr<StreamWriter> writer_;
+  std::ios::streampos start_;
+};
+
+template <typename Key, typename Value>
+std::list<Key> GetMapKeys(const std::map<Key, Value>& m) {
+  std::list<Key> keys;
+  absl::c_transform(
+      m, std::back_inserter(keys),
+      [](const std::pair<Key, Value>& pair) { return pair.first; });
+  return keys;
+}
+
+class SubStream : public std::streambuf {
+ public:
+  SubStream(StreamReader& reader, int64_t sizeInBytes)
+      : reader_(reader),
+        start_(reader.CurrentPosition()),
+        sizeInBytes_(sizeInBytes),
+        current_(0) {}
+
+ protected:
+  int underflow() override {
+    if (current_ + std::streamsize(1) >= sizeInBytes_) {
+      return traits_type::eof();
+    }
+    return reader_.Stream().rdbuf()->sgetc();
+  }
+
+  int uflow() override {
+    if (current_ + std::streamsize(1) > sizeInBytes_) {
+      return traits_type::eof();
+    }
+    current_ += std::streamsize(1);
+    return reader_.Stream().rdbuf()->sbumpc();
+  }
+
+  std::streampos seekoff(std::streamoff off, std::ios_base::seekdir way,
+                         std::ios_base::openmode which =
+                             std::ios_base::in | std::ios_base::out) override {
+    std::streampos cursor;
+
+    if (way == std::ios_base::beg) {
+      cursor = off;
+    } else if (way == std::ios_base::cur) {
+      cursor = current_ + off;
+    } else if (way == std::ios_base::end) {
+      cursor = sizeInBytes_ - off;
+    }
+
+    if (cursor < 0 || cursor >= sizeInBytes_) {
+      return std::streampos(-1);
+    }
+    current_ = cursor;
+    if (reader_.Stream().rdbuf()->pubseekpos(start_ + current_) ==
+        std::streampos(-1)) {
+      return std::streampos(-1);
+    }
+
+    return current_;
+  }
+
+  std::streampos seekpos(std::streampos sp,
+                         std::ios_base::openmode which =
+                             std::ios_base::in | std::ios_base::out) override {
+    if (sp < 0 || sp >= sizeInBytes_) {
+      return std::streampos(-1);
+    }
+    current_ = sp;
+    if (reader_.Stream().rdbuf()->pubseekpos(start_ + current_) ==
+        std::streampos(-1)) {
+      return std::streampos(-1);
+    }
+    return current_;
+  }
+
+ private:
+  StreamReader& reader_;
+  std::ios::streampos start_;
+  std::streamsize sizeInBytes_;
+  std::ios::streampos current_;
+};
 }  // namespace
 
 LogContext::LogContext(const std::string& context) : saved_context_(context_) {
@@ -458,6 +576,22 @@ void Tensor::SaveDataToJsonFile(const std::string& filename) const {
   PRINT_INFO("Saved content of " << info_.Name() << " to " << filename);
 }
 
+void Tensor::ToStream(StreamWriter& out) const {
+  Info().ToStream(out);
+  out.WriteData(data_.data(), Info().Shape().DataSizeInBytes());
+}
+
+void Tensor::LoadDataFromStream(StreamReader& in) {
+  TensorInfo info{in};
+  ERROR_ON_MSG(
+      !info_.TypeAndShapeMatch(info),
+      "Type and Shape from metadata JSON file: "
+          << info_.ToString()
+          << " don't match those from binary file: " << info.ToString());
+  data_.resize(info_.Shape().DataSizeInBytes());
+  in.ReadData(data_.data(), info_.Shape().DataSizeInBytes());
+}
+
 void Tensor::SaveDataToJsonStream(std::ostream* sout) const {
   // Use a const_cast here to avoid having to create a ConstDataIterator: it's
   // safe because the iterator will only be used for reading.
@@ -474,14 +608,15 @@ void Tensor::SaveDataToJsonStream(std::ostream* sout) const {
   WriteJsonToStream(root, sout);
 }
 
-Executable::Executable(const std::string& executable_filename) {
+Executable::Executable(StreamReader& stream, int64_t length) {
   try {
-    std::ifstream file(executable_filename, std::ios::binary);
+    SubStream sub(stream, length > 0 ? length : stream.NumBytesLeft());
+    std::istream sub_stream(&sub);
     poplar::Executable poplar_executable =
-        poplar::Executable::deserialize(file);
+        poplar::Executable::deserialize(sub_stream);
     engine_.reset(new poplar::Engine(std::move(poplar_executable)));
   } catch (const std::exception& e) {
-    ERROR("Failed to deserialize " << executable_filename << " : " << e.what());
+    ERROR("Failed to deserialize " << stream.Filename() << " : " << e.what());
   }
 }
 
@@ -602,7 +737,19 @@ TensorInfo::TensorInfo(const std::string& name, const std::string& handle,
     : name_(name), handle_(handle), shape_(shape), type_(type) {}
 
 bool TensorInfo::TypeAndShapeMatch(const TensorInfo& other) const {
-  return type_ == other.type_ && shape_ == other.shape_;
+  bool type_match = type_ == other.type_;
+  // Types don't need to be an exact match: they just need to
+  // be compatible.
+  if (!type_match && type_ == TensorType::Parameter) {
+    type_match = other.type_ == TensorType::ParameterOut;
+  }
+  if (!type_match && type_ == TensorType::InputData) {
+    type_match = other.type_ == TensorType::OutputData;
+  }
+  if (!type_match && type_ == TensorType::Infeed) {
+    type_match = other.type_ == TensorType::Outfeed;
+  }
+  return type_match && shape_ == other.shape_;
 }
 
 void TensorInfo::ToStream(StreamWriter& out) const {
@@ -636,6 +783,10 @@ Tensor::Tensor(const TensorInfo& info) : info_(info) {
   data_.resize(info_.Shape().DataSizeInBytes());
 }
 
+Tensor::Tensor(const TensorInfo& info, const void* data) : Tensor(info) {
+  memcpy(data_.data(), data, info_.Shape().DataSizeInBytes());
+}
+
 std::string TensorInfo::Filename() const {
   std::string data_filename = name_;
   std::replace(data_filename.begin(), data_filename.end(), '/', '_');
@@ -652,30 +803,41 @@ int64_t IpuConfig::ReplicationCount() const { return replication_count_; }
 
 poplar::OptionFlags IpuConfig::OptionFlags() const { return option_flags_; }
 
-JsonParser::JsonParser(const std::string& filename) {
+Json::Value LoadJsonFromFile(const std::string& filename) {
   std::ifstream json_file(filename);
   ERROR_ON_MSG(!json_file.is_open(), "Failed to open file " << filename);
 
   Json::CharReaderBuilder builder;
   JSONCPP_STRING errs;
-  ERROR_ON_MSG(!parseFromStream(builder, json_file, &root_, &errs), errs);
+  Json::Value root;
+  ERROR_ON_MSG(!parseFromStream(builder, json_file, &root, &errs), errs);
+  return root;
 }
 
-const Json::Value& JsonParser::Root() const { return root_; }
+Json::Value LoadJsonFromString(const std::string& json_content) {
+  Json::CharReaderBuilder builder;
+  const char* start = json_content.c_str();
+  const char* end = start + json_content.size();
+  JSONCPP_STRING errs;
+  Json::Value root;
+  std::unique_ptr<Json::CharReader> const reader(builder.newCharReader());
+  ERROR_ON_MSG(!reader->parse(start, end, &root, &errs), errs);
+  return root;
+}
 
-TensorManager::TensorManager(const JsonParser& metadata)
-    : config_(metadata.Root()["config"]) {
-  config_ = IpuConfig(metadata.Root()["config"]);
+TensorManager::TensorManager(const Json::Value& root)
+    : config_(root["config"]) {
+  config_ = IpuConfig(root["config"]);
   absl::c_transform(
-      metadata.Root()["inputs"], std::back_inserter(inputs_),
+      root["inputs"], std::back_inserter(inputs_),
       [](const Json::Value& input) { return Tensor{TensorInfo{input}}; });
   absl::c_transform(
-      metadata.Root()["outputs"], std::back_inserter(outputs_),
+      root["outputs"], std::back_inserter(outputs_),
       [](const Json::Value& output) { return Tensor{TensorInfo{output}}; });
-  absl::c_transform(metadata.Root()["infeeds"], std::back_inserter(infeeds_),
+  absl::c_transform(root["infeeds"], std::back_inserter(infeeds_),
                     [](const Json::Value& infeed) { return Infeed{infeed}; });
   absl::c_transform(
-      metadata.Root()["outfeeds"], std::back_inserter(outfeeds_),
+      root["outfeeds"], std::back_inserter(outfeeds_),
       [](const Json::Value& outfeed) { return Outfeed{outfeed}; });
 }
 
@@ -683,8 +845,8 @@ void TensorManager::LoadCheckpointMetadataFromJson(
     const std::string& filename) {
   LogContext ctx(
       absl::StrCat("Loading checkpoint metadata from JSON file ", filename));
-  JsonParser parser(filename);
-  const Json::Value& infeed_positions = parser.Root()["infeeds"];
+  Json::Value root = LoadJsonFromFile(filename);
+  const Json::Value& infeed_positions = root["infeeds"];
   absl::c_for_each(infeeds_, [&infeed_positions](Infeed& infeed) {
     absl::c_for_each(
         infeed.MutableStreams(), [&infeed_positions](InfeedStream& stream) {
@@ -738,34 +900,95 @@ void Tensor::LoadDataFromJson(const std::string& data_filename) {
   try {
     NDArrayParser parser;
     data_.clear();
-    JsonParser js(data_filename);
-    parser(js.Root(), info_.Shape(), data_);
+    parser(LoadJsonFromFile(data_filename), info_.Shape(), data_);
   } catch (const std::out_of_range& error) {
     ERROR(error.what());
   }
 }
 
-void TensorManager::LoadParameters(const std::string& path) {
+void TensorManager::LoadInfeeds(const BinaryLoader& loader) {
+  for (auto& infeed : infeeds_) {
+    ipu::LogContext ctx{absl::StrCat("Loading infeed '", infeed.Name(), "'")};
+    infeed.InitializeDataSources(loader);
+  }
+}
+
+void TensorManager::AssertAllTensorsProvided(const BinaryLoader& loader) {
+  std::list<std::string> missing_msg;
+  std::set<std::string> tensors_provided =
+      loader.GetObjectNames(ObjectType::Tensor);
+  std::set<std::string> feeds_provided =
+      loader.GetObjectNames(ObjectType::Feed);
+  std::string errors_msg;
   for (auto& input : inputs_) {
-    if (input.Info().Type() == TensorType::Parameter) {
-      LogContext ctx(
-          absl::StrCat("Loading parameter '", input.Info().Name(), "'"));
-      input.LoadDataFromJson(absl::StrCat(path, "/", input.Info().Filename()));
+    if (tensors_provided.find(input.Info().Name()) == tensors_provided.end()) {
+      missing_msg.push_back(absl::StrCat(
+          "No data provided for ", TensorTypeToString(input.Info().Type()),
+          " '", input.Info().Name(), "'"));
+    }
+  }
+  for (auto& infeed : infeeds_) {
+    for (int i = 0; i < infeed.Streams().size(); i++) {
+      const std::string name = absl::StrCat(infeed.Name(), ".", i);
+      if (feeds_provided.find(name) == feeds_provided.end()) {
+        missing_msg.push_back(
+            absl::StrCat("No data provided for infeed's stream '", name, "'"));
+      }
+    }
+  }
+  ERROR_ON_MSG(!missing_msg.empty(), absl::StrJoin(missing_msg, "\n"));
+}
+
+void TensorManager::LoadInputsAndParameters(const BinaryLoader& loader) {
+  for (auto& input : inputs_) {
+    LogContext ctx(absl::StrCat("Loading ",
+                                TensorTypeToString(input.Info().Type()), " '",
+                                input.Info().Name(), "'"));
+    if (loader.ContainsObject(ObjectType::Tensor, input.Info().Name())) {
+      std::unique_ptr<StreamReader> in =
+          loader.GetTensorStream(input.Info().Name());
+      input.LoadDataFromStream(*in);
     }
   }
 }
 
-void TensorManager::SaveOutputsToJsonFile(const std::string& path) {
+void TensorManager::SaveOutputs(TensorType type, BinaryWriter& writer,
+                                bool allow_duplicates) const {
   std::map<std::string, int> duplicates;
-  for (auto& output : outputs_) {
-    std::string filename = output.Info().Filename();
-    auto& occurrences = duplicates[output.Info().Name()];
-    if (occurrences > 0) {
-      filename = Infeed::StreamFilename(filename, occurrences);
+  ERROR_ON(type != TensorType::ParameterOut && type != TensorType::OutputData);
+  absl::c_for_each(outputs_, [allow_duplicates, type, &writer,
+                              &duplicates](const Tensor& out) {
+    if (out.Info().Type() == type) {
+      auto& occurrences = duplicates[out.Info().Name()];
+      std::string override_name;
+      if (occurrences > 0) {
+        ERROR_ON_MSG(!allow_duplicates, "More than one output tensor is named '"
+                                            << out.Info().Name() << "'");
+        override_name = absl::StrCat(out.Info().Name(), ".", occurrences);
+        std::cout << "WARNING: Renaming output named '" << out.Info().Name()
+                  << "' to '" << override_name << "' to avoid conflict.\n";
+      }
+      writer.WriteTensor(out, override_name);
+      occurrences++;
     }
-    occurrences++;
-    output.SaveDataToJsonFile(absl::StrCat(path, "/", filename));
-  }
+  });
+}
+
+void TensorManager::SaveOutputsToJson(TensorType type,
+                                      const std::string& folder) const {
+  std::map<std::string, int> duplicates;
+  ERROR_ON(type != TensorType::ParameterOut && type != TensorType::OutputData);
+  absl::c_for_each(outputs_, [folder, type, &duplicates](const Tensor& out) {
+    if (out.Info().Type() == type) {
+      auto& occurrences = duplicates[out.Info().Name()];
+      std::string filename = out.Info().Filename();
+      if (occurrences > 0) {
+        filename = Infeed::StreamFilename(filename, occurrences);
+      }
+      out.SaveDataToJsonFile(absl::StrCat(folder, "/", filename));
+      occurrences++;
+    }
+  });
 }
 
 std::list<Tensor*> TensorManager::InputDataTensors() {
@@ -788,8 +1011,6 @@ void* Tensor::Data() {
                                     << info_.Shape().DataSizeInBytes());
   return data_.data();
 }
-
-void* Tensor::DataEnd() { return data_.data() + data_.size(); }
 
 void TensorManager::ConnectStreams(Executable& executable) {
   auto& engine = executable.Engine();
@@ -858,6 +1079,8 @@ void SeedManager::ConnectStreams(Executable& executable) {
   }
 }
 
+std::fstream& StreamWriter::Stream() { return fd_; }
+
 void StreamWriter::WriteInt64(int64_t value) {
   WriteData(&value, sizeof(value));
 }
@@ -881,10 +1104,13 @@ void StreamWriter::WriteString(const std::string& value) {
   }
 }
 
+const std::string& StreamReader::Filename() const { return filename_; }
+
 std::string StreamReader::ReadString(int64_t max_len) {
   int64_t len = ReadInt64();
   ERROR_ON_MSG(max_len > 0 && len > max_len,
                "Invalid string (Len " << len << "> max " << max_len << ")");
+  ERROR_ON_MSG(len > 1048576, "File corrupted: string of length " << len);
   if (len == 0) {
     return "";
   }
@@ -901,7 +1127,11 @@ StreamWriter::StreamWriter(const std::string& filename)
   BinaryVersion().ToStream(*this);
 }
 
-void StreamWriter::Close() { fd_.close(); }
+void StreamWriter::Close() {
+  if (fd_.is_open()) {
+    fd_.close();
+  }
+}
 
 void StreamWriter::MoveAbsolute(std::ios::streampos position) {
   fd_.seekg(position);
@@ -909,8 +1139,8 @@ void StreamWriter::MoveAbsolute(std::ios::streampos position) {
 
 std::ios::streampos StreamWriter::CurrentPosition() { return fd_.tellg(); }
 
-StreamReader::StreamReader(const std::string& filename)
-    : fd_(filename, std::istream::binary), filename_(filename) {
+StreamReader::StreamReader(const std::string& filename, bool is_versioned)
+    : fd_(filename, std::ios::binary), filename_(filename) {
   ERROR_ON_MSG(!fd_.is_open(), "Failed to open file '" << filename << "'");
   fd_.exceptions(std::ifstream::eofbit | std::ifstream::failbit |
                  std::ifstream::badbit);
@@ -918,7 +1148,9 @@ StreamReader::StreamReader(const std::string& filename)
   fd_.seekg(0, std::ios::end);
   end_ = fd_.tellg();
   fd_.seekg(0, std::ios::beg);
-  BinaryVersion().ErrorIfNotCompatible(*this);
+  if (is_versioned) {
+    BinaryVersion().ErrorIfNotCompatible(*this);
+  }
 }
 
 StreamReader StreamReader::Clone() {
@@ -961,11 +1193,9 @@ void StreamReader::MoveAbsolute(std::ios::streampos position) {
 
 std::ios::streampos StreamReader::CurrentPosition() { return fd_.tellg(); }
 
-InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {}
+std::ifstream& StreamReader::Stream() { return fd_; }
 
-InfeedStream::InfeedStream(const std::string& filename) {
-  InitializeDataSource(filename);
-}
+InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {}
 
 const TensorInfo& InfeedStream::Info() const { return info_; }
 
@@ -987,11 +1217,8 @@ std::string InfeedStream::ToString() {
   return absl::StrCat("[", absl::StrJoin(tensors, "\n"), "]");
 }
 
-void InfeedStream::InitializeDataSource(const std::string& filename) {
-  LogContext ctx{absl::StrCat("from file ", filename)};
-  reader_ = std::make_shared<StreamReader>(filename);
-  ERROR_ON(StreamObjectType::Feed !=
-           static_cast<StreamObjectType>(reader_->ReadInt64()));
+void InfeedStream::InitializeDataSource(std::shared_ptr<StreamReader> in) {
+  reader_ = in;
   TensorInfo info{*reader_};
   // If there is no metadata then keep these ones.
   if (info_.Type() == TensorType::NotSet) {
@@ -1005,7 +1232,7 @@ void InfeedStream::InitializeDataSource(const std::string& filename) {
   }
   num_tensors_ = reader_->ReadInt64();
   ERROR_ON(num_tensors_ <= 0);
-  ERROR_ON(reader_->NumBytesLeft() !=
+  ERROR_ON(reader_->NumBytesLeft() <
            num_tensors_ * info_.Shape().DataSizeInBytes());
   first_tensor_pos_ = reader_->CurrentPosition();
   current_tensor_loaded_ = false;
@@ -1071,7 +1298,8 @@ void OutfeedStream::SetOutputFolder(const std::string& output_folder) {
     UpdateNumTensorsAndClose();
   }
   writer_ = std::make_shared<StreamWriter>(filename);
-  writer_->WriteInt64(static_cast<int64_t>(StreamObjectType::Feed));
+  writer_->WriteInt64(static_cast<int64_t>(ObjectType::Feed));
+  writer_->WriteString(info_.Name());
   info_.ToStream(*writer_);
   // Set num_tensors to 0: we don't know how many elements we're going to write.
   num_tensors_pos_ = writer_->CurrentPosition();
@@ -1134,11 +1362,11 @@ Infeed::Infeed(const Json::Value& infeed) : name_(infeed["name"].asString()) {
       });
 }
 
-void Infeed::InitializeDataSources(const std::string& filename) {
-  int64_t prev_num_elements;
+void Infeed::InitializeDataSources(const BinaryLoader& loader) {
   for (int i = 0; i < streams_.size(); i++) {
-    LogContext ctx{absl::StrCat("stream ", i)};
-    streams_[i].InitializeDataSource(Infeed::StreamFilename(filename, i));
+    LogContext ctx{absl::StrCat(Name(), ".", i)};
+    streams_[i].InitializeDataSource(
+        loader.CreateInfeedStreamReader(absl::StrCat(Name(), ".", i)));
   }
   ERROR_ON(!absl::c_all_of(streams_, [this](const InfeedStream& stream) {
     return stream.NumTensors() == this->streams_[0].NumTensors();
@@ -1154,4 +1382,185 @@ void Infeed::InitializeDataSources(const std::string& filename) {
   return absl::StrCat(basename, ".", stream_idx, extension);
 }
 
+FeedWriter::FeedWriter(std::shared_ptr<StreamWriter> writer,
+                       int64_t tensor_size, int64_t num_tensors)
+    : writer_(writer),
+      tensor_size_(tensor_size),
+      current_pos_(writer->CurrentPosition()) {
+  std::vector<char> dummy_buffer;
+  dummy_buffer.resize(tensor_size);
+  // Reserve the space:
+  for (int i = 0; i < num_tensors; i++) {
+    writer_->WriteData(dummy_buffer.data(), tensor_size);
+  }
+  end_pos_ = writer_->CurrentPosition();
+}
+
+void FeedWriter::AppendTensor(const void* data) {
+  ERROR_ON(current_pos_ >= end_pos_);
+  // Save the current writer's position
+  std::ios::streampos saved_pos = writer_->CurrentPosition();
+  // Jump to the feed's location in the file
+  writer_->MoveAbsolute(current_pos_);
+  // Write the tensor
+  writer_->WriteData(data, tensor_size_);
+  // Move current_pos_ to the next slot
+  current_pos_ = writer_->CurrentPosition();
+  // Restore the writer to its current position
+  writer_->MoveAbsolute(saved_pos);
+}
+
+BinaryWriter::BinaryWriter(const std::string& filename)
+    : writer_(std::make_shared<StreamWriter>(filename)) {}
+
+FeedWriter BinaryWriter::CreateFeed(const std::string& name,
+                                    const TensorInfo& info,
+                                    int64_t num_tensors) {
+  writer_->WriteInt64(static_cast<int64_t>(ObjectType::Feed));
+  writer_->WriteString(name);
+  DeferredSizeWriter object_size{writer_};
+  info.ToStream(*writer_);
+  writer_->WriteInt64(num_tensors);
+  return FeedWriter{writer_, info.Shape().DataSizeInBytes(), num_tensors};
+}
+
+void BinaryWriter::WriteExecutable(const std::string& name,
+                                   const poplar::Executable& executable) {
+  writer_->WriteInt64(static_cast<int64_t>(ObjectType::PoplarExecutable));
+  writer_->WriteString(name);
+  DeferredSizeWriter object_size{writer_};
+  executable.serialize(writer_->Stream());
+}
+
+void BinaryWriter::WriteMetadata(const std::string& name,
+                                 const std::string& json_metadata) {
+  writer_->WriteInt64(static_cast<int64_t>(ObjectType::PoplarMetadata));
+  writer_->WriteString(name);
+  DeferredSizeWriter object_size{writer_};
+  writer_->WriteString(json_metadata);
+}
+
+void BinaryWriter::WriteTensor(const Tensor& tensor,
+                               const std::string override_name) {
+  writer_->WriteInt64(static_cast<int64_t>(ObjectType::Tensor));
+  if (!override_name.empty()) {
+    writer_->WriteString(override_name);
+  } else {
+    writer_->WriteString(tensor.Info().Name());
+  }
+  DeferredSizeWriter object_size{writer_};
+  tensor.ToStream(*writer_);
+}
+
+void BinaryWriter::Close() {
+  if (writer_) {
+    writer_->Close();
+    writer_ = nullptr;
+  }
+}
+
+BinaryWriter::~BinaryWriter() { Close(); }
+
+void BinaryLoader::LoadFile(const std::string& filename) {
+  LogContext ctx{"Loading binary file '" + filename + "'"};
+  StreamReader reader{filename};
+  while (reader.NumBytesLeft() > 0) {
+    int64_t type_int = reader.ReadInt64();
+    ERROR_ON_MSG(type_int < 0 || type_int > static_cast<int64_t>(
+                                                ObjectType::PoplarMetadata),
+                 "Invalid ObjectType '" << type_int << "'");
+    ObjectType type = static_cast<ObjectType>(type_int);
+    std::string name = reader.ReadString();
+    Object obj;
+    int64_t size = reader.ReadInt64();
+    obj.filename = filename;
+    obj.offset = reader.CurrentPosition();
+    reader.MoveRelative(size);
+    obj.end = reader.CurrentPosition();
+    PRINT_INFO("Obj " << obj.filename << " off " << obj.offset << " end "
+                      << obj.end << " Name " << name << " Type "
+                      << ObjectTypeToString(type));
+    objects_[type][name] = obj;
+  }
+}
+
+std::unique_ptr<TensorManager> BinaryLoader::CreateTensorManager(
+    const std::string metadata_name) const {
+  LogContext ctx{"BinaryLoader::CreateTensorManager " + metadata_name};
+  const Object& obj = GetObject(ObjectType::PoplarMetadata, metadata_name);
+  StreamReader in{obj.filename};
+  in.MoveAbsolute(obj.offset);
+  return absl::make_unique<TensorManager>(LoadJsonFromString(in.ReadString()));
+}
+
+std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
+    const std::string executable_name) const {
+  LogContext ctx{"BinaryLoader::CreateExecutable " + executable_name};
+  const Object& obj = GetObject(ObjectType::PoplarExecutable, executable_name);
+  StreamReader in{obj.filename};
+  in.MoveAbsolute(obj.offset);
+  return absl::make_unique<Executable>(in, obj.end - obj.offset);
+}
+
+const BinaryLoader::Object BinaryLoader::GetObject(
+    ObjectType type, const std::string& name) const {
+  auto objects_it = objects_.find(type);
+  ERROR_ON_MSG(objects_it == objects_.end(),
+               "No object of type " << ObjectTypeToString(type) << " loaded");
+  auto objects = objects_it->second;
+  ERROR_ON_MSG(name.empty() && objects.size() > 1,
+               "BinaryLoader contains more than one "
+                   << ObjectTypeToString(type)
+                   << " and "
+                      "you did not specify which one to load: ["
+                   << absl::StrJoin(GetMapKeys(objects), ", ") << "]");
+  if (name.empty()) {
+    return objects.begin()->second;
+  } else {
+    auto object_it = objects.find(name);
+    ERROR_ON_MSG(object_it == objects.end(),
+                 "Could not find "
+                     << ObjectTypeToString(type) << " named '" << name << "': ["
+                     << absl::StrJoin(GetMapKeys(objects), ", ") << "]");
+    return object_it->second;
+  }
+}
+
+std::unique_ptr<StreamReader> BinaryLoader::CreateInfeedStreamReader(
+    const std::string infeed_name) const {
+  const Object& obj = GetObject(ObjectType::Feed, infeed_name);
+  std::unique_ptr<StreamReader> in =
+      absl::make_unique<StreamReader>(obj.filename);
+  in->MoveAbsolute(obj.offset);
+  return in;
+}
+
+bool BinaryLoader::ContainsObject(ObjectType type,
+                                  const std::string& name) const {
+  auto objects_it = objects_.find(type);
+  if (objects_it == objects_.end()) {
+    return false;
+  }
+  return objects_it->second.find(name) != objects_it->second.end();
+}
+
+std::unique_ptr<StreamReader> BinaryLoader::GetTensorStream(
+    const std::string& name) const {
+  const Object& obj = GetObject(ObjectType::Tensor, name);
+  std::unique_ptr<StreamReader> in =
+      absl::make_unique<StreamReader>(obj.filename);
+  in->MoveAbsolute(obj.offset);
+  return in;
+}
+
+std::set<std::string> BinaryLoader::GetObjectNames(ObjectType type) const {
+  std::set<std::string> names;
+  auto objects_it = objects_.find(type);
+  if (objects_it != objects_.end()) {
+    for (auto obj : objects_it->second) {
+      names.insert(obj.first);
+    }
+  }
+  return names;
+}
 }  // namespace ipu

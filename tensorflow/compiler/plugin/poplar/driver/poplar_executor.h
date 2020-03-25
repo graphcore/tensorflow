@@ -114,6 +114,7 @@ class ModuleFilenames {
   std::string CachedEngineFilename() const;
   std::string SerializedExecutableFilename() const;
   std::string SerializedMetadataFilename() const;
+  std::string Name() const;
 
  private:
   const std::string basename_;

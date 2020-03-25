@@ -43,6 +43,7 @@ from tensorflow.compiler.xla.python_api import types
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.platform import test
 
+
 class FeedId:
   next_feed_id = 0
 
@@ -354,8 +355,9 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
         files = filesInFolder(output_folder)
         self.assertEqual(
-            len(files), 2,
-            "Expected 2 files (One for each tuple element), found: %s" % files)
+            len(files), 1,
+            "Expected 1 file (Containing both tuple elements), found: %s" %
+            files)
 
   @test_util.deprecated_graph_mode_only
   def testNamedInfeedsDataSerialization(self):
@@ -384,9 +386,9 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
         files = filesInFolder(output_folder)
         self.assertEqual(
-            len(files), 2,
-            "Expected 2 files (One for feed 'a', and one for 'b'), found: %s" %
-            files)
+            len(files), 1,
+            "Expected 1 file containing both feed 'a', and feed 'b', found: %s"
+            % files)
 
   @test_util.deprecated_graph_mode_only
   def testNamedInfeedsDataSerializationStep(self):
@@ -415,9 +417,9 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
         files = filesInFolder(output_folder)
         self.assertEqual(
-            len(files), 2,
-            "Expected 2 files (One for feed 'a', and one for 'b'), found: %s" %
-            files)
+            len(files), 1,
+            "Expected 1 file containing both feed 'a', and feed 'b', found: %s"
+            % files)
 
 
 if __name__ == "__main__":

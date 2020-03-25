@@ -135,6 +135,7 @@ py_library(
         ":ipu_grad_ops_lib",
         ":ipu_ops_lib",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
+        "//tensorflow/compiler/plugin/poplar:dataset_exporters_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:sendrecv_ops_py",
         "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",

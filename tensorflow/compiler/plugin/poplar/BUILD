@@ -583,6 +583,7 @@ cc_library(
         ":optimizers",
         ":option_flag_cc_impl",
         ":pipeline_config_cc_impl",
+        "//tensorflow/compiler/plugin/poplar/tools:poplar_executable_runner",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/compiler/xla/service:cholesky_expander",
@@ -675,6 +676,7 @@ cc_library(
     name = "kernels",
     srcs = [
         "kernels/datastream/dataset_benchmark.cc",
+        "kernels/datastream/exporters.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
         "kernels/host_compute_kernels.cc",
@@ -1032,6 +1034,27 @@ tf_custom_op_py_library(
 )
 
 cc_library(
+    name = "dataset_exporters",
+    srcs = ["ops/datastream/exporters.cc"],
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "dataset_exporters_wrapper_py",
+    out = "ops/gen_dataset_exporters.py",
+    visibility = ["//tensorflow:internal"],
+    deps = [":dataset_exporters"],
+)
+
+tf_custom_op_py_library(
+    name = "dataset_exporters_py",
+    kernels = [":dataset_exporters"],
+    srcs_version = "PY2AND3",
+    deps = [":dataset_exporters_wrapper_py"],
+)
+
+cc_library(
     name = "poplar_lib",
     srcs = [
         "driver/xla_ipu_device.cc",
@@ -1044,6 +1067,7 @@ cc_library(
     linkstatic = 1,
     deps = [
         ":dataset_benchmark",
+        ":dataset_exporters",
         ":dataset_ops",
         ":driver",
         ":graph_optimizer_passes",

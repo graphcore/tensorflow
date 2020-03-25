@@ -13,11 +13,8 @@ from tensorflow.compat.v1 import global_variables
 from tensorflow.compat.v1 import train
 from tensorflow.python.ops.variables import global_variables_initializer
 from tensorflow.core.framework import attr_value_pb2
-
-TF_v2 = tf.version.VERSION.startswith("2.")
-
-if TF_v2:
-  from tensorflow import saved_model
+from tensorflow.python.ipu import dataset_extractor
+from tensorflow.python.saved_model import saved_model
 
 
 class _Variable:
@@ -72,37 +69,27 @@ class _Metadata:
     assert not not_found, "\n".join(not_found)
 
 
-def _export_variables(sess, variables, meta, output_folder):
-  os.makedirs(output_folder, exist_ok=True)
-  for v in variables:
-    logging.debug("Processing Variable name = %s , dtype = %s, shape = %s",
-                  v.name, v.dtype, v.shape)
-    if meta:
+def _export_variables(sess, variables, meta, output_file):
+  os.makedirs(os.path.dirname(output_file), exist_ok=True)
+  if meta:
+    for v in variables:
+      logging.debug("Validating Variable name = %s , dtype = %s, shape = %s",
+                    v.name, v.dtype, v.shape)
       meta.validate(v.name, v.shape, v.dtype)
-    values = sess.run(v)
-    filename = v.name.replace("/", "_")
-    if filename.endswith(":0"):
-      filename = filename[:-2]
-    if filename != v.name:
-      logging.warning("File name for variable %s was changed to %s.data",
-                      v.name, filename)
-    filename = os.path.join(output_folder, filename + ".data")
-    if os.path.isfile(filename):
-      logging.warning("File %s already exists and is being overwritten",
-                      filename)
-    with open(filename, 'w') as f:
-      json.dump(values.tolist(), f)
-    logging.info("Successfully exported variable %s to %s", v.name, filename)
+  sess.run(
+      dataset_extractor.export_variables(variables,
+                                         output_file,
+                                         is_input=False))
 
 
-def _export_v2_SavedModel(save_path, output_folder, meta):
+def _export_v2_SavedModel(save_path, output_file, meta):
   with Session(graph=tf.Graph()) as sess:
     model = saved_model.load(save_path)
     sess.run(global_variables_initializer())
-    _export_variables(sess, model.variables, meta, output_folder)
+    _export_variables(sess, model.variables, meta, output_file)
 
 
-def _export_v1_meta_graph(save_path, output_folder, meta):
+def _export_v1_meta_graph(save_path, output_file, meta):
   graph = tf.Graph()
   with Session(graph=graph) as sess:
     saver = train.import_meta_graph(save_path + ".meta")
@@ -116,29 +103,29 @@ def _export_v1_meta_graph(save_path, output_folder, meta):
 
     # Load the variables from file.
     saver.restore(sess, save_path)
-    # Export the variables to the output_folder
-    _export_variables(sess, global_variables(), meta, output_folder)
+    # Export the variables to the output_file
+    _export_variables(sess, global_variables(), meta, output_file)
 
 
-def export_variables_from_live_session(sess, output_folder, gc_metadata=None):
+def export_variables_from_live_session(sess, output_file, gc_metadata=None):
   """Export the variables from a given tf.Session to a given output folder and
   optionally validate them against a given json metadata file.
   """
   meta = _Metadata(gc_metadata) if gc_metadata else None
   with sess.graph.as_default():
-    _export_variables(sess, global_variables(), meta, output_folder)
+    _export_variables(sess, global_variables(), meta, output_file)
 
 
-def export_variables_from_live_model(model, output_folder, gc_metadata=None):
+def export_variables_from_live_model(model, output_file, gc_metadata=None):
   """Export the variables from a given Keras model to a given output folder and
   optionally validate them against a given json metadata file.
   """
   sess = backend.get_session()
   meta = _Metadata(gc_metadata) if gc_metadata else None
-  _export_variables(sess, model.variables, meta, output_folder)
+  _export_variables(sess, model.variables, meta, output_file)
 
 
-def export_model(save_path, output_folder, gc_metadata=None):
+def export_model(save_path, output_file, gc_metadata=None):
   """ Export the variables from a TF v1 or v2 model to a given output folder and
   optionally validate them against a given json metadata file.
   """
@@ -149,17 +136,10 @@ def export_model(save_path, output_folder, gc_metadata=None):
   pbtxt_file = os.path.join(save_path, "saved_model.pbtxt")
   if os.path.isfile(meta_file):
     logging.info("Loading v1 saved model from folder %s", save_path)
-    _export_v1_meta_graph(save_path, output_folder, meta)
+    _export_v1_meta_graph(save_path, output_file, meta)
   elif os.path.isfile(pb_file) or os.path.isfile(pbtxt_file):
-    if not TF_v2:
-      logging.fatal(
-          ("Found Keras SavedModel in folder %s but cannot "
-           "export it because it requires Tensorflow version >= 2.0 and the "
-           "version used is %s"), save_path, tf.version.VERSION)
-      exit(1)
-
     logging.info("Loading v2 Keras SavedModel from folder %s", save_path)
-    _export_v2_SavedModel(save_path, output_folder, meta)
+    _export_v2_SavedModel(save_path, output_file, meta)
   else:
     logging.fatal(("Could not find any Tensorflow v1 (%s) or v2 (%s or %s)"
                    " models"), meta_file, pb_file, pbtxt_file)
@@ -179,7 +159,7 @@ if __name__ == '__main__':
                       "--output",
                       type=str,
                       default=".",
-                      help="Where to write the extracted weights.")
+                      help="File where to write the extracted weights.")
   parser.add_argument("-f",
                       "--force",
                       action='store_true',

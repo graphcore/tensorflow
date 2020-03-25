@@ -127,184 +127,102 @@ std::string GetOnlyFileWithExtension(const std::string& folder,
   return retval;
 }
 
-struct MetadataFile {
+struct BinaryFiles {
+  std::vector<std::string> filenames;
+};
+
+struct CkptFile {
   std::string filename;
 };
 
-struct ExecutableFile {
-  std::string filename;
-};
-
-struct WeightsFolder {
+struct OutputFolder {
   std::string folder;
 };
 
-struct InputFiles {
-  bool Contains(const std::string name) const {
-    return files.find(name) != files.end();
-  }
-  std::map<std::string, std::string> files;
-};
+std::string AbslUnparseFlag(BinaryFiles f) {
+  return absl::UnparseFlag(f.filenames);
+}
 
-struct InfeedFiles {
-  bool Contains(const std::string name) const {
-    return files.find(name) != files.end();
-  }
-  std::map<std::string, std::string> files;
-};
-
-std::string AbslUnparseFlag(ExecutableFile f) {
+std::string AbslUnparseFlag(CkptFile f) {
   return absl::UnparseFlag(f.filename);
 }
 
-std::string AbslUnparseFlag(MetadataFile f) {
-  return absl::UnparseFlag(f.filename);
-}
-
-std::string AbslUnparseFlag(WeightsFolder f) {
+std::string AbslUnparseFlag(OutputFolder f) {
   return absl::UnparseFlag(f.folder);
 }
 
-std::string AbslUnparseFlag(InputFiles f) {
-  return absl::StrCat(
-      "{", absl::StrJoin(f.files, ", ", absl::PairFormatter("=")), "}");
-}
-
-std::string AbslUnparseFlag(InfeedFiles f) {
-  return absl::StrCat(
-      "{", absl::StrJoin(f.files, ", ", absl::PairFormatter("=")), "}");
-}
-
-bool AbslParseFlag(absl::string_view text, InputFiles* f, std::string* error) {
-  std::vector<std::string> inputs;
-  if (!absl::ParseFlag(text, &inputs, error)) {
+bool AbslParseFlag(absl::string_view text, BinaryFiles* f, std::string* error) {
+  std::vector<std::string> filenames;
+  if (!absl::ParseFlag(text, &filenames, error)) {
     return false;
   }
-  for (auto& input : inputs) {
-    std::vector<std::string> pair = absl::StrSplit(input, '=');
-    if (pair.size() != 2) {
-      *error = absl::StrCat("Invalid 'input_name=file' pair '", input,
-                            "' in --input_data value '", text, "'");
-      return false;
+  for (auto name : filenames) {
+    if (IsDir(name)) {
+      std::vector<std::string> files = ListFiles(name, error);
+      if (!error->empty()) {
+        return false;
+      }
+      for (auto file : files) {
+        if (FileExtension(file, true) == "bin" ||
+            FileExtension(file, true) == "ipu_bin") {
+          f->filenames.push_back(absl::StrCat(name, "/", file));
+        }
+      }
+    } else {
+      if (!FileExists(name)) {
+        *error = absl::StrCat("Could not open file '", name, "'.");
+        return false;
+      }
+      f->filenames.push_back(name);
     }
-    if (!FileExists(pair[1])) {
-      *error = absl::StrCat("Cannot open input_data file '", pair[1],
-                            "' from --input_data '", text, "'");
-      return false;
-    }
-    f->files[pair[0]] = pair[1];
   }
-
   return true;
 }
 
-bool AbslParseFlag(absl::string_view text, InfeedFiles* f, std::string* error) {
-  std::vector<std::string> feeds;
-  if (!absl::ParseFlag(text, &feeds, error)) {
-    return false;
-  }
-  for (auto& feed : feeds) {
-    std::vector<std::string> pair = absl::StrSplit(feed, '=');
-    if (pair.size() != 2) {
-      *error = absl::StrCat("Invalid 'infeed_name=file' pair '", feed,
-                            "' in --infeed_data value '", text, "'");
-      return false;
-    }
-    f->files[pair[0]] = pair[1];
-  }
-
-  return true;
-}
-
-bool AbslParseFlag(absl::string_view text, MetadataFile* f,
-                   std::string* error) {
+bool AbslParseFlag(absl::string_view text, CkptFile* f, std::string* error) {
   if (!absl::ParseFlag(text, &f->filename, error)) {
     return false;
   }
   if (IsDir(f->filename)) {
     ERROR_ON(!error->empty());
-    const std::string folder = f->filename;
-    const std::string filename =
-        GetOnlyFileWithExtension(folder, "json", error);
-    if (filename.empty()) {
-      return false;
-    }
-    f->filename = absl::StrCat(folder, "/", filename);
+    f->filename = absl::StrCat(f->filename, "/ckpt.json");
   }
+
   if (!FileExists(f->filename)) {
-    *error = absl::StrCat("Could not open metadata file '", f->filename, "'.");
+    *error = absl::StrCat("Could not open checkpoint file '", f->filename, "'");
     return false;
   }
   return true;
 }
 
-bool AbslParseFlag(absl::string_view text, ExecutableFile* f,
-                   std::string* error) {
-  if (!absl::ParseFlag(text, &f->filename, error)) {
-    return false;
-  }
-  if (IsDir(f->filename)) {
-    ERROR_ON(!error->empty());
-    const std::string folder = f->filename;
-    const std::string filename =
-        GetOnlyFileWithExtension(folder, "ipu_bin", error);
-    if (filename.empty()) {
-      return false;
-    }
-    f->filename = absl::StrCat(folder, "/", filename);
-  }
-  if (!FileExists(f->filename)) {
-    *error = absl::StrCat("Could not open Poplar Executable file '",
-                          f->filename, "'");
-    return false;
-  }
-  return true;
-}
-
-bool AbslParseFlag(absl::string_view text, WeightsFolder* f,
+bool AbslParseFlag(absl::string_view text, OutputFolder* f,
                    std::string* error) {
   if (!absl::ParseFlag(text, &f->folder, error)) {
     return false;
   }
   if (!IsDir(f->folder)) {
-    *error = absl::StrCat("'", f->folder, "' is not a valid directory");
-    return false;
-  }
-  if (!ContainsFilesWithExtension(f->folder, "data", error)) {
-    if (error->empty()) {
-      *error = absl::StrCat("Couldn't find any .data file in the directory '",
-                            f->folder, "'");
-    }
+    *error = absl::StrCat("'", f->folder, "' is not a valid output directory");
     return false;
   }
   return true;
 }
 
-ABSL_FLAG(MetadataFile, model_metadata, MetadataFile(),
-          "Path to the json file containing the metadata of the model to run.");
-ABSL_FLAG(ExecutableFile, model_executable, ExecutableFile(),
-          "Path to the ipu_bin file containing the Poplar binaries "
-          "of the model to run");
-ABSL_FLAG(WeightsFolder, weights_path, WeightsFolder(),
-          "Path to the folder where the weights (.data files) can be found.");
-ABSL_FLAG(InputFiles, input_data, InputFiles(),
-          "List of input_name=input_file pairs for the given model. e.g "
-          "--input_data=\"input_0=/tmp/data/input_0.json\".");
-ABSL_FLAG(InfeedFiles, infeed_data, InfeedFiles(),
-          "List of infeed_name=infeed_file pairs for the given model. e.g "
-          "--infeed_data=\"training_feed=/tmp/data/training_feed.bin\". "
-          "(Note: the tuple index will automatically be added by the Runner.)");
+ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
+          "List of binary files containing metadata, binaries, weights,"
+          " inputs, feeds, etc. Note if this flag is set then the flags "
+          "model_metadata, model_executable, weights_path, input_data, "
+          "infeed_data are ignored.");
 ABSL_FLAG(int, iterations, 1, "Number of times to run the executable");
 ABSL_FLAG(int, ckpt_frequency, 1, "Frequency at which to create checkpoints");
 ABSL_FLAG(bool, print_output, false,
           "Print the content of the output buffers to stdout");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
-ABSL_FLAG(bool, load_ckpt, false,
-          "Load the checkpoint config from the weights folder");
+ABSL_FLAG(CkptFile, ckpt, CkptFile(),
+          "Load the checkpoint config from the given file");
 ABSL_FLAG(bool, strict, false,
           "Enable strict mode: all the input data files must be provided by "
           "--input_data.");
-ABSL_FLAG(std::string, output_folder, "",
+ABSL_FLAG(OutputFolder, output_folder, OutputFolder(),
           "Where to save the content of the output tensors");
 
 bool HelpFilter(absl::string_view filename) {
@@ -333,144 +251,59 @@ int main(int argc, char** argv) {
 
   absl::ParseCommandLine(argc, argv);
 
-  const std::string metadata_filename =
-      absl::GetFlag(FLAGS_model_metadata).filename;
-  const std::string poplar_executable_filename =
-      absl::GetFlag(FLAGS_model_executable).filename;
-  const std::string weights_path = absl::GetFlag(FLAGS_weights_path).folder;
-  const InputFiles input_data = absl::GetFlag(FLAGS_input_data);
-  const InfeedFiles infeed_data = absl::GetFlag(FLAGS_infeed_data);
+  const BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
   const bool print_output = absl::GetFlag(FLAGS_print_output);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
-  const bool load_ckpt = absl::GetFlag(FLAGS_load_ckpt);
+  const std::string ckpt_file = absl::GetFlag(FLAGS_ckpt).filename;
   const bool strict = absl::GetFlag(FLAGS_strict);
   const int iterations = absl::GetFlag(FLAGS_iterations);
   const int ckpt_frequency = absl::GetFlag(FLAGS_ckpt_frequency);
-  const std::string output_folder = absl::GetFlag(FLAGS_output_folder);
+  const std::string output_folder = absl::GetFlag(FLAGS_output_folder).folder;
 
   ipu::LogContext::EnableInfo(verbose);
 
-  ERROR_ON_MSG(poplar_executable_filename.empty(),
-               "--model_executable needs to be set to a valid "
-               "ipu_bin file");
-  ERROR_ON_MSG(metadata_filename.empty(),
-               ": --model_metadata needs to be set to a valid "
-               "json file");
-  ERROR_ON_MSG(weights_path.empty(),
-               "--weights_path needs to be set to a valid folder");
+  auto init_start = std::chrono::high_resolution_clock::now();
   ERROR_ON_MSG(!output_folder.empty() && !CreateDirIfNeeded(output_folder),
                "Failed to create output folder '" << output_folder << "'");
 
-  auto init_start = std::chrono::high_resolution_clock::now();
-  std::cout << "\n[Parsing Graph's metadata]\n";
-  ipu::JsonParser metadata{metadata_filename};
-  ipu::TensorManager tensors{metadata};
+  ERROR_ON_MSG(binaries.filenames.empty(),
+               "--binaries needs to point at "
+               "one or more folders or bin / ipu_bin files");
+
+  ipu::BinaryLoader loader;
+  for (auto file : binaries.filenames) {
+    loader.LoadFile(file);
+  }
+
+  std::unique_ptr<ipu::TensorManager> tensors = loader.CreateTensorManager();
+  std::unique_ptr<ipu::Executable> exe = loader.CreateExecutable();
+
+  if (strict) {
+    tensors->AssertAllTensorsProvided(loader);
+  }
+  tensors->LoadInputsAndParameters(loader);
+  tensors->LoadInfeeds(loader);
+
+  if (!ckpt_file.empty()) {
+    tensors->LoadCheckpointMetadataFromJson(ckpt_file);
+  }
+
+  PRINT_INFO("List of streams:\n" << exe->StreamsList());
+  tensors->ConnectStreams(*exe);
+
+  ipu::SeedManager seeds{tensors->Config()};
+  seeds.ConnectStreams(*exe);
 
   std::cout << "\n[Initialising IPU]\n";
   ipu::DeviceManager manager;
-  poplar::Device device = manager.GetDevice(tensors.Config().NumIpus(),
-                                            tensors.Config().OptionFlags());
-  std::cout << "\n[Loading Poplar executable]\n";
-  ipu::Executable exe{poplar_executable_filename};
-  PRINT_INFO("List of streams:\n" << exe.StreamsList());
-
-  tensors.LoadParameters(weights_path);
-  std::list<ipu::Tensor*> inputs = tensors.InputDataTensors();
-  std::list<std::string> extra_inputs, inputs_missing;
-  absl::c_transform(input_data.files, std::back_inserter(extra_inputs),
-                    [](const std::pair<std::string, std::string>& pair) {
-                      return pair.first;
-                    });
-
-  for (auto input : inputs) {
-    if (!input_data.Contains(input->Info().Name())) {
-      inputs_missing.push_back(input->Info().Name());
-    } else {
-      extra_inputs.erase(absl::c_find(extra_inputs, input->Info().Name()));
-      const std::string filename = input_data.files.at(input->Info().Name());
-      input->LoadDataFromJson(filename);
-    }
-  }
-  if (strict && (!inputs_missing.empty() || !extra_inputs.empty())) {
-    absl::c_for_each(inputs_missing, [](const std::string& input) {
-      std::cout << "ERROR: No data provided for input_data '" << input << "'\n"
-                << std::flush;
-    });
-    absl::c_for_each(extra_inputs, [](const std::string& input) {
-      std::cout << "ERROR: Provided a data file for the input '" << input
-                << "' but this input cannot be found in the model provided.\n"
-                << std::flush;
-    });
-    return -1;
-  } else {
-    absl::c_for_each(inputs_missing, [](const std::string& input) {
-      std::cout << "WARNING: No data provided for input_data '" << input
-                << "': the model will be run using a buffer of 0 values.\n"
-                << std::flush;
-    });
-    absl::c_for_each(extra_inputs, [](const std::string& input) {
-      std::cout << "WARNING: Provided a data file for the input '" << input
-                << "' but this input cannot be found in the model provided.\n"
-                << std::flush;
-    });
-  }
-
-  std::list<std::string> extra_infeeds, infeeds_missing;
-  absl::c_transform(infeed_data.files, std::back_inserter(extra_infeeds),
-                    [](const std::pair<std::string, std::string>& pair) {
-                      return pair.first;
-                    });
-
-  for (auto& infeed : tensors.MutableInfeeds()) {
-    if (!infeed_data.Contains(infeed.Name())) {
-      infeeds_missing.push_back(infeed.Name());
-    } else {
-      ipu::LogContext ctx{absl::StrCat("Loading infeed '", infeed.Name(), "'")};
-      extra_infeeds.erase(absl::c_find(extra_infeeds, infeed.Name()));
-      infeed.InitializeDataSources(infeed_data.files.at(infeed.Name()));
-    }
-  }
-  if (strict && (!infeeds_missing.empty() || !extra_infeeds.empty())) {
-    absl::c_for_each(infeeds_missing, [](const std::string& infeed) {
-      std::cout << "ERROR: No data provided for infeed_data '" << infeed
-                << "'\n"
-                << std::flush;
-    });
-    absl::c_for_each(extra_infeeds, [](const std::string& infeed) {
-      std::cout << "ERROR: Provided a data file for the infeed '" << infeed
-                << "' but this infeed cannot be found in the model provided.\n"
-                << std::flush;
-    });
-    return -1;
-  } else {
-    absl::c_for_each(infeeds_missing, [](const std::string& infeed) {
-      std::cout << "WARNING: No data provided for infeed_data '" << infeed
-                << "': the model will be run using a buffer of 0 values.\n"
-                << std::flush;
-    });
-    absl::c_for_each(extra_infeeds, [](const std::string& infeed) {
-      std::cout << "WARNING: Provided a data file for the infeed '" << infeed
-                << "' but this infeed cannot be found in the model provided.\n"
-                << std::flush;
-    });
-  }
-
-  if (load_ckpt) {
-    tensors.LoadCheckpointMetadataFromJson(
-        absl::StrCat(weights_path, "/ckpt.json"));
-  }
-
-  tensors.ConnectStreams(exe);
-
-  ipu::SeedManager seeds{tensors.Config()};
-  seeds.ConnectStreams(exe);
-
+  poplar::Device device = manager.GetDevice(tensors->Config().NumIpus(),
+                                            tensors->Config().OptionFlags());
   auto init_end = std::chrono::high_resolution_clock::now();
   std::cout << "Done in "
             << SecondsToTimeString(seconds(init_end - init_start).count())
             << std::endl;
   std::cout << "\n[Executing]\n";
-  exe.Load(device);
+  exe->Load(device);
   for (int iteration = 0; iteration < iterations; iteration++) {
     auto now = std::chrono::high_resolution_clock::now();
     float elapsed = static_cast<float>(seconds(now - init_end).count());
@@ -490,25 +323,29 @@ int main(int argc, char** argv) {
                    "Failed to create output folder '" << iteration_folder);
     }
     if (create_ckpt) {
-      tensors.CreateCheckpointMetadataJson(
+      tensors->CreateCheckpointMetadataJson(
           absl::StrCat(iteration_folder, "/ckpt.json"));
-      tensors.SetOutfeedsFolder(iteration_folder);
+      tensors->SetOutfeedsFolder(iteration_folder);
     } else {
-      tensors.IgnoreOutfeeds();
+      tensors->IgnoreOutfeeds();
     }
 
-    exe.Run();
+    exe->Run();
 
     if (print_output || create_ckpt) {
-      exe.DeviceToHostCopy();
+      exe->DeviceToHostCopy();
       if (print_output) {
         std::cout << "Outputs:\n";
-        for (auto& output : tensors.Outputs()) {
+        for (auto& output : tensors->Outputs()) {
           std::cout << output.ToString() << std::endl;
         }
       }
       if (create_ckpt) {
-        tensors.SaveOutputsToJsonFile(iteration_folder);
+        ipu::BinaryWriter parameters_writer(
+            absl::StrCat(iteration_folder, "/parameters.bin"));
+        tensors->SaveOutputs(ipu::TensorType::ParameterOut, parameters_writer);
+        tensors->SaveOutputsToJson(ipu::TensorType::OutputData,
+                                   iteration_folder);
       }
     }
   }
