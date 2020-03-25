@@ -83,7 +83,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   where identical weight updates are performed (keeping the workers in
   sync). This is done even when the call to `optimizer.apply_gradients()`
   is inside a function passed to `ipu_compiler.compile()`, as the allreduce
-  is exctacted from the compiled XLA cluster and placed on the host in
+  is extracted from the compiled XLA cluster and placed on the host in
   the outside graph (by internally using an
   :func:`~tensorflow.python.ipu.scopes.outside_compilation_scope`).
 
