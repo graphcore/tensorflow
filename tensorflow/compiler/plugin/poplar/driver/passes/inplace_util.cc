@@ -425,6 +425,7 @@ HloInstructionDescription::HloInstructionDescription(
     }
 
     // Inplace on all operands.
+    case HloOpcode::kAllReduce:
     case HloOpcode::kConditional:
     case HloOpcode::kMap:
     case HloOpcode::kSort:
@@ -556,7 +557,6 @@ HloInstructionDescription::HloInstructionDescription(
 
     // Not inplace ops.
     case HloOpcode::kAfterAll:
-    case HloOpcode::kAllReduce:
     case HloOpcode::kAllToAll:
     case HloOpcode::kBatchNormGrad:
     case HloOpcode::kBatchNormInference:

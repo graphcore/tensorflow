@@ -827,12 +827,6 @@ TEST_F(HloInplaceDependencyTest, TestInplaceMultipleReadOnlyClusters) {
   std::string hlo = R"(
 HloModule top
 
-%to_apply_func {
-  x = f32[] parameter(0)
-  y = f32[] parameter(1)
-  ROOT add = f32[] add(x, y)
-}
-
 ENTRY c1 {
   p0 = f32[20] parameter(0)
   a = f32[10, 2] reshape(p0)
@@ -845,12 +839,12 @@ ENTRY c1 {
   f = f32[20] slice(b), slice={[0:20]}
   g = f32[20] slice(b), slice={[20:40]}
 
-  h = f32[20] all-reduce(d), to_apply=%to_apply_func
-  i = f32[20] all-reduce(f), to_apply=%to_apply_func
-  j = f32[20] all-reduce(g), to_apply=%to_apply_func
-  k = f32[20] add(h, i)
-  l = f32[20] add(j, k)
-  ROOT t = (f32[20], f32[10,2]) tuple(l, e)
+  h = f16[20] convert(d)
+  i = f16[20] convert(f)
+  j = f16[20] convert(g)
+  k = f16[20] add(h, i)
+  l = f16[20] add(j, k)
+  ROOT t = (f32[20], f16[10,2]) tuple(l, e)
 }
 
 )";
@@ -864,9 +858,8 @@ ENTRY c1 {
   InplaceFinder inplaceFinder;
   EXPECT_TRUE(inplaceFinder.Run(module0).ValueOrDie());
   auto inplace_instructions = GetInplaceInstructions(module0);
-  EXPECT_THAT(inplace_instructions.size(), 9);
-  std::set<std::string> in_place_ops = {"add", "c", "d", "e", "f",
-                                        "g",   "k", "l", "t"};
+  EXPECT_THAT(inplace_instructions.size(), 8);
+  std::set<std::string> in_place_ops = {"c", "d", "e", "f", "g", "k", "l", "t"};
   for (auto i : inplace_instructions) {
     EXPECT_TRUE(in_place_ops.count(i->name()));
   }

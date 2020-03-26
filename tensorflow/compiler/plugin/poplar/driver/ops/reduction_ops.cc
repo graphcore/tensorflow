@@ -886,39 +886,31 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
   poplar::program::Sequence seq;
   poplar::Graph& graph = GetGraph(res, inst);
 
-  // If we aren't part of a replicated graph, then just duplicate the tensor.
+  TF_ASSIGN_OR_RETURN(auto tensors,
+                      FindInplaceOutputTensors(tensor_map, res, inst, seq));
+  CHECK_EQ(tensors.size(), inst->operand_count());
+  std::vector<poplar::Tensor> flat_tensors;
+  for (auto operand_tensors : tensors) {
+    flat_tensors.insert(flat_tensors.end(), operand_tensors.begin(),
+                        operand_tensors.end());
+  }
+
+  // If we aren't part of a replicated graph, then just forward the tensor
   if (res.replication_factor < 2) {
-    for (int i = 0; i < inst->operand_count(); ++i) {
-      TF_ASSIGN_OR_RETURN(auto in,
-                          FindInstructionInput(tensor_map, res, inst, i, seq));
-      auto out = poputil::duplicate(
-          graph, in, seq, StrCat(GetDebugName(inst), "/", i),
-          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, out));
+    for (int64 i = 0; i != flat_tensors.size(); ++i) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, flat_tensors[i]));
     }
   } else {
-    // Collect all of the input tensors and clone them.
-    std::vector<poplar::Tensor> input_tensors(inst->operand_count());
-    std::vector<poplar::Tensor> output_tensors(inst->operand_count());
-    for (int i = 0; i < inst->operand_count(); ++i) {
-      TF_ASSIGN_OR_RETURN(input_tensors[i],
-                          FindInstructionInput(tensor_map, res, inst, i, seq));
-      output_tensors[i] =
-          graph.clone(input_tensors[i], StrCat(GetDebugName(inst), "/", i));
-    }
-
-    // Create a concatenated and flattened tensor of the input and output
-    // tensor.
-    auto input = FlattenAndConcatenateTensors(input_tensors);
-    auto output = FlattenAndConcatenateTensors(output_tensors);
+    // Create a concatenated and flattened tensor of the inputs.
+    auto flat_tensor = FlattenAndConcatenateTensors(flat_tensors);
 
     // Replicated sum the concatenated tensor.
     popops::replicatedAllReduceWithOutput(
-        GetMasterGraph(res), input, output, popops::Operation::ADD, seq,
-        GetDebugName(inst), GetReplicateAllReduceOptions());
+        GetMasterGraph(res), flat_tensor, flat_tensor, popops::Operation::ADD,
+        seq, GetDebugName(inst), GetReplicateAllReduceOptions());
 
-    for (size_t i = 0; i != output_tensors.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output_tensors[i]));
+    for (int64 i = 0; i != flat_tensors.size(); ++i) {
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, flat_tensors[i]));
     }
   }
 
