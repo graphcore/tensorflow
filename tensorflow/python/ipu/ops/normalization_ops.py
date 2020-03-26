@@ -199,8 +199,6 @@ def group_norm(inputs,
       not used. When the next layer is linear (also e.g. `nn.relu`), this can be
       disabled since the scaling can be done by the next layer.
     epsilon: Small float added to variance to avoid dividing by zero.
-    activation_fn: Activation function, default set to None to skip it and
-      maintain a linear activation.
     param_initializers: Optional initializers for beta and gamma.
     reuse: Whether or not the layer and its variables should be reused. To be
       able to reuse the layer scope must be given.
@@ -251,16 +249,10 @@ def layer_norm(inputs,
 
     https://arxiv.org/abs/1607.06450.
 
-  Given a tensor `inputs` of rank `R`, moments are calculated and normalization
-  is performed over axes `begin_norm_axis ... R - 1`.  Scaling and centering,
-  if requested, is performed over axes `begin_params_axis .. R - 1`.
-
-  By default, `begin_norm_axis = 1` and `begin_params_axis = -1`,
-  meaning that normalization is performed over all but the first axis
-  (the `HWC` if `inputs` is `NHWC`), while the `beta` and `gamma` trainable
-  parameters are calculated for the rightmost axis (the `C` if `inputs` is
-  `NHWC`).  Scaling and recentering is performed via broadcast of the
-  `beta` and `gamma` parameters with the normalized tensor.
+  Layer normalization will generate normalization statistics across the
+  spatial (X,Y,...) dimensions and the feature channels dimension (C). It is
+  equivalent to a group normalization where all of the features in the feature
+  channels dimension are put into a single group.
 
   The shapes of `beta` and `gamma` are `inputs.shape[begin_params_axis:]`,
   and this part of the inputs' shape must be fully defined.
@@ -268,10 +260,9 @@ def layer_norm(inputs,
   Args:
     inputs: A Tensor with at least 2 dimensions one which is channels. All
      shape dimensions must be fully defined.
-    channels_axis: An integer. Specifies index of channels axis which will be
-      broken into `groups`, each of which whose statistics will be computed
-      across. Preferred usage is to specify negative integers to be agnostic as
-      to whether a batch dimension is included.
+    channels_axis: An integer. Specifies index of channels axis. Preferred
+      usage is to specify negative integers to be agnostic as to whether a
+      batch dimension is included.
     reduction_axes: Deprecated.
     center: If True, add offset of `beta` to normalized tensor. If False, `beta`
       is ignored.
@@ -279,8 +270,6 @@ def layer_norm(inputs,
       not used. When the next layer is linear (also e.g. `nn.relu`), this can be
       disabled since the scaling can be done by the next layer.
     epsilon: Small float added to variance to avoid dividing by zero.
-    activation_fn: Activation function, default set to None to skip it and
-      maintain a linear activation.
     param_initializers: Optional initializers for beta and gamma.
     reuse: Whether or not the layer and its variables should be reused. To be
       able to reuse the layer scope must be given.
@@ -304,9 +293,7 @@ def layer_norm(inputs,
   if channels_axis > (inputs.shape.ndims - 1):
     raise ValueError('Axis is out of bounds.')
 
-  if channels_axis < 0:
-    channels_axis = inputs.shape.ndims + channels_axis
-  groups = inputs.shape.as_list()[channels_axis]
+  groups = 1
 
   return _group_norm_impl(inputs, groups, channels_axis, center, scale,
                           epsilon, param_initializers, reuse,
@@ -336,13 +323,18 @@ def instance_norm(inputs,
     "Instance Normalization: The Missing Ingredient for Fast Stylization"
     Dmitry Ulyanov, Andrea Vedaldi, Victor Lempitsky
 
+  Instance normalization will generate normalization statistics across the
+  spatial (X,Y,...) dimensions.  Each slice along the feature channels
+  dimension (C) is normalized independently. It is equivalent to a group
+  normalization where the number of groups is the same as the size of the
+  feature channels dimension.
+
   Args:
     inputs: A Tensor with at least 2 dimensions one which is channels. All
       shape dimensions must be fully defined.
-    channels_axis: An integer. Specifies index of channels axis which will be
-      broken into `groups`, each of which whose statistics will be computed
-      across. Preferred usage is to specify negative integers to be agnostic as
-      to whether a batch dimension is included.
+    channels_axis: An integer. Specifies index of channels axis. Preferred
+      usage is to specify negative integers to be agnostic as to whether a
+      batch dimension is included.
     reduction_axes: Deprecated.
     center: If True, add offset of `beta` to normalized tensor. If False, `beta`
       is ignored.
@@ -350,8 +342,6 @@ def instance_norm(inputs,
       not used. When the next layer is linear (also e.g. `nn.relu`), this can be
       disabled since the scaling can be done by the next layer.
     epsilon: Small float added to variance to avoid dividing by zero.
-    activation_fn: Activation function, default set to None to skip it and
-      maintain a linear activation.
     param_initializers: Optional initializers for beta and gamma.
     reuse: Whether or not the layer and its variables should be reused. To be
       able to reuse the layer scope must be given.
@@ -369,7 +359,15 @@ def instance_norm(inputs,
     ValueError: If the rank of `inputs` is undefined.
     ValueError: If rank or channels dimension of `inputs` is undefined.
   """
-  groups = 1
+  if inputs.shape.ndims is None:
+    raise ValueError('Inputs %s has undefined rank.' % inputs.name)
+  if channels_axis > (inputs.shape.ndims - 1):
+    raise ValueError('Axis is out of bounds.')
+
+  if channels_axis < 0:
+    channels_axis = inputs.shape.ndims + channels_axis
+  groups = inputs.shape.as_list()[channels_axis]
+
   return _group_norm_impl(inputs, groups, channels_axis, center, scale,
                           epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
