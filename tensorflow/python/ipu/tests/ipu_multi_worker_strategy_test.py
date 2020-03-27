@@ -1084,7 +1084,9 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
     # The resulting losses should be the same, as distributed training should in
     # general be equivalent to non-distributed training with concatenated batches.
-    np.testing.assert_almost_equal(losses_reference, losses_distributed)
+    np.testing.assert_almost_equal(losses_reference,
+                                   losses_distributed,
+                                   decimal=6)
 
   def test_pipelining_example_with_keras_layers(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
