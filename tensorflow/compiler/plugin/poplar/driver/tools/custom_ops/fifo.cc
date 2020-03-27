@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
+
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -22,9 +23,7 @@ namespace poplarplugin {
 
 HloFifoInstruction::HloFifoInstruction(HloInstruction* operand, int64 depth)
     : HloPoplarInstruction(operand->shape(), {operand}, PoplarOp::Fifo, depth),
-      depth_(depth) {
-  set_custom_call_has_side_effect(true);
-}
+      depth_(depth) {}
 
 const HloInstruction* HloFifoInstruction::input() const { return operand(0); }
 
