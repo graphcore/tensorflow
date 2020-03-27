@@ -148,9 +148,13 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
 
       def stage2(lr, partial, labels):
         logits = keras.layers.Dense(10)(partial)
-        cross_entropy = keras.losses.sparse_categorical_crossentropy(
+        per_example_loss = keras.losses.sparse_categorical_crossentropy(
             y_true=labels, y_pred=logits, from_logits=True)
-        loss = math_ops.reduce_mean(cross_entropy)
+        # In a custom training loop, the optimiser does an allreduce *sum*, not
+        # average, of the gradients across the distributed workers. Therefore
+        # we want to divide the loss here by the *global* batch size, which is
+        # done by the `tf.nn.compute_average_loss()` function.
+        loss = nn.compute_average_loss(per_example_loss)
         return lr, loss
 
       def optimizer_function(lr, loss):
@@ -169,17 +173,27 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
         return pipeline_op
 
       def compiled_model(lr):
-        return ipu_compiler.compile(model, inputs=[lr])
+        with ipu_scope("/device:IPU:0"):
+          return ipu_compiler.compile(model, inputs=[lr])
 
       with ops.device("cpu"):
         lr = array_ops.placeholder(np.float32, [])
 
       train_op = strategy.experimental_run_v2(compiled_model, args=[lr])
-      outfeed_op = outfeed_queue.dequeue()
+
+      _, per_worker_losses = outfeed_queue.dequeue()
+
+      # Mean across the local `pipeline_depth` batches:
+      per_worker_loss = math_ops.reduce_mean(per_worker_losses)
+
+      # Global mean across the distributed workers (since it is already
+      # divided by the global batch size above, we do a sum here):
+      global_loss = strategy.reduce(ReduceOp.SUM, per_worker_loss)
 
       config = ipu_utils.create_ipu_config()
       config = ipu_utils.auto_select_ipus(config, num_ipus=2)
       ipu_utils.configure_ipu_system(config)
+      ipu_utils.move_variable_initialization_to_cpu()
 
       with session_lib.Session(target=sess_target, config=sess_config) as sess:
         sess.run(infeed_queue.initializer)
@@ -187,7 +201,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
 
         for _ in range(10):
           sess.run(train_op, {lr: 0.01})
-          lr_out, loss_out = sess.run(outfeed_op)
+          global_loss_val = sess.run(global_loss)
   """
   def __init__(self,
                cluster_resolver,

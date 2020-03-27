@@ -31,6 +31,7 @@ from tensorflow.python.client import session as session_lib
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import cross_device_utils
 from tensorflow.python.distribute import distribute_lib
+from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.distribute import multi_worker_test_base
 from tensorflow.python.distribute import multi_worker_util
 from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
@@ -38,7 +39,6 @@ from tensorflow.python.distribute.cluster_resolver.tfconfig_cluster_resolver imp
 from tensorflow.python.distribute.reduce_util import ReduceOp
 from tensorflow.python.estimator import estimator_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import random_seed
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -55,7 +55,9 @@ from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.scopes import ipu_scope
 from tensorflow.python.keras.layers.normalization import BatchNormalization
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
@@ -948,18 +950,13 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
     self._run_workers_in_processes(self._test_pipelining, cluster_spec)
 
-  def _test_pipelining_example_with_keras_layers(self, _task_id):
-    strategy, sess_target, sess_config = self._create_test_objects(
-        variables_on_host=False)
-
-    random_seed.set_random_seed(random_seed.DEFAULT_GRAPH_SEED)
-    prev_loss = np.inf
-    pipeline_depth = 4
-
-    features = np.ones((1, 20), dtype=np.float32)
-    labels = np.ones((1), dtype=np.int32)
-    dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
-    dataset = dataset.repeat().batch(4, drop_remainder=True)
+  def _run_pipelining_example_with_keras_layers(self,
+                                                strategy,
+                                                dataset,
+                                                pipeline_depth,
+                                                sess_target=None,
+                                                sess_config=None):
+    loss_vals = []
 
     # Start of verbatim copy of example from ipu_multi_worker_strategy.py.
 
@@ -975,9 +972,13 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
       def stage2(lr, partial, labels):
         logits = keras.layers.Dense(10)(partial)
-        cross_entropy = keras.losses.sparse_categorical_crossentropy(
+        per_example_loss = keras.losses.sparse_categorical_crossentropy(
             y_true=labels, y_pred=logits, from_logits=True)
-        loss = math_ops.reduce_mean(cross_entropy)
+        # In a custom training loop, the optimiser does an allreduce *sum*, not
+        # average, of the gradients across the distributed workers. Therefore
+        # we want to divide the loss here by the *global* batch size, which is
+        # done by the `tf.nn.compute_average_loss()` function.
+        loss = nn.compute_average_loss(per_example_loss)
         return lr, loss
 
       def optimizer_function(lr, loss):
@@ -996,17 +997,27 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         return pipeline_op
 
       def compiled_model(lr):
-        return ipu_compiler.compile(model, inputs=[lr])
+        with ipu_scope("/device:IPU:0"):
+          return ipu_compiler.compile(model, inputs=[lr])
 
       with ops.device("cpu"):
         lr = array_ops.placeholder(np.float32, [])
 
       train_op = strategy.experimental_run_v2(compiled_model, args=[lr])
-      outfeed_op = outfeed_queue.dequeue()
+
+      _, per_worker_losses = outfeed_queue.dequeue()
+
+      # Mean across the local `pipeline_depth` batches:
+      per_worker_loss = math_ops.reduce_mean(per_worker_losses)
+
+      # Global mean across the distributed workers (since it is already
+      # divided by the global batch size above, we do a sum here):
+      global_loss = strategy.reduce(ReduceOp.SUM, per_worker_loss)
 
       config = ipu_utils.create_ipu_config()
       config = ipu_utils.auto_select_ipus(config, num_ipus=2)
       ipu_utils.configure_ipu_system(config)
+      ipu_utils.move_variable_initialization_to_cpu()
 
       with session_lib.Session(target=sess_target, config=sess_config) as sess:
         sess.run(infeed_queue.initializer)
@@ -1014,15 +1025,66 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
         for _ in range(10):
           sess.run(train_op, {lr: 0.01})
-          lr_out, loss_out = sess.run(outfeed_op)
+          global_loss_val = sess.run(global_loss)
 
           # End of example code.
 
-          # Check that the loss decreases monotonically.
-          np.testing.assert_almost_equal([0.01] * pipeline_depth, lr_out)
-          mean_loss = np.mean(loss_out)
-          self.assertLess(mean_loss, prev_loss)
-          prev_loss = mean_loss
+          if loss_vals:
+            # Check that the loss decreases monotonically.
+            self.assertLess(global_loss_val, loss_vals[-1])
+          loss_vals.append(global_loss_val)
+
+        sess.run(infeed_queue.deleter)
+        sess.run(outfeed_queue.deleter)
+
+    return loss_vals
+
+  def _test_pipelining_example_with_keras_layers(self, task_id):
+    pipeline_depth = 4
+    local_batch_size = 2
+    num_workers = 2
+
+    features = [
+        i * np.ones((1, 20), dtype=np.float32) for i in range(num_workers)
+    ]
+    labels = [i * np.ones(1, dtype=np.int32) for i in range(num_workers)]
+    concat_features = np.concatenate(features)
+    concat_labels = np.concatenate(labels)
+
+    def mock_initializer_get(_identifier):
+      return init_ops.GlorotUniform(seed=42)
+
+    with test.mock.patch.object(keras.initializers, 'get',
+                                mock_initializer_get):
+
+      # Test using the default non-distributed strategy. Each batch is twice
+      # the size, with the batches for the workers concatenated.
+      default_strategy = distribution_strategy_context._get_default_strategy()  # pylint: disable=protected-access
+
+      with ops.Graph().as_default():
+        concat_dataset = dataset_ops.Dataset.from_tensor_slices(
+            (concat_features, concat_labels))
+        concat_dataset = concat_dataset.repeat().batch(num_workers *
+                                                       local_batch_size,
+                                                       drop_remainder=True)
+        losses_reference = self._run_pipelining_example_with_keras_layers(
+            default_strategy, concat_dataset, pipeline_depth)
+
+      # Test using the actual distribution strategy. Each worker gets its own batch.
+      strategy, sess_target, sess_config = self._create_test_objects(
+          variables_on_host=False)
+
+      with ops.Graph().as_default():
+        local_dataset = dataset_ops.Dataset.from_tensor_slices(
+            (features[task_id], labels[task_id]))
+        local_dataset = local_dataset.repeat().batch(local_batch_size,
+                                                     drop_remainder=True)
+        losses_distributed = self._run_pipelining_example_with_keras_layers(
+            strategy, local_dataset, pipeline_depth, sess_target, sess_config)
+
+    # The resulting losses should be the same, as distributed training should in
+    # general be equivalent to non-distributed training with concatenated batches.
+    np.testing.assert_almost_equal(losses_reference, losses_distributed)
 
   def test_pipelining_example_with_keras_layers(self):
     cluster_spec = multi_worker_test_base.create_cluster_spec(num_workers=2)
