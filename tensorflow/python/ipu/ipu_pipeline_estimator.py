@@ -262,13 +262,17 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
       raise TypeError("The `model_fn` used with `IPUPipelineEstimator` "
                       "must return `IPUPipelineEstimatorSpec`.")
 
-    num_stages = len(estimator_spec.computational_stages)
+    if estimator_spec.device_mapping is not None:
+      num_devices_required = len(set(estimator_spec.device_mapping))
+    else:
+      num_devices_required = len(estimator_spec.computational_stages)
+
     num_shards = self._config.ipu_run_config.num_shards
-    if num_stages != num_shards:
+    if num_shards != num_devices_required:
       raise ValueError(
-          ("The length of `computational_stages` (got {}) must be equal to "
-           "`IPURunConfig.num_shards` (got {})").format(
-               num_stages, num_shards))
+          ("This pipeline requires {} devices, but `IPURunConfig.num_shards` "
+           "was set to {} (they must be equal).").format(
+               num_devices_required, num_shards))
 
     return estimator_spec
 

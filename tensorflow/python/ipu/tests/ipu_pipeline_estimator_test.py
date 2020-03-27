@@ -115,8 +115,36 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
                                      config=_make_config())
 
     with self.assertRaisesRegex(
-        ValueError, r"The length of `computational_stages` \(got 0\) "
-        r"must be equal to `IPURunConfig.num_shards` \(got 2\)"):
+        ValueError, "This pipeline requires 0 devices, but "
+        "`IPURunConfig.num_shards` was set to 2"):
+      estimator.train(input_fn=my_input_fn, steps=1)
+
+  def testNumShardsMustEqualNumUniqueDevices(self):
+    def model_fn_with_zero_stages(mode):
+      def optimizer_function():
+        pass
+
+      return IPUPipelineEstimatorSpec(mode,
+                                      computational_stages=[],
+                                      pipeline_depth=1,
+                                      device_mapping=[0, 1, 2, 3, 0],
+                                      optimizer_function=optimizer_function)
+
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([0], [0]))
+
+    ipu_options = ipu_utils.create_ipu_config()
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=2)
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            num_shards=2, iterations_per_loop=1, ipu_options=ipu_options))
+
+    estimator = IPUPipelineEstimator(model_fn=model_fn_with_zero_stages,
+                                     config=config)
+
+    with self.assertRaisesRegex(
+        ValueError, r"This pipeline requires 4 devices, but "
+        "`IPURunConfig.num_shards` was set to 2"):
       estimator.train(input_fn=my_input_fn, steps=1)
 
   def testMustContainOptimizerFunctionWhenTraining(self):
@@ -353,16 +381,21 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     with self.assertRaisesRegex(KeyError, "must contain 'loss'"):
       estimator.evaluate(input_fn=my_input_fn, steps=1)
 
-  def testEvaluate(self, pipeline_depth=4):
+  def testEvaluateWithStagesMappedToSameIpu(self, pipeline_depth=6):
     def my_model_fn(mode):
       self.assertEqual(mode, model_fn_lib.ModeKeys.EVAL)
 
       def stage1(features):
-        w = variable_scope.get_variable("w", initializer=1.0)
-        partial = w * features
+        w1 = variable_scope.get_variable("w1", initializer=1.0)
+        partial = w1 * features
         return partial
 
       def stage2(partial):
+        w2 = variable_scope.get_variable("w2", initializer=1.0)
+        partial = w2 * partial
+        return partial
+
+      def stage3(partial):
         squared = partial * partial
         return partial, squared
 
@@ -372,10 +405,12 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
             "loss": squared,
         }
 
-      return IPUPipelineEstimatorSpec(mode,
-                                      computational_stages=[stage1, stage2],
-                                      eval_metrics_fn=eval_metrics_fn,
-                                      pipeline_depth=pipeline_depth)
+      return IPUPipelineEstimatorSpec(
+          mode,
+          computational_stages=[stage1, stage2, stage3],
+          device_mapping=[0, 1, 0],
+          eval_metrics_fn=eval_metrics_fn,
+          pipeline_depth=pipeline_depth)
 
     num_steps = 2
     features = np.arange(pipeline_depth * num_steps, dtype=np.float32)
