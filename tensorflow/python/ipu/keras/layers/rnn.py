@@ -54,27 +54,9 @@ class _PopnnRNN(Layer):
                dtype=dtypes.float32,
                dropout=0.,
                return_state=False,
+               return_sequences=False,
+               time_major=False,
                **kwargs):
-    """Creates a _PopnnRNN model from model spec.
-
-    Args:
-      num_units: the number of units within the RNN model.
-      partials_dtype: the type used by Popnn to perform partial
-                      calculations.
-        Either tf.float16 or tf.float32.
-      seed: A Python integer. Used to create the default Glorot uniform
-        initializer kernel_initializer.
-      kernel_initializer: starting value to initialize the weight
-        (default is all zeros).
-      bias_initializer: starting value to initialize the bias
-        (default is all zeros).
-      dropout: Float between 0 and 1.
-        Fraction of the units to drop for
-        the linear transformation of the inputs.
-      return_state: When True, the layer returns a tuple containing the
-        output and the state tensors.  Otherwise it returns only the
-        output tensor.
-    """
     super(_PopnnRNN, self).__init__(dtype=dtype, **kwargs)
 
     if dtype not in [dtypes.float16, dtypes.float32]:
@@ -82,20 +64,22 @@ class _PopnnRNN(Layer):
     # Layer self.dtype is type name, the original DType object is kept here.
     self._plain_dtype = dtype
     self._partials_dtype = partials_dtype
-    self._num_layers = 1
     self._num_units = num_units
     self._kernel_initializer = kernel_initializer
     self._bias_initializer = bias_initializer
     self._dropout = dropout
     self._seed = seed
     self._return_state = return_state
+    self._return_sequences = return_sequences
+    self._time_major = time_major
     # Init input_size to None, which will be set after build().
     self._input_size = None
     self._saveable = None
 
-  @property
-  def num_layers(self):
-    return self._num_layers
+  def _verify_input_size(self):
+    if not self._input_size:
+      raise ValueError(
+          "`_input_size` is unknown because the layer has not been built yet.")
 
   @property
   def num_units(self):
@@ -103,24 +87,22 @@ class _PopnnRNN(Layer):
 
   @property
   def input_size(self):
-    if not self._input_size:
-      raise ValueError(
-          "\'input_size\' is unknown since layer has not been built.")
+    self._verify_input_size()
     return self._input_size
 
   @property
   def canonical_weight_shape(self):
     """Shapes of Popnn canonical weight tensors."""
-    if not self._input_size:
-      raise RuntimeError(
-          "%s.canonical_weight_shape invoked before input shape is known" %
-          type(self).__name__)
-
-    return self._canonical_weight_shape(0)
+    self._verify_input_size()
+    return [
+        self._input_size + self._num_units,
+        self._num_units * self._num_gates_per_layer
+    ]
 
   @property
   def canonical_bias_shapes(self):
     """Shapes of Popnn canonical bias tensors."""
+    self._verify_input_size()
     return self._canonical_bias_shape(0)
 
   # pylint: disable=unused-argument, arguments-differ
@@ -211,28 +193,6 @@ class _PopnnRNN(Layer):
   def _zero_state(self, batch_size):
     raise ValueError("This method needs to be overridden.")
 
-  def _canonical_weight_shape(self, layer):
-    """Shapes of Popnn canonical weight tensors for given layer."""
-    if layer < 0 or layer >= self._num_layers:
-      raise ValueError("\'layer\' is not valid, got %s, expecting [%d, %d]" %
-                       (layer, 0, self._num_layers - 1))
-    if not self._input_size:
-      raise RuntimeError(
-          "%s._canonical_weight_shape invoked before input shape is known" %
-          type(self).__name__)
-
-    input_size = self._input_size
-    num_units = self._num_units
-    num_gates = self._num_gates_per_layer
-
-    if layer == 0:
-      tf_wts = [input_size, num_units * num_gates]
-    else:
-      # TODO we only support one layer.
-      tf_wts = [num_units, num_units * num_gates]
-    tf_wts[0] += num_units
-    return tf_wts
-
   def _canonical_bias_shape(self, unused_layer):
     """Shapes of Popnn canonical bias tensors for given layer."""
     return [self._num_gates_per_layer, self._num_units]
@@ -263,42 +223,44 @@ class _PopnnRNN(Layer):
 
 class PopnnLSTM(_PopnnRNN):
   # pylint:disable=line-too-long
-  """XLA compatible, time-major Popnn implementation of an LSTM layer.
+  """XLA compatible, Popnn implementation of an LSTM layer.
 
-    Below is a typical workflow:
+  Below is a typical workflow:
 
-    .. code-block:: python
+  .. code-block:: python
 
-      with tf.Graph().as_default():
-        lstm = PopnnLSTM(num_units, ...)
+    with tf.Graph().as_default():
+      lstm = PopnnLSTM(num_units, ...)
 
-        outputs, output_states = lstm(inputs, initial_states, training=True)
+      outputs = lstm(inputs)
 
-    Args:
-      num_units: the number of units within the RNN model.
-      partials_dtype: the type used by Popnn to perform partial
-                      calculations.
-        Either tf.float16 or tf.float32.
-      kernel_initializer: starting value to initialize the weight
-        (default is all zeros).
-      bias_initializer: starting value to initialize the bias
-        (default is all zeros).
-      recurrent_initializer: This optional parameter will partition
-                             weight initialization into two stages,
-                             first initalizing the input kernel
-                             using kernel_initializer then will
-                             initalize a kernel for the recurrent
-                             state. This partitioning is what the
-                             keras LSTM layer does.
-                             (default is None, meaning off)
-      dropout: Float between 0 and 1.
-        Fraction of the units to drop for
-        the linear transformation of the inputs.
-      return_state: When True, the layer returns a tuple containing the
-        output and the state tensors.  Otherwise it returns only the
-        output tensor.
-      seed: A Python integer. Used to create the default Glorot uniform
-        initializer kernel_initializer.
+  Args:
+    num_units: the number of units within the RNN model.
+    partials_dtype: the type used by Popnn to perform partial
+                    calculations.
+      Either tf.float16 or tf.float32.
+    kernel_initializer: starting value to initialize the weight
+      (default is all zeros).
+    bias_initializer: starting value to initialize the bias
+      (default is all zeros).
+    recurrent_initializer: This optional parameter will partition
+                            weight initialization into two stages,
+                            first initalizing the input kernel
+                            using kernel_initializer then will
+                            initalize a kernel for the recurrent
+                            state. This partitioning is what the
+                            keras LSTM layer does.
+                            (default is None, meaning off)
+    dropout: Float between 0 and 1.
+      Fraction of the units to drop for
+      the linear transformation of the inputs.
+    return_state: When True, the layer returns a tuple containing the
+      output and the state tensors.  Otherwise it returns only the
+      output tensor.
+    seed: A Python integer. Used to create the default Glorot uniform
+      initializer kernel_initializer.
+    time_major: The input should be of the form [sequence, batch, units]
+                instead of the default [batch, sequence, units].
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_LSTM
@@ -330,6 +292,7 @@ class PopnnLSTM(_PopnnRNN):
                unroll=False,
                partials_dtype=dtypes.float32,
                seed=None,
+               time_major=False,
                **kwargs):
     if recurrent_initializer is not None:
       self.recurrent_initializer = initializers.get(recurrent_initializer)
@@ -389,10 +352,6 @@ class PopnnLSTM(_PopnnRNN):
       raise ValueError(
           "IPU custom LSTM layer does not support implementation != 1.")
 
-    if return_sequences:
-      raise ValueError(
-          "IPU custom LSTM layer does not support return_sequences = True.")
-
     if go_backwards:
       raise ValueError(
           "IPU custom LSTM layer does not support go_backwards = True.")
@@ -411,6 +370,8 @@ class PopnnLSTM(_PopnnRNN):
                                     bias_initializer=bias_initializer,
                                     dropout=dropout,
                                     return_state=return_state,
+                                    return_sequences=return_sequences,
+                                    time_major=time_major,
                                     **kwargs)
 
   def build(self, input_shape):
@@ -433,18 +394,31 @@ class PopnnLSTM(_PopnnRNN):
     """Runs the forward step for the LSTM layer.
 
     Args:
-      inputs: 3-D tensor with shape [time_len, batch_size, input_size].
+      inputs: 3-D tensor with shape [batch_size, seq_len, input_size]. If the
+              time_major parameter is set to True, then the shape should
+              be [seq_len, batch_size, input_size].
       initial_state: An `LSTMStateTuple` of state tensors, each shaped
         `[batch_size, num_units]`. If not provided, the state is initialized to
         zeros.
       training: whether this operation will be used in training or inference.
 
     Returns:
-      tuple of output and output states:
+      output: When `return_sequences` is set, then LSTM returns a tensor of
+              shape [batch_size, seq_len, num_units], otherwise it returns
+              a tensor of shape [batch_size, num_units].
+      output_state: The output state of the last cell, when the parameter
+                    `return_state` is set to True.
 
     """
     dtype = self.dtype
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
+
+    if len(inputs.shape) != 3:
+      raise ValueError("inputs tensor must be 3D")
+
+    if not self._time_major:
+      # Shuffle from Keras [B, S, N] to Poplibs [S, B, N]
+      inputs = array_ops.transpose(inputs, [1, 0, 2])
 
     batch_size = array_ops.shape(inputs)[1]
 
@@ -487,10 +461,15 @@ class PopnnLSTM(_PopnnRNN):
         partials_dtype=self._partials_dtype,
         name=self._name)
 
-    output_state = rnn_cell.LSTMStateTuple(output_c, output_h)
+    if not self._time_major:
+      # Convert output from Poplibs [S, B, N] to Keras [B, S, N]
+      output = array_ops.transpose(output, [1, 0, 2])
+
+    if not self._return_sequences:
+      output = output[-1, :, :] if self._time_major else output[:, -1, :]
 
     if self._return_state:
-      return output, output_state
+      return output, output_h, output_c
 
     return output
 
@@ -516,16 +495,16 @@ class PopnnLSTM(_PopnnRNN):
 
 class PopnnGRU(_PopnnRNN):
   # pylint:disable=line-too-long
-  """XLA compatible, time-major Popnn implementation of an GRU layer.
+  """XLA compatible, Popnn implementation of an GRU layer.
 
   Below is a typical workflow:
 
   .. code-block:: python
 
     with tf.Graph().as_default():
-      lstm = PopnnGRU(num_units, ...)
+      gru = PopnnGRU(num_units, ...)
 
-      outputs, output_state = lstm(inputs, initial_state, training=True)
+      outputs = gru(inputs)
 
   Args:
     units: the number of units within the RNN model.
@@ -543,6 +522,8 @@ class PopnnGRU(_PopnnRNN):
       output tensor.
     seed: A Python integer. Used to create the default Glorot uniform
       initializer kernel_initializer.
+    time_major: The input should be of the form [sequence, batch, units]
+                instead of the default [batch, sequence, units].
   """
   # pylint:enable=line-too-long
   _rnn_mode = POPNN_GRU
@@ -574,6 +555,7 @@ class PopnnGRU(_PopnnRNN):
                reset_after=False,
                partials_dtype=dtypes.float32,
                seed=None,
+               time_major=False,
                **kwargs):
 
     if activation != 'tanh':
@@ -627,10 +609,6 @@ class PopnnGRU(_PopnnRNN):
       raise ValueError(
           "IPU custom GRU layer does not support implementation != 1.")
 
-    if return_sequences:
-      raise ValueError(
-          "IPU custom GRU layer does not support return_sequences.")
-
     if go_backwards:
       raise ValueError("IPU custom GRU layer does not support go_backwards.")
 
@@ -650,6 +628,8 @@ class PopnnGRU(_PopnnRNN):
                                    bias_initializer=bias_initializer,
                                    dropout=dropout,
                                    return_state=return_state,
+                                   return_sequences=return_sequences,
+                                   time_major=time_major,
                                    **kwargs)
 
   def build(self, input_shape):
@@ -672,22 +652,33 @@ class PopnnGRU(_PopnnRNN):
     """Runs the forward step for the GRU layer.
 
     Args:
-      inputs: 3-D tensor with shape [time_len, batch_size, input_size].
+      inputs: 3-D tensor with shape [batch_size, seq_len, input_size]. If the
+              time_major parameter is True, the the shape should be
+              [seq_len, batch_size, input_size].
       initial_state: Initial state tensor, shaped `[batch_size, num_units]`
         If not provided, the state is initialized to zeros.
       training: whether this operation will be used in training or inference.
 
     Returns:
-      output: a tensor of shape [time_len, batch_size, num_units].
-      output_state: The output state of the last cell.
+      output: When `return_sequences` is set, then GRU returns a tensor of
+              shape [batch_size, seq_len, num_units], otherwise it returns
+              a tensor of shape [batch_size, num_units].
+      output_state: The output state of the last cell, when the parameter
+                    `return_state` is set to True.
 
     Raises:
       ValueError: if initial_state is not valid.
 
     """
-
     dtype = self.dtype
     inputs = ops.convert_to_tensor(inputs, dtype=dtype)
+
+    if len(inputs.shape) != 3:
+      raise ValueError("inputs tensor must be 3D")
+
+    if not self._time_major:
+      # Shuffle from Keras [B, S, N] to Poplibs [S, B, N]
+      inputs = array_ops.transpose(inputs, [1, 0, 2])
 
     batch_size = array_ops.shape(inputs)[1]
 
@@ -716,6 +707,13 @@ class PopnnGRU(_PopnnRNN):
         is_training=training,
         partials_dtype=self._partials_dtype,
         name=self._name)
+
+    if not self._time_major:
+      # Convert output from Poplibs [S, B, N] to Keras [B, S, N]
+      output = array_ops.transpose(output, [1, 0, 2])
+
+    if not self._return_sequences:
+      output = output[-1, :, :] if self._time_major else output[:, -1, :]
 
     if self._return_state:
       return output, output_state
