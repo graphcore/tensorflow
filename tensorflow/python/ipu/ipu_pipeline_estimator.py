@@ -289,6 +289,19 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
   `model_fn` must return a :class:`.IPUPipelineEstimatorSpec`
   that contains the information needed for pipelined execution.
 
+  Data parallelism based on graph replication is supported. Each replica will
+  consume `pipeline_depth` batches from the dataset returned by the `input_fn`
+  and accumulate the gradients, giving an effective batch size of
+  `num_replicas * pipeline_depth * batch_size`. The optimizer in the `model_fn`
+  should be wrapped in an
+  :class:`~tensorflow.python.ipu.optimizers.cross_replica_optimizer.CrossReplicaOptimizer`
+  in order to average the gradients across the replicas.
+
+  This can further be combined with distributed multi-worker training using the
+  :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`,
+  giving a total effective batch size of
+  `num_workers * num_replicas * pipeline_depth * batch_size`.
+
   Refer to the :mod:`~tensorflow.python.ipu.ops.pipelining_ops`
   documentation for more details about pipelining.
   """

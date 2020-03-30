@@ -15,7 +15,7 @@ Python API
 .. automodule:: tensorflow.python.ipu.ipu_infeed_queue
   :members:
 
-.. automodule:: tensorflow.python.ipu.ipu_optimizer
+.. automodule:: tensorflow.python.ipu.optimizers.cross_replica_optimizer
   :members:
 
 .. automodule:: tensorflow.python.ipu.ipu_outfeed_queue
