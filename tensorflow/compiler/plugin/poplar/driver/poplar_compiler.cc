@@ -727,6 +727,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloComputationNameUniquify>();
     pipeline.AddPass<CholeskyExpander>();
     pipeline.AddPass<TriangularSolveExpander>();
+    pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<NotSupportedGatherExpander>();
     pipeline.AddPass<NotSupportedScatterExpander>();
     pipeline.AddPass<DynamicIndexSplitter>();
