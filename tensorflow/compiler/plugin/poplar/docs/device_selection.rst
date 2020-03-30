@@ -159,6 +159,8 @@ If you set ``TF_POPLAR_FLAGS=--help`` and execute a TF session, it will output s
 help for each option. Some of the more common options are described below.
 For a full list, refer to  :ref:`api-section`.
 
+* ``--help`` will print the information for all the flags.
+
 * ``--use_synthetic_data`` will prevent the system from downloading or uploading
   data to the card when executing code.  This is used for testing performance
   without the overhead of data transfer.
@@ -167,6 +169,19 @@ For a full list, refer to  :ref:`api-section`.
   ``--use_synthetic_data`` flag to control how the inputs to the graph will be initialised
   on the IPU. The values will be either random (``--synthetic_data_initializer=random``)
   or a constant value ``X`` (``--synthetic_data_initializer=X``)
+
+* ``--use_ipu_model`` will use the Poplar IPUModel for graph compilation and
+  execution.
+
+* ``--log_cycle_count`` will log the number of cycles used in evaluating the
+  main graph. The numeric argument indicates the tile on which the cycle count
+  operation will be created.
+  This may be used as an alternative to profiling
+  for graphs with dynamic control flow.
+
+* ``--while_loop_brute_force_max_trip_count`` is the upper bound for how many
+  iterations a while loop will be simulated for in order to brute force the
+  number of times it will be executed.
 
 * ``--max_compilation_threads`` sets the maximum number of threads which Poplar
   is allowed to use for compiling the executable.
@@ -183,22 +198,27 @@ For a full list, refer to  :ref:`api-section`.
 * ``--executable_cache_path`` enables the Poplar executable cache.
   See :ref:`caching_executables`.
 
-* ``--dump_schedule_as_dot`` creates a file containing the scheduled HLO graph as
-  a Graphviz DOT file.
+* ``--save_interval_report`` dumps the Poplar interval report to the given
+  directory.
 
 * ``--tensor_map_file_path`` will cause a JSON file containing the tile mapping
   of all tensors to be written to this directory.
+
+* ``--dump_schedule_as_dot`` will dump the schedule of the XLA graph to the user
+  console.
 
 * ``--fallback_scheduler`` uses the standard TensorFlow scheduler, instead of
   the Graphcore specific one.
 
 * ``--allow_nans`` will allow NaNs.
 
-* ``--log_cycle_count`` will log the number of cycles used in evaluating the
-  main graph. The numeric argument indicates the tile on which the cycle count
-  operation will be created.
-  This may be used as an alternative to profiling
-  for graphs with dynamic control flow.
+* ``--null_data_feed`` will cause any infeed queues to copy garbage data to the
+  IPU rather than real data. This option can be used to determine whether the
+  dataset provided to the infeed queue is the bottleneck during execution.
+
+* ``--dump_text_reports_to_stdio`` if profiling is enabled, then a text summary
+  of the profile will be dumped into the standard output, in addition to the
+  normal report processing.
 
 Multiple options can be specified at the same time by concatenating them like command line
 switches, for example: ``--executable_cache_path=/tmp/cache --allow_nans``.
