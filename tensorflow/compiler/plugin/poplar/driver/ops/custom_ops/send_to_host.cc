@@ -53,7 +53,7 @@ class SendToHostOp : public PoplarOpDef {
       seq.add(poplar::program::Copy(tensor, stream,
                                     res.always_rearrange_copies_on_host));
 
-      const Shape& shape = inst->operand(0)->shape();
+      const Shape& shape = inst->operand(i)->shape();
       res.annotations.send_infos.emplace_back(stream.handle(), rendezvous_key,
                                               shape, send->ConcatReplicas());
     }
