@@ -48,6 +48,19 @@ limitations under the License.
 namespace tensorflow {
 
 namespace {
+const std::set<DataType> ok_types = {
+    DataType::DT_INT32,
+    DataType::DT_FLOAT,
+    DataType::DT_HALF,
+    DataType::DT_BOOL,
+};
+
+struct TypeToStringFormatter {
+  void operator()(std::string* out, DataType type) const {
+    out->append(DataTypeString(type));
+  }
+};
+
 void XlaShapesFromAttr(OpKernelConstruction* ctx,
                        std::vector<xla::Shape>& result) {
   std::vector<TensorShape> shapes;
@@ -77,6 +90,21 @@ void GetFeedConfig(OpKernelConstruction* ctx,
   config.set_io_batch_size(io_batch_size);
 
   *(config.mutable_tf_data_types()) = {types.begin(), types.end()};
+
+  // Verify that the input doesn't contain any data types that we
+  // do not like.
+  for (unsigned i = 0; i < types.size(); ++i) {
+    if (ok_types.count(types[i]) == 0) {
+      std::string acceptable =
+          absl::StrJoin(ok_types, ",", TypeToStringFormatter());
+      ctx->CtxFailureWithWarning(errors::FailedPrecondition(
+          "Unsupprted datatype ", DataTypeString(types[i]), " on index ", i,
+          " of feed operation ", ctx->def().name(), " with feed id '", feed_id,
+          "'. You should use a tf.DataSet.map() operation to cast the element "
+          "into one of (",
+          acceptable, ")."));
+    }
+  }
 }
 
 void GetOutfeedMode(OpKernelConstruction* ctx,

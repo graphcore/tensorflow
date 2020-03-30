@@ -1442,6 +1442,29 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       outfed = sess.run(outfeed)
       self.assertAllClose(outfed, range(num_iterations))
 
+  @test_util.deprecated_graph_mode_only
+  def testCannotFeedInt64(self):
+    dataset = dataset_ops.Dataset.range(5)
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+
+    def body(v, x):
+      v = v + math_ops.cast(x, np.int32)
+      return v
+
+    def my_net():
+      r = ipu.loops.repeat(5, body, (0,), infeed_queue)
+      return r
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      ipu.ipu_compiler.compile(my_net, inputs=[])
+
+    with session_lib.Session() as sess:
+      with self.assertRaisesRegex(
+          errors.FailedPreconditionError,
+          "Unsupprted datatype int64 on index 0 of feed operation"):
+        sess.run(infeed_queue.initializer)
+
 
 if __name__ == "__main__":
   googletest.main()
