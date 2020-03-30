@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DIRVER_TOOLS_FALGS_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DIRVER_TOOLS_FALGS_H_
 
+#include <string>
 #include <vector>
 
 #include "tensorflow/core/platform/default/integral_types.h"
@@ -85,13 +86,6 @@ class PoplarXlaFlags {
   // Allow/disallow nans during graph construction.
   bool allow_nans = false;
 
-  // Stores all the values as a string.
-  std::string as_string = "";
-
-  // Return the hash for all the flags which affect the graph generation and
-  // compilation only.
-  std::size_t hlo_hash;
-
   // When true, the infeed callback will return immediately without providing
   // any real data
   bool null_data_feed = false;
@@ -100,6 +94,13 @@ class PoplarXlaFlags {
   // be dumped into the standard output, in addition to the normal report
   // processing.
   bool dump_text_reports_to_stdio = false;
+
+  // Stores all the values as a string.
+  std::string as_string = "";
+
+  // Return the hash for all the flags which affect the graph generation and
+  // compilation only.
+  std::size_t hlo_hash;
 
  private:
   PoplarXlaFlags();
