@@ -983,6 +983,24 @@ class IPUEstimator(_IPUEstimatorBase):
   data feeds. It also provides a simple way to use multiple IPUs in the
   form of either data parallelism or model parallelism.
 
+  The data parallelism is based on graph replication. One batch from the
+  dataset returned by the `input_fn` (of size `batch_size`) is sent to each
+  replica, giving an effective batch size of `num_replicas * batch_size`.
+  The only change needed to the `model_fn` is that the optimizer should be
+  wrapped in an
+  :class:`~tensorflow.python.ipu.optimizers.cross_replica_optimizer.CrossReplicaOptimizer`
+  in order to average the gradients across the replicas.
+
+  This can also be combined with distributed multi-worker training using the
+  :class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`,
+  giving a total effective batch size of
+  `num_workers * num_replicas * batch_size`.
+
+  The model parallelism supported by this class is basic sharding. Consider
+  using the
+  :class:`~tensorflow.python.ipu.ipu_pipeline_estimator.IPUPipelineEstimator`
+  to get pipelined execution.
+
   For efficiency, it supports compiling a graph that contains multiple
   iterations of the training/prediction/evaluation loop, which will be
   fully executed on the IPU before yielding back to the TensorFlow
