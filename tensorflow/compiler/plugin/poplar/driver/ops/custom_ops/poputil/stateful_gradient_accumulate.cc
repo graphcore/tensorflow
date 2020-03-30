@@ -145,8 +145,7 @@ class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
 
     // Create a sequence to be executed during the pipeline.
     poplar::program::Sequence seq;
-    TensorVector inputs =
-        FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
+    TensorVector inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq);
 
     // Clone the inputs into accumulators which are the outputs.
     TensorVector accumulators(inputs.size());
