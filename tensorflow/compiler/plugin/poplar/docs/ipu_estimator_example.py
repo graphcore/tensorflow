@@ -53,10 +53,14 @@ def model_fn(features, labels, mode, params):
     return tf.estimator.EstimatorSpec(mode,
                                       loss=loss,
                                       eval_metric_ops=eval_metric_ops)
+
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.GradientDescentOptimizer(params["learning_rate"])
+    if params["replicas"] > 1:
+      optimizer = ipu.cross_replica_optimizer.CrossReplicaOptimizer(optimizer)
     train_op = optimizer.minimize(loss=loss)
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
+
   raise NotImplementedError(mode)
 
 
@@ -101,6 +105,13 @@ def parse_args():
       help="The learning rate used with stochastic gradient descent.")
 
   parser.add_argument(
+      "--replicas",
+      type=int,
+      default=1,
+      help="The replication factor. Increases the number of IPUs "
+      "used and the effective batch size by this factor.")
+
+  parser.add_argument(
       "--model-dir",
       help="Directory where checkpoints and summaries are stored.")
 
@@ -113,10 +124,11 @@ def create_ipu_estimator(args):
       use_poplar_text_report=False,
   )
 
-  ipu.utils.auto_select_ipus(ipu_options, num_ipus=1)
+  ipu.utils.auto_select_ipus(ipu_options, num_ipus=args.replicas)
 
   ipu_run_config = ipu.ipu_run_config.IPURunConfig(
       iterations_per_loop=args.iterations_per_loop,
+      num_replicas=args.replicas,
       ipu_options=ipu_options,
   )
 
@@ -130,7 +142,10 @@ def create_ipu_estimator(args):
   return ipu.ipu_estimator.IPUEstimator(
       config=config,
       model_fn=model_fn,
-      params={"learning_rate": args.learning_rate},
+      params={
+          "learning_rate": args.learning_rate,
+          "replicas": args.replicas
+      },
   )
 
 
@@ -164,7 +179,8 @@ def train(ipu_estimator, args, x_train, y_train):
   t1 = time.time()
 
   duration_seconds = t1 - t0
-  images_per_second = args.training_steps * args.batch_size / duration_seconds
+  images_per_step = args.batch_size * args.replicas
+  images_per_second = args.training_steps * images_per_step / duration_seconds
   print("Took {:.2f} minutes, i.e. {:.0f} images per second".format(
       duration_seconds / 60, images_per_second))
 
@@ -184,8 +200,9 @@ def test(ipu_estimator, args, x_test, y_test):
 
   num_test_examples = len(x_test)
 
-  test_batch_size = calc_batch_size(num_test_examples,
-                                    args.iterations_per_loop, args.batch_size)
+  batches_per_loop = args.replicas * args.iterations_per_loop
+  test_batch_size = calc_batch_size(num_test_examples, batches_per_loop,
+                                    args.batch_size)
 
   if test_batch_size != args.batch_size:
     print("Test batch size changed to {}.".format(test_batch_size))
@@ -195,7 +212,7 @@ def test(ipu_estimator, args, x_test, y_test):
     dataset = dataset.batch(test_batch_size, drop_remainder=True)
     return dataset
 
-  num_steps = num_test_examples // test_batch_size
+  num_steps = num_test_examples // (test_batch_size * args.replicas)
   metrics = ipu_estimator.evaluate(input_fn=input_fn, steps=num_steps)
   test_loss = metrics["loss"]
   test_accuracy = metrics["accuracy"]
@@ -209,10 +226,12 @@ def main():
   train_data, test_data = cifar10.load_data()
 
   num_test_examples = len(test_data[0])
-  if num_test_examples % args.iterations_per_loop != 0:
-    raise ValueError(("iterations_per_loop ({}) must evenly " +
+  batches_per_loop = args.replicas * args.iterations_per_loop
+  if num_test_examples % batches_per_loop != 0:
+    raise ValueError(("replicas * iterations_per_loop ({} * {}) must evenly " +
                       "divide the number of test examples ({})").format(
-                          args.iterations_per_loop, num_test_examples))
+                          args.replicas, args.iterations_per_loop,
+                          num_test_examples))
 
   ipu_estimator = create_ipu_estimator(args)
 
