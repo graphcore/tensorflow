@@ -3635,6 +3635,22 @@ py_test(
 )
 
 py_test(
+    name = "ipu_estimator_example_replicated",
+    size = "large",
+    srcs = ["docs/ipu_estimator_example.py"],
+    args = [
+        "--iterations-per-loop=1",
+        "--training-steps=1",
+        "--replicas=2",
+    ],
+    main = "ipu_estimator_example.py",
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+py_test(
     name = "ipu_pipeline_estimator_example",
     size = "large",
     srcs = ["docs/ipu_pipeline_estimator_example.py"],
@@ -3951,6 +3967,7 @@ test_suite(
 test_suite(
     name = "replicated_tests",
     tests = [
+        "ipu_estimator_example_replicated",
         "replicated_graph_test",
         "replicated_stateful_gradient_accumulate_test",
         "sharded_and_replicated_test",
