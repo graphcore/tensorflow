@@ -459,6 +459,8 @@ StatusOr<absl::flat_hash_set<const HloComputation*>> ProcessPipeline(
 
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
+  // Make sure that the root of each stage is a tuple.
+  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   // Convert forward stage sharding into tuple sharding.
   for (HloInstruction* fwd_stage : stages.forward) {
     // PipelineFixer checks that fwd stages have sharding.

@@ -13,11 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
@@ -25,9 +27,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -264,6 +263,49 @@ Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages) {
           "Expected the pipeline stage %s to not have sharding.",
           backward_stage->ToShortString().c_str());
     }
+  }
+  return Status::OK();
+}
+
+Status FixRootInstructions(const PipelineStages& pipeline_stages) {
+  const uint64 num_stages = pipeline_stages.forward.size() +
+                            pipeline_stages.backward.size() +
+                            (pipeline_stages.resource_update ? 1 : 0);
+  std::vector<const HloInstruction*> stages(num_stages);
+  absl::c_copy(pipeline_stages.forward, stages.begin());
+  absl::c_copy(pipeline_stages.backward,
+               std::next(stages.begin(), pipeline_stages.forward.size()));
+  if (pipeline_stages.resource_update) {
+    stages.back() = *pipeline_stages.resource_update;
+  }
+  for (const HloInstruction* stage : stages) {
+    HloComputation* comp = stage->to_apply();
+    HloInstruction* root = comp->root_instruction();
+    if (root->opcode() == HloOpcode::kTuple) {
+      continue;
+    }
+    if (!root->shape().IsTuple()) {
+      return UnimplementedStrCat("Expected the PipelineStage(Backward) ",
+                                 stage->ToString(),
+                                 " to have a tuple output shape.");
+    }
+    // Create a GTE from each subshape.
+    const int64 num_elements = ShapeUtil::TupleElementCount(root->shape());
+    std::vector<HloInstruction*> gtes(num_elements);
+    for (int64 tuple_index = 0; tuple_index != num_elements; ++tuple_index) {
+      TF_ASSIGN_OR_RETURN(gtes[tuple_index],
+                          MakeGetTupleElementHlo(root, tuple_index));
+      if (root->has_sharding()) {
+        // If there is any sharding, then forward it.
+        gtes[tuple_index]->set_sharding(root->sharding().GetSubSharding(
+            root->shape(), ShapeIndex{tuple_index}));
+      }
+    }
+    // Create the root tuple.
+    HloInstruction* new_root =
+        comp->AddInstruction(HloInstruction::CreateTuple(gtes));
+    root->SetupDerivedInstruction(new_root);
+    comp->set_root_instruction(new_root);
   }
   return Status::OK();
 }

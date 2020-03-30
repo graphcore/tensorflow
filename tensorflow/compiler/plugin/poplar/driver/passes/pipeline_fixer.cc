@@ -736,6 +736,8 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_RETURN_IF_ERROR(DuplicateGTEEdges(stages_).status());
   // Uniquify computations called by stages.
   TF_RETURN_IF_ERROR(UniquifyPipelineStageCallsites(stages_).status());
+  // Make sure that the root of each stage is a tuple.
+  TF_RETURN_IF_ERROR(FixRootInstructions(stages_));
   // Verify we can actually try and lower this Pipeline.
   TF_RETURN_IF_ERROR(VerifyPipelineStagesBeforeFixing(stages_));
   // Run the lowering on pipeline stages.

@@ -18,14 +18,11 @@ limitations under the License.
 #include <map>
 #include <set>
 
+#include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
-
 #include "tensorflow/compiler/xla/service/hlo_value.h"
-
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
-
-#include "absl/container/flat_hash_map.h"
 
 namespace xla {
 
@@ -74,6 +71,10 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 // from it. Ignores computations which are called in the Parallel context.
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
     HloInstruction* pipeline_stage, CallGraph* call_graph);
+
+// Makes sure that the root instruction of each stage is a Tuple instruction
+// (not just tuple shaped).
+Status FixRootInstructions(const PipelineStages& pipeline_stages);
 
 // Verifies that Pipeline stages are suitable for fixing.
 // This means that we expect the Pipeline to not have been modified and so

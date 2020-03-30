@@ -20,11 +20,13 @@ import numpy as np
 
 from tensorflow.keras import layers
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import clip_ops
+from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
@@ -1269,7 +1271,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed15")
 
       def my_net(x):
-        return pipelining_ops.pipeline([stage1, identity],
+        return pipelining_ops.pipeline([stage1, identity, identity, identity],
                                        pipeline_depth=8,
                                        inputs=[x],
                                        outfeed_queue=outfeed_queue,
@@ -1280,7 +1282,7 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         pipeline = ipu_compiler.compile(my_net, inputs=[1.0])
 
       cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
-      cfg = utils.auto_select_ipus(cfg, 2)
+      cfg = utils.auto_select_ipus(cfg, 4)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
 
@@ -1311,6 +1313,46 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         if v.name == "stage1/w:0":
           new_v = sess.run(v)
           self.assertEqual(new_v, -10.0)
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineInferenceWithConditional(self):
+    dataset = tu.create_single_increasing_dataset(10, shape=[1])
+    dataset = dataset.batch(batch_size=1, drop_remainder=True)
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(dataset, "__feed16")
+    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue("__feed16")
+
+    def stage1(x):
+      return x
+
+    def stage2(x):
+      return x
+
+    def stage3(x):
+      p = x > 2.0
+      return control_flow_ops.cond(p, lambda: constant_op.constant(1.0),
+                                   lambda: constant_op.constant(2.0))
+
+    def my_net():
+      return pipelining_ops.pipeline([stage1, stage2, stage3],
+                                     6,
+                                     inputs=[],
+                                     infeed_queue=infeed_queue,
+                                     outfeed_queue=outfeed_queue)
+
+    with tu.ipu_session() as sess:
+      with ops.device("/device:IPU:0"):
+        r = ipu_compiler.compile(my_net)
+
+      cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
+      cfg = utils.auto_select_ipus(cfg, 4)
+      utils.configure_ipu_system(cfg)
+      utils.move_variable_initialization_to_cpu()
+
+      outfeed_op = outfeed_queue.dequeue()
+      sess.run(infeed_queue.initializer)
+      sess.run(r)
+      output = sess.run(outfeed_op)
+      self.assertAllClose(output, [[2.0, 2.0, 2.0, 1.0, 1.0, 1.0]])
 
 
 if __name__ == "__main__":
