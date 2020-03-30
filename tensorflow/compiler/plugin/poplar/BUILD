@@ -2720,6 +2720,25 @@ tf_xla_py_test(
 )
 
 tf_xla_py_test(
+    name = "cholesky_test",
+    size = "small",
+    srcs = ["tests/cholesky_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:linalg_ops",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
     name = "constant_test",
     size = "large",
     srcs = ["tests/constant_test.py"],
@@ -3786,6 +3805,7 @@ test_suite(
         "bias_apply_graph_caching_test",
         "case_test",
         "casts_elimination_test",
+        "cholesky_test",
         "combine_instructions_test",
         "commutative_instruction_reorder_operands_test",
         "conditional_test",
