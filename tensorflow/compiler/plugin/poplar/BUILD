@@ -3688,6 +3688,20 @@ tf_xla_py_test(
     ],
 )
 
+py_test(
+    name = "example_tf2_pipelined_model",
+    size = "large",
+    srcs = ["docs/example_tf2_pipelined_model.py"],
+    args = [
+        "--epochs=1",
+        "--steps-per-epoch=2",
+    ],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 tf_xla_py_test(
     name = "bias_apply_graph_caching_test",
     size = "medium",
@@ -3925,6 +3939,7 @@ test_suite(
         "distributed_training_example",
         "example_tf2_custom_training",
         "example_tf2_fit",
+        "example_tf2_pipelined_model",
         "ipu_estimator_example",
         "ipu_pipeline_estimator_example",
         "logging_example_1",

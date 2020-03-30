@@ -97,3 +97,28 @@ section for a full example.
 The outer training function should be called using the ``experimental_run_v2``
 method on the ``IPUStrategy`` object, to ensure that it is executed using the
 strategy's configuration.
+
+PipelinedModel
+______________
+
+``PipelinedModel`` is a substitute for the Keras Sequential model class, with
+support for multi-device IPU pipelines.  Using pipelined execution allows the
+IPU to achieve high compute efficiency while utilising multiple devices.
+
+The PipelinedModel has the same API as the standard Keras Model and
+Sequential classes, but will train the model on multiple IPUs and stream
+the data into the devices using an Infeed queue which is created automatically.
+
+The constructor takes, rather than a list of layers as with the standard
+Sequential model, a list of lists of layers, one for each IPU pipeline stage.
+See the examples section to see how the API is used.
+
+In a machine learning model a step is often considered to be one pass through
+the model where the forward pass is done, then the gradients are calculated
+and then the parameters are updated.  Since a pipeline accumulates multiple
+gradients before applying them collectively to the parameter, we call a step
+one of those pipeline operations.  So the number of data samples processed per
+step is equal to the batch size multiplied by the pipeline depth.
+
+This will be reflected in the rate at which the progress bar advances, and the
+entries in the Keras History.

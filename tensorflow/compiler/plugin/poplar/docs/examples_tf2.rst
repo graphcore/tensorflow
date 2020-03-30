@@ -11,3 +11,7 @@ training function.
 
 .. literalinclude:: example_tf2_custom_training.py
 
+This example shows how to use the IPU specific Keras pipelined model
+class to train a network.
+
+.. literalinclude:: tf2_pipelined_model.py
