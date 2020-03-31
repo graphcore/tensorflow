@@ -173,6 +173,7 @@ cc_library(
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
         "driver/passes/replication_factor_to_constant.cc",
+        "driver/passes/resource_update_schedule_optimizer.cc",
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_simplifier.cc",
         "driver/passes/sharding_pass.cc",
@@ -304,6 +305,7 @@ cc_library(
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/replication_factor_to_constant.h",
+        "driver/passes/resource_update_schedule_optimizer.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
         "driver/passes/sharding_pass.h",
@@ -2370,6 +2372,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "resource_update_schedule_optimizer_test",
+    size = "small",
+    srcs = ["tests/resource_update_schedule_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 tf_cc_test(
     name = "extract_outside_compilation_pass_test",
     size = "small",
@@ -3904,6 +3921,7 @@ test_suite(
         "pipeline_optimizer_test",
         "pipeline_recomputation_test",
         "pipeline_resource_update_fixer_test",
+        "pipeline_resource_variables_offload_test",
         "pipeline_sequential_visitor_test",
         "pipeline_util_test",
         "pipeline_visitor_test",
@@ -3915,6 +3933,7 @@ test_suite(
         "remapping_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
+        "resource_update_schedule_optimizer_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",
         "scatter_simplifier_test",
