@@ -15,21 +15,25 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/constant_nan.h"
 
+#include <stdlib.h>
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
 #include "tensorflow/stream_executor/lib/statusor.h"
-
-#include <stdlib.h>
 
 namespace xla {
 namespace poplarplugin {
 
 StatusOr<bool> ConstantNaN::Run(HloModule* module) {
-  for (auto* comp : module->MakeNonfusionComputations()) {
-    for (HloInstruction* inst : comp->instructions()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
       if (inst->opcode() != HloOpcode::kConstant) {
         continue;
       }

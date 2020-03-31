@@ -85,8 +85,11 @@ bool IsProducerOp(const HloInstruction* inst) {
 
 StatusOr<std::vector<HloInstruction*>> GetPipelines(const HloModule* module) {
   std::vector<HloInstruction*> pipeline_ops;
-  for (HloComputation* comp : module->MakeNonfusionComputations()) {
-    for (HloInstruction* inst : comp->instructions()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
       if (IsPipelineOp(inst)) {
         pipeline_ops.push_back(inst);
       }
@@ -471,8 +474,7 @@ StatusOr<HloInstruction*> ReplaceCallWith(
 StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage, const std::vector<HloInstruction*>& ordered_lowering,
     std::map<int64, HloInstruction*> replace_parameter_with_lowered_instruction,
-    absl::flat_hash_set<HloInstruction*> forced_parameters,
-    bool replace_resource_update_uses) {
+    HloInstructionSet forced_parameters, bool replace_resource_update_uses) {
   CHECK(IsPipelineStageOrBackwardOp(stage));
 
   HloComputation* pipeline_computation = stage->parent();
@@ -484,8 +486,8 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   }
 
   // Create a set of instructions to lower for faster lookup.
-  const absl::flat_hash_set<HloInstruction*> ordered_lowering_set(
-      ordered_lowering.begin(), ordered_lowering.end());
+  const HloInstructionSet ordered_lowering_set(ordered_lowering.begin(),
+                                               ordered_lowering.end());
 
   // Mapping of the lowered instructions.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> lowered_insts;
@@ -547,7 +549,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
       HloInstruction* operand = inst->mutable_operand(operand_idx);
       // Check if the operand for the instruction being lowered is also being
       // lowered.
-      if (!ordered_lowering_set.contains(operand)) {
+      if (!ContainsKey(ordered_lowering_set, operand)) {
         // The operand is not being lowered - we need to make sure it can be
         // accessed inside the computation.
         auto itr = operand_to_parameter.find(operand);
@@ -626,7 +628,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   for (HloInstruction* inst : ordered_lowering) {
     // Go through all the users.
     for (HloInstruction* user : inst->users()) {
-      if (user != stage && !ordered_lowering_set.contains(user) &&
+      if (user != stage && !ContainsKey(ordered_lowering_set, user) &&
           replace_external_use(user)) {
         // Find any outside uses of the inst - we need to create GTEs for
         // those.

@@ -14,9 +14,10 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/replication_factor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -30,15 +31,17 @@ ReplicationFactorToConstant::ReplicationFactorToConstant(
 
 StatusOr<bool> ReplicationFactorToConstant::Run(HloModule* module) {
   bool changed = false;
-  for (auto* comp : module->computations()) {
-    const auto instructions = comp->MakeInstructionPostOrder();
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
 
-    for (auto* inst : instructions) {
+    for (auto* inst : comp->MakeInstructionPostOrder()) {
       if (IsPoplarInstruction(PoplarOp::ReplicationFactor)(inst)) {
         auto replacement = comp->AddInstruction(HloInstruction::CreateConstant(
             LiteralUtil::CreateR0<int32>(replication_factor_)));
 
-        inst->ReplaceAllUsesWith(replacement);
+        TF_RETURN_IF_ERROR(inst->ReplaceAllUsesWith(replacement));
         changed = true;
       }
     }
