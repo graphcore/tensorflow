@@ -46,7 +46,7 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
     TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));
     TF_ASSIGN_OR_RETURN(StageID previous_stage_id,
                         analysis->GetPreviousStageID(stage));
-    absl::flat_hash_set<HloInstruction*> fwd_stage_inputs;
+    HloInstructionSet fwd_stage_inputs;
     for (HloInstruction* operand : stage->unique_operands()) {
       switch (operand->opcode()) {
         case HloOpcode::kGetTupleElement: {

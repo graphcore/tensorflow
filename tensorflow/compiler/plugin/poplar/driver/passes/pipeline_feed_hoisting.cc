@@ -172,7 +172,7 @@ StatusOr<bool> PipelineFeedHoisting::HoistInPipeline(
         // Note that hoisting can create a new computation, therefore we always
         // start from the begining.
         HloComputation* stage_comp = stage->to_apply();
-        for (HloInstruction* inst : stage_comp->instructions()) {
+        for (HloInstruction* inst : stage_comp->MakeInstructionPostOrder()) {
           // We cannot hoist if there are control dependencies.
           if (inst->control_predecessors().size() ||
               inst->control_successors().size()) {

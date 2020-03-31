@@ -14,16 +14,16 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -43,8 +43,12 @@ bool ShouldBlockInstruction(const HloInstruction* inst) {
 StatusOr<bool> AddBlockRecompute::Run(HloModule* module) {
   bool result = false;
 
-  for (auto comp : module->MakeNonfusionComputations()) {
-    for (auto inst : comp->instructions()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
+    for (auto inst : comp->MakeInstructionPostOrder()) {
       if (ShouldBlockInstruction(inst)) {
         auto block = comp->AddInstruction(CreateBlockRecompute(inst));
         inst->SetupDerivedInstruction(block);

@@ -143,9 +143,6 @@ StatusOr<bool> InsertIntraIPUCopies(PipelineStages& stages) {
  */
 std::vector<int> GetPipelineStageDeviceMapping(const HloInstruction* pipeline) {
   HloComputation* pipeline_computation = pipeline->to_apply();
-  std::vector<HloInstruction*> instructions(
-      pipeline_computation->instructions().begin(),
-      pipeline_computation->instructions().end());
 
   // Cannot reasonably return StatusOr because this is called inside a
   // constructor.

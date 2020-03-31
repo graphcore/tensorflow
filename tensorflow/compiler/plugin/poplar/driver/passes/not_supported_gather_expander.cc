@@ -15,12 +15,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/not_supported_gather_expander.h"
 
+#include <map>
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/gather_expander.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
-#include <map>
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -46,9 +47,14 @@ StatusOr<bool> NotSupportedGatherExpander::Run(HloModule* module) {
 
   bool changed = false;
   std::vector<HloInstruction*> not_supported_gather_insts;
-  for (auto* comp : module->MakeNonfusionComputations()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
     absl::c_copy_if(
-        comp->instructions(), std::back_inserter(not_supported_gather_insts),
+        comp->MakeInstructionPostOrder(),
+        std::back_inserter(not_supported_gather_insts),
         [](const HloInstruction* inst) {
           return inst->opcode() == HloOpcode::kGather &&
                  // Avoid expanding gather ops that produce zero sized tensors,
