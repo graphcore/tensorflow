@@ -18,3 +18,10 @@ need to be understood to successfully use it as a training and inference
 engine. These include IPU-specific API configurations, model parallelism, error
 logging and report generation, as well as strategies for dealing with
 out-of-memory (OOM) issues.
+
+Requirements
+............
+
+The Graphcore TensorFlow implementation requires Ubuntu 18.04 and Python 3.6.
+It will only run on a processor that supports the Intel AVX-512 extension to
+the instructions set.
