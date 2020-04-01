@@ -104,7 +104,7 @@ class AllocationFinder : public HloModulePass {
   void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64);
 
   // Should return true when target 'a' should be used over 'b'
-  bool CompareTargets(const TensorTarget& a, const TensorTarget& b);
+  bool ReplaceTarget(const TensorTarget& a, const TensorTarget& b);
 
   void AddTensorTarget(const TensorLocation& source,
                        const TensorTarget& tensor_target);

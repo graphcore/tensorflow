@@ -129,18 +129,50 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
   std::vector<TensorLocation> allocating_instructions;
 };
 
+int64 GetAllocationPriority(const TensorTarget& target) {
+  switch (target.tgt->opcode()) {
+    case HloOpcode::kConvolution:
+    case HloOpcode::kDot: {
+      return 1;
+    }
+    case HloOpcode::kFusion: {
+      return IsPopOpsConvolution(target.tgt) ? 1 : 0;
+    }
+    default: { return 0; }
+  }
+}
 }  // namespace
+
+bool AllocationFinder::ReplaceTarget(const TensorTarget& new_target,
+                                     const TensorTarget& existing_target) {
+  const int64 new_target_priority = GetAllocationPriority(new_target);
+  const int64 existing_target_priority = GetAllocationPriority(existing_target);
+  if (new_target_priority > existing_target_priority) {
+    // New target has higher priority.
+    return true;
+  } else if (new_target_priority == existing_target_priority) {
+    // Replace if one instruction is marked as fwd and the other isn't.
+    return IsTrainingForward(new_target.tgt) &&
+           !IsTrainingForward(existing_target.tgt);
+
+  } else {
+    // Existing target has higher priority.
+    return false;
+  }
+}
 
 void AllocationFinder::AddTensorTarget(const TensorLocation& source,
                                        const TensorTarget& tensor_target) {
-  // Insert only if the source is not already in the map.
-  tensor_allocation_map.insert(std::make_pair(source, tensor_target));
-}
+  bool replace = true;
+  auto itr = tensor_allocation_map.find(source);
+  // Check whether we should replace the tensor target.
+  if (itr != tensor_allocation_map.end()) {
+    replace = ReplaceTarget(tensor_target, itr->second);
+  }
 
-bool AllocationFinder::CompareTargets(const TensorTarget& new_target,
-                                      const TensorTarget& existing_target) {
-  return IsTrainingForward(new_target.tgt) &&
-         !IsTrainingForward(existing_target.tgt);
+  if (replace) {
+    tensor_allocation_map[source] = tensor_target;
+  }
 }
 
 void AllocationFinder::FindConsumers(const TensorLocation& src,
@@ -150,68 +182,34 @@ void AllocationFinder::FindConsumers(const TensorLocation& src,
     if (visited.count(user) == 0) {
       visited.insert(user);
       int64 op_index = user->operand_index(tgt);
+      auto tensor_target = TensorTarget(user, op_index, path);
       switch (user->opcode()) {
-        case HloOpcode::kConvolution: {
-          auto t = TensorTarget(user, op_index, path);
-          auto i = tensor_allocation_map.find(src);
-          if (i != tensor_allocation_map.end() &&
-              CompareTargets(t, i->second)) {
-            tensor_allocation_map.erase(src);
-          }
-          AddTensorTarget(src, t);
-          break;
-        }
+        case HloOpcode::kConvolution:
         case HloOpcode::kDot: {
-          auto t = TensorTarget(user, op_index, path);
-          auto i = tensor_allocation_map.find(src);
-          if (i != tensor_allocation_map.end() &&
-              CompareTargets(t, i->second)) {
-            tensor_allocation_map.erase(src);
-          }
-          AddTensorTarget(src, t);
+          AddTensorTarget(src, tensor_target);
           break;
         }
         case HloOpcode::kDynamicSlice: {
           if (op_index == 0) {
-            auto t = TensorTarget(user, op_index, path);
-            auto i = tensor_allocation_map.find(src);
-            if (i != tensor_allocation_map.end()) {
-              tensor_allocation_map.erase(src);
-            }
-            AddTensorTarget(src, t);
+            AddTensorTarget(src, tensor_target);
           }
           break;
         }
         case HloOpcode::kDynamicUpdateSlice: {
           if (op_index == 0 || op_index == 1) {
-            auto t = TensorTarget(user, op_index, path);
-            auto i = tensor_allocation_map.find(src);
-            if (i != tensor_allocation_map.end()) {
-              tensor_allocation_map.erase(src);
-            }
-            AddTensorTarget(src, t);
+            AddTensorTarget(src, tensor_target);
           }
           break;
         }
         case HloOpcode::kScatter: {
           if (op_index == 0 || op_index == 1 || op_index == 2) {
-            auto t = TensorTarget(user, op_index, path);
-            auto i = tensor_allocation_map.find(src);
-            if (i != tensor_allocation_map.end()) {
-              tensor_allocation_map.erase(src);
-            }
-            AddTensorTarget(src, t);
+            AddTensorTarget(src, tensor_target);
           }
           break;
         }
         case HloOpcode::kGather: {
           if (op_index == 0 || op_index == 1) {
-            auto t = TensorTarget(user, op_index, path);
-            auto i = tensor_allocation_map.find(src);
-            if (i != tensor_allocation_map.end()) {
-              tensor_allocation_map.erase(src);
-            }
-            AddTensorTarget(src, t);
+            AddTensorTarget(src, tensor_target);
           }
           break;
         }
@@ -227,12 +225,7 @@ void AllocationFinder::FindConsumers(const TensorLocation& src,
           HloComputation* comp = user->fused_instructions_computation();
           if (IsPopOpsFusion(user)) {
             if (IsPopOpsFusion(user, "depthwise_conv")) {
-              auto t = TensorTarget(user, op_index, path);
-              auto i = tensor_allocation_map.find(src);
-              if (i != tensor_allocation_map.end()) {
-                tensor_allocation_map.erase(src);
-              }
-              AddTensorTarget(src, t);
+              AddTensorTarget(src, tensor_target);
             } else if (IsPopOpsFusion(user, "zero_pad")) {
               FindConsumers(src, user, index);
             } else if (IsPopOpsFusion(user, "scaled_inplace") && op_index < 2) {
@@ -255,13 +248,7 @@ void AllocationFinder::FindConsumers(const TensorLocation& src,
             auto allocating_indexes = poplar_inst->AllocatingIndices();
 
             if (allocating_indexes.count(op_index)) {
-              auto t = TensorTarget(user, op_index, path);
-              auto i = tensor_allocation_map.find(src);
-              if (i != tensor_allocation_map.end() &&
-                  CompareTargets(t, i->second)) {
-                tensor_allocation_map.erase(src);
-              }
-              AddTensorTarget(src, t);
+              AddTensorTarget(src, tensor_target);
             }
           } else {
             auto shapes = FlattenedXlaShape(src.instruction->shape());

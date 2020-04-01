@@ -3484,7 +3484,6 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/scalar_elementwise_graph_test.py"],
     enabled_backends = ["poplar"],
-    tags = ["exclusive"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -3829,12 +3828,33 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "allocation_finder_priority_test",
+    size = "large",
+    srcs = ["tests/allocation_finder_priority_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:nn",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
         "64_bit_test",
         "add_block_recompute_test",
         "all_to_all_finder_test",
+        "allocation_finder_priority_test",
         "allocation_finder_test",
         "apply_recompute_suggestion_test",
         "arg_min_max_test",
