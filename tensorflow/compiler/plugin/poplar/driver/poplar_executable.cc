@@ -305,7 +305,11 @@ Status ExportInternal(const ModuleFilenames& filenames,
                                      replication_count, opts, target));
     ipu::BinaryWriter writer(filenames.SerializedExecutableFilename());
     writer.WriteMetadata(filenames.Name(), json_metadata);
-    writer.WriteExecutable(filenames.Name(), executable);
+    {
+      ipu::ExecutableWriter exec_writer =
+          writer.CreateExecutable(filenames.Name());
+      executable.serialize(exec_writer.Stream());
+    }
     writer.Close();
 
     std::unique_ptr<tensorflow::WritableFile> file;
