@@ -441,6 +441,31 @@ cc_library(
 )
 
 cc_library(
+    name = "infeed_utils",
+    srcs = [
+        "driver/tools/infeed_allocator.cc",
+        "driver/tools/infeed_iterator.cc",
+    ],
+    hdrs = [
+        "driver/tools/infeed_allocator.h",
+        "driver/tools/infeed_iterator.h",
+        "driver/tools/spsc_queue.h",
+    ],
+    linkstatic = 1,
+    deps = [
+        ":flags",
+        ":xla_backend_protos",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_headers_lib",
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core/kernels/data:unbounded_thread_pool",
+        "//third_party/eigen3",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+    ],
+)
+
+cc_library(
     name = "driver",
     srcs = [
         "driver/ops/cast_to_gfloat_ops.cc",
@@ -510,8 +535,6 @@ cc_library(
         "driver/tools/data_initializer.cc",
         "driver/tools/embedding_plans_preplanning.cc",
         "driver/tools/generic_graph_caching.cc",
-        "driver/tools/infeed_allocator.cc",
-        "driver/tools/infeed_iterator.cc",
         "driver/tools/io_thread.cc",
         "driver/tools/mapping_helper.cc",
         "driver/tools/matmul_preplanning.cc",
@@ -553,8 +576,6 @@ cc_library(
         "driver/tools/data_initializer.h",
         "driver/tools/embedding_plans_preplanning.h",
         "driver/tools/generic_graph_caching.h",
-        "driver/tools/infeed_allocator.h",
-        "driver/tools/infeed_iterator.h",
         "driver/tools/io_thread.h",
         "driver/tools/mapping_helper.h",
         "driver/tools/matmul_preplanning.h",
@@ -563,7 +584,6 @@ cc_library(
         "driver/tools/seed_generator.h",
         "driver/tools/send_recv_runtime_util.h",
         "driver/tools/spsc_outfeed_queue.h",
-        "driver/tools/spsc_queue.h",
         "driver/tools/subcomputation_graph_caching.h",
         "driver/tools/tensor_map.h",
         "driver/vertex_templates.h",
@@ -584,6 +604,7 @@ cc_library(
         ":common",
         ":config_protos_cc_impl",
         ":custom_kernels_util",
+        ":infeed_utils",
         ":optimizers",
         ":option_flag_cc_impl",
         ":pipeline_config_cc_impl",
@@ -686,10 +707,30 @@ cc_library(
 )
 
 cc_library(
+    name = "dataset_exporters_kernel",
+    srcs = [
+        "kernels/datastream/exporters.cc",
+    ],
+    deps = [
+        ":infeed_utils",
+        ":option_flag_cc_impl",
+        ":xla_backend_protos",
+        "//tensorflow/compiler/plugin/poplar/tools:poplar_executable_data",
+        "//tensorflow/compiler/tf2xla:common",
+        "//tensorflow/compiler/tf2xla:tf2xla_util",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/core:core_cpu",
+        "//third_party/eigen3",
+        "@com_google_absl//absl/strings",
+        "@jsoncpp_git//:jsoncpp",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
     name = "kernels",
     srcs = [
         "kernels/datastream/dataset_benchmark.cc",
-        "kernels/datastream/exporters.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
         "kernels/functional/functional_util.cc",
@@ -735,10 +776,10 @@ cc_library(
     deps = [
         ":common",
         ":custom_kernels_util",
+        ":dataset_exporters_kernel",
         ":driver",
         ":rearrange_function_arguments",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
-        "//tensorflow/compiler/plugin/poplar/tools:poplar_executable_runner",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:xla_compiler",
         "//tensorflow/compiler/tf2xla/kernels:tensor_list_utils",
