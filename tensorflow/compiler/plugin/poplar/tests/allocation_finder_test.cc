@@ -138,6 +138,62 @@ ENTRY c1 {
   EXPECT_EQ(t.backward_path[0], ip2);
 }
 
+TEST_F(AllocationFinderTest, FindAllocationTargetWithPriority) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f16[1,16,16,2] parameter(0)
+  p1 = f16[1,16,16,2] parameter(1)
+  p2 = f16[3,3,2,4] parameter(2)
+
+  add = f16[1,16,16,2] add(p0, p1)
+
+  zero = s32[] constant(0)
+  ds = f16[1,16,16,1] dynamic-slice(p0, zero, zero, zero, zero), dynamic_slice_sizes={1,16,16,1}
+  conv = f16[1,16,16,4] convolution(p0, p2), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
+
+  ROOT t = (f16[1,16,16,4], f16[1,16,16,2], f16[1,16,16,1]) tuple(conv, add, ds)
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(3);
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1, 2});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* conv = root->operand(0);
+  const auto* ip0 = conv->operand(0);
+  const auto* ip2 = conv->operand(1);
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{ip0, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], ip0);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{ip2, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], ip2);
+}
+
 // Check it goes through call sites
 TEST_F(AllocationFinderTest, FindSubCompTensorAllocations) {
   Shape input_shape = ShapeUtil::MakeShape(F32, {1, 10, 10, 2});
