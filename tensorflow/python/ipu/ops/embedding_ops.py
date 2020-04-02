@@ -118,7 +118,8 @@ class HostEmbedding:
       raise ValueError(
           "HostEmbedding embedding_tensor is not a tensorflow tensor")
 
-    if not None and not isinstance(optimizer_spec, HostEmbeddingOptimizerSpec):
+    if not isinstance(optimizer_spec,
+                      (type(None), HostEmbeddingOptimizerSpec)):
       raise ValueError(
           "HostEmbedding optimizer_spec is not a HostEmbeddingOptimizerSpec" +
           " or None")
