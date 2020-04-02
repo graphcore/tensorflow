@@ -591,6 +591,38 @@ class IPUPipelineTest(test.TestCase):
       losses = history.history['loss']
       self.assertTrue(losses[0] > losses[-1])
 
+  @test_util.run_v2_only
+  def testFitWithMetrics(self):
+
+    dataset = test_dataset()
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Compile model with SGD optimizer
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
+      m.compile(opt, loss='mse', metrics=['accuracy'])
+
+      # Fit the weights to the dataset
+      history = m.fit(dataset, steps_per_epoch=2, epochs=2)
+
+      # Should be only a loss stored in the history, and it should contain
+      # only the single epochs value
+      self.assertEqual(list(history.history.keys()), ['loss', 'accuracy'])
+      self.assertEqual(type(history.history['loss']), list)
+      self.assertEqual(type(history.history['accuracy']), list)
+      self.assertEqual(len(history.history['loss']), 2)
+      self.assertEqual(len(history.history['accuracy']), 2)
+      self.assertEqual(type(history.history['loss'][0]), np.float32)
+      self.assertEqual(type(history.history['loss'][1]), np.float32)
+      self.assertEqual(type(history.history['accuracy'][0]), np.float32)
+      self.assertEqual(type(history.history['accuracy'][1]), np.float32)
+
 
 if __name__ == '__main__':
   test.main()

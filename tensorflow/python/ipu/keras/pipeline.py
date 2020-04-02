@@ -256,10 +256,6 @@ class PipelinedModel(Model):
           "Optimizer must be a native Tensorflow optimizers, or Keras V2 "
           "optimizers, found in tensorflow.keras.optimizer_v2.")
 
-    if metrics is not None:
-      raise NotImplementedError(
-          "metrics currently not supported by the IPU Pipelined model.")
-
     if not isinstance(loss_weights, (list, type(None))):
       raise ValueError("loss_weights can only be specified as a list.")
 
@@ -316,24 +312,28 @@ class PipelinedModel(Model):
 
     masks = self._prepare_output_masks()
 
-    # Save all metric attributes per output of the model.
-    self._cache_output_metric_attributes(self._compile_metrics,
-                                         self._compile_weighted_metrics)
+    # Create the stateful metrics operations only once.
+    if not hasattr(self, "_per_output_metrics"):
+      self._cache_output_metric_attributes(self._compile_metrics,
+                                           self._compile_weighted_metrics)
 
-    # Set metric attributes for each output.
-    self._set_metric_attributes()
+      # Set metric attributes for each output.
+      self._set_metric_attributes()
 
     # Invoke metric functions (unweighted) for all the outputs.
-    self._handle_metrics(self.outputs,
-                         targets=self._targets,
-                         skip_target_masks=self._prepare_skip_target_masks(),
-                         masks=masks)
+    metrics = self._handle_metrics(
+        self.outputs,
+        targets=self._targets,
+        skip_target_masks=self._prepare_skip_target_masks(),
+        masks=masks)
 
     # Prepare sample weight modes. List with the same length as model outputs.
     training_utils.prepare_sample_weight_modes(self._training_endpoints, None)
 
     # Creates the model loss
     self.total_loss = self._prepare_total_loss(masks)
+
+    return [self.total_loss] + metrics
 
   @def_function.function(autograph=False)
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count):
@@ -354,10 +354,7 @@ class PipelinedModel(Model):
       if stage_id == len(self.stages) - 1:
         self._set_output_attrs(x)
 
-        self._add_loss(targets)
-
-        # TODO(T17455) include metric outputs
-        return self.total_loss
+        return self._add_loss(targets)
 
       return x, targets
 
@@ -367,7 +364,7 @@ class PipelinedModel(Model):
       stages.append(partial(call_stage, stage_id))
 
     # Function for generating the optimizer config for pipelines.
-    def optimizer_function(loss):
+    def optimizer_function(loss, *_):
 
       if not self.trainable_weights:
         raise ValueError("Model must have at least one trainable parameter.")
@@ -574,6 +571,16 @@ class PipelinedModel(Model):
 
         # Send an end of batches
         callbacks.on_batch_end(batch_num, batch_logs)
+
+        # After the first call we can update the callbacks to include
+        # the metrics.
+        if epoch == initial_epoch and run == 0:
+          cbks.set_callback_parameters(callbacks,
+                                       self,
+                                       epochs=epochs,
+                                       steps_per_epoch=steps_per_epoch,
+                                       verbose=verbose,
+                                       mode=mode)
 
       # Restart the iterator at the end of the epoch if necessary
       if recreate_iterator:
