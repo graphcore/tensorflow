@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/kernels/pipelining/rearrange_pipeline_stage_arguments.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/functional/rearrange_function_arguments.h"
 
 #include <string>
 

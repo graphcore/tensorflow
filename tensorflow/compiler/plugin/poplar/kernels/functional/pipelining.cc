@@ -14,8 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/functional/rearrange_function_arguments.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/pipelining/rearrange_pipeline_stage_arguments.h"
 
 #include "tensorflow/compiler/tf2xla/kernels/tensor_list_utils.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
