@@ -31,6 +31,7 @@ load(
     "//third_party/ngraph:build_defs.bzl",
     "if_ngraph",
 )
+load("@local_config_poplar//poplar:build_defs.bzl", "if_poplar")
 
 package(
     default_visibility = visibility,
@@ -59,8 +60,10 @@ py_library(
         ":no_contrib",
         "//tensorflow/python/estimator:estimator_py",
         "//tensorflow/python/tpu:tpu_estimator",
-        "//tensorflow/python/ipu:ipu_lib",
-    ] + if_not_v2(["//tensorflow/contrib:contrib_py"]),
+    ] + if_not_v2(["//tensorflow/contrib:contrib_py"])
+    + if_poplar(["//tensorflow/python/ipu:ipu_lib"],
+                ["//tensorflow/python/ipu:dataset_extractor"]
+               ),
 )
 
 py_library(
@@ -3801,11 +3804,12 @@ py_library(
         ":variable_scope",
         ":variables",
         "//tensorflow/python/eager:wrap_function",
-        "//tensorflow/python/ipu:ipu_grad_ops_lib",
         "//tensorflow/python/ops/distributions",
         "//tensorflow/python/ops/linalg",
         "//tensorflow/python/ops/ragged",
-    ],
+    ] + if_poplar(
+        ["//tensorflow/python/ipu:ipu_grad_ops_lib"]
+                 ),
 )
 
 py_library(

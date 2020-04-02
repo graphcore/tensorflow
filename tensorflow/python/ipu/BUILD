@@ -80,13 +80,24 @@ py_library(
 )
 
 py_library(
+    name = "dataset_extractor",
+    srcs = [
+        "dataset_extractor.py",
+    ],
+    srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow/compiler/plugin/poplar:dataset_exporters_py",
+        "//tensorflow/python/data/ops:dataset_ops",
+    ],
+)
+
+py_library(
     name = "ipu_lib",
     srcs = [
         "__init__.py",
         "autoshard.py",
         "autoshard_cnn.py",
         "dataset_benchmark.py",
-        "dataset_extractor.py",
         "gradient_accumulation_optimizer.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
@@ -132,10 +143,10 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":data",
+        ":dataset_extractor",
         ":ipu_grad_ops_lib",
         ":ipu_ops_lib",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
-        "//tensorflow/compiler/plugin/poplar:dataset_exporters_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:sendrecv_ops_py",
         "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",

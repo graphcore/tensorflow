@@ -156,6 +156,7 @@ load(
     "if_mkl",
     "mkl_deps",
 )
+load("@local_config_poplar//poplar:build_defs.bzl", "if_no_poplar")
 # Placeholder for Google-internal load statements.
 
 package(
@@ -1422,7 +1423,8 @@ cc_library(
     ]) + if_tensorrt([
         "//tensorflow/compiler/tf2tensorrt:trt_engine_resource_ops_op_lib",
         "//tensorflow/compiler/tf2tensorrt:trt_op_libs",
-    ]) + tf_additional_cloud_op_deps(),
+    ]) + tf_additional_cloud_op_deps()
+    + if_no_poplar(["//tensorflow/compiler/plugin/poplar:dataset_exporters"]),
     alwayslink = 1,
 )
 
@@ -1621,7 +1623,7 @@ cc_library(
     ]) + if_tensorrt([
         "//tensorflow/compiler/tf2tensorrt:trt_engine_resource_op_kernels",
         "//tensorflow/compiler/tf2tensorrt:trt_op_kernels",
-    ]),
+    ]) + if_no_poplar(["//tensorflow/compiler/plugin/poplar:dataset_exporters_kernel"])
 )
 
 cc_library(
