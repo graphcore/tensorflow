@@ -1223,6 +1223,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       with ipu_scope("/device:IPU:0"):
         [res] = ipu_compiler.compile(my_net, inputs=[])
 
+      config = ipu_utils.create_ipu_config()
+      config = ipu_utils.auto_select_ipus(config, num_ipus=1)
+      ipu_utils.configure_ipu_system(config)
+
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(infeed_queue.initializer)
         self.assertEqual(task_id * 10.0, sess.run(res))
