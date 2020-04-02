@@ -651,12 +651,12 @@ cc_library(
 )
 
 cc_library(
-    name = "rearrange_pipeline_stage_arguments",
+    name = "rearrange_function_arguments",
     srcs = [
-        "kernels/pipelining/rearrange_pipeline_stage_arguments.cc",
+        "kernels/functional/rearrange_function_arguments.cc",
     ],
     hdrs = [
-        "kernels/pipelining/rearrange_pipeline_stage_arguments.h",
+        "kernels/functional/rearrange_function_arguments.h",
     ],
     linkstatic = 1,
     deps = [
@@ -681,9 +681,9 @@ cc_library(
         "kernels/datastream/exporters.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
+        "kernels/functional/pipelining.cc",
         "kernels/host_compute_kernels.cc",
         "kernels/ipu_kernels.cc",
-        "kernels/pipelining/pipelining.cc",
         "kernels/popfloat/cast_to_gfloat.cc",
         "kernels/popnn/arg_min_max.cc",
         "kernels/popnn/gelu.cc",
@@ -723,7 +723,7 @@ cc_library(
         ":common",
         ":custom_kernels_util",
         ":driver",
-        ":rearrange_pipeline_stage_arguments",
+        ":rearrange_function_arguments",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/compiler/plugin/poplar/tools:poplar_executable_runner",
         "//tensorflow/compiler/tf2xla:common",
@@ -995,7 +995,7 @@ tf_custom_op_py_library(
 
 cc_library(
     name = "pipelining_ops",
-    srcs = ["ops/pipelining/pipelining.cc"],
+    srcs = ["ops/functional/pipelining.cc"],
     deps = ["//tensorflow/core:framework"],
     alwayslink = True,
 )
