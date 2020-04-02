@@ -14,4 +14,4 @@ training function.
 This example shows how to use the IPU specific Keras pipelined model
 class to train a network.
 
-.. literalinclude:: tf2_pipelined_model.py
+.. literalinclude:: example_tf2_pipelined_model.py
