@@ -530,7 +530,7 @@ Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
       if (!host_embeddings_cv.wait_until(
               lk, std::chrono::system_clock::now() + std::chrono::seconds(5),
               [&] { return static_cast<bool>(embedding_interface); })) {
-        return xla::ResourceExhausted(
+        return xla::FailedPrecondition(
             "Host embedding interface with id='%s' not registered. Did you run "
             "the associated host_embedding op in the session?",
             lookup_info.embedding_id);
@@ -581,7 +581,7 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
       if (!host_embeddings_cv.wait_until(
               lk, std::chrono::system_clock::now() + std::chrono::seconds(5),
               [&] { return static_cast<bool>(embedding_interface); })) {
-        return xla::ResourceExhausted(
+        return xla::FailedPrecondition(
             "Host embedding interface with id='%s' not registered. Did you run "
             "the associated host_embedding op in the session?",
             update_info.embedding_id);
