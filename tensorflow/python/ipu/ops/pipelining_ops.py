@@ -27,8 +27,9 @@ from enum import IntEnum
 from google.protobuf import json_format
 
 from tensorflow.compiler.plugin.poplar.driver import pipeline_config_pb2
-from tensorflow.compiler.plugin.poplar.ops import gen_pipelining_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
+from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import scopes
@@ -408,7 +409,7 @@ def pipeline(computational_stages,
   # a tf.Tensor to a boolean will be interpreted as an operation in the
   # graph by Autograph.
   inputs = inputs if not isinstance(inputs, type(None)) else []
-  inputs = _convert_to_list(inputs)
+  inputs = functional_ops._convert_to_list(inputs)  # pylint: disable=protected-access
   inputs = ops.convert_n_to_tensor(inputs)
 
   if continuous_weight_updates:
@@ -534,7 +535,7 @@ def pipeline(computational_stages,
                                 name=stage_name)
 
     if optimizer_function:
-      outputs = _convert_to_list(outputs)
+      outputs = functional_ops._convert_to_list(outputs)  # pylint: disable=protected-access
 
       # Get the output from the optimizer function
       opt_fn = optimizer_function(*outputs)
@@ -576,13 +577,12 @@ def pipeline(computational_stages,
         apply_grad_ops.append(apply_grads)
 
       with ops.name_scope(name + "/WU") as scope:
-        func_graph, captured_args = _compile_function(resource_update_, [],
-                                                      scope, apply_grad_ops,
-                                                      True)
+        func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
+            resource_update_, [], scope, apply_grad_ops, True)
 
       # Create the pipeline resource update stage and lower the function into XLA.
       with ops.control_dependencies(list(func_graph.control_captures)):
-        outputs = gen_pipelining_ops.pipeline_resource_update(
+        outputs = gen_functional_ops.pipeline_resource_update(
             captured_args,
             to_apply=util.create_new_tf_function(func_graph),
             Tout=func_graph.output_types,
@@ -592,8 +592,8 @@ def pipeline(computational_stages,
       if not outfeed_queue:
         raise ValueError(
             "The last computational stage has tensor outputs: %s, but no"
-            " outfeed_queue has been provided." %
-            (', '.join(str(t) for t in _convert_to_list(outputs))))
+            " outfeed_queue has been provided." % (', '.join(
+                str(t) for t in functional_ops._convert_to_list(outputs))))  # pylint: disable=protected-access
 
       else:
         raise ValueError(
@@ -603,12 +603,20 @@ def pipeline(computational_stages,
     control_outputs.append(outputs)
 
   with ops.name_scope(name) as scope:
-    func_graph, captured_args = _compile_function(_pipeline, inputs, scope,
-                                                  control_outputs)
+    # pylint: disable=protected-access
+    try:
+      func_graph, captured_args = functional_ops._compile_function(
+          _pipeline, inputs, scope, control_outputs)
+    except functional_ops._InvalidCaptureException as e:
+      raise ValueError(
+          "Trying to capture the tensor %s which is not a resource. This tensor"
+          " needs to be passed as either part of the `input` or `infeed_queue`"
+          " of the pipeline." % (str(e)))
+    # pylint: enable=protected-access
 
     # Create the pipeline and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):
-      output = gen_pipelining_ops.pipeline(
+      output = gen_functional_ops.pipeline(
           captured_args,
           to_apply=util.create_new_tf_function(func_graph),
           Tout=func_graph.output_types,
@@ -656,7 +664,7 @@ def _pipeline_stage(func,
 
   """
   name = name if name else "pipeline_stage"
-  args = _convert_to_list(args)
+  args = functional_ops._convert_to_list(args)  # pylint: disable=protected-access
 
   func_to_compile = func
   control_outputs = []
@@ -665,8 +673,8 @@ def _pipeline_stage(func,
   if infeed_queue:
 
     def infeed_func_wrapper(*args):
-      args = _convert_to_list(args)
-      dequeue_ops = _convert_to_list(infeed_queue._dequeue())
+      args = functional_ops._convert_to_list(args)  # pylint: disable=protected-access
+      dequeue_ops = functional_ops._convert_to_list(infeed_queue._dequeue())  # pylint: disable=protected-access
       # Deal with the dequeue depending on whether it's a list or dict.
       if len(dequeue_ops) == 1 and isinstance(dequeue_ops[0], dict):
         kwargs = dequeue_ops[0]
@@ -684,20 +692,28 @@ def _pipeline_stage(func,
       # Check if there are output tensors - if there are then enqueue them.
       if not isinstance(outputs, ops.Operation):
         if not isinstance(outputs, dict):
-          outputs = _convert_to_list(outputs)
+          outputs = functional_ops._convert_to_list(outputs)  # pylint: disable=protected-access
         outputs = outfeed_queue.enqueue(outputs)
       control_outputs.append(outputs)
 
     func_to_compile = outfeed_func_wrapper
 
   with ops.name_scope(name) as scope:
-    func_graph, captured_args = _compile_function(func_to_compile, args, scope,
-                                                  control_outputs)
+    # pylint: disable=protected-access
+    try:
+      func_graph, captured_args = functional_ops._compile_function(
+          func_to_compile, args, scope, control_outputs)
+    except functional_ops._InvalidCaptureException as e:
+      raise ValueError(
+          "Trying to capture the tensor %s which is not a resource. This tensor"
+          " needs to be passed as either part of the `input` or `infeed_queue`"
+          " of the pipeline." % (str(e)))
+    # pylint: enable=protected-access
 
     # Create the pipeline stage and lower the function into XLA.
     with ops.control_dependencies(list(func_graph.control_captures)):
       with scopes.ipu_shard(device_id):
-        outputs = gen_pipelining_ops.pipeline_stage(
+        outputs = gen_functional_ops.pipeline_stage(
             captured_args,
             to_apply=util.create_new_tf_function(func_graph),
             Tout=func_graph.output_types,
@@ -707,54 +723,3 @@ def _pipeline_stage(func,
       return outputs
     return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
                                               outputs)
-
-
-def _compile_function(func,
-                      args,
-                      scope,
-                      control_outputs,
-                      allow_external_captures=False):
-  # Automatic control dependencies are added in defuns, but not in v1
-  # graphs. Propagate that behavior here.
-  add_control_dependencies = ops.get_default_graph()._add_control_dependencies
-
-  func_name = util.unique_fn_name(scope, "func")
-  captured_args = [ops.convert_to_tensor(x) for x in args]
-
-  # Compile the function to a graph.
-  func_graph = func_graph_module.func_graph_from_py_func(
-      func_name,
-      func,
-      captured_args, {},
-      add_control_dependencies=add_control_dependencies)
-
-  # Add the external captures (resources) to arguments.
-  for t in func_graph.external_captures:
-    if not allow_external_captures and t.dtype != dtypes.resource:
-      raise ValueError(
-          "Trying to capture the tensor %s which is not a resource. This tensor"
-          " needs to be passed as either part of the `input` or `infeed_queue`"
-          " of the pipeline." % (t.name))
-  captured_args += func_graph.external_captures
-
-  # Add any control outputs.  Autograph will add control outputs to the graph
-  # automatically, so only add ones which are not already present.
-  for o in control_outputs:
-    if not o in func_graph.control_outputs:
-      func_graph.control_outputs.extend([o])
-
-  # Fix shape inference for the gradients and extract_outside_compilation_pass.
-  for op in func_graph.get_operations():
-    output_shapes = [out.get_shape() for out in op.outputs]
-    # pylint: disable=protected-access
-    op._set_shape_list_attr("_output_shapes", output_shapes)
-    op._set_shape_list_attr("_xla_inferred_shapes", output_shapes)
-    # pylint: enable=protected-access
-
-  return func_graph, captured_args
-
-
-def _convert_to_list(xs):
-  if not isinstance(xs, (list, tuple)):
-    return [xs]
-  return list(xs)

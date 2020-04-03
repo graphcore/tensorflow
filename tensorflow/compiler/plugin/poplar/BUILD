@@ -1009,7 +1009,7 @@ tf_custom_op_py_library(
 )
 
 cc_library(
-    name = "pipelining_ops",
+    name = "functional_ops",
     srcs = ["ops/functional/pipelining.cc"],
     deps = [
         ":common_shape_fns",
@@ -1019,17 +1019,17 @@ cc_library(
 )
 
 tf_gen_op_wrapper_py(
-    name = "pipelining_ops_wrapper_py",
-    out = "ops/gen_pipelining_ops.py",
+    name = "functional_ops_wrapper_py",
+    out = "ops/gen_functional_ops.py",
     visibility = ["//tensorflow:internal"],
-    deps = [":pipelining_ops"],
+    deps = [":functional_ops"],
 )
 
 tf_custom_op_py_library(
-    name = "pipelining_ops_py",
-    kernels = [":pipelining_ops"],
+    name = "functional_ops_py",
+    kernels = [":functional_ops"],
     srcs_version = "PY2AND3",
-    deps = [":pipelining_ops_wrapper_py"],
+    deps = [":functional_ops_wrapper_py"],
 )
 
 cc_library(
@@ -1090,11 +1090,11 @@ cc_library(
         ":dataset_exporters",
         ":dataset_ops",
         ":driver",
+        ":functional_ops",
         ":graph_optimizer_passes",
         ":host_compute_ops",
         ":ipu_ops",
         ":kernels",
-        ":pipelining_ops",
         ":pop_datastream_ops",
         ":popfloat_ops",
         ":poplar_backend",
