@@ -37,6 +37,7 @@ Python API
 
 .. automodule:: tensorflow.python.ipu.ipu_run_config
   :members:
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
   :members: IPUMultiWorkerStrategy

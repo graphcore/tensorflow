@@ -1027,7 +1027,7 @@ class IPUEstimator(_IPUEstimatorBase):
       path will be resolved. If `None`, the model_dir in `config` will be used
       if set. If both are set, they must be same. If both are `None`, a
       temporary directory will be used.
-    config: `tf.ipu.ipu_run_config.RunConfig` configuration object.
+    config: A :class:`~tensorflow.python.ipu.ipu_run_config.RunConfig` object.
     params: `dict` of hyper parameters that will be passed into `model_fn`.
             Keys are names of parameters, values are basic python types.
     warm_start_from: Optional string filepath to a checkpoint or SavedModel to
