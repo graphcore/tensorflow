@@ -32,11 +32,13 @@ from tensorflow.python.ipu.ipu_pipeline_estimator import IPUPipelineEstimator
 from tensorflow.python.ipu.ipu_pipeline_estimator import IPUPipelineEstimatorSpec
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import metrics_impl
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import test
 from tensorflow.python.summary import summary_iterator
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.training import training_util
 
 
 def _make_config(iterations_per_loop=1):
@@ -425,6 +427,61 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     metrics = estimator.evaluate(input_fn=my_input_fn, steps=num_steps)
     self.assertEqual(np.mean(features), metrics["mean"])
     self.assertEqual(np.mean(np.square(features)), metrics["loss"])
+
+  @combinations.generate(combinations.combine(iterations_per_loop=[1, 2]))
+  def testPassGlobalStepAsInput(self, iterations_per_loop):
+    x = 1.5
+    y = 1.0
+    initial_w = 2.0
+    pipeline_depth = 4
+
+    def my_model_fn(mode):
+      def stage1(global_step, features, labels):
+        w = variable_scope.get_variable(name="w", initializer=initial_w)
+        partial = w * features
+        return global_step, partial, labels
+
+      def stage2(global_step, partial, labels):
+        loss = partial + labels
+        return global_step, loss
+
+      def optimizer_function(global_step, loss):
+        lr = 0.1 - 0.001 * global_step
+        opt = gradient_descent.GradientDescentOptimizer(lr)
+        return pipelining_ops.OptimizerFunctionOutput(opt, loss)
+
+      def eval_metrics_fn(global_step, loss):
+        return {
+            "global_step_observed": metrics_impl.mean(global_step),
+            "loss": loss,
+        }
+
+      global_step_input = math_ops.cast(training_util.get_global_step(),
+                                        dtype=np.float32)
+
+      return IPUPipelineEstimatorSpec(mode,
+                                      computational_stages=[stage1, stage2],
+                                      optimizer_function=optimizer_function,
+                                      eval_metrics_fn=eval_metrics_fn,
+                                      inputs=[global_step_input],
+                                      pipeline_depth=pipeline_depth)
+
+    def my_input_fn():
+      features = [x] * pipeline_depth * iterations_per_loop
+      labels = [y] * pipeline_depth * iterations_per_loop
+      dataset = dataset_ops.Dataset.from_tensor_slices((features, labels))
+      return dataset
+
+    estimator = IPUPipelineEstimator(model_fn=my_model_fn,
+                                     config=_make_config(iterations_per_loop))
+
+    for i in range(2):
+      estimator.train(input_fn=my_input_fn, steps=iterations_per_loop)
+      self.assertEqual(iterations_per_loop * (i + 1),
+                       estimator.get_variable_value("global_step"))
+
+    out = estimator.evaluate(input_fn=my_input_fn, steps=iterations_per_loop)
+    self.assertEqual(2 * iterations_per_loop, out["global_step_observed"])
 
 
 if __name__ == "__main__":
