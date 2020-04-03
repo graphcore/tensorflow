@@ -694,6 +694,15 @@ cc_library(
 )
 
 cc_library(
+    name = "common_shape_fns",
+    srcs = ["ops/common_shape_fns.cc"],
+    hdrs = ["ops/common_shape_fns.h"],
+    linkstatic = 1,
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+cc_library(
     name = "kernels",
     srcs = [
         "kernels/datastream/dataset_benchmark.cc",
@@ -943,7 +952,10 @@ cc_library(
         "ops/poputil/stateful_gradient_accumulate.cc",
         "ops/poputil/user_operation.cc",
     ],
-    deps = ["//tensorflow/core:framework"],
+    deps = [
+        ":common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
     alwayslink = True,
 )
 
@@ -966,7 +978,10 @@ cc_library(
         "ops/datastream/feeds.cc",
         "ops/datastream/host_embedding.cc",
     ],
-    deps = ["//tensorflow/core:framework"],
+    deps = [
+        ":common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
     alwayslink = True,
 )
 
@@ -1015,7 +1030,10 @@ tf_custom_op_py_library(
 cc_library(
     name = "pipelining_ops",
     srcs = ["ops/functional/pipelining.cc"],
-    deps = ["//tensorflow/core:framework"],
+    deps = [
+        ":common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
     alwayslink = True,
 )
 
