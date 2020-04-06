@@ -711,6 +711,7 @@ cc_library(
         "kernels/datastream/exporters.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
+        "kernels/functional/functional_util.cc",
         "kernels/functional/pipelining.cc",
         "kernels/host_compute_kernels.cc",
         "kernels/ipu_kernels.cc",
@@ -747,6 +748,7 @@ cc_library(
         "kernels/training_ops.cc",
     ],
     hdrs = [
+        "kernels/functional/functional_util.h",
         "kernels/ipu_kernels_common.h",
     ],
     deps = [
