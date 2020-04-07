@@ -133,7 +133,8 @@ class IPUPipelineTest(test.TestCase):
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
     # Remove directory from any previous run
-    shutil.rmtree(checkpoint_dir)
+    if os.path.isdir(checkpoint_dir):
+      shutil.rmtree(checkpoint_dir)
 
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
