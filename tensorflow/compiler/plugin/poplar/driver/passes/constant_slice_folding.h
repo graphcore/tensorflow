@@ -20,7 +20,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
-namespace poplarplugin {
 
 // A pass which converts a scalar slice of a part of a constant into a constant
 // scalar.
@@ -31,7 +30,6 @@ class ConstantSliceFolding : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 };
 
-}  // namespace poplarplugin
 }  // namespace xla
 
 #endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_CONSTANT_SLICE_FOLDING_H_

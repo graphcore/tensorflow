@@ -175,35 +175,33 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
 
   std::map<HloInstruction*, std::pair<int, int>> operands;
 
-  for (auto comp : flattened->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-
-    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
-      switch (inst->opcode()) {
-        case HloOpcode::kConvolution: {
-          classifications[inst] = MLType::INFERENCE_FWD;
-          operands[inst] = std::make_pair(0, 1);
-          break;
-        }
-        case HloOpcode::kDot: {
-          classifications[inst] = MLType::INFERENCE_FWD;
-          operands[inst] = std::make_pair(0, 1);
-          break;
-        }
-        case HloOpcode::kFusion: {
-          if (IsPopOpsConvolution(inst)) {
+  for (HloComputation* comp : flattened->computations()) {
+    if (!IsPopOpsFusion(comp)) {
+      for (HloInstruction* inst : comp->instructions()) {
+        switch (inst->opcode()) {
+          case HloOpcode::kConvolution: {
             classifications[inst] = MLType::INFERENCE_FWD;
             operands[inst] = std::make_pair(0, 1);
-          } else if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
-            classifications[inst] = MLType::INFERENCE_FWD;
-            operands[inst] = std::make_pair(1, 2);
+            break;
           }
-          break;
+          case HloOpcode::kDot: {
+            classifications[inst] = MLType::INFERENCE_FWD;
+            operands[inst] = std::make_pair(0, 1);
+            break;
+          }
+          case HloOpcode::kFusion: {
+            if (IsPopOpsConvolution(inst)) {
+              classifications[inst] = MLType::INFERENCE_FWD;
+              operands[inst] = std::make_pair(0, 1);
+            } else if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
+              classifications[inst] = MLType::INFERENCE_FWD;
+              operands[inst] = std::make_pair(1, 2);
+            }
+            break;
+          }
+          default:
+            break;
         }
-        default:
-          break;
       }
     }
   }

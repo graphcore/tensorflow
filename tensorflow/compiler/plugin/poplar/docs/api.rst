@@ -15,6 +15,9 @@ Python API
 .. automodule:: tensorflow.python.ipu.ipu_infeed_queue
   :members:
 
+.. automodule:: tensorflow.python.ipu.optimizers.cross_replica_optimizer
+  :members:
+
 .. automodule:: tensorflow.python.ipu.ipu_outfeed_queue
   :members:
 
@@ -34,7 +37,6 @@ Python API
 
 .. automodule:: tensorflow.python.ipu.ipu_run_config
   :members:
-  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
   :members: IPUMultiWorkerStrategy
@@ -97,16 +99,7 @@ Python API
 .. automodule:: tensorflow.python.ipu.custom_ops
   :members:
 
-.. automodule:: tensorflow.python.ipu.optimizers.cross_replica_optimizer
-  :members:
-
-.. automodule:: tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer
-  :members:
-
 .. automodule:: tensorflow.python.ipu.optimizers.map_gradient_optimizer
-  :members:
-
-.. automodule:: tensorflow.python.ipu.optimizers.sharded_optimizer
   :members:
 
 .. automodule:: tensorflow.python.ipu.dataset_benchmark

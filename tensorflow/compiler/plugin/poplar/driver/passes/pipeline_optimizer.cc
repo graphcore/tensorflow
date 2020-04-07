@@ -237,8 +237,6 @@ StatusOr<bool> PipelineOptimizer::OptimizePipeline(
   HloComputation* pipeline_comp = pipeline_op->to_apply();
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // Make sure that the root of each stage is a tuple.
-  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   // For each stage, starting from the last stage to last.
   std::vector<HloInstruction*> ordered = OrderInnerPipelineFunctions(stages);
   for (HloInstruction* call : ordered) {

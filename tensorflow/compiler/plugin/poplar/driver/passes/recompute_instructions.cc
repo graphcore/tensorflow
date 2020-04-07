@@ -479,7 +479,7 @@ StatusOr<bool> RecomputeInstructions::Run(HloModule* module) {
       // If not try and get cases of just Conv/Norm.
       absl::make_unique<ConvNormMatcher>()};
 
-  for (auto* comp : module->MakeComputationPostOrder()) {
+  for (HloComputation* comp : module->computations()) {
     if (IsPopOpsFusion(comp) || comp->instruction_count() < 4) {
       continue;
     }

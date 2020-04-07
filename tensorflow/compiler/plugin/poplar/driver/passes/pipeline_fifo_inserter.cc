@@ -33,8 +33,6 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
   bool changed = false;
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // Make sure that the root of each stage is a tuple.
-  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   TF_ASSIGN_OR_RETURN(auto analysis,
                       PipelineDataflowAnalysis::GetAnalysis(stages, true));
 
@@ -46,7 +44,7 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
     TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));
     TF_ASSIGN_OR_RETURN(StageID previous_stage_id,
                         analysis->GetPreviousStageID(stage));
-    HloInstructionSet fwd_stage_inputs;
+    absl::flat_hash_set<HloInstruction*> fwd_stage_inputs;
     for (HloInstruction* operand : stage->unique_operands()) {
       switch (operand->opcode()) {
         case HloOpcode::kGetTupleElement: {

@@ -43,7 +43,6 @@ class IPUPipelineEstimatorSpec(
         'device_mapping',
         'pipeline_schedule',
         'offload_weight_update_variables',
-        'inputs',
     ])):
   """Ops and objects returned from a `model_fn` and passed to
   :class:`.IPUPipelineEstimator`."""
@@ -55,8 +54,7 @@ class IPUPipelineEstimatorSpec(
               optimizer_function=None,
               device_mapping=None,
               pipeline_schedule=None,
-              offload_weight_update_variables=True,
-              inputs=None):
+              offload_weight_update_variables=True):
     """Creates a validated `IPUPipelineEstimatorSpec` instance.
 
     Depending on the value of `mode`, different arguments are required. Namely
@@ -97,9 +95,6 @@ class IPUPipelineEstimatorSpec(
         memory can reduce maximum memory liveness, but can also increase the
         computation time of the weight update. Note that this option has no
         effect for inference only pipelines.
-      inputs: arguments passed to the first pipeline stage. Can be used to pass
-        e.g. a learning rate tensor or the `tf.train.get_global_step()` tensor
-        that cannot be accessed directly from within a pipeline stage function.
 
     Returns:
       A validated `IPUPipelineEstimatorSpec` object.
@@ -125,8 +120,7 @@ class IPUPipelineEstimatorSpec(
         optimizer_function=optimizer_function,
         device_mapping=device_mapping,
         pipeline_schedule=pipeline_schedule,
-        offload_weight_update_variables=offload_weight_update_variables,
-        inputs=inputs)
+        offload_weight_update_variables=offload_weight_update_variables)
 
 
 class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: disable=protected-access
@@ -155,7 +149,6 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           computational_stages=spec.computational_stages,
           pipeline_depth=spec.pipeline_depth,
           repeat_count=self._config.ipu_run_config.iterations_per_loop,
-          inputs=spec.inputs,
           optimizer_function=spec.optimizer_function,
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
@@ -191,7 +184,6 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           computational_stages=spec.computational_stages,
           pipeline_depth=spec.pipeline_depth,
           repeat_count=self._config.ipu_run_config.iterations_per_loop,
-          inputs=spec.inputs,
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
           name="ipu_pipeline_estimator_eval")
@@ -227,7 +219,6 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
           computational_stages=spec.computational_stages,
           pipeline_depth=spec.pipeline_depth,
           repeat_count=self._config.ipu_run_config.iterations_per_loop,
-          inputs=spec.inputs,
           device_mapping=spec.device_mapping,
           pipeline_schedule=spec.pipeline_schedule,
           name="ipu_pipeline_estimator_predict")

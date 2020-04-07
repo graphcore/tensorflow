@@ -13,18 +13,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
-
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
+
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -37,12 +37,8 @@ StatusOr<bool> RemoveBlockedRecomputeSuggestions::Run(HloModule* module) {
   auto is_suggestion = IsPoplarInstruction(PoplarOp::SuggestRecompute);
   auto is_block = IsPoplarInstruction(PoplarOp::BlockRecompute);
 
-  for (auto comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-
-    for (auto inst : comp->MakeInstructionPostOrder()) {
+  for (auto comp : module->MakeNonfusionComputations()) {
+    for (auto inst : comp->instructions()) {
       if (inst->opcode() == HloOpcode::kCustomCall) {
         auto custom_call = Cast<HloCustomCallInstruction>(inst);
 

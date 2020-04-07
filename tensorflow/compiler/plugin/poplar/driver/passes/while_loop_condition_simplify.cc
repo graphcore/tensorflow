@@ -208,12 +208,8 @@ WhileLoopConditionSimplify::WhileLoopConditionSimplify() {}
 StatusOr<bool> WhileLoopConditionSimplify::Run(HloModule* module) {
   bool changed = false;
   std::vector<HloInstruction*> while_insts;
-  for (auto* comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-
-    for (auto* instr : comp->MakeInstructionPostOrder()) {
+  for (auto* comp : module->computations()) {
+    for (auto* instr : comp->instructions()) {
       if (instr->opcode() == HloOpcode::kWhile) {
         while_insts.push_back(instr);
       }

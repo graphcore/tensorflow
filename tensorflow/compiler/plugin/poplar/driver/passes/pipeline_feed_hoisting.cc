@@ -162,8 +162,6 @@ StatusOr<bool> PipelineFeedHoisting::HoistInPipeline(
   bool changed = false;
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // Make sure that the root of each stage is a tuple.
-  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   for (auto& stages : {stages.forward, stages.backward}) {
     for (HloInstruction* stage : stages) {
       bool hoisted;
@@ -172,7 +170,7 @@ StatusOr<bool> PipelineFeedHoisting::HoistInPipeline(
         // Note that hoisting can create a new computation, therefore we always
         // start from the begining.
         HloComputation* stage_comp = stage->to_apply();
-        for (HloInstruction* inst : stage_comp->MakeInstructionPostOrder()) {
+        for (HloInstruction* inst : stage_comp->instructions()) {
           // We cannot hoist if there are control dependencies.
           if (inst->control_predecessors().size() ||
               inst->control_successors().size()) {

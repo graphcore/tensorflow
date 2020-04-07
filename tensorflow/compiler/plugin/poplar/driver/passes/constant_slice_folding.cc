@@ -21,7 +21,6 @@ limitations under the License.
 #include <vector>
 
 #include "absl/memory/memory.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
@@ -35,18 +34,13 @@ limitations under the License.
 #include "tensorflow/core/lib/core/errors.h"
 
 namespace xla {
-namespace poplarplugin {
 
 StatusOr<bool> ConstantSliceFolding::Run(HloModule* module) {
   auto evaluator = absl::make_unique<HloEvaluator>(/*max_loop_iterations=*/0);
 
   bool changed = false;
 
-  for (auto computation : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(computation)) {
-      continue;
-    }
-
+  for (auto* computation : module->MakeNonfusionComputations()) {
     for (auto instruction : computation->MakeInstructionPostOrder()) {
       if (instruction->opcode() != HloOpcode::kSlice &&
           instruction->opcode() != HloOpcode::kReshape) {
@@ -76,5 +70,5 @@ StatusOr<bool> ConstantSliceFolding::Run(HloModule* module) {
 
   return changed;
 }
-}  // namespace poplarplugin
+
 }  // namespace xla

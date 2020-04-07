@@ -15,11 +15,10 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/commutative_instruction_reorder_operands.h"
 
-#include <map>
-
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/shape_util.h"
+
+#include <map>
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -57,11 +56,7 @@ static bool IsElementwiseBinaryCommutative(const HloInstruction* inst) {
 
 StatusOr<bool> CommutativeInstructionReorderOperands::Run(HloModule* module) {
   bool changed = false;
-  for (auto* comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-
+  for (auto* comp : module->computations()) {
     for (auto* inst : comp->MakeInstructionPostOrder()) {
       if (IsElementwiseBinaryCommutative(inst) &&
           IsReshaping(inst->operand(0)) && !IsReshaping(inst->operand(1))) {

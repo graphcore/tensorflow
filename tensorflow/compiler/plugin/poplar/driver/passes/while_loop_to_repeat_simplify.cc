@@ -393,12 +393,8 @@ void PruneComputations(HloModule* module) {
 
 StatusOr<bool> WhileLoopToRepeatSimplify::Run(HloModule* module) {
   // For each while instruction
-  for (auto* comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-
-    for (auto* inst : comp->MakeInstructionPostOrder()) {
+  for (auto* comp : module->computations()) {
+    for (auto* inst : comp->instructions()) {
       if (inst->opcode() == HloOpcode::kWhile) {
         HloInstruction* while_inst = inst;
         // For each while loop, try and simplify the logic to convert the loop

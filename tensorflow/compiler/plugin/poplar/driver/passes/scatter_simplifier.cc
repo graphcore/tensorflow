@@ -69,11 +69,7 @@ StatusOr<bool> ScatterSimplifier::Run(HloModule* module) {
   VLOG(2) << "Before the ScatterSimplifier:";
   XLA_VLOG_LINES(2, module->ToString());
 
-  for (auto comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-
+  for (HloComputation* comp : module->MakeNonfusionComputations()) {
     // Go through instructions in post order to make sure we do not change
     // operands.
     auto insts = comp->MakeInstructionPostOrder();

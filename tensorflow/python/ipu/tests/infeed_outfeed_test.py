@@ -1465,32 +1465,6 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
           "Unsupprted datatype int64 on index 0 of feed operation"):
         sess.run(infeed_queue.initializer)
 
-  @test_util.deprecated_graph_mode_only
-  def testFeedBools(self):
-    left = [False, False, True, True]
-    right = [False, True, False, True]
-    dataset = dataset_ops.Dataset.from_tensor_slices((left, right))
-    dataset = dataset.batch(2, drop_remainder=True)
-
-    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
-    outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
-
-    def body(l, r):
-      return outfeed_queue.enqueue(math_ops.logical_and(l, r))
-
-    def my_net():
-      return ipu.loops.repeat(2, body, infeed_queue=infeed_queue)
-
-    with ipu.scopes.ipu_scope("/device:IPU:0"):
-      res = ipu.ipu_compiler.compile(my_net, inputs=[])
-
-    dequeued = outfeed_queue.dequeue()
-    with session_lib.Session() as sess:
-      sess.run(infeed_queue.initializer)
-      sess.run(res)
-      out = sess.run(dequeued)
-      self.assertAllEqual(np.logical_and(left, right), np.concatenate(out))
-
 
 if __name__ == "__main__":
   googletest.main()

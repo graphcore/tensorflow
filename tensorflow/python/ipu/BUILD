@@ -14,7 +14,6 @@ py_library(
     srcs = [
         "ops/cross_replica_ops.py",
         "ops/embedding_ops.py",
-        "ops/functional_ops.py",
         "ops/internal_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
@@ -26,8 +25,8 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:dataset_benchmark_py",
-        "//tensorflow/compiler/plugin/poplar:functional_ops_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:popfloat_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
@@ -44,7 +43,6 @@ py_library(
         "ops/all_to_all_op_grad.py",
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
-        "ops/functional_ops_grad.py",
         "ops/internal_ops_grad.py",
         "ops/nn_ops_grad.py",
         "ops/normalization_ops_grad.py",
@@ -54,8 +52,8 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:functional_ops_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
         "//tensorflow/compiler/plugin/poplar:popops_ops_py",
         "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
@@ -108,7 +106,6 @@ py_library(
         "ops/custom_ops.py",
         "ops/embedding_ops.py",
         "ops/experimental/popfloat_cast_to_gfloat.py",
-        "ops/functional_ops.py",
         "ops/internal_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",

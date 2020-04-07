@@ -93,7 +93,7 @@ StatusOr<bool> InterIpuCopyInserter::Run(HloModule* module) {
 
   bool added = false;
 
-  for (auto* comp : module->MakeComputationPostOrder()) {
+  for (auto* comp : module->computations()) {
     if (IsPopOpsFusion(comp)) {
       continue;
     }

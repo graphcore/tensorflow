@@ -83,7 +83,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
@@ -864,7 +863,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     TF_ASSIGN_OR_RETURN(auto scheduler, BestIpuSchedule(schedulers));
 
-    pipeline.AddPass<ResourceUpdateScheduleOptimizer>();
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
     pipeline.AddPass<LowerFrontendAttributes>();
 
