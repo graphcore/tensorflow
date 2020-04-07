@@ -15,11 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/wide_const_finder.h"
 
-#include <utility>
-#include <vector>
-
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal_util.h"
+
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -29,27 +26,26 @@ namespace poplarplugin {
 WideConstFinder::WideConstFinder() {}
 
 StatusOr<bool> WideConstFinder::Run(HloModule* module) {
-  std::vector<HloComputation*> comps = module->MakeComputationPostOrder();
+  std::vector<HloComputation*> comps(module->computations().begin(),
+                                     module->computations().end());
 
   for (auto* comp : comps) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
+    if (!comp->IsFusionComputation()) {
+      for (HloInstruction* inst : comp->instructions()) {
+        if (!inst->shape().IsToken()) {
+          if (inst->IsConstant() && ShapeUtil::ElementsIn(inst->shape()) > 1) {
+            const Literal& literal = inst->literal();
+            if (literal.IsAll(0)) {
+              const auto element_type = inst->shape().element_type();
+              auto zero = LiteralUtil::Zero(element_type).Clone();
+              HloInstruction* c = comp->AddInstruction(
+                  HloInstruction::CreateConstant(std::move(zero)));
+              HloInstruction* b = comp->AddInstruction(
+                  HloInstruction::CreateBroadcast(inst->shape(), c, {}));
 
-    for (auto* inst : comp->MakeInstructionPostOrder()) {
-      if (!inst->shape().IsToken()) {
-        if (inst->IsConstant() && ShapeUtil::ElementsIn(inst->shape()) > 1) {
-          const Literal& literal = inst->literal();
-          if (literal.IsAll(0)) {
-            const auto element_type = inst->shape().element_type();
-            auto zero = LiteralUtil::Zero(element_type).Clone();
-            HloInstruction* c = comp->AddInstruction(
-                HloInstruction::CreateConstant(std::move(zero)));
-            HloInstruction* b = comp->AddInstruction(
-                HloInstruction::CreateBroadcast(inst->shape(), c, {}));
-
-            if (!inst->ReplaceAllUsesWith(b).ok()) {
-              return false;
+              if (!inst->ReplaceAllUsesWith(b).ok()) {
+                return false;
+              }
             }
           }
         }

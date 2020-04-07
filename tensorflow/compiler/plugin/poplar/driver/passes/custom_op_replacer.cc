@@ -17,7 +17,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
@@ -35,12 +34,8 @@ namespace poplarplugin {
 StatusOr<bool> CustomOpReplacer::Run(HloModule* module) {
   std::vector<HloCustomCallInstruction*> custom_calls;
 
-  for (auto comp : module->MakeComputationPostOrder()) {
-    if (IsPopOpsFusion(comp)) {
-      continue;
-    }
-
-    for (auto inst : comp->MakeInstructionPostOrder()) {
+  for (auto comp : module->MakeNonfusionComputations()) {
+    for (auto inst : comp->instructions()) {
       if (inst->opcode() == HloOpcode::kCustomCall) {
         auto custom_call = Cast<HloCustomCallInstruction>(inst);
 

@@ -13,7 +13,7 @@ from tensorflow.compat.v1 import global_variables
 from tensorflow.compat.v1 import train
 from tensorflow.python.ops.variables import global_variables_initializer
 from tensorflow.core.framework import attr_value_pb2
-from tensorflow.python.ipu.dataset_extractor import export_variables
+from tensorflow.python.ipu import dataset_extractor
 from tensorflow.python.saved_model import saved_model
 
 
@@ -70,15 +70,16 @@ class _Metadata:
 
 
 def _export_variables(sess, variables, meta, output_file):
-  dirname = os.path.dirname(output_file)
-  if dirname:
-    os.makedirs(dirname, exist_ok=True)
+  os.makedirs(os.path.dirname(output_file), exist_ok=True)
   if meta:
     for v in variables:
       logging.debug("Validating Variable name = %s , dtype = %s, shape = %s",
                     v.name, v.dtype, v.shape)
       meta.validate(v.name, v.shape, v.dtype)
-  sess.run(export_variables(variables, output_file, is_input=False))
+  sess.run(
+      dataset_extractor.export_variables(variables,
+                                         output_file,
+                                         is_input=False))
 
 
 def _export_v2_SavedModel(save_path, output_file, meta):

@@ -22,7 +22,6 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import standard_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
-from tensorflow.python.ipu import functional_ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
@@ -60,11 +59,11 @@ class PipelineTester(object):
           # TF2 replacement for: iterator = dataset.make_one_shot_iterator()
           iterator = compat_v1_data.make_one_shot_iterator(dataset)
           next_example, next_label = iterator.get_next()
-          outputs = functional_ops._convert_to_list(args)  # pylint: disable=W0212
+          outputs = pipelining_ops._convert_to_list(args)  # pylint: disable=W0212
           outputs.append(next_example)
           outputs.append(next_label)
           for stage in stages:
-            outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
+            outputs = stage(*pipelining_ops._convert_to_list(outputs))  # pylint: disable=W0212
           return outputs
 
         loss = pipeline(*inputs)
@@ -128,7 +127,7 @@ class PipelineTester(object):
           outputs = args
           for i, stage in enumerate(stages):
             with scopes.ipu_shard(i):
-              outputs = stage(*functional_ops._convert_to_list(outputs))  # pylint: disable=W0212
+              outputs = stage(*pipelining_ops._convert_to_list(outputs))  # pylint: disable=W0212
           loss = outputs
           enqueue_op = outfeed_queue.enqueue(loss)
           opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(

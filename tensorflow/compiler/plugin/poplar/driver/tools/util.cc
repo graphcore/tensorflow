@@ -153,22 +153,6 @@ int64 GetSingleShardingDeviceId(const HloInstruction* inst) {
   }
 }
 
-bool IsAllowedTupleSharding(const HloInstruction* inst) {
-  switch (inst->opcode()) {
-    case HloOpcode::kCall:
-    case HloOpcode::kWhile:
-    case HloOpcode::kConditional:
-    case HloOpcode::kTuple:
-    case HloOpcode::kParameter:
-    case HloOpcode::kInfeed:
-    case HloOpcode::kOutfeed:
-    case HloOpcode::kGetTupleElement:
-      return true;
-    default:
-      return false;
-  }
-}
-
 int64 CountShapes(const Shape& shape) {
   int64 n = 0;
   if (shape.IsTuple()) {

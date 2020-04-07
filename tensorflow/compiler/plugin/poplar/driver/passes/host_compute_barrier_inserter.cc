@@ -48,7 +48,7 @@ OpSendRecvs GroupSendRecvsByHostComputeOp(const HloComputation* comp) {
   auto is_send = IsPoplarInstruction(SendToHost);
   auto is_recv = IsPoplarInstruction(RecvFromHost);
 
-  for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+  for (HloInstruction* inst : comp->instructions()) {
     if (inst->metadata().op_type() == kHostComputeOp) {
       const auto& op_name = inst->metadata().op_name();
       if (is_send(inst)) {
@@ -102,7 +102,7 @@ StatusOr<bool> AddBarrier(HloComputation* comp,
 StatusOr<bool> HostComputeBarrierInserter::Run(HloModule* module) {
   bool changed = false;
 
-  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+  for (HloComputation* comp : module->computations()) {
     if (IsPopOpsFusion(comp)) {
       // Optimization: Popops fusion computations cannot have Send/Recv ops.
       continue;

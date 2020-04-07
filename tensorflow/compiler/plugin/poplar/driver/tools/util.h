@@ -97,9 +97,6 @@ std::vector<int64> GetShardingDeviceIdVector(const HloSharding& sharding);
 // sharding must be a single value.
 int64 GetSingleShardingDeviceId(const HloInstruction* inst);
 
-// Returns whether the instruction is allowed to have tuple sharding.
-bool IsAllowedTupleSharding(const HloInstruction* inst);
-
 // Count the number of leaf shapes in a shape tuple
 int64 CountShapes(const Shape& shape);
 

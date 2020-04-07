@@ -14,7 +14,6 @@ py_library(
     srcs = [
         "ops/cross_replica_ops.py",
         "ops/embedding_ops.py",
-        "ops/functional_ops.py",
         "ops/internal_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
@@ -26,8 +25,8 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/plugin/poplar:dataset_benchmark_py",
-        "//tensorflow/compiler/plugin/poplar:functional_ops_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:popfloat_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
@@ -44,7 +43,6 @@ py_library(
         "ops/all_to_all_op_grad.py",
         "ops/embedding_ops_grad.py",
         "ops/experimental/popfloat_ops_grad.py",
-        "ops/functional_ops_grad.py",
         "ops/internal_ops_grad.py",
         "ops/nn_ops_grad.py",
         "ops/normalization_ops_grad.py",
@@ -54,8 +52,8 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/compiler/plugin/poplar:functional_ops_py",
         "//tensorflow/compiler/plugin/poplar:ipu_ops_py",
+        "//tensorflow/compiler/plugin/poplar:pipelining_ops_py",
         "//tensorflow/compiler/plugin/poplar:popnn_ops_py",
         "//tensorflow/compiler/plugin/poplar:popops_ops_py",
         "//tensorflow/compiler/plugin/poplar:poprand_ops_py",
@@ -80,24 +78,13 @@ py_library(
 )
 
 py_library(
-    name = "dataset_extractor",
-    srcs = [
-        "dataset_extractor.py",
-    ],
-    srcs_version = "PY2AND3",
-    deps = [
-        "//tensorflow/compiler/plugin/poplar:dataset_exporters_py",
-        "//tensorflow/python/data/ops:dataset_ops",
-    ],
-)
-
-py_library(
     name = "ipu_lib",
     srcs = [
         "__init__.py",
         "autoshard.py",
         "autoshard_cnn.py",
         "dataset_benchmark.py",
+        "dataset_extractor.py",
         "gradient_accumulation_optimizer.py",
         "ipu_compiler.py",
         "ipu_estimator.py",
@@ -122,7 +109,6 @@ py_library(
         "ops/custom_ops.py",
         "ops/embedding_ops.py",
         "ops/experimental/popfloat_cast_to_gfloat.py",
-        "ops/functional_ops.py",
         "ops/internal_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
@@ -146,10 +132,10 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":data",
-        ":dataset_extractor",
         ":ipu_grad_ops_lib",
         ":ipu_ops_lib",
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
+        "//tensorflow/compiler/plugin/poplar:dataset_exporters_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:sendrecv_ops_py",
         "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",
@@ -285,20 +271,6 @@ tf_py_test(
     name = "keras_pipeline_test",
     size = "large",
     srcs = ["tests/keras/keras_pipeline_test.py"],
-    additional_deps = [
-        ":pipelining_test_util",
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python/keras:layers",
-        "//third_party/py/numpy",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python:framework_test_lib",
-    ],
-)
-
-tf_py_test(
-    name = "keras_pipeline_save_restore_test",
-    size = "large",
-    srcs = ["tests/keras/keras_pipeline_save_restore_test.py"],
     additional_deps = [
         ":pipelining_test_util",
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -867,7 +839,6 @@ test_suite(
         "keras_dropout_test",
         "keras_embedding_lookup_test",
         "keras_normalization_test",
-        "keras_pipeline_save_restore_test",
         "keras_pipeline_test",
         "keras_rnn_test",
         "map_gradient_optimizer_test",

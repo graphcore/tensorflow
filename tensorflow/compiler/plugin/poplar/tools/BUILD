@@ -37,25 +37,6 @@ tf_cc_binary(
 )
 
 cc_library(
-    name = "poplar_executable_data",
-    srcs = [
-        "poplar_executable_data.cc",
-    ],
-    hdrs = [
-        "poplar_executable_data.h",
-    ],
-    copts = ["-fexceptions"],
-    linkstatic = 1,
-    visibility = ["//visibility:public"],
-    deps = [
-        "//third_party/eigen3",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/strings",
-        "@jsoncpp_git//:jsoncpp",
-    ],
-)
-
-cc_library(
     name = "poplar_executable_runner",
     srcs = [
         "poplar_executable_runner.cc",
@@ -67,7 +48,7 @@ cc_library(
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
-        ":poplar_executable_data",
+        "//third_party/eigen3",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/strings",
         "@jsoncpp_git//:jsoncpp",

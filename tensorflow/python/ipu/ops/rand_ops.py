@@ -19,7 +19,6 @@ Popnn random operators
 
 from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
 from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 
 
@@ -29,8 +28,6 @@ def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
 
   Args:
     x: The input tensor.
-    seed: An optional two element `tf.int32` tensor, representing the random
-      seed that will be used to create the distribution for dropout.
     rate: The probability that a given element will be zeroed out.
     scale: An optional factor to apply to all other elements.
     seed_modifier: An optional parameter given to poplar which uses it to modify
@@ -52,11 +49,6 @@ def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
     is_using_user_seed = False
     # Create empty placeholder we will generate a random one internally.
     seed = array_ops.zeros([2], dtypes.int32)
-
-  seed = ops.convert_to_tensor(seed)
-  if seed.shape != [2]:
-    raise ValueError("Expected the seed to have a shape [2], but got %s." %
-                     (str(seed.shape)))
 
   # We transfrom rate to be the change an individual node will dropout as
   # ipu_dropout is using the old tensorflow method that rate is the probability

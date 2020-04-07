@@ -16,32 +16,6 @@
 """
 
 # pylint: disable=wildcard-import,unused-import
-from tensorflow.python.ipu.ops import all_to_all_op
-from tensorflow.python.ipu.ops import all_to_all_op_grad
-from tensorflow.python.ipu.ops import custom_ops
-from tensorflow.python.ipu.ops import cross_replica_ops
-from tensorflow.python.ipu.ops import embedding_ops
-from tensorflow.python.ipu.ops import embedding_ops_grad
-from tensorflow.python.ipu.ops import functional_ops
-from tensorflow.python.ipu.ops import functional_ops_grad
-from tensorflow.python.ipu.ops import internal_ops
-from tensorflow.python.ipu.ops import internal_ops_grad
-from tensorflow.python.ipu.ops import nn_ops
-from tensorflow.python.ipu.ops import nn_ops_grad
-from tensorflow.python.ipu.ops import normalization_ops
-from tensorflow.python.ipu.ops import normalization_ops_grad
-from tensorflow.python.ipu.ops import pipelining_ops
-from tensorflow.python.ipu.ops import pipelining_ops_grad
-from tensorflow.python.ipu.ops import rand_ops
-from tensorflow.python.ipu.ops import rand_ops_grad
-from tensorflow.python.ipu.ops import reduce_scatter_op
-from tensorflow.python.ipu.ops import replication_ops
-from tensorflow.python.ipu.ops import rnn_ops
-from tensorflow.python.ipu.ops import rnn_ops_grad
-from tensorflow.python.ipu.ops import summary_ops
-
-from tensorflow.python.ipu.ops.experimental import popfloat_cast_to_gfloat
-
 from tensorflow.python.ipu import autoshard
 from tensorflow.python.ipu import autoshard_cnn
 from tensorflow.python.ipu import data
@@ -62,6 +36,30 @@ from tensorflow.python.ipu import vertex_edsl
 
 from tensorflow.python.ipu.keras.sequential import Sequential
 from tensorflow.python.ipu.keras import layers
+
+from tensorflow.python.ipu.ops import all_to_all_op
+from tensorflow.python.ipu.ops import all_to_all_op_grad
+from tensorflow.python.ipu.ops import custom_ops
+from tensorflow.python.ipu.ops import cross_replica_ops
+from tensorflow.python.ipu.ops import embedding_ops
+from tensorflow.python.ipu.ops import embedding_ops_grad
+from tensorflow.python.ipu.ops import internal_ops
+from tensorflow.python.ipu.ops import internal_ops_grad
+from tensorflow.python.ipu.ops import nn_ops
+from tensorflow.python.ipu.ops import nn_ops_grad
+from tensorflow.python.ipu.ops import normalization_ops
+from tensorflow.python.ipu.ops import normalization_ops_grad
+from tensorflow.python.ipu.ops import pipelining_ops
+from tensorflow.python.ipu.ops import pipelining_ops_grad
+from tensorflow.python.ipu.ops import rand_ops
+from tensorflow.python.ipu.ops import rand_ops_grad
+from tensorflow.python.ipu.ops import reduce_scatter_op
+from tensorflow.python.ipu.ops import replication_ops
+from tensorflow.python.ipu.ops import rnn_ops
+from tensorflow.python.ipu.ops import rnn_ops_grad
+from tensorflow.python.ipu.ops import summary_ops
+
+from tensorflow.python.ipu.ops.experimental import popfloat_cast_to_gfloat
 
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
