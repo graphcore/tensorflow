@@ -42,10 +42,10 @@ def next_feed_id():
 next_feed_id.feed_count = 0
 
 
-def test_dataset(length=None, batch_size=1):
+def test_dataset(length=None, batch_size=1, x_val=1.0, y_val=0.2):
 
-  constant_d = constant_op.constant(1.0, shape=[32])
-  constant_l = constant_op.constant(0.2, shape=[2])
+  constant_d = constant_op.constant(x_val, shape=[32])
+  constant_l = constant_op.constant(y_val, shape=[2])
 
   ds = dataset_ops.Dataset.from_tensors((constant_d, constant_l))
   ds = ds.repeat(length)
@@ -419,6 +419,49 @@ class IPUPipelineTest(test.TestCase):
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 1)
       self.assertEqual(type(history.history['loss'][0]), np.float32)
+
+  @test_util.run_v2_only
+  def testFitTwice(self):
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Compile model with SGD optimizer
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
+      m.compile(opt, loss='mse')
+
+      # Clear profiling logs
+      ipu.ops.summary_ops.get_ipu_reports()
+
+      # Fit the weights to the dataset
+      history = m.fit(test_dataset(), steps_per_epoch=2)
+      l = history.history['loss'][0]
+
+      # # Record weights
+      w_1 = [w.numpy() for w in m.weights]
+
+      # Fit the weights to the dataset
+      history = m.fit(test_dataset(), steps_per_epoch=2)
+
+      # Loss should be different after second training.
+      self.assertTrue(l > history.history['loss'][0])
+
+      w_2 = [w.numpy() for w in m.weights]
+
+      # Weights should be different too.
+      for w1, w2 in zip(w_1, w_2):
+        self.assertFalse(np.all(w1 == w2))
+
+      # Should have compiled the graph once, and executed twice.
+      # TODO(T18639) fix the number of compiles.
+      evts = ipu.ops.summary_ops.get_ipu_reports()
+      evts = ipu.utils.extract_compile_reports(evts)
+      self.assertEqual(2, len(evts))
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochTwoEpochs(self):

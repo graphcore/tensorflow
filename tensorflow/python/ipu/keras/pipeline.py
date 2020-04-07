@@ -635,3 +635,13 @@ class PipelinedModel(Model):
               use_multiprocessing=False):
     raise NotImplementedError(
         "PipelineModels does not support the `predict` interface.")
+
+  def save(self,
+           filepath,
+           overwrite=True,
+           include_optimizer=True,
+           save_format=None,
+           signatures=None,
+           options=None):
+    raise NotImplementedError(
+        "PipelineModels does not support the `save` interface.")
