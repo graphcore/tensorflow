@@ -18,6 +18,9 @@ limitations under the License.
 #include <fstream>
 #include <limits>
 #include <map>
+#include <popops/DynamicSlice.hpp>
+#include <popops/Zero.hpp>
+#include <poputil/TileMapping.hpp>
 #include <regex>
 
 #include "absl/container/inlined_vector.h"
@@ -35,10 +38,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 
-#include <popops/DynamicSlice.hpp>
-#include <popops/Zero.hpp>
-#include <poputil/TileMapping.hpp>
-
 using ::absl::StrCat;
 
 namespace xla {
@@ -52,6 +51,13 @@ uint64 GetShardForOutputIndex(const HloInstruction* inst,
                               int flattened_output_tuple_index) {
   if (inst->has_sharding()) {
     const auto& sharding = GetShardingDeviceIdVector(inst->sharding());
+
+    // If the instruction is not allowed tuple shardding, then all the outputs
+    // have the same shard.
+    if (!IsAllowedTupleSharding(inst)) {
+      flattened_output_tuple_index = 0;
+    }
+
     if (flattened_output_tuple_index >= static_cast<int>(sharding.size())) {
       LOG(FATAL) << "Sharding index " << flattened_output_tuple_index
                  << " out of range on " << inst->ToString();
