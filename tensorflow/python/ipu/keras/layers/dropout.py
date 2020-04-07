@@ -20,7 +20,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
+from tensorflow.python.ipu import rand_ops
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
@@ -39,24 +39,26 @@ class Dropout(Layer):
                **kwargs):
     """Creates a Dropout model.
 
-        Args:
-            rate: Float between 0 and 1. Fraction of the input units to drop.
-            seed: A Python integer to use as random seed.
-            noise_shape: 1D integer tensor representing the shape of the
-              binary dropout mask that will be multiplied with the input.
-            scale: An optional factor to apply to all retained elements.
-            seed_modifier: An optional parameter given to poplar which
-                         uses it to modify the seed.
+    Args:
+      rate: Float between 0 and 1. Fraction of the input units to drop.
+      seed: An optional two-element tensor-like object (`tf.Tensor`, a numpy
+        array or Python list/tuple), representing the random seed that will be
+        used to create the distribution for dropout.
+      noise_shape: 1D integer tensor representing the shape of the binary
+        dropout mask that will be multiplied with the input.
+      scale: An optional factor to apply to all retained elements.
+      seed_modifier: An optional parameter given to poplar which uses it to
+        modify the seed.
 
-        Call arguments:
-          inputs: Input tensor (of any rank).
-          training: Python boolean indicating whether the layer should behave
-            in training mode (adding dropout) or in inference mode (doing
-            nothing).
+    Call arguments:
+      inputs: Input tensor (of any rank).
+      training: Python boolean indicating whether the layer should behave
+        in training mode (adding dropout) or in inference mode (doing
+        nothing).
 
-        Returns:
-            A `Tensor` which has some nodes set to zero, as randomly
-            selected based on other parameters.
+    Returns:
+      A `Tensor` which has some nodes set to zero, as randomly selected based on
+      other parameters.
     """
     super(Dropout, self).__init__(**kwargs)
     self.built = False
@@ -90,15 +92,12 @@ class Dropout(Layer):
           "then use a different model class.")
 
     if training:
-      output, _ = gen_poprand_ops.ipu_dropout(
-          x,
-          seed=self.seed,
-          user_seed=1,
-          rate=(1.0 - self.rate),
-          scale=self.scale,
-          name=self.name,
-          is_using_user_seed=self.is_using_user_seed,
-          seed_modifier=self.seed_modifier)
+      output = rand_ops.dropout(x,
+                                seed=self.seed,
+                                rate=self.rate,
+                                scale=self.scale,
+                                seed_modifier=self.seed_modifier,
+                                name=self.name)
     else:
       output = array_ops.identity(x)
 
