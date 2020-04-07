@@ -296,6 +296,20 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "keras_pipeline_save_restore_test",
+    size = "large",
+    srcs = ["tests/keras/keras_pipeline_save_restore_test.py"],
+    additional_deps = [
+        ":pipelining_test_util",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/keras:layers",
+        "//third_party/py/numpy",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework_test_lib",
+    ],
+)
+
+tf_py_test(
     name = "keras_normalization_test",
     size = "medium",
     srcs = ["tests/keras/keras_normalization_test.py"],
@@ -853,6 +867,7 @@ test_suite(
         "keras_dropout_test",
         "keras_embedding_lookup_test",
         "keras_normalization_test",
+        "keras_pipeline_save_restore_test",
         "keras_pipeline_test",
         "keras_rnn_test",
         "map_gradient_optimizer_test",
