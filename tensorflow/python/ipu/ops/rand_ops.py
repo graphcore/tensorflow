@@ -29,8 +29,9 @@ def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
 
   Args:
     x: The input tensor.
-    seed: An optional two element `tf.int32` tensor, representing the random
-      seed that will be used to create the distribution for dropout.
+    seed: An optional two-element tensor-like object (`tf.Tensor`, a numpy array
+      or Python list/tuple), representing the random seed that will be used to
+      create the distribution for dropout.
     rate: The probability that a given element will be zeroed out.
     scale: An optional factor to apply to all other elements.
     seed_modifier: An optional parameter given to poplar which uses it to modify

@@ -23,13 +23,13 @@ from __future__ import print_function
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu import rand_ops
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
 
 from tensorflow.python.ops import rnn_cell
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
-from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
 
 from tensorflow.python.keras import initializers
 
@@ -49,6 +49,7 @@ class _PopnnRNN(Layer):
                num_units,
                partials_dtype=dtypes.float32,
                seed=None,
+               dropout_seed=None,
                kernel_initializer=None,
                bias_initializer=None,
                dtype=dtypes.float32,
@@ -68,6 +69,7 @@ class _PopnnRNN(Layer):
     self._kernel_initializer = kernel_initializer
     self._bias_initializer = bias_initializer
     self._dropout = dropout
+    self._dropout_seed = dropout_seed
     self._seed = seed
     self._return_state = return_state
     self._return_sequences = return_sequences
@@ -120,8 +122,7 @@ class _PopnnRNN(Layer):
       input_shape: a TensorShape object with 3 dimensions.
 
     Raises:
-      ValueError: if input_shape has wrong dimension or unknown 3rd
-      dimension.
+      ValueError: if input_shape has wrong dimension or unknown 3rd dimension.
     """
     if self.built:
       return
@@ -201,24 +202,15 @@ class _PopnnRNN(Layer):
     if not training:
       return inputs
 
-    if self._seed is None:
+    if self._dropout_seed is None:
       # User did not provide a seed
-      self._seed = [0, 0]
-      is_using_user_seed = False
-    else:
-      # User provided a seed
-      is_using_user_seed = True
+      self._dropout_seed = [0, 0]
 
-    inputs = gen_poprand_ops.ipu_dropout(inputs,
-                                         seed=self._seed,
-                                         user_seed=1,
-                                         rate=(1.0 - self._dropout),
-                                         scale=1.,
-                                         name=self.name + "_dropout",
-                                         is_using_user_seed=is_using_user_seed,
-                                         seed_modifier=1)
-
-    return inputs[0]
+    return rand_ops.dropout(inputs,
+                            seed=self._dropout_seed,
+                            rate=self._dropout,
+                            scale=1.,
+                            name=self.name + "_dropout")
 
 
 class PopnnLSTM(_PopnnRNN):
@@ -236,24 +228,22 @@ class PopnnLSTM(_PopnnRNN):
 
   Args:
     num_units: the number of units within the RNN model.
-    partials_dtype: the type used by Popnn to perform partial
-                    calculations.
+    partials_dtype: the type used by Popnn to perform partial calculations.
       Either tf.float16 or tf.float32.
-    kernel_initializer: starting value to initialize the weight
-      (default is all zeros).
-    bias_initializer: starting value to initialize the bias
-      (default is all zeros).
-    recurrent_initializer: This optional parameter will partition
-                            weight initialization into two stages,
-                            first initalizing the input kernel
-                            using kernel_initializer then will
-                            initalize a kernel for the recurrent
-                            state. This partitioning is what the
-                            keras LSTM layer does.
-                            (default is None, meaning off)
-    dropout: Float between 0 and 1.
-      Fraction of the units to drop for
-      the linear transformation of the inputs.
+    kernel_initializer: starting value to initialize the weight (default is all
+      zeros).
+    bias_initializer: starting value to initialize the bias (default is all
+      zeros).
+    recurrent_initializer: This optional parameter will partition weight
+      initialization into two stages, first initalizing the input kernel using
+      kernel_initializer then will initalize a kernel for the recurrent state.
+      This partitioning is what the keras LSTM layer does (default is None,
+      meaning off).
+    dropout: Float between 0 and 1. Fraction of the units to drop for the linear
+      transformation of the inputs.
+    dropout_seed: An optional two-element tensor-like object (`tf.Tensor`, a
+      numpy array or Python list/tuple), representing the random seed that will
+      be used to create the distribution for dropout.
     return_state: When True, the layer returns a tuple containing the
       output and the state tensors.  Otherwise it returns only the
       output tensor.
@@ -283,6 +273,7 @@ class PopnnLSTM(_PopnnRNN):
                recurrent_constraint=None,
                bias_constraint=None,
                dropout=0.,
+               dropout_seed=None,
                recurrent_dropout=0.,
                implementation=1,
                return_sequences=False,
@@ -369,6 +360,7 @@ class PopnnLSTM(_PopnnRNN):
                                     kernel_initializer=kernel_initializer,
                                     bias_initializer=bias_initializer,
                                     dropout=dropout,
+                                    dropout_seed=dropout_seed,
                                     return_state=return_state,
                                     return_sequences=return_sequences,
                                     time_major=time_major,
@@ -508,18 +500,19 @@ class PopnnGRU(_PopnnRNN):
 
   Args:
     units: the number of units within the RNN model.
-    partials_dtype: the type used by Popnn to perform partial
-      calculations. Either tf.float16 or tf.float32.
-    kernel_initializer: starting value to initialize the weight
-      (default isipu Glorot uniform initializer).
-    bias_initializer: starting value to initialize the bias
-      (default is all zeros).
-    dropout: Float between 0 and 1.
-      Fraction of the units to drop for
-      the linear transformation of the inputs.
-    return_state: When True, the layer returns a tuple containing the
-      output and the state tensors.  Otherwise it returns only the
-      output tensor.
+    partials_dtype: the type used by Popnn to perform partial calculations.
+      Either tf.float16 or tf.float32.
+    kernel_initializer: starting value to initialize the weight (default is
+      Glorot uniform initializer).
+    bias_initializer: starting value to initialize the bias (default is all
+      zeros).
+    dropout: Float between 0 and 1. Fraction of the units to drop for the
+      linear transformation of the inputs.
+    dropout_seed: An optional two-element tensor-like object (`tf.Tensor`, a
+      numpy array or Python list/tuple), representing the random seed that will
+      be used to create the distribution for dropout.
+    return_state: When True, the layer returns a tuple containing the output and
+      the state tensors.  Otherwise it returns only the output tensor.
     seed: A Python integer. Used to create the default Glorot uniform
       initializer kernel_initializer.
     time_major: The input should be of the form [sequence, batch, units]
@@ -545,6 +538,7 @@ class PopnnGRU(_PopnnRNN):
                recurrent_constraint=None,
                bias_constraint=None,
                dropout=0.,
+               dropout_seed=None,
                recurrent_dropout=0.,
                implementation=1,
                return_sequences=False,
@@ -627,6 +621,7 @@ class PopnnGRU(_PopnnRNN):
                                    kernel_initializer=kernel_initializer,
                                    bias_initializer=bias_initializer,
                                    dropout=dropout,
+                                   dropout_seed=dropout_seed,
                                    return_state=return_state,
                                    return_sequences=return_sequences,
                                    time_major=time_major,
