@@ -30,22 +30,6 @@ namespace poplarplugin {
 
 namespace {
 
-bool IsAllowedTupleSharding(const HloInstruction* inst) {
-  switch (inst->opcode()) {
-    case HloOpcode::kCall:
-    case HloOpcode::kWhile:
-    case HloOpcode::kConditional:
-    case HloOpcode::kTuple:
-    case HloOpcode::kParameter:
-    case HloOpcode::kInfeed:
-    case HloOpcode::kOutfeed:
-    case HloOpcode::kGetTupleElement:
-      return true;
-    default:
-      return false;
-  }
-}
-
 bool CompatibleShapes(const Shape& l, const Shape& r) {
   // Normal tensors are always acceptable for transferring sharding info
   if (l.IsArray() && r.IsArray()) return true;
