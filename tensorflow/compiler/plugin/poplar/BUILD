@@ -453,8 +453,8 @@ cc_library(
     ],
     linkstatic = 1,
     deps = [
+        ":backend_protos",
         ":flags",
-        ":xla_backend_protos",
         "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla:xla_headers_lib",
         "//tensorflow/core:core_cpu",
@@ -712,9 +712,9 @@ cc_library(
         "kernels/datastream/exporters.cc",
     ],
     deps = [
+        ":backend_protos",
         ":infeed_utils",
         ":option_flag_cc_impl",
-        ":xla_backend_protos",
         "//tensorflow/compiler/plugin/poplar/tools:poplar_executable_data",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/tf2xla:tf2xla_util",
