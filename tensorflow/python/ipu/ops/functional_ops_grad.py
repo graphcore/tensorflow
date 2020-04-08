@@ -18,7 +18,6 @@ from __future__ import division
 from __future__ import print_function
 
 from tensorflow.python.framework import func_graph as func_graph_module
-from tensorflow.python.framework import function_def_to_graph
 from tensorflow.python.framework import ops
 from tensorflow.python.framework.func_graph import FuncGraph
 from tensorflow.python.ops import cond_v2
@@ -71,25 +70,66 @@ class _XlaFuncGradGraph(FuncGraph):
     return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
 
 
-def _GetGradientsForFunction(op, *grads):
+def _resolve_grad_inputs(graph, grad_graph, op):
+  """Returns the tensors to pass as inputs to `grad_graph`.
+
+  The `grad_graph` may have external references to
+  1. Its outer graph containing the input gradients. These references are kept
+     as is.
+  2. Tensors in the forward pass graph. These tensors may not be "live"
+     when the gradient is being computed. We replace such references by their
+     corresponding tensor in `graph.outer_graph`.
+
+  Args:
+    graph: FuncGraph. The forward-pass function.
+    grad_graph: FuncGraph. The gradients function.
+
+  Returns:
+    A list of inputs tensors to be passed to grad_graph.
+  """
+  new_inputs = []
+  for t in grad_graph.external_captures:
+    # `t` must either be in `grad_graph.outer_graph` or in the forward
+    # `graph`.
+    if t.graph == graph:
+      for i, output in enumerate(t.graph.outputs):
+        if output is t:
+          t = op.outputs[i]
+          break
+    else:
+      for i, output in enumerate(t.graph.internal_captures):
+        if output is t:
+          t = t.graph.external_captures[i]
+          break
+
+    # Note: We rely on the capturing logic of the gradient op graph to
+    # correctly capture the tensors in `graph.outer_graph`. This is handled
+    # when building the gradient function.
+    if t.graph != graph.outer_graph:
+      raise ValueError(
+          "Attempting to capture tensor %s which is not an output." % (str(t)))
+    new_inputs.append(t)
+
+  return new_inputs
+
+
+def _get_gradients_for_function(op, *grads):
+  # Note that this function assumes that the op has function graph at attribute `to_apply` which has only single user (this op).
   assert control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph())
   # Get the forward function to create a gradient for it.
   fwd_op = op.outputs[0].op
   inputs = fwd_op.inputs
-  input_shapes = [t.shape for t in inputs]
-  fdef = fwd_op.graph._get_function(  # pylint: disable=protected-access
-      fwd_op.get_attr("to_apply").name).definition
 
-  with op.graph.as_default():
-    func_graph = function_def_to_graph.function_def_to_graph(
-        fdef, input_shapes)
+  # Use the original graph incase any values were captured.
+  # We know we can modify this graph as we generate unique Functional graphs.
+  func_graph = fwd_op.graph._get_function(  # pylint: disable=protected-access
+      fwd_op.get_attr("to_apply").name).graph
+  assert func_graph.outer_graph == op.graph
+
   for external_t, internal_t in zip(inputs, func_graph.inputs):
     custom_gradient.copy_handle_data(external_t, internal_t)
 
   func_graph.reset_captures(zip(inputs, func_graph.inputs))
-
-  # Link the op so that the gradient code can use it.
-  func_graph._forward_cond = op
 
   # Note: op.graph != ops.get_default_graph() when we are computing the gradient
   # of a pipeline stage.
@@ -119,6 +159,6 @@ def _GetGradientsForFunction(op, *grads):
     fwd_op._add_outputs([t.dtype for t in extra_func_outputs],
                         [t.shape for t in extra_func_outputs])
 
-  func_grad_inputs = cond_v2._resolve_grad_inputs(func_graph, func_grad_graph)
+  func_grad_inputs = _resolve_grad_inputs(func_graph, func_grad_graph, op)
   # pylint: enable=protected-access
   return func_grad_graph, func_grad_inputs
