@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/send_recv_barrier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
@@ -30,37 +31,7 @@
 
 namespace xla {
 namespace poplarplugin {
-
 namespace {
-
-static constexpr char kHostComputeOp[] = "XlaHostCompute";
-
-struct SendRecvs {
-  std::vector<HloInstruction*> sends;
-  std::vector<HloInstruction*> recvs;
-};
-
-using OpSendRecvs = std::unordered_map<string, SendRecvs>;
-
-OpSendRecvs GroupSendRecvsByHostComputeOp(const HloComputation* comp) {
-  OpSendRecvs result;
-
-  auto is_send = IsPoplarInstruction(SendToHost);
-  auto is_recv = IsPoplarInstruction(RecvFromHost);
-
-  for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
-    if (inst->metadata().op_type() == kHostComputeOp) {
-      const auto& op_name = inst->metadata().op_name();
-      if (is_send(inst)) {
-        result[op_name].sends.push_back(inst);
-      } else if (is_recv(inst)) {
-        result[op_name].recvs.push_back(inst);
-      }
-    }
-  }
-
-  return result;
-}
 
 StatusOr<bool> AddBarrier(HloComputation* comp,
                           const OpSendRecvs& op_send_recvs) {

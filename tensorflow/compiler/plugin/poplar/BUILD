@@ -163,6 +163,8 @@ cc_library(
         "driver/passes/gradient_accumulation_verifier.cc",
         "driver/passes/hlo_computation_name_uniquify.cc",
         "driver/passes/host_compute_barrier_inserter.cc",
+        "driver/passes/host_compute_schedule_optimizer.cc",
+        "driver/passes/host_compute_util.cc",
         "driver/passes/inplace_finder.cc",
         "driver/passes/inplace_util.cc",
         "driver/passes/inter_ipu_copy_inserter.cc",
@@ -295,6 +297,8 @@ cc_library(
         "driver/passes/gradient_accumulation_verifier.h",
         "driver/passes/hlo_computation_name_uniquify.h",
         "driver/passes/host_compute_barrier_inserter.h",
+        "driver/passes/host_compute_schedule_optimizer.h",
+        "driver/passes/host_compute_util.h",
         "driver/passes/inplace_finder.h",
         "driver/passes/inplace_util.h",
         "driver/passes/inter_ipu_copy_inserter.h",
@@ -1680,6 +1684,19 @@ xla_test(
     name = "host_compute_barrier_inserter_test",
     size = "small",
     srcs = ["tests/host_compute_barrier_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
+    name = "host_compute_schedule_optimizer_test",
+    size = "small",
+    srcs = ["tests/host_compute_schedule_optimizer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -3945,6 +3962,7 @@ test_suite(
         "hlo_hash_test",
         "hlo_matcher_test",
         "host_compute_barrier_inserter_test",
+        "host_compute_schedule_optimizer_test",
         "infeed_prefetch_test",
         "inplace_test",
         "inter_ipu_copy_inserter_test",
