@@ -27,6 +27,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import custom_gradient
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
@@ -1353,6 +1354,64 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       sess.run(r)
       output = sess.run(outfeed_op)
       self.assertAllClose(output, [[2.0, 2.0, 2.0, 1.0, 1.0, 1.0]])
+
+  @test_util.deprecated_graph_mode_only
+  def testPipelineWithCustomGradientFunction(self):
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(10, shape=[4])
+      dataset = dataset.batch(batch_size=4, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return value, math_ops.cast(label / 10, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    pipeline_depth = 24
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    @custom_gradient.custom_gradient
+    def f(x):
+      x = x * x
+
+      def grad(dy):
+        return dy * x
+
+      return x, grad
+
+    def stage1(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable(
+            "w2",
+            shape=[4, 4],
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        x = math_ops.matmul(x, weight)
+      return x, label
+
+    def stage2(x, label):
+      return f(x), label
+
+    def stage3(x, label):
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=x, labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+        [stage1, stage2, stage3],
+        inputs_fn, [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        14415,
+        schedule=pipelining_ops.PipelineSchedule.Grouped)
 
 
 if __name__ == "__main__":
