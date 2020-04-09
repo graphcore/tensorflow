@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -57,12 +58,16 @@ StatusOr<bool> SuggestRecompute::Run(HloModule* module) {
     }
   }
 
-  for (auto comp : module->MakeNonfusionComputations()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
     if (no_recomputation_computations.contains(comp)) {
       continue;
     }
 
-    for (auto inst : comp->instructions()) {
+    for (auto inst : comp->MakeInstructionPostOrder()) {
       if (ShouldRecomputeInstruction(inst)) {
         auto recomp = comp->AddInstruction(CreateSuggestRecompute(inst));
         inst->SetupDerivedInstruction(recomp);

@@ -150,7 +150,10 @@ StatusOr<bool> MultiUpdateCanonicalize::Run(HloModule* module) {
   VLOG(2) << "Before the MultiUpdateCanonicalize:";
   XLA_VLOG_LINES(2, module->ToString());
 
-  for (HloComputation* comp : module->MakeNonfusionComputations()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
     // Go through instructions in post order to make sure we do not change
     // operands.
     auto insts = comp->MakeInstructionPostOrder();

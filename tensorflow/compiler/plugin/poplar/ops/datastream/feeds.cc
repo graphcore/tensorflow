@@ -13,14 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/ops/common_shape_fns.h"
 #include "tensorflow/core/framework/common_shape_fns.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
 namespace tensorflow {
-
-using shape_inference::InferenceContext;
-using shape_inference::ShapeHandle;
 
 REGISTER_OP("PopDatastreamInfeedDequeue")
     .Output("outputs: output_types")
@@ -30,16 +28,7 @@ REGISTER_OP("PopDatastreamInfeedDequeue")
     .Attr("output_shapes: list(shape) >= 1")
     .Attr("io_batch_size: int = 1")
     .SetIsStateful()
-    .SetShapeFn([](InferenceContext* c) {
-      std::vector<PartialTensorShape> shapes;
-      TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &shapes));
-      for (size_t i = 0; i < shapes.size(); ++i) {
-        ShapeHandle out;
-        TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(shapes[i], &out));
-        c->set_output(i, out);
-      }
-      return Status::OK();
-    })
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(
 A placeholder op for multiple values that will be fed into the computation
 simultaneously as an XLA tuple.

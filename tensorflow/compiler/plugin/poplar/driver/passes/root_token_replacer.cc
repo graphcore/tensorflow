@@ -66,7 +66,12 @@ StatusOr<HloInstruction*> UpdateRootInstruction(
 
 StatusOr<bool> RootTokenReplacer::Run(HloModule* module) {
   bool changed = false;
-  for (auto* comp : module->computations()) {
+
+  for (auto* comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
     HloInstruction* root = comp->root_instruction();
     const Shape& root_shape = root->shape();
 

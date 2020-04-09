@@ -54,6 +54,8 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
   HloComputation* pipeline_comp = pipeline_op->to_apply();
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
+  // Make sure that the root of each stage is a tuple.
+  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   // Do not optimize if there is no resource update or pipeline wu variable
   // offloading is turned off.
   if (!stages.resource_update || !GetPipelineOffloadWUVariables(pipeline_op)) {

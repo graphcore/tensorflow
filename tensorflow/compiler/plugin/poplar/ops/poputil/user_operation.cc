@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/core/framework/common_shape_fns.h"
+#include "tensorflow/compiler/plugin/poplar/ops/common_shape_fns.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
@@ -33,18 +33,7 @@ REGISTER_OP("IpuUserOp")
     .Attr("partial_derivative_index: int")
     // We don't know what the user is going to do.
     .SetIsStateful()
-
-    // Infer the shape from the output shapes list.
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      std::vector<PartialTensorShape> shapes;
-      TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &shapes));
-      for (size_t i = 0; i < shapes.size(); ++i) {
-        shape_inference::ShapeHandle out;
-        TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(shapes[i], &out));
-        c->set_output(i, out);
-      }
-      return Status::OK();
-    })
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(
         Adds a prebuilt user operation to the tensorflow graph. 
         input: The variadic input to the user op.
@@ -76,18 +65,7 @@ REGISTER_OP("IpuUserReadWriteOp")
     .Attr("partial_derivative_index: int")
     // We don't know what the user is going to do.
     .SetIsStateful()
-
-    // Infer the shape from the output shapes list.
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      std::vector<PartialTensorShape> shapes;
-      TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &shapes));
-      for (size_t i = 0; i < shapes.size(); ++i) {
-        shape_inference::ShapeHandle out;
-        TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(shapes[i], &out));
-        c->set_output(i, out);
-      }
-      return Status::OK();
-    })
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(
         Adds a prebuilt user operation to the tensorflow graph. 
         input: The variadic input to the user op.

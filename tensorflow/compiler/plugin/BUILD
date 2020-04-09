@@ -28,6 +28,7 @@
   ** Please don't remove this file - it is supporting some 3rd party plugins **
 """
 
+load("@local_config_poplar//poplar:build_defs.bzl", "if_poplar")
 package(
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
@@ -43,10 +44,7 @@ package(
 # tensorflow/stream_executor/host/host_platform.cc for examples.
 cc_library(
     name = "plugin",
-    deps = [
-        "//tensorflow/compiler/plugin/poplar:poplar_lib",
-        #"//tensorflow/compiler/plugin/example:example_lib",
-    ],
+    deps = if_poplar(["//tensorflow/compiler/plugin/poplar:poplar_lib"])
 )
 
 # This target is for plugins/extensions to add their backend registration files.
@@ -55,10 +53,7 @@ cc_library(
 # example.
 cc_library(
     name = "plugin_backend",
-    deps = [
-        "//tensorflow/compiler/plugin/poplar:poplar_backend",
-        #"//tensorflow/compiler/plugin/example:example_backend",
-    ],
+    deps = if_poplar(["//tensorflow/compiler/plugin/poplar:poplar_backend"])
 )
 
 # This target is added purely for the purpose of ensuring that `:xla_device` is

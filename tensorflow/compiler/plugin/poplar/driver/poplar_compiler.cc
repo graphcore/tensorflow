@@ -83,6 +83,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
@@ -161,7 +162,7 @@ int64 SizeFunction(const BufferValue& buffer) {
   return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
 }
 
-std::string GetPathToGraphProgFile(std::string filename) {
+StatusOr<std::string> GetPathToGraphProgFile(std::string filename) {
   Dl_info dlInfo;
   static const void* dummy;
   if (dladdr(&dummy, &dlInfo)) {
@@ -177,7 +178,9 @@ std::string GetPathToGraphProgFile(std::string filename) {
   {
     char buf[256];
     if (!getcwd(buf, 255)) {
-      return "";
+      return xla::InternalErrorStrCat("Failed to retrieve current working ",
+                                      "directory when looking for '", filename,
+                                      "' codelets");
     }
     std::string path(buf);
     path = path + "/tensorflow/compiler/plugin/poplar/" + filename;
@@ -186,8 +189,9 @@ std::string GetPathToGraphProgFile(std::string filename) {
     }
   }
 
-  return "";
+  return xla::InternalErrorStrCat("Failed to find '", filename, "' codelets");
 }
+
 bool GetConstantSubOutput(const HloInstruction* root, const Shape& layout,
                           std::vector<Literal>& sub_result) {
   if (root->opcode() == HloOpcode::kConstant) {
@@ -547,7 +551,9 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
       VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
     }
   }
-  main_graph.addCodelets(GetPathToGraphProgFile("tf.gp"));
+  TF_ASSIGN_OR_RETURN(const std::string codelets_path,
+                      GetPathToGraphProgFile("tf.gp"));
+  main_graph.addCodelets(codelets_path);
   poplin::addCodelets(main_graph);
   popnn::addCodelets(main_graph);
   popops::addCodelets(main_graph);
@@ -860,6 +866,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     TF_ASSIGN_OR_RETURN(auto scheduler, BestIpuSchedule(schedulers));
 
+    pipeline.AddPass<ResourceUpdateScheduleOptimizer>();
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
     pipeline.AddPass<LowerFrontendAttributes>();
 

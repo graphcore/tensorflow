@@ -237,7 +237,11 @@ StatusOr<bool> ModuleExpressionOutliner(HloComputation* comp) {
 
 StatusOr<bool> ExpressionOutliner::Run(HloModule* module) {
   bool was_outlined = false;
-  for (auto* comp : module->MakeNonfusionComputations()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
     TF_ASSIGN_OR_RETURN(bool was_modified, ModuleExpressionOutliner(comp));
     if (was_modified) {
       was_outlined = true;
