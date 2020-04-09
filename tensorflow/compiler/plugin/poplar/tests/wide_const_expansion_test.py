@@ -111,7 +111,6 @@ class WideConstExpansionTest(xla_test.XLATestCase):
         a = array_ops.pad(a, [[0, 0], [23, 1]])
         a = a - b * 0.1
         mm1 = math_ops.matmul(a, weights, name="mm1")
-        print(mm1, flush=True)
         return mm1
 
       pa = array_ops.placeholder(np.float16, [1024, 1000], name="a")
@@ -132,6 +131,39 @@ class WideConstExpansionTest(xla_test.XLATestCase):
 
       report.parse_log()
       report.assert_max_tile_memory(103673)
+
+  def testCheckMaxTileSizePadding2(self):
+    with self.session() as sess:
+
+      def my_graph(a, b):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          weights = variable_scope.get_variable(
+              "x",
+              dtype=np.float16,
+              shape=[64, 64],
+              initializer=init_ops.constant_initializer(1.0))
+        a = math_ops.matmul(a, weights, name="mm1")
+        a = array_ops.pad(a, [[0, 0], [4935, 1]], constant_values=64)
+        return a + b
+
+      pa = array_ops.placeholder(np.float16, [64, 64], name="a")
+      pb = array_ops.placeholder(np.float16, [64, 5000], name="a")
+
+      with ops.device("/device:IPU:0"):
+        out = ipu_compiler.compile(my_graph, [pa, pb])
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+
+      out = sess.run(out, {pa: np.ones(pa.shape), pb: np.ones(pb.shape)})
+      self.assertAllClose(np.full(pb.shape, 65.0), out[0])
+
+      report.parse_log()
+      report.assert_max_tile_memory(6166)
 
 
 if __name__ == "__main__":
