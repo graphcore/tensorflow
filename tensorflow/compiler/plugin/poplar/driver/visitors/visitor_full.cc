@@ -181,46 +181,9 @@ Status FullVisitor::HandleTranspose(HloInstruction* inst) {
 Status FullVisitor::HandleSlice(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(
-      TensorVectors inputs,
-      FindInplaceOutputTensors(tensor_map, resources_, inst, sequence, false));
-  CHECK_EQ(inputs.size(), 1);
-  CHECK_EQ(inputs[0].size(), 1);
-  poplar::Tensor out = inputs[0][0];
-
-  auto optional_begin =
-      convert_array<std::vector<size_t>>(inst->slice_starts());
-  if (!optional_begin) {
-    return xla::FailedPrecondition("HandleSlice - cannot cast slice starts.");
-  }
-  std::vector<size_t> begin = *optional_begin;
-
-  auto optional_end = convert_array<std::vector<size_t>>(inst->slice_limits());
-  if (!optional_end) {
-    return xla::FailedPrecondition("HandleSlice - cannot cast slice limits.");
-  }
-  std::vector<size_t> end = *optional_end;
-
-  std::vector<int64> strides(inst->slice_strides());
-  bool simple(true);
-  for (std::size_t s : strides) {
-    simple &= (s == 1);
-  }
-  if (simple) {
-    out = out.slice(begin, end);
-  } else {
-    for (size_t d = 0; d < strides.size(); d++) {
-      int64 s = strides[d];
-      if (s > 0) {
-        out = out.slice(begin[d], end[d], d);
-        out = out.subSample(strides[d], d);
-      } else {
-        out = out.slice(end[d] + 1, begin[d] + 1, d);
-        out = out.reverse(d);
-        out = out.subSample(-strides[d], d);
-      }
-    }
-  }
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
+      poplar::program::Program prog,
+      CreateSlice(resources_, inst, GetOutputShape(inst), tensor_map));
+  sequence.add(prog);
   return Status::OK();
 }
 
