@@ -67,7 +67,11 @@ bool CaseBAllOperandsInConst32Set(
 StatusOr<bool> F16ConstantFolding::Run(HloModule* module) {
   bool graph_modified = false;
 
-  for (auto* comp : module->MakeNonfusionComputations()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
     absl::flat_hash_set<HloInstruction*> constant_32_dag;
 
     // Finds DAG subtrees of fp16 ops.

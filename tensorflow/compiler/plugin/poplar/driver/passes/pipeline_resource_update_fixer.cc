@@ -68,6 +68,8 @@ StatusOr<bool> PipelineResourceUpdateFixer::FixPipeline(
   HloComputation* pipeline_comp = pipeline_op->to_apply();
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
+  // Make sure that the root of each stage is a tuple.
+  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   if (!stages.resource_update) {
     return false;
   }

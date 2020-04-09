@@ -27,6 +27,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
@@ -71,6 +72,7 @@ namespace xla {
 namespace {
 
 namespace m = match;
+namespace pp = poplarplugin;
 
 constexpr int64 very_small_gather_size = 4;
 
@@ -3881,7 +3883,6 @@ Status AlgebraicSimplifierVisitor::HandleMap(HloInstruction* map) {
 
 Status AlgebraicSimplifierVisitor::HandleCustomCall(
     HloInstruction* custom_call) {
-  namespace pp = poplarplugin;
   // We elide gradient accumulation ops with `num_mini_batches=1`.
   if (pp::IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(
           custom_call)) {
@@ -3899,7 +3900,11 @@ StatusOr<bool> PoplarAlgebraicSimplifier::Run(HloModule* module) {
       2, "PoplarAlgebraicSimplifier::Run(), before:\n" + module->ToString());
   bool changed = false;
   AlgebraicSimplifierVisitor visitor(this);
-  for (auto* comp : module->MakeNonfusionComputations()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (pp::IsPopOpsFusion(comp)) {
+      continue;
+    }
+
     if (visitor.Run(comp, this)) {
       changed = true;
     }

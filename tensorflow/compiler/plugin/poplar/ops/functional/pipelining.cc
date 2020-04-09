@@ -13,31 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/core/framework/common_shape_fns.h"
+#include "tensorflow/compiler/plugin/poplar/ops/common_shape_fns.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/util/tensor_format.h"
 
 namespace tensorflow {
-namespace {
-Status SetOutputShape(shape_inference::InferenceContext* c) {
-  std::vector<PartialTensorShape> output_shapes;
-  TF_RETURN_IF_ERROR(c->GetAttr("output_shapes", &output_shapes));
-  if (output_shapes.size() != static_cast<size_t>(c->num_outputs())) {
-    return errors::InvalidArgument(
-        "`output_shapes` must be the same length as num outputs (",
-        output_shapes.size(), " vs. ", c->num_outputs());
-  }
-  for (size_t i = 0; i < output_shapes.size(); ++i) {
-    shape_inference::ShapeHandle out;
-    TF_RETURN_IF_ERROR(
-        c->MakeShapeFromPartialTensorShape(output_shapes[i], &out));
-    c->set_output(i, out);
-  }
-  return Status::OK();
-}
-}  // namespace
 
 REGISTER_OP("Pipeline")
     .Input("inputs: Tin")
@@ -52,9 +34,7 @@ REGISTER_OP("Pipeline")
     .Attr("output_shapes: list(shape) >= 0")
     .Attr("pipeline_poplar_config: string")
     .SetIsStateful()
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      return SetOutputShape(c);
-    })
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(
 inputs: A list of input tensors.
 output: A list of tensors returned by computing to_apply on a device.
@@ -70,9 +50,7 @@ REGISTER_OP("PipelineStage")
     .Attr("stage_id: int >= 0")
     .Attr("output_shapes: list(shape) >= 0")
     .SetIsStateful()
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      return SetOutputShape(c);
-    })
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(
 inputs: A list of input tensors.
 output: A list of tensors returned by computing to_apply on a device.
@@ -89,9 +67,7 @@ REGISTER_OP("PipelineStageBackward")
     .Attr("stage_id: int >= 0")
     .Attr("output_shapes: list(shape) >= 0")
     .SetIsStateful()
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      return SetOutputShape(c);
-    })
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(
 inputs: A list of input tensors.
 output: A list of tensors returned by computing to_apply on a device.
@@ -107,9 +83,7 @@ REGISTER_OP("PipelineResourceUpdate")
     .Attr("Tout: list(type) >= 0")
     .Attr("output_shapes: list(shape) >= 0")
     .SetIsStateful()
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      return SetOutputShape(c);
-    })
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(
 inputs: A list of input tensors.
 output: A list of tensors returned by computing to_apply on a device.

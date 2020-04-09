@@ -294,10 +294,15 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
                                          IsFifoInstruction());
   for (auto itr = copies_end; itr != fifos_end; ++itr) {
     HloInstruction* inst = *itr;
-    CHECK_EQ(inst->user_count(), 1);
-    if (IsPipelineStageRecomputation(inst->users()[0])) {
-      result[inst] = get_stage_from_users(inst);
+    if (inst->user_count() == 1) {
+      if (IsPipelineStageRecomputation(inst->users()[0])) {
+        result[inst] = get_stage_from_users(inst);
+      } else {
+        result[inst] = get_stage_from_operands(inst);
+      }
     } else {
+      CHECK_EQ(inst->user_count(), 2);
+      CHECK(!absl::c_any_of(inst->users(), IsPipelineStageRecomputation));
       result[inst] = get_stage_from_operands(inst);
     }
   }

@@ -193,6 +193,7 @@ cc_library(
         "driver/passes/remove_blocked_recompute_suggestions.cc",
         "driver/passes/remove_recompute_suggestions.cc",
         "driver/passes/replication_factor_to_constant.cc",
+        "driver/passes/resource_update_schedule_optimizer.cc",
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_simplifier.cc",
         "driver/passes/sharding_pass.cc",
@@ -324,6 +325,7 @@ cc_library(
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/replication_factor_to_constant.h",
+        "driver/passes/resource_update_schedule_optimizer.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
         "driver/passes/sharding_pass.h",
@@ -535,6 +537,7 @@ cc_library(
         "driver/tools/poplar_util.cc",
         "driver/tools/rnn_util.cc",
         "driver/tools/seed_generator.cc",
+        "driver/tools/send_recv_runtime_util.cc",
         "driver/tools/subcomputation_graph_caching.cc",
         "driver/tools/tensor_map.cc",
         "driver/visitors/deferred_visitor.cc",
@@ -577,6 +580,7 @@ cc_library(
         "driver/tools/poplar_util.h",
         "driver/tools/rnn_util.h",
         "driver/tools/seed_generator.h",
+        "driver/tools/send_recv_runtime_util.h",
         "driver/tools/spsc_outfeed_queue.h",
         "driver/tools/spsc_queue.h",
         "driver/tools/subcomputation_graph_caching.h",
@@ -668,12 +672,12 @@ cc_library(
 )
 
 cc_library(
-    name = "rearrange_pipeline_stage_arguments",
+    name = "rearrange_function_arguments",
     srcs = [
-        "kernels/pipelining/rearrange_pipeline_stage_arguments.cc",
+        "kernels/functional/rearrange_function_arguments.cc",
     ],
     hdrs = [
-        "kernels/pipelining/rearrange_pipeline_stage_arguments.h",
+        "kernels/functional/rearrange_function_arguments.h",
     ],
     linkstatic = 1,
     deps = [
@@ -692,15 +696,25 @@ cc_library(
 )
 
 cc_library(
+    name = "common_shape_fns",
+    srcs = ["ops/common_shape_fns.cc"],
+    hdrs = ["ops/common_shape_fns.h"],
+    linkstatic = 1,
+    deps = ["//tensorflow/core:framework"],
+    alwayslink = True,
+)
+
+cc_library(
     name = "kernels",
     srcs = [
         "kernels/datastream/dataset_benchmark.cc",
         "kernels/datastream/exporters.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
+        "kernels/functional/functional_util.cc",
+        "kernels/functional/pipelining.cc",
         "kernels/host_compute_kernels.cc",
         "kernels/ipu_kernels.cc",
-        "kernels/pipelining/pipelining.cc",
         "kernels/popfloat/cast_to_gfloat.cc",
         "kernels/popnn/arg_min_max.cc",
         "kernels/popnn/gelu.cc",
@@ -734,13 +748,14 @@ cc_library(
         "kernels/training_ops.cc",
     ],
     hdrs = [
+        "kernels/functional/functional_util.h",
         "kernels/ipu_kernels_common.h",
     ],
     deps = [
         ":common",
         ":custom_kernels_util",
         ":driver",
-        ":rearrange_pipeline_stage_arguments",
+        ":rearrange_function_arguments",
         "//tensorflow/compiler/plugin/poplar/kernels/dataset:kernels",
         "//tensorflow/compiler/plugin/poplar/tools:poplar_executable_runner",
         "//tensorflow/compiler/tf2xla:common",
@@ -941,7 +956,10 @@ cc_library(
         "ops/poputil/stateful_gradient_accumulate.cc",
         "ops/poputil/user_operation.cc",
     ],
-    deps = ["//tensorflow/core:framework"],
+    deps = [
+        ":common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
     alwayslink = True,
 )
 
@@ -964,7 +982,10 @@ cc_library(
         "ops/datastream/feeds.cc",
         "ops/datastream/host_embedding.cc",
     ],
-    deps = ["//tensorflow/core:framework"],
+    deps = [
+        ":common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
     alwayslink = True,
 )
 
@@ -1011,24 +1032,27 @@ tf_custom_op_py_library(
 )
 
 cc_library(
-    name = "pipelining_ops",
-    srcs = ["ops/pipelining/pipelining.cc"],
-    deps = ["//tensorflow/core:framework"],
+    name = "functional_ops",
+    srcs = ["ops/functional/pipelining.cc"],
+    deps = [
+        ":common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
     alwayslink = True,
 )
 
 tf_gen_op_wrapper_py(
-    name = "pipelining_ops_wrapper_py",
-    out = "ops/gen_pipelining_ops.py",
+    name = "functional_ops_wrapper_py",
+    out = "ops/gen_functional_ops.py",
     visibility = ["//tensorflow:internal"],
-    deps = [":pipelining_ops"],
+    deps = [":functional_ops"],
 )
 
 tf_custom_op_py_library(
-    name = "pipelining_ops_py",
-    kernels = [":pipelining_ops"],
+    name = "functional_ops_py",
+    kernels = [":functional_ops"],
     srcs_version = "PY2AND3",
-    deps = [":pipelining_ops_wrapper_py"],
+    deps = [":functional_ops_wrapper_py"],
 )
 
 cc_library(
@@ -1089,11 +1113,11 @@ cc_library(
         ":dataset_exporters",
         ":dataset_ops",
         ":driver",
+        ":functional_ops",
         ":graph_optimizer_passes",
         ":host_compute_ops",
         ":ipu_ops",
         ":kernels",
-        ":pipelining_ops",
         ":pop_datastream_ops",
         ":popfloat_ops",
         ":poplar_backend",
@@ -2389,6 +2413,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "resource_update_schedule_optimizer_test",
+    size = "small",
+    srcs = ["tests/resource_update_schedule_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 tf_cc_test(
     name = "extract_outside_compilation_pass_test",
     size = "small",
@@ -3482,7 +3521,6 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/scalar_elementwise_graph_test.py"],
     enabled_backends = ["poplar"],
-    tags = ["exclusive"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -3791,12 +3829,33 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "allocation_finder_priority_test",
+    size = "large",
+    srcs = ["tests/allocation_finder_priority_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:init_ops",
+        "//tensorflow/python:nn",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:variables",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
         "64_bit_test",
         "add_block_recompute_test",
         "all_to_all_finder_test",
+        "allocation_finder_priority_test",
         "allocation_finder_test",
         "apply_recompute_suggestion_test",
         "arg_min_max_test",
@@ -3883,6 +3942,7 @@ test_suite(
         "pipeline_optimizer_test",
         "pipeline_recomputation_test",
         "pipeline_resource_update_fixer_test",
+        "pipeline_resource_variables_offload_test",
         "pipeline_sequential_visitor_test",
         "pipeline_util_test",
         "pipeline_visitor_test",
@@ -3894,6 +3954,7 @@ test_suite(
         "remapping_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
+        "resource_update_schedule_optimizer_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",
         "scatter_simplifier_test",

@@ -13,11 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
@@ -25,9 +27,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -86,8 +85,11 @@ bool IsProducerOp(const HloInstruction* inst) {
 
 StatusOr<std::vector<HloInstruction*>> GetPipelines(const HloModule* module) {
   std::vector<HloInstruction*> pipeline_ops;
-  for (HloComputation* comp : module->MakeNonfusionComputations()) {
-    for (HloInstruction* inst : comp->instructions()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
       if (IsPipelineOp(inst)) {
         pipeline_ops.push_back(inst);
       }
@@ -268,6 +270,49 @@ Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages) {
   return Status::OK();
 }
 
+Status FixRootInstructions(const PipelineStages& pipeline_stages) {
+  const uint64 num_stages = pipeline_stages.forward.size() +
+                            pipeline_stages.backward.size() +
+                            (pipeline_stages.resource_update ? 1 : 0);
+  std::vector<const HloInstruction*> stages(num_stages);
+  absl::c_copy(pipeline_stages.forward, stages.begin());
+  absl::c_copy(pipeline_stages.backward,
+               std::next(stages.begin(), pipeline_stages.forward.size()));
+  if (pipeline_stages.resource_update) {
+    stages.back() = *pipeline_stages.resource_update;
+  }
+  for (const HloInstruction* stage : stages) {
+    HloComputation* comp = stage->to_apply();
+    HloInstruction* root = comp->root_instruction();
+    if (root->opcode() == HloOpcode::kTuple) {
+      continue;
+    }
+    if (!root->shape().IsTuple()) {
+      return UnimplementedStrCat("Expected the PipelineStage(Backward) ",
+                                 stage->ToString(),
+                                 " to have a tuple output shape.");
+    }
+    // Create a GTE from each subshape.
+    const int64 num_elements = ShapeUtil::TupleElementCount(root->shape());
+    std::vector<HloInstruction*> gtes(num_elements);
+    for (int64 tuple_index = 0; tuple_index != num_elements; ++tuple_index) {
+      TF_ASSIGN_OR_RETURN(gtes[tuple_index],
+                          MakeGetTupleElementHlo(root, tuple_index));
+      if (root->has_sharding()) {
+        // If there is any sharding, then forward it.
+        gtes[tuple_index]->set_sharding(root->sharding().GetSubSharding(
+            root->shape(), ShapeIndex{tuple_index}));
+      }
+    }
+    // Create the root tuple.
+    HloInstruction* new_root =
+        comp->AddInstruction(HloInstruction::CreateTuple(gtes));
+    root->SetupDerivedInstruction(new_root);
+    comp->set_root_instruction(new_root);
+  }
+  return Status::OK();
+}
+
 Status VerifyPipelineAfterFixing(HloInstruction* pipeline_op) {
   HloComputation* pipeline_computation = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages pipeline_stages,
@@ -429,8 +474,7 @@ StatusOr<HloInstruction*> ReplaceCallWith(
 StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage, const std::vector<HloInstruction*>& ordered_lowering,
     std::map<int64, HloInstruction*> replace_parameter_with_lowered_instruction,
-    absl::flat_hash_set<HloInstruction*> forced_parameters,
-    bool replace_resource_update_uses) {
+    HloInstructionSet forced_parameters, bool replace_resource_update_uses) {
   CHECK(IsPipelineStageOrBackwardOp(stage));
 
   HloComputation* pipeline_computation = stage->parent();
@@ -442,8 +486,8 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   }
 
   // Create a set of instructions to lower for faster lookup.
-  const absl::flat_hash_set<HloInstruction*> ordered_lowering_set(
-      ordered_lowering.begin(), ordered_lowering.end());
+  const HloInstructionSet ordered_lowering_set(ordered_lowering.begin(),
+                                               ordered_lowering.end());
 
   // Mapping of the lowered instructions.
   absl::flat_hash_map<HloInstruction*, HloInstruction*> lowered_insts;
@@ -505,7 +549,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
       HloInstruction* operand = inst->mutable_operand(operand_idx);
       // Check if the operand for the instruction being lowered is also being
       // lowered.
-      if (!ordered_lowering_set.contains(operand)) {
+      if (!ContainsKey(ordered_lowering_set, operand)) {
         // The operand is not being lowered - we need to make sure it can be
         // accessed inside the computation.
         auto itr = operand_to_parameter.find(operand);
@@ -584,7 +628,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
   for (HloInstruction* inst : ordered_lowering) {
     // Go through all the users.
     for (HloInstruction* user : inst->users()) {
-      if (user != stage && !ordered_lowering_set.contains(user) &&
+      if (user != stage && !ContainsKey(ordered_lowering_set, user) &&
           replace_external_use(user)) {
         // Find any outside uses of the inst - we need to create GTEs for
         // those.
@@ -1067,6 +1111,14 @@ Status PipelineDataflowAnalysis::VerifyPipelineUsage(
           pipeline_stage_id.id < pipeline_stage_user_id.id) {
         return Status::OK();
       }
+
+      // If we allow fifo optimizations and recomputation, then it can also be
+      // used by any other recomputation stage which occurs later.
+      if (allow_fifo_optimizations_ && allow_recomputation_ &&
+          pipeline_stage_user_id.stage_type == StageType::kRecomputation &&
+          pipeline_stage_id.id < pipeline_stage_user_id.id) {
+        return Status::OK();
+      }
       break;
     }
     case StageType::kBackward: {
@@ -1349,77 +1401,98 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       } else if (IsPoplarInstruction(PoplarOp::Fifo)(inst)) {
         // We always expect FIFO input to be a GTE.
         const HloInstruction* fifo_input = inst->operand(0);
-        // We always expect the FIFO to only have a single user.
-        if (inst->user_count() != 1) {
+        // We always expect the FIFO to only have at least a single user.
+        // However if we allow fifo instructions between stages on the same IPU
+        // which are not intermediate *and* recomputation, then the fifo can
+        // have two users.
+        const uint64 max_user_count =
+            (allow_fifo_optimizations_ && allow_recomputation_) ? 2 : 1;
+
+        if (inst->user_count() > max_user_count) {
           return FailedPrecondition(
-              "Expected the FIFO operation to be used exactly once.");
+              "Expected the FIFO operation to have at most %d users, but has "
+              "%d users.",
+              max_user_count, inst->user_count());
         }
-        const bool input_to_recomputation_stage =
-            allow_recomputation_ &&
-            IsPipelineStageRecomputation(inst->users()[0]);
-        if (input_to_recomputation_stage) {
-          // When we are recomputing a stage, for a FIFO we expect:
-          // Infeed/ForwardStage -> GTE -> (InterIPUCopy)-> FIFO ->
-          // RecomputationStage.
-          const HloInstruction* gte_input =
-              fifo_input->operand(0)->LatestNonGteAncestor();
-          if (gte_input->opcode() != HloOpcode::kInfeed) {
+        const bool fifo_input_is_fifo =
+            IsPoplarInstruction(PoplarOp::Fifo)(fifo_input);
+        for (const HloInstruction* user : inst->users()) {
+          const bool input_to_recomputation_stage =
+              allow_recomputation_ && IsPipelineStageRecomputation(user);
+          if (IsPoplarInstruction(PoplarOp::Fifo)(user)) {
+            // This is a fifo feeding into another fifo, which is allowed.
+            continue;
+          } else if (fifo_input_is_fifo) {
+            if (!IsAnyPipelineStageOpOrResourceUpdate(user)) {
+              return UnimplementedStrCat(
+                  "Trying to create a FIFO which is consumed by ",
+                  inst->ToString(), ", which is not supported.");
+            }
+          } else if (input_to_recomputation_stage) {
+            // When we are recomputing a stage, for a FIFO we expect:
+            // Infeed/ForwardStage -> GTE -> (InterIPUCopy)-> FIFO ->
+            // RecomputationStage.
+            const HloInstruction* gte_input =
+                fifo_input->operand(0)->LatestNonGteAncestor();
+            if (gte_input->opcode() != HloOpcode::kInfeed) {
+              TF_ASSIGN_OR_RETURN(StageID fifo_input_stage_id,
+                                  GetStageID(gte_input));
+              TF_ASSIGN_OR_RETURN(StageID fifo_output_stage_id,
+                                  GetStageID(user));
+              // Expect for a FIFO to either be between:
+              // - A forward stage and the next stage's recomputation stage
+              // (Input).
+              // - A forward stage and the corresponding recomputatoin stage
+              // (State).
+              if (fifo_input_stage_id.stage_type != StageType::kForward ||
+                  fifo_output_stage_id.stage_type !=
+                      StageType::kRecomputation ||
+                  ((fifo_input_stage_id.id != fifo_output_stage_id.id) &&
+                   ((fifo_input_stage_id.id + 1) != fifo_output_stage_id.id))) {
+                return UnimplementedStrCat(
+                    "Trying to create a FIFO between ",
+                    fifo_input_stage_id.ToString(), " and ",
+                    fifo_output_stage_id.ToString(),
+                    ". This violates the dataflow constraints because a FIFO "
+                    "operation can only be placed between a forward "
+                    "PipelineStage and its corresponding or the next "
+                    "Recomputation PipelineStage.");
+              }
+            }
+          } else {
+            if (fifo_input->opcode() != HloOpcode::kGetTupleElement) {
+              return FailedPrecondition(
+                  "Expected the input of a FIFO operation to be a GTE  "
+                  "instruction, but is %s instead.",
+                  fifo_input->ToString());
+            }
+            // When we are not recomputing, for a FIFO we expect that the input
+            // is a chain: ForwardStage -> GTE -> FIFO -> BackwardStage.
             TF_ASSIGN_OR_RETURN(StageID fifo_input_stage_id,
-                                GetStageID(gte_input));
-            TF_ASSIGN_OR_RETURN(StageID fifo_output_stage_id,
-                                GetStageID(inst->users()[0]));
-            // Expect for a FIFO to either be between:
-            // - A forward stage and the next stage's recomputation stage
-            // (Input).
-            // - A forward stage and the corresponding recomputatoin stage
-            // (State).
-            if (fifo_input_stage_id.stage_type != StageType::kForward ||
-                fifo_output_stage_id.stage_type != StageType::kRecomputation ||
-                ((fifo_input_stage_id.id != fifo_output_stage_id.id) &&
-                 ((fifo_input_stage_id.id + 1) != fifo_output_stage_id.id))) {
+                                GetStageID(fifo_input->operand(0)));
+            TF_ASSIGN_OR_RETURN(StageID fifo_output_stage_id, GetStageID(user));
+            // Expect the input to FIFO to be a forward stage and the output of
+            // FIFO to be a backward stage. Expect their IDs to match.
+            bool allowed_fifo =
+                fifo_input_stage_id.stage_type == StageType::kForward &&
+                fifo_output_stage_id.stage_type == StageType::kBackward &&
+                fifo_input_stage_id.id == fifo_output_stage_id.id;
+
+            if (allow_fifo_optimizations_) {
+              // Allow FIFOs between stages of the same type.
+              allowed_fifo |= fifo_input_stage_id.stage_type ==
+                              fifo_output_stage_id.stage_type;
+            }
+            if (!allowed_fifo) {
               return UnimplementedStrCat(
                   "Trying to create a FIFO between ",
                   fifo_input_stage_id.ToString(), " and ",
                   fifo_output_stage_id.ToString(),
                   ". This violates the dataflow constraints because a FIFO "
                   "operation can only be placed between a forward "
-                  "PipelineStage and its corresponding or the next "
-                  "Recomputation PipelineStage.");
+                  "PipelineStage and a backward PipelineStage with the same "
+                  "stage ID.");
             }
-          }
-        } else {
-          if (fifo_input->opcode() != HloOpcode::kGetTupleElement) {
-            return FailedPrecondition(
-                "Expected the input of a FIFO operation to be a GTE  "
-                "instruction, but is %s instead.",
-                fifo_input->ToString());
-          }
-          // When we are not recomputing, for a FIFO we expect that the input is
-          // a chain: ForwardStage -> GTE -> FIFO -> BackwardStage.
-          TF_ASSIGN_OR_RETURN(StageID fifo_input_stage_id,
-                              GetStageID(fifo_input->operand(0)));
-          TF_ASSIGN_OR_RETURN(StageID fifo_output_stage_id,
-                              GetStageID(inst->users()[0]));
-          // Expect the input to FIFO to be a forward stage and the output of
-          // FIFO to be a backward stage. Expect their IDs to match.
-          bool allowed_fifo =
-              fifo_input_stage_id.stage_type == StageType::kForward &&
-              fifo_output_stage_id.stage_type == StageType::kBackward &&
-              fifo_input_stage_id.id == fifo_output_stage_id.id;
-
-          if (allow_fifo_optimizations_) {
-            // Allow FIFOs between stages of the same type.
-            allowed_fifo |= fifo_input_stage_id.stage_type ==
-                            fifo_output_stage_id.stage_type;
-          }
-          if (!allowed_fifo) {
-            return UnimplementedStrCat(
-                "Trying to create a FIFO between ",
-                fifo_input_stage_id.ToString(), " and ",
-                fifo_output_stage_id.ToString(),
-                ". This violates the dataflow constraints because a FIFO "
-                "operation can only be placed between a forward PipelineStage "
-                "and a backward PipelineStage with the same stage ID.");
           }
         }
         return false;

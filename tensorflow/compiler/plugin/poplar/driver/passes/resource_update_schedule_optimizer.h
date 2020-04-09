@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,25 +13,34 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_CONSTANT_SLICE_FOLDING_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_CONSTANT_SLICE_FOLDING_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_SCHEDULE_OPTIMIZER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_SCHEDULE_OPTIMIZER_H_
 
-#include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
+class HloInstruction;
+class HloModule;
+
 namespace poplarplugin {
 
-// A pass which converts a scalar slice of a part of a constant into a constant
-// scalar.
-class ConstantSliceFolding : public HloModulePass {
+/**
+ * This pass tries to optimize the schedule of a resource update computation.
+ */
+class ResourceUpdateScheduleOptimizer : public HloModulePass {
  public:
-  absl::string_view name() const override { return "constant_slice_folding"; }
+  absl::string_view name() const override {
+    return "resource-update--schedule-optimizer";
+  }
 
   StatusOr<bool> Run(HloModule* module) override;
+
+ private:
+  // Optimize a resource update.
+  StatusOr<bool> OptimizeResourceUpdate(HloInstruction* resource_update_op);
 };
 
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_CONSTANT_SLICE_FOLDING_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_SCHEDULE_OPTIMIZER_H_
