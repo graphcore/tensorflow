@@ -13,20 +13,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/apply_recompute_suggestion.h"
+
 #include <unordered_set>
 #include <vector>
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/apply_recompute_suggestion.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -46,8 +46,12 @@ bool IsBlockRecomputeInstruction(const HloInstruction* inst) {
 StatusOr<bool> ApplyRecomputeSuggestion::Run(HloModule* module) {
   std::vector<HloCustomCallInstruction*> custom_calls;
 
-  for (auto comp : module->MakeNonfusionComputations()) {
-    for (auto inst : comp->instructions()) {
+  for (auto comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+
+    for (auto inst : comp->MakeInstructionPostOrder()) {
       if (inst->opcode() == HloOpcode::kCustomCall) {
         auto custom_call = Cast<HloCustomCallInstruction>(inst);
 

@@ -80,14 +80,19 @@ class IPURunConfig(
 
 
 class RunConfig(run_config_lib.RunConfig):
-  """RunConfig with IPU support.
-
-  Args:
-    ipu_run_config: :class:`.IPURunConfig` object for IPU-specific configuration.
-    master: a string. The address of the distributed master to use for training.
-    **kwargs: keyword config parameters.
-  """
+  """RunConfig with IPU support."""
   def __init__(self, ipu_run_config=None, master=None, **kwargs):
+    """Constructs a RunConfig with IPU support.
+
+    These are the arguments specific to the RunConfig for IPUs. All remaining
+    keyword arguments are passed to the base class, which is documented below.
+
+    Args:
+      ipu_run_config: :class:`.IPURunConfig` object for IPU-specific
+        configuration.
+      master: a string. The address of the distributed master to use for
+        training.
+    """
     super(RunConfig, self).__init__(**kwargs)
     self._ipu_run_config = ipu_run_config or IPURunConfig()
 
@@ -95,6 +100,8 @@ class RunConfig(run_config_lib.RunConfig):
     # only override here if the user gave it explicitly.
     if master is not None:
       self._master = master
+
+  __init__.__doc__ += run_config_lib.RunConfig.__init__.__doc__
 
   @property
   def ipu_run_config(self):

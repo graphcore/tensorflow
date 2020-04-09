@@ -15,29 +15,27 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
 
 #include <list>
+#include <queue>
 #include <set>
 #include <string>
 #include <utility>
 
+#include "absl/strings/str_replace.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_noop.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/service/tuple_simplifier.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/str_util.h"
-
-#include "absl/strings/str_replace.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -87,13 +85,17 @@ StatusOr<std::vector<HloInstruction*>> FindClusterToLower(
   // operands and users of instructions already in the cluster.
   std::vector<HloInstruction*> ordered_lowering;
   std::vector<const HloValueSet*> value_sets;
-  absl::flat_hash_set<HloInstruction*> to_visit;
+  std::queue<HloInstruction*> to_visit;
   absl::flat_hash_set<HloInstruction*> visited;
-  to_visit.insert(lowering_root);
+  to_visit.push(lowering_root);
 
   while (!to_visit.empty()) {
-    HloInstruction* inst = *to_visit.begin();
-    to_visit.erase(inst);
+    HloInstruction* inst = to_visit.front();
+    to_visit.pop();
+
+    if (visited.contains(inst)) {
+      continue;
+    }
 
     bool ready_to_lower = true;
     for (HloInstruction* operand : inst->operands()) {
@@ -121,7 +123,7 @@ StatusOr<std::vector<HloInstruction*>> FindClusterToLower(
             bool needs_lowering,
             analysis->HasToBeLoweredIntoStage(stage, candidate));
         if (needs_lowering) {
-          to_visit.insert(candidate);
+          to_visit.push(candidate);
         }
       }
     }
@@ -150,8 +152,8 @@ StatusOr<std::vector<HloInstruction*>> FindClusterToLower(
 
 // Tidy function to remove any dangling outputs from a stage and prevent use
 // after free.
-Status RemovePipelineStageDeadUsers(
-    HloInstruction* stage, absl::flat_hash_set<HloInstruction*>& stage_users) {
+Status RemovePipelineStageDeadUsers(HloInstruction* stage,
+                                    HloInstructionSet& stage_users) {
   std::vector<HloInstruction*> users = stage->users();
   HloComputation* comp = stage->parent();
   for (HloInstruction* gte : users) {
@@ -203,8 +205,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
     TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));
     // We can't just iterate over users as we might remove some of them during
     // lowering.
-    absl::flat_hash_set<HloInstruction*> stage_users(stage->users().begin(),
-                                                     stage->users().end());
+    HloInstructionSet stage_users(stage->users().begin(), stage->users().end());
     // We try and lower one user at a time, otherwise we might create clusters
     // which cannot be lowered because they are using multiple pipeline stages.
     while (!stage_users.empty()) {
@@ -265,8 +266,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
     // GTE has been de-duplicated.
     // Store the tuple index from each user gte.
     HloInstruction* pipeline_root = stage->parent()->root_instruction();
-    absl::flat_hash_map<int64, absl::flat_hash_set<HloInstruction*>>
-        output_users;
+    std::map<int64, HloInstructionSet> output_users;
     for (HloInstruction* gte : previous_stage->users()) {
       CHECK_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
       CHECK_EQ(gte->user_count(), 1);
@@ -291,10 +291,9 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
     // uses with it, and add X as a forced parameter. The lowering will then
     // thread the value through and create GTEs out of this stage for all other
     // pipeline stages (but it will not change uses in the resource update).
-    absl::flat_hash_set<HloInstruction*> forced_parameters;
+    HloInstructionSet forced_parameters;
     for (auto& tuple_index_users_pair : output_users) {
-      absl::flat_hash_set<HloInstruction*> users =
-          tuple_index_users_pair.second;
+      HloInstructionSet users = tuple_index_users_pair.second;
       HloInstruction* forced_parameter = *users.begin();
       users.erase(forced_parameter);
       forced_parameters.insert(forced_parameter);
@@ -356,16 +355,22 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
     // only.
     std::vector<HloInstruction*> ordered_lowering;
     std::vector<const HloValueSet*> value_sets;
-    absl::flat_hash_set<HloInstruction*> to_visit;
+    std::queue<HloInstruction*> to_visit;
     absl::flat_hash_set<HloInstruction*> visited;
+
     for (auto& pair : parameters_to_replace) {
-      to_visit.insert(pair.second);
+      to_visit.push(pair.second);
     }
 
     while (!to_visit.empty()) {
-      HloInstruction* inst = *to_visit.begin();
+      HloInstruction* inst = to_visit.front();
+      to_visit.pop();
+
+      if (visited.contains(inst)) {
+        continue;
+      }
+
       ordered_lowering.push_back(inst);
-      to_visit.erase(inst);
       value_sets.push_back(&analysis->GetValueSet(inst));
 
       // Add any operand which has to be lowered.
@@ -375,7 +380,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
               bool needs_lowering,
               analysis->HasToBeLoweredIntoStage(stage, operand));
           if (needs_lowering) {
-            to_visit.insert(operand);
+            to_visit.push(operand);
           }
         }
       }
@@ -434,7 +439,7 @@ StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
     // Get the corresponding forward stage.
     HloInstruction* fwd_stage = stages_.forward[stage_id.id];
     // Go through the operands to the forward stage.
-    absl::flat_hash_set<HloInstruction*> params_users;
+    HloInstructionSet params_users;
     for (HloInstruction* operand : fwd_stage->operands()) {
       if (operand->opcode() == HloOpcode::kParameter) {
         // For parameters, we add all their non-pipeline stage users as
@@ -574,14 +579,19 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
     // Find the cluster of instructions from the to_lower instruction.
     std::vector<HloInstruction*> ordered_lowering;
     std::vector<const HloValueSet*> value_sets;
-    absl::flat_hash_set<HloInstruction*> to_visit;
+    std::queue<HloInstruction*> to_visit;
     absl::flat_hash_set<HloInstruction*> visited;
 
-    to_visit.insert(to_lower);
+    to_visit.push(to_lower);
     while (!to_visit.empty()) {
-      HloInstruction* inst = *to_visit.begin();
+      HloInstruction* inst = to_visit.front();
+      to_visit.pop();
+
+      if (visited.contains(inst)) {
+        continue;
+      }
+
       ordered_lowering.push_back(inst);
-      to_visit.erase(inst);
       value_sets.push_back(&analysis->GetValueSet(inst));
 
       // Add any operand which has to be lowered.
@@ -590,7 +600,7 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
           TF_ASSIGN_OR_RETURN(bool needs_lowering,
                               analysis->HasToBeLowered(operand));
           if (needs_lowering) {
-            to_visit.insert(operand);
+            to_visit.push(operand);
           }
         }
       }
@@ -736,6 +746,8 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_RETURN_IF_ERROR(DuplicateGTEEdges(stages_).status());
   // Uniquify computations called by stages.
   TF_RETURN_IF_ERROR(UniquifyPipelineStageCallsites(stages_).status());
+  // Make sure that the root of each stage is a tuple.
+  TF_RETURN_IF_ERROR(FixRootInstructions(stages_));
   // Verify we can actually try and lower this Pipeline.
   TF_RETURN_IF_ERROR(VerifyPipelineStagesBeforeFixing(stages_));
   // Run the lowering on pipeline stages.

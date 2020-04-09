@@ -18,18 +18,15 @@ limitations under the License.
 #include <map>
 #include <set>
 
+#include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
-
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
-
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
 
-#include "absl/container/flat_hash_map.h"
-
 namespace xla {
 
-class HloInstruction;
 class HloComputation;
 class HloModule;
 class CallGraph;
@@ -75,6 +72,10 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
     HloInstruction* pipeline_stage, CallGraph* call_graph);
 
+// Makes sure that the root instruction of each stage is a Tuple instruction
+// (not just tuple shaped).
+Status FixRootInstructions(const PipelineStages& pipeline_stages);
+
 // Verifies that Pipeline stages are suitable for fixing.
 // This means that we expect the Pipeline to not have been modified and so
 // the root instruction for all the stages is a tuple and all the users of
@@ -117,7 +118,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     const std::vector<HloInstruction*>& ordered_lowering = {},
     std::map<int64, HloInstruction*>
         replace_parameter_with_lowered_instruction = {},
-    absl::flat_hash_set<HloInstruction*> forced_parameters = {},
+    HloInstructionSet forced_parameters = {},
     bool replace_resource_update_uses = true);
 
 // Replaces a call with a new one, including a new computation.

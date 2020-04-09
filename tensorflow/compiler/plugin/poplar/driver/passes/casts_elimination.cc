@@ -164,7 +164,7 @@ bool CastsElimination::HandleMatch(HloMatcherMatched& match,
   absl::flat_hash_set<NodeId> outlined_node_ids;
   // A set of nodes which we can outline because all the operands have been
   // outlined.
-  absl::flat_hash_set<NodeId> to_outline;
+  std::set<NodeId> to_outline;
 
   auto pattern = patterns_[match.pattern_idx];
   HloComputation* computation = match.computation;

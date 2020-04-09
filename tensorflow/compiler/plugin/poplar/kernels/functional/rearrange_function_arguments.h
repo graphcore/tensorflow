@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_PIPELINING_REARRANGE_PIPELINE_STAGE_ARGUMENTS_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_PIPELINING_REARRANGE_PIPELINE_STAGE_ARGUMENTS_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_FUNCTIONAL_REARRANGE_FUNCTION_ARGUMENTS_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_FUNCTIONAL_REARRANGE_FUNCTION_ARGUMENTS_H_
 // Based on tensorflow/compiler/tf2xla/rearrange_function_argument.h
 
 #include "tensorflow/core/framework/function.h"
@@ -36,4 +36,4 @@ Status RearrangeFunctionArguments(
 
 }  // namespace tensorflow
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_PIPELINING_REARRANGE_PIPELINE_STAGE_ARGUMENTS_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_FUNCTIONAL_REARRANGE_FUNCTION_ARGUMENTS_H_
