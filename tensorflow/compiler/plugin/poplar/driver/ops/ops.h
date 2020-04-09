@@ -292,6 +292,11 @@ StatusOr<poplar::program::Program> CreateCopy(CompilerResources& res,
                                               const xla::Shape& output_shape,
                                               TensorMap& tensor_map);
 
+StatusOr<poplar::program::Program> CreateSlice(CompilerResources& res,
+                                               const HloInstruction* inst,
+                                               const xla::Shape& output_shape,
+                                               TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateConditionalOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map);

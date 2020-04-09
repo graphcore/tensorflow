@@ -125,7 +125,7 @@ bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res);
 StatusOr<std::string> GetInstructionCompilationInfo(
     const std::unique_ptr<xla::HloModule>& module, CompilerResources& res);
 
-// A copy between two tensors with compatbile aliasing Poplar Tensors.
+// Add a copy between two tensors with compatbile aliasing Poplar Tensors.
 poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
                                                  const poplar::Tensor& src,
                                                  const poplar::Tensor& dst);
