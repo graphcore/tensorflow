@@ -57,11 +57,6 @@ namespace poplarplugin {
 class PoplarBackendConfig;
 struct CompilerResources;
 
-enum class NormType {
-  BatchNorm,
-  GroupNorm,
-};
-
 StatusOr<popops::expr::UnaryOpType> LookupUnaryFn(const HloInstruction*);
 
 StatusOr<popops::expr::BinaryOpType> LookupBinaryFn(const HloInstruction*);
@@ -309,44 +304,12 @@ StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
 StatusOr<poplar::program::Program> CreateSort(CompilerResources& res,
                                               const HloInstruction* inst,
                                               TensorMap& tensor_map);
+
 poplar::Tensor ShuffleNormInputToPoplar(const poplar::Tensor& input,
                                         const unsigned feature_dimension);
 
 poplar::Tensor ShuffleNormOutputToTensorflow(const poplar::Tensor& output,
                                              const unsigned feature_dimension);
-
-StatusOr<poplar::program::Program> CreateBatchNormInf(
-    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateBatchNormTraining(
-    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateBatchNormGrad(
-    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateNormInference(
-    const NormType& norm_type, poplar::Graph& graph, CompilerResources& res,
-    const HloInstruction* inst, const float epsilon,
-    const uint32 feature_dimension, absl::optional<uint32> optional_num_groups,
-    TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateNormTraining(
-    const NormType& norm_type, poplar::Graph& graph, CompilerResources& res,
-    const HloInstruction* inst, const float epsilon,
-    const uint32 feature_dimension, absl::optional<uint32> optional_num_groups,
-    TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateNormGrad(
-    const NormType& norm_type, poplar::Graph& graph, CompilerResources& res,
-    const HloInstruction* inst, const float epsilon,
-    const uint32 feature_dimension, absl::optional<uint32> optional_num_groups,
-    TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateNormStatistics(
-    const NormType& norm_type, poplar::Graph& graph, CompilerResources& res,
-    const HloInstruction* inst, const float epsilon,
-    const uint32 feature_dimension, absl::optional<uint32> optional_num_groups,
-    TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateScatter(
     CompilerResources& res, const HloScatterInstruction* inst,

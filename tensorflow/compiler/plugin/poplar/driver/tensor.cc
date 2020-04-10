@@ -23,7 +23,6 @@ limitations under the License.
 #include <poplar/Engine.hpp>
 #include <poplar/OptionFlags.hpp>
 #include <poplar/TensorCloneMethod.hpp>
-#include <poplin/Norms.hpp>
 #include <popops/Gather.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
@@ -716,40 +715,6 @@ static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
   return result.dimShuffle(ToUnsignedVector(permutations));
 }
 
-StatusOr<poplar::Tensor> AddNormScaleTensor(
-    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
-    const HloInstruction* layout, uint64 layout_output_idx,
-    const unsigned feature_dimension, const TensorMap& tensor_map) {
-  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
-
-  if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
-    return xla::FailedPrecondition(
-        "Batch Norm %s layout input not found for %s", layout->name(),
-        debug_name);
-  }
-
-  poplar::Tensor acts = outputs[layout_output_idx];
-  auto shuffled = ShuffleNormInputToPoplar(acts, feature_dimension);
-  return poplin::createNormGamma(graph, shuffled);
-}
-
-StatusOr<poplar::Tensor> AddNormOffsetTensor(
-    poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
-    const HloInstruction* layout, uint64 layout_output_idx,
-    const unsigned feature_dimension, const TensorMap& tensor_map) {
-  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
-
-  if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
-    return xla::FailedPrecondition(
-        "Batch Norm %s layout input not found for %s", layout->name(),
-        debug_name);
-  }
-
-  poplar::Tensor acts = outputs[layout_output_idx];
-  auto shuffled = ShuffleNormInputToPoplar(acts, feature_dimension);
-  return poplin::createNormBeta(graph, shuffled);
-}
-
 static StatusOr<poplar::Tensor> AddElementwiseBinary(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
@@ -806,32 +771,6 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
       const std::string error_msg =
           absl::StrCat("Invalid operand for tensor allocation on ", debug_name);
       switch (target->opcode()) {
-        case HloOpcode::kBatchNormInference:
-        case HloOpcode::kBatchNormTraining: {
-          const unsigned feature_dimension =
-              Cast<HloBatchNormInstruction>(target)->feature_index();
-          switch (input_index) {
-            case 1: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddNormScaleTensor(graph, resources, debug_name,
-                                          *optional_layout,
-                                          *optional_layout_output_idx,
-                                          feature_dimension, tensor_map));
-              break;
-            }
-            case 2: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddNormOffsetTensor(graph, resources, debug_name,
-                                           *optional_layout,
-                                           *optional_layout_output_idx,
-                                           feature_dimension, tensor_map));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
         case HloOpcode::kDot: {
           switch (input_index) {
             case 0: {

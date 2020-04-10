@@ -519,7 +519,6 @@ cc_library(
         "driver/ops/graph_caching_util.cc",
         "driver/ops/map_ops.cc",
         "driver/ops/maths_ops.cc",
-        "driver/ops/norm_ops.cc",
         "driver/ops/ops_helper.cc",
         "driver/ops/reduction_ops.cc",
         "driver/ops/scatter_ops.cc",

@@ -72,12 +72,6 @@ class FullVisitor : public BaseVisitor {
 
   Status HandleSort(HloInstruction* inst) override;
 
-  Status HandleBatchNormInference(HloInstruction* inst) override;
-
-  Status HandleBatchNormTraining(HloInstruction* inst) override;
-
-  Status HandleBatchNormGrad(HloInstruction* inst) override;
-
   Status Postprocess(HloInstruction* inst) override;
 
   Status HandleGather(HloInstruction* inst) override;
@@ -88,6 +82,9 @@ class FullVisitor : public BaseVisitor {
   Status Name(HloInstruction* inst) override { return HandleHloOp(inst); }
 
   HANDLE_AS_HLO_OP(HandleConvolution)
+  HANDLE_AS_HLO_OP(HandleBatchNormInference)
+  HANDLE_AS_HLO_OP(HandleBatchNormTraining)
+  HANDLE_AS_HLO_OP(HandleBatchNormGrad)
 };
 
 }  // namespace poplarplugin
