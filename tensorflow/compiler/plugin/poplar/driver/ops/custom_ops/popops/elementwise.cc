@@ -27,7 +27,7 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
-
+namespace {
 class UnaryElementwiseOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
@@ -61,7 +61,31 @@ class UnaryElementwiseOp : public PoplarOpDef {
   }
 };
 
-REGISTER_POPLAR_OP(UnaryOp, UnaryElementwiseOp);
+REGISTER_HLO_OP(kAbs, UnaryElementwiseOp);
+REGISTER_HLO_OP(kRoundNearestAfz, UnaryElementwiseOp);
+REGISTER_HLO_OP(kCeil, UnaryElementwiseOp);
+REGISTER_HLO_OP(kClz, UnaryElementwiseOp);
+REGISTER_HLO_OP(kConvert, UnaryElementwiseOp);
+REGISTER_HLO_OP(kBitcastConvert, UnaryElementwiseOp);
+REGISTER_HLO_OP(kCopy, UnaryElementwiseOp);
+REGISTER_HLO_OP(kCos, UnaryElementwiseOp);
+REGISTER_HLO_OP(kExp, UnaryElementwiseOp);
+REGISTER_HLO_OP(kExpm1, UnaryElementwiseOp);
+REGISTER_HLO_OP(kFloor, UnaryElementwiseOp);
+REGISTER_HLO_OP(kImag, UnaryElementwiseOp);
+REGISTER_HLO_OP(kIsFinite, UnaryElementwiseOp);
+REGISTER_HLO_OP(kLog, UnaryElementwiseOp);
+REGISTER_HLO_OP(kLog1p, UnaryElementwiseOp);
+REGISTER_HLO_OP(kNot, UnaryElementwiseOp);
+REGISTER_HLO_OP(kNegate, UnaryElementwiseOp);
+REGISTER_HLO_OP(kPopulationCount, UnaryElementwiseOp);
+REGISTER_HLO_OP(kReal, UnaryElementwiseOp);
+REGISTER_HLO_OP(kReducePrecision, UnaryElementwiseOp);
+REGISTER_HLO_OP(kRsqrt, UnaryElementwiseOp);
+REGISTER_HLO_OP(kSign, UnaryElementwiseOp);
+REGISTER_HLO_OP(kSin, UnaryElementwiseOp);
+REGISTER_HLO_OP(kSqrt, UnaryElementwiseOp);
+REGISTER_HLO_OP(kTanh, UnaryElementwiseOp);
 
 class BinaryElementwiseOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
@@ -99,6 +123,23 @@ class BinaryElementwiseOp : public PoplarOpDef {
 
 REGISTER_POPLAR_OP(Implicit_binary_inplace, BinaryElementwiseOp);
 REGISTER_POPLAR_OP(Implicit_binary, BinaryElementwiseOp);
+REGISTER_HLO_OP(kAdd, BinaryElementwiseOp);
+REGISTER_HLO_OP(kAtan2, BinaryElementwiseOp);
+REGISTER_HLO_OP(kCompare, BinaryElementwiseOp);
+REGISTER_HLO_OP(kComplex, BinaryElementwiseOp);
+REGISTER_HLO_OP(kDivide, BinaryElementwiseOp);
+REGISTER_HLO_OP(kMaximum, BinaryElementwiseOp);
+REGISTER_HLO_OP(kMinimum, BinaryElementwiseOp);
+REGISTER_HLO_OP(kMultiply, BinaryElementwiseOp);
+REGISTER_HLO_OP(kPower, BinaryElementwiseOp);
+REGISTER_HLO_OP(kRemainder, BinaryElementwiseOp);
+REGISTER_HLO_OP(kSubtract, BinaryElementwiseOp);
+REGISTER_HLO_OP(kAnd, BinaryElementwiseOp);
+REGISTER_HLO_OP(kOr, BinaryElementwiseOp);
+REGISTER_HLO_OP(kXor, BinaryElementwiseOp);
+REGISTER_HLO_OP(kShiftLeft, BinaryElementwiseOp);
+REGISTER_HLO_OP(kShiftRightArithmetic, BinaryElementwiseOp);
+REGISTER_HLO_OP(kShiftRightLogical, BinaryElementwiseOp);
 
 class TernaryElementwiseOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
@@ -153,6 +194,9 @@ class TernaryElementwiseOp : public PoplarOpDef {
 
 REGISTER_POPLAR_OP(Implicit_ternary_inplace, TernaryElementwiseOp);
 REGISTER_POPLAR_OP(Implicit_ternary, TernaryElementwiseOp);
+REGISTER_HLO_OP(kClamp, TernaryElementwiseOp);
+REGISTER_HLO_OP(kSelect, TernaryElementwiseOp);
 
+}  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

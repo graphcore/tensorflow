@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <poplar/Program.hpp>
 
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor.h"
 
@@ -41,8 +42,6 @@ class BaseVisitor : public DfsHloVisitor {
 
   virtual const Shape& GetOutputShape(HloInstruction*) const;
 
-  Status HandlePoplarOp(HloInstruction* inst);
-
   Status HandleTupleSelect(HloInstruction* inst) override;
 
   Status HandleConvert(HloInstruction* inst) override;
@@ -51,7 +50,6 @@ class BaseVisitor : public DfsHloVisitor {
 
   Status HandleAllReduce(HloInstruction* crs) override;
 
-  Status HandleRng(HloInstruction* inst) override;
   Status HandleConstant(HloInstruction* inst) override;
 
   Status HandleGetTupleElement(HloInstruction* inst) override;
@@ -78,14 +76,17 @@ class BaseVisitor : public DfsHloVisitor {
 
   Status HandleAddDependency(HloInstruction* hlo) override;
 
-#define POPLAR_OP(Name) \
-  Status Name(HloInstruction* inst) override { return HandlePoplarOp(inst); };
+  Status HandleHloOp(HloInstruction* hlo);
 
-  POPLAR_OP(HandleElementwiseUnary)
-  POPLAR_OP(HandleElementwiseBinary)
-  POPLAR_OP(HandleClamp)
-  POPLAR_OP(HandleSelect)
-  POPLAR_OP(HandleCompare)
+#define HANDLE_AS_HLO_OP(Name) \
+  Status Name(HloInstruction* inst) override { return HandleHloOp(inst); }
+
+  HANDLE_AS_HLO_OP(HandleElementwiseUnary)
+  HANDLE_AS_HLO_OP(HandleElementwiseBinary)
+  HANDLE_AS_HLO_OP(HandleClamp)
+  HANDLE_AS_HLO_OP(HandleSelect)
+  HANDLE_AS_HLO_OP(HandleCompare)
+  HANDLE_AS_HLO_OP(HandleRng)
 
   /*
    * Operations not processed by this visitor.

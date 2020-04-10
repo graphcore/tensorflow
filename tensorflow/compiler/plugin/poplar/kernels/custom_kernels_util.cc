@@ -71,7 +71,7 @@ static absl::optional<PoplarOp> PoplarOpFromFusionString(
 
 }  // namespace
 
-absl::optional<PoplarOp> GetPoplibsCustomOp(const HloInstruction* inst) {
+absl::optional<PoplarOp> GetPoplarCustomOp(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kCustomCall) {
     PoplarOp op;
     bool op_parsed = PoplarOp_Parse(inst->custom_call_target(), &op);
@@ -84,29 +84,6 @@ absl::optional<PoplarOp> GetPoplibsCustomOp(const HloInstruction* inst) {
     // computation.
     HloComputation* comp = inst->fused_instructions_computation();
     return PoplarOpFromFusionString(comp->name());
-  } else if (inst->opcode() == HloOpcode::kRng) {
-    // If the RNG is one of the two we support, return them else fall through to
-    // absl::nullopt.
-    switch (inst->random_distribution()) {
-      case RandomDistribution::RNG_UNIFORM:
-        return PoplarOp::RandomUniform;
-      case RandomDistribution::RNG_NORMAL:
-        return PoplarOp::RandomNormal;
-    }
-  } else if (inst->IsElementwise()) {
-    // Find out which type of elementwise operation we are doing.
-    switch (inst->operand_count()) {
-      case 1:
-        return PoplarOp::UnaryOp;
-      case 2:
-        return PoplarOp::Implicit_binary;
-      case 3:
-        return PoplarOp::Implicit_ternary;
-      default:
-        return absl::nullopt;
-    }
-  } else if (inst->opcode() == HloOpcode::kConvolution) {
-    return PoplarOp::Convolution;
   }
 
   return absl::nullopt;
