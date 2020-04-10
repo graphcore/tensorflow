@@ -895,23 +895,19 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
                         operand_tensors.end());
   }
 
-  // If we aren't part of a replicated graph, then just forward the tensor
-  if (res.replication_factor < 2) {
-    for (int64 i = 0; i != flat_tensors.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, flat_tensors[i]));
-    }
-  } else {
+  // Only do the all reduce when there are multiple replicas.
+  if (res.replication_factor > 1) {
     // Create a concatenated and flattened tensor of the inputs.
     auto flat_tensor = FlattenAndConcatenateTensors(flat_tensors);
 
     // Replicated sum the concatenated tensor.
-    popops::replicatedAllReduceWithOutput(
-        GetMasterGraph(res), flat_tensor, flat_tensor, popops::Operation::ADD,
-        seq, GetDebugName(inst), GetReplicateAllReduceOptions());
+    popops::replicatedAllReduceInPlace(
+        GetMasterGraph(res), flat_tensor, popops::Operation::ADD, seq,
+        GetDebugName(inst), GetReplicateAllReduceOptions());
+  }
 
-    for (int64 i = 0; i != flat_tensors.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, flat_tensors[i]));
-    }
+  for (int64 i = 0; i != flat_tensors.size(); ++i) {
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, flat_tensors[i]));
   }
 
   return seq;
