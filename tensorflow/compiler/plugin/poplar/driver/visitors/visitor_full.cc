@@ -295,39 +295,6 @@ Status FullVisitor::HandleSort(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status FullVisitor::HandleBatchNormInference(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-
-  TF_ASSIGN_OR_RETURN(auto prog,
-                      CreateBatchNormInf(resources_, inst, tensor_map));
-
-  sequence.add(prog);
-
-  return Status::OK();
-}
-
-Status FullVisitor::HandleBatchNormTraining(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-
-  TF_ASSIGN_OR_RETURN(auto prog,
-                      CreateBatchNormTraining(resources_, inst, tensor_map));
-
-  sequence.add(prog);
-
-  return Status::OK();
-}
-
-Status FullVisitor::HandleBatchNormGrad(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-
-  TF_ASSIGN_OR_RETURN(auto prog,
-                      CreateBatchNormGrad(resources_, inst, tensor_map));
-
-  sequence.add(prog);
-
-  return Status::OK();
-}
-
 Status FullVisitor::HandleGather(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
