@@ -18,13 +18,14 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <utility>
 
+#include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
+#include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
-
-#include "absl/container/flat_hash_map.h"
 
 namespace poplar {
 class Graph;
@@ -55,33 +56,109 @@ class PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map) = 0;
 };
 
-// The following singleton class is used to register and access custom poplibs
+// The following singleton class is used to register and access custom poplar
 // ops.
-class PoplarOpManager {
+template <typename OpType>
+class OpManager {
  public:
   // Registration method
-  static void RegsiterOp(PoplarOp op,
-                         std::unique_ptr<PoplarOpDef> poplibs_op_def);
-  static StatusOr<PoplarOpDef*> GetOp(const HloInstruction* inst);
+  static void RegsiterOp(OpType op,
+                         std::unique_ptr<PoplarOpDef> poplar_op_def) {
+    auto& ops = GetInstance().ops;
+
+    if (ops.contains(op)) {
+      LOG(FATAL) << "Trying to register the same op twice.";
+    }
+    ops[op] = std::move(poplar_op_def);
+  }
+
+  static bool HasOp(OpType op) {
+    auto& ops = GetInstance().ops;
+    return ops.contains(op);
+  }
+
+ protected:
+  OpManager<OpType>() = default;
+
+  static absl::optional<PoplarOpDef*> GetOpImpl(OpType op) {
+    auto& ops = GetInstance().ops;
+    auto itr = ops.find(op);
+    if (itr != ops.end()) {
+      return itr->second.get();
+    }
+    return absl::nullopt;
+  }
 
  private:
-  PoplarOpManager() = default;
-  static PoplarOpManager& GetInstance();
+  static OpManager<OpType>& GetInstance() {
+    static OpManager<OpType> instance;
+    return instance;
+  }
 
-  absl::flat_hash_map<PoplarOp, std::unique_ptr<PoplarOpDef>> ops;
+  absl::flat_hash_map<OpType, std::unique_ptr<PoplarOpDef>> ops;
+};
+
+// Manager for custom Poplar ops.
+class PoplarOpManager : public OpManager<PoplarOp> {
+ public:
+  static StatusOr<PoplarOpDef*> GetOp(const HloInstruction* inst) {
+    // Find the poplar info given a CustomCall instruction.
+    auto ret = GetPoplarCustomOp(inst);
+    if (!ret) {
+      return FailedPrecondition("Could not find poplar op %s.",
+                                inst->ToString().c_str());
+    }
+    auto def = GetOpImpl(*ret);
+    if (def) {
+      return *def;
+    }
+    return FailedPrecondition("Could not find definition for %s.",
+                              PoplarOp_Name(*ret).c_str());
+  }
 };
 
 class PoplarOpRegistrar {
  public:
-  PoplarOpRegistrar(PoplarOp op, std::unique_ptr<PoplarOpDef> poplibs_op_def);
+  PoplarOpRegistrar(PoplarOp op, std::unique_ptr<PoplarOpDef> poplar_op_def) {
+    PoplarOpManager::RegsiterOp(op, std::move(poplar_op_def));
+  }
 
   PoplarOpRegistrar() = delete;
 };
 
-#define REGISTER_POPLAR_OP(poplibs_op, poplibs_op_def)                         \
+#define REGISTER_POPLAR_OP(poplar_op, poplar_op_def)                         \
+  namespace {                                                                \
+  static PoplarOpRegistrar registrar__poplar_op__##poplar_op##__object(      \
+      PoplarOp::poplar_op, std::unique_ptr<PoplarOpDef>(new poplar_op_def)); \
+  }
+
+// Manager for Hlo ops.
+class HloOpManager : public OpManager<HloOpcode> {
+ public:
+  static StatusOr<PoplarOpDef*> GetOp(const HloInstruction* inst) {
+    auto def = GetOpImpl(inst->opcode());
+    if (def) {
+      return *def;
+    }
+    return FailedPrecondition("Could not find definition for %s.",
+                              HloOpcodeString(inst->opcode()).c_str());
+  }
+};
+
+class HloOpRegistrar {
+ public:
+  HloOpRegistrar(HloOpcode hlo_opcode,
+                 std::unique_ptr<PoplarOpDef> poplar_op_def) {
+    HloOpManager::RegsiterOp(hlo_opcode, std::move(poplar_op_def));
+  }
+
+  HloOpRegistrar() = delete;
+};
+
+#define REGISTER_HLO_OP(hlo_opcode, poplar_op_def)                             \
   namespace {                                                                  \
-  static PoplarOpRegistrar registrar__poplibs_op__##poplibs_op##__object(      \
-      PoplarOp::poplibs_op, std::unique_ptr<PoplarOpDef>(new poplibs_op_def)); \
+  static HloOpRegistrar registrar__hlo_opcode__##hlo_opcode##__object(         \
+      HloOpcode::hlo_opcode, std::unique_ptr<PoplarOpDef>(new poplar_op_def)); \
   }
 
 }  // namespace poplarplugin

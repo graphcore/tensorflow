@@ -21,8 +21,8 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/custom_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
@@ -145,21 +145,6 @@ StatusOr<poplar::program::Program> CreateCallOp(CompilerResources& res,
   }
 
   return seq;
-}
-
-StatusOr<poplar::program::Program> CreateNonCallPoplarOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map) {
-  VLOG(1) << "Processing " << inst->ToString() << " as Poplibs call";
-  poplar::Graph& graph = GetGraph(res, inst);
-  auto op = GetPoplibsCustomOp(inst);
-  if (op) {
-    return CreatePoplarOp(graph, res, inst, output, tensor_map);
-  } else {
-    return xla::FailedPrecondition(
-        "Unrecognised Non call poplar instruction %s.",
-        inst->ToString().c_str());
-  }
 }
 
 StatusOr<poplar::program::Program> CreateCustomCallOp(

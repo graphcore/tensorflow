@@ -183,8 +183,8 @@ class Conv2DOp : public PoplarOpDef {
   }
 };
 
+REGISTER_HLO_OP(kConvolution, Conv2DOp);
 REGISTER_POPLAR_OP(Depthwise_conv, Conv2DOp);
-REGISTER_POPLAR_OP(Convolution, Conv2DOp)
 
 class Conv2DReverseOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,

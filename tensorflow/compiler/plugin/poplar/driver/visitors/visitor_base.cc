@@ -21,6 +21,12 @@ limitations under the License.
 #include <stddef.h>
 
 #include <map>
+#include <poplar/CSRFunctions.hpp>
+#include <poplar/Engine.hpp>
+#include <poplar/GraphElements.hpp>
+#include <poplar/Tensor.hpp>
+#include <poplar/exceptions.hpp>
+#include <poputil/Util.hpp>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -28,11 +34,14 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -43,13 +52,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/stream_executor/lib/initialize.h"
-
-#include <poplar/CSRFunctions.hpp>
-#include <poplar/Engine.hpp>
-#include <poplar/GraphElements.hpp>
-#include <poplar/Tensor.hpp>
-#include <poplar/exceptions.hpp>
-#include <poputil/Util.hpp>
 
 using tensorflow::str_util::StartsWith;
 
@@ -95,11 +97,13 @@ const Shape& BaseVisitor::GetOutputShape(HloInstruction* inst) const {
   return inst->shape();
 }
 
-Status BaseVisitor::HandlePoplarOp(HloInstruction* inst) {
+Status BaseVisitor::HandleHloOp(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->ToString();
-  TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
-                      CreateNonCallPoplarOp(resources_, inst,
-                                            GetOutputShape(inst), tensor_map));
+  poplar::Graph& graph = GetGraph(resources_, inst);
+
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Program prog,
+      CreateHloOp(graph, resources_, inst, GetOutputShape(inst), tensor_map));
   sequence.add(prog);
   return Status::OK();
 }
@@ -163,26 +167,6 @@ Status BaseVisitor::HandleAllReduce(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status BaseVisitor::HandleRng(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-  if (inst->operand_count() != 2) {
-    LOG(FATAL) << "RNG must have two operands.";
-  }
-  for (auto* op : inst->operands()) {
-    if (op->opcode() != HloOpcode::kConstant) {
-      LOG(FATAL) << "RNG operand " << op->ToString() << " is not a constant.";
-    }
-  }
-
-  if (inst->random_distribution() != RandomDistribution::RNG_NORMAL &&
-      inst->random_distribution() != RandomDistribution::RNG_UNIFORM) {
-    LOG(FATAL) << "Unsupported random distribution type "
-               << inst->random_distribution() << ".";
-  }
-
-  return HandlePoplarOp(inst);
-}
-
 Status BaseVisitor::HandleConstant(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
 
@@ -240,6 +224,7 @@ TensorVectors GetFusionInputs(CompilerResources& res,
 }  // namespace
 
 Status BaseVisitor::HandleFusion(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->ToString();
   poplar::program::Program prog;
   HloComputation* comp = inst->fused_instructions_computation();
 
@@ -255,8 +240,17 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
                                   arithmetic_visitor.outputs()[i]));
     }
   } else if (IsPopOpsFusion(inst)) {
-    // If is is a special fusion-type op
-    return HandlePoplarOp(inst);
+    // Fusions are handle as Poplar custom ops.
+    poplar::Graph& graph = GetGraph(resources_, inst);
+    const bool is_poplar_custom_op = GetPoplarCustomOp(inst).has_value();
+    if (is_poplar_custom_op) {
+      TF_ASSIGN_OR_RETURN(
+          prog, CreatePoplarOp(graph, resources_, inst, GetOutputShape(inst),
+                               tensor_map));
+    } else {
+      return xla::FailedPrecondition("Unrecognised fusion instruction %s.",
+                                     inst->ToString().c_str());
+    }
   } else {
     TF_ASSIGN_OR_RETURN(prog, CreateFusionOp(resources_, inst,
                                              GetOutputShape(inst), tensor_map));

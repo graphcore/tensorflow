@@ -86,10 +86,6 @@ Status FullVisitor::HandleDot(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status FullVisitor::HandleConvolution(HloInstruction* inst) {
-  return HandlePoplarOp(inst);
-}
-
 Status FullVisitor::HandleCopy(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(

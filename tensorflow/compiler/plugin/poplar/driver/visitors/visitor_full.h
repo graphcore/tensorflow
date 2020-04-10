@@ -40,8 +40,6 @@ class FullVisitor : public BaseVisitor {
 
   Status HandleDot(HloInstruction* inst) override;
 
-  Status HandleConvolution(HloInstruction* inst) override;
-
   Status HandleCopy(HloInstruction* inst) override;
 
   Status HandleReverse(HloInstruction* inst) override;
@@ -85,6 +83,11 @@ class FullVisitor : public BaseVisitor {
   Status HandleGather(HloInstruction* inst) override;
 
   Status HandleOutfeed(HloInstruction* inst) override;
+
+#define HANDLE_AS_HLO_OP(Name) \
+  Status Name(HloInstruction* inst) override { return HandleHloOp(inst); }
+
+  HANDLE_AS_HLO_OP(HandleConvolution)
 };
 
 }  // namespace poplarplugin

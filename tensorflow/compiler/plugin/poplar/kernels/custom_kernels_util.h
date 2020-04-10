@@ -35,7 +35,7 @@ class Window;
 
 namespace poplarplugin {
 // Tries to convert the string target for the kCustomCall
-absl::optional<PoplarOp> GetPoplibsCustomOp(const HloInstruction* inst);
+absl::optional<PoplarOp> GetPoplarCustomOp(const HloInstruction* inst);
 
 namespace IPUCustomKernelsUtil {
 

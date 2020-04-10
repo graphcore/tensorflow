@@ -12,24 +12,26 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include <poplar/Graph.hpp>
+#include <popops/ElementWise.hpp>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
 
-#include <poplar/Graph.hpp>
-#include <popops/ElementWise.hpp>
-
 namespace xla {
 namespace poplarplugin {
-// Helper functions
 namespace {
 
-static StatusOr<poplar::program::Program> random_normal(
+inline const HloInstruction* LookThroughBroadcast(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kBroadcast ? inst->operand(0) : inst;
+}
+
+static StatusOr<poplar::program::Program> RandomNormal(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     double mean_val, double sd_val, const xla::Shape& output_shape,
     TensorMap& tensor_map) {
@@ -46,33 +48,6 @@ static StatusOr<poplar::program::Program> random_normal(
   TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
   return seq;
 }
-
-inline const HloInstruction* LookThroughBroadcast(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kBroadcast ? inst->operand(0) : inst;
-}
-
-}  // namespace
-
-class RandomNormalOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
-    const HloInstruction* mean = inst->operand(0);
-    const HloInstruction* sd = inst->operand(1);
-
-    TF_ASSIGN_OR_RETURN(double mean_val,
-                        LiteralScalarToNativeType<double>(mean->literal()));
-    TF_ASSIGN_OR_RETURN(double sd_val,
-                        LiteralScalarToNativeType<double>(sd->literal()));
-
-    return random_normal(graph, res, inst, mean_val, sd_val, output_shape,
-                         tensor_map);
-  }
-};
-
-REGISTER_POPLAR_OP(RandomNormal, RandomNormalOp);
 
 class RandomNormalScaleOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
@@ -103,14 +78,14 @@ class RandomNormalScaleOp : public PoplarOpDef {
 
     double mean_val = mean1_val + mean2_val;
     double sd_val = sd1_val * sd2_val;
-    return random_normal(graph, res, inst, mean_val, sd_val, output_shape,
-                         tensor_map);
+    return RandomNormal(graph, res, inst, mean_val, sd_val, output_shape,
+                        tensor_map);
   }
-};  // namespace poplarplugin
+};
 
 REGISTER_POPLAR_OP(Norm_scale_add, RandomNormalScaleOp);
 
-static StatusOr<poplar::program::Program> random_uniform(
+static StatusOr<poplar::program::Program> RandomUniform(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     double lower_val, double upper_val, const xla::Shape& output_shape,
     TensorMap& tensor_map) {
@@ -158,37 +133,60 @@ class RandomUniformScaleOp : public PoplarOpDef {
     lower_val = lower_val * scale_val + shift_val;
     upper_val = upper_val * scale_val + shift_val;
 
-    return random_uniform(graph, res, inst, lower_val, upper_val, output_shape,
-                          tensor_map);
+    return RandomUniform(graph, res, inst, lower_val, upper_val, output_shape,
+                         tensor_map);
   }
 };
 
 REGISTER_POPLAR_OP(Uniform_scale_add, RandomUniformScaleOp);
 
-class RandomUniformOp : public PoplarOpDef {
+class RngOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    const HloInstruction* lower = inst->operand(0);
-    const HloInstruction* upper = inst->operand(1);
-
-    TF_ASSIGN_OR_RETURN(double lower_val,
-                        LiteralScalarToNativeType<double>(lower->literal()));
-    TF_ASSIGN_OR_RETURN(double upper_val,
-                        LiteralScalarToNativeType<double>(upper->literal()));
-
-    if (ShapeUtil::ElementIsIntegral(output_shape)) {
-      upper_val -= 1.0;
+    if (inst->operand_count() != 2) {
+      return FailedPrecondition("RNG must have two operands.");
     }
-    return random_uniform(graph, res, inst, lower_val, upper_val, output_shape,
-                          tensor_map);
+    for (auto* op : inst->operands()) {
+      if (op->opcode() != HloOpcode::kConstant) {
+        return FailedPrecondition("RNG operand %s is not a constant.",
+                                  op->ToString().c_str());
+      }
+    }
+
+    const HloInstruction* op0 = inst->operand(0);
+    const HloInstruction* op1 = inst->operand(1);
+
+    TF_ASSIGN_OR_RETURN(double op0_val,
+                        LiteralScalarToNativeType<double>(op0->literal()));
+    TF_ASSIGN_OR_RETURN(double op1_val,
+                        LiteralScalarToNativeType<double>(op1->literal()));
+
+    switch (inst->random_distribution()) {
+      case RandomDistribution::RNG_NORMAL: {
+        return RandomNormal(graph, res, inst, op0_val, op1_val, output_shape,
+                            tensor_map);
+      }
+      case RandomDistribution::RNG_UNIFORM: {
+        if (ShapeUtil::ElementIsIntegral(output_shape)) {
+          op1_val -= 1.0;
+        }
+        return RandomUniform(graph, res, inst, op0_val, op1_val, output_shape,
+                             tensor_map);
+      }
+      default: {
+        return FailedPrecondition(
+            "Unsupported random distribution type: %s.",
+            RandomDistributionToString(inst->random_distribution()).c_str());
+      }
+    }
   }
 };
 
-REGISTER_POPLAR_OP(RandomUniform, RandomUniformOp);
+REGISTER_HLO_OP(kRng, RngOp);
 
+}  // namespace
 }  // namespace poplarplugin
-
 }  // namespace xla

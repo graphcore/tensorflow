@@ -13,25 +13,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_CUSTOM_OPS_CUSTOM_OPS_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_CUSTOM_OPS_CUSTOM_OPS_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_OPS_HELPER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_OPS_HELPER_H_
 
-/*
- * This is a wrapper for a function which then calls the right custom op given
- * the instruction metadata.
- */
-#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-
+#include <string>
 #include <vector>
 
+#include <poplar/exceptions.hpp>
+#include <poputil/exceptions.hpp>
+
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
-
-#include <poplar/exceptions.hpp>
-#include <poputil/exceptions.hpp>
 
 namespace poplar {
 class Graph;
@@ -56,7 +52,20 @@ StatusOr<poplar::program::Program> CreatePoplarOp(poplar::Graph& graph,
                                                   const HloInstruction* inst,
                                                   const xla::Shape& output,
                                                   TensorMap& tensor_map);
+
+StatusOr<poplar::Tensor> AllocateHloOpTensor(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const std::string& name,
+                                             const TensorTarget& tensor_target,
+                                             const xla::Shape& shape,
+                                             const TensorMap& tensor_map);
+
+StatusOr<poplar::program::Program> CreateHloOp(poplar::Graph& graph,
+                                               CompilerResources& res,
+                                               const HloInstruction* inst,
+                                               const xla::Shape& output,
+                                               TensorMap& tensor_map);
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_CUSTOM_OPS_CUSTOM_OPS_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_OPS_HELPER_H_

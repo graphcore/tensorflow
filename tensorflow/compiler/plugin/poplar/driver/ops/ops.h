@@ -177,10 +177,6 @@ StatusOr<poplar::program::Program> CreateCustomCallOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output, TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreateNonCallPoplarOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output, TensorMap& tensor_map);
-
 StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
                                                   const HloInstruction* inst,
                                                   const xla::Shape& output,
@@ -228,10 +224,6 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
                                                     TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateConvBiasAddOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> TruncatedNormal(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);
 
