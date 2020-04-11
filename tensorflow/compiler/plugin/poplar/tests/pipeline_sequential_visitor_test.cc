@@ -70,8 +70,8 @@ std::unique_ptr<CompilerResources> GetMockResources(
       max_inter_ipu_copies_buffer_size, 0, 1, 64, module,
       IpuOptions::FloatingPointBehaviour(), false, "", false, false, false);
   resources->module_call_graph = CallGraph::Build(module);
-  resources->main_graph = absl::make_unique<poplar::Graph>(
-      device, 0, poplar::replication_factor(1));
+  resources->main_graph =
+      absl::make_unique<poplar::Graph>(device, poplar::replication_factor(1));
 
   // Add mock vgraphs
   for (int i = 0; i < number_of_vgraphs; ++i) {

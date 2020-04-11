@@ -472,7 +472,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     const poplar::Target& poplar_target =
         poplar_executor->GetOrCreatePoplarTarget();
     resources.main_graph = absl::make_unique<poplar::Graph>(
-        poplar_target, 0,
+        poplar_target,
         poplar::replication_factor(resources.replication_factor));
   } catch (const std::exception& e) {
     return PoplarExceptionToTensorflowStatus("[Create Graph] ", e);
