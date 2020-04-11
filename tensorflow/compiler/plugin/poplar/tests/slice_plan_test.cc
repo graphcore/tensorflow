@@ -70,7 +70,7 @@ std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
       IpuOptions::FloatingPointBehaviour(), false, "", false, false, false);
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph = absl::make_unique<poplar::Graph>(
-      poplar::Device::createCPUDevice(), 0, poplar::replication_factor(1));
+      poplar::Device::createCPUDevice(), poplar::replication_factor(1));
   poplin::addCodelets(*resources->main_graph);
   popnn::addCodelets(*resources->main_graph);
   popops::addCodelets(*resources->main_graph);
