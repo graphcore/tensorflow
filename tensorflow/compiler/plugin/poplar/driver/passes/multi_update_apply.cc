@@ -247,7 +247,7 @@ StatusOr<HloInstruction*> CreateNewMultiUpdate(
                            multi_update->GetSerializationFactor()));
 
   if (shard) {
-    new_multi_update_add->set_device_sharding(*shard);
+    new_multi_update_add->set_sharding(HloSharding::AssignDevice(*shard));
   }
   multi_update->SetupDerivedInstruction(new_multi_update_add);
   return new_multi_update_add;

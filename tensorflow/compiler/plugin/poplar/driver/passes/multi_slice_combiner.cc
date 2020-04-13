@@ -112,10 +112,10 @@ bool MultiSliceCombiner::HandleMatch(
 
   // Set the sharding device if there is one.
   if (sharding_device) {
-    new_multi_slice->set_device_sharding(*sharding_device);
-    output1->set_device_sharding(*sharding_device);
-    output2->set_device_sharding(*sharding_device);
-    new_indices->set_device_sharding(*sharding_device);
+    new_multi_slice->set_sharding(HloSharding::AssignDevice(*sharding_device));
+    output1->set_sharding(HloSharding::AssignDevice(*sharding_device));
+    output2->set_sharding(HloSharding::AssignDevice(*sharding_device));
+    new_indices->set_sharding(HloSharding::AssignDevice(*sharding_device));
   }
   return true;
 }
