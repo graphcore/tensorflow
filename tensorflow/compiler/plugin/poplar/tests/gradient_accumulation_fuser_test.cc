@@ -215,7 +215,7 @@ entry  {
   %norm = f16[4] custom-call(a1), custom_call_target="ReplicationNormalise", backend_config="{}\n"
   %arg1 = f16[4] parameter(1)
   %arg2 = f16[1] parameter(2)
-  ROOT %ga = (f16[4], f16[4]) custom-call(arg1, norm, arg2), custom_call_target="StatefulGradientAccumulateWithMomentum", backend_config="{\"num_mini_batches\":10}\n"
+  ROOT %ga = (f16[4], f16[4]) custom-call(arg1, norm, arg2), custom_call_target="StatefulGradientAccumulateWithMomentum", sharding={maximal device=1}, backend_config="{\"num_mini_batches\":10}\n"
 }
   )";
 
@@ -236,6 +236,7 @@ entry  {
           root);
   ASSERT_TRUE(ga_and_ar);
   EXPECT_EQ(ga_and_ar->MiniBatchesToAccumulate(), 10);
+  EXPECT_EQ(ga_and_ar->sharding(), HloSharding::AssignDevice(1));
 }
 
 }  // namespace

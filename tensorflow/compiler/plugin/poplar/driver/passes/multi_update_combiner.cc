@@ -198,9 +198,9 @@ bool MultiUpdateCombiner::HandleMatch(
 
   // Set the sharding device if there is one.
   if (sharding_device) {
-    new_indices->set_device_sharding(*sharding_device);
-    new_updates->set_device_sharding(*sharding_device);
-    new_multi_update->set_device_sharding(*sharding_device);
+    new_indices->set_sharding(HloSharding::AssignDevice(*sharding_device));
+    new_updates->set_sharding(HloSharding::AssignDevice(*sharding_device));
+    new_multi_update->set_sharding(HloSharding::AssignDevice(*sharding_device));
   }
   return true;
 }

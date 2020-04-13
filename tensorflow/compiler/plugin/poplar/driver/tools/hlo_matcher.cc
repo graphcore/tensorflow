@@ -1109,7 +1109,7 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
 
   fusion->set_metadata(old->metadata());
   if (sharding_device) {
-    fusion->set_device_sharding(*sharding_device);
+    fusion->set_sharding(HloSharding::AssignDevice(*sharding_device));
   }
 
   // Replace the uses with the new outputs.

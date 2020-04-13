@@ -118,7 +118,7 @@ bool HandleGradAccumNoMomentum(HloMatcherPattern& pattern,
           {input}, grad_accum->MiniBatchesToAccumulate()));
   // Set the sharding device if there was any.
   if (sharding_device) {
-    new_output->set_device_sharding(*sharding_device);
+    new_output->set_sharding(HloSharding::AssignDevice(*sharding_device));
   }
 
   // Get the output so that we can replace the uses.
@@ -178,7 +178,7 @@ bool HandleGradAccumWithMomentum(HloMatcherPattern& pattern,
           {accum, grad, momentum}, grad_accum->MiniBatchesToAccumulate()));
   // Set the sharding device if there was any.
   if (sharding_device) {
-    new_output->set_device_sharding(*sharding_device);
+    new_output->set_sharding(HloSharding::AssignDevice(*sharding_device));
   }
 
   // Get the output so that we can replace the uses.
