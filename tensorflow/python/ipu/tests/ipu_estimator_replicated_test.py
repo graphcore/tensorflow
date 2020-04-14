@@ -28,6 +28,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
+from tensorflow.python.ipu.ops import replication_ops
 
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
@@ -293,6 +294,53 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     scores = estimator.evaluate(my_input_fn, steps=1)
     self.assertEqual(3., scores["feature_mean"])
     self.assertEqual(4., scores[model_fn_lib.LOSS_METRIC_KEY])
+
+  def testReplicatedEvaluationOnHost(self):
+    if ipu_utils.running_on_ipu_model():
+      self.skipTest("Replicated top level graphs are not supported on the "
+                    "IPU_MODEL target")
+
+    def my_input_fn():
+      features = [0, 0, 0, 1, 0, 0, 0, 1]
+      labels = [0, 1, 0, 1, 0, 1, 0, 1]
+      return dataset_ops.Dataset.from_tensor_slices(
+          (features, labels)).batch(2, drop_remainder=True)
+
+    def my_metrics_fn(features, labels):
+      labels64 = math_ops.cast(labels, np.int64)
+      return {
+          "accuracy": metrics_impl.accuracy(labels, features),
+          "precision": metrics_impl.precision(labels, features),
+          "recall": metrics_impl.recall(labels, features),
+          "recall_at_1": metrics_impl.recall_at_k(labels64, features, k=1),
+          "recall_at_2": metrics_impl.recall_at_k(labels64, features, k=2),
+          "mse": metrics_impl.mean_squared_error(labels, features),
+          "rmse": metrics_impl.root_mean_squared_error(labels, features),
+      }
+
+    def my_model_fn(features, labels, mode):
+      loss = math_ops.cast(replication_ops.replication_index(), np.float32)
+      eval_metrics = (my_metrics_fn, [features, labels])
+      return ipu_estimator.IPUEstimatorSpec(mode,
+                                            loss=loss,
+                                            eval_metrics=eval_metrics)
+
+    ipu_options = ipu_utils.create_ipu_config()
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            iterations_per_loop=1, num_replicas=4, ipu_options=ipu_options))
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    scores = estimator.evaluate(my_input_fn, steps=1)
+    self.assertEqual(0.75, scores["accuracy"])
+    self.assertEqual(1.0, scores["precision"])
+    self.assertEqual(0.5, scores["recall"])
+    self.assertEqual(0.5, scores["recall_at_1"])
+    self.assertEqual(1.0, scores["recall_at_2"])
+    self.assertEqual(0.25, scores["mse"])
+    self.assertEqual(0.5, scores["rmse"])
+    self.assertEqual(1.5, scores[model_fn_lib.LOSS_METRIC_KEY])
 
   @test_util.deprecated_graph_mode_only
   def testReplicatedPrediction(self):

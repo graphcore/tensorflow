@@ -71,18 +71,88 @@ _IPU_DEVICE = "/device:IPU:0"
 _RESERVED_PARAMS_KEYS = [_INPUT_FN_KEY]
 
 
+def _validate_function_call_spec(call_spec, name):
+  if call_spec is not None:
+    if not isinstance(call_spec, tuple):
+      raise ValueError("`{}` must be a tuple".format(name))
+    if len(call_spec) != 2:
+      raise ValueError("`{}` must have two elements".format(name))
+    if not callable(call_spec[0]):
+      raise ValueError("first element in `{}` must be callable".format(name))
+    if not isinstance(call_spec[1], list):
+      raise ValueError("second element in `{}` must be a list".format(name))
+
+
 class IPUEstimatorSpec(
     collections.namedtuple('IPUEstimatorSpec', [
         'mode', 'predictions', 'loss', 'train_op', 'eval_metric_ops',
-        'host_call', 'training_hooks', 'evaluation_hooks', 'prediction_hooks'
+        'eval_metrics', 'host_call', 'training_hooks', 'evaluation_hooks',
+        'prediction_hooks'
     ])):
-  """Ops and objects returned from a `model_fn` and passed to `IPUEstimator`."""
+  """Ops and objects returned from a `model_fn` and passed to `IPUEstimator`.
+
+  This is very similar to `EstimatorSpec`, with the addition of two extra
+  arguments: `eval_metrics` and `host_call`. If neither of those arguments
+  are needed, an `EstimatorSpec` can be passed to the `IPUEstimator` instead.
+
+  `eval_metrics` is a tuple of a function and a list of tensors to pass to
+  that function. The function runs on the CPU and returns a dict of metrics.
+  The tensors are transferred from the IPU to the CPU host and passed to the
+  function.
+
+  Exactly one of `eval_metrics` and `eval_metric_ops` must be provided during
+  evaluation. The major difference between the two is that while the
+  `eval_metric_ops` will execute directly on the IPU, the `eval_metrics` will
+  execute on the CPU host using the provided function. Example:
+
+  .. code-block:: python
+
+    def my_metrics_fn(features, labels):
+      return {
+          "accuracy": tf.metrics.accuracy(labels, features),
+          "precision": tf.metrics.precision(labels, features),
+          "recall": tf.metrics.recall(labels, features),
+      }
+
+    eval_metrics = (my_metrics_fn, [features, labels])
+    spec = IPUEstimatorSpec(mode, loss=loss, eval_metrics=eval_metrics)
+
+  `host_call` is a tuple of a function and a list of tensors to pass to that
+  function. `host_call` only works for training and is executed on the CPU for
+  every training step. The tensors are transferred from the IPU to the CPU host
+  and passed to the function.
+
+  This functionality can be used for e.g. doing all-reduce of the gradients and
+  weight updates on the host during distributed training with the
+  `IPUMultiWorkerStrategy`. Example:
+
+  .. code-block:: python
+
+    def my_host_fn(*host_gradients):
+      # This will all-reduce the gradients and update the weights on the host.
+      return optimizer.apply_gradients(zip(host_gradients, variables))
+
+    train_op = tf.identity(loss)
+    grads_and_vars = optimizer.compute_gradients(loss, var_list=variables)
+    gradients = [g for (g, _) in grads_and_vars]
+    host_call = (my_host_fn, gradients)
+
+    spec = IPUEstimatorSpec(mode=mode,
+                            loss=loss,
+                            train_op=train_op,
+                            host_call=host_call)
+
+  See full example: :any:`distributed_training_example`.
+
+  For documentation of the remaining arguments, see `EstimatorSpec`.
+  """
   def __new__(cls,
               mode,
               predictions=None,
               loss=None,
               train_op=None,
               eval_metric_ops=None,
+              eval_metrics=None,
               host_call=None,
               training_hooks=None,
               evaluation_hooks=None,
@@ -99,13 +169,8 @@ class IPUEstimatorSpec(
         prediction_hooks)
     eval_metric_ops = model_fn_lib._validate_eval_metric_ops(eval_metric_ops)
 
-    if host_call is not None:
-      if not isinstance(host_call, tuple):
-        raise ValueError("`host_call` must be a tuple")
-      if len(host_call) != 2:
-        raise ValueError("`host_call` must have two elements")
-      if not isinstance(host_call[1], list):
-        raise ValueError("second element in `host_call` must be a list")
+    _validate_function_call_spec(host_call, "host_call")
+    _validate_function_call_spec(eval_metrics, "eval_metrics")
 
     return super().__new__(cls,
                            mode=mode,
@@ -113,6 +178,7 @@ class IPUEstimatorSpec(
                            loss=loss,
                            train_op=train_op,
                            eval_metric_ops=eval_metric_ops,
+                           eval_metrics=eval_metrics,
                            host_call=host_call,
                            training_hooks=training_hooks,
                            evaluation_hooks=evaluation_hooks,
@@ -383,7 +449,7 @@ class _ModelFnWrapperBase:
 
   @staticmethod
   @abc.abstractmethod
-  def get_outfeed_mode(mode):
+  def need_outfeed(mode):
     raise NotImplementedError()
 
 
@@ -401,15 +467,12 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
     self._captured_hooks = []
     self._captured_host_call_fn = None
     self._captured_host_call_args = None
+    self._captured_eval_metrics_fn = None
 
   @staticmethod
-  def get_outfeed_mode(mode):
-    if mode == model_fn_lib.ModeKeys.PREDICT:
-      return ipu_outfeed_queue.IPUOutfeedMode.ALL
-    if mode == model_fn_lib.ModeKeys.EVAL:
-      return ipu_outfeed_queue.IPUOutfeedMode.LAST
+  def need_outfeed(mode):
     # No outfeed for training
-    return None
+    return mode != model_fn_lib.ModeKeys.TRAIN
 
   def _loop_replica_mean(self, loop_sum):
     if self._replication_factor == 1:
@@ -430,9 +493,16 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
 
   def _capture_host_call(self, host_call):
     if host_call:
-      assert self._captured_host_call_fn is None, "Can only capture host_call once"
+      assert self._captured_host_call_fn is None, \
+          "Can only capture host_call once"
       self._captured_host_call_fn, tensors = host_call
       self._captured_host_call_args = _add_send_to_host_ops(tensors)
+
+  def _capture_eval_metrics_fn(self, metrics_fn):
+    assert metrics_fn is not None
+    assert self._captured_eval_metrics_fn is None, \
+        "Can only capture eval_metrics_fn once"
+    self._captured_eval_metrics_fn = metrics_fn
 
   def _received_host_call_args(self):
     return _add_recv_at_host_ops(self._captured_host_call_args)
@@ -523,19 +593,29 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
         raise ValueError("EstimatorSpec must contain loss when evaluating")
 
       eval_metric_ops = estimator_spec.eval_metric_ops
-      if not eval_metric_ops:
+      eval_metrics = getattr(estimator_spec, "eval_metrics", None)
+      if not eval_metric_ops and not eval_metrics:
         raise ValueError(
-            "EstimatorSpec must contain eval_metric_ops when evaluating")
+            "EstimatorSpec must contain either eval_metric_ops or "
+            "eval_metrics when evaluating")
+      if eval_metric_ops and eval_metrics:
+        raise ValueError(
+            "EstimatorSpec cannot contain both eval_metric_ops and "
+            "eval_metrics")
 
       self._capture_hooks(estimator_spec.evaluation_hooks)
 
-      metric_values = _extract_metric_values(eval_metric_ops)
+      if eval_metric_ops:
+        outfeed_values = _extract_metric_values(eval_metric_ops)
+      else:
+        metrics_fn, outfeed_values = eval_metrics
+        self._capture_eval_metrics_fn(metrics_fn)
 
       if self._autosharding:
         autoshard.automatic_sharding(self._num_shards, features, loss)
 
       total_loss += math_ops.cast(loss, dtypes.float32)
-      outfeed = self._outfeed_queue.enqueue(metric_values)
+      outfeed = self._outfeed_queue.enqueue(outfeed_values)
       return total_loss, outfeed
 
     def evaluation_loop():
@@ -551,16 +631,37 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
     loss = compiled_evaluation_loop[0]
 
     with ops.device(_HOST_DEVICE):
-      metrics = self._outfeed_queue.dequeue()
-      metric_ops = {}
-      for metric_name, metric_tensor in six.iteritems(metrics):
-        # For replicated graphs the tensor will have an additional replica
-        # dimension, so we reduce over this dimension (if it exists).
-        # TODO(hakons): mean is not always correct, e.g. for
-        # root_mean_squared_error.
-        # Use no-op as the update_op since updating is done inside the loop.
-        metric_ops[metric_name] = (math_ops.reduce_mean(metric_tensor),
-                                   control_flow_ops.no_op())
+      if self._captured_eval_metrics_fn is not None:
+        # Calculate metrics on the host. Control dependency on the loop needed
+        # since the metric *ops* on the host must see all the enqueued inputs.
+        # The metric *tensors* on the host are idempotent and will not trigger
+        # another execution of the dequeue op when evaluated later.
+        with ops.control_dependencies(compiled_evaluation_loop):
+          inputs = self._outfeed_queue.dequeue()
+
+        metric_ops = self._captured_eval_metrics_fn(*inputs)
+      else:
+        # Metrics already calculated on IPU. Aggregate on the host. We can
+        # *not* have a control dependency on the loop here as the metric
+        # tensors must be idempotent, i.e. they must support evaluation
+        # without triggering a new execution of the dequeue op, and our
+        # pass-through metric tensors below have a data dependency on the
+        # dequeue op. The metric tensors are evaluated in a separate
+        # execution so they are guaranteed to see all the enqueued inputs.
+        metrics = self._outfeed_queue.dequeue()
+
+        metric_ops = {}
+        for metric_name, metric_tensor in six.iteritems(metrics):
+          # The outfeed outputs all values, but we only need the last one (the
+          # most recent aggregated value) when they are calculated on IPU.
+          last_metric_tensor = metric_tensor[-1]
+          # For replicated graphs the tensor will have an additional replica
+          # dimension, so we reduce over this dimension (if it exists).
+          # Note: mean is not always correct, e.g. for root_mean_squared_error,
+          # workaround is to use `eval_metrics` on host to get correct aggregation.
+          # Use no-op as the update_op since updating is done inside the loop.
+          metric_ops[metric_name] = (math_ops.reduce_mean(last_metric_tensor),
+                                     control_flow_ops.no_op())
 
     return loss, metric_ops
 
@@ -663,13 +764,12 @@ def _augment_model_fn(model_fn, wrapper_class):
         replication_factor=replication_factor)
     hooks.append(_IPUInfeedLifecycleHook(infeed_queue))
 
-    outfeed_mode = wrapper_class.get_outfeed_mode(mode)
-    if outfeed_mode is None:
+    if not wrapper_class.need_outfeed(mode):
       outfeed_queue = None
     else:
       outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(
           _FeedIdAllocator.alloc_outfeed_id(mode),
-          outfeed_mode=outfeed_mode,
+          outfeed_mode=ipu_outfeed_queue.IPUOutfeedMode.ALL,
           replication_factor=replication_factor)
       hooks.append(_IPUOutfeedLifecycleHook(outfeed_queue))
 

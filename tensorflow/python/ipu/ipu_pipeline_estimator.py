@@ -139,8 +139,8 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
     self._captured_eval_metrics_fn = None
 
   @staticmethod
-  def get_outfeed_mode(mode):  # pylint: disable=unused-argument
-    return ipu_outfeed_queue.IPUOutfeedMode.ALL
+  def need_outfeed(mode):  # pylint: disable=unused-argument
+    return True
 
   @property
   def captured_hooks(self):
