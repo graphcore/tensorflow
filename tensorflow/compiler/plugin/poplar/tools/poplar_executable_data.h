@@ -199,8 +199,8 @@ class OutfeedStream {
   void UpdateNumTensorsAndClose();
   TensorInfo info_;
   std::shared_ptr<StreamWriter> writer_;
-  std::ios::streampos num_tensors_pos_;
-  std::ios::streampos data_size_pos_;
+  std::streampos num_tensors_pos_;
+  std::streampos data_size_pos_;
 };
 
 class Outfeed {
@@ -223,8 +223,8 @@ class StreamWriter {
   void WriteInt64(int64_t value);
   void WriteInt64Array(const std::vector<int64_t>& values);
   void WriteData(const void* data, size_t size);
-  void MoveAbsolute(std::ios::streampos position);
-  std::ios::streampos CurrentPosition();
+  void MoveAbsolute(std::streampos position);
+  std::streampos CurrentPosition();
   void Close();
   std::fstream& Stream();
 
@@ -239,9 +239,9 @@ class StreamReader {
   int64_t NumBytesLeft();
   std::string ReadString(int64_t max_len = 0);
   void ReadData(void* dst, int64_t length);
-  void MoveRelative(std::ios::streamoff offset);
-  void MoveAbsolute(std::ios::streampos position);
-  std::ios::streampos CurrentPosition();
+  void MoveRelative(std::streamoff offset);
+  void MoveAbsolute(std::streampos position);
+  std::streampos CurrentPosition();
   int64_t ReadInt64();
   std::vector<int64_t> ReadInt64Array();
   std::ifstream& Stream();
@@ -264,8 +264,8 @@ class FeedWriter {
  private:
   std::shared_ptr<StreamWriter> writer_;
   int64_t tensor_size_;
-  std::ios::streampos end_pos_;
-  std::ios::streampos current_pos_;
+  std::streampos end_pos_;
+  std::streampos current_pos_;
 };
 
 class ExecutableWriter {

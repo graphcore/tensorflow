@@ -91,7 +91,7 @@ class InfeedStream {
  private:
   TensorInfo info_;
   bool current_tensor_loaded_;
-  std::ios::streampos first_tensor_pos_;
+  std::streampos first_tensor_pos_;
   int64_t num_tensors_;
   int64_t tensor_idx_;
   std::shared_ptr<StreamReader> reader_;
@@ -168,8 +168,8 @@ class BinaryLoader {
  private:
   struct Object {
     std::string filename;
-    std::ios::streampos offset;
-    std::ios::streampos end;
+    std::streampos offset;
+    std::streampos end;
   };
   const Object GetObject(ObjectType type, const std::string& name) const;
   std::map<ObjectType, std::map<std::string, Object>> objects_;
