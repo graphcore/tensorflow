@@ -645,6 +645,9 @@ void BinaryLoader::LoadFile(const std::string& filename) {
     std::string name = reader.ReadString();
     Object obj;
     int64_t size = reader.ReadInt64();
+    ERROR_ON_MSG(size <= 0, "Invalid object size " << size << " for "
+                                                   << ObjectTypeToString(type)
+                                                   << " '" << name << "': ");
     obj.filename = filename;
     obj.offset = reader.CurrentPosition();
     reader.MoveRelative(size);

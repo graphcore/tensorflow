@@ -845,9 +845,8 @@ ExecutableWriter BinaryWriter::CreateExecutable(const std::string& name) {
   writer_->WriteInt64(static_cast<int64_t>(ObjectType::PoplarExecutable));
   writer_->WriteString(name);
   DeferredSizeWriter object_size{writer_};
-  std::function<void()> on_write_complete = [&object_size]() {
-    object_size.WriteSize();
-  };
+  std::function<void()> on_write_complete =
+      std::bind(&DeferredSizeWriter::WriteSize, object_size);
   return ExecutableWriter(writer_, on_write_complete);
 }
 
