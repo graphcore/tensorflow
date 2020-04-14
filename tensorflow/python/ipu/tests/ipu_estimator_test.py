@@ -703,8 +703,64 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     config = ipu_run_config.RunConfig()
     estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
-    with self.assertRaisesRegex(ValueError, "must contain eval_metric_ops"):
+    with self.assertRaisesRegex(
+        ValueError, "must contain either eval_metric_ops or eval_metrics"):
       estimator.evaluate(my_input_fn, steps=1)
+
+  def testEvaluateCannotProvideBothEvalMetrics(self):
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensors(([], []))
+
+    def my_model_fn(features, labels, mode):
+      eval_metric_ops = {
+          "accuracy": metrics_impl.accuracy(labels, features),
+      }
+      eval_metrics = (lambda: None, [])
+      loss = math_ops.reduce_mean(features + labels)
+      return ipu_estimator.IPUEstimatorSpec(mode,
+                                            loss=loss,
+                                            eval_metric_ops=eval_metric_ops,
+                                            eval_metrics=eval_metrics)
+
+    config = ipu_run_config.RunConfig()
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    with self.assertRaisesRegex(
+        ValueError, "cannot contain both eval_metric_ops and eval_metrics"):
+      estimator.evaluate(my_input_fn, steps=1)
+
+  def testEvaluateOnHost(self):
+    def my_input_fn():
+      features = [0, 0, 0, 1]
+      labels = [0, 1, 0, 1]
+      return dataset_ops.Dataset.from_tensor_slices(
+          (features, labels)).batch(2, drop_remainder=True)
+
+    def my_metrics_fn(features, labels):
+      labels64 = math_ops.cast(labels, np.int64)
+      return {
+          "accuracy": metrics_impl.accuracy(labels, features),
+          "precision": metrics_impl.precision(labels, features),
+          "recall": metrics_impl.recall(labels, features),
+          "recall_at_1": metrics_impl.recall_at_k(labels64, features, k=1),
+          "recall_at_2": metrics_impl.recall_at_k(labels64, features, k=2),
+      }
+
+    def my_model_fn(features, labels, mode):
+      loss = constant_op.constant(0.0)
+      eval_metrics = (my_metrics_fn, [features, labels])
+      return ipu_estimator.IPUEstimatorSpec(mode,
+                                            loss=loss,
+                                            eval_metrics=eval_metrics)
+
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=1))
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    scores = estimator.evaluate(my_input_fn, steps=2)
+    self.assertEqual(0.75, scores["accuracy"])
+    self.assertEqual(1.0, scores["precision"])
+    self.assertEqual(0.5, scores["recall"])
+    self.assertEqual(0.5, scores["recall_at_1"])
+    self.assertEqual(1.0, scores["recall_at_2"])
 
   @combinations.generate(
       combinations.combine(estimator_class=[
