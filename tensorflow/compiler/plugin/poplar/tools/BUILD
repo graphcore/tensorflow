@@ -81,7 +81,7 @@ genrule(
                     dst=$$dst_lib
                     ;;
                 *.h)
-                    dst=$${dst/*include/$$dst_headers}
+                    dst=$${dst/*jsoncpp_git/$$dst_headers}
                     dst=$${dst/tensorflow/$$dst_headers\/tensorflow}
                     mkdir -p `dirname $$dst`
                     ;;
