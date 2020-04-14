@@ -2,6 +2,23 @@ licenses(["unencumbered"])  # Public Domain or MIT
 
 exports_files(["LICENSE"])
 
+filegroup(
+    name = "headers",
+    srcs = [
+        "include/json/autolink.h",
+        "include/json/config.h",
+        "include/json/features.h",
+        "include/json/forwards.h",
+        "include/json/json.h",
+        "include/json/reader.h",
+        "include/json/value.h",
+        "include/json/version.h",
+        "include/json/writer.h",
+    ],
+    visibility = ["//visibility:public"],
+    )
+
+
 cc_library(
     name = "jsoncpp",
     srcs = [
@@ -12,15 +29,7 @@ cc_library(
         "src/lib_json/json_writer.cpp",
     ],
     hdrs = [
-        "include/json/autolink.h",
-        "include/json/config.h",
-        "include/json/features.h",
-        "include/json/forwards.h",
-        "include/json/json.h",
-        "include/json/reader.h",
-        "include/json/value.h",
-        "include/json/version.h",
-        "include/json/writer.h",
+    ":headers",
     ],
     copts = [
         "-DJSON_USE_EXCEPTION=0",

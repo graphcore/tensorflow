@@ -55,6 +55,47 @@ cc_library(
     ],
 )
 
+genrule(
+    name = "libpoplar_executable_runner",
+    srcs = [
+        ":poplar_executable_runner",
+        ":PoplarExecutableRunner",
+        ":PoplarBinaryReader",
+        "@jsoncpp_git//:jsoncpp",
+        "@jsoncpp_git//:headers",
+    ] + glob(["poplar_executable_*.h"]),
+    outs = ["libpoplar_executable_runner.tar.gz"],
+    cmd = """
+        tmp_root=`mktemp -d`
+        tmp_folder=$$tmp_root/libpoplar_executable_runner
+        dst_headers=$$tmp_folder/include
+        dst_lib=$$tmp_folder/lib
+        dst_bin=$$tmp_folder/bin
+        mkdir -p $$dst_headers
+        mkdir -p $$dst_lib
+        mkdir -p $$dst_bin
+        for f in $(SRCS); do
+            dst=$$f
+            case $$dst in
+                *.so|*.a)
+                    dst=$$dst_lib
+                    ;;
+                *.h)
+                    dst=$${dst/*include/$$dst_headers}
+                    dst=$${dst/tensorflow/$$dst_headers\/tensorflow}
+                    mkdir -p `dirname $$dst`
+                    ;;
+                *)
+                    dst=$$dst_bin
+                    ;;
+            esac
+            cp $$f $$dst
+        done
+        tar czf $@ -C $$tmp_root libpoplar_executable_runner
+        rm -rf $$tmp_root
+        """,
+)
+
 cc_library(
     name = "poplar_executable_runner",
     srcs = [
@@ -64,7 +105,6 @@ cc_library(
         "poplar_executable_runner.h",
     ],
     copts = ["-fexceptions"],
-    linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
         ":poplar_executable_data",
