@@ -551,6 +551,17 @@ tf_py_test(
     shard_count = 2,
 )
 
+tf_py_test(
+    name = "ipu_strategy_replicated_test",
+    size = "large",
+    srcs = ["tests/ipu_strategy_replicated_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 py_test(
     name = "pop_datastream_test",
     size = "small",
@@ -893,6 +904,7 @@ test_suite(
     name = "replicated_tests",
     tests = [
         "ipu_estimator_replicated_test",
+        "ipu_strategy_replicated_test",
         "replication_normalise_test",
     ],
 )

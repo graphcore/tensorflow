@@ -17,10 +17,15 @@ Distribution strategy for a single system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
+from tensorflow.python.distribute import device_util
 from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import input_lib
+from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import values
+from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import ops
+from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.util import nest
 
@@ -82,6 +87,11 @@ def _get_variable_creator_initial_value(device, **kwargs):
   return initial_value_fn
 
 
+def _is_current_device_ipu():
+  current_device = tf_device.DeviceSpec.from_string(device_util.current())
+  return current_device.device_type == "IPU"
+
+
 class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstract-method
   # Not all abstract methods are implemented; implement as needed.
   # See _DefaultDistributionExtended for dummy implementations.
@@ -126,8 +136,20 @@ class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstrac
         xla_context.Exit()
 
   def _reduce_to(self, reduce_op, value, destinations):
-    del reduce_op, destinations
-    return value
+    del destinations
+
+    if not _is_current_device_ipu():
+      return value
+
+    if reduce_op not in (reduce_util.ReduceOp.SUM, reduce_util.ReduceOp.MEAN):
+      raise ValueError("Unsupported reduce op: {}".format(reduce_op))
+
+    result = cross_replica_ops.cross_replica_sum(value)
+
+    if reduce_op == reduce_util.ReduceOp.MEAN:
+      result = gen_poputil_ops.ipu_replication_normalise(result)
+
+    return result
 
   def _update(self, var, fn, args, kwargs, group):
     return self._update_non_slot(var, fn, (var,) + tuple(args), kwargs, group)
