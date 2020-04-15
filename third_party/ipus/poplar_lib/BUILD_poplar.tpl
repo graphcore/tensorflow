@@ -24,7 +24,6 @@ cc_library(
         "lib*/**/libpoprand*",
         "lib*/**/libpopfloat*",
         "lib*/**/libpopsys*",
-        "lib*/**/libpopsolver*",
         "lib*/**/libpoputil*",
         "lib*/**/libtbb.*",
         "lib*/**/libtbbmalloc.*",
