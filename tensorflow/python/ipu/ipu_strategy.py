@@ -23,7 +23,9 @@ from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import input_lib
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import values
+from tensorflow.python.eager import def_function
 from tensorflow.python.framework import device as tf_device
+from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ipu.ops import cross_replica_ops
 from tensorflow.python.ops import control_flow_ops
@@ -92,6 +94,23 @@ def _is_current_device_ipu():
   return current_device.device_type == "IPU"
 
 
+_UNSUPPORTED_DTYPES = (dtypes.float64,)
+
+
+def _validate_dtypes(tensors, name):
+  for t in tensors:
+    if t.dtype in _UNSUPPORTED_DTYPES:
+      raise TypeError("Unsupported data type for {}: {}".format(
+          name, t.dtype.name))
+
+
+def _validate_function(fn, args, kwargs):
+  if isinstance(fn, def_function.Function):
+    concrete_fn = fn.get_concrete_function(*args, **kwargs)
+    _validate_dtypes(concrete_fn.inputs, "input")
+    _validate_dtypes(concrete_fn.outputs, "output")
+
+
 class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstract-method
   # Not all abstract methods are implemented; implement as needed.
   # See _DefaultDistributionExtended for dummy implementations.
@@ -131,6 +150,7 @@ class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstrac
       xla_context = control_flow_ops.XLAControlFlowContext()
       try:
         xla_context.Enter()
+        _validate_function(fn, args, kwargs)
         return fn(*args, **kwargs)
       finally:
         xla_context.Exit()

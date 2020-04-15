@@ -431,6 +431,30 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
       self.assertEqual(num_epochs * 2, event_counts[IpuTraceEvent.LOAD_ENGINE])
       self.assertEqual(num_execs, event_counts[IpuTraceEvent.EXECUTE])
 
+  @test_util.run_v2_only
+  def test_unsupported_data_types(self):
+    @def_function.function
+    def identity(x):
+      return x
+
+    @def_function.function
+    def cast_float64(x):
+      return math_ops.cast(x, np.float64)
+
+    strategy = ipu_strategy.IPUStrategy()
+
+    with strategy.scope():
+
+      with self.assertRaisesRegex(TypeError,
+                                  "Unsupported data type for input: float64"):
+        strategy.experimental_run_v2(identity,
+                                     args=[np.array(1.0, dtype=np.float64)])
+
+      with self.assertRaisesRegex(TypeError,
+                                  "Unsupported data type for output: float64"):
+        strategy.experimental_run_v2(cast_float64,
+                                     args=[np.array(1.0, dtype=np.float32)])
+
 
 if __name__ == "__main__":
   test.main()
