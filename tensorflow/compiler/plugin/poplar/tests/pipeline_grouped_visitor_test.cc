@@ -66,6 +66,7 @@ std::unique_ptr<CompilerResources> GetMockResources(poplar::Device& device,
       poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
       false, false, false, false, merge_infeeds, 1, 0, 0, 0, 0, 1, 64, module,
       IpuOptions::FloatingPointBehaviour(), false, "", false, false, false);
+  resources->streams_indices.InitializeIndexTensors(*resources, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph =
       absl::make_unique<poplar::Graph>(device, poplar::replication_factor(1));

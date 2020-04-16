@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
+#include <string>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -38,6 +39,49 @@ DeferredArgVectors MakeArgVector(const HloComputation* comp) {
   }
   return output;
 }
+
+Status AddHostToDeviceCopy(const poplar::DataStream& stream, poplar::Tensor dst,
+                           bool rearrange_on_host, poplar::Graph& graph,
+                           CompilerResources& res,
+                           poplar::program::Sequence& seq,
+                           const InputOutputAliasingMap::InputInfo& info,
+                           const HloInstruction* inst) {
+  if (res.use_verified_transfers) {
+    if (rearrange_on_host) {
+      LOG(WARNING)
+          << "rearrange_on_host cannot be used with verified streams: ignored.";
+    }
+    TF_ASSIGN_OR_RETURN(poplar::Tensor index,
+                        res.streams_indices.IndexTensor(info, inst, seq));
+    seq.add(poplar::program::Copy(stream, dst, index, false,
+                                  res.streams_indices.CopyOptions()));
+  } else {
+    seq.add(poplar::program::Copy(stream, dst, rearrange_on_host));
+  }
+  return Status::OK();
+}
+
+Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
+                           bool rearrange_on_host, poplar::Graph& graph,
+                           CompilerResources& res,
+                           poplar::program::Sequence& seq,
+                           const InputOutputAliasingMap::OutputInfo& info,
+                           const HloInstruction* inst) {
+  if (res.use_verified_transfers) {
+    if (rearrange_on_host) {
+      LOG(WARNING)
+          << "rearrange_on_host cannot be used with verified streams: ignored.";
+    }
+    TF_ASSIGN_OR_RETURN(poplar::Tensor index,
+                        res.streams_indices.IndexTensor(info, inst, seq));
+    seq.add(poplar::program::Copy(src, stream, index, false,
+                                  res.streams_indices.CopyOptions()));
+  } else {
+    seq.add(poplar::program::Copy(src, stream, rearrange_on_host));
+  }
+  return Status::OK();
+}
+
 }  // namespace
 
 EntryVisitor::EntryVisitor(CompilerResources& resources,
@@ -88,14 +132,18 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     }
 
     // Create a host stream.
+    const std::string handle =
+        GetInputCopyHandle(inst->parameter_number(), flat_tuple_index);
     auto fifo = graph.addHostToDeviceFIFO(
-        GetInputCopyHandle(inst->parameter_number(), flat_tuple_index),
-        tensor_destination.elementType(), tensor_destination.numElements(),
-        poplar::ReplicatedStreamMode::BROADCAST);
+        handle, tensor_destination.elementType(),
+        tensor_destination.numElements(),
+        poplar::ReplicatedStreamMode::BROADCAST,
+        resources_.streams_indices.GraphInputOptions(in_info, handle));
 
-    stream_copy_seq.add(poplar::program::Copy(
+    TF_RETURN_IF_ERROR(AddHostToDeviceCopy(
         fifo, tensor_destination,
-        !in_info.IsStreaming() || resources_.always_rearrange_copies_on_host));
+        !in_info.IsStreaming() || resources_.always_rearrange_copies_on_host,
+        graph, resources_, stream_copy_seq, in_info, inst));
 
   } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
     // Initialize the tensor to a constant value.
@@ -206,14 +254,16 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
         poplar::Tensor out = ConvertFromDeviceLayout(
             layout_sub_shapes[tuple_index], out_tensors[tuple_index]);
 
-        auto fifo =
-            graph.addDeviceToHostFIFO(GetOutputCopyHandle(idx, tuple_index),
-                                      out.elementType(), out.numElements());
+        const std::string handle = GetOutputCopyHandle(idx, tuple_index);
+        auto fifo = graph.addDeviceToHostFIFO(
+            handle, out.elementType(), out.numElements(),
+            resources_.streams_indices.GraphOutputOptions(out_info, handle));
 
-        seq.add(poplar::program::Copy(
-            out, fifo,
-            !out_info.IsStreaming() ||
-                resources_.always_rearrange_copies_on_host));
+        TF_RETURN_IF_ERROR(
+            AddDeviceToHostCopy(out, fifo,
+                                !out_info.IsStreaming() ||
+                                    resources_.always_rearrange_copies_on_host,
+                                graph, resources_, seq, out_info, root));
       }
     }
   }

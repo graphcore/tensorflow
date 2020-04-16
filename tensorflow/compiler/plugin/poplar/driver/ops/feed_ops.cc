@@ -66,10 +66,28 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
                                     const Shape& data_shape,
                                     poplar::Tensor& tensor_to_update) {
     if (!UseSyntheticData()) {
+      const std::string handle =
+          GetInfeedCopyHandle(infeed->name(), tuple_index);
+      TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
+          infeed_config.feed_id(), tuple_index, handle, seq, inst));
       auto fifo = graph.addHostToDeviceFIFO(
-          GetInfeedCopyHandle(infeed->name(), tuple_index),
-          tensor_to_update.elementType(), tensor_to_update.numElements());
-      seq.add(poplar::program::Copy(fifo, tensor_to_update, false));
+          handle, tensor_to_update.elementType(),
+          tensor_to_update.numElements(),
+          poplar::ReplicatedStreamMode::REPLICATE,
+          res.streams_indices.GraphFeedOptions(handle));
+      if (res.use_verified_transfers) {
+        TF_ASSIGN_OR_RETURN(poplar::Tensor index,
+                            res.streams_indices.IndexTensor(handle, inst, seq));
+        seq.add(poplar::program::Copy(fifo, tensor_to_update, index, false,
+                                      res.streams_indices.CopyOptions()));
+        // Increment the index by one.
+        popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
+                           {index.slice(0, 1)}, seq,
+                           GetDebugName(inst) + "/InfeedIndexInc/" +
+                               std::to_string(tuple_index));
+      } else {
+        seq.add(poplar::program::Copy(fifo, tensor_to_update, false));
+      }
     } else if (UseSyntheticData() && UseSyntheticDataInitializer()) {
       // Initialize the tensor with a synthetic initalizer.
       auto& initializer = DataInitializer::GetSyntheticDataInitializer();
@@ -220,11 +238,25 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
 
     if (io_batch_size == 1) {
       // Simply copy to the stream
-      auto fifo =
-          graph.addDeviceToHostFIFO(GetOutfeedCopyHandle(inst->name(), i),
-                                    in.elementType(), in.numElements());
+      const std::string handle = GetOutfeedCopyHandle(inst->name(), i);
+      TF_RETURN_IF_ERROR(res.streams_indices.InitializeFeedStream(
+          info.config.feed_id(), i, handle, seq, inst));
+      auto fifo = graph.addDeviceToHostFIFO(
+          GetOutfeedCopyHandle(inst->name(), i), in.elementType(),
+          in.numElements(), res.streams_indices.GraphFeedOptions(handle));
+      if (res.use_verified_transfers) {
+        TF_ASSIGN_OR_RETURN(poplar::Tensor index,
+                            res.streams_indices.IndexTensor(handle, inst, seq));
 
-      seq.add(poplar::program::Copy(in, fifo, false));
+        seq.add(poplar::program::Copy(in, fifo, index, false,
+                                      res.streams_indices.CopyOptions()));
+        // Increment the index by one.
+        popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
+                           {index.slice(0, 1)}, seq,
+                           GetDebugName(inst) + "/OutfeedIndexInc");
+      } else {
+        seq.add(poplar::program::Copy(in, fifo, false));
+      }
     } else {
       // Batch multiple writes, and then write as a block.
 
