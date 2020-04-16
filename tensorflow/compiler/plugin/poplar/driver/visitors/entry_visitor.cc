@@ -164,6 +164,11 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
     if (out_info.IsResourceModified()) {
       const int64 param_number = out_info.GetInputIndex();
       if (IsRemoteParameter(param_number, resources_)) {
+        if (resources_.use_verified_transfers) {
+          return xla::FailedPrecondition(
+              "Parameter offloading cannot be used at the same time as "
+              "verified streams");
+        }
         continue;
       }
     }
@@ -219,6 +224,7 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
 const poplar::program::Sequence EntryVisitor::GetHostToDevice() const {
   return host_to_device;
 }
+
 const poplar::program::Sequence EntryVisitor::GetDeviceToHost() const {
   return device_to_host;
 }

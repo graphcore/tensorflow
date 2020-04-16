@@ -53,6 +53,12 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
   // The amount of data the user has specified to be prefetched on each host
   // sync.
   size_t io_batch_size = std::max<size_t>(1, infeed_config.io_batch_size());
+  // Only batch size 1 is supported for verified transfers as we need to
+  // increment the index between each read.
+  if (res.use_verified_transfers && io_batch_size != 1) {
+    return InvalidArgument(
+        "Only io_batch_size = 1 is supported for verified transfers.");
+  }
 
   // A functor wrapper to either use synthetic data or copy from the host,
   // depending on the global synthetic flags.
@@ -173,6 +179,12 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
   outfeed_config.ParseFromString(outfeed->outfeed_config());
 
   size_t io_batch_size = std::max<size_t>(1, outfeed_config.io_batch_size());
+  // Only batch size 1 is supported for verified transfers as we need to
+  // increment the index between each write.
+  if (res.use_verified_transfers && io_batch_size != 1) {
+    return InvalidArgument(
+        "Only io_batch_size = 1 is supported for verified transfers.");
+  }
 
   // Check that the replication factor matches.
   if (res.replication_factor != outfeed_config.replication_factor()) {

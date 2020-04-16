@@ -40,7 +40,7 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
-// NEXT ID 27
+// NEXT ID 30
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -210,4 +210,25 @@ message IpuOptions {
 
   // Use stable statistics calculation in norms
   bool use_stable_norm_statistics = 28;
+
+  message VerifiedInfo {
+    int64 key = 1;
+    int64 start_id = 2;
+  }
+
+  message VerifiedTransfers {
+    bool enabled = 1;
+    VerifiedInfo inputs = 2;
+    VerifiedInfo input_parameters = 3;
+    VerifiedInfo outputs = 4;
+    VerifiedInfo output_parameters = 5;
+    map<string,VerifiedInfo> infeeds = 6;
+    map<string,VerifiedInfo> outfeeds = 7;
+    VerifiedInfo checkpoint_in = 8;
+    VerifiedInfo checkpoint_out = 9;
+  }
+
+  // Options controlling the configuration of Poplar data transfers.
+  VerifiedTransfers verified_transfers = 29;
+
 };

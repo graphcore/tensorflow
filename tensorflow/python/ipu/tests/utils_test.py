@@ -69,7 +69,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, [1, 1])
     self.assertTrue(isinstance(cfg, IpuOptions))
-    self.assertTrue(len(cfg.device_config), 2)
+    self.assertEqual(len(cfg.device_config), 2)
     self.assertFalse(cfg.floating_point_behaviour.flags_set)
     self.assertFalse(cfg.has_ipu_version)
 
@@ -111,41 +111,41 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.auto_select_ipus(cfg, [4, 4])
     self.assertTrue(isinstance(cfg, IpuOptions))
     self.assertTrue(len(cfg.device_config), 2)
-    self.assertTrue(cfg.device_config[0].auto_count, 4)
-    self.assertTrue(cfg.device_config[1].auto_count, 4)
+    self.assertEqual(cfg.device_config[0].auto_count, 4)
+    self.assertEqual(cfg.device_config[1].auto_count, 4)
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.auto_select_ipus(cfg, [4, 4])
     self.assertTrue(isinstance(cfg, IpuOptions))
-    self.assertTrue(len(cfg.device_config), 2)
-    self.assertTrue(cfg.device_config[0].auto_count, 4)
-    self.assertTrue(cfg.device_config[1].auto_count, 4)
+    self.assertEqual(len(cfg.device_config), 2)
+    self.assertEqual(cfg.device_config[0].auto_count, 4)
+    self.assertEqual(cfg.device_config[1].auto_count, 4)
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.select_ipus(cfg, [2, 3])
     self.assertTrue(isinstance(cfg, IpuOptions))
-    self.assertTrue(len(cfg.device_config), 2)
-    self.assertTrue(cfg.device_config[0].cfg_index, 2)
-    self.assertTrue(cfg.device_config[1].cfg_index, 3)
+    self.assertEqual(len(cfg.device_config), 2)
+    self.assertEqual(cfg.device_config[0].cfg_index, 2)
+    self.assertEqual(cfg.device_config[1].cfg_index, 3)
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_compilation_options(cfg, {'A': 'B', 'C': 'D'})
-    self.assertTrue(len(cfg.compilation_options), 2)
-    self.assertTrue(cfg.compilation_options[0].option, "A")
-    self.assertTrue(cfg.compilation_options[0].value, "B")
-    self.assertTrue(cfg.compilation_options[1].option, "C")
-    self.assertTrue(cfg.compilation_options[1].value, "D")
+    self.assertEqual(len(cfg.compilation_options), 2)
+    self.assertEqual(cfg.compilation_options[0].option, "A")
+    self.assertEqual(cfg.compilation_options[0].value, "B")
+    self.assertEqual(cfg.compilation_options[1].option, "C")
+    self.assertEqual(cfg.compilation_options[1].value, "D")
 
     cfg = ipu.utils.create_ipu_config()
     folder_name = "/tmp/my_folder"
     cfg = ipu.utils.set_serialization_options(cfg, folder_name)
-    self.assertTrue(cfg.serialization_folder, folder_name)
+    self.assertEqual(cfg.serialization_folder, folder_name)
 
     cfg = ipu.utils.create_ipu_config()
     cfg = ipu.utils.set_ipu_connection_type(
         cfg, ipu.utils.DeviceConnectionType.NEVER, ipu_version=1)
-    self.assertTrue(cfg.device_connection_type, IpuDeviceConnectionType.NEVER)
-    self.assertTrue(cfg.ipu_version, 1)
+    self.assertEqual(cfg.device_connection_type, IpuDeviceConnectionType.NEVER)
+    self.assertEqual(cfg.ipu_version, 1)
     self.assertTrue(cfg.has_ipu_version)
 
     with self.assertRaises(Exception):
@@ -165,22 +165,52 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
                                         profile_execution=True)
 
     cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=True)
-    self.assertTrue(cfg.profiling.execution_trace_type ==
-                    IpuExecutionProfileType.DEVICE_PROFILE)
+    self.assertEqual(cfg.profiling.execution_trace_type,
+                     IpuExecutionProfileType.DEVICE_PROFILE)
 
     cfg = ipu.utils.create_ipu_config(profiling=True, profile_execution=False)
-    self.assertTrue(cfg.profiling.execution_trace_type ==
-                    IpuExecutionProfileType.NO_PROFILE)
+    self.assertEqual(cfg.profiling.execution_trace_type,
+                     IpuExecutionProfileType.NO_PROFILE)
 
     cfg = ipu.utils.create_ipu_config(
         profiling=True,
         profile_execution=ipu.utils.ExecutionProfileType.IPU_PROFILE)
-    self.assertTrue(cfg.profiling.execution_trace_type ==
-                    IpuExecutionProfileType.IPU_PROFILE)
+    self.assertEqual(cfg.profiling.execution_trace_type,
+                     IpuExecutionProfileType.IPU_PROFILE)
 
     with self.assertRaises(Exception):
       cfg = ipu.utils.create_ipu_config(profiling=True,
                                         profile_execution="IPU")
+
+    cfg = ipu.utils.create_ipu_config()
+    self.assertFalse(cfg.verified_transfers.enabled)
+    cfg = ipu.utils.set_transfer_options(cfg, True)
+    self.assertTrue(cfg.verified_transfers.enabled)
+    opts = ipu.utils.VerificationOptions()
+    opts.outputs.key = 2
+    opts.outfeeds["out"].start_id = 1
+    opts.outfeeds["out2"].key = 2
+    opts.infeeds["in"] = ipu.utils.KeyId(key=3, start_id=4)
+
+    cfg = ipu.utils.set_verification_options(cfg, opts)
+    # Default key is 0
+    self.assertEqual(cfg.verified_transfers.inputs.key, 0)
+    # start_id should be -1 by default
+    self.assertEqual(cfg.verified_transfers.inputs.start_id, -1)
+    self.assertEqual(cfg.verified_transfers.outputs.key, 2)
+    self.assertEqual(cfg.verified_transfers.outputs.start_id, -1)
+    self.assertEqual(cfg.verified_transfers.infeeds["in"].key, 3)
+    self.assertEqual(cfg.verified_transfers.infeeds["in"].start_id, 4)
+    self.assertEqual(cfg.verified_transfers.outfeeds["out"].key, 0)
+    self.assertEqual(cfg.verified_transfers.outfeeds["out"].start_id, 1)
+    self.assertEqual(cfg.verified_transfers.outfeeds["out2"].key, 2)
+    self.assertEqual(cfg.verified_transfers.outfeeds["out2"].start_id, -1)
+    # Checkpoints are special cases: by default their id is 0.
+    # (We don't want them to automatically increment)
+    self.assertEqual(cfg.verified_transfers.checkpoint_in.key, 0)
+    self.assertEqual(cfg.verified_transfers.checkpoint_in.start_id, 0)
+    self.assertEqual(cfg.verified_transfers.checkpoint_out.key, 0)
+    self.assertEqual(cfg.verified_transfers.checkpoint_out.start_id, 0)
 
   @test_util.deprecated_graph_mode_only
   def testEventFetchAndStringDecode(self):

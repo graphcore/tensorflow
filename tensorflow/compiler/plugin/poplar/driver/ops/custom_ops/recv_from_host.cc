@@ -70,6 +70,10 @@ class RecvFromHostOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
+    if (res.use_verified_transfers) {
+      return FailedPrecondition(
+          "Verified transfers cannot be used with Host embeddings");
+    }
     poplar::program::Sequence seq;
 
     const auto* recv = Cast<HloRecvFromHostInstruction>(inst);
@@ -108,7 +112,6 @@ class RecvFromHostOp : public PoplarOpDef {
                                     res.always_rearrange_copies_on_host));
 
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, tensor));
-
       res.annotations.recv_infos.emplace_back(stream.handle(), rendezvous_key,
                                               shape);
     }

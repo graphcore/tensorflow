@@ -38,8 +38,12 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::program::Sequence seq;
+    if (res.use_verified_transfers) {
+      return FailedPrecondition(
+          "Verified transfers cannot be used with Host embeddings");
+    }
 
+    poplar::program::Sequence seq;
     TensorVector indices =
         FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
 
@@ -84,8 +88,12 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    poplar::program::Sequence seq;
+    if (res.use_verified_transfers) {
+      return FailedPrecondition(
+          "Verified transfers cannot be used with Host embeddings");
+    }
 
+    poplar::program::Sequence seq;
     if (!UseSyntheticData()) {
       TensorVector grads =
           FindInstructionInputs(tensor_map, res, inst, 0, seq, false);

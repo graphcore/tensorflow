@@ -701,6 +701,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   CompilerResources resources(
       poplar_executor->GetConvolutionOptions(),
       poplar_executor->GetMatMulOptions(), poplar_executor->GetPoolingOptions(),
+      poplar_executor->UseVerifiedTransfers(),
       poplar_executor->ClearMatmulPassType(),
       poplar_executor->DisableGraphConvCaching(),
       poplar_executor->DisableGraphOutlining(),
