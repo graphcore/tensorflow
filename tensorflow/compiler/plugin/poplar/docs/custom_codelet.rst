@@ -58,7 +58,7 @@ If the operation can have its gradient taken, then the shared object can
 contain a separate function with the same name as the forward pass builder.
 The function must be given the same name as the forward operation with ``_grad``
 appended.  The signature of the builder function is slightly different, as it
-takes the forward pass outputs and inputs as arguments, as well as the
+takes the forward pass inputs and outputs as arguments, as well as the
 gradient outputs.
 
 .. code-block:: cpp
@@ -67,8 +67,8 @@ gradient outputs.
   poplar::program::Program Build_grad(
       poplar::Graph& graph, int input_grad_index,
       const std::vector<poplar::Tensor>& gradients,
-      const std::vector<poplar::Tensor>& fwd_outputs,
       const std::vector<poplar::Tensor>& fwd_inputs,
+      const std::vector<poplar::Tensor>& fwd_outputs,
       std::vector<poplar::Tensor>& outputs,
       const std::string& debug_prefix)
 
@@ -84,9 +84,9 @@ The arguments are:
 * ``gradients``: the inputs to the gradient operation, from the previous gradient operation
   or loss.
 
-* ``fwd_outputs``: the tensors which are the outputs of the forward operation.
-
 * ``fwd_inputs``: the tensors which are the inputs to the forward operation.
+
+* ``fwd_outputs``: the tensors which are the outputs of the forward operation.
 
 * ``outputs``: the outputs of this gradient operation. There must be one per
   input of the original forward operation.  Inputs which are not
