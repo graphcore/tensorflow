@@ -498,35 +498,40 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         self.assertAllClose(outfed[i], np.broadcast_to(i + 1, [4, 4]))
 
   @test_util.deprecated_graph_mode_only
-  def testMultipleOutfeedsRepeatNonTuple(self):
+  def testMultipleOutfeedsInSameGraph(self):
 
     outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
     outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id())
 
-    def body(v):
-      outfeed1 = outfeed_queue1.enqueue(v)
-      outfeed2 = outfeed_queue2.enqueue(v * 2)
+    def inner_body(v):
+      outfeed = outfeed_queue2.enqueue(v)
       v = v + 1
-      return (v, outfeed1, outfeed2)
+      return v, outfeed
+
+    def body(v):
+      outfeed = outfeed_queue1.enqueue(v)
+      v = ipu.loops.repeat(10, inner_body, v)
+      return v, outfeed
 
     def my_net(v):
-      r = ipu.loops.repeat(20, body, (v))
+      r = ipu.loops.repeat(10, body, v)
       return r
 
     with ops.device('cpu'):
-      v = array_ops.placeholder(np.float32, [4, 4])
+      v = array_ops.placeholder(np.float32, [])
 
     with ipu.scopes.ipu_scope("/device:IPU:0"):
       res = ipu.ipu_compiler.compile(my_net, inputs=[v])
 
-    outfeed_queue1.dequeue()
-    outfeed_queue2.dequeue()
+    dequeued1 = outfeed_queue1.dequeue()
+    dequeued2 = outfeed_queue2.dequeue()
+
     with session_lib.Session() as sess:
       tu.ReportJSON(self, sess)
-      with self.assertRaisesRegex(
-          errors.InvalidArgumentError,
-          'Only one IPUOutfeedQueue supported per graph'):
-        sess.run(res, {v: np.ones([4, 4], np.float32)})
+      sess.run(res, {v: 0.0})
+      out1, out2 = sess.run([dequeued1, dequeued2])
+      self.assertAllEqual(np.arange(0, 100, step=10), out1)
+      self.assertAllEqual(np.arange(0, 100, step=1), out2)
 
   @test_util.deprecated_graph_mode_only
   def testSingleInfeedOutfeedRepeatNonTuple(self):
