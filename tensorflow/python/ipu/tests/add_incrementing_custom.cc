@@ -46,8 +46,8 @@ extern "C" poplar::program::Program Build(
 extern "C" poplar::program::Program Build_grad(
     poplar::Graph& graph, int input_grad_index,
     const std::vector<poplar::Tensor>& gradients,
-    const std::vector<poplar::Tensor>& fwd_outputs,
     const std::vector<poplar::Tensor>& fwd_inputs,
+    const std::vector<poplar::Tensor>& fwd_outputs,
     std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
