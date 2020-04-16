@@ -25,7 +25,7 @@ import collections
 from tensorflow.python import ops
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.ipu import ipu_estimator
-from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.util import function_utils
@@ -203,7 +203,8 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
       with ops.control_dependencies([compiled_evaluation_loop]):
         inputs = self._outfeed_queue.dequeue()
 
-      metrics = self._captured_eval_metrics_fn(*inputs)
+      args, kwargs = loops._body_arguments(inputs)  # pylint: disable=protected-access
+      metrics = self._captured_eval_metrics_fn(*args, **kwargs)
 
     if not isinstance(metrics, dict):
       raise TypeError(("The `eval_metrics_fn` must return a dict, "

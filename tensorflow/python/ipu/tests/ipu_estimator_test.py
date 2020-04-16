@@ -728,7 +728,8 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         ValueError, "cannot contain both eval_metric_ops and eval_metrics"):
       estimator.evaluate(my_input_fn, steps=1)
 
-  def testEvaluateOnHost(self):
+  @combinations.generate(combinations.combine(arg_type=[list, dict]))
+  def testEvaluateOnHost(self, arg_type):
     def my_input_fn():
       features = [0, 0, 0, 1]
       labels = [0, 1, 0, 1]
@@ -747,7 +748,15 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
     def my_model_fn(features, labels, mode):
       loss = constant_op.constant(0.0)
-      eval_metrics = (my_metrics_fn, [features, labels])
+
+      if arg_type is list:
+        args = [features, labels]
+      else:
+        assert arg_type is dict
+        # Pass in reverse order just to check that they are passed by name.
+        args = {"labels": labels, "features": features}
+
+      eval_metrics = (my_metrics_fn, args)
       return ipu_estimator.IPUEstimatorSpec(mode,
                                             loss=loss,
                                             eval_metrics=eval_metrics)
@@ -761,6 +770,28 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertEqual(0.5, scores["recall"])
     self.assertEqual(0.5, scores["recall_at_1"])
     self.assertEqual(1.0, scores["recall_at_2"])
+
+  def testEvaluateOnHostWithWrongArgumentType(self):
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([]))
+
+    def my_metrics_fn():
+      pass
+
+    def my_model_fn(features, labels, mode):
+      del features, labels
+      loss = constant_op.constant(0.0)
+      eval_metrics = (my_metrics_fn, loss)
+      return ipu_estimator.IPUEstimatorSpec(mode,
+                                            loss=loss,
+                                            eval_metrics=eval_metrics)
+
+    config = ipu_run_config.RunConfig()
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+
+    with self.assertRaisesRegex(
+        TypeError, "second element in `eval_metrics` must be a list or dict"):
+      estimator.evaluate(my_input_fn, steps=1)
 
   @combinations.generate(
       combinations.combine(estimator_class=[

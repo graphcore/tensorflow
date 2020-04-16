@@ -71,16 +71,21 @@ _IPU_DEVICE = "/device:IPU:0"
 _RESERVED_PARAMS_KEYS = [_INPUT_FN_KEY]
 
 
-def _validate_function_call_spec(call_spec, name):
+def _validate_function_call_spec(call_spec, name, allow_dict_arg=False):
   if call_spec is not None:
     if not isinstance(call_spec, tuple):
-      raise ValueError("`{}` must be a tuple".format(name))
+      raise TypeError("`{}` must be a tuple".format(name))
     if len(call_spec) != 2:
       raise ValueError("`{}` must have two elements".format(name))
     if not callable(call_spec[0]):
-      raise ValueError("first element in `{}` must be callable".format(name))
-    if not isinstance(call_spec[1], list):
-      raise ValueError("second element in `{}` must be a list".format(name))
+      raise TypeError("first element in `{}` must be callable".format(name))
+
+    allowed_arg_types = (list,)
+    if allow_dict_arg:
+      allowed_arg_types += (dict,)
+    if not isinstance(call_spec[1], allowed_arg_types):
+      raise TypeError("second element in `{}` must be a {}".format(
+          name, " or ".join(t.__name__ for t in allowed_arg_types)))
 
 
 class IPUEstimatorSpec(
@@ -95,10 +100,11 @@ class IPUEstimatorSpec(
   arguments: `eval_metrics` and `host_call`. If neither of those arguments
   are needed, an `EstimatorSpec` can be passed to the `IPUEstimator` instead.
 
-  `eval_metrics` is a tuple of a function and a list of tensors to pass to
-  that function. The function runs on the CPU and returns a dict of metrics.
-  The tensors are transferred from the IPU to the CPU host and passed to the
-  function.
+  `eval_metrics` is a tuple of a (`function`, `tensors`), where `tensors` is
+  either a list of `tf.Tensor`s or a dict from strings to `tf.Tensor`s, that is
+  passed to the function. The function runs on the CPU and returns a dict of
+  metrics. The tensors are transferred from the IPU to the CPU host and passed
+  to the function.
 
   Exactly one of `eval_metrics` and `eval_metric_ops` must be provided during
   evaluation. The major difference between the two is that while the
@@ -170,7 +176,10 @@ class IPUEstimatorSpec(
     eval_metric_ops = model_fn_lib._validate_eval_metric_ops(eval_metric_ops)
 
     _validate_function_call_spec(host_call, "host_call")
-    _validate_function_call_spec(eval_metrics, "eval_metrics")
+
+    _validate_function_call_spec(eval_metrics,
+                                 "eval_metrics",
+                                 allow_dict_arg=True)
 
     return super().__new__(cls,
                            mode=mode,
@@ -647,7 +656,8 @@ class _ModelFnWrapper(_ModelFnWrapperBase):
         with ops.control_dependencies(compiled_evaluation_loop):
           inputs = self._outfeed_queue.dequeue()
 
-        metric_ops = self._captured_eval_metrics_fn(*inputs)
+        args, kwargs = loops._body_arguments(inputs)  # pylint: disable=protected-access
+        metric_ops = self._captured_eval_metrics_fn(*args, **kwargs)
       else:
         # Metrics already calculated on IPU. Aggregate on the host. We can
         # *not* have a control dependency on the loop here as the metric
