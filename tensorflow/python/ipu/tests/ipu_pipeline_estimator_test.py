@@ -383,6 +383,51 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
     with self.assertRaisesRegex(KeyError, "must contain 'loss'"):
       estimator.evaluate(input_fn=my_input_fn, steps=1)
 
+  @combinations.generate(combinations.combine(arg_type=[list, dict]))
+  def testEvaluate(self, arg_type):
+    num_steps = 2
+    pipeline_depth = 4
+
+    def my_model_fn(mode):
+      def stage1(features):
+        w1 = variable_scope.get_variable("w1", initializer=1.0)
+        partial = w1 * features
+        return partial
+
+      def stage2(partial):
+        squared = partial * partial
+
+        if arg_type is list:
+          return [partial, squared]
+
+        assert arg_type is dict
+        # Pass in reverse order just to check that they are passed by name.
+        return {"squared": squared, "partial": partial}
+
+      def eval_metrics_fn(partial, squared):
+        return {
+            "mean": metrics_impl.mean(partial),
+            "loss": squared,
+        }
+
+      return IPUPipelineEstimatorSpec(mode,
+                                      computational_stages=[stage1, stage2],
+                                      eval_metrics_fn=eval_metrics_fn,
+                                      pipeline_depth=pipeline_depth)
+
+    features = np.arange(pipeline_depth * num_steps, dtype=np.float32)
+
+    def my_input_fn():
+      dataset = dataset_ops.Dataset.from_tensor_slices(features)
+      return dataset.batch(1, drop_remainder=True)
+
+    estimator = IPUPipelineEstimator(model_fn=my_model_fn,
+                                     config=_make_config())
+
+    metrics = estimator.evaluate(input_fn=my_input_fn, steps=num_steps)
+    self.assertEqual(np.mean(features), metrics["mean"])
+    self.assertEqual(np.mean(np.square(features)), metrics["loss"])
+
   def testEvaluateWithStagesMappedToSameIpu(self, pipeline_depth=6):
     def my_model_fn(mode):
       self.assertEqual(mode, model_fn_lib.ModeKeys.EVAL)
