@@ -212,7 +212,7 @@ tf_py_test(
 
 tf_py_test(
     name = "dropout_test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/dropout_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -582,7 +582,7 @@ py_test(
 
 tf_py_test(
     name = "frontend_attributes_test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/frontend_attributes_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -595,7 +595,7 @@ tf_py_test(
 
 tf_py_test(
     name = "popnn_normalization_test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/popnn_normalization_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",
@@ -691,7 +691,7 @@ tf_py_test(
 
 tf_py_test(
     name = "utils_test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/utils_test.py"],
     additional_deps = [
         "//tensorflow:tensorflow_py",
