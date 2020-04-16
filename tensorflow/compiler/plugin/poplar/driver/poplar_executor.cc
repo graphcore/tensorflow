@@ -1410,6 +1410,9 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     VLOG(1) << "Pooling option: " << opt.first << " = " << opt.second;
   }
 
+  VLOG(1) << "Use verified transfers: "
+          << (UseVerifiedTransfers() ? "Yes" : "No");
+
   for (auto opt : graph_options_) {
     VLOG(1) << "Graph report option: " << opt.first << " = " << opt.second;
   }

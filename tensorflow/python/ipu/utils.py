@@ -17,12 +17,12 @@ General utility functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+import collections
 from enum import Enum
-
 import os
 import time
-
 import numpy as np
+
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.driver import config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
@@ -352,6 +352,10 @@ def create_ipu_config(profiling=False,
 
   opts.prefetch_data_streams = prefetch_data_streams
   opts.selection_order = selection_order.value
+
+  opts.verified_transfers.enabled = False
+  opts = set_verification_options(opts, VerificationOptions())
+
   return opts
 
 
@@ -445,6 +449,96 @@ def set_norm_options(opts, use_stable_statistics=False):
     The IpuOptions configuration protobuf.
   """
   opts.use_stable_norm_statistics = use_stable_statistics
+
+  return opts
+
+
+def set_transfer_options(opts, use_verified_transfers=False):
+  """Set the IPU options related to Poplar data transfers.
+
+  Args:
+    opts: An IpuOptions session control protobuf.
+    use_verified_transfers: If True, use Poplar's verified transfers.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.verified_transfers.enabled = use_verified_transfers
+
+  return opts
+
+
+class KeyId:
+  def __init__(self, key=0, start_id=-1):
+    self.key = key
+    self.start_id = start_id
+
+
+class VerificationOptions:
+  """Store pairs of key / id to use for each type of data used in the graph.
+  Does nothing unless verified transfers have been enabled by calling
+  `set_transfer_options(opts, use_verified_transfers=True).`
+  And an instance of this class has been set by calling
+  `set_verification_options`:
+
+  .. code-block:: python
+    o = VerificationOptions()
+    o.inputs.key = 1
+    o.infeeds["infeed"].key = 3
+    set_verification_options(opts, o)
+  """
+  def __init__(self):
+    self.inputs = KeyId()
+    self.input_parameters = KeyId()
+    self.outputs = KeyId()
+    self.output_parameters = KeyId()
+    self.infeeds = collections.defaultdict(KeyId)
+    self.outfeeds = collections.defaultdict(KeyId)
+    self.checkpoint_in = KeyId(0, 0)
+    self.checkpoint_out = KeyId(0, 0)
+
+
+def set_verification_options(opts, verification_options):
+  """Set the pairs or key / id to use for each type of data used in the graph
+     when verified transfers are enabled.
+
+  .. code-block:: python
+
+      # Create a device which will use verified transfers with different keys.
+      opts = create_ipu_config()
+      opts = set_transfer_options(opts, use_verified_transfers=True)
+      o = VerificationOptions()
+      o.input_parameters = KeyId(1)
+      o.infeeds["training_feed"] = KeyId(2)
+      opts = set_verification_options(opts, o)
+      ipu.utils.configure_ipu_system(opts)
+      with tf.Session() as s:
+        ...
+  Args:
+    opts: An IpuOptions session control protobuf.
+    verification_options: a VerificationOptions object that contains
+      the keys / ids to use.
+  """
+  if not isinstance(verification_options, VerificationOptions):
+    raise Exception(
+        "`verification_options` must be of type VerificationOptions")
+
+  def _cp_key_and_id(src, dst):
+    dst.key = src.key
+    dst.start_id = src.start_id
+
+  for attr in [
+      "inputs", "input_parameters", "outputs", "output_parameters",
+      "checkpoint_in", "checkpoint_out"
+  ]:
+    _cp_key_and_id(getattr(verification_options, attr),
+                   getattr(opts.verified_transfers, attr))
+
+  for name, options in verification_options.infeeds.items():
+    _cp_key_and_id(options, opts.verified_transfers.infeeds[name])
+
+  for name, options in verification_options.outfeeds.items():
+    _cp_key_and_id(options, opts.verified_transfers.outfeeds[name])
 
   return opts
 
@@ -1229,7 +1323,8 @@ def move_variable_initialization_to_cpu(graph=None):
 def export_dataset_to_file(dataset_or_infeed,
                            output_filename,
                            num_elements,
-                           feed_name=""):
+                           feed_name="",
+                           apply_options=True):
   """Export as binary `num_elements` from the given `infeed` to the specified
   `output_filename`.
 
@@ -1246,7 +1341,9 @@ def export_dataset_to_file(dataset_or_infeed,
     structure or an `IPUInfeedQueue`.
     output_filename: Where to export the tensors to.
     num_elements: Number of elements to export from the dataset.
-    feed_name: Specify the feed name
+    feed_name: Specify the feed name.
+    apply_options: Whether to apply optimization options which can improve the
+            dataset performance.
   """
   assert isinstance(dataset_or_infeed,
                     (dataset_ops.Dataset, ipu_infeed_queue.IPUInfeedQueue))
@@ -1255,6 +1352,9 @@ def export_dataset_to_file(dataset_or_infeed,
     feed_name = feed_name or dataset_or_infeed._id  # pylint: disable=protected-access
   else:
     dataset = dataset_or_infeed
+  if apply_options:
+    dataset = dataset._apply_options()  # pylint: disable=protected-access
+
   extractor = dataset_extractor.dataset_extractor(dataset, num_elements,
                                                   output_filename, feed_name)
   with ops.device("cpu"), session_lib.Session() as sess:

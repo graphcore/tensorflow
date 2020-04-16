@@ -32,6 +32,10 @@ class SendToHostOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
+    if (res.use_verified_transfers) {
+      return FailedPrecondition(
+          "Verified transfers cannot be used with Host embeddings");
+    }
     poplar::program::Sequence seq;
 
     const auto* send = Cast<HloSendToHostInstruction>(inst);

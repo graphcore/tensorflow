@@ -80,6 +80,8 @@ struct CompilerResources {
 
   const poplar::OptionFlags default_pooling_options;
 
+  bool use_verified_transfers;
+
   bool clear_matmul_pass_type;
 
   bool disable_graph_convolution_caching;
@@ -129,10 +131,11 @@ struct CompilerResources {
   CompilerResources(
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
-      const poplar::OptionFlags& pooling_options, bool clear_matmul_pass_type,
-      bool disable_graph_convolution_caching, bool disable_graph_outlining,
-      bool merge_infeed_io_copies, uint32 replication_factor,
-      int64 max_all_reduce_buffer_size, int64 max_reduce_scatter_buffer_size,
+      const poplar::OptionFlags& pooling_options, bool verified_transfers,
+      bool clear_matmul_pass_type, bool disable_graph_convolution_caching,
+      bool disable_graph_outlining, bool merge_infeed_io_copies,
+      uint32 replication_factor, int64 max_all_reduce_buffer_size,
+      int64 max_reduce_scatter_buffer_size,
       int64 max_inter_ipu_copies_buffer_size, int64 max_send_recv_cluster_size,
       int64 max_scheduler_lookahead_depth,
       int64 max_scheduler_search_space_size, HloModule* module,
@@ -149,6 +152,7 @@ struct CompilerResources {
         default_conv_options(conv_options),
         default_matmul_options(matmul_options),
         default_pooling_options(pooling_options),
+        use_verified_transfers(verified_transfers),
         clear_matmul_pass_type(clear_matmul_pass_type),
         disable_graph_convolution_caching(disable_graph_convolution_caching),
         disable_graph_outlining(disable_graph_outlining),

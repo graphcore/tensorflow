@@ -26,6 +26,7 @@ limitations under the License.
 #include <list>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
@@ -332,6 +333,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.floating_point_behaviour();
   }
 
+  const IpuOptions::VerifiedTransfers& VerifiedTransfers() const {
+    return current_config_.verified_transfers();
+  }
+
   IpuDeviceConnectionType ConnectionType() const {
     return current_config_.device_connection_type();
   }
@@ -371,6 +376,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   poplar::OptionFlags GetMatMulOptions() const { return matmul_options_; }
 
   poplar::OptionFlags GetPoolingOptions() const { return pooling_options_; }
+
+  bool UseVerifiedTransfers() const {
+    return current_config_.verified_transfers().enabled();
+  }
 
   bool ClearMatmulPassType() const {
     return current_config_.clear_matmul_pass_type();
