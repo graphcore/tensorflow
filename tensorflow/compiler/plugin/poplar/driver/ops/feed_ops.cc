@@ -165,10 +165,6 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
 StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
                                                  const HloInstruction* inst,
                                                  TensorMap& tensor_map) {
-  if (res.annotations.outfeed_infos.size()) {
-    return InvalidArgument("Only one IPUOutfeedQueue supported per graph.");
-  }
-
   poplar::program::Sequence seq;
   poplar::Graph& graph = GetGraph(res, inst);
 
