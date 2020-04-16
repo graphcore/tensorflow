@@ -58,7 +58,7 @@ cc_library(
 genrule(
     name = "libpoplar_executable_runner",
     srcs = [
-        ":poplar_executable_runner",
+        ":libpoplar_executable_runner.so",
         ":PoplarExecutableRunner",
         ":PoplarBinaryReader",
         "@jsoncpp_git//:jsoncpp",
@@ -96,6 +96,19 @@ genrule(
         """,
 )
 
+cc_binary(
+    name = "libpoplar_executable_runner.so",
+    linkshared = 1,
+    linkstatic = 1,
+    deps = [
+        ":poplar_executable_runner",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/strings",
+        "@jsoncpp_git//:jsoncpp",
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
 cc_library(
     name = "poplar_executable_runner",
     srcs = [
@@ -105,6 +118,7 @@ cc_library(
         "poplar_executable_runner.h",
     ],
     copts = ["-fexceptions"],
+    linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
         ":poplar_executable_data",
