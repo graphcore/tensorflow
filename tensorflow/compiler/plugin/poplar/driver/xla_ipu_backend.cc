@@ -17,7 +17,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
-
 #include "tensorflow/compiler/tf2xla/tf2xla_util.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "tensorflow/core/framework/kernel_def.pb.h"
@@ -48,8 +47,8 @@ static bool OpFilter(KernelDef* kdef) {
   if (kdef->op() == "Const") {
     AddDtypeToKernelDefConstraint("dtype", DT_STRING, kdef);
   }
-  if (kdef->op() == "Pipeline" || kdef->op() == "PipelineStage" ||
-      kdef->op() == "PipelineStageBackward" ||
+  if (kdef->op() == "Function" || kdef->op() == "Pipeline" ||
+      kdef->op() == "PipelineStage" || kdef->op() == "PipelineStageBackward" ||
       kdef->op() == "PipelineResourceUpdate") {
     AddDtypeToKernelDefConstraint("Tin", DT_RESOURCE, kdef);
     AddDtypeToKernelDefConstraint("Tout", DT_RESOURCE, kdef);

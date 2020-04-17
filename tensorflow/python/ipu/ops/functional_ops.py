@@ -22,10 +22,60 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import control_flow_util_v2 as util
+
+
+def function(func, name=None):
+  """
+  A function is a block of organized, reusable code which is used to perform a
+  single action. Functions provide better modularity for your application and a
+  high degree of code reusing which can decrease the memory usage at the expense
+  of passing the arguments around.
+
+  Functions can be used by models constrained by memory which have common
+  structures or to serialize some large operations.
+
+  If the provided function contains any stateful operations, such as stateful
+  random number generation, then the function cannot be reused and it will be
+  inlined automatically.
+
+  See the documentation for more details and examples.
+
+  Args:
+    func: A python function which takes a list of positional arguments only. All
+      the arguments must be `tf.Tensor`-like objects, or be convertible to them.
+      See the documentation for examples of how to pass non `tf.Tensor`-like
+      objects to the functions.
+      The function provided must return at least one `tf.Tensor`-like object.
+    name: The name of the function.
+
+  Returns:
+    An `Operation` that executes the function.
+
+  """
+  name = name if name else "function"
+
+  def func_wrapper(*args):
+    args = _convert_to_list(args)
+    with ops.name_scope(name) as scope:
+      func_graph, captured_args = _compile_function(
+          func, args, scope, [], allow_external_captures=True)
+
+      with ops.control_dependencies(list(func_graph.control_captures)):
+        outputs = gen_functional_ops.function(
+            captured_args,
+            to_apply=util.create_new_tf_function(func_graph),
+            Tout=func_graph.output_types,
+            output_shapes=func_graph.output_shapes)
+
+      return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
+                                                outputs)
+
+  return func_wrapper
 
 
 class _InvalidCaptureException(Exception):
@@ -42,7 +92,7 @@ def _compile_function(func,
   add_control_dependencies = ops.get_default_graph()._add_control_dependencies  # pylint: disable=protected-access
 
   func_name = util.unique_fn_name(scope, "func")
-  captured_args = [ops.convert_to_tensor(x) for x in args]
+  captured_args = ops.convert_n_to_tensor(args)
 
   # Compile the function to a graph.
   func_graph = func_graph_module.func_graph_from_py_func(

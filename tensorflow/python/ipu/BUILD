@@ -868,6 +868,7 @@ test_suite(
         "expression_op_test",
         "fifo_test",
         "frontend_attributes_test",
+        "functional_ops_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",
         "ipu_compiler_test",

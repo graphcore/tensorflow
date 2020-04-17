@@ -72,6 +72,7 @@ message PoplarBackendConfig {
       Pipeline = 4;
       PipelineStageRecomputation = 5;
       PipelineResourceUpdate = 6;
+      Function = 7;
     };
 
     message RepeatConfig {
@@ -98,6 +99,9 @@ message PoplarBackendConfig {
     message CallConfig {
     }
 
+    message FunctionConfig {
+    }
+
     Type type = 1;
 
     oneof Config {
@@ -105,6 +109,7 @@ message PoplarBackendConfig {
       RepeatConfig repeat_config = 3;
       PipelineStageConfig pipeline_stage_config = 4;
       PipelineConfig pipeline_config = 5;
+      FunctionConfig function_config = 6;
     }
   }
 

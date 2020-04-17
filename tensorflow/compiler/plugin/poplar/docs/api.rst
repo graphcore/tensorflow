@@ -82,6 +82,9 @@ Python API
   :members:
   :special-members: __init__
 
+.. automodule:: tensorflow.python.ipu.ops.functional_ops
+  :members:
+
 .. automodule:: tensorflow.python.ipu.ops.reduce_scatter_op
   :members:
 

@@ -13,12 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -366,11 +366,6 @@ bool IsPipelineResourceUpdate(const HloInstruction* inst) {
 
 bool IsPipelineOp(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
-}
-
-bool CallCanBeInlined(const HloInstruction* inst) {
-  // Only allow inlining for actual calls.
-  return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Call);
 }
 
 int64 GetPipelineRepeatCount(const HloInstruction* inst) {

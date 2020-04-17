@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
 from tensorflow.python.framework.func_graph import FuncGraph
@@ -96,11 +97,6 @@ def _resolve_grad_inputs(graph, grad_graph, op):
         if output is t:
           t = op.outputs[i]
           break
-    else:
-      for i, output in enumerate(t.graph.internal_captures):
-        if output is t:
-          t = t.graph.external_captures[i]
-          break
 
     # Note: We rely on the capturing logic of the gradient op graph to
     # correctly capture the tensors in `graph.outer_graph`. This is handled
@@ -125,7 +121,6 @@ def _get_gradients_for_function(op, *grads):
   func_graph = fwd_op.graph._get_function(  # pylint: disable=protected-access
       fwd_op.get_attr("to_apply").name).graph
   assert func_graph.outer_graph == op.graph
-
   for external_t, internal_t in zip(inputs, func_graph.inputs):
     custom_gradient.copy_handle_data(external_t, internal_t)
 
@@ -162,3 +157,17 @@ def _get_gradients_for_function(op, *grads):
   func_grad_inputs = _resolve_grad_inputs(func_graph, func_grad_graph, op)
   # pylint: enable=protected-access
   return func_grad_graph, func_grad_inputs
+
+
+@ops.RegisterGradient("Function")
+def _function_grad(op, *grads):
+  """The gradient of a Function op."""
+  func_grad_graph, func_grad_inputs = _get_gradients_for_function(op, *grads)
+  outputs = gen_functional_ops.function(
+      func_grad_inputs,
+      to_apply=util.create_new_tf_function(func_grad_graph),
+      Tout=func_grad_graph.output_types,
+      output_shapes=func_grad_graph.output_shapes)
+
+  return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
+                                            outputs)

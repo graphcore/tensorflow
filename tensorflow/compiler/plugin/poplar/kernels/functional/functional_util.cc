@@ -40,11 +40,11 @@ XlaCompiler::CompileOptions GetDefaultCompileOptions() {
   return compile_options;
 }
 
-// Function which tries to get all the arguments to the Op. It tries to evaluate
-// any constant inputs to a value so that they can be propagated.
+// Function which tries to get all the arguments to the Op. It optionally tries
+// to evaluate any constant inputs to a value so that they can be propagated.
 xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
     XlaOpKernelContext* ctx, const DataTypeVector& input_types,
-    int* num_resource_args) {
+    int* num_resource_args, bool evaluate_constants) {
   auto builder = ctx->builder();
 
   std::vector<XlaCompiler::Argument> arguments(input_types.size());
@@ -90,7 +90,8 @@ xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
       // this could be the output of a MetadataOnly op e.g. Size.
       xla::StatusOr<absl::optional<Tensor>> maybe_constant =
           expression.ResolveConstant(ctx->compiler()->client());
-      if (maybe_constant.ok() && maybe_constant.ValueOrDie().has_value()) {
+      if (evaluate_constants && maybe_constant.ok() &&
+          maybe_constant.ValueOrDie().has_value()) {
         arg.kind = XlaCompiler::Argument::kConstant;
         arg.constant_value = std::move(maybe_constant.ValueOrDie().value());
         VLOG(2) << "Constant type: " << DataTypeString(arg.type)
