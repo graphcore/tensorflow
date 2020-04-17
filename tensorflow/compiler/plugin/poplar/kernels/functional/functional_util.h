@@ -26,11 +26,11 @@ namespace poplarplugin {
 // Return the default compilation comptions for functions.
 XlaCompiler::CompileOptions GetDefaultCompileOptions();
 
-// Function which tries to get all the arguments to the Op. It tries to evaluate
-// any constant inputs to a value so that they can be propagated.
+// Function which tries to get all the arguments to the Op. It optionally tries
+// to evaluate any constant inputs to a value so that they can be propagated.
 xla::StatusOr<std::vector<XlaCompiler::Argument>> GetXlaArguments(
     XlaOpKernelContext* ctx, const DataTypeVector& input_types,
-    int* num_resource_args);
+    int* num_resource_args, bool evaluate_constants = true);
 
 // Function which gets all non-constant function inputs.
 xla::StatusOr<std::vector<xla::XlaOp>> GetXlaInputs(

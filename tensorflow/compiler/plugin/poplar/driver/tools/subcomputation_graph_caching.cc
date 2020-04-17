@@ -65,6 +65,9 @@ SubcomputationGraphCache::GetOrCompileSubcomputation(
       return deferred_visitor;
     }
     itr = table_.emplace(computation, deferred_visitor).first;
+  } else {
+    VLOG(1) << "Computation " << computation->name()
+            << " has already been compiled, reusing the code.";
   }
   return itr->second;
 }

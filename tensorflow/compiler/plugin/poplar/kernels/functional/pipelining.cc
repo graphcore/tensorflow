@@ -392,6 +392,5 @@ class PipelineOp : public XlaOpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };
 REGISTER_IPU_OP("Pipeline", PipelineOp);
-
 }  // namespace
 }  // namespace tensorflow

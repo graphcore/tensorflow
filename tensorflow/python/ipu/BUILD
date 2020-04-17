@@ -783,6 +783,23 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "functional_ops_test",
+    size = "large",
+    srcs = ["tests/functional_ops_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 4,
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -795,6 +812,7 @@ test_suite(
         "expression_op_test",
         "fifo_test",
         "frontend_attributes_test",
+        "functional_ops_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",
         "ipu_compiler_test",

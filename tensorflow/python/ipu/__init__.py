@@ -66,4 +66,7 @@ from tensorflow.python.ipu.optimizers import cross_replica_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 
+# Expose functional_ops.function as ipu.function
+from tensorflow.python.ipu.ops.functional_ops import function
+
 # pylint: enable=wildcard-import,unused-import

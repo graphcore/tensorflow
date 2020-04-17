@@ -756,6 +756,7 @@ cc_library(
         "kernels/datastream/dataset_benchmark.cc",
         "kernels/datastream/feeds.cc",
         "kernels/datastream/host_embedding.cc",
+        "kernels/functional/functional.cc",
         "kernels/functional/functional_util.cc",
         "kernels/functional/pipelining.cc",
         "kernels/host_compute_kernels.cc",
@@ -1078,7 +1079,10 @@ tf_custom_op_py_library(
 
 cc_library(
     name = "functional_ops",
-    srcs = ["ops/functional/pipelining.cc"],
+    srcs = [
+        "ops/functional/functional.cc",
+        "ops/functional/pipelining.cc",
+    ],
     deps = [
         ":common_shape_fns",
         "//tensorflow/core:framework",
@@ -3907,6 +3911,61 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "function_example1",
+    size = "small",
+    srcs = ["docs/function_example1.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "function_example2",
+    size = "small",
+    srcs = ["docs/function_example2.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "function_block1",
+    size = "small",
+    srcs = ["docs/function_block1.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "function_block2",
+    size = "small",
+    srcs = ["docs/function_block2.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
+tf_xla_py_test(
+    name = "function_block3",
+    size = "small",
+    srcs = ["docs/function_block3.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -4072,6 +4131,11 @@ test_suite(
     name = "doc_examples",
     tests = [
         "distributed_training_example",
+        "function_block1",
+        "function_block2",
+        "function_block3",
+        "function_example1",
+        "function_example2",
         "ipu_estimator_example",
         "ipu_pipeline_estimator_example",
         "logging_example_1",
