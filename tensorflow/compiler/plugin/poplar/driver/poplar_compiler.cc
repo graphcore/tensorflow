@@ -958,6 +958,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       TF_RETURN_IF_ERROR(matmul_preplanning.Plan(module.get(), resources));
       auto order = module->schedule().sequence(entry).instructions();
 
+      TF_RETURN_IF_ERROR(resources.streams_indices.InitializeIndexTensors(
+          resources, poplar_executor->VerifiedTransfers()));
+
       // The following line starts the lowering in poplar.
       TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
     } catch (const std::exception& e) {

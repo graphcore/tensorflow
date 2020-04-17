@@ -39,6 +39,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/mapping_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/subcomputation_graph_caching.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 
 namespace xla {
@@ -127,6 +128,8 @@ struct CompilerResources {
   std::unique_ptr<CallGraph> module_call_graph;
 
   absl::flat_hash_map<std::string, poplar::RemoteBuffer> remote_buffers;
+
+  VerifiedStreamsIndices streams_indices;
 
   CompilerResources(
       const poplar::OptionFlags& conv_options,

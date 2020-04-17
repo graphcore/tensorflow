@@ -222,11 +222,17 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
 }
 
 const poplar::program::Sequence EntryVisitor::GetHostToDevice() const {
-  return host_to_device;
+  poplar::program::Sequence combined;
+  combined.add(resources_.streams_indices.LoadCheckpointSequence());
+  combined.add(host_to_device);
+  return combined;
 }
 
 const poplar::program::Sequence EntryVisitor::GetDeviceToHost() const {
-  return device_to_host;
+  poplar::program::Sequence combined;
+  combined.add(device_to_host);
+  combined.add(resources_.streams_indices.SaveCheckpointSequence());
+  return combined;
 }
 
 }  // namespace poplarplugin
