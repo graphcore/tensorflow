@@ -131,7 +131,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(loss, feed_dict={x: data, y_: labels})
 
       report.parse_log()
-      report.assert_total_tile_memory(25815435)
+      report.assert_total_tile_memory(25427768)
 
   def testTraining(self):
     with self.session() as sess:
@@ -159,7 +159,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(42556381)
+      report.assert_total_tile_memory(41717668)
 
   def testTrainingMomentum(self):
     with self.session() as sess:
@@ -295,7 +295,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(46698896)
+      report.assert_total_tile_memory(46070240)
 
   def testTrainingMomentumInLoopWithGradientAccumulation(self):
     with self.session() as sess:
