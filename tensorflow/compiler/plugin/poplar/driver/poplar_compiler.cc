@@ -1036,7 +1036,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
               poplar_executor->CreateExecutableCacheDirIfMissing());
           TF_RETURN_IF_ERROR(PoplarExecutable::Serialize(
               filenames, exec, resources.annotations, replication_factor,
-              poplar_executor->GetReportExecutionFlags()));
+              poplar_executor->GetReportExecutionFlags(),
+              resources.streams_indices.GetAssignedIds(),
+              resources.streams_indices.CheckpointFeedsOrder()));
         }
       }
       if (poplar_executor->EnableSerialization()) {
@@ -1130,7 +1132,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       std::move(resources.annotations.recv_infos),
       std::move(resources.annotations.host_embedding_lookup_infos),
       std::move(resources.annotations.host_embedding_update_infos),
-      std::move(resources.annotations.remote_parameter_infos));
+      std::move(resources.annotations.remote_parameter_infos),
+      resources.streams_indices.GetAssignedIds(),
+      resources.streams_indices.CheckpointFeedsOrder());
 
   executable.reset(poplar_executable);
 

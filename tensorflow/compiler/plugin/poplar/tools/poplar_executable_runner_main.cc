@@ -102,7 +102,7 @@ struct BinaryFiles {
   std::vector<std::string> filenames;
 };
 
-struct CkptFile {
+struct CheckpointFile {
   std::string filename;
 };
 
@@ -110,7 +110,7 @@ std::string AbslUnparseFlag(BinaryFiles f) {
   return absl::UnparseFlag(f.filenames);
 }
 
-std::string AbslUnparseFlag(CkptFile f) {
+std::string AbslUnparseFlag(CheckpointFile f) {
   return absl::UnparseFlag(f.filename);
 }
 
@@ -142,7 +142,8 @@ bool AbslParseFlag(absl::string_view text, BinaryFiles* f, std::string* error) {
   return true;
 }
 
-bool AbslParseFlag(absl::string_view text, CkptFile* f, std::string* error) {
+bool AbslParseFlag(absl::string_view text, CheckpointFile* f,
+                   std::string* error) {
   if (!absl::ParseFlag(text, &f->filename, error)) {
     return false;
   }
@@ -168,7 +169,7 @@ ABSL_FLAG(int, ckpt_frequency, 1, "Frequency at which to create checkpoints");
 ABSL_FLAG(bool, print_output, false,
           "Print the content of the output buffers to stdout");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
-ABSL_FLAG(CkptFile, ckpt, CkptFile(),
+ABSL_FLAG(CheckpointFile, ckpt, CheckpointFile(),
           "Load the checkpoint config from the given file");
 ABSL_FLAG(bool, strict, false,
           "Enable strict mode: all the input data files must be provided by "
