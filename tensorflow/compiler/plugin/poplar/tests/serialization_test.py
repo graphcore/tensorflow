@@ -67,11 +67,14 @@ def PrimitiveTypeStringToNumpyDtype(primitive_type_str):
 
 
 class IpuSerializationTest(xla_test.XLATestCase):
-  def _configureIPU(self, serialization_folder):
+  def _configureIPU(self, serialization_folder, verification_options=None):
     opts = utils.create_ipu_config()
     opts = utils.set_ipu_connection_type(opts,
                                          utils.DeviceConnectionType.NEVER, 1)
     opts = utils.set_serialization_options(opts, serialization_folder)
+    if verification_options:
+      opts = utils.set_transfer_options(opts, True)
+      opts = utils.set_verification_options(opts, verification_options)
     utils.configure_ipu_system(opts)
 
   def _create_tmp_symlink(self, tmp_folder):
@@ -136,6 +139,61 @@ class IpuSerializationTest(xla_test.XLATestCase):
             PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
         # First dimension is the number of tensors in the feed: ignore it
         self.assertEqual(list(expected_tensor.shape[1:]), stream.get("shape"))
+
+  def _find_feed_streams(self, feeds, feed_name):
+    matches = [f for f in feeds if f["name"] == feed_name]
+    self.assertEqual(len(matches), 1)
+    self.assertTrue(len(matches[0].get("streams", [])) > 0)
+    return matches[0]["streams"]
+
+  def _validate_feeds(self, expected_feeds, test_feeds, auto_ids,
+                      checkpoint_feeds):
+    self.assertEqual(len(expected_feeds), len(test_feeds))
+    for feed, expected in expected_feeds.items():
+      self.assertTrue(feed in checkpoint_feeds)
+      streams = self._find_feed_streams(test_feeds, feed)
+      seen_ids = []
+      for stream in streams:
+        self.assertEqual(expected.key, stream.get("key"))
+        self.assertTrue(isinstance(stream.get("id"), int))
+        if expected.start_id < 0:
+          self.assertTrue(stream["id"] not in auto_ids)
+          auto_ids.append(stream["id"])
+        else:
+          sid = stream["id"]
+          self.assertTrue(sid in range(expected.start_id, expected.start_id +
+                                       len(streams)))
+          self.assertTrue(sid not in seen_ids)
+          seen_ids.append(sid)
+
+  def _validate_tensors(self, expected, tensors, tensor_type, auto_ids):
+    for tensor in [t for t in tensors if t.get("type") == tensor_type]:
+      self.assertEqual(expected.key, tensor.get("key"))
+      self.assertTrue(isinstance(tensor.get("id"), int))
+      if expected.start_id < 0:
+        self.assertTrue(tensor["id"] not in auto_ids)
+        auto_ids.append(tensor["id"])
+      else:
+        self.assertEqual(expected.start_id, data["id"])
+
+  def _validate_secure_metadata(self, opts, metadata):
+    auto_ids = []
+    infeeds = metadata.get("infeeds", [])
+    outfeeds = metadata.get("outfeeds", [])
+    checkpoint_feeds = metadata.get("ckpt", {}).get("feeds", [])
+    self.assertEqual(
+        len(opts.infeeds) + len(opts.outfeeds), len(checkpoint_feeds))
+
+    self._validate_feeds(opts.infeeds, infeeds, auto_ids, checkpoint_feeds)
+    self._validate_feeds(opts.outfeeds, outfeeds, auto_ids, checkpoint_feeds)
+    self._validate_tensors(opts.inputs, metadata.get("inputs"), "input_data",
+                           auto_ids)
+    self._validate_tensors(opts.input_parameters, metadata.get("inputs"),
+                           "parameter", auto_ids)
+    self._validate_tensors(opts.outputs, metadata.get("outputs"),
+                           "parameter_out", auto_ids)
+    self._validate_tensors(opts.output_parameters, metadata.get("outputs"),
+                           "output_data", auto_ids)
 
   @test_util.deprecated_graph_mode_only
   def testSimpleFeedsInfoSerialization(self):
@@ -217,6 +275,86 @@ class IpuSerializationTest(xla_test.XLATestCase):
                                          dtype=dtypes.float32,
                                          name="vs/weights:0"), "parameter_out")
                  ])
+          else:
+            self.assertEqual(name, "%s.ipu_bin" % module_hash)
+
+  @test_util.deprecated_graph_mode_only
+  def testVerifiedInfeedsOutfeedInfoSerialization(self):
+    poplar_flags = os.environ.get("TF_POPLAR_FLAGS",
+                                  "").replace("--use_ipu_model", "")
+    with test.mock.patch.dict(
+        "os.environ",
+        {"TF_POPLAR_FLAGS": poplar_flags}), self.session() as sess:
+      dataset = tu.create_single_increasing_dataset(2, shape=[3, 3])
+      infeed_name = FeedId.Next("feed")
+      outfeed_name = FeedId.Next("feed")
+      infeed_spec = dataset.element_spec[0]
+      infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, infeed_name)
+      outfeed_queue = ipu.ipu_outfeed_queue.IPUOutfeedQueue(outfeed_name)
+
+      def body(const, inp):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          inp2 = variable_scope.get_variable("input_2", [3, 3])
+          v = inp * inp2 + const
+          outfeed = outfeed_queue.enqueue(v)
+          return (const, outfeed)
+
+      def my_graph(const):
+        return ipu.loops.repeat(4, body, (const), infeed_queue)
+
+      with ops.device("cpu"):
+        const = array_ops.placeholder(np.float32, [],
+                                      name="my/test/constant/0")
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        output = ipu.ipu_compiler.compile(my_graph, inputs=[const])
+
+      outfed = outfeed_queue.dequeue()
+      with tempfile.TemporaryDirectory() as tmp_folder:
+        tmp = self._create_tmp_symlink(tmp_folder)
+        folder = os.path.join(tmp, "saved")
+
+        opts = utils.VerificationOptions()
+        opts.infeeds[infeed_name] = utils.KeyId(1)
+        opts.outfeeds[outfeed_name] = utils.KeyId(2)
+        opts.checkpoint_in.key = 3
+        opts.checkpoint_out.key = 4
+
+        self._configureIPU(folder, verification_options=opts)
+
+        tu.move_variable_initialization_to_cpu()
+
+        sess.run(infeed_queue.initializer)
+        sess.run(variables.global_variables_initializer())
+        with self.assertRaisesRegex(errors.InvalidArgumentError,
+                                    "compilation only"):
+          sess.run(output, {const: np.ones(const.shape)})
+        outfed_result = sess.run(outfed)
+
+        with variable_scope.variable_scope("vs", use_resource=True,
+                                           reuse=True):
+          inp2 = variable_scope.get_variable("input_2")
+        module_hash = None
+
+        self.assertTrue(os.path.isdir(folder))
+        files = filesInFolder(folder)
+        self.assertEqual(len(files), 2, "Expected 2 files, found: %s" % files)
+        for name in files:
+          if not module_hash:
+            m = re.match(r"([0-9a-f]+)\..*", name)
+            self.assertTrue(
+                m, "Failed to identify module hash from filename %s" % name)
+            module_hash = m.group(1)
+          if name == module_hash + ".json":
+            with open(os.path.join(folder, name), "r") as metadata_file:
+              metadata = json.load(metadata_file)
+            self._validateStreams(
+                metadata, [(const, "input_data"), (inp2, "parameter")],
+                [(tensor_spec.TensorSpec(
+                    shape=[], dtype=dtypes.float32,
+                    name="XLA_Retvals:0"), "output_data")],
+                [(infeed_spec, infeed_name)], [(outfed_result, outfeed_name)])
+            self._validate_secure_metadata(opts, metadata)
           else:
             self.assertEqual(name, "%s.ipu_bin" % module_hash)
 

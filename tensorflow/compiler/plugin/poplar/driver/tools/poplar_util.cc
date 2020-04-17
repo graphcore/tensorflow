@@ -412,17 +412,21 @@ Json::Value DimensionsToJson(const absl::Span<const int64> dimensions) {
 StatusOr<std::string> CreateExecutableMetadataJson(
     const InputOutputAliasingMap& io_map, const InfeedInfos& infeed_infos,
     const OutfeedInfos& outfeed_infos, uint32 replication_count,
-    const poplar::OptionFlags& opts, const poplar::Target& target) {
+    const poplar::OptionFlags& opts, const poplar::Target& target,
+    const VerifiedStreamsIndices::KeyIdMappings& indices,
+    const std::vector<string>& ckpt_feeds_order) {
   Json::Value inputs;
   std::map<std::string, std::string> params_handle_map;
+  const bool use_verified_transfers = !indices.empty();
   for (auto input : io_map.GetEntryInputInfos()) {
     Json::Value stream;
     if (input.Shape().IsTuple()) {
       return tensorflow::errors::Unimplemented("Tuple inputs not supported");
     }
 
+    const std::string handle = GetInputCopyHandle(inputs.size(), 0);
     stream["name"] = UnmangleInputName(input.Name());
-    stream["handle"] = GetInputCopyHandle(inputs.size(), 0);
+    stream["handle"] = handle;
     stream["data_type"] = PrimitiveType_Name(input.Shape().element_type());
     stream["shape"] = DimensionsToJson(input.Shape().dimensions());
     if (input.IsStreaming()) {
@@ -431,6 +435,11 @@ StatusOr<std::string> CreateExecutableMetadataJson(
       stream["type"] = "parameter";
       params_handle_map[GetInputCopyHandle(inputs.size(), 0)] =
           UnmangleInputName(input.Name());
+    }
+    if (use_verified_transfers) {
+      auto key_id = indices.at(handle);
+      stream["key"] = Json::Value::Int64(key_id.key);
+      stream["id"] = Json::Value::Int64(key_id.id);
     }
     inputs.append(stream);
   }
@@ -441,8 +450,9 @@ StatusOr<std::string> CreateExecutableMetadataJson(
       return xla::FailedPrecondition("Nested tuples in output not supported");
     }
     Json::Value stream;
+    const std::string handle = GetOutputCopyHandle(outputs.size(), 0);
     stream["name"] = output.Name();
-    stream["handle"] = GetOutputCopyHandle(outputs.size(), 0);
+    stream["handle"] = handle;
     stream["data_type"] = PrimitiveType_Name(output.Shape().element_type());
     stream["shape"] = DimensionsToJson(output.Shape().dimensions());
     if (output.IsStreaming()) {
@@ -456,6 +466,11 @@ StatusOr<std::string> CreateExecutableMetadataJson(
         // Override the name to make sure it matches the one from the input.
         stream["name"] = params_handle_map.at(input_handle);
       }
+    }
+    if (use_verified_transfers) {
+      auto key_id = indices.at(handle);
+      stream["key"] = Json::Value::Int64(key_id.key);
+      stream["id"] = Json::Value::Int64(key_id.id);
     }
     outputs.append(stream);
   }
@@ -480,12 +495,18 @@ StatusOr<std::string> CreateExecutableMetadataJson(
             infeed.config.feed_id());
       }
       Json::Value stream;
+      const std::string handle =
+          GetInfeedCopyHandle(infeed.stream_prefix, streams.size());
       stream["name"] =
           absl::StrCat(infeed.config.feed_id(), ".", streams.size());
-      stream["handle"] =
-          GetInfeedCopyHandle(infeed.stream_prefix, streams.size());
+      stream["handle"] = handle;
       stream["shape"] = DimensionsToJson(shape.dimensions());
       stream["data_type"] = PrimitiveType_Name(shape.element_type());
+      if (use_verified_transfers) {
+        auto key_id = indices.at(handle);
+        stream["key"] = Json::Value::Int64(key_id.key);
+        stream["id"] = Json::Value::Int64(key_id.id);
+      }
       streams.append(stream);
     }
     feed["streams"] = streams;
@@ -508,12 +529,18 @@ StatusOr<std::string> CreateExecutableMetadataJson(
             streams.size(), outfeed.config.feed_id(), shape.ToString());
       }
       Json::Value stream;
+      const std::string handle =
+          GetOutfeedCopyHandle(outfeed.stream_prefix, streams.size());
       stream["name"] =
           absl::StrCat(outfeed.config.feed_id(), ".", streams.size());
-      stream["handle"] =
-          GetOutfeedCopyHandle(outfeed.stream_prefix, streams.size());
+      stream["handle"] = handle;
       stream["data_type"] = PrimitiveType_Name(shape.element_type());
       stream["shape"] = DimensionsToJson(shape.dimensions());
+      if (use_verified_transfers) {
+        auto key_id = indices.at(handle);
+        stream["key"] = Json::Value::Int64(key_id.key);
+        stream["id"] = Json::Value::Int64(key_id.id);
+      }
       streams.append(stream);
     }
     feed["streams"] = streams;
@@ -535,6 +562,13 @@ StatusOr<std::string> CreateExecutableMetadataJson(
         "The target's type must be poplar::TargetType::IPU");
   }
 
+  Json::Value ckpt;
+  Json::Value streams;
+  for (auto feed : ckpt_feeds_order) {
+    streams.append(feed);
+  }
+  ckpt["feeds"] = streams;
+
   Json::Value root;
   if (!inputs.empty()) {
     root["inputs"] = inputs;
@@ -547,6 +581,9 @@ StatusOr<std::string> CreateExecutableMetadataJson(
   }
   if (!outfeeds.empty()) {
     root["outfeeds"] = outfeeds;
+  }
+  if (!ckpt_feeds_order.empty()) {
+    root["ckpt"] = ckpt;
   }
   root["config"] = config;
 

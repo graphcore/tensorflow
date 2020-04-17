@@ -291,7 +291,9 @@ Status ExportInternal(const ModuleFilenames& filenames,
                       const HostEmbeddingInfos& updates,
                       const InputOutputAliasingMap& io_map,
                       uint32 replication_count, const poplar::OptionFlags& opts,
-                      const poplar::Target& target) {
+                      const poplar::Target& target,
+                      const VerifiedStreamsIndices::KeyIdMappings& indices,
+                      const std::vector<string> checkpoint_feeds_order) {
   if (!sends.empty()) {
     return tensorflow::errors::FailedPrecondition(
         "Failed to export the PoplarExecutable because it contains Sends "
@@ -315,12 +317,18 @@ Status ExportInternal(const ModuleFilenames& filenames,
 
   // Write poplar executable to a file
   try {
+    TF_ASSIGN_OR_RETURN(std::string json_metadata,
+                        CreateExecutableMetadataJson(
+                            io_map, infeeds, outfeeds, replication_count, opts,
+                            target, indices, checkpoint_feeds_order));
     TF_ASSIGN_OR_RETURN(
-        std::string json_metadata,
+        std::string json_metadata_no_verif,
         CreateExecutableMetadataJson(io_map, infeeds, outfeeds,
-                                     replication_count, opts, target));
+                                     replication_count, opts, target, {}, {}));
+    // For security reasons don't store the verification information inside the
+    // binary.
     ipu::BinaryWriter writer(filenames.SerializedExecutableFilename());
-    writer.WriteMetadata(filenames.Name(), json_metadata);
+    writer.WriteMetadata(filenames.Name(), json_metadata_no_verif);
     {
       ipu::ExecutableWriter exec_writer =
           writer.CreateExecutable(filenames.Name());
@@ -353,7 +361,8 @@ Status ExportInternal(const ModuleFilenames& filenames,
       resources.annotations.host_embedding_lookup_infos,
       resources.annotations.host_embedding_update_infos,
       resources.annotations.input_output_aliasing_map, replication_count, opts,
-      target);
+      target, resources.streams_indices.GetAssignedIds(),
+      resources.streams_indices.CheckpointFeedsOrder());
 }
 
 /*static*/ Status PoplarExecutable::Export(
@@ -367,7 +376,9 @@ Status ExportInternal(const ModuleFilenames& filenames,
       poplar_executable.GetHostEmbeddingLookupInfos(),
       poplar_executable.GetHostEmbeddingUpdateInfos(),
       poplar_executable.GetInputOutputAliasingMap(),
-      poplar_executable.GetReplicationFactor(), opts, target);
+      poplar_executable.GetReplicationFactor(), opts, target,
+      poplar_executable.KeyIdMappings(),
+      poplar_executable.CheckpointFeedsOrder());
 }
 /*static*/ Status PoplarExecutable::Serialize(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
