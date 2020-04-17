@@ -31,6 +31,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
 
 #include <poplar/Engine.hpp>
 
@@ -61,7 +62,9 @@ class PoplarExecutable : public Executable {
                    SendRecvInfos&& send_infos, SendRecvInfos&& recv_infos,
                    HostEmbeddingInfos&& host_embedding_lookup_infos,
                    HostEmbeddingInfos&& host_embedding_update_infos,
-                   RemoteParameterInfos&& remote_parameter_infos);
+                   RemoteParameterInfos&& remote_parameter_infos,
+                   const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
+                   const std::vector<string>& checkpoint_feeds_order);
 
   ~PoplarExecutable() override;
 
@@ -126,6 +129,14 @@ class PoplarExecutable : public Executable {
     return is_scalar_elementwise_graph_;
   }
 
+  const VerifiedStreamsIndices::KeyIdMappings& KeyIdMappings() const {
+    return key_id_mappings_;
+  }
+
+  const std::vector<string>& CheckpointFeedsOrder() const {
+    return checkpoint_feeds_order_;
+  }
+
   static StatusOr<PoplarExecutable*> Deserialize(
       std::unique_ptr<HloModule> hlo_module,
       std::unique_ptr<HloProfilePrinterData> hlo_profile_printer,
@@ -136,7 +147,9 @@ class PoplarExecutable : public Executable {
                           const poplar::Executable& executable,
                           const CompilerAnnotations& annotations,
                           uint32 replication_count,
-                          const poplar::OptionFlags& opts);
+                          const poplar::OptionFlags& opts,
+                          const VerifiedStreamsIndices::KeyIdMappings& mappings,
+                          const std::vector<string>& checkpoint_feeds_order);
 
   static Status Export(const ModuleFilenames& filenames,
                        const poplar::Executable& executable,
@@ -144,6 +157,7 @@ class PoplarExecutable : public Executable {
                        uint32 replication_count,
                        const poplar::OptionFlags& opts,
                        const poplar::Target& target);
+
   static Status Export(const ModuleFilenames& filenames,
                        const poplar::Executable& executable,
                        const PoplarExecutable& poplar_executable,
@@ -175,6 +189,8 @@ class PoplarExecutable : public Executable {
   RemoteParameterInfos remote_parameter_infos_;
   bool loaded_from_cache_;
   const bool is_scalar_elementwise_graph_;
+  VerifiedStreamsIndices::KeyIdMappings key_id_mappings_;
+  const std::vector<string> checkpoint_feeds_order_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PoplarExecutable);
 };

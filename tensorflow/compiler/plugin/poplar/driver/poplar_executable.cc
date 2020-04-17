@@ -48,7 +48,9 @@ PoplarExecutable::PoplarExecutable(
     SendRecvInfos&& recv_infos,
     HostEmbeddingInfos&& host_embedding_lookup_infos,
     HostEmbeddingInfos&& host_embedding_update_infos,
-    RemoteParameterInfos&& remote_parameter_infos)
+    RemoteParameterInfos&& remote_parameter_infos,
+    const VerifiedStreamsIndices::KeyIdMappings& key_id_mappings,
+    const std::vector<string>& checkpoint_feeds_order)
     : Executable(std::move(hlo_module), std::move(profile_printer),
                  std::move(profile_index_map)),
       poplar_engine_(std::move(engine)),
@@ -69,7 +71,9 @@ PoplarExecutable::PoplarExecutable(
       host_embedding_lookup_infos_(std::move(host_embedding_lookup_infos)),
       host_embedding_update_infos_(std::move(host_embedding_update_infos)),
       remote_parameter_infos_(std::move(remote_parameter_infos)),
-      loaded_from_cache_(false) {}
+      loaded_from_cache_(false),
+      key_id_mappings_(key_id_mappings),
+      checkpoint_feeds_order_(checkpoint_feeds_order) {}
 
 PoplarExecutable::~PoplarExecutable() {
   if (poplar_engine_.get() != nullptr) {
@@ -235,6 +239,18 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
     opts.set(flag.option(), flag.value());
   }
 
+  VerifiedStreamsIndices::KeyIdMappings key_id_mappings;
+  for (const auto& mapping : proto.key_id_mappings()) {
+    key_id_mappings.emplace(
+        mapping.handle(),
+        VerifiedStreamsIndices::KeyIdPair(mapping.key(), mapping.start_id()));
+  }
+
+  std::vector<std::string> checkpoint_feeds_order;
+  for (auto feed : proto.checkpoint_feeds_order()) {
+    checkpoint_feeds_order.push_back(feed);
+  }
+
   // Load the executable
   std::string poplar_executable_filename = proto.engine();
   if (poplar_executable_filename != filenames.CachedExecutableFilename()) {
@@ -259,8 +275,8 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
       std::move(profile_index_map), std::move(engine), std::move(iomap), false,
       {}, false, false, {}, replication_factor, std::move(infeeds),
       std::move(outfeeds), {}, {}, std::move(sends), std::move(recvs),
-      std::move(lookups), std::move(updates),
-      std::move(remote_parameter_infos));
+      std::move(lookups), std::move(updates), std::move(remote_parameter_infos),
+      key_id_mappings, checkpoint_feeds_order);
 
   executable->loaded_from_cache_ = true;
 
@@ -356,7 +372,9 @@ Status ExportInternal(const ModuleFilenames& filenames,
 /*static*/ Status PoplarExecutable::Serialize(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
     const CompilerAnnotations& annotations, uint32 replication_count,
-    const poplar::OptionFlags& opts) {
+    const poplar::OptionFlags& opts,
+    const VerifiedStreamsIndices::KeyIdMappings& mappings,
+    const std::vector<string>& checkpoint_feeds_order) {
   PoplarExecutableProto proto;
 
   // Write poplar executable to a file
@@ -430,6 +448,18 @@ Status ExportInternal(const ModuleFilenames& filenames,
     auto* remote_parameter = proto.add_remote_parameters();
     remote_parameter->set_parameter_number(
         remote_parameter_info.parameter_number);
+  }
+
+  for (const auto key_id_mapping : mappings) {
+    auto* mapping = proto.add_key_id_mappings();
+    mapping->set_handle(key_id_mapping.first);
+    mapping->set_key(key_id_mapping.second.key);
+    mapping->set_start_id(key_id_mapping.second.id);
+  }
+
+  for (const auto feed : checkpoint_feeds_order) {
+    std::string* proto_feed = proto.add_checkpoint_feeds_order();
+    *proto_feed = feed;
   }
 
   return WriteBinaryProto(tensorflow::Env::Default(),
