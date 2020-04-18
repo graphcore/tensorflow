@@ -83,7 +83,7 @@ class IpuGatherLookupTest(xla_test.XLATestCase):
         ok = [
             'embedding_lookup/custom-call/output/multiSlice/*',
             '__seed/set/setMasterSeed',
-            'host-exchange-local-copy-1*',
+            'host-exchange-local-copy-',
         ]
         if y_0 == 1:
           ok = ok[:-1]

@@ -84,8 +84,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Copy_',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(4817018)
-      report.assert_max_tile_memory(5054)
+      report.assert_total_tile_memory(954492)
+      report.assert_max_tile_memory(1690)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionTraining(self):
@@ -155,8 +155,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(5067619)
-      report.assert_max_tile_memory(7464)
+      report.assert_total_tile_memory(1193804)
+      report.assert_max_tile_memory(4108)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionSerializedLookup(self):
@@ -232,8 +232,8 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'Copy_',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(15257536)
-      report.assert_max_tile_memory(13196)
+      report.assert_total_tile_memory(11405248)
+      report.assert_max_tile_memory(10028)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionsNoMatch(self):
