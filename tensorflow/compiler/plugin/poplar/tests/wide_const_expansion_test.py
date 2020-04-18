@@ -42,13 +42,13 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       sess.run(variables.global_variables_initializer())
 
       report.parse_log()
-      report.assert_max_tile_memory(10696)
+      report.assert_max_tile_memory(7480)
 
       out = sess.run(output, {pb: np.ones(shape=shape, dtype=dtype)})
       self.assertAllClose(np.full(shape, 7, dtype=dtype), out)
 
       report.parse_log()
-      report.assert_max_tile_memory(31382)
+      report.assert_max_tile_memory(28294)
 
   def testWideConstantWithAllocationTarget(self):
     with self.session() as sess:
@@ -94,8 +94,8 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
 
-      report.assert_max_tile_memory(12280)
-      report.assert_always_live_memory(4172100)
+      report.assert_max_tile_memory(9008)
+      report.assert_always_live_memory(315556)
 
   def testCheckMaxTileSizePadding(self):
     with self.session() as sess:
@@ -130,7 +130,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       self.assertAllClose(np.zeros(pb.shape), out[0])
 
       report.parse_log()
-      report.assert_max_tile_memory(103673)
+      report.assert_max_tile_memory(100521)
 
   def testCheckMaxTileSizePadding2(self):
     with self.session() as sess:
@@ -163,7 +163,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       self.assertAllClose(np.full(pb.shape, 65.0), out[0])
 
       report.parse_log()
-      report.assert_max_tile_memory(6166)
+      report.assert_max_tile_memory(2998)
 
 
 if __name__ == "__main__":

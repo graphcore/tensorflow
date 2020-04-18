@@ -86,7 +86,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0][0] * 2, np.take(result[1], i_h, axis=0))
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
       report.parse_log()
-      report.assert_max_tile_memory(4056, tolerance=0.3)
+      report.assert_max_tile_memory(772, tolerance=0.3)
 
   @test_util.deprecated_graph_mode_only
   def testAGIShape(self):
@@ -137,7 +137,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       self.assertAllClose(result[0][0] * 2, np.take(result[1], i_h, axis=0))
       self.assertEqual(result[0][0].shape, (lookup_count, shape[1]))
       report.parse_log()
-      report.assert_max_tile_memory(9136, tolerance=0.3)
+      report.assert_max_tile_memory(5852, tolerance=0.3)
 
   @test_util.deprecated_graph_mode_only
   def testTrainNoExec(self):

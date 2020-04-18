@@ -61,8 +61,8 @@ class MatMulGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_total_tile_memory(116441988)
-      report.assert_max_tile_memory(103685)
+      report.assert_total_tile_memory(112509300)
+      report.assert_max_tile_memory(100438)
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'mm1/dot*', 'Copy_']
       report.assert_all_compute_sets_and_list(ok)

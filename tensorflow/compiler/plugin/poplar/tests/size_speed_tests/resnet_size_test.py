@@ -131,7 +131,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(loss, feed_dict={x: data, y_: labels})
 
       report.parse_log()
-      report.assert_total_tile_memory(25427768)
+      report.assert_total_tile_memory(21575480)
 
   def testTraining(self):
     with self.session() as sess:
@@ -159,7 +159,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(41717668)
+      report.assert_total_tile_memory(37865380)
 
   def testTrainingMomentum(self):
     with self.session() as sess:
@@ -187,7 +187,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(44947077)
+      report.assert_total_tile_memory(40767817)
 
   def testTrainingInLoop(self):
     with self.session() as sess:
@@ -223,7 +223,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(44351728)
+      report.assert_total_tile_memory(40142604)
 
   def testTrainingMomentumInLoop(self):
     with self.session() as sess:
@@ -258,7 +258,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(47090480)
+      report.assert_total_tile_memory(42827984)
 
   def testTrainingInLoopWithGradientAccumulation(self):
     with self.session() as sess:
@@ -295,7 +295,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(46070240)
+      report.assert_total_tile_memory(42217952)
 
   def testTrainingMomentumInLoopWithGradientAccumulation(self):
     with self.session() as sess:
@@ -331,7 +331,7 @@ class Resnet18_No_Batchnorm(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
 
-      report.assert_total_tile_memory(48594056)
+      report.assert_total_tile_memory(44320222)
 
 
 if __name__ == "__main__":
