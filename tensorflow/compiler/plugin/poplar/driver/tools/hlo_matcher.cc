@@ -15,23 +15,21 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 
-#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
-#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
-#include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/core/status.h"
+#include <queue>
+#include <set>
+#include <stack>
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
-
-#include <queue>
-#include <set>
-#include <stack>
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/core/lib/core/errors.h"
+#include "tensorflow/core/lib/core/status.h"
 
 using ::absl::StrCat;
 
@@ -327,14 +325,21 @@ HloMatcherNode::HloMatcherNode(HloMatcherOpcodeTarget opcode_target,
                                NodeOperands operands)
     : opcode_target_(opcode_target),
       operands_(operands),
-      node_condition_(absl::nullopt){};
+      node_conditions_({}) {}
 
 HloMatcherNode::HloMatcherNode(HloMatcherOpcodeTarget opcode_target,
                                NodeOperands operands,
                                NodeCondition node_condition)
     : opcode_target_(opcode_target),
       operands_(operands),
-      node_condition_(node_condition){};
+      node_conditions_({node_condition}) {}
+
+HloMatcherNode::HloMatcherNode(
+    HloMatcherOpcodeTarget opcode_target, NodeOperands operands,
+    const std::vector<NodeCondition>& node_conditions)
+    : opcode_target_(opcode_target),
+      operands_(operands),
+      node_conditions_(node_conditions) {}
 
 const HloMatcherOpcodeTarget& HloMatcherNode::GetOpcodeTarget() const {
   return opcode_target_;
@@ -342,8 +347,8 @@ const HloMatcherOpcodeTarget& HloMatcherNode::GetOpcodeTarget() const {
 
 const NodeOperands& HloMatcherNode::GetOperands() const { return operands_; }
 
-const absl::optional<NodeCondition>& HloMatcherNode::GetNodeCondition() const {
-  return node_condition_;
+const std::vector<NodeCondition>& HloMatcherNode::GetNodeConditions() const {
+  return node_conditions_;
 }
 
 const bool HloMatcherNode::Matches(const HloInstruction* inst) const {
@@ -364,7 +369,10 @@ const bool HloMatcherNode::Matches(const HloInstruction* inst) const {
     }
   }
   if (opcode_match) {
-    return GetNodeCondition() ? (*GetNodeCondition())(inst) : true;
+    return absl::c_all_of(GetNodeConditions(),
+                          [inst](const NodeCondition& condition) -> bool {
+                            return condition(inst);
+                          });
   } else {
     return false;
   }

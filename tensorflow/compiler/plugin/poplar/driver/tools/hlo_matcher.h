@@ -18,13 +18,12 @@ limitations under the License.
 
 #include <utility>
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
-#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
-
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
+#include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
 
@@ -65,9 +64,12 @@ class HloMatcherNode {
   HloMatcherNode(HloMatcherOpcodeTarget opcode_target, NodeOperands operands,
                  NodeCondition node_condition);
 
+  HloMatcherNode(HloMatcherOpcodeTarget opcode_target, NodeOperands operands,
+                 const std::vector<NodeCondition>& node_conditions);
+
   const HloMatcherOpcodeTarget& GetOpcodeTarget() const;
   const NodeOperands& GetOperands() const;
-  const absl::optional<NodeCondition>& GetNodeCondition() const;
+  const std::vector<NodeCondition>& GetNodeConditions() const;
 
   // Checks whether the instruction matches this node.
   const bool Matches(const HloInstruction* inst) const;
@@ -84,9 +86,9 @@ class HloMatcherNode {
   // in the matching position in the parameter_indices list.
   NodeOperands operands_;
 
-  // If provided, this function will be called with the instruction. Only if
-  // it returns true does the matching proceed.
-  absl::optional<NodeCondition> node_condition_;
+  // These functions will be called with the instruction. Only if all the
+  // functions return true does the matching proceed.
+  const std::vector<NodeCondition> node_conditions_;
 };
 
 using PatternType = std::string;

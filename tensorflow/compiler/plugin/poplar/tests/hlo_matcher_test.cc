@@ -1944,6 +1944,46 @@ std::vector<HloMatcherPattern> patterns = {
   EXPECT_EQ(8, hlo_module->entry_computation()->instruction_count());
 }
 
+TEST_F(HloMatcherTest, MatchMultipleConditions) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f32[10,10] parameter(0)
+  p1 = f32[10,10] parameter(1)
+  ROOT add1 = f32[10,10] add(p0, p1)
+ }
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
+
+  // clang-format off
+  std::vector<HloMatcherPattern> patterns = {
+    HloMatcherPattern(
+      PatternType("test"),
+      PatternMetaTarget(0),
+      PatternInputs({1, 2}),
+      PatternOutputs({0}),
+      Pattern({
+        {HloOpcode::kAdd, NodeOperands({1, 2}), {IsAddOrSubtract, IsFloat}},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({})}
+      })
+    )
+  };
+  // clang-format on
+
+  CompilerAnnotations annotations(hlo_module);
+  TestMatcher matcher(patterns, annotations, false);
+
+  EXPECT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  ASSERT_EQ(1, matcher.replace_count);
+  EXPECT_EQ(3, hlo_module->entry_computation()->instruction_count());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
