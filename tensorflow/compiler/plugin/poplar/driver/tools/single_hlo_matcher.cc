@@ -18,7 +18,7 @@ limitations under the License.
 #include <string>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {

@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 
 #include <queue>
 #include <stack>
@@ -409,9 +409,6 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kPower:
     case HloOpcode::kRemainder:
     case HloOpcode::kSubtract:
-    case HloOpcode::kAnd:
-    case HloOpcode::kOr:
-    case HloOpcode::kXor:
     case HloOpcode::kShiftLeft:
     case HloOpcode::kShiftRightArithmetic:
     case HloOpcode::kShiftRightLogical:
@@ -516,6 +513,20 @@ HloInstructionDescription::HloInstructionDescription(
         std::iota(indexes.begin(), indexes.end(), 0);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = indexes;
+      }
+      break;
+    }
+
+    case HloOpcode::kAnd:
+    case HloOpcode::kOr:
+    case HloOpcode::kXor: {
+      // Only inplace if their input/output type is the same.
+      if (inst->shape().element_type() ==
+          inst->operand(0)->shape().element_type()) {
+        type_ = HloInstructionType::kInplaceReadWrite;
+        inplace_operands_ = {0};
+      } else {
+        type_ = HloInstructionType::kNotInplace;
       }
       break;
     }
