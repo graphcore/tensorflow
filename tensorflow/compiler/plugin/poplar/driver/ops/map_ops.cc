@@ -407,12 +407,13 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
 
   for (int64 o = 0; o < inst->operand_count(); o++) {
     auto& comp_inputs = subcomp_visitor->inputs()[o];
-    if (comp_inputs.size() != inputs[o].size()) {
+    auto& inst_inputs = inputs[o];
+    if (comp_inputs.size() != inst_inputs.size()) {
       return xla::FailedPrecondition("Mismatched number of inputs.");
     }
-    for (size_t i = 0; i < inputs.size(); i++) {
+    for (size_t i = 0; i < inst_inputs.size(); i++) {
       if (subcomp_visitor->InputIsUsed(o, i)) {
-        seq.add(poplar::program::Copy(inputs[o][i], comp_inputs[i]));
+        seq.add(poplar::program::Copy(inst_inputs[i], comp_inputs[i]));
       }
     }
   }
