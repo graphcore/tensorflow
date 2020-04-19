@@ -1,8 +1,11 @@
 #  Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+#
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
 #  You may obtain a copy of the License at
+#
 #      http://www.apache.org/licenses/LICENSE-2.0
+#
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl.testing import parameterized
 import os
 import numpy as np
 import test_utils as tu
@@ -28,7 +32,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.compiler.xla import xla
 
 
-class IpuGatherLookupTest(xla_test.XLATestCase):
+class IpuGatherLookupTest(xla_test.XLATestCase, parameterized.TestCase):
   # Overriding abstract cached_session.
   def cached_session(self):
     return 0
@@ -36,7 +40,8 @@ class IpuGatherLookupTest(xla_test.XLATestCase):
   def test_session(self):
     return 0
 
-  def testGatherLookupRandomize(self):
+  @parameterized.parameters(range(1, 10))
+  def testGatherLookupRandomize(self, y_0):
     # Configure argument for targeting the IPU.
     # gather_simplifier is on.
     cfg = utils.create_ipu_config(profiling=True, profile_execution=True)
@@ -54,45 +59,40 @@ class IpuGatherLookupTest(xla_test.XLATestCase):
       return g
 
     # Compare cpu gather vs ipu gather_simplifier.
-    def test_cpu_vs_ipu_gather(y_0):
-      with self.session() as sess:
-        with ops.device('cpu'):
-          y = array_ops.placeholder(np.int32, shape=[y_0])
-          w = array_ops.placeholder(np.int32, shape=[w_0, w_1])
-          y_i = np.random.randint(low=0, high=w_0 - 1, size=y_0)
-          w_i = np.reshape(
-              np.random.randint(low=100, high=200, size=w_0 * w_1), (w_0, w_1))
-          cpu_take = array_ops.gather(w_i, y_i)
+    with self.session() as sess:
+      with ops.device('cpu'):
+        y = array_ops.placeholder(np.int32, shape=[y_0])
+        w = array_ops.placeholder(np.int32, shape=[w_0, w_1])
+        y_i = np.random.randint(low=0, high=w_0 - 1, size=y_0)
+        w_i = np.reshape(np.random.randint(low=100, high=200, size=w_0 * w_1),
+                         (w_0, w_1))
+        cpu_take = array_ops.gather(w_i, y_i)
 
-          report = tu.ReportJSON(self, sess=sess, configure_device=False)
+        report = tu.ReportJSON(self, sess=sess, configure_device=False)
 
-        with ops.device("/device:IPU:0"):
-          r = xla.compile(network, inputs=[w, y])
+      with ops.device("/device:IPU:0"):
+        r = xla.compile(network, inputs=[w, y])
 
-        sess.run(variables.global_variables_initializer())
-        report.reset()
-        ipu_gather_simplifier = sess.run(r, {y: y_i, w: w_i})
-        self.assertAllClose(ipu_gather_simplifier[0], cpu_take)
+      sess.run(variables.global_variables_initializer())
+      report.reset()
+      ipu_gather_simplifier = sess.run(r, {y: y_i, w: w_i})
+      self.assertAllClose(ipu_gather_simplifier[0], cpu_take)
 
-        report.parse_log()
-        # pylint: disable=line-too-long
+      report.parse_log()
+      # pylint: disable=line-too-long
 
-        # This tests gather simplifier hlo pass for embedding_lookup case.
-        # It checks if "embedding_lookup/gather*/multiSlice" string was
-        # replaced by embedding_lookup/custom-call/*/multiSlice".
-        ok = [
-            'embedding_lookup/custom-call/output/multiSlice/*',
-            '__seed/set/setMasterSeed',
-            'host-exchange-local-copy-',
-        ]
-        if y_0 == 1:
-          ok = ok[:-1]
-        # pylint: enable=line-too-long
-        report.assert_all_compute_sets_and_list(ok)
-
-    # Test loop for y_0 in 2*w_0 range.
-    for y_0 in range(1, 2 * w_0):
-      test_cpu_vs_ipu_gather(y_0)
+      # This tests gather simplifier hlo pass for embedding_lookup case.
+      # It checks if "embedding_lookup/gather*/multiSlice" string was
+      # replaced by embedding_lookup/custom-call/*/multiSlice".
+      ok = [
+          'embedding_lookup/custom-call/output/multiSlice/*',
+          '__seed/set/setMasterSeed',
+          'host-exchange-local-copy-',
+      ]
+      if y_0 == 1:
+        ok = ok[:-1]
+      # pylint: enable=line-too-long
+      report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":
