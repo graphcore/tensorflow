@@ -168,6 +168,8 @@ class IpuSerializationTest(xla_test.XLATestCase):
 
   def _validate_tensors(self, expected, tensors, tensor_type, auto_ids):
     for tensor in [t for t in tensors if t.get("type") == tensor_type]:
+      if "checkpoint" in tensor.get("name"):
+        continue
       self.assertEqual(expected.key, tensor.get("key"))
       self.assertTrue(isinstance(tensor.get("id"), int))
       if expected.start_id < 0:
@@ -348,12 +350,26 @@ class IpuSerializationTest(xla_test.XLATestCase):
           if name == module_hash + ".json":
             with open(os.path.join(folder, name), "r") as metadata_file:
               metadata = json.load(metadata_file)
-            self._validateStreams(
-                metadata, [(const, "input_data"), (inp2, "parameter")],
-                [(tensor_spec.TensorSpec(
-                    shape=[], dtype=dtypes.float32,
-                    name="XLA_Retvals:0"), "output_data")],
-                [(infeed_spec, infeed_name)], [(outfed_result, outfeed_name)])
+            self._validateStreams(metadata, [
+                (const, "input_data"), (inp2, "parameter"),
+                (tensor_spec.TensorSpec(shape=[2 * 2],
+                                        dtype=dtypes.int32,
+                                        name="checkpoint:0"), "parameter"),
+                (tensor_spec.TensorSpec(
+                    shape=[1], dtype=dtypes.int32,
+                    name="checkpointIndex:0"), "input_data")
+            ], [(tensor_spec.TensorSpec(shape=[],
+                                        dtype=dtypes.float32,
+                                        name="XLA_Retvals:0"), "output_data"),
+                (tensor_spec.TensorSpec(shape=[2 * 2],
+                                        dtype=dtypes.int32,
+                                        name="checkpoint:0"), "parameter_out"),
+                (tensor_spec.TensorSpec(
+                    shape=[2 * 2],
+                    dtype=dtypes.int32,
+                    name="checkpointClear:0"), "output_data")],
+                                  [(infeed_spec, infeed_name)],
+                                  [(outfed_result, outfeed_name)])
             self._validate_secure_metadata(opts, metadata)
           else:
             self.assertEqual(name, "%s.ipu_bin" % module_hash)
