@@ -18,9 +18,6 @@ Pipelining operators
 """
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 from enum import IntEnum
 
