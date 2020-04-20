@@ -101,7 +101,9 @@ StatusOr<bool> GradientAccumulationVerifier::Run(HloModule* module) {
           if (repeat_count % num_mini_batches) {
             return FailedPrecondition(
                 "Detected a gradient accumulation operation with %d number of "
-                "mini batches inside of a loop with %d iterations.\n"
+                "mini batches inside a loop with %d iterations.\n"
+                "It is required that the number of mini batches to accumulate "
+                "evenly divides the number of loop iterations.\n"
                 "This check can be disabled with "
                 "`XLA_FLAGS=\"--xla_disable_hlo_passes=gradient-accumulation-"
                 "verifier\"`, however the compiler cannot guarantee "
