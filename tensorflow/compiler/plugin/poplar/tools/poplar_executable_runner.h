@@ -42,7 +42,7 @@ class Executable {
  public:
   explicit Executable(StreamReader& stream, int64_t length = 0);
   poplar::Engine& Engine();
-  std::string StreamsList() const;
+  std::string StreamsList(bool summmary = false) const;
   void Load(const poplar::Device& device);
   void Run();
   void DeviceToHostCopy();
@@ -128,6 +128,8 @@ class TensorManager {
   std::list<Tensor*> InputDataTensors();
   void AssertAllTensorsProvided(const BinaryLoader& loader);
   void LoadInputsAndParameters(const BinaryLoader& loader);
+  void LoadVerifiedCheckpoint(const BinaryLoader& loader,
+                              int64_t checkpoint_index);
   void LoadInputs(const BinaryLoader& loader);
   void LoadInfeeds(const BinaryLoader& loader);
   void SaveOutputs(TensorType type, BinaryWriter& writer,
@@ -140,7 +142,9 @@ class TensorManager {
   std::vector<Tensor> outputs_;
   std::vector<Infeed> infeeds_;
   std::vector<Outfeed> outfeeds_;
+  std::vector<std::string> feeds_order_;
   IpuConfig config_;
+  int64_t verified_checkpoint_index_;
 };
 
 class SeedManager {

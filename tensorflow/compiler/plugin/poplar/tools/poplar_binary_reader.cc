@@ -127,6 +127,8 @@ ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
 ABSL_FLAG(bool, print_output, false,
           "Print the content of the tensors to stdout");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
+ABSL_FLAG(bool, list_handles, false,
+          "List the names of the handles present in --binaries");
 ABSL_FLAG(bool, list_tensors, false,
           "List the names of the tensors present in --binaries");
 ABSL_FLAG(bool, list_feeds, false,
@@ -152,6 +154,7 @@ int main(int argc, char** argv) {
   const BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
   const bool print_output = absl::GetFlag(FLAGS_print_output);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
+  const bool list_handles = absl::GetFlag(FLAGS_list_handles);
   const bool list_tensors = absl::GetFlag(FLAGS_list_tensors);
   const bool list_feeds = absl::GetFlag(FLAGS_list_feeds);
   const std::string output_folder = absl::GetFlag(FLAGS_output_folder);
@@ -171,7 +174,7 @@ int main(int argc, char** argv) {
   for (auto file : binaries.filenames) {
     loader.LoadFile(file);
   }
-  if (list_tensors || list_feeds) {
+  if (list_tensors || list_feeds || list_handles) {
     if (list_tensors) {
       std::cout << "List of tensors:\n"
                 << absl::StrJoin(loader.GetObjectNames(ipu::ObjectType::Tensor),
@@ -183,6 +186,14 @@ int main(int argc, char** argv) {
                 << absl::StrJoin(loader.GetObjectNames(ipu::ObjectType::Feed),
                                  "\n")
                 << std::endl;
+    }
+    if (list_handles) {
+      for (auto name :
+           loader.GetObjectNames(ipu::ObjectType::PoplarExecutable)) {
+        std::cout << "List of handles in executable " << name << ":\n";
+        auto exe = loader.CreateExecutable(name);
+        std::cout << exe->StreamsList(true) << std::endl;
+      }
     }
     return 0;
   }

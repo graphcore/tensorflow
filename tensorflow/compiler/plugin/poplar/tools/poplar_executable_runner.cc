@@ -203,11 +203,59 @@ Executable::Executable(StreamReader& stream, int64_t length) {
 
 poplar::Engine& Executable::Engine() { return *engine_; }
 
-std::string Executable::StreamsList() const {
-  int idx = 0;
+std::string Executable::StreamsList(bool summary) const {
   std::stringstream ss;
-  for (auto stream : engine_->listStreams()) {
-    ss << "[" << idx++ << "] " << stream << std::endl;
+  if (summary) {
+    std::map<std::string, std::set<int>> read_streams, write_streams;
+    std::smatch m;
+    const std::regex re{"(.*?)([0-9]+)\\.0([-+])"};
+    std::list<std::string> other_inputs, other_outputs;
+    for (auto stream : engine_->listStreams()) {
+      if (std::regex_match(stream, m, re)) {
+        ERROR_ON(m.size() != 4);
+        const std::string prefix = m[1].str();
+        const int idx = atoi(m[2].str().c_str());
+        const bool write = (m[3].str() == "-");
+
+        auto& group = write ? write_streams : read_streams;
+        auto& indices = group[prefix];
+        ERROR_ON(indices.find(idx) != indices.end());
+        indices.emplace(idx);
+      } else {
+        if (stream[stream.size() - 1] == '-') {
+          other_outputs.push_back(stream);
+        } else {
+          other_inputs.push_back(stream);
+        }
+      }
+    }
+    ss << "Input streams:\n";
+    for (auto pair : read_streams) {
+      ERROR_ON(*absl::c_min_element(pair.second) != 0);
+      int num_indices = *absl::c_max_element(pair.second);
+      ERROR_ON(num_indices + 1 != pair.second.size());
+      ss << "  " << pair.first << "0.0+ --> " << pair.first << num_indices
+         << ".0+\n";
+    }
+    for (auto stream : other_inputs) {
+      ss << "  " << stream << std::endl;
+    }
+    ss << "\nOutput streams:\n";
+    for (auto pair : write_streams) {
+      ERROR_ON(*absl::c_min_element(pair.second) != 0);
+      int num_indices = *absl::c_max_element(pair.second);
+      ERROR_ON(num_indices + 1 != pair.second.size());
+      ss << "  " << pair.first << "0.0- --> " << pair.first << num_indices
+         << ".0-\n";
+    }
+    for (auto stream : other_outputs) {
+      ss << "  " << stream << std::endl;
+    }
+  } else {
+    int idx = 0;
+    for (auto stream : engine_->listStreams()) {
+      ss << "[" << idx++ << "] " << stream << std::endl;
+    }
   }
   return ss.str();
 }
@@ -285,17 +333,29 @@ poplar::OptionFlags IpuConfig::OptionFlags() const { return option_flags_; }
 TensorManager::TensorManager(const Json::Value& root)
     : config_(root["config"]) {
   config_ = IpuConfig(root["config"]);
-  absl::c_transform(
-      root["inputs"], std::back_inserter(inputs_),
-      [](const Json::Value& input) { return Tensor{TensorInfo{input}}; });
-  absl::c_transform(
-      root["outputs"], std::back_inserter(outputs_),
-      [](const Json::Value& output) { return Tensor{TensorInfo{output}}; });
+  absl::c_transform(root["inputs"], std::back_inserter(inputs_),
+                    [](const Json::Value& input) {
+                      LogContext ctx(input.toStyledString());
+                      return Tensor{TensorInfo{input}};
+                    });
+  absl::c_transform(root["outputs"], std::back_inserter(outputs_),
+                    [](const Json::Value& output) {
+                      LogContext ctx(output.toStyledString());
+                      return Tensor{TensorInfo{output}};
+                    });
   absl::c_transform(root["infeeds"], std::back_inserter(infeeds_),
-                    [](const Json::Value& infeed) { return Infeed{infeed}; });
-  absl::c_transform(
-      root["outfeeds"], std::back_inserter(outfeeds_),
-      [](const Json::Value& outfeed) { return Outfeed{outfeed}; });
+                    [](const Json::Value& infeed) {
+                      LogContext ctx(infeed.toStyledString());
+                      return Infeed{infeed};
+                    });
+  absl::c_transform(root["outfeeds"], std::back_inserter(outfeeds_),
+                    [](const Json::Value& outfeed) {
+                      LogContext ctx(outfeed.toStyledString());
+                      return Outfeed{outfeed};
+                    });
+  absl::c_transform(root["checkpoint"]["feeds"],
+                    std::back_inserter(feeds_order_),
+                    [](const Json::Value& feed) { return feed.asString(); });
 }
 
 void TensorManager::LoadCheckpointMetadataFromJson(
@@ -363,6 +423,9 @@ void TensorManager::AssertAllTensorsProvided(const BinaryLoader& loader) {
       loader.GetObjectNames(ObjectType::Feed);
   std::string errors_msg;
   for (auto& input : inputs_) {
+    if (input.Info().Name() == "checkpointIndex") {
+      continue;
+    }
     if (tensors_provided.find(input.Info().Name()) == tensors_provided.end()) {
       missing_msg.push_back(absl::StrCat(
           "No data provided for ", TensorTypeToString(input.Info().Type()),
@@ -445,9 +508,41 @@ std::list<Tensor*> TensorManager::InputDataTensors() {
 
 const IpuConfig& TensorManager::Config() const { return config_; }
 
+void TensorManager::LoadVerifiedCheckpoint(const BinaryLoader& loader,
+                                           int64_t checkpoint_index) {
+  if (!infeeds_.empty()) {
+    std::unique_ptr<ipu::StreamReader> reader =
+        loader.GetTensorStream("checkpointClear");
+    ipu::Tensor feeds_positions{*reader};
+    const int64_t* positions =
+        reinterpret_cast<int64_t*>(feeds_positions.Data());
+
+    for (auto& feed : infeeds_) {
+      int feed_idx = -1;
+      for (int i = 0; i < feeds_order_.size(); i++) {
+        if (feed.Name() == feeds_order_[i]) {
+          feed_idx = i;
+          break;
+        }
+      }
+      ERROR_ON_MSG(feed_idx < 0,
+                   "Can't find index position for infeed " << feed.Name());
+      for (auto& stream : feed.MutableStreams()) {
+        stream.JumpToTensor(positions[feed_idx]);
+      }
+    }
+    verified_checkpoint_index_ = checkpoint_index;
+  }
+}
+
 void TensorManager::ConnectStreams(Executable& executable) {
   auto& engine = executable.Engine();
 
+  // If there was a checkpoint associated to this executable then set the
+  // checkpoint index.
+  if (!feeds_order_.empty()) {
+    engine.connectStream("checkpointIndex", &verified_checkpoint_index_);
+  }
   for (auto& input : inputs_) {
     PRINT_INFO("Connecting " << input.Info().Name() << " to handle "
                              << input.Info().Handle());
@@ -463,6 +558,8 @@ void TensorManager::ConnectStreams(Executable& executable) {
                       output.Info().Shape().DataSizeInBytes());
         }
       };
+      PRINT_INFO("Connecting " << output.Info().Name() << " to handle "
+                               << output.Info().Handle());
       engine.connectStreamToCallback(output.Info().Handle(), replica_id,
                                      callback);
     }
