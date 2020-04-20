@@ -119,7 +119,7 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with self.assertRaisesRegex(
           errors.FailedPreconditionError,
           "Detected a gradient accumulation operation with 4 number of mini "
-          "batches inside of a loop with 10 iterations."):
+          "batches inside a loop with 10 iterations."):
         sess.run(r, {y: [10]})
 
   def testStatefulGradientAccumulateWithMomentum(self):
@@ -219,7 +219,7 @@ class StatefulGradientAccumulateTest(xla_test.XLATestCase):
       with self.assertRaisesRegex(
           errors.FailedPreconditionError,
           "Detected a gradient accumulation operation with 5 number of mini "
-          "batches inside of a loop with 8 iterations."):
+          "batches inside a loop with 8 iterations."):
         sess.run(r, {y: [10]})
 
 
