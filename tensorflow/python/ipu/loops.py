@@ -21,8 +21,6 @@ Looping utilities
 # tensorflow/python/tpu/training_loop.py
 # which creates the loops for the TPUs.
 
-from __future__ import absolute_import
-from __future__ import division
 
 from tensorflow.python.framework import ops
 from tensorflow.python.compiler.xla import xla

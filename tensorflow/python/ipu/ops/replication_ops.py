@@ -16,9 +16,6 @@
 Utility operations to be used in replicated mode
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 
