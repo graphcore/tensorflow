@@ -14,7 +14,6 @@
 # ==============================================================================
 """Test for IPU Keras Pipelined model."""
 
-
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
@@ -26,6 +25,7 @@ from tensorflow.python.eager import def_function
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu.tests import pipelining_test_util
+from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.platform import test
 from tensorflow.python.training import gradient_descent
 
@@ -63,7 +63,19 @@ def test_language_dataset(length=None, batch_size=1):
   return ds
 
 
-# Run a 2 stage model on the CPU
+def test_inference_dataset(length=None, batch_size=1, x_val=1.0):
+
+  constant_d = constant_op.constant(x_val, shape=[32])
+
+  ds = dataset_ops.Dataset.from_tensors(constant_d)
+  ds = ds.repeat(length)
+  ds = ds.batch(batch_size, drop_remainder=True)
+
+  return ds
+
+
+# Run a 2 stage model on the CPU, returning a single output value (loss
+# or last stage output).
 @def_function.function
 def run_model_on_cpu(test_wrapper, model, input_values, repeat_count,
                      pipeline_depth, loss, optimizer):
@@ -82,12 +94,29 @@ def run_model_on_cpu(test_wrapper, model, input_values, repeat_count,
     for l in model[1]:
       x = l(x)
 
-    return loss(y_true=t, y_pred=x)
+    if loss:
+      return loss(y_true=t, y_pred=x)
 
-  losses = pipelining_test_util.PipelineTester.run_on_cpu(
+    return x
+
+  outputs = pipelining_test_util.PipelineTester.run_on_cpu(
       test_wrapper, [stage1, stage2], inputs_fn, input_values, repeat_count,
       pipeline_depth, test_dataset, optimizer)
-  return losses
+  return outputs
+
+
+def aggregate_cpu_out(aggregator, results):
+  a = aggregator(use_steps=False, num_samples=len(results))
+  e = enumerate(iter(results))
+
+  i, r = next(e)
+  a.create(r)
+  a.aggregate(r, 0, 1)
+
+  for i, r in e:
+    a.aggregate(r, i, i + 1)
+  a.finalize()
+  return a.results
 
 
 def simple_pipeline():
@@ -194,7 +223,6 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testCannotUseKerasV1Optimizers(self):
-
     p = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=4)
 
     with self.assertRaisesRegex(
@@ -204,49 +232,85 @@ class IPUPipelineTest(test.TestCase):
       p.compile(opt, 'mse')
 
   @test_util.run_v2_only
-  def testMismatchDatasetLengthToPipelineDepth(self):
-
-    dataset = tu.create_dual_increasing_dataset(64,
-                                                data_shape=[1, 32],
-                                                label_shape=[1, 2],
-                                                repeat=False)
-
+  def testMustCallCompileFit(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
 
-      # Compile model with SGD optimizer
+      with self.assertRaisesRegex(
+          RuntimeError, "You must compile your model before training/testing"):
+        m.fit(test_dataset(length=64))
+
+  @test_util.run_v2_only
+  def testMustCallCompileEvaluate(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
+
+      with self.assertRaisesRegex(
+          RuntimeError, "You must compile your model before training/testing"):
+        m.evaluate(test_dataset(length=64))
+
+  @test_util.run_v2_only
+  def testNeedTupleDatasetFit(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
+      m.compile('sgd', loss='mse')
+
+      with self.assertRaisesRegex(
+          ValueError,
+          "PipelineModel.fit requires a dataset containing a tuple"):
+        m.fit(test_inference_dataset(length=48))
+
+  @test_util.run_v2_only
+  def testNeedTupleDatasetEvaluate(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
+      m.compile('sgd', loss='mse')
+
+      with self.assertRaisesRegex(
+          ValueError,
+          "PipelineModel.evaluate requires a dataset containing a tuple"):
+        m.evaluate(test_inference_dataset(length=48))
+
+  @test_util.run_v2_only
+  def testNeedTupleDatasetPredict(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
+
+      with self.assertRaisesRegex(
+          ValueError,
+          "PipelineModel.predict requires a dataset containing either"):
+        m.predict(test_dataset(length=48))
+
+  @test_util.run_v2_only
+  def testMismatchDatasetLengthToPipelineDepth(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
           ValueError,
           "PipelineModels require the number of batches in the dataset"):
-        m.fit(dataset, epochs=4)
+        m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only
   def testUnlimitedDatasetHasNoStepsPerEpoch(self):
-
-    dataset = tu.create_dual_increasing_dataset(64,
-                                                data_shape=[1, 32],
-                                                label_shape=[1, 2],
-                                                repeat=True)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
-
-      # Compile model with SGD optimizer
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
           ValueError, "When using an infinitely repeating dataset, you"):
-        m.fit(dataset, epochs=4)
+        m.fit(test_dataset(), epochs=4)
 
   @test_util.run_v2_only
   def testStepsPerEpochTooLargeForDataset(self):
-
-    dataset = test_dataset(length=144)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=12)
@@ -255,7 +319,6 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -263,13 +326,10 @@ class IPUPipelineTest(test.TestCase):
       with self.assertRaisesRegex(
           ValueError,
           r"Steps per epoch times pipeline depth \(14 x 12\) is greater than"):
-        m.fit(dataset, steps_per_epoch=14)
+        m.fit(test_dataset(length=144), steps_per_epoch=14)
 
   @test_util.run_v2_only
   def testResultsOneEpochWithTfOptimizer_CpuMatch(self):
-
-    dataset = test_dataset(length=96)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
@@ -280,38 +340,33 @@ class IPUPipelineTest(test.TestCase):
 
       opt = gradient_descent.GradientDescentOptimizer(0.001)
 
-      # Compile model with SGD optimizer
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      history = m.fit(dataset)
+      history = m.fit(test_dataset(length=96))
 
       # Should be only a loss stored in the history, and it should contain
       # only the single epochs value
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float32)
+      self.assertEqual(type(history.history['loss'][0]), np.float64)
 
     opt_cpu = gradient_descent.GradientDescentOptimizer(0.001)
     loss_cpu = keras.losses.mean_squared_error
     cpu_loss = run_model_on_cpu(self, fixed_weight_pipeline(), [], 12, 8,
                                 loss_cpu, opt_cpu)
     cpu_loss = list(map(lambda x: x.numpy(), cpu_loss))
+    cpu_loss = aggregate_cpu_out(training_utils.MetricsAggregator, cpu_loss)
+    cpu_loss = cpu_loss[0]
 
     # history['loss'] is one loss value per epoch (of which there is 1)
-    first_epoch_ipu_loss = history.history['loss'][0]
+    ipu_loss = history.history['loss'][0]
 
-    # cpu_loss is every loss value in the one and only epoch
-    first_epoch_cpu_loss = cpu_loss[-1]
-
-    self.assertEqual(first_epoch_ipu_loss, first_epoch_cpu_loss)
+    self.assertAllClose(ipu_loss, cpu_loss)
 
   @test_util.run_v2_only
   def testFitHistoryWithKerasOptimizer(self):
-
-    dataset = test_dataset(length=72)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
@@ -320,25 +375,21 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      history = m.fit(dataset)
+      history = m.fit(test_dataset(length=72))
 
       # Should be only a loss stored in the history, and it should contain
       # only the single epochs value
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float32)
+      self.assertEqual(type(history.history['loss'][0]), np.float64)
 
   @test_util.run_v2_only
   def testFitHistoryTwoEpochs(self):
-
-    dataset = test_dataset(length=72)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
@@ -347,26 +398,22 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      history = m.fit(dataset, epochs=2)
+      history = m.fit(test_dataset(length=72), epochs=2)
 
       # Should be only a loss stored in the history, and it should contain
       # only the single epochs value
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 2)
-      self.assertEqual(type(history.history['loss'][0]), np.float32)
-      self.assertEqual(type(history.history['loss'][1]), np.float32)
+      self.assertEqual(type(history.history['loss'][0]), np.float64)
+      self.assertEqual(type(history.history['loss'][1]), np.float64)
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerRun(self):
-
-    dataset = test_dataset(length=96)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
@@ -375,7 +422,6 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -385,16 +431,13 @@ class IPUPipelineTest(test.TestCase):
       cb = BatchCallbackCounter()
 
       # Fit the weights to the dataset
-      m.fit(dataset, callbacks=[cb], steps_per_run=2)
+      m.fit(test_dataset(length=96), callbacks=[cb], steps_per_run=2)
 
       # Should have been called back twice due to end of batch
       self.assertEqual(cb.count(), 2)
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochOneEpoch(self):
-
-    dataset = test_dataset()
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
@@ -403,23 +446,21 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      history = m.fit(dataset, steps_per_epoch=144)
+      history = m.fit(test_dataset(), steps_per_epoch=144)
 
       # Should be only a loss stored in the history, and it should contain
       # only the single epochs value
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 1)
-      self.assertEqual(type(history.history['loss'][0]), np.float32)
+      self.assertEqual(type(history.history['loss'][0]), np.float64)
 
   @test_util.run_v2_only
   def testFitTwice(self):
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
@@ -428,7 +469,6 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
@@ -462,9 +502,6 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochTwoEpochs(self):
-
-    dataset = test_dataset()
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
@@ -473,26 +510,22 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      history = m.fit(dataset, steps_per_epoch=144, epochs=2)
+      history = m.fit(test_dataset(), steps_per_epoch=144, epochs=2)
 
       # Should be only a loss stored in the history, and it should contain
       # only the single epochs value
       self.assertEqual(list(history.history.keys()), ['loss'])
       self.assertEqual(type(history.history['loss']), list)
       self.assertEqual(len(history.history['loss']), 2)
-      self.assertEqual(type(history.history['loss'][0]), np.float32)
-      self.assertEqual(type(history.history['loss'][1]), np.float32)
+      self.assertEqual(type(history.history['loss'][0]), np.float64)
+      self.assertEqual(type(history.history['loss'][1]), np.float64)
 
   @test_util.run_v2_only
   def testFitHistoryWithKerasOptimizerBatchSize2(self):
-
-    dataset = test_dataset(length=144, batch_size=2)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
@@ -501,27 +534,22 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
       cb = BatchCallbackCounter()
-      m.fit(dataset, callbacks=[cb])
+      m.fit(test_dataset(length=144, batch_size=2), callbacks=[cb])
 
       # 144 samples, batch size 2 = 72 mini-batches
       # 72 mini-batches, pipeline depth 24 = 3 steps
       logs = cb.logs()
       self.assertEqual(len(logs), 1)
-      print(logs[0].keys())
       self.assertTrue("num_steps" in logs[0].keys())
       self.assertEqual(logs[0]['num_steps'], 3)
 
   @test_util.run_v2_only
   def testFitWithLearningRateDecay(self):
-
-    dataset = test_dataset(length=72)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       # Clear old reports
@@ -533,13 +561,12 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001,
                                                     decay=0.1)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      m.fit(dataset, epochs=6)
+      m.fit(test_dataset(length=72), epochs=6)
 
       # Ensure that we are not downloading the weights each time even though
       # the 'learning rate' hyper is being updated
@@ -548,9 +575,6 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testFitWithExponentialDecayLearningRateSchedule(self):
-
-    dataset = test_dataset(length=72)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       # Clear old reports
@@ -562,14 +586,13 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       lrs = keras.optimizer_v2.learning_rate_schedule.ExponentialDecay(
           0.001, 4, 0.1, staircase=True)
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=lrs)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      m.fit(dataset, epochs=6)
+      m.fit(test_dataset(length=72), epochs=6)
 
       # Ensure that we are not downloading the weights each time even though
       # the 'learning rate' hyper is being updated
@@ -581,8 +604,6 @@ class IPUPipelineTest(test.TestCase):
     # Clear old reports
     ipu.ops.summary_ops.get_ipu_reports()
 
-    dataset = test_dataset(length=72)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       # Clear old reports
@@ -594,14 +615,13 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       lrs = keras.optimizer_v2.learning_rate_schedule.PiecewiseConstantDecay(
           boundaries=[8, 16], values=[0.001, 0.0005, 0.0001])
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=lrs)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      m.fit(dataset, epochs=6)
+      m.fit(test_dataset(length=72), epochs=6)
 
       # Ensure that we are not downloading the weights each time even though
       # the 'learning rate' hyper is being updated
@@ -610,9 +630,6 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testTrainPipelineWithLstm(self):
-
-    dataset = test_language_dataset(length=72)
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(pipeline_with_lstm(), pipeline_depth=24)
@@ -621,21 +638,17 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.001)
       m.compile(opt, loss='mse')
 
       # Fit the weights to the dataset
-      history = m.fit(dataset, epochs=3, verbose=0)
+      history = m.fit(test_language_dataset(length=72), epochs=3, verbose=0)
 
       losses = history.history['loss']
       self.assertTrue(losses[0] > losses[-1])
 
   @test_util.run_v2_only
   def testFitWithMetrics(self):
-
-    dataset = test_dataset()
-
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=24)
@@ -644,12 +657,11 @@ class IPUPipelineTest(test.TestCase):
       cfg = ipu.utils.auto_select_ipus(cfg, 2)
       ipu.utils.configure_ipu_system(cfg)
 
-      # Compile model with SGD optimizer
       opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=0.0001)
       m.compile(opt, loss='mse', metrics=['accuracy'])
 
       # Fit the weights to the dataset
-      history = m.fit(dataset, steps_per_epoch=2, epochs=2)
+      history = m.fit(test_dataset(), steps_per_epoch=2, epochs=2)
 
       # Should be only a loss stored in the history, and it should contain
       # only the single epochs value
@@ -658,10 +670,70 @@ class IPUPipelineTest(test.TestCase):
       self.assertEqual(type(history.history['accuracy']), list)
       self.assertEqual(len(history.history['loss']), 2)
       self.assertEqual(len(history.history['accuracy']), 2)
-      self.assertEqual(type(history.history['loss'][0]), np.float32)
-      self.assertEqual(type(history.history['loss'][1]), np.float32)
+      self.assertEqual(type(history.history['loss'][0]), np.float64)
+      self.assertEqual(type(history.history['loss'][1]), np.float64)
       self.assertEqual(type(history.history['accuracy'][0]), np.float32)
       self.assertEqual(type(history.history['accuracy'][1]), np.float32)
+
+  @test_util.run_v2_only
+  def testEval_CpuMatch(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      m.compile("sgd", loss='mse')
+
+      # Fit the weights to the dataset
+      result = m.evaluate(test_dataset(length=96))
+
+      # The result is an aggregate of the loss
+      self.assertEqual(len(result), 1)
+      self.assertEqual(type(result), list)
+
+    loss_cpu = keras.losses.mean_squared_error
+    cpu_loss = run_model_on_cpu(self, fixed_weight_pipeline(), [], 12, 8,
+                                loss_cpu, None)
+    cpu_loss = list(map(lambda x: x.numpy(), cpu_loss))
+    cpu_loss = aggregate_cpu_out(training_utils.MetricsAggregator, cpu_loss)
+    cpu_loss = cpu_loss[0]
+
+    # result is the single aggregated loss value
+    ipu_loss = result[0]
+
+    self.assertEqual(ipu_loss, cpu_loss)
+
+  @test_util.run_v2_only
+  def testPredict_CpuMatch(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
+
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 2)
+      ipu.utils.configure_ipu_system(cfg)
+
+      # Fit the weights to the dataset
+      result = m.predict(test_inference_dataset(length=96))
+
+      # The result is the tuple of concatenated output tensors
+      self.assertEqual(type(result), tuple)
+      self.assertEqual(len(result), 1)
+      self.assertEqual(type(result[0]), np.ndarray)
+      self.assertEqual(result[0].shape, (96, 2))
+
+    cpu_out = run_model_on_cpu(self, fixed_weight_pipeline(), [], 12, 8, None,
+                               None)
+    cpu_out = list(map(lambda x: x.numpy(), cpu_out))
+    cpu_out = aggregate_cpu_out(training_utils.OutputsAggregator, cpu_out)
+
+    # result is the predicted values
+    ipu_output = result[0]
+
+    self.assertAllEqual(ipu_output, cpu_out)
 
 
 if __name__ == '__main__':

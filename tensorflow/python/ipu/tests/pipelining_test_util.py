@@ -66,22 +66,27 @@ class PipelineTester(object):
 
         loss = pipeline(*inputs)
 
-        trainable_variables = variables.trainable_variables()
-        accum_vars = [
-            standard_ops.Variable(array_ops.zeros_like(
-                var.initialized_value()),
-                                  trainable=False)
-            for var in trainable_variables
-        ]
-        zero_ops = [
-            var.assign(array_ops.zeros_like(var)) for var in accum_vars
-        ]
-        grads = optimizer.compute_gradients(loss, trainable_variables)
-        accum_ops = [
-            accum_vars[i].assign_add(gv[0]) for i, gv in enumerate(grads)
-        ]
-        train_step = optimizer.apply_gradients([(accum_vars[i], gv[1])
-                                                for i, gv in enumerate(grads)])
+        if optimizer:
+          trainable_variables = variables.trainable_variables()
+          accum_vars = [
+              standard_ops.Variable(
+                  array_ops.zeros_like(var.initialized_value()),
+                  trainable=False) for var in trainable_variables
+          ]
+          zero_ops = [
+              var.assign(array_ops.zeros_like(var)) for var in accum_vars
+          ]
+          grads = optimizer.compute_gradients(loss, trainable_variables)
+          accum_ops = [
+              accum_vars[i].assign_add(gv[0]) for i, gv in enumerate(grads)
+          ]
+          train_step = optimizer.apply_gradients([
+              (accum_vars[i], gv[1]) for i, gv in enumerate(grads)
+          ])
+        else:
+          train_step = None
+          accum_ops = []
+          zero_ops = []
 
       session.run(variables.global_variables_initializer())
       losses = []
@@ -94,7 +99,8 @@ class PipelineTester(object):
             losses.append(l)
           # Run the train_step ops to update the weights based on accumulated
           # gradients
-          session.run(train_step)
+          if train_step:
+            session.run(train_step)
       return losses
 
   @staticmethod

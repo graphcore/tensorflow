@@ -23,6 +23,7 @@ from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.eager import def_function
+from tensorflow.python.framework import tensor_spec
 from tensorflow.python.keras import callbacks as cbks
 from tensorflow.python.keras import backend
 from tensorflow.python.keras import optimizers
@@ -336,11 +337,11 @@ class PipelinedModel(Model):
     return [self.total_loss] + metrics
 
   @def_function.function(autograph=False)
-  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count):
+  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
+                         mode):
 
-    # Plain function to build a stage
-    def call_stage(stage_id, inputs, targets):
-
+    # Plain functions to build a stage
+    def call_inference_stage(stage_id, inputs):
       # Record the inputs of the first stage
       if stage_id == 0 and not self.inputs:
         self._set_input_attrs(inputs)
@@ -349,19 +350,29 @@ class PipelinedModel(Model):
       for l in self.stages[stage_id]:
         x = l(x)
 
+      return x
+
+    def call_training_stage(stage_id, inputs, targets):
+
+      x = call_inference_stage(stage_id, inputs)
+
       # Recompile the model now that we know the inputs and outputs, and
       # then create the losses and metrics
       if stage_id == len(self.stages) - 1:
         self._set_output_attrs(x)
-
         return self._add_loss(targets)
 
       return x, targets
 
     # The pipeline stages, a set of feed forward functions.
+    if mode == ModeKeys.PREDICT:
+      stage_fn = call_inference_stage
+    else:
+      stage_fn = call_training_stage
+
     stages = []
     for stage_id in range(len(self.stages)):
-      stages.append(partial(call_stage, stage_id))
+      stages.append(partial(stage_fn, stage_id))
 
     # Function for generating the optimizer config for pipelines.
     def optimizer_function(loss, *_):
@@ -387,82 +398,40 @@ class PipelinedModel(Model):
 
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
+    opt = optimizer_function if mode == ModeKeys.TRAIN else None
+
     pipeline = pipelining_ops.pipeline(stages,
                                        pipeline_depth=self.pipeline_depth,
                                        repeat_count=repeat_count,
                                        inputs=[],
                                        infeed_queue=infeed_queue,
                                        outfeed_queue=outfeed_queue,
-                                       optimizer_function=optimizer_function,
+                                       optimizer_function=opt,
                                        name=self.name,
                                        **self.args)
 
     return pipeline.outputs
 
   @def_function.function(autograph=False)
-  def _run_helper(self, infeed_queue, outfeed_queue=None, repeat_count=1):
+  def _run_helper(self, infeed_queue, outfeed_queue, repeat_count, mode):
 
     strategy = distribution_strategy_context.get_strategy()
     return strategy.experimental_run_v2(
         self._internal_run_loop,
-        args=[infeed_queue, outfeed_queue, repeat_count])
+        args=[infeed_queue, outfeed_queue, repeat_count, mode])
 
   @trackable.no_automatic_dependency_tracking
-  def fit(self,
-          x=None,
-          y=None,
-          batch_size=None,
-          epochs=1,
-          verbose=1,
-          callbacks=None,
-          validation_split=0.,
-          validation_data=None,
-          shuffle=True,
-          class_weight=None,
-          sample_weight=None,
-          initial_epoch=0,
-          steps_per_epoch=None,
-          validation_steps=None,
-          validation_freq=1,
-          max_queue_size=10,
-          workers=1,
-          use_multiprocessing=False,
-          steps_per_run=None,
-          **kwargs):
-    """
-    This provides the same functionality as the Keras Model `fit` method.
+  def _do_internal(self, mode, ds, epochs, verbose, callbacks, initial_epoch,
+                   steps_per_epoch, steps_per_run, **kwargs):
 
-    The pipeline itself can be wrapped in a loop in order to execute a larger
-    training run in a single call to hardware.  The `steps_per_run` argument
-    is needed to describe how many steps should be performed on each hardware
-    execution.  The dataset should be able to provide enough samples to run
-    for the mini-batch size multiplied by the pipeline depth multiplied by the
-    steps_per_run value.  If the dataset is infinite, because it has been
-    repeated indefinitely, then this will be ok.
-    """
-
-    if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(
-          "PipelineModels can only `fit` with a `tf.data.Dataset` as input.")
-
-    if y is not None:
-      raise ValueError(
-          "When `x` is a `tf.data.Dataset`, `y` should not be specified "
-          "(since targets will be obtained from `x`).")
-
-    if validation_split != 0. or validation_steps != None:
-      raise ValueError("PipelineModels do not support validation during fit.")
-
-    self._assert_compile_was_called()
-
-    mode = ModeKeys.TRAIN
+    self.args = kwargs
 
     # Figure out if we need to recreate the iterator after each epoch.
     recreate_iterator = False
     require_steps_per_epoch = False
     verify_dataset_length = False
 
-    dataset_length = backend.get_value(cardinality.cardinality(x))
+    dataset_length = backend.get_value(cardinality.cardinality(ds))
     if dataset_length == cardinality.INFINITE:
       # An infinite dataset can be walked over indefinitely, but the user
       # must specify how many steps there are in each epoch.
@@ -499,7 +468,7 @@ class PipelinedModel(Model):
             (steps_per_epoch, self.pipeline_depth, dataset_length))
 
     mini_batches_per_epoch = training_utils.infer_steps_for_dataset(
-        self, x, mini_batches_per_epoch, epochs, steps_name='steps_per_epoch')
+        self, ds, mini_batches_per_epoch, epochs, steps_name='steps_per_epoch')
 
     if mini_batches_per_epoch % self.pipeline_depth != 0:
       raise ValueError(
@@ -521,6 +490,8 @@ class PipelinedModel(Model):
 
     outer_loop_count = int(steps_per_epoch / steps_per_run)
 
+    total_samples = mini_batches_per_epoch * (epochs - initial_epoch)
+
     # Prepare for progress reporting
     callbacks = cbks.configure_callbacks(callbacks,
                                          self,
@@ -531,7 +502,7 @@ class PipelinedModel(Model):
                                          mode=mode)
 
     # Create queues
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(x, next_feed_id("infeed"))
+    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, next_feed_id("infeed"))
 
     outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id("outfeed"))
 
@@ -542,6 +513,14 @@ class PipelinedModel(Model):
 
     # Ask the poplar executor to create a dataset iterator
     infeed_queue.initializer  # pylint: disable=pointless-statement
+
+    # Aggregator for combining the various outputs/metrics together
+    if mode != ModeKeys.PREDICT:
+      aggregator = training_utils.MetricsAggregator(use_steps=False,
+                                                    num_samples=total_samples)
+    else:
+      aggregator = training_utils.OutputsAggregator(use_steps=False,
+                                                    num_samples=total_samples)
 
     # Training
     for epoch in range(initial_epoch, epochs):
@@ -565,9 +544,10 @@ class PipelinedModel(Model):
         callbacks.on_batch_begin(batch_num, batch_logs)
 
         # Create and run the pipeline.
-        self._run_helper(infeed_queue,
-                         outfeed_queue,
-                         repeat_count=steps_per_run)
+        self._run_helper(infeed_queue=infeed_queue,
+                         outfeed_queue=outfeed_queue,
+                         repeat_count=steps_per_run,
+                         mode=mode)
 
         # Send an end of batches
         callbacks.on_batch_end(batch_num, batch_logs)
@@ -589,12 +569,19 @@ class PipelinedModel(Model):
 
       # Fetch the outfeed for the history
       results = outfeed_queue.dequeue()
+      results = map(lambda x: x.numpy(), results)
+      results = enumerate(zip(*results))
 
       # Get the final loss and metrics
-      results = map(lambda x: x.numpy(), results)
-      results = list(map(lambda x: list(x)[-1], results))
+      i, r = next(results)
+      aggregator.create(r)
+      aggregator.aggregate(r, 0, 1)
 
-      assert len(self.metrics_names) == len(results)
+      for i, r in results:
+        aggregator.aggregate(r, i, i + 1)
+
+      aggregator.finalize()
+      results = aggregator.results
 
       # Store only the final losses/metrics for the epoch log
       cbks.make_logs(self, epoch_logs, results, mode)
@@ -608,7 +595,86 @@ class PipelinedModel(Model):
     # Close the outfeed queue iterator.
     outfeed_queue.deleter  # pylint: disable=pointless-statement
 
-    return self.history
+    # fit() method returns the history object
+    if mode == ModeKeys.TRAIN:
+      return self.history
+
+    # evaluate() and predict() return the aggregated results
+    return aggregator.results
+
+  @trackable.no_automatic_dependency_tracking
+  def fit(self,
+          x=None,
+          y=None,
+          batch_size=None,
+          epochs=1,
+          verbose=1,
+          callbacks=None,
+          validation_split=0.,
+          validation_data=None,
+          shuffle=True,
+          class_weight=None,
+          sample_weight=None,
+          initial_epoch=0,
+          steps_per_epoch=None,
+          validation_steps=None,
+          validation_freq=1,
+          max_queue_size=10,
+          workers=1,
+          use_multiprocessing=False,
+          steps_per_run=None,
+          **kwargs):
+    """
+    This provides the same functionality as the Keras Model `fit` method.
+
+    The pipeline itself can be wrapped in a loop in order to execute a larger
+    training run in a single call to hardware.  The `steps_per_run` argument
+    is needed to describe how many steps should be performed on each hardware
+    execution.  The dataset should be able to provide enough samples to run
+    for the mini-batch size multiplied by the pipeline depth multiplied by the
+    steps_per_run value.  If the dataset is infinite, because it has been
+    repeated indefinitely, then this will be ok.
+    """
+    if not isinstance(x, dataset_ops.DatasetV2):
+      raise ValueError(
+          "PipelineModels can only `fit` with a `tf.data.Dataset` as input.")
+
+    if y is not None:
+      raise ValueError(
+          "When `x` is a `tf.data.Dataset`, `y` should not be specified "
+          "(since targets will be obtained from `x`).")
+
+    if validation_split != 0. or validation_steps != None:
+      raise ValueError("PipelineModels do not support validation during fit.")
+
+    if batch_size is not None:
+      raise ValueError("Do not specify `batch_size` in PipelineModels.fit(). "
+                       "Use the DataSet.batch() method to apply batching at "
+                       "the input dataset level.")
+
+    if class_weight is not None:
+      raise ValueError("PipelineModels do not support class_weight.")
+
+    if sample_weight is not None:
+      raise ValueError("PipelineModels do not support sample_weight.")
+
+    if validation_steps is not None:
+      raise ValueError("PipelineModels do not support validation_steps.")
+
+    if validation_freq != 1:
+      raise ValueError("PipelineModels do not support validation_freq.")
+
+    structure = dataset_ops.get_structure(x)
+    if not isinstance(structure, tuple) or len(structure) != 2:
+      raise ValueError(
+          "PipelineModel.fit requires a dataset containing a tuple of "
+          "two elements, the data value and the target value.")
+
+    self._assert_compile_was_called()
+
+    return self._do_internal(ModeKeys.TRAIN, x, epochs, verbose, callbacks,
+                             initial_epoch, steps_per_epoch, steps_per_run,
+                             **kwargs)
 
   def evaluate(self,
                x=None,
@@ -620,9 +686,49 @@ class PipelinedModel(Model):
                callbacks=None,
                max_queue_size=10,
                workers=1,
-               use_multiprocessing=False):
-    raise NotImplementedError(
-        "PipelineModels does not support the `evaluate` interface.")
+               use_multiprocessing=False,
+               steps_per_run=None,
+               **kwargs):
+    """
+    This provides the same functionality as the Keras Model `evaluate` method.
+
+    The pipeline itself can be wrapped in a loop in order to execute a larger
+    evaluation run in a single call to hardware.  The `steps_per_run` argument
+    is needed to describe how many steps should be performed on each hardware
+    execution.  The dataset should be able to provide enough samples to run
+    for the mini-batch size multiplied by the pipeline depth multiplied by the
+    steps_per_run value.  If the dataset is infinite, because it has been
+    repeated indefinitely, then this will be ok.
+    """
+
+    if not isinstance(x, dataset_ops.DatasetV2):
+      raise ValueError(
+          "PipelineModels can only `evaluate` with a `tf.data.Dataset` as "
+          "input.")
+
+    if y is not None:
+      raise ValueError(
+          "When `x` is a `tf.data.Dataset`, `y` should not be specified "
+          "(since targets will be obtained from `x`).")
+
+    if batch_size is not None:
+      raise ValueError("Do not specify `batch_size` in "
+                       "PipelineModels.evaluate(). Use the DataSet.batch() "
+                       "method to apply batching at the input dataset level.")
+
+    if sample_weight is not None:
+      raise ValueError("PipelineModels do not support sample_weight.")
+
+    structure = dataset_ops.get_structure(x)
+    if not isinstance(structure, tuple) or len(structure) != 2:
+      raise ValueError(
+          "PipelineModel.evaluate requires a dataset containing a tuple of "
+          "two elements, the data value and the target value.")
+
+    self._assert_compile_was_called()
+
+    return self._do_internal(ModeKeys.TEST, x, 1, verbose, callbacks, 0, steps,
+                             steps_per_run, **kwargs)
 
   def predict(self,
               x,
@@ -632,9 +738,47 @@ class PipelinedModel(Model):
               callbacks=None,
               max_queue_size=10,
               workers=1,
-              use_multiprocessing=False):
-    raise NotImplementedError(
-        "PipelineModels does not support the `predict` interface.")
+              use_multiprocessing=False,
+              steps_per_run=None,
+              **kwargs):
+    """
+    This provides the same functionality as the Keras Model `predict` method.
+
+    The predict method operates on a DataSet, because the IPU pipelining
+    mechanism relies on feeding data to the system in a stream.  So single
+    predictions cannot be performed using this method.  Exporting the model
+    parameters, and importing them into the same model but not pipelined will
+    allow single mini-batches.
+
+    The pipeline itself can be wrapped in a loop in order to execute a larger
+    prediction run in a single call to hardware.  The `steps_per_run` argument
+    is needed to describe how many steps should be performed on each hardware
+    execution.  The dataset should be able to provide enough samples to run
+    for the mini-batch size multiplied by the pipeline depth multiplied by the
+    steps_per_run value.  If the dataset is infinite, because it has been
+    repeated indefinitely, then this will be ok.
+    """
+    if not isinstance(x, dataset_ops.DatasetV2):
+      raise ValueError(
+          "PipelineModels can only `predict` with a `tf.data.Dataset` as "
+          "input.")
+
+    if batch_size is not None:
+      raise ValueError("Do not specify `batch_size` in "
+                       "PipelineModels.predict(). Use the DataSet.batch() "
+                       "method to apply batching at the input dataset level.")
+
+    structure = dataset_ops.get_structure(x)
+    print(structure)
+    if not (isinstance(structure, tensor_spec.TensorSpec) or
+            (isinstance(structure, tensor_spec.TensorSpec)
+             and len(structure) != 1)):
+      raise ValueError(
+          "PipelineModel.predict requires a dataset containing either a "
+          "tuple of one single data value, or just a single data value.")
+
+    return self._do_internal(ModeKeys.PREDICT, x, 1, verbose, callbacks, 0,
+                             steps, steps_per_run, **kwargs)
 
   def save(self,
            filepath,
