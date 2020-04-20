@@ -593,7 +593,7 @@ StatusOr<std::string> CreateExecutableMetadataJson(
       stream["handle"] = handle;
       stream["data_type"] = "S32";
       stream["shape"] = DimensionsToJson({1});
-      stream["type"] = "parameter";
+      stream["type"] = "input_data";
 
       inputs.append(stream);
     }
