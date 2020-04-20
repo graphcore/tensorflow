@@ -180,7 +180,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
     auto_ids = []
     infeeds = metadata.get("infeeds", [])
     outfeeds = metadata.get("outfeeds", [])
-    checkpoint_feeds = metadata.get("ckpt", {}).get("feeds", [])
+    checkpoint_feeds = metadata.get("checkpoint", {}).get("feeds", [])
     self.assertEqual(
         len(opts.infeeds) + len(opts.outfeeds), len(checkpoint_feeds))
 

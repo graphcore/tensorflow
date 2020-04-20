@@ -47,9 +47,10 @@ class CompilerResources;
 class VerifiedStreamsIndices {
  public:
   struct KeyIdPair {
-    KeyIdPair(uint64 i, uint64 k) : id(i), key(k) {}
-    uint64 id;
+    KeyIdPair(uint64 key_value, uint64 id_value)
+        : key(key_value), id(id_value) {}
     uint64 key;
+    uint64 id;
   };
   using KeyIdMappings = std::map<std::string, KeyIdPair>;
 

@@ -414,7 +414,7 @@ StatusOr<std::string> CreateExecutableMetadataJson(
     const OutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& opts, const poplar::Target& target,
     const VerifiedStreamsIndices::KeyIdMappings& indices,
-    const std::vector<string>& ckpt_feeds_order) {
+    const std::vector<string>& checkpoint_feeds_order) {
   Json::Value inputs;
   std::map<std::string, std::string> params_handle_map;
   const bool use_verified_transfers = !indices.empty();
@@ -562,12 +562,69 @@ StatusOr<std::string> CreateExecutableMetadataJson(
         "The target's type must be poplar::TargetType::IPU");
   }
 
-  Json::Value ckpt;
+  Json::Value checkpoint;
   Json::Value streams;
-  for (auto feed : ckpt_feeds_order) {
+  for (auto feed : checkpoint_feeds_order) {
     streams.append(feed);
   }
-  ckpt["feeds"] = streams;
+  checkpoint["feeds"] = streams;
+
+  if (!checkpoint_feeds_order.empty()) {
+    {
+      const std::string handle = "checkpointIn";
+      Json::Value stream;
+      stream["name"] = "checkpoint";
+      stream["handle"] = handle;
+      stream["data_type"] = "S32";
+      stream["shape"] = DimensionsToJson({2 * checkpoint_feeds_order.size()});
+      stream["type"] = "parameter";
+
+      if (use_verified_transfers) {
+        auto key_id = indices.at(handle);
+        stream["key"] = Json::Value::Int64(key_id.key);
+        stream["id"] = Json::Value::Int64(key_id.id);
+      }
+      inputs.append(stream);
+    }
+    {
+      const std::string handle = "checkpointIndex";
+      Json::Value stream;
+      stream["name"] = handle;
+      stream["handle"] = handle;
+      stream["data_type"] = "S32";
+      stream["shape"] = DimensionsToJson({1});
+      stream["type"] = "parameter";
+
+      inputs.append(stream);
+    }
+    {
+      Json::Value stream;
+      const std::string handle = "checkpointOut";
+      stream["handle"] = handle;
+      stream["data_type"] = "S32";
+      stream["shape"] = DimensionsToJson({2 * checkpoint_feeds_order.size()});
+      stream["type"] = "parameter_out";
+      stream["input_handle"] = "checkpointIn";
+      // Override the name to make sure it matches the one from the input.
+      stream["name"] = "checkpoint";
+      if (use_verified_transfers) {
+        auto key_id = indices.at(handle);
+        stream["key"] = Json::Value::Int64(key_id.key);
+        stream["id"] = Json::Value::Int64(key_id.id);
+      }
+      outputs.append(stream);
+    }
+    {
+      Json::Value stream;
+      const std::string handle = "checkpointOutClear";
+      stream["name"] = "checkpointClear";
+      stream["handle"] = handle;
+      stream["data_type"] = "S32";
+      stream["shape"] = DimensionsToJson({2 * checkpoint_feeds_order.size()});
+      stream["type"] = "output_data";
+      outputs.append(stream);
+    }
+  }
 
   Json::Value root;
   if (!inputs.empty()) {
@@ -582,8 +639,8 @@ StatusOr<std::string> CreateExecutableMetadataJson(
   if (!outfeeds.empty()) {
     root["outfeeds"] = outfeeds;
   }
-  if (!ckpt_feeds_order.empty()) {
-    root["ckpt"] = ckpt;
+  if (!checkpoint_feeds_order.empty()) {
+    root["checkpoint"] = checkpoint;
   }
   root["config"] = config;
 

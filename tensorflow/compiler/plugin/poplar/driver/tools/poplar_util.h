@@ -164,7 +164,7 @@ StatusOr<std::string> CreateExecutableMetadataJson(
     const OutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& opts, const poplar::Target& target,
     const VerifiedStreamsIndices::KeyIdMappings& indices,
-    const std::vector<string>& ckpt_feeds_order);
+    const std::vector<string>& checkpoint_feeds_order);
 
 }  // namespace poplarplugin
 }  // namespace xla
