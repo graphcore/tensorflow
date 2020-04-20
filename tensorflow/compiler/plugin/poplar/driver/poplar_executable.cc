@@ -321,10 +321,10 @@ Status ExportInternal(const ModuleFilenames& filenames,
                         CreateExecutableMetadataJson(
                             io_map, infeeds, outfeeds, replication_count, opts,
                             target, indices, checkpoint_feeds_order));
-    TF_ASSIGN_OR_RETURN(
-        std::string json_metadata_no_verif,
-        CreateExecutableMetadataJson(io_map, infeeds, outfeeds,
-                                     replication_count, opts, target, {}, {}));
+    TF_ASSIGN_OR_RETURN(std::string json_metadata_no_verif,
+                        CreateExecutableMetadataJson(
+                            io_map, infeeds, outfeeds, replication_count, opts,
+                            target, {}, checkpoint_feeds_order));
     // For security reasons don't store the verification information inside the
     // binary.
     ipu::BinaryWriter writer(filenames.SerializedExecutableFilename());

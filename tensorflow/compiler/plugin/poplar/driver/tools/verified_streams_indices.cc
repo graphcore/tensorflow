@@ -272,14 +272,14 @@ void VerifiedStreamsIndices::Index::Initialize(CompilerResources& resources,
 
 VerifiedStreamsIndices::KeyIdPair
 VerifiedStreamsIndices::Index::NextKeyIdPair() {
-  KeyIdPair pair{id_, key_};
+  KeyIdPair pair{key_, id_};
   id_++;
   return pair;
 }
 
 VerifiedStreamsIndices::KeyIdPair VerifiedStreamsIndices::Index::GetKeyIdPair()
     const {
-  return {id_, key_};
+  return {key_, id_};
 }
 
 void VerifiedStreamsIndices::Index::IncrementNumTensors() { num_tensors_++; }
@@ -298,24 +298,25 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
   poplar::Graph& graph = GetMasterGraph(*resources_);
   TF_ASSIGN_OR_RETURN(
       checkpoint_tensor_,
-      AddPlainTensor(graph, "ckptIn",
+      AddPlainTensor(graph, "checkpoint",
                      XlaShapeFromPoplarShape(xla::PrimitiveType::U32,
                                              {2 * feeds_info_.size()}),
                      *resources_));
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor checkpoint_idx,
-      AddPlainTensor(graph, "ckptIndex",
+      AddPlainTensor(graph, "checkpointIndex",
                      XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {1}),
                      *resources_));
 
-  auto fifo_index = graph.addHostToDeviceFIFO(
-      "ckptIndex", checkpoint_idx.elementType(), checkpoint_idx.numElements());
+  auto fifo_index =
+      graph.addHostToDeviceFIFO("checkpointIndex", checkpoint_idx.elementType(),
+                                checkpoint_idx.numElements());
   load_checkpoint_.add(
       poplar::program::Copy(fifo_index, checkpoint_idx, false));
 
   auto fifo_in = graph.addHostToDeviceFIFO(
-      "ckptIn", checkpoint_tensor_.elementType(),
+      "checkpointIn", checkpoint_tensor_.elementType(),
       checkpoint_tensor_.numElements(), poplar::ReplicatedStreamMode::BROADCAST,
       {{"streamVerification", "true"},
        {"key", absl::StrCat(opts.checkpoint_in().key())},
@@ -323,12 +324,16 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
   load_checkpoint_.add(poplar::program::Copy(fifo_in, checkpoint_tensor_,
                                              checkpoint_idx, false,
                                              {{"streamVerification", "true"}}));
+  assigned_ids_.insert(
+      {fifo_in.handle(),
+       {opts.checkpoint_in().key(), opts.checkpoint_in().start_id()}});
+
   // Increment the index by one.
   popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)), {checkpoint_idx},
-                     load_checkpoint_, "CkptIndexInc");
+                     load_checkpoint_, "CheckpointIndexInc");
 
   auto fifo_out = graph.addDeviceToHostFIFO(
-      "ckptOut", checkpoint_tensor_.elementType(),
+      "checkpointOut", checkpoint_tensor_.elementType(),
       checkpoint_tensor_.numElements(),
       {{"streamVerification", "true"},
        {"key", absl::StrCat(opts.checkpoint_out().key())},
@@ -336,8 +341,11 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
   save_checkpoint_.add(poplar::program::Copy(checkpoint_tensor_, fifo_out,
                                              checkpoint_idx, false,
                                              {{"streamVerification", "true"}}));
+  assigned_ids_.insert(
+      {fifo_out.handle(),
+       {opts.checkpoint_out().key(), opts.checkpoint_out().start_id()}});
   auto fifo_out_clear = graph.addDeviceToHostFIFO(
-      "ckptOutClear", checkpoint_tensor_.elementType(),
+      "checkpointOutClear", checkpoint_tensor_.elementType(),
       checkpoint_tensor_.numElements());
   save_checkpoint_.add(
       poplar::program::Copy(checkpoint_tensor_, fifo_out_clear, false));
