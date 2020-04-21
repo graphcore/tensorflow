@@ -34,7 +34,7 @@ class HloPrintTensor : public HloPoplarInstruction {
 
   uint64 NumberOfInplaceOperands() const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
   const std::string& TensorName() const;
 

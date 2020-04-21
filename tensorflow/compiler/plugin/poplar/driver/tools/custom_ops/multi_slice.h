@@ -31,7 +31,7 @@ class HloMultiSliceInstruction : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -56,7 +56,7 @@ class HloMultiUpdateInstruction : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
   // The dimension in indices which contains the starting indices. If it is
   // equal to the indices tensor rank we implicitly consider that tensor to

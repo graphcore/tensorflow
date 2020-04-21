@@ -31,7 +31,7 @@ class HloDropoutInstruction : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
   // Probability of a given element being set to zero.
   float Rate() const { return rate; }

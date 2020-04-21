@@ -38,7 +38,7 @@ class HloSendToHostInstruction : public HloPoplarInstruction {
 
   uint64 NumberOfInplaceOperands() const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
   const std::vector<std::string>& RendezvousKeys() const;
 

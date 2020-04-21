@@ -38,7 +38,7 @@ class HloOneHotInstruction : public HloPoplarInstruction {
 
   int32 Axis() const { return axis_; }
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

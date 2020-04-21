@@ -36,7 +36,7 @@ class HloReduceScatterInstruction : public HloPoplarInstruction {
 
   uint64 NumberOfInplaceOperands() const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
