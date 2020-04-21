@@ -262,12 +262,6 @@ Status HloSchedule::Verify() const {
       pos++;
     }
 
-    // string instructions_names = "";
-    // for (const HloInstruction* instruction : sequence(computation).instructions()) {
-    //   instructions_names += "\nInstruction: " + instruction->name();
-    // }
-
-    
     TF_RET_CHECK(instruction_position.size() ==
                  computation->instruction_count())
         << "Schedule for computation " << computation->name() << " has "
