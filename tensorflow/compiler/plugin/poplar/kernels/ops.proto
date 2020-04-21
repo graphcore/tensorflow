@@ -71,6 +71,10 @@ enum PoplarOp {
   RemoteParameterDummyOutput = 67;
   RecvFromHost = 68;
   SendToHost = 69;
+  SliceApply = 70;
+  SliceApplyaXbY = 71;
+  SliceApplyabY = 72;
+  SliceApplyaXb = 73;
 
   // Supported Fusions.
   Conv_biasadd = 200;

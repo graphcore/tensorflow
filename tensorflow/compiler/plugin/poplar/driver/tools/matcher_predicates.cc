@@ -23,7 +23,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 #include "tensorflow/compiler/xla/service/hlo_query.h"
@@ -441,6 +440,16 @@ bool IsMultiSliceGather(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kGather) {
     const HloGatherInstruction* gather = Cast<HloGatherInstruction>(inst);
     return CheckValidAttributesForGather(gather);
+  }
+  return false;
+}
+
+bool IsAnySliceApply(const HloInstruction* inst) {
+  for (auto op : {PoplarOp::SliceApply, PoplarOp::SliceApplyaXbY,
+                  PoplarOp::SliceApplyabY, PoplarOp::SliceApplyaXb}) {
+    if (IsPoplarInstruction(op)(inst)) {
+      return true;
+    }
   }
   return false;
 }

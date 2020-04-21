@@ -1,6 +1,17 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+#  Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#  =============================================================================
 
 import numpy as np
 
@@ -127,6 +138,49 @@ class MatMulSizeTest(xla_test.XLATestCase):
       sess.run(train, feed_dict={x: data, y_: labels})
       report.parse_log()
       report.assert_total_tile_memory(15850928)
+
+  def testSerializedMatmul(self):
+    with self.session() as sess:
+
+      def serialized_matmul(lhs, rhs, num_splits):
+        lhs_shape = lhs.get_shape().as_list()
+        rhs_shape = rhs.get_shape().as_list()
+        assert lhs_shape[1] == rhs_shape[0]
+        assert (lhs_shape[0] % num_splits) == 0
+
+        @ipu.function
+        def inner_func(lhs_, rhs_):
+          return math_ops.matmul(lhs_, rhs_)
+
+        split_size = lhs_shape[0] // num_splits
+        result = []
+        for i in range(0, num_splits):
+          lhs_slice = array_ops.slice(lhs, [i * split_size, 0],
+                                      [split_size, lhs_shape[1]])
+          result.append(inner_func(lhs_slice, rhs))
+        return array_ops.concat(result, axis=0)
+
+      def model(x, y, z):
+        return x + serialized_matmul(y, z, num_splits=6)
+
+      B = 30522
+      I = 768
+      O = 128
+      x = array_ops.placeholder(datatype, shape=[B, I])
+      y = array_ops.placeholder(datatype, shape=[B, O])
+      z = array_ops.placeholder(datatype, shape=[O, I])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        out = ipu.ipu_compiler.compile(model, [x, y, z])
+
+      report = ReportJSON(self, sess)
+      output = sess.run(out,
+                        feed_dict={k: np.ones(k.shape)
+                                   for k in (x, y, z)})
+      self.assertAllClose(np.full([B, I], 129.0), output[0])
+      report.parse_log()
+      report.assert_total_tile_memory(140091692)
+      report.assert_max_tile_memory(141739)
 
 
 if __name__ == "__main__":

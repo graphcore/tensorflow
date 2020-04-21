@@ -151,6 +151,11 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
       return output_and_all_operands_same_type(inst) &&
              op_source->shape() == inst->shape();
     }
+    if (IsAnySliceApply(inst)) {
+      // Only handle operand 0
+      return inst->operand_index(op_source) == 0 &&
+             output_and_all_operands_same_type(inst);
+    }
     switch (inst->opcode()) {
       case HloOpcode::kConcatenate:
       case HloOpcode::kReshape:

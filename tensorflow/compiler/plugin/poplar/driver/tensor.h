@@ -59,6 +59,11 @@ bool PoplarShapeMatchesXLAShape(const poplar::Tensor& tensor,
 poplar::Tensor FlattenAndConcatenateTensors(
     const std::vector<poplar::Tensor>& tensors);
 
+// Clone the tensor and rebalance any aliasing across the tiles.
+poplar::Tensor TensorCloneAndRebalanceAliasing(poplar::Graph& graph,
+                                               CompilerResources& res,
+                                               const poplar::Tensor& tensor,
+                                               const std::string& name = "");
 StatusOr<poplar::Tensor> SliceTensor(
     poplar::Tensor tensor_to_slice,
     const HloInstruction::InstructionVector& slices, int64 slice_index);
