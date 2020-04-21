@@ -107,6 +107,7 @@ py_library(
         "ipu_outfeed_queue.py",
         "ipu_pipeline_estimator.py",
         "ipu_run_config.py",
+        "ipu_session_run_hooks.py",
         "ipu_strategy.py",
         "keras/__init__.py",
         "keras/layers/__init__.py",
@@ -541,6 +542,22 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "ipu_session_run_hooks_test",
+    size = "small",
+    srcs = ["tests/ipu_session_run_hooks_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
     name = "ipu_strategy_test",
     size = "large",
     srcs = ["tests/ipu_strategy_test.py"],
@@ -893,6 +910,7 @@ test_suite(
         "ipu_estimator_test",
         "ipu_multi_worker_strategy_test",
         "ipu_pipeline_estimator_test",
+        "ipu_session_run_hooks_test",
         "ipu_strategy_test",
         "keras_dropout_test",
         "keras_embedding_lookup_test",
