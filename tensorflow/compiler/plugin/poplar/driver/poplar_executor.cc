@@ -1342,7 +1342,6 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
   }
 
   option_flags_ = poplar::OptionFlags();
-  option_flags_.set("target.workerStackSizeInBytes", "0x200");
 
   // Set appropriate options for trace levels.
   switch (current_config_.profiling().execution_trace_type()) {

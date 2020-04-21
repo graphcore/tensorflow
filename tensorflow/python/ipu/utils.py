@@ -551,7 +551,7 @@ def set_compilation_options(opts, compilation_options=None):
       opts = create_ipu_config()
       opts = set_compilation_options(opts,
           compilation_options={"debug.instrument": "true",
-                               "target.workerStackSizeInBytes": "64"})
+                               "debug.allowOutOfMemory": "true"})
       ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
