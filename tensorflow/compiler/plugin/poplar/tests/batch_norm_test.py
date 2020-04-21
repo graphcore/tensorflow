@@ -217,10 +217,17 @@ class IpuXlaBatchNormTest(xla_test.XLATestCase):
       ReportJSON(self, sess, use_stable_norm_statistics=True)
       sess.run(variables.global_variables_initializer())
 
-      # Use a tensor with large mean to test the stability
-      input_mean = 1e10
-      result = sess.run(normed, {a: input_mean * np.ones([4, 64, 64, 4])})
-      self.assertAllClose(result, np.ones([4, 64, 64, 4]))
+      # Use a tensor with large mean to test the stability. This blows up with
+      # the non-stable implementation (NaN output). Use a power-of-two that can
+      # be represented exactly in float32 to make sure we work with an exact
+      # mean internally.
+      input_mean = 2.0**64
+      inputs = input_mean * np.ones([4, 64, 64, 4])
+
+      # y = gamma * (x - mean) / sqrt(variance + epsilon) + beta
+      # Both (x - mean) and beta_initializer are zero, so this should be zero.
+      result = sess.run(normed, {a: inputs})
+      self.assertAllEqual(result, np.zeros([4, 64, 64, 4]))
 
   def testBatchNormalizeFusedLayer(self):
     with self.session() as sess:
