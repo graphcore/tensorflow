@@ -18,7 +18,6 @@ Pipelining operators
 """
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
-
 from enum import IntEnum
 
 from google.protobuf import json_format
@@ -561,8 +560,16 @@ def pipeline(computational_stages,
       for grad, var in grads_and_vars:
         if grad is not None:
           with ops.colocate_with(grad):
-            grad = gen_poputil_ops.ipu_pipeline_stateful_gradient_accumulate(
-                grad, num_mini_batches=pipeline_depth)
+            # Create an accumulator.
+            accumulator = gen_poputil_ops.gradient_accumulator_create(
+                dtype=grad.dtype, output_shape=grad.shape)
+            # Add the gradients to the accumulator.
+            accumulator = gen_poputil_ops.gradient_accumulator_add(
+                accumulator, grad)
+            # Sink the accumulators.
+            grad = gen_poputil_ops.gradient_accumulator_sink(
+                accumulator, num_mini_batches=pipeline_depth)
+        # Use the accumulated gradients.
         accumulated_grads_and_vars.append((grad, var))
 
       # Create an explicit function call for the apply gradients - note that we

@@ -17,6 +17,8 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_STATEFUL_GRADIENT_ACCUMULATE_H
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
@@ -69,22 +71,6 @@ class HloStatefulGradientAccumulateAndAllReduce
 std::unique_ptr<HloInstruction> CreateStatefulGradientAccumulateAndAllReduce(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
 
-class HloPipelineStatefulGradientAccumulate
-    : public HloStatefulGradientAccumulate {
- public:
-  explicit HloPipelineStatefulGradientAccumulate(
-      absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
-  uint64 NumberOfInplaceOperands() const override;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
-
-std::unique_ptr<HloInstruction> CreatePipelineStatefulGradientAccumulate(
-    absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
-
 class HloStatefulGradientAccumulateWithMomentum
     : public HloStatefulGradientAccumulate {
  public:
@@ -118,6 +104,88 @@ class HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNorm
 
 std::unique_ptr<HloInstruction>
 CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
+    absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
+
+// Gradient accumulation is split into the following ops:
+// * HloGradientAccumulatorCreate - this op creates the gradient accumulation
+//   buffer and zeros it at the begining/after the gradients have been applied.
+// * HloGradientAccumulatorAdd - this op takes the accumulator on the LHS and
+//   the gradient on the RHS. This op is converted into an elementwise add
+//   before lowering.
+// * HloGradientAccumulatorSink - this op combines accumulators when they are
+//   used in multiple pipeline stages and unifies them into a single buffer.
+class HloGradientAccumulatorCreate : public HloPoplarInstruction {
+ public:
+  explicit HloGradientAccumulatorCreate(const Shape& shape);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  uint64 NumberOfInplaceOperands() const override;
+  bool IsPopOpsElementwise() const override;
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
+    const Shape& shape);
+
+class HloGradientAccumulatorAdd : public HloPoplarInstruction {
+ public:
+  explicit HloGradientAccumulatorAdd(HloInstruction* const accumulator,
+                                     HloInstruction* const gradient);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  uint64 NumberOfInplaceOperands() const override;
+  bool IsPopOpsElementwise() const override;
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+};
+
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorAdd(
+    HloInstruction* const accumulator, HloInstruction* const gradient);
+
+class HloGradientAccumulatorSink : public HloPoplarInstruction {
+ public:
+  explicit HloGradientAccumulatorSink(
+      absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+  uint64 NumberOfInplaceOperands() const override;
+  bool IsPopOpsElementwise() const override;
+
+  // The number of mini batches which will be accumulated.
+  int32 MiniBatchesToAccumulate() const { return num_mini_batches_; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+
+ protected:
+  int32 num_mini_batches_;
+};
+
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorSink(
     absl::Span<HloInstruction* const> operands, int32 num_mini_batches);
 
 }  // namespace poplarplugin

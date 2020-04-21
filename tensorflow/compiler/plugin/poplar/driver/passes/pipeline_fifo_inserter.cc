@@ -14,13 +14,13 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -69,13 +69,23 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
           }
           break;
         }
-        case HloOpcode::kParameter:
+        case HloOpcode::kParameter: {
           // We don't need to do anything for parameters.
           break;
-        default:
+        }
+        case HloOpcode::kCustomCall: {
+          if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
+                  operand)) {
+            // We don't need to do anything for gradient accumulator creators.
+            break;
+          }
+          // Fall through.
+        }
+        default: {
           return InternalErrorStrCat("Invalid input ", operand->ToString(),
                                      " to pipeline stage ", stage_id.ToString(),
                                      ".");
+        }
       }
     }
 

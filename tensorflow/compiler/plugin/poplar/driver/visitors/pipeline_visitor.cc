@@ -99,6 +99,32 @@ std::function<bool(const HloInstruction*)> IsIpuInterCopyInstruction() {
 }
 
 /**
+ * Construct a unary predicate which checks if a given HloInstruction is an
+ * HloGradientAccumulatorCreate.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(const HloInstruction*)>
+IsGradientAccumulatorCreateInstruction() {
+  return [](const HloInstruction* inst) -> bool {
+    return IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
+  };
+}
+
+/**
+ * Construct a unary predicate which checks if a given HloInstruction is an
+ * HloGradientAccumulatorSink.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(const HloInstruction*)>
+IsGradientAccumulatorSinkInstruction() {
+  return [](const HloInstruction* inst) -> bool {
+    return IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(inst);
+  };
+}
+
+/**
  * Get the number of stages in a pipeline.
  *
  * @param pipeline The outer pipeline instruction.
@@ -316,9 +342,19 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     result[inst] = get_stage_from_users(inst);
   }
 
+  // Partition out the gradient accumulation buffers - these are assigned to the
+  // first stage in which they are used in.
+  auto gradient_accumulators_end =
+      std::stable_partition(parameters_end, instructions.end(),
+                            IsGradientAccumulatorCreateInstruction());
+  for (auto itr = parameters_end; itr != gradient_accumulators_end; ++itr) {
+    HloInstruction* inst = *itr;
+    result[inst] = get_stage_from_users(inst);
+  }
+
   // Go through the remaining instructions and assign them to stages given their
   // operands. Note that we are visiting in post-order.
-  for (auto itr = parameters_end; itr != instructions.end(); ++itr) {
+  for (auto itr = gradient_accumulators_end; itr != instructions.end(); ++itr) {
     HloInstruction* inst = *itr;
     // Only assign the stage if no other instruction assigned it for us.
     if (!result.contains(inst)) {
@@ -914,7 +950,7 @@ PipelineVisitor::PipelineVisitor(
       inst_stage_mapping_(inst_stage_mapping),
       stages_with_recomputation_(stages_with_recomputation) {
   // Push a new vector for the zeroing sequences onto the stack.
-  res.pipelining_buffer_zeroing_sequences.push({});
+  res.gradient_accumulation_zeroing_sequences.push({});
   // Push a new vector for the write undef sequences onto the stack.
   res.pipelining_write_undef_sequences.push({});
 }
@@ -1244,11 +1280,13 @@ Status PipelineVisitor::HandleCopy(HloInstruction* hlo) {
   return Status::OK();
 }
 
-Status PipelineVisitor::HandleCustomCall(HloInstruction* hlo) {
+Status PipelineVisitor::HandleNonDeferredCustomCall(HloInstruction* hlo) {
   if (IsFifoInstruction()(hlo)) {
     return HandleFifo(hlo);
   } else if (IsIpuInterCopyInstruction()(hlo)) {
     return HandleInterIpuCopy(hlo);
+  } else if (IsGradientAccumulatorSinkInstruction()(hlo)) {
+    return HandleGradientAccumulatorSink(hlo);
   } else {
     return HandleNotImplemented(hlo);
   }
@@ -1286,6 +1324,22 @@ Status PipelineVisitor::HandleInterIpuCopy(HloInstruction* hlo) {
   return Status::OK();
 }
 
+Status PipelineVisitor::HandleGradientAccumulatorSink(HloInstruction* hlo) {
+  VLOG(1) << "Processing " << hlo->name();
+  if (!IsPoplibsHloCustomOp(hlo)) {
+    return HandleNotImplemented(hlo);
+  }
+
+  // The sink op just makes sure that all the uses of the gradient
+  // accumulation buffer in different pipeline stages on the same device result
+  // in the same buffer.
+  // No sequence is created.
+  TF_RETURN_IF_ERROR(
+      CreateCustomCallOp(resources_, hlo, hlo->shape(), tensor_map).status());
+
+  return Status::OK();
+}
+
 Status PipelineVisitor::HandleOutfeed(HloInstruction* hlo) {
   VLOG(1) << "Processing " << hlo->ToString();
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
@@ -1313,11 +1367,11 @@ Status PipelineVisitor::HandleDeferredAllocationWhile(HloInstruction* hlo) {
 Status PipelineVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   // Create a sequence for all the zeroing of pipeline tensors (gradient
   // accumulation).
-  auto& zeroing_seqs = resources_.pipelining_buffer_zeroing_sequences.top();
+  auto& zeroing_seqs = resources_.gradient_accumulation_zeroing_sequences.top();
   for (poplar::program::Sequence& zeroing_seq : zeroing_seqs) {
     pipeline_tensors_zeroing_sequence_.add(zeroing_seq);
   }
-  resources_.pipelining_buffer_zeroing_sequences.pop();
+  resources_.gradient_accumulation_zeroing_sequences.pop();
 
   // Create a sequence for all the write undefs of pipeline tensors (FIFOs).
   auto& write_undefs = resources_.pipelining_write_undef_sequences.top();

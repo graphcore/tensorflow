@@ -30,6 +30,12 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+namespace {
+// Returns whether the instruction is a gradient accumulation creator.
+bool IsGradientAccumulatorCreate(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
+}
+}  // namespace
 
 std::string StageID::ToString() const {
   std::stringstream ss;
@@ -74,6 +80,8 @@ bool IsProducerOp(const HloInstruction* inst) {
   switch (inst->opcode()) {
     case HloOpcode::kCall:
       return IsAnyPipelineStageOp(inst);
+    case HloOpcode::kCustomCall:
+      return IsGradientAccumulatorCreate(inst);
     case HloOpcode::kParameter:
       return true;
     case HloOpcode::kInfeed:
@@ -1187,6 +1195,46 @@ Status PipelineDataflowAnalysis::VerifyParameterUsage(
   return Status::OK();
 };
 
+Status PipelineDataflowAnalysis::VerifyGradientAccumulatorCreateUsage(
+    const HloInstruction* gradient_accumulator_create,
+    const HloInstruction* pipeline_stage_user) {
+  CHECK(IsGradientAccumulatorCreate(gradient_accumulator_create));
+  TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(pipeline_stage_user));
+  // Get the shard for the pipeline stage.
+  TF_ASSIGN_OR_RETURN(const int64 shard, GetShardForStage(stage_id));
+  // Get the gradient_accumulator_create value and check where it is used.
+  const HloValue& gradient_accumulator_create_value =
+      GetValueSet(gradient_accumulator_create).GetUniqueValue();
+
+  // The gradient buffer is not used by any stage and it will be removed by DCE.
+  if (!used_by_stages_.contains(&gradient_accumulator_create_value)) {
+    return Status::OK();
+  }
+
+  for (const HloInstruction* user_stage :
+       used_by_stages_.at(&gradient_accumulator_create_value)) {
+    TF_ASSIGN_OR_RETURN(StageID user_stage_id, GetStageID(user_stage));
+    // Get the shard for the other user stage.
+    TF_ASSIGN_OR_RETURN(const int64 user_shard,
+                        GetShardForStage(user_stage_id));
+    if (stage_id.id != user_stage_id.id && shard != user_shard) {
+      return UnimplementedStrCat(
+          "The ", stage_id.ToString(),
+          " is trying to use a gradient accumulation buffer (",
+          gradient_accumulator_create->name(),
+          ") which is already used by the ", user_stage_id.ToString(),
+          ". This violates the dataflow constraints because gradient for the "
+          "same parameter can only be accumulated by pipeline stages on the "
+          "same IPU.\n"
+          "If the model requires for multiple pipeline stages to access the "
+          "same `tf.Variable` then these pipeline stages need to placed onto "
+          "the same IPU using the `device_mapping` argument to "
+          "`tf.python.ipu.pipelining_ops.pipeline`.");
+    }
+  }
+  return Status::OK();
+}
+
 Status PipelineDataflowAnalysis::VerifyInfeedUsage(
     const HloInstruction* infeed, const HloInstruction* pipeline_stage_user) {
   CHECK_EQ(infeed->opcode(), HloOpcode::kInfeed);
@@ -1220,6 +1268,12 @@ Status PipelineDataflowAnalysis::VerifyPipelineStageOperands(
     switch (producer->opcode()) {
       case HloOpcode::kParameter: {
         TF_RETURN_IF_ERROR(VerifyParameterUsage(producer, pipeline_stage));
+        break;
+      }
+      case HloOpcode::kCustomCall: {
+        CHECK(IsGradientAccumulatorCreate(producer));
+        TF_RETURN_IF_ERROR(
+            VerifyGradientAccumulatorCreateUsage(producer, pipeline_stage));
         break;
       }
       case HloOpcode::kCall: {
@@ -1326,6 +1380,28 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       }
     }
     case HloOpcode::kCustomCall: {
+      if (IsGradientAccumulatorCreate(inst)) {
+        return false;
+      } else if (IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(inst)) {
+        // The sink op combines the same gradient accumulation buffer being
+        // the output from different pipeline stages residing on the same IPU.
+        // We expect it to only have a single user - the pipeline resource
+        // update.
+        if (inst->user_count() != 1) {
+          return FailedPrecondition(
+              "Expected the gradient accumulator %s to have one user.",
+              inst->ToString());
+        }
+
+        if (!IsPipelineResourceUpdate(inst->users()[0])) {
+          return FailedPrecondition(
+              "Expected the gradient accumulator to only be used by the "
+              "pipeline resource update, but is used by %s instead.",
+              inst->ToString());
+        }
+        return false;
+      }
+
       if (!allow_communication_ops_) {
         return true;
       }

@@ -16,6 +16,8 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -105,30 +107,6 @@ std::unique_ptr<HloInstruction> CreateStatefulGradientAccumulateAndAllReduce(
       operands, num_mini_batches);
 }
 
-HloPipelineStatefulGradientAccumulate::HloPipelineStatefulGradientAccumulate(
-    absl::Span<HloInstruction* const> operands, int32 num_mini_batches)
-    : HloStatefulGradientAccumulate(
-          operands, num_mini_batches,
-          PoplarOp::PipelineStatefulGradientAccumulate) {}
-
-uint64 HloPipelineStatefulGradientAccumulate::NumberOfInplaceOperands() const {
-  return 0;
-}
-
-std::unique_ptr<HloInstruction>
-HloPipelineStatefulGradientAccumulate::CloneWithNewOperandsImpl(
-    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return absl::make_unique<HloPipelineStatefulGradientAccumulate>(
-      new_operands, num_mini_batches_);
-}
-
-std::unique_ptr<HloInstruction> CreatePipelineStatefulGradientAccumulation(
-    absl::Span<HloInstruction* const> operands, int32 num_mini_batches) {
-  return absl::make_unique<HloPipelineStatefulGradientAccumulate>(
-      operands, num_mini_batches);
-}
-
 HloStatefulGradientAccumulateWithMomentum::
     HloStatefulGradientAccumulateWithMomentum(
         absl::Span<HloInstruction* const> operands, int32 num_mini_batches)
@@ -203,6 +181,132 @@ CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
       operands, num_mini_batches);
 }
 
+HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(const Shape& shape)
+    : HloPoplarInstruction(shape, {}, PoplarOp::GradientAccumulatorCreate) {
+  // Mark the creator as stateful so that it does not get merged with other same
+  // shaped accumulators.
+  set_custom_call_has_side_effect(true);
+}
+
+absl::flat_hash_set<int64> HloGradientAccumulatorCreate::AllocatingIndices()
+    const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64>
+HloGradientAccumulatorCreate::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloGradientAccumulatorCreate::NumberOfInplaceOperands() const {
+  return 0;
+}
+
+bool HloGradientAccumulatorCreate::IsPopOpsElementwise() const { return false; }
+
+std::unique_ptr<HloInstruction>
+HloGradientAccumulatorCreate::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  CHECK_EQ(new_operands.size(), 0);
+  return absl::make_unique<HloGradientAccumulatorCreate>(shape);
+}
+
+std::vector<std::string>
+HloGradientAccumulatorCreate::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
+    const Shape& shape) {
+  return absl::make_unique<HloGradientAccumulatorCreate>(shape);
+}
+
+HloGradientAccumulatorAdd::HloGradientAccumulatorAdd(
+    HloInstruction* const accumulator, HloInstruction* const gradient)
+    : HloPoplarInstruction(accumulator->shape(), {accumulator, gradient},
+                           PoplarOp::GradientAccumulatorAdd) {}
+
+absl::flat_hash_set<int64> HloGradientAccumulatorAdd::AllocatingIndices()
+    const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64>
+HloGradientAccumulatorAdd::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloGradientAccumulatorAdd::NumberOfInplaceOperands() const { return 0; }
+
+bool HloGradientAccumulatorAdd::IsPopOpsElementwise() const { return false; }
+
+std::unique_ptr<HloInstruction>
+HloGradientAccumulatorAdd::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  CHECK_EQ(new_operands.size(), 2);
+  return absl::make_unique<HloGradientAccumulatorAdd>(new_operands[0],
+                                                      new_operands[1]);
+}
+
+std::vector<std::string>
+HloGradientAccumulatorAdd::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  return {};
+}
+
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorAdd(
+    HloInstruction* const accumulator, HloInstruction* const gradient) {
+  return absl::make_unique<HloGradientAccumulatorAdd>(accumulator, gradient);
+}
+
+HloGradientAccumulatorSink::HloGradientAccumulatorSink(
+    absl::Span<HloInstruction* const> operands, int32 num_mini_batches)
+    : HloPoplarInstruction(operands[0]->shape(), operands,
+                           PoplarOp::GradientAccumulatorSink, num_mini_batches),
+      num_mini_batches_(num_mini_batches) {}
+
+absl::flat_hash_set<int64> HloGradientAccumulatorSink::AllocatingIndices()
+    const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64>
+HloGradientAccumulatorSink::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloGradientAccumulatorSink::NumberOfInplaceOperands() const {
+  return operand_count();
+}
+
+bool HloGradientAccumulatorSink::IsPopOpsElementwise() const { return false; }
+
+std::unique_ptr<HloInstruction>
+HloGradientAccumulatorSink::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return absl::make_unique<HloGradientAccumulatorSink>(new_operands,
+                                                       num_mini_batches_);
+}
+
+std::vector<std::string>
+HloGradientAccumulatorSink::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes;
+  attributes.push_back("num_mini_batches=" + std::to_string(num_mini_batches_));
+
+  return attributes;
+}
+
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorSink(
+    absl::Span<HloInstruction* const> operands, int32 num_mini_batches) {
+  return absl::make_unique<HloGradientAccumulatorSink>(operands,
+                                                       num_mini_batches);
+}
+
 namespace {
 
 StatusOr<std::unique_ptr<HloInstruction>>
@@ -218,23 +322,6 @@ HloStatefulGradientAccumulateFactoryFunc(HloCustomCallInstruction* call) {
 static HloPoplarInstructionFactory stateful_gradient_accumulate_factory(
     PoplarOp::StatefulGradientAccumulate,
     HloStatefulGradientAccumulateFactoryFunc);
-
-StatusOr<std::unique_ptr<HloInstruction>>
-HloPipelineStatefulGradientAccumulateFactoryFunc(
-    HloCustomCallInstruction* call) {
-  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
-  // Get the attribute values
-  TF_ASSIGN_OR_RETURN(int32 num_mini_batches,
-                      attribute_map.GetAttributeAsInt("num_mini_batches"));
-
-  return CreatePipelineStatefulGradientAccumulation(call->operands(),
-                                                    num_mini_batches);
-}
-
-static HloPoplarInstructionFactory
-    pipeline_stateful_gradient_accumulate_factory(
-        PoplarOp::PipelineStatefulGradientAccumulate,
-        HloPipelineStatefulGradientAccumulateFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>>
 HloStatefulGradientAccumulateWithMomentumFactoryFunc(
@@ -269,6 +356,38 @@ static HloPoplarInstructionFactory
     stateful_gradient_accumulate_factory_with_momentum_and_all_reduce_with_norm(
         PoplarOp::StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
         HloStatefulGradientAccumulateWithMomentumAndAllReduceWithNormFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>>
+HloGradientAccumulatorCreateFactoryFunc(HloCustomCallInstruction* call) {
+  return CreateGradientAccumulatorCreate(call->shape());
+}
+
+static HloPoplarInstructionFactory gradient_accumulator_creator_factory(
+    PoplarOp::GradientAccumulatorCreate,
+    HloGradientAccumulatorCreateFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloGradientAccumulatorAddFactoryFunc(
+    HloCustomCallInstruction* call) {
+  CHECK_EQ(call->operand_count(), 2);
+  return CreateGradientAccumulatorAdd(call->mutable_operand(0),
+                                      call->mutable_operand(1));
+}
+
+static HloPoplarInstructionFactory gradient_accumulator_add_factory(
+    PoplarOp::GradientAccumulatorAdd, HloGradientAccumulatorAddFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloGradientAccumulatorSinkFactoryFunc(
+    HloCustomCallInstruction* call) {
+  auto attribute_map = IPUCustomKernelsUtil::AttributeMap(call);
+  // Get the attribute values
+  TF_ASSIGN_OR_RETURN(int32 num_mini_batches,
+                      attribute_map.GetAttributeAsInt("num_mini_batches"));
+
+  return CreateGradientAccumulatorSink(call->operands(), num_mini_batches);
+}
+
+static HloPoplarInstructionFactory gradient_accumulator_sink_factory(
+    PoplarOp::GradientAccumulatorSink, HloGradientAccumulatorSinkFactoryFunc);
 
 }  // namespace
 
