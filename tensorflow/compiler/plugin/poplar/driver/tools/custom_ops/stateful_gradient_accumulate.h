@@ -33,7 +33,7 @@ class HloStatefulGradientAccumulate : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
   // The number of mini batches which will be accumulated.
   int32 MiniBatchesToAccumulate() const { return num_mini_batches_; }

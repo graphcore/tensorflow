@@ -29,7 +29,7 @@ class HloReplicationIndexInstruction : public HloPoplarInstruction {
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
   uint64 NumberOfInplaceOperands() const override;
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

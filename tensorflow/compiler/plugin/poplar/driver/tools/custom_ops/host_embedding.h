@@ -39,7 +39,7 @@ class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
 
   const std::string& EmbeddingId() const { return embedding_id_; }
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -72,7 +72,7 @@ class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
 
   const std::string& EmbeddingId() const { return embedding_id_; }
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

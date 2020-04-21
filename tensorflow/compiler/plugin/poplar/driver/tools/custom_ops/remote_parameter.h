@@ -39,7 +39,7 @@ class HloRemoteParameterLoad : public HloPoplarInstruction {
 
   int64 GetParameterNumber() const { return param_number_; }
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -71,7 +71,7 @@ class HloRemoteParameterStore : public HloPoplarInstruction {
 
   int64 GetOutputIndex() const { return output_idx_; }
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -104,7 +104,7 @@ class HloRemoteParameterDummyOutput : public HloPoplarInstruction {
 
   int64 GetOutputIndex() const { return output_idx_; }
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(

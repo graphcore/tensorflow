@@ -36,7 +36,7 @@ class HloTopK : public HloPoplarInstruction {
   int64 NumK() const { return num_k; }
   bool ShouldBeSorted() const { return sorted; }
 
-  bool IsPopOpsElementwise() const;
+  bool IsPopOpsElementwise() const override;
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
