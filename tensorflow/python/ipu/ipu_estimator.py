@@ -147,6 +147,11 @@ class IPUEstimatorSpec(
 
   See full example: :any:`distributed_training_example`.
 
+  The various hooks (`training_hooks, `evaluation_hooks`, `prediction_hooks`)
+  support instances of `tf.estimator.SessionRunHook`. To log tensor values from
+  within the `model_fn`, use the
+  :class:`~tensorflow.python.ipu.ipu_session_run_hooks.IPULoggingTensorHook`.
+
   For documentation of the remaining arguments, see `EstimatorSpec`.
   """
   def __new__(cls,

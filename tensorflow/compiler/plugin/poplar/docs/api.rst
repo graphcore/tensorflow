@@ -25,6 +25,9 @@ Python API
 .. autoclass:: IPUEstimatorSpec
   :members: __new__
 
+.. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
+  :members: IPUMultiWorkerStrategy
+
 .. automodule:: tensorflow.python.ipu.ipu_pipeline_estimator
 .. autoclass:: IPUPipelineEstimator
   :members:
@@ -36,8 +39,9 @@ Python API
   :members:
   :special-members: __init__
 
-.. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
-  :members: IPUMultiWorkerStrategy
+.. automodule:: tensorflow.python.ipu.ipu_session_run_hooks
+  :members:
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.keras.layers.dropout
   :members:
