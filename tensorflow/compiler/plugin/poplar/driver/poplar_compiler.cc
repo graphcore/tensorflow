@@ -88,6 +88,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_condition_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
@@ -795,6 +796,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     if (poplar_executor->EnableMatmulCombiner()) {
       pipeline.AddPass<MatmulCombiner>(resources.annotations);
     }
+    pipeline.AddPass<SliceOptimizer>(resources.annotations);
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);

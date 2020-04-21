@@ -178,6 +178,7 @@ cc_library(
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_simplifier.cc",
         "driver/passes/sharding_pass.cc",
+        "driver/passes/slice_optimizer.cc",
         "driver/passes/suggest_recompute.cc",
         "driver/passes/while_loop_condition_simplify.cc",
         "driver/passes/while_loop_to_repeat_simplify.cc",
@@ -222,6 +223,7 @@ cc_library(
         "driver/tools/custom_ops/send_recv_barrier.cc",
         "driver/tools/custom_ops/send_to_host.cc",
         "driver/tools/custom_ops/sigmoid.cc",
+        "driver/tools/custom_ops/slice_apply.cc",
         "driver/tools/custom_ops/sparse.cc",
         "driver/tools/custom_ops/stateful_gradient_accumulate.cc",
         "driver/tools/custom_ops/stateful_noop.cc",
@@ -312,6 +314,7 @@ cc_library(
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
         "driver/passes/sharding_pass.h",
+        "driver/passes/slice_optimizer.h",
         "driver/passes/suggest_recompute.h",
         "driver/passes/while_loop_condition_simplify.h",
         "driver/passes/while_loop_to_repeat_simplify.h",
@@ -354,6 +357,7 @@ cc_library(
         "driver/tools/custom_ops/send_recv_barrier.h",
         "driver/tools/custom_ops/send_to_host.h",
         "driver/tools/custom_ops/sigmoid.h",
+        "driver/tools/custom_ops/slice_apply.h",
         "driver/tools/custom_ops/sparse.h",
         "driver/tools/custom_ops/stateful_gradient_accumulate.h",
         "driver/tools/custom_ops/stateful_noop.h",
@@ -497,6 +501,7 @@ cc_library(
         "driver/ops/custom_ops/popops/random.cc",
         "driver/ops/custom_ops/popops/reduce_scatter.cc",
         "driver/ops/custom_ops/popops/select_scalars.cc",
+        "driver/ops/custom_ops/popops/slice_apply.cc",
         "driver/ops/custom_ops/poprand/dropout.cc",
         "driver/ops/custom_ops/poprand/random.cc",
         "driver/ops/custom_ops/poputil/codelet_expression_op.cc",
@@ -2548,6 +2553,21 @@ tf_cc_test(
     ],
 )
 
+xla_test(
+    name = "slice_optimizer_test",
+    size = "medium",
+    srcs = ["tests/slice_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -3430,7 +3450,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/size_speed_tests/matmul_size_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 3,
+    shard_count = 4,
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",
@@ -4106,6 +4126,7 @@ test_suite(
         "sharding_pass_test",
         "shortest_path_scheduler_test",
         "simple_network_test",
+        "slice_optimizer_test",
         "slice_plan_test",
         "sort_op_cc_test",
         "sort_op_py_test",

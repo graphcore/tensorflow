@@ -1,4 +1,4 @@
-/* Copyright 2018 Graphcore Ltd
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,10 +26,6 @@ namespace poplarplugin {
 
 class CommutativeInstructionReorderOperands : public HloModulePass {
  public:
-  CommutativeInstructionReorderOperands();
-
-  ~CommutativeInstructionReorderOperands() override = default;
-
   absl::string_view name() const override {
     return "commutative-instruction-reorder-operands";
   }

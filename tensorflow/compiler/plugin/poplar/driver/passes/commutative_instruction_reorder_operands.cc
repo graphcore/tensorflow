@@ -25,16 +25,14 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
-
-CommutativeInstructionReorderOperands::CommutativeInstructionReorderOperands() {
-}
-
-static bool IsReshaping(const HloInstruction* inst) {
+namespace {
+bool PreferOnRhs(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kAddDependency) {
     inst = inst->operand(0);
   }
   switch (inst->opcode()) {
     case HloOpcode::kBroadcast:
+    case HloOpcode::kConcatenate:
     case HloOpcode::kReshape:
     case HloOpcode::kPad:
       return true;
@@ -43,17 +41,18 @@ static bool IsReshaping(const HloInstruction* inst) {
   }
 }
 
-static bool IsElementwiseBinaryCommutative(const HloInstruction* inst) {
+bool IsElementwiseBinaryCommutative(const HloInstruction* inst) {
   switch (inst->opcode()) {
     case HloOpcode::kAdd:
-    case HloOpcode::kMultiply:
     case HloOpcode::kMaximum:
     case HloOpcode::kMinimum:
+    case HloOpcode::kMultiply:
       return true;
     default:
       return false;
   }
 }
+}  // namespace
 
 StatusOr<bool> CommutativeInstructionReorderOperands::Run(HloModule* module) {
   bool changed = false;
@@ -64,7 +63,7 @@ StatusOr<bool> CommutativeInstructionReorderOperands::Run(HloModule* module) {
 
     for (auto* inst : comp->MakeInstructionPostOrder()) {
       if (IsElementwiseBinaryCommutative(inst) &&
-          IsReshaping(inst->operand(0)) && !IsReshaping(inst->operand(1))) {
+          PreferOnRhs(inst->operand(0)) && !PreferOnRhs(inst->operand(1))) {
         auto* op0 = inst->mutable_operand(0);
         auto* op1 = inst->mutable_operand(1);
         inst->ReplaceOperandWith(0, op1);

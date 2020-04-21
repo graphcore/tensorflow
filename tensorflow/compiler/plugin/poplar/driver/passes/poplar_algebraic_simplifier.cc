@@ -505,6 +505,7 @@ Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
                      add->shape(), HloOpcode::kAdd, a, b)),
                  c));
   }
+
   return Status::OK();
 }
 
