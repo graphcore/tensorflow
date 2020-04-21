@@ -89,11 +89,11 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleConstant);
 
   Status HandleCopy(HloInstruction* hlo) override;
-  Status HandleCustomCall(HloInstruction* hlo) override;
   Status HandleOutfeed(HloInstruction* hlo) override;
 
   virtual Status HandleFifo(HloInstruction* hlo);
   virtual Status HandleInterIpuCopy(HloInstruction* hlo);
+  virtual Status HandleGradientAccumulatorSink(HloInstruction* hlo);
 
   StatusOr<poplar::program::Sequence> GetPipelineSequence(
       int64 iterations) const;
@@ -103,6 +103,7 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       const HloInstruction* inst);
 
   Status HandleDeferredAllocationCall(HloInstruction* inst) override;
+  Status HandleNonDeferredCustomCall(HloInstruction* hlo) override;
   Status HandleDeferredAllocationTuple(HloInstruction* inst) override;
   Status HandleDeferredAllocationWhile(HloInstruction* inst) override;
 

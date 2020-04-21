@@ -17,7 +17,6 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_FIXER_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
 namespace xla {
@@ -72,6 +71,12 @@ class PipelineFixer : public HloModulePass {
   // function is to make sure if a parameter is being modified by a constant
   // that the modification is lowered to the relevent backward Pipeline stage.
   StatusOr<bool> LowerParameterUsagesIntoStages();
+
+  // Constant gradients are not associated with any pipeline stage, however the
+  // frontend will still generate the accumulation instructions. Simplify the
+  // gradient by removing the accumulation and instead multiplying the input by
+  // the number of mini-batches to accumulate.
+  StatusOr<bool> FixConstantGradients();
 
   // Lowers inputs to the pipeline resource update which are not associated to
   // any pipeline stage.

@@ -131,55 +131,6 @@ REGISTER_POPLAR_OP(StatefulGradientAccumulate, StatefulGradientAccumulateOp);
 REGISTER_POPLAR_OP(StatefulGradientAccumulateAndAllReduce,
                    StatefulGradientAccumulateOp);
 
-class PipelineStatefulGradientAccumulateOp : public PoplarOpDef {
-  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
-                                             CompilerResources& res,
-                                             const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
-                                             TensorMap& tensor_map) override {
-    const std::string debug_name = GetDebugName(inst);
-
-    // Create a sequence for zeroing the accumulator before the pipeline is
-    // executed.
-    poplar::program::Sequence zeroing_seq;
-
-    // Create a sequence to be executed during the pipeline.
-    poplar::program::Sequence seq;
-    TensorVector inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq);
-
-    // Clone the inputs into accumulators which are the outputs.
-    TensorVector accumulators(inputs.size());
-    absl::c_transform(inputs, accumulators.begin(),
-                      [&graph, &debug_name](const poplar::Tensor& in) {
-                        return graph.clone(in, debug_name + "/Accumulator");
-                      });
-
-    for (size_t i = 0; i != inputs.size(); ++i) {
-      // Add the initial zeroing.
-      popops::zero(graph, accumulators[i], zeroing_seq,
-                   debug_name + "/ZeroAccumulator");
-      // Add input to the accumulator.
-      popops::addInPlace(graph, accumulators[i], inputs[i], seq,
-                         debug_name + "/Accumulate");
-    }
-
-    // Add the zeroing sequence.
-    if (res.pipelining_buffer_zeroing_sequences.empty()) {
-      return FailedPrecondition(
-          "Cannot zero Pipeline's gradient accumulators.");
-    }
-    res.pipelining_buffer_zeroing_sequences.top().push_back(zeroing_seq);
-
-    for (size_t i = 0; i != accumulators.size(); ++i) {
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, accumulators[i]));
-    }
-
-    return seq;
-  }
-};
-REGISTER_POPLAR_OP(PipelineStatefulGradientAccumulate,
-                   PipelineStatefulGradientAccumulateOp);
-
 class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
   StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
                                      CompilerResources& res,
@@ -335,11 +286,65 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
 
     return seq;
   }
-};  // namespace
+};
 REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentum,
                    StatefulGradientAccumulateWithMomentumOp);
 REGISTER_POPLAR_OP(StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm,
                    StatefulGradientAccumulateWithMomentumOp);
+
+// A gradient accumulation creation op creates a gradient accumulation buffer
+// which can be used by multiple pipeline stages on the same IPU.
+// It is however handeled by the deferred allocation visitor.
+class GradientAccumulatorCreateOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    return InternalErrorStrCat(
+        "Instruction ", inst->name(),
+        " should have been allocated by the DeferredVisitor. This error is "
+        "most likely caused by inappropriate use of gradient accumulation. "
+        "Please use the Pipelinining API.");
+  }
+};
+REGISTER_POPLAR_OP(GradientAccumulatorCreate, GradientAccumulatorCreateOp);
+
+// A gradient accumulation sink combines accumulators from different pipeline
+// stages on the same IPU into a single buffer.
+class GradientAccumulatorSinkOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    if (!IsLoweredInplace(inst)) {
+      return InternalErrorStrCat("Expected the instruction ", inst->name(),
+                                 " to have been lowered inplace.");
+    }
+    poplar::program::Sequence seq;
+    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
+                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
+    CHECK_EQ(inputs.size(), inst->operand_count());
+    CHECK_EQ(inputs[0].size(), 1);
+    poplar::Tensor output = inputs[0][0];
+
+    // Make sure that all the merged gradient accumulation buffers are the same
+    // location.
+    for (uint64 i = 1; i != inputs.size(); ++i) {
+      CHECK_EQ(inputs[i].size(), 1);
+      if (inputs[i][0] != output) {
+        return InternalErrorStrCat(
+            "Expected all the gradient accumulation buffers for instruction ",
+            inst->name(), " to match.");
+      }
+    }
+
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+    return seq;
+  }
+};
+REGISTER_POPLAR_OP(GradientAccumulatorSink, GradientAccumulatorSinkOp);
 
 }  // namespace
 }  // namespace poplarplugin

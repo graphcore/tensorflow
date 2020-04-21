@@ -51,6 +51,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gather_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
@@ -835,6 +836,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<PipelineOptimizer>();
     }
     pipeline.AddPass<InterIpuCopyInserter>();
+    pipeline.AddPass<GradientAccumulationOptimizer>();
     // Passes below this point need to respect the inplace information.
     pipeline.AddPass<InplaceFinder>();
     pipeline.AddPass<ExpressionOutliner>();

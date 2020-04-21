@@ -17,15 +17,14 @@ limitations under the License.
 
 #include <memory>
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -65,30 +64,127 @@ Status PipelineVerifier::VerifyGradientAccumulation(HloModule* module,
     if (IsPopOpsFusion(computation)) {
       continue;
     }
+
     for (const HloInstruction* inst : computation->instructions()) {
-      if (!IsPoplarInstruction(PoplarOp::PipelineStatefulGradientAccumulate)(
-              inst)) {
+      if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst)) {
         continue;
       }
-      // We expect the gradient accumulation op to be:
-      // * inside a backward pipeline stage,
-      auto call_sites = call_graph->GetNode(inst->parent()).caller_callsites();
-      if (call_sites.size() != 1 ||
-          !IsPipelineStageBackward(call_sites[0].instruction())) {
-        return FailedPrecondition(
-            "Expected Poplar custom operation "
-            "PipelineStatefulGradientAccumulate to be only used inside a "
-            "backward pipeline stage.");
+
+      if (inst->user_count() == 0) {
+        return InternalErrorStrCat("Expected the gradient accumulation buffer ",
+                                   inst->ToString(),
+                                   " to have at least one user.");
       }
-      // * only used by the root instruction.
-      if (!absl::c_all_of(inst->users(),
-                          [&computation](const HloInstruction* user) {
-                            return computation->root_instruction() == user;
-                          })) {
-        return FailedPrecondition(
-            "Expected Poplar custom operation "
-            "PipelineStatefulGradientAccumulate to be only used by the root of "
-            "the backward pipeline stage computation.");
+
+      // We expect all the backward stages to be lowered inplace in order to
+      // make sure there is only one gradient accumulation buffer if it is used
+      // by multiple stages.
+      const bool expect_lowered_inplace = inst->user_count() > 1;
+
+      // We expect the gradient accumulation creators to only be used by
+      // backward pipeline stages residing on the same shard.
+      for (HloInstruction* user : inst->users()) {
+        const std::vector<int64> indices = user->OperandIndices(inst);
+        if (indices.size() != 1) {
+          return InternalErrorStrCat(
+              "Expected the gradient accumulation buffer to only appear as an "
+              "opperand once, but it is used ",
+              indices.size(), " times.");
+        }
+        if (!IsPipelineStageBackward(user)) {
+          return InternalErrorStrCat(
+              "Expected the gradient accumulation buffer to only be used by "
+              "backward pipeline stages, but detected ",
+              inst->ToString(), " as a user.");
+        }
+        if (*user->sharding_unique_device() !=
+            *inst->sharding_unique_device()) {
+          return InternalError(
+              "Expected the gradient accumulation buffer and the backward "
+              "pipeline stage to have compatible sharding.");
+        }
+        if (expect_lowered_inplace && !IsLoweredInplace(user)) {
+          return InternalErrorStrCat("Expected the pipeline backward stage ",
+                                     inst->ToString(),
+                                     " to have been lowered inplace.");
+        }
+        HloComputation* pipeline_stage_comp = user->to_apply();
+
+        // Inside of the backward pipeline stage, we expect the gradient
+        // accumulator to be used serially, with the final use in the root
+        // tuple. We expect all the uses to be inplace on the buffer.
+        int64 output_index = indices[0];
+        HloInstruction* inner_user =
+            pipeline_stage_comp->parameter_instruction(output_index);
+        do {
+          if (inner_user->user_count() != 1) {
+            return InternalErrorStrCat(
+                "Expected the gradient accumulation buffer to be used "
+                "serially, but detected ",
+                inner_user->user_count(), " users.");
+          }
+          HloInstruction* next_user = inner_user->users()[0];
+          const std::vector<int64> next_user_indices =
+              next_user->OperandIndices(inner_user);
+
+          if (next_user_indices.size() != 1) {
+            return InternalErrorStrCat(
+                "Expected the gradient accumulation buffer to only appear as "
+                "an opperand once, but it is used ",
+                next_user_indices.size(), " times.");
+          }
+          auto inplace_modifier = GetInplaceModifier(inner_user);
+          if (!inplace_modifier) {
+            return InternalError(
+                "Expected the gradient accumulation buffer to be used "
+                "inplace.");
+          }
+          if (*inplace_modifier != next_user) {
+            return InternalErrorStrCat(
+                "Expected the gradient accumulation inplace user to be ",
+                next_user->ToString(), " but it was ",
+                (*inplace_modifier)->ToString(), ".");
+          }
+          inner_user = next_user;
+          output_index = next_user_indices[0];
+        } while (pipeline_stage_comp->root_instruction() != inner_user);
+        CHECK_EQ(inner_user->opcode(), HloOpcode::kTuple);
+
+        // We expect the output at the gradient accumulation buffer location
+        // to be only used (via a GTE) by the gradient accumulation sink
+        // instruction.
+        absl::flat_hash_set<HloInstruction*> gtes;
+        for (HloInstruction* stage_user : user->users()) {
+          CHECK_EQ(stage_user->opcode(), HloOpcode::kGetTupleElement);
+          if (stage_user->tuple_index() == output_index) {
+            gtes.insert(stage_user);
+          }
+        }
+        if (gtes.size() != 1) {
+          return InternalErrorStrCat(
+              "Expected the gradient accumulation buffer to only have a "
+              "single user, but it has ",
+              gtes.size(), " users.");
+        }
+
+        // We expect the sink instruction to only be used by the resource
+        // update function.
+        HloInstruction* gte = *std::begin(gtes);
+        if (gte->user_count() != 1) {
+          return InternalErrorStrCat(
+              "Expected the gradient accumulation buffer to only have a "
+              "single "
+              "user, but it has ",
+              gte->user_count(), " users.");
+        }
+
+        if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(
+                gte->users()[0])) {
+          return InternalErrorStrCat(
+              "Expected the gradient accumulation buffer to be used by a "
+              "gradient accumulation sink, but it is used by ",
+              gte->users()[0]->ToString(), " instead.");
+        }
       }
     }
   }
@@ -152,8 +248,8 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
           if (IsPoplarInstruction(PoplarOp::StatefulGradientAccumulate)(inst) ||
               IsPoplarInstruction(
                   PoplarOp::StatefulGradientAccumulateAndAllReduce)(inst) ||
-              IsPoplarInstruction(PoplarOp::PipelineStatefulGradientAccumulate)(
-                  inst)) {
+              IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst) ||
+              IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(inst)) {
             LOG(INFO)
                 << "Detected a gradient accumulation operation inside "
                    "the resource update part of the pipeline which might "

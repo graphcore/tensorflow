@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 
+#include <popops/Zero.hpp>
 #include <poputil/Util.hpp>
 #include <string>
 #include <utility>
@@ -43,15 +44,14 @@ Status DeferredAllocations::AddDeferredAllocation(
   switch (location.instruction->opcode()) {
     case HloOpcode::kInfeed:
     case HloOpcode::kParameter: {
-      // Create a new set for this location.
-      to_allocate_locations_[location].insert(location);
-      // Move the allocation function.
-      allocation_functions_[location] = std::move(allocate_fn);
-      // Move the post process function.
-      post_process_functions_[location] = std::move(post_process_fn);
-      // Add it to the lookup table.
-      location_lookup_table_[location] = std::move(location);
-      return Status::OK();
+      break;
+    }
+    case HloOpcode::kCustomCall: {
+      if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
+              location.instruction)) {
+        break;
+      }
+      // Fall through.
     }
     default: {
       return FailedPrecondition(
@@ -59,6 +59,15 @@ Status DeferredAllocations::AddDeferredAllocation(
           location.instruction->ToString());
     }
   }
+  // Create a new set for this location.
+  to_allocate_locations_[location].insert(location);
+  // Move the allocation function.
+  allocation_functions_[location] = std::move(allocate_fn);
+  // Move the post process function.
+  post_process_functions_[location] = std::move(post_process_fn);
+  // Add it to the lookup table.
+  location_lookup_table_[location] = std::move(location);
+  return Status::OK();
 }
 
 Status DeferredAllocations::AddDeferredAllocationUser(
@@ -277,9 +286,6 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
 Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
                                               const Shape shape) {
   const auto param_num = input_location.instruction->parameter_number();
-
-  auto& callsite_inputs = callsite_inputs_[param_num];
-  auto& inputs = computation_inputs_[param_num];
   auto& allocated = allocated_tensors_[param_num];
 
   // Whether this input has an allocation target.
@@ -673,6 +679,74 @@ Status DeferredVisitor::HandleDeferredAllocationWhile(HloInstruction* inst) {
       auto seq, CreateWhileOp(resources_, inst, inputs, GetOutputShape(inst),
                               tensor_map));
   sequence.add(seq);
+  return Status::OK();
+}
+
+Status DeferredVisitor::HandleCustomCall(HloInstruction* inst) {
+  if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst)) {
+    return HandleGradientAccumulatorCreate(inst);
+  }
+  return HandleNonDeferredCustomCall(inst);
+}
+
+Status DeferredVisitor::HandleNonDeferredCustomCall(HloInstruction* inst) {
+  return FullVisitor::HandleCustomCall(inst);
+}
+
+Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+  CHECK(!inst->shape().IsTuple());
+
+  TensorLocation output_location{inst, 0};
+  // Whether this input has an allocation target.
+  const bool has_allocation_target =
+      HasTensorAllocationTarget(output_location, resources_);
+
+  // Function which is called when allocating this tensor.
+  DeferredAllocateFunction allocate_fn =
+      [this,
+       inst](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+    // Allocate the tensor.
+    TF_ASSIGN_OR_RETURN(
+        auto tensor,
+        AllocateInput(allocation_location, inst->shape(), absl::nullopt));
+    return tensor;
+  };
+
+  // Function which is called after the tensor has been created.
+  DeferredPostProcessFunction post_process_fn =
+      [this, inst](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+    // Create a sequence for zeroing the accumulator before the accumulation is
+    // performed.
+    poplar::Graph& graph = GetGraph(resources_, inst);
+    poplar::program::Sequence zeroing_seq;
+    popops::zero(graph, tensor, zeroing_seq,
+                 GetDebugName(inst) + "/ZeroAccumulator");
+
+    // Add to the zeroing sequence.
+    if (resources_.gradient_accumulation_zeroing_sequences.empty()) {
+      return FailedPrecondition("Cannot zero gradient accumulation buffer.");
+    }
+
+    resources_.gradient_accumulation_zeroing_sequences.top().push_back(
+        zeroing_seq);
+    return tensor;
+  };
+
+  if (has_allocation_target) {
+    // If a tensor can be allocated now, then do it immediately.
+    poplar::Tensor output;
+    TF_ASSIGN_OR_RETURN(output, allocate_fn(output_location));
+    TF_ASSIGN_OR_RETURN(output, post_process_fn(output));
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
+  } else {
+    // Otherwise defer the allocation.
+    VLOG(1) << "Deferring allocation of " << inst->name() << " sub tensor 0.";
+    TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+    TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+        output_location, std::move(allocate_fn), std::move(post_process_fn)));
+  }
+
   return Status::OK();
 }
 

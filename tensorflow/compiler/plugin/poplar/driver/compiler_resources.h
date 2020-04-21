@@ -110,7 +110,7 @@ struct CompilerResources {
   std::vector<poplar::Tensor> zeroed_tensors;
 
   std::stack<std::vector<poplar::program::Sequence>>
-      pipelining_buffer_zeroing_sequences;
+      gradient_accumulation_zeroing_sequences;
 
   std::stack<std::vector<poplar::program::Sequence>>
       pipelining_write_undef_sequences;

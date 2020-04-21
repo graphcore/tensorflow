@@ -231,7 +231,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
       VLOG(3) << "Lowering outputs for stage " << stage_id;
       changed = true;
 
-      // Prevent use after free in the outter loop.
+      // Prevent use after free in the outer loop.
       absl::c_for_each(ordered_lowering, [&stage_users](HloInstruction* inst) {
         stage_users.erase(inst);
       });
@@ -276,8 +276,11 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
       // * the current stage - this has already been lowered,
       // * the root instruction,
       // * the PipelineResourceUpdate.
+      // * a gradient accumulation sink - it will be an input to the
+      //   PipelineResourceUpdate.
       if (!(gte_user == stage || gte_user == pipeline_root ||
-            IsPipelineResourceUpdate(gte_user))) {
+            IsPipelineResourceUpdate(gte_user) ||
+            IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(gte_user))) {
         output_users[tuple_index].insert(gte);
       }
     }
@@ -468,7 +471,7 @@ StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
       }
       VLOG(3) << "Lowering parameters for stage " << stage_id;
       changed = true;
-      // Prevent use after free in the outter loop.
+      // Prevent use after free in the outer loop.
       absl::c_for_each(ordered_lowering, [&params_users](HloInstruction* inst) {
         params_users.erase(inst);
       });
@@ -541,6 +544,63 @@ Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
   return Status::OK();
 }
 
+StatusOr<bool> PipelineFixer::FixConstantGradients() {
+  if (!stages_.resource_update) {
+    return false;
+  }
+  HloInstruction* resource_update = *stages_.resource_update;
+  HloComputation* pipeline_comp = resource_update->parent();
+  TF_ASSIGN_OR_RETURN(auto analysis,
+                      PipelineDataflowAnalysis::GetAnalysis(stages_));
+  bool changed = false;
+  // Go through all the gradient accumulator sinks.
+  for (int64 op_idx = 0; op_idx != resource_update->operand_count(); ++op_idx) {
+    HloInstruction* operand = resource_update->mutable_operand(op_idx);
+    if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(operand)) {
+      continue;
+    }
+    // We expect the sink to only be an input once to the resource update.
+    CHECK_EQ(resource_update->OperandIndices(operand).size(), 1);
+    HloGradientAccumulatorSink* sink =
+        Cast<HloGradientAccumulatorSink>(operand);
+    // We expect the sink to only have a single input at this point.
+    CHECK_EQ(sink->operand_count(), 1);
+    HloInstruction* sink_input = operand->mutable_operand(0);
+    if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(sink_input)) {
+      continue;
+    }
+    HloInstruction* lhs = sink_input->mutable_operand(0);
+    if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(lhs)) {
+      return FailedPrecondition(
+          "Expected the input to the GradientAccumulatorAdd to be a "
+          "GradientAccumulatorCreate, but is %s.",
+          lhs->ToString().c_str());
+    }
+    HloInstruction* rhs = sink_input->mutable_operand(1);
+    VLOG(3) << "Replacing an accumulated constant gradient with a constnat.";
+    const int32 mutliplier = sink->MiniBatchesToAccumulate();
+    // Create the constant for the gradient accumulation.
+    Literal literal(ShapeUtil::MakeShape(S32, operand->shape().dimensions()));
+    literal.PopulateWithValue(mutliplier);
+    HloInstruction* const_multiplier = pipeline_comp->AddInstruction(
+        HloInstruction::CreateConstant(std::move(literal)));
+    // Convert it to the right type.
+    HloInstruction* cast_multiplier = pipeline_comp->AddInstruction(
+        HloInstruction::CreateConvert(operand->shape(), const_multiplier));
+    // Multiply the constant gradient by the accumulation factor.
+    HloInstruction* multiplied_gradient =
+        pipeline_comp->AddInstruction(HloInstruction::CreateBinary(
+            operand->shape(), HloOpcode::kMultiply, cast_multiplier, rhs));
+    TF_RETURN_IF_ERROR(
+        pipeline_comp->ReplaceInstruction(operand, multiplied_gradient));
+    // Explicitly remove the gradient buffer allocator as it is stateful.
+    TF_RETURN_IF_ERROR(pipeline_comp->ForceRemoveInstruction(lhs));
+    changed = true;
+  }
+
+  return changed;
+}
+
 StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
   if (!stages_.resource_update) {
     return false;
@@ -563,26 +623,13 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
     // We currently only expect constant gradients to be stageless
     // (because they do not depend on any input, we cannot associate them
     // with a backward stage).
-    // Note that the gradients might be accumulated, which we need to take into
-    // account.
-    HloInstruction* to_lower = operand;
-    int32 mutliplier = 1;
-
-    if (IsPoplarInstruction(PoplarOp::PipelineStatefulGradientAccumulate)(
-            to_lower)) {
-      HloPipelineStatefulGradientAccumulate* grad_accum =
-          Cast<HloPipelineStatefulGradientAccumulate>(to_lower);
-      to_lower = grad_accum->mutable_operand(0);
-      mutliplier = grad_accum->MiniBatchesToAccumulate();
-    }
-
-    // Find the cluster of instructions from the to_lower instruction.
+    // Find the cluster of instructions from the operand instruction.
     std::vector<HloInstruction*> ordered_lowering;
     std::vector<const HloValueSet*> value_sets;
     std::queue<HloInstruction*> to_visit;
     absl::flat_hash_set<HloInstruction*> visited;
 
-    to_visit.push(to_lower);
+    to_visit.push(operand);
     while (!to_visit.empty()) {
       HloInstruction* inst = to_visit.front();
       to_visit.pop();
@@ -632,28 +679,11 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
       old_to_new_computation[old_inst] = new_inst;
     }
 
-    // We need to take the gradient accumulation out, therefore we multiply the
-    // result of the lowering by the number of batches we are accumulating.
-    // Create the multiplier - note that all this arthemtic will be folded by
-    // other passes.
-    // Create the literal first.
-    Literal literal(ShapeUtil::MakeShape(S32, to_lower->shape().dimensions()));
-    literal.PopulateWithValue(mutliplier);
-    HloInstruction* const_multiplier = resource_update_comp->AddInstruction(
-        HloInstruction::CreateConstant(std::move(literal)));
-    // Convert it to the right type.
-    HloInstruction* cast_multiplier = resource_update_comp->AddInstruction(
-        HloInstruction::CreateConvert(to_lower->shape(), const_multiplier));
-    // Get the lowered result and multiply it.
-    HloInstruction* lowered_multiplied =
-        resource_update_comp->AddInstruction(HloInstruction::CreateBinary(
-            to_lower->shape(), HloOpcode::kMultiply,
-            old_to_new_computation.at(to_lower), cast_multiplier));
-
-    // Replace all uses of the corresponding parameters with the to_lower
+    // Replace all uses of the corresponding parameters with the operand
     // instruction.
     HloInstruction* param = resource_update_comp->parameter_instruction(op_idx);
-    TF_RETURN_IF_ERROR(param->ReplaceAllUsesWith(lowered_multiplied));
+    TF_RETURN_IF_ERROR(
+        param->ReplaceAllUsesWith(old_to_new_computation.at(operand)));
     unused_op_indices.insert(op_idx);
   }
 
@@ -752,6 +782,8 @@ Status PipelineFixer::FixPipeline(HloInstruction* pipeline_op) {
   TF_RETURN_IF_ERROR(VerifyPipelineStagesBeforeFixing(stages_));
   // Run the lowering on pipeline stages.
   TF_RETURN_IF_ERROR(LowerOpsIntoPipelineStages().status());
+  // Run the fixing for constant gradients.
+  TF_RETURN_IF_ERROR(FixConstantGradients().status());
   // Run the lowering on the resource update.
   TF_RETURN_IF_ERROR(LowerResourceUpdateInputs().status());
   // Tidy again.

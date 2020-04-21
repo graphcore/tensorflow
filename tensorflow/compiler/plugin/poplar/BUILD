@@ -140,6 +140,7 @@ cc_library(
         "driver/passes/fuse_wide_const.cc",
         "driver/passes/gather_simplifier.cc",
         "driver/passes/gradient_accumulation_fuser.cc",
+        "driver/passes/gradient_accumulation_optimizer.cc",
         "driver/passes/gradient_accumulation_verifier.cc",
         "driver/passes/hlo_computation_name_uniquify.cc",
         "driver/passes/host_compute_barrier_inserter.cc",
@@ -276,6 +277,7 @@ cc_library(
         "driver/passes/fuse_wide_const.h",
         "driver/passes/gather_simplifier.h",
         "driver/passes/gradient_accumulation_fuser.h",
+        "driver/passes/gradient_accumulation_optimizer.h",
         "driver/passes/gradient_accumulation_verifier.h",
         "driver/passes/hlo_computation_name_uniquify.h",
         "driver/passes/host_compute_barrier_inserter.h",
@@ -2568,6 +2570,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "gradient_accumulation_optimizer_test",
+    size = "small",
+    srcs = ["tests/gradient_accumulation_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4057,6 +4074,7 @@ test_suite(
         "gather_simplifier_embedding_lookup_test",
         "gradient_accumulation_fuser_test",
         "gradient_accumulation_optimization_pass_test",
+        "gradient_accumulation_optimizer_test",
         "graph_compile_io_map_test",
         "group_norm_test",
         "gru_test",

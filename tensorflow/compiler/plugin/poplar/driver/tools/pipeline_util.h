@@ -231,10 +231,16 @@ class PipelineDataflowAnalysis {
   Status VerifyPipelineUsage(const HloInstruction* pipeline_stage,
                              const HloInstruction* pipeline_stage_user) const;
 
-  // Verifies that the parameter is only used by one stage (fwd, recomp and/or
-  // bwd).
+  // Verifies that the parameter is only used by stages (fwd, recomp and/or
+  // bwd) on the same shard.
   Status VerifyParameterUsage(const HloInstruction* parameter,
                               const HloInstruction* pipeline_stage_user);
+
+  // Verifies that the gradient accumulator creator is only used by backward
+  // pipeline stages on the same shard.
+  Status VerifyGradientAccumulatorCreateUsage(
+      const HloInstruction* gradient_accumulator_creator,
+      const HloInstruction* pipeline_stage_user);
 
   // Verifies that the infeed is only used by one stage (fwd and possibly
   // recomp).

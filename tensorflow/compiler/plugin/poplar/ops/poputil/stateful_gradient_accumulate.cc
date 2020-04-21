@@ -26,13 +26,6 @@ REGISTER_OP("IpuStatefulGradientAccumulate")
     .Attr("verify_usage: bool = true")
     .SetShapeFn(shape_inference::UnchangedShape);
 
-REGISTER_OP("IpuPipelineStatefulGradientAccumulate")
-    .Input("input: dtype")
-    .Output("output: dtype")
-    .Attr("dtype: {float16, float32, int32}")
-    .Attr("num_mini_batches: int")
-    .SetShapeFn(shape_inference::UnchangedShape);
-
 REGISTER_OP("IpuStatefulGradientAccumulateWithMomentum")
     .Input("accum: resource")
     .Input("grad: dtype")
@@ -40,6 +33,36 @@ REGISTER_OP("IpuStatefulGradientAccumulateWithMomentum")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32, int32}")
     .Attr("num_mini_batches: int")
+    .SetShapeFn(shape_inference::UnchangedShape);
+
+REGISTER_OP("GradientAccumulatorCreate")
+    .Output("output: dtype")
+    .Attr("dtype: {float16, float32}")
+    .Attr("output_shape: shape")
+    .SetIsStateful()
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      PartialTensorShape output_shape;
+      TF_RETURN_IF_ERROR(c->GetAttr("output_shape", &output_shape));
+      shape_inference::ShapeHandle s;
+      TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(output_shape, &s));
+      c->set_output(0, s);
+      return Status::OK();
+    });
+
+REGISTER_OP("GradientAccumulatorAdd")
+    .Input("accumulator: dtype")
+    .Input("gradients: dtype")
+    .Output("accumulated: dtype")
+    .Attr("dtype: {float16, float32}")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::UnchangedShape);
+
+REGISTER_OP("GradientAccumulatorSink")
+    .Input("input: dtype")
+    .Output("output: dtype")
+    .Attr("dtype: {float16, float32}")
+    .Attr("num_mini_batches: int")
+    .SetIsStateful()
     .SetShapeFn(shape_inference::UnchangedShape);
 
 }  // namespace tensorflow

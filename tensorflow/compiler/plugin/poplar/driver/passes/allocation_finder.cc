@@ -102,9 +102,11 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
             : false;
     const bool is_recv_from_host =
         IsPoplarInstruction(PoplarOp::RecvFromHost)(inst);
+    const bool is_gradient_accumulator_create =
+        IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
 
     if (is_remap_deduce || is_host_embedding_lookup || is_remote_buffer_load ||
-        is_rw_user_op || is_recv_from_host) {
+        is_rw_user_op || is_recv_from_host || is_gradient_accumulator_create) {
       auto shapes = FlattenedXlaShape(inst->shape());
       for (unsigned int i = 0; i < shapes.size(); i++) {
         allocating_instructions.push_back(TensorLocation{inst, i});

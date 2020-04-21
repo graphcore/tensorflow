@@ -13,12 +13,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
-
+#include "tensorflow/compiler/tf2xla/shape_util.h"
+#include "tensorflow/compiler/tf2xla/type_util.h"
+#include "tensorflow/compiler/tf2xla/xla_helpers.h"
+#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
+#include "tensorflow/compiler/tf2xla/xla_op_registry.h"
+#include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -27,15 +33,6 @@ limitations under the License.
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/util/stream_executor_util.h"
-
-#include "tensorflow/compiler/tf2xla/shape_util.h"
-#include "tensorflow/compiler/tf2xla/type_util.h"
-#include "tensorflow/compiler/tf2xla/xla_helpers.h"
-#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
-#include "tensorflow/compiler/tf2xla/xla_op_registry.h"
-#include "tensorflow/compiler/xla/literal_util.h"
-
-#include "absl/container/flat_hash_set.h"
 
 using namespace xla::poplarplugin;
 
@@ -77,18 +74,6 @@ class StatefulGradientAccumulate : public XlaOpKernel, IpuOpKernel {
 };
 
 REGISTER_IPU_OP("IpuStatefulGradientAccumulate", StatefulGradientAccumulate);
-
-class PipelineStatefulGradientAccumulate : public StatefulGradientAccumulate {
- public:
-  explicit PipelineStatefulGradientAccumulate(OpKernelConstruction* ctx)
-      : StatefulGradientAccumulate(
-            ctx, PoplarOp::PipelineStatefulGradientAccumulate) {}
-
- private:
-  TF_DISALLOW_COPY_AND_ASSIGN(PipelineStatefulGradientAccumulate);
-};
-REGISTER_IPU_OP("IpuPipelineStatefulGradientAccumulate",
-                PipelineStatefulGradientAccumulate);
 
 class StatefulGradientAccumulateWithMomentum : public XlaOpKernel, IpuOpKernel {
  public:
@@ -142,5 +127,107 @@ class StatefulGradientAccumulateWithMomentum : public XlaOpKernel, IpuOpKernel {
 };
 REGISTER_IPU_OP("IpuStatefulGradientAccumulateWithMomentum",
                 StatefulGradientAccumulateWithMomentum);
+
+class GradientAccumulatorCreate : public XlaOpKernel, IpuOpKernel {
+ public:
+  explicit GradientAccumulatorCreate(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx), IpuOpKernel() {
+    TensorShape shape;
+    DataType dtype;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("output_shape", &shape));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("dtype", &dtype));
+    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &output_shape));
+  }
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    xla::XlaBuilder* b = ctx->builder();
+
+    xla::XlaOp output =
+        xla::CustomCall(b, PoplarOp_Name(PoplarOp::GradientAccumulatorCreate),
+                        {}, output_shape, attribute_map_.Serialise());
+
+    ctx->SetOutput(0, output);
+  }
+
+ private:
+  xla::Shape output_shape;
+  TF_DISALLOW_COPY_AND_ASSIGN(GradientAccumulatorCreate);
+};
+
+REGISTER_IPU_OP("GradientAccumulatorCreate", GradientAccumulatorCreate);
+
+class GradientAccumulatorAdd : public XlaOpKernel, IpuOpKernel {
+ public:
+  explicit GradientAccumulatorAdd(OpKernelConstruction* ctx)
+      : XlaOpKernel(ctx), IpuOpKernel() {}
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    const DataType dtype = output_type(0);
+    xla::XlaBuilder* b = ctx->builder();
+
+    auto accumulator = ctx->Input(0);
+    auto gradient = ctx->Input(1);
+    auto accumulator_shape = ctx->InputShape(0);
+    auto gradient_shape = ctx->InputShape(1);
+
+    OP_REQUIRES(ctx, accumulator_shape.IsSameSize(gradient_shape),
+                errors::InvalidArgument(
+                    "Gradient and the accumulator do not have the same shape",
+                    accumulator_shape.DebugString(), " ",
+                    gradient_shape.DebugString()));
+
+    xla::Shape xla_shape;
+    OP_REQUIRES_OK(ctx,
+                   TensorShapeToXLAShape(dtype, gradient_shape, &xla_shape));
+
+    xla::XlaOp output = xla::CustomCall(
+        b, PoplarOp_Name(PoplarOp::GradientAccumulatorAdd),
+        {accumulator, gradient}, xla_shape, attribute_map_.Serialise());
+
+    ctx->SetOutput(0, output);
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(GradientAccumulatorAdd);
+};
+
+REGISTER_IPU_OP("GradientAccumulatorAdd", GradientAccumulatorAdd);
+
+class GradientAccumulatorSink : public XlaOpKernel, IpuOpKernel {
+ public:
+  explicit GradientAccumulatorSink(
+      OpKernelConstruction* ctx,
+      PoplarOp op = PoplarOp::GradientAccumulatorSink)
+      : XlaOpKernel(ctx), IpuOpKernel(), op_(op) {
+    int32 num_mini_batches;
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("num_mini_batches", &num_mini_batches));
+    OP_REQUIRES(
+        ctx, num_mini_batches > 0,
+        errors::FailedPrecondition("num_mini_batches needs to be at least 1."));
+    attribute_map_.AddAttribute("num_mini_batches", num_mini_batches);
+  }
+
+  void Compile(XlaOpKernelContext* ctx) override {
+    const DataType dtype = output_type(0);
+    xla::XlaBuilder* b = ctx->builder();
+
+    auto input = ctx->Input(0);
+    auto shape = ctx->InputShape(0);
+
+    xla::Shape xla_shape;
+    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
+
+    xla::XlaOp output = xla::CustomCall(b, PoplarOp_Name(op_), {input},
+                                        xla_shape, attribute_map_.Serialise());
+
+    ctx->SetOutput(0, output);
+  }
+
+ private:
+  const PoplarOp op_;
+  TF_DISALLOW_COPY_AND_ASSIGN(GradientAccumulatorSink);
+};
+
+REGISTER_IPU_OP("GradientAccumulatorSink", GradientAccumulatorSink);
 
 }  // namespace tensorflow

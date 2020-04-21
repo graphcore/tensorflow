@@ -463,7 +463,7 @@ HloInstructionDescription::HloInstructionDescription(
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = {0};
       } else if (IsPipelineOp(inst) || IsPipelineResourceUpdate(inst)) {
-        // Pipeline and PipelineStageBackward operations are inplace on all
+        // Pipeline and PipelineResourceUpdate operations are inplace on all
         // their inputs.
         OperandIndexes indexes(inst->operand_count());
         std::iota(indexes.begin(), indexes.end(), 0);

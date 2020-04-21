@@ -380,7 +380,7 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
   auto& callsites = call_graph_node.caller_callsites();
   std::vector<int64> parameters_to_add;
   // In pipeliening, do not add a parameter as an input location, unless it was
-  // a parameter in the outter scope too.
+  // a parameter/gradient accumulation buffer in the outer scope.
   if (callsites.size() != 1 ||
       !IsAnyPipelineStageOpOrResourceUpdate(callsites[0].instruction())) {
     parameters_to_add.resize(comp->num_parameters());
@@ -389,7 +389,8 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
     HloInstruction* caller = callsites[0].instruction();
     for (int64 i = 0; i != comp->num_parameters(); ++i) {
       const HloInstruction* operand = caller->operand(i);
-      if (operand->opcode() == HloOpcode::kParameter) {
+      if (operand->opcode() == HloOpcode::kParameter ||
+          IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(operand)) {
         parameters_to_add.push_back(i);
       }
     }
@@ -413,7 +414,8 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
         IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst) ||
         is_rw_user_op ||
         IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst) ||
-        IsPoplarInstruction(PoplarOp::RecvFromHost)(inst)) {
+        IsPoplarInstruction(PoplarOp::RecvFromHost)(inst) ||
+        IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst)) {
       FlattenInputs(inst, deferred_inputs);
     }
   }
