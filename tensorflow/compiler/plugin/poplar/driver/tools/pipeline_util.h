@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <map>
 #include <set>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
@@ -295,6 +296,54 @@ class PipelineDataflowAnalysis {
   bool allow_recomputation_;
   bool allow_fifo_optimizations_;
 };
+
+// A helper class used to represent a tensor being passed through pipeline
+// stages.
+class PipelinePath {
+ public:
+  // Type used to describe the path.
+  enum class Type {
+    // A path is between two backward stages on the same shard.
+    kBackward,
+    // A path is between two forward stages on the same shard.
+    kForward,
+    // A path is between a forward and a backward stage - same pipeline stage
+    // id.
+    kForwardToBackward,
+  };
+
+  PipelinePath(HloInstruction* new_consumer, uint64 stage_idx, uint64 input_idx,
+               uint64 output_idx);
+  bool FinishPath(PipelineStages& stages);
+  std::vector<uint64>& GetVisitedStages();
+  std::vector<uint64>& GetInputsPath();
+  std::vector<uint64>& GetOutputsPath();
+  StatusOr<int64> GetFifoDepth(const HloInstruction* pipeline_op);
+  // The pipeline stage which should now be consuming the value.
+  HloInstruction* GetNewConsumerStage();
+  // The old pipeline stage which is currently consuming the value.
+  HloInstruction* GetOldConsumerStage();
+  Type GetType();
+
+ private:
+  // The fields below are populated by the FinishPath function.
+  bool finished_ = false;
+  int64 fifo_depth_ = -1;
+  bool fifo_between_fwd_and_bwd_ = false;
+  HloInstruction* old_consumer_ = nullptr;
+  Type type_;
+
+  std::vector<uint64> visited_stages_;
+  std::vector<uint64> inputs_path_;
+  std::vector<uint64> outputs_path_;
+  HloInstruction* new_consumer_;
+};
+
+// A function used to find pipeline paths for operations which are passed
+// through multiple stages.
+StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
+    PipelineStages& stages);
+
 }  // namespace poplarplugin
 }  // namespace xla
 
