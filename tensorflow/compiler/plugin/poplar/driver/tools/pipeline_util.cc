@@ -1725,6 +1725,7 @@ bool PipelinePath::FinishPath(PipelineStages& stages) {
   const uint64 end_stage_idx = visited_stages_.back();
 
   const uint64 num_backward_stages = stages.backward.size();
+  const uint64 num_forward_stages = stages.forward.size();
   // It is worth remembering that the path can only be a chain between
   // consecutive stages.
   const bool start_is_backward_stage = start_stage_idx < num_backward_stages;
@@ -1736,7 +1737,8 @@ bool PipelinePath::FinishPath(PipelineStages& stages) {
   if (old_consumer_id < num_backward_stages) {
     old_consumer_ = stages.backward.at(old_consumer_id);
   } else {
-    old_consumer_id = (2 * num_backward_stages - old_consumer_id - 1);
+    old_consumer_id =
+        (num_forward_stages + num_backward_stages - old_consumer_id - 1);
     old_consumer_ = stages.forward.at(old_consumer_id);
   }
 
@@ -1749,7 +1751,8 @@ bool PipelinePath::FinishPath(PipelineStages& stages) {
     // Handle case (3).
     fifo_depth_ = end_stage_idx - num_backward_stages;
     type_ = Type::kForwardToBackward;
-    return start_stage_idx == (2 * num_backward_stages - end_stage_idx - 1);
+    return start_stage_idx ==
+           (num_forward_stages + num_backward_stages - end_stage_idx - 1);
   } else {
     return false;
   }
