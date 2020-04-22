@@ -639,10 +639,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
                           PoplarExecutable::Deserialize(
                               std::move(module), std::move(profile_printer),
                               std::move(profile_index_map), filenames));
-      // When restoring the executable we still need to make sure all the
-      // outfeeds are unique.
-      TF_RETURN_IF_ERROR(poplar_executor->RegisterOutfeeds(
-          poplar_executable->GetOutfeedInfos()));
 
       if (poplar_executor->EnableSerialization()) {
         TF_RETURN_IF_ERROR(
@@ -972,10 +968,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
 
     poplar::program::Sequence main_program;
-
-    // Register the outfeeds which this executable creates.
-    TF_RETURN_IF_ERROR(
-        poplar_executor->RegisterOutfeeds(resources.annotations.outfeed_infos));
 
     // Set up the random seed
     TF_ASSIGN_OR_RETURN(auto seed_setup,

@@ -1415,6 +1415,88 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
         sess.run(outfeed_queue.deleter)
 
   @test_util.deprecated_graph_mode_only
+  def testOutfeedNameCanBeReusedWithSameShape(self):
+    with session_lib.Session() as sess:
+      outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        enqueue1 = ipu.ipu_compiler.compile(outfeed_queue1.enqueue,
+                                            inputs=[1.0])
+      dequeue1 = outfeed_queue1.dequeue()
+
+      outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        enqueue2 = ipu.ipu_compiler.compile(outfeed_queue2.enqueue,
+                                            inputs=[2.0])
+      dequeue2 = outfeed_queue2.dequeue()
+
+      sess.run(enqueue1)
+      self.assertEqual(1.0, sess.run(dequeue1))
+
+      sess.run(enqueue2)
+      self.assertEqual(2.0, sess.run(dequeue2))
+
+      sess.run(outfeed_queue1.deleter)
+
+      # Can only deregister it once
+      with self.assertRaisesRegex(errors.NotFoundError,
+                                  "Outfeed with id='reuse_name'"):
+        sess.run(outfeed_queue2.deleter)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedNameCannotBeReusedWithDifferentShape(self):
+    with session_lib.Session() as sess:
+      outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        enqueue1 = ipu.ipu_compiler.compile(outfeed_queue1.enqueue,
+                                            inputs=[1.0])
+      dequeue1 = outfeed_queue1.dequeue()
+
+      outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        enqueue2 = ipu.ipu_compiler.compile(outfeed_queue2.enqueue,
+                                            inputs=[[1.0, 1.0]])
+
+      sess.run(enqueue1)
+      self.assertEqual(1.0, sess.run(dequeue1))
+
+      with self.assertRaisesRegex(
+          errors.FailedPreconditionError,
+          "Outfeed with id='reuse_name' already exists but with a different"):
+        sess.run(enqueue2)
+
+      sess.run(outfeed_queue1.deleter)
+
+  @test_util.deprecated_graph_mode_only
+  def testOutfeedNameCannotBeReusedWithDifferentType(self):
+    with session_lib.Session() as sess:
+      outfeed_queue1 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        enqueue1 = ipu.ipu_compiler.compile(outfeed_queue1.enqueue,
+                                            inputs=[1.0])
+      dequeue1 = outfeed_queue1.dequeue()
+
+      outfeed_queue2 = ipu.ipu_outfeed_queue.IPUOutfeedQueue(
+          "reuse_name", outfeed_mode=ipu.ipu_outfeed_queue.IPUOutfeedMode.LAST)
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        enqueue2 = ipu.ipu_compiler.compile(outfeed_queue2.enqueue,
+                                            inputs=[[1]])
+
+      sess.run(enqueue1)
+      self.assertEqual(1.0, sess.run(dequeue1))
+
+      with self.assertRaisesRegex(
+          errors.FailedPreconditionError,
+          "Outfeed with id='reuse_name' already exists but with a different"):
+        sess.run(enqueue2)
+
+      sess.run(outfeed_queue1.deleter)
+
+  @test_util.deprecated_graph_mode_only
   def testInfeedOutfeedScalarPrefetchAndBuffer(self):
     number_of_batches = 4
     num_iterations = 100
