@@ -396,6 +396,90 @@ ENTRY e {
   EXPECT_THAT(gte->tuple_index(), 0);
   EXPECT_THAT(gte->operand(0), stages.forward[1]);
 }
+
+TEST_F(PipelineCommunicationOptimizerTest, FifoFwdOnly) {
+  std::string hlo = R"(
+HloModule top
+
+add_float {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT a = f32[] add(f32[] x, f32[] y)
+}
+
+stage_0_fwd {
+  stage_0_fwd_t = token[] after-all()
+  stage_0_fwd_feed = (f32[1,4,4,2], token[]) infeed(stage_0_fwd_t)
+  stage_0_fwd_input = f32[1,4,4,2] get-tuple-element(stage_0_fwd_feed), index=0
+  stage_0_fwd_weights0 = f32[1,4,4,2] parameter(0)
+  stage_0_fwd_acts_0 = f32[1,4,4,2] add(stage_0_fwd_input, stage_0_fwd_weights0)
+  ROOT stage_0_fwd_tuple = (f32[1,4,4,2]) tuple(stage_0_fwd_acts_0)
+}
+
+stage_1_fwd {
+  stage_1_fwd_acts_0 = f32[1,4,4,2] parameter(0)
+  stage_1_fwd_weights1 = f32[1,4,4,2] parameter(1)
+  stage_1_fwd_acts_1 = f32[1,4,4,2] add(stage_1_fwd_acts_0, stage_1_fwd_weights1) stage_1_fwd_zero = f32[] constant(0)
+  ROOT stage_1_fwd_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_1_fwd_acts_1, stage_1_fwd_acts_0)
+}
+
+stage_2_fwd {
+  stage_2_fwd_acts_0 = f32[1,4,4,2] parameter(0)
+  stage_2_fwd_acts_1 = f32[1,4,4,2] parameter(1)
+  stage_2_fwd_acts_2 = f32[1,4,4,2] add(stage_2_fwd_acts_0, stage_2_fwd_acts_1)
+  ROOT stage_2_fwd_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(stage_2_fwd_acts_2, stage_2_fwd_acts_1)
+}
+
+pipeline {
+  pipeline_weights0 = f32[1,4,4,2] parameter(0), sharding={maximal device=0}
+  pipeline_stage_0 = (f32[1,4,4,2]) call(pipeline_weights0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={{maximal device=0}}
+
+  stage_0_fwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_0), index=0, sharding={maximal device=0}
+  pipeline_weights1 = f32[1,4,4,2] parameter(1), sharding={maximal device=1}
+
+  pipeline_stage_1 = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_fwd, pipeline_weights1), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={{maximal device=1}, {maximal device=1}}
+  stage_1_fwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=0, sharding={maximal device=1}
+  stage_0_fwd_x = f32[1,4,4,2] get-tuple-element(pipeline_stage_1), index=1, sharding={maximal device=1}
+
+  pipeline_stage_2 = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_fwd_x, stage_1_fwd), to_apply=stage_2_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}", sharding={{maximal device=0}, {maximal device=0}}
+  
+  ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0, pipeline_weights1)
+}
+
+ENTRY e {
+  e.weights0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.weights1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.weights0, e.weights1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":0}}}"
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  auto module0 = module.get();
+
+  PipelineCommunicationOptimizer optimizer;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
+  // Expect changes.
+  EXPECT_TRUE(changed);
+  HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
+
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+  // Expect the input to stage_2_fwd is a FIFO from gte index 0 from
+  // stage_0_fwd.
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::Fifo)(stages.forward[2]->operand(0)));
+  auto fifo = stages.forward[2]->operand(0);
+  // Expect FIFO depth to be 1.
+  EXPECT_THAT(Cast<HloFifoInstruction>(fifo)->depth(), 1);
+  // Expect sharding on the fifo.
+  EXPECT_THAT(fifo->sharding_unique_device(), 0);
+  EXPECT_THAT(fifo->operand(0)->opcode(), HloOpcode::kGetTupleElement);
+  auto gte = fifo->operand(0);
+  EXPECT_THAT(gte->tuple_index(), 0);
+  EXPECT_THAT(gte->operand(0), stages.forward[0]);
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
