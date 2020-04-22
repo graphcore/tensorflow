@@ -107,6 +107,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/embedding_plans_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_hash.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
@@ -615,8 +616,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     std::call_once(help_flag_printed, &PrintHelpString);
   }
 
-  VLOG(1) << "Begin compilation: " << module->name() << " for ordinal  "
-          << stream_exec->device_ordinal();
+  VLOG(1) << "Begin compilation: " << module->name() << " " << std::hex
+          << " (Hash: 0x" << HloHash(module.get()).GetHash() << std::dec
+          << ") for ordinal  " << stream_exec->device_ordinal();
 
   PoplarExecutor* poplar_executor(
       static_cast<PoplarExecutor*>(stream_exec->implementation()));
@@ -1109,6 +1111,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     poplar_executor->AddCompileEndEventRecord(
         module->name(), report_stream.str(), map_json, inst_info, duration);
   }
+
+  VLOG(1) << "End compilation: " << module->name() << " (Hash: 0x" << std::hex
+          << HloHash(module.get()).GetHash() << ")";
 
   std::unique_ptr<Executable> executable;
   PoplarExecutable* poplar_executable = new PoplarExecutable(
