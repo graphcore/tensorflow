@@ -84,7 +84,7 @@ Status PipelineVerifier::VerifyGradientAccumulation(HloModule* module,
       // We expect the gradient accumulation creators to only be used by
       // backward pipeline stages residing on the same shard.
       for (HloInstruction* user : inst->users()) {
-        const std::vector<int64> indices = user->OperandIndices(inst);
+        const auto indices = user->OperandIndices(inst);
         if (indices.size() != 1) {
           return InternalErrorStrCat(
               "Expected the gradient accumulation buffer to only appear as an "
@@ -124,8 +124,7 @@ Status PipelineVerifier::VerifyGradientAccumulation(HloModule* module,
                 inner_user->user_count(), " users.");
           }
           HloInstruction* next_user = inner_user->users()[0];
-          const std::vector<int64> next_user_indices =
-              next_user->OperandIndices(inner_user);
+          const auto next_user_indices = next_user->OperandIndices(inner_user);
 
           if (next_user_indices.size() != 1) {
             return InternalErrorStrCat(
