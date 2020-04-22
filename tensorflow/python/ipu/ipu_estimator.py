@@ -58,6 +58,7 @@ from tensorflow.python.util import function_utils
 
 _INITIAL_LOSS = 0.0
 _INPUT_FN_KEY = "input_fn"
+_BATCH_SIZE_KEY = "batch_size"
 _ASSIGN_ADD_OP = "AssignAddVariableOp"
 _CROSS_REPLICA_SUM_OP = "IpuCrossReplicaSum"
 _HOST_DEVICE = "/device:CPU:0"
@@ -852,13 +853,34 @@ def _augment_model_fn(model_fn, wrapper_class):
   return _model_fn
 
 
+def _calc_batch_size(global_batch_size, num_workers, num_replicas, name):
+  if global_batch_size is None:
+    return None
+
+  if global_batch_size < 1:
+    raise ValueError("{} (got {}) must be positive".format(
+        name, global_batch_size))
+
+  batch_size, remainder = divmod(global_batch_size, num_workers * num_replicas)
+
+  if remainder != 0:
+    raise ValueError(
+        "{} (got {}) must be divisible by num_workers * num_replicas ({} * {})"
+        .format(name, global_batch_size, num_workers, num_replicas))
+
+  return batch_size
+
+
 class _IPUEstimatorBase(estimator_lib.Estimator):
   def __init__(self,
                model_fn,
                model_dir=None,
                config=None,
                params=None,
-               warm_start_from=None):
+               warm_start_from=None,
+               train_batch_size=None,
+               eval_batch_size=None,
+               predict_batch_size=None):
     # Base Estimator does not allow for overriding publice APIs as of June 2019
     estimator_lib.Estimator._assert_members_are_not_overridden = lambda _: None
 
@@ -872,6 +894,39 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
       raise ValueError('{} are reserved keys but existed in params {}.'.format(
           _RESERVED_PARAMS_KEYS, params))
 
+    self._any_batch_size_provided = ((train_batch_size is not None)
+                                     or (eval_batch_size is not None)
+                                     or (predict_batch_size is not None))
+
+    if (self._any_batch_size_provided and params is not None
+        and _BATCH_SIZE_KEY in params):
+      raise ValueError(
+          "{} cannot be passed in params when a batch size argument is passed".
+          format(_BATCH_SIZE_KEY))
+
+    # pylint: disable=protected-access
+    num_train_workers = config._train_distribute.num_replicas_in_sync if \
+        config._train_distribute else 1
+    num_eval_workers = config._eval_distribute.num_replicas_in_sync if \
+        config._eval_distribute else 1
+    # pylint: enable=protected-access
+
+    num_replicas = config.ipu_run_config.num_replicas
+
+    self._batch_size_for_train = _calc_batch_size(train_batch_size,
+                                                  num_train_workers,
+                                                  num_replicas,
+                                                  "train_batch_size")
+
+    self._batch_size_for_eval = _calc_batch_size(eval_batch_size,
+                                                 num_eval_workers,
+                                                 num_replicas,
+                                                 "eval_batch_size")
+
+    self._batch_size_for_predict = _calc_batch_size(predict_batch_size, 1,
+                                                    num_replicas,
+                                                    "predict_batch_size")
+
     is_distributed = config._train_distribute or config._eval_distribute  # pylint: disable=protected-access
     if is_distributed and config.ipu_run_config.iterations_per_loop > 1:
       raise NotImplementedError(
@@ -883,6 +938,21 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
                      config=config,
                      params=params,
                      warm_start_from=warm_start_from)
+
+  def _setup_params(self, input_fn, batch_size):
+    self._params[_INPUT_FN_KEY] = input_fn
+
+    if self._any_batch_size_provided:
+      if batch_size is not None:
+        if "params" not in function_utils.fn_args(input_fn):
+          raise ValueError(
+              "input_fn must have params argument to receive params['{}']".
+              format(_BATCH_SIZE_KEY))
+
+        self._params[_BATCH_SIZE_KEY] = batch_size
+      else:
+        # Remove any value left from previous call.
+        self._params.pop(_BATCH_SIZE_KEY, None)
 
   def train(self,
             input_fn,
@@ -919,7 +989,8 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
       `self`, for chaining.
     """
     self._validate_steps(steps)
-    self._params[_INPUT_FN_KEY] = input_fn
+    self._setup_params(input_fn, self._batch_size_for_train)
+
     return super().train(input_fn=input_fn,
                          hooks=hooks,
                          steps=steps,
@@ -1011,9 +1082,9 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
       name, as well as an entry `global_step` which contains the value of the
       global step for which this evaluation was performed.
     """
-
     self._validate_steps(steps)
-    self._params[_INPUT_FN_KEY] = input_fn
+    self._setup_params(input_fn, self._batch_size_for_eval)
+
     return super().evaluate(input_fn=input_fn,
                             hooks=hooks,
                             steps=steps,
@@ -1067,8 +1138,8 @@ class _IPUEstimatorBase(estimator_lib.Estimator):
     Yields:
       Evaluated values of `predictions` tensors.
     """
+    self._setup_params(input_fn, self._batch_size_for_predict)
 
-    self._params[_INPUT_FN_KEY] = input_fn
     predictions = super().predict(input_fn=input_fn,
                                   predict_keys=predict_keys,
                                   hooks=hooks,
@@ -1108,6 +1179,14 @@ class IPUEstimator(_IPUEstimatorBase):
   giving a total effective batch size of
   `num_workers * num_replicas * batch_size`.
 
+  The desired global batch size can be passed as `train_batch_size`,
+  `eval_batch_size` and `predict_batch_size`, and the local batch size will be
+  calculated based on the number of replicas and the number of distributed
+  workers and passed to the `input_fn` and `model_fn` in
+  `params['batch_size']`. If the `input_fn` returns a dataset batched with
+  `dataset.batch(params['batch_size'], drop_remainder=True)`, the global batch
+  size will be as desired.
+
   The model parallelism supported by this class is basic sharding. Consider
   using the
   :class:`~tensorflow.python.ipu.ipu_pipeline_estimator.IPUPipelineEstimator`
@@ -1141,13 +1220,25 @@ class IPUEstimator(_IPUEstimatorBase):
                      `tf.estimator.WarmStartSettings`, then all variables are
                      warm-started, and it is assumed that vocabularies
                      and `tf.Tensor` names are unchanged.
+    train_batch_size: If not None, an int representing the global training
+      batch size. This global batch size is transformed to a local batch size
+      passed as `params['batch_size']` to the `input_fn` and `model_fn` during
+      training. Must be divisble by the number of replicas multiplied by the
+      number of distributed workers.
+    eval_batch_size: If not None, an int representing the global evaluation
+      batch size. Same behaviour as train_batch_size, only during evaluation.
+    predict_batch_size: If not None, an int representing the global prediction
+      batch size. Same behaviour as train_batch_size, only during prediction.
   """
   def __init__(self,
                model_fn,
                model_dir=None,
                config=None,
                params=None,
-               warm_start_from=None):
+               warm_start_from=None,
+               train_batch_size=None,
+               eval_batch_size=None,
+               predict_batch_size=None):
     # Verifies the model_fn signature according to Estimator framework.
     estimator_lib._verify_model_fn_args(model_fn, params)  # pylint: disable=protected-access
 
@@ -1157,4 +1248,7 @@ class IPUEstimator(_IPUEstimatorBase):
                      model_dir=model_dir,
                      config=config,
                      params=params,
-                     warm_start_from=warm_start_from)
+                     warm_start_from=warm_start_from,
+                     train_batch_size=train_batch_size,
+                     eval_batch_size=eval_batch_size,
+                     predict_batch_size=predict_batch_size)
