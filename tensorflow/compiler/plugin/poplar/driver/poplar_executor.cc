@@ -294,6 +294,21 @@ PoplarExecutor::OutfeedContext::OutfeedContext(const FeedInfo& outfeed_info)
   }
 }
 
+bool PoplarExecutor::OutfeedContext::Matches(const FeedInfo& outfeed_info) {
+  auto s = GetOutfeedShapes(FlattenedXlaShape(outfeed_info.shape),
+                            outfeed_info.config.replication_factor());
+  if (s.size() != shapes.size()) {
+    return false;
+  }
+  for (auto i = 0; i < s.size(); i++) {
+    if (s[i] != shapes[i]) {
+      return false;
+    }
+  }
+  return google::protobuf::util::MessageDifferencer::Equivalent(
+      config, outfeed_info.config);
+}
+
 PoplarExecutor::PoplarExecutor()
     : ordinal_(0),
       current_engine_(nullptr),
@@ -2324,12 +2339,16 @@ PoplarExecutor::GetTensorsFromOutfeed(const std::string& feed_id,
 Status PoplarExecutor::RegisterOutfeeds(const OutfeedInfos& outfeed_infos) {
   for (auto& outfeed_info : outfeed_infos) {
     auto outfeed_id = outfeed_info.config.feed_id();
-    if (outfeed_contexts_.contains(outfeed_id)) {
-      return xla::FailedPrecondition(
-          "Outfeed with id='%s' already exists. Consider changing the "
-          "`feed_name` in IPUOutfeedQueue. The Poplar backend requires all "
-          "outfeeds in the same TensorFlow device to have unique names.",
-          outfeed_id.c_str());
+    const auto existing_feed = outfeed_contexts_.find(outfeed_id);
+    if (existing_feed != outfeed_contexts_.end()) {
+      if (!existing_feed->second->Matches(outfeed_info)) {
+        return xla::FailedPrecondition(
+            "Outfeed with id='%s' already exists but with a different tensor "
+            "shape. Consider changing the `feed_name` in IPUOutfeedQueue. "
+            "The Poplar backend requires all outfeeds in the same TensorFlow "
+            "device to have unique names.",
+            outfeed_id.c_str());
+      }
     } else {
       outfeed_contexts_[outfeed_id] =
           absl::make_unique<OutfeedContext>(outfeed_info);
@@ -2601,6 +2620,9 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 
     VLOG(1) << "Executing on poplar stream ordinal " << ordinal_ << " of type "
             << GetDeviceTargetName();
+
+    // Create any outfeed queues which do not already exist
+    TF_RETURN_IF_ERROR(RegisterOutfeeds(executable.GetOutfeedInfos()));
 
     // Create our own free list which we use to allocate all the memory used by
     // all the tensors.

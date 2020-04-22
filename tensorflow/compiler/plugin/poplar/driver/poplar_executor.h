@@ -817,6 +817,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     OutfeedContext(const FeedInfo& outfeed_info);
     OutfeedContext() = delete;
 
+    bool Matches(const FeedInfo& outfeed_info);
+
     const PoplarFeedConfig config;
     const std::vector<xla::Shape> shapes;
     std::vector<tensorflow::DataType> tf_data_types;
