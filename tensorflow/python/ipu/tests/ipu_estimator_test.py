@@ -87,8 +87,9 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       combinations.combine(
           dataset_class=[dataset_ops.DatasetV1, dataset_ops.DatasetV2]))
   def testTrain(self, dataset_class):
-    def my_model_fn(features, labels, mode):
+    def my_model_fn(features, labels, mode, params):
       self.assertEqual(model_fn_lib.ModeKeys.TRAIN, mode)
+      self.assertEqual(2, params["batch_size"])
 
       with variable_scope.variable_scope("vs", use_resource=True):
         predictions = layers.Dense(units=1)(features)
@@ -101,17 +102,20 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
                                         loss=loss,
                                         train_op=train_op)
 
-    def my_input_fn():
+    def my_input_fn(params):
       dataset = dataset_class.from_tensor_slices(
           _create_regression_dataset(num_samples=1000, num_features=5))
-      dataset = dataset.batch(batch_size=2, drop_remainder=True).repeat()
+      dataset = dataset.batch(batch_size=params["batch_size"],
+                              drop_remainder=True).repeat()
       return dataset
 
     config = ipu_run_config.RunConfig(
         ipu_run_config=ipu_run_config.IPURunConfig(iterations_per_loop=2),
         log_step_count_steps=1)
 
-    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn, config=config)
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                           config=config,
+                                           train_batch_size=2)
 
     session_run_counter = _SessionRunCounter()
 
@@ -1389,6 +1393,158 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     self.assertAllEqual([[90., 0., 0., 0., 1., 1., 0., 0., 0.]], next(outputs))
 
     del outputs  # Release generator resources.
+
+  def testBatchSizeCalculationWithReplication(self):
+    def input_fn_without_params():
+      pass
+
+    class ParamsReceived(RuntimeError):
+      def __init__(self, params):
+        super().__init__(str(params))
+        self.params = params
+
+    def mock_input_fn(params):
+      raise ParamsReceived(params)
+
+    # Testing with replication here is fine with the IPU model since we never
+    # attempt to compile anything.
+    ipu_options = ipu_utils.create_ipu_config()
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=2)
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(num_replicas=2,
+                                                   ipu_options=ipu_options))
+
+    for param in ["train_batch_size", "eval_batch_size", "predict_batch_size"]:
+      with self.assertRaisesRegex(
+          ValueError,
+          "batch_size cannot be passed in params when a batch size argument "
+          "is passed"):
+        ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                   config=config,
+                                   **{param: 1},
+                                   params={"batch_size": 1})
+
+      with self.assertRaisesRegex(
+          ValueError, r"{} \(got 0\) must be positive".format(param)):
+        ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                   config=config,
+                                   **{param: 0})
+
+      with self.assertRaisesRegex(
+          ValueError, r"{} \(got 1\) must be divisible by "
+          r"num_workers \* num_replicas \(1 \* 2\)".format(param)):
+        ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                   config=config,
+                                   **{param: 1})
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                           config=config,
+                                           train_batch_size=2,
+                                           eval_batch_size=4,
+                                           predict_batch_size=6)
+
+    with self.assertRaisesRegex(
+        ValueError,
+        r"input_fn must have params argument to receive params\['batch_size'\]"
+    ):
+      estimator.train(input_fn_without_params, steps=1)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 1"):
+      estimator.train(mock_input_fn, steps=1)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 2"):
+      estimator.evaluate(mock_input_fn, steps=1)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 3"):
+      next(estimator.predict(mock_input_fn))
+
+    # Test that only passing train_batch_size does not pass
+    # params["batch_size"] during evaluate and predict.
+    estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                           config=config,
+                                           train_batch_size=2)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 1"):
+      estimator.train(mock_input_fn, steps=1)
+
+    with self.assertRaises(ParamsReceived) as raised:
+      estimator.evaluate(mock_input_fn, steps=1)
+    self.assertNotIn("batch_size", raised.exception.params)
+
+    with self.assertRaises(ParamsReceived) as raised:
+      next(estimator.predict(mock_input_fn))
+    self.assertNotIn("batch_size", raised.exception.params)
+
+    # Test that passing params["batch_size"] manually is fine as long
+    # as none of the batch size arguments are passed.
+    estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                           config=config,
+                                           params={"batch_size": 42})
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 42"):
+      estimator.train(mock_input_fn, steps=1)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 42"):
+      estimator.evaluate(mock_input_fn, steps=1)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 42"):
+      next(estimator.predict(mock_input_fn))
+
+  def testBatchSizeCalculationWithReplicationAndDistribution(self):
+    class ParamsReceived(RuntimeError):
+      pass
+
+    def mock_input_fn(params):
+      raise ParamsReceived(str(params))
+
+    train_cluster = server_lib.ClusterSpec(
+        {"worker": ["worker0:2222", "worker1:2222"]})
+    train_distribute = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
+        SimpleClusterResolver(train_cluster, task_type="worker", task_id=0))
+
+    eval_cluster = server_lib.ClusterSpec(
+        {"worker": ["worker0:2222", "worker1:2222", "worker2:2222"]})
+    eval_distribute = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
+        SimpleClusterResolver(eval_cluster, task_type="worker", task_id=0))
+
+    # Testing with replication here is fine with the IPU model since we never
+    # attempt to compile anything.
+    ipu_options = ipu_utils.create_ipu_config()
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=2)
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(num_replicas=2,
+                                                   ipu_options=ipu_options),
+        train_distribute=train_distribute,
+        eval_distribute=eval_distribute)
+
+    with self.assertRaisesRegex(
+        ValueError, r"train_batch_size \(got 1\) must be divisible by "
+        r"num_workers \* num_replicas \(2 \* 2\)"):
+      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                 config=config,
+                                 train_batch_size=1)
+
+    with self.assertRaisesRegex(
+        ValueError, r"eval_batch_size \(got 1\) must be divisible by "
+        r"num_workers \* num_replicas \(3 \* 2\)"):
+      ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                 config=config,
+                                 eval_batch_size=1)
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=_dummy_model_fn,
+                                           config=config,
+                                           train_batch_size=4,
+                                           eval_batch_size=12,
+                                           predict_batch_size=6)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 1"):
+      estimator.train(mock_input_fn, steps=1)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 2"):
+      estimator.evaluate(mock_input_fn, steps=1)
+
+    with self.assertRaisesRegex(ParamsReceived, "'batch_size': 3"):
+      next(estimator.predict(mock_input_fn))
 
 
 if __name__ == "__main__":
