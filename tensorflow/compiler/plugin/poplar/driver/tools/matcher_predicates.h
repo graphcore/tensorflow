@@ -30,6 +30,7 @@ bool IsRandomUniform(const HloInstruction*);
 bool IsCompareEqual(const HloInstruction*);
 bool IsConstantZero(const HloInstruction*);
 bool IsConstantOne(const HloInstruction*);
+bool IsWideConstantZero(const HloInstruction*);
 bool IsExternalPadding(const HloInstruction*);
 bool IsFloat(const HloInstruction*);
 bool IsScalar(const HloInstruction*);

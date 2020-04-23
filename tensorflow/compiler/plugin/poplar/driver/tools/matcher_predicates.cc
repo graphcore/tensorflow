@@ -454,6 +454,15 @@ bool IsAnySliceApply(const HloInstruction* inst) {
   return false;
 }
 
+bool IsWideConstantZero(const HloInstruction* inst) {
+  if (IsPopOpsFusion(inst, "wide_const")) {
+    const HloInstruction* fusion_root =
+        inst->fused_instructions_computation()->root_instruction();
+    return IsConstantZero(fusion_root->operand(0));
+  }
+  return IsConstantZero(inst);
+}
+
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op) {
   return [op](const HloInstruction* inst) -> bool {
     return IsPoplibsHloCustomOp(inst) &&

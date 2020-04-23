@@ -314,6 +314,168 @@ ENTRY c1 {
   }
 }
 
+TEST_F(SliceOptimizerTest, SliceApplyWithZeros) {
+  std::string hlo = R"(
+HloModule top
+
+_pop_op_wide_const {
+  c = f32[] constant(0.0)
+  ROOT b = f32[2] broadcast(c), dimensions={}
+}
+
+ENTRY c1 {
+  p0 = f32[5] parameter(0)
+  p1 = f32[2] parameter(1)
+  p2 = f32[2] parameter(2)
+  p3 = f32[2] parameter(3)
+  p4 = f32[16] parameter(4)
+  c1 = f32[2] fusion(), kind=kCustom, calls=_pop_op_wide_const
+  c2 = f32[3] constant({0.0, 0.0, 0.0})
+  a = f32[16] concatenate(p0, p1, c1, p2, p3, c2), dimensions={0}
+  ROOT %add = f32[16] add(p4, a)
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module0);
+
+  HloInstruction* p4 = FindInstruction(module0, "p4");
+  SliceOptimizer so(annotations);
+  EXPECT_TRUE(so.Run(module0).ValueOrDie());
+
+  int64 start_index = 0;
+  int64 paramter_index = 0;
+  HloInstruction* input = p4;
+  const std::vector<bool> is_constant{false, false, true, false, false, true};
+  const std::vector<int64> offsets{5, 2, 2, 2, 2, 3};
+
+  for (int64 i = 0; i != 6; ++i) {
+    if (!is_constant[i]) {
+      EXPECT_EQ(input->user_count(), 1);
+      input = input->users()[0];
+      EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApply)(input));
+      HloInstruction* lhs = input->mutable_operand(0);
+      const HloInstruction* rhs = input->operand(1);
+
+      // Check the instruction parameters.
+      auto* casted = Cast<HloSliceApply>(input);
+      EXPECT_EQ(casted->GetOperation(), HloOpcode::kAdd);
+      EXPECT_EQ(casted->GetApplyDimension(), 0);
+      EXPECT_EQ(casted->GetStartIndex(), start_index);
+
+      // Check the instruction operands.
+      EXPECT_EQ(rhs->opcode(), HloOpcode::kParameter);
+      EXPECT_EQ(rhs->parameter_number(), paramter_index);
+      paramter_index++;
+    }
+    start_index += offsets[i];
+  }
+  EXPECT_EQ(start_index, 16);
+  EXPECT_EQ(paramter_index, 4);
+  EXPECT_EQ(module0->entry_computation()->root_instruction(), input);
+
+  {
+    // Excute and compare to CPU.
+    auto module_to_execut = ParseAndReturnVerifiedModule(hlo, config);
+    auto p0 = LiteralUtil::CreateFullWithDescendingLayout({5}, 1.0f);
+    auto p1 = LiteralUtil::CreateFullWithDescendingLayout({2}, 2.0f);
+    auto p2 = LiteralUtil::CreateFullWithDescendingLayout({2}, 3.0f);
+    auto p3 = LiteralUtil::CreateFullWithDescendingLayout({2}, 4.0f);
+    auto p4 = LiteralUtil::CreateFullWithDescendingLayout({16}, 5.0f);
+    std::vector<Literal*> inputs = {&p0, &p1, &p2, &p3, &p4};
+    EXPECT_TRUE(RunAndCompare(std::move(module_to_execut.ValueOrDie()), inputs,
+                              ErrorSpec{1e-4, 1e-4}));
+  }
+}
+
+TEST_F(SliceOptimizerTest, SliceApplyabYWithZeros) {
+  std::string hlo = R"(
+HloModule top
+
+_pop_op_wide_const {
+  c = f32[] constant(0.0)
+  ROOT b = f32[2] broadcast(c), dimensions={}
+}
+
+ENTRY c1 {
+  p0 = f32[5] parameter(0)
+  p1 = f32[2] parameter(1)
+  p2 = f32[2] parameter(2)
+  p3 = f32[2] parameter(3)
+  p4 = f32[16] parameter(4)
+  c1 = f32[2] fusion(), kind=kCustom, calls=_pop_op_wide_const
+  c2 = f32[3] constant({0.0, 0.0, 0.0})
+  a = f32[16] concatenate(p0, p1, c1, p2, p3, c2), dimensions={0}
+  scale = f32[] constant(0.1)
+  bcast = f32[16] broadcast(scale), dimensions={}
+  ac = f32[16] multiply(a, bcast)
+  ROOT %sub = f32[16] subtract(p4, ac)
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module0);
+
+  HloInstruction* p4 = FindInstruction(module0, "p4");
+  SliceOptimizer so(annotations);
+  EXPECT_TRUE(so.Run(module0).ValueOrDie());
+
+  int64 start_index = 0;
+  int64 paramter_index = 0;
+  HloInstruction* input = p4;
+  const std::vector<bool> is_constant{false, false, true, false, false, true};
+  const std::vector<int64> offsets{5, 2, 2, 2, 2, 3};
+
+  const HloInstruction* scale = FindInstruction(module0, "scale");
+  for (int64 i = 0; i != 6; ++i) {
+    if (!is_constant[i]) {
+      EXPECT_EQ(input->user_count(), 1);
+      input = input->users()[0];
+      EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SliceApplyabY)(input));
+      HloInstruction* lhs = input->mutable_operand(0);
+      const HloInstruction* rhs = input->operand(1);
+
+      // Check the instruction parameters.
+      auto* casted = Cast<HloSliceApplyabY>(input);
+      EXPECT_EQ(casted->GetOperation(), HloOpcode::kSubtract);
+      EXPECT_EQ(casted->GetApplyDimension(), 0);
+      EXPECT_EQ(casted->GetStartIndex(), start_index);
+
+      // Check the instruction operands.
+      EXPECT_EQ(rhs->opcode(), HloOpcode::kParameter);
+      EXPECT_EQ(rhs->parameter_number(), paramter_index);
+      EXPECT_EQ(input->operand(2), scale);
+      paramter_index++;
+    }
+    start_index += offsets[i];
+  }
+  EXPECT_EQ(start_index, 16);
+  EXPECT_EQ(paramter_index, 4);
+  EXPECT_EQ(module0->entry_computation()->root_instruction(), input);
+
+  {
+    // Excute and compare to CPU.
+    auto module_to_execut = ParseAndReturnVerifiedModule(hlo, config);
+    auto p0 = LiteralUtil::CreateFullWithDescendingLayout({5}, 1.0f);
+    auto p1 = LiteralUtil::CreateFullWithDescendingLayout({2}, 2.0f);
+    auto p2 = LiteralUtil::CreateFullWithDescendingLayout({2}, 3.0f);
+    auto p3 = LiteralUtil::CreateFullWithDescendingLayout({2}, 4.0f);
+    auto p4 = LiteralUtil::CreateFullWithDescendingLayout({16}, 5.0f);
+    std::vector<Literal*> inputs = {&p0, &p1, &p2, &p3, &p4};
+    EXPECT_TRUE(RunAndCompare(std::move(module_to_execut.ValueOrDie()), inputs,
+                              ErrorSpec{1e-4, 1e-4}));
+  }
+}
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
