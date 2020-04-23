@@ -185,8 +185,13 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApply(
       [](HloOpcode opcode, HloInstruction* const input,
          HloInstruction* const update_slice, int64 apply_dimension,
          int64 start_index) -> StatusOr<HloInstruction*> {
-        return input->parent()->AddInstruction(CreateSliceApply(
-            input, update_slice, apply_dimension, start_index, opcode));
+        HloInstruction* output = input;
+        // We can skip this update if the slice is just zeros.
+        if (!IsWideConstantZero(update_slice)) {
+          output = input->parent()->AddInstruction(CreateSliceApply(
+              input, update_slice, apply_dimension, start_index, opcode));
+        }
+        return output;
       });
 }
 
@@ -198,9 +203,14 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyabY(
       [scale_update](HloOpcode opcode, HloInstruction* const input,
                      HloInstruction* const update_slice, int64 apply_dimension,
                      int64 start_index) -> StatusOr<HloInstruction*> {
-        return input->parent()->AddInstruction(
-            CreateSliceApplyabY(input, update_slice, scale_update,
-                                apply_dimension, start_index, opcode));
+        HloInstruction* output = input;
+        // We can skip this update if the slice is just zeros.
+        if (!IsWideConstantZero(update_slice)) {
+          output = input->parent()->AddInstruction(
+              CreateSliceApplyabY(input, update_slice, scale_update,
+                                  apply_dimension, start_index, opcode));
+        }
+        return output;
       });
 }
 
@@ -212,6 +222,8 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyaXb(
       [scale_input](HloOpcode opcode, HloInstruction* const input,
                     HloInstruction* const update_slice, int64 apply_dimension,
                     int64 start_index) -> StatusOr<HloInstruction*> {
+        // TODO(T19611) when the update slice is all zeros, just create a scalar
+        // multiply on the part of the input.
         return input->parent()->AddInstruction(
             CreateSliceApplyaXb(input, update_slice, scale_input,
                                 apply_dimension, start_index, opcode));
@@ -227,6 +239,8 @@ StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyaXbY(
           HloOpcode opcode, HloInstruction* const input,
           HloInstruction* const update_slice, int64 apply_dimension,
           int64 start_index) -> StatusOr<HloInstruction*> {
+        // TODO(T19611) when the update slice is all zeros, just create a scalar
+        // multiply on the part of the input.
         return input->parent()->AddInstruction(
             CreateSliceApplyaXbY(input, update_slice, scale_input, scale_update,
                                  apply_dimension, start_index, opcode));
