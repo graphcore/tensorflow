@@ -28,6 +28,7 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.keras import layers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
+from tensorflow.python.ops import lookup_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
@@ -1574,6 +1575,31 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       sess.run(res)
       out = sess.run(dequeued)
       self.assertAllEqual(np.logical_and(left, right), np.concatenate(out))
+
+  @test_util.deprecated_graph_mode_only
+  def testHashTableInDataPipeline(self):
+    keys = constant_op.constant(["brain", "salad", "surgery"])
+    values = constant_op.constant([0, 1, 2], np.int32)
+    table = lookup_ops.StaticHashTableV1(
+        initializer=lookup_ops.KeyValueTensorInitializer(keys, values),
+        default_value=-1)
+
+    dataset = dataset_ops.Dataset.from_tensor_slices(
+        ["brain brain tank salad surgery".split()])
+    dataset = dataset.map(table.lookup)
+
+    infeed_queue = ipu.ipu_infeed_queue.IPUInfeedQueue(dataset, next_feed_id())
+
+    def my_net():
+      return infeed_queue._dequeue()  # pylint: disable=protected-access
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      [res] = ipu.ipu_compiler.compile(my_net)
+
+    with session_lib.Session() as sess:
+      sess.run(infeed_queue.initializer)
+      sess.run(table.initializer)
+      self.assertAllEqual([0, 0, -1, 1, 2], sess.run(res))
 
 
 if __name__ == "__main__":

@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape.h"
 
 #include "tensorflow/core/common_runtime/process_function_library_runtime.h"
+#include "tensorflow/core/common_runtime/renamed_device.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/function_handle_cache.h"
 #include "tensorflow/core/kernels/data/unbounded_thread_pool.h"
@@ -38,25 +39,6 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/device_mgr.h"
 #include "tensorflow/core/public/session_options.h"
 #include "tensorflow/core/public/version.h"
-
-namespace {
-std::string GetTaskName(const tensorflow::Device* device) {
-  using Utils = tensorflow::DeviceNameUtils;
-
-  CHECK(device != nullptr);
-  const std::string& full_name = device->name();
-
-  Utils::ParsedName parsed_name;
-  CHECK(Utils::ParseFullName(full_name, &parsed_name))
-      << "Failed to parse: " << full_name;
-
-  std::string task_name;
-  CHECK(Utils::GetTaskName(parsed_name, &task_name))
-      << "Failed to get task name from: " << full_name;
-
-  return task_name;
-}
-}  // namespace
 
 namespace xla {
 namespace poplarplugin {
@@ -88,15 +70,13 @@ InfeedIterator::InfeedIterator(
                               ? PoplarXlaFlags::Get().max_infeed_threads
                               : tensorflow::port::MaxParallelism();
 
-  // Create the CPU device the base iterator runs on.
-  // First set up the options.
-  tensorflow::SessionOptions options;
-  (*options.config.mutable_device_count())["CPU"] = 1;
-  // Get the task name (might vary in distributed contexts).
-  const std::string task_name = GetTaskName(flr->device());
-  // Create the device manager.
+  // Wrap the given flr->device() in order to have access to any resources in
+  // the resource manager of the device, which might be captured by ops in the
+  // dataset pipeline. The device must outlive our usage here.
   device_mgr_ = absl::make_unique<tensorflow::StaticDeviceMgr>(
-      tensorflow::DeviceFactory::NewDevice("CPU", options, task_name));
+      tensorflow::RenamedDevice::NewRenamedDevice(
+          flr->device()->name(), flr->device(), /*owns_underlying=*/false,
+          /*isolate_session_state=*/false));
 
   tensorflow::Device* device = device_mgr_->ListDevices()[0];
 

@@ -21,6 +21,7 @@ from absl.testing import parameterized
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.keras import layers
+from tensorflow.python import feature_column
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
 from tensorflow.python.distribute.distribute_config import DistributeConfig
@@ -32,9 +33,9 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_estimator
+from tensorflow.python.ipu import ipu_multi_worker_strategy
 from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
-from tensorflow.python.ipu import ipu_multi_worker_strategy
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
@@ -1345,6 +1346,49 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     sample_period = iterations_per_loop
     sampled = [(i // sample_period) * sample_period for i in range(num_steps)]
     self.assertEqual(np.mean(sampled), metrics["mean_global_step"])
+
+  def testPredictWithFeatureColumns(self):
+    def my_model_fn(features, mode):
+      return model_fn_lib.EstimatorSpec(mode=mode, predictions=features)
+
+    def my_input_fn():
+      # Add some feature columns.
+      feature_columns = []
+
+      age = feature_column.numeric_column("age")
+      feature_columns.append(age)
+
+      age_buckets = feature_column.bucketized_column(age,
+                                                     boundaries=[20, 40, 60])
+      feature_columns.append(age_buckets)
+
+      direction = feature_column.categorical_column_with_vocabulary_list(
+          "direction", ["north", "east", "south", "west"])
+      direction_one_hot = feature_column.indicator_column(direction)
+      feature_columns.append(direction_one_hot)
+
+      dataset = dataset_ops.Dataset.from_tensor_slices({
+          "age": [[18], [25], [55], [90]],
+          "direction": [["west"], ["south"], ["east"], ["north"]]
+      })
+
+      # Add a dataset mapping to dense features.
+      feature_layer = layers.DenseFeatures(feature_columns)
+      dataset = dataset.map(feature_layer)
+      dataset = dataset.batch(2, drop_remainder=True)
+      return dataset
+
+    estimator = ipu_estimator.IPUEstimator(model_fn=my_model_fn,
+                                           config=ipu_run_config.RunConfig())
+
+    outputs = estimator.predict(my_input_fn)
+
+    self.assertAllEqual([[18., 1., 0., 0., 0., 0., 0., 0., 1.]], next(outputs))
+    self.assertAllEqual([[25., 0., 1., 0., 0., 0., 0., 1., 0.]], next(outputs))
+    self.assertAllEqual([[55., 0., 0., 1., 0., 0., 1., 0., 0.]], next(outputs))
+    self.assertAllEqual([[90., 0., 0., 0., 1., 1., 0., 0., 0.]], next(outputs))
+
+    del outputs  # Release generator resources.
 
 
 if __name__ == "__main__":
