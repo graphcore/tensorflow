@@ -23,7 +23,6 @@ limitations under the License.
 #include <poplar/Engine.hpp>
 #include <poplar/OptionFlags.hpp>
 #include <poplar/TensorCloneMethod.hpp>
-#include <popops/Gather.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
 #include <string>
@@ -558,18 +557,6 @@ StatusOr<poplar::Tensor> AddScatterTensor(poplar::Graph& graph,
   return AddDynamicSliceTensor(graph, debug_name, shape_xla, slice_shape_xla);
 }
 
-StatusOr<poplar::Tensor> AddGatherTensor(
-    poplar::Graph& graph, const std::string& debug_name,
-    const xla::Shape& shape_xla, std::vector<std::size_t> slice_sizes,
-    std::vector<unsigned> start_index_map) {
-  const auto shape = PoplarShapeFromXlaShape(shape_xla);
-
-  TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(shape_xla));
-
-  return popops::createGatherInput(graph, poplar_type, shape, slice_sizes,
-                                   start_index_map, debug_name);
-}
-
 static StatusOr<poplar::Tensor> AddLeftMatMul(poplar::Graph& graph,
                                               const std::string& debug_name,
                                               const xla::Shape& shape,
@@ -779,30 +766,6 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
 
               TF_ASSIGN_OR_RETURN(out, AddScatterTensor(graph, debug_name,
                                                         tshape, slice_shape));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
-        case HloOpcode::kGather: {
-          switch (input_index) {
-            case 0: {
-              const auto dim_numbers = target->gather_dimension_numbers();
-              const auto slice_sizes = target->gather_slice_sizes();
-              const auto start_index_map = dim_numbers.start_index_map();
-
-              TF_ASSIGN_OR_RETURN(
-                  out, AddGatherTensor(
-                           graph, debug_name, tshape,
-                           {slice_sizes.begin(), slice_sizes.end()},
-                           {start_index_map.begin(), start_index_map.end()}));
-              break;
-            }
-            case 1: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddIndicesTensor(graph, debug_name, tshape, resources));
               break;
             }
             default:
