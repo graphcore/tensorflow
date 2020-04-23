@@ -880,16 +880,52 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   HloComputation* entry = module->entry_computation();
 
-  if (poplar_executor->IpuTraceEventsEnabled()) {
-    poplar_executor->AddCompileBeginEventRecord(module->name());
-  }
-
   // Set layout if there isn't one
   auto comp_layout =
       module->mutable_entry_computation_layout()->mutable_result_layout();
   if (!comp_layout->LayoutIsSet()) {
     auto shape = entry->root_instruction()->shape();
     TF_CHECK_OK(comp_layout->CopyLayoutFromShape(shape));
+  }
+
+  std::vector<std::vector<Literal>> constant_output;
+  const bool is_constant_output = GetConstantOutput(
+      entry->root_instruction(), comp_layout->shape(), constant_output);
+
+  const bool any_computation_has_side_effects =
+      AnyComputationHasSideEffects(module.get());
+  const auto is_constant_graph =
+      is_constant_output && !any_computation_has_side_effects;
+
+  std::vector<uint64> remaped_output;
+
+  const bool all_outputs_are_parameters =
+      AreAllOutputsParameters(module.get(), remaped_output);
+
+  bool is_remap_graph =
+      all_outputs_are_parameters && !any_computation_has_side_effects;
+
+  const bool all_scalar_elementwise_graph =
+      AreAllScalarElementwiseGraph(module.get());
+
+  const bool is_scalar_elementwise_graph =
+      all_scalar_elementwise_graph && !any_computation_has_side_effects;
+
+  bool compile = true;
+  if (is_constant_graph) {
+    VLOG(1) << "Skip engine compilation - output is constant.";
+    compile = false;
+  } else if (is_remap_graph) {
+    VLOG(1) << "Skip engine compilation - all outputs are inputs.";
+    compile = false;
+  } else if (is_scalar_elementwise_graph) {
+    VLOG(1) << "Skip engine compilation - scalar elementwise graph.";
+    compile = false;
+  }
+
+  const bool enable_trace_events = poplar_executor->IpuTraceEventsEnabled();
+  if (enable_trace_events && compile) {
+    poplar_executor->AddCompileBeginEventRecord(module->name());
   }
 
   // Strip all layout information, as the Poplar lowering does not use
@@ -912,38 +948,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   std::unique_ptr<poplar::Engine> engine;
   std::vector<poplar::program::Program> progs;
-
-  std::vector<std::vector<Literal>> constant_output;
-  const bool is_constant_output = GetConstantOutput(
-      entry->root_instruction(), comp_layout->shape(), constant_output);
-
-  const bool any_computation_has_side_effects =
-      AnyComputationHasSideEffects(module.get());
-  const auto is_constant_graph =
-      is_constant_output && !any_computation_has_side_effects;
-
   std::string map_json;
-  std::vector<uint64> remaped_output;
 
-  const bool all_outputs_are_parameters =
-      AreAllOutputsParameters(module.get(), remaped_output);
-
-  bool is_remap_graph =
-      all_outputs_are_parameters && !any_computation_has_side_effects;
-
-  const bool all_scalar_elementwise_graph =
-      AreAllScalarElementwiseGraph(module.get());
-
-  const bool is_scalar_elementwise_graph =
-      all_scalar_elementwise_graph && !any_computation_has_side_effects;
-
-  if (is_constant_graph) {
-    VLOG(1) << "Skip engine compilation - output is constant.";
-  } else if (is_remap_graph) {
-    VLOG(1) << "Skip engine compilation - all outputs are inputs.";
-  } else if (is_scalar_elementwise_graph) {
-    VLOG(1) << "Skip engine compilation - scalar elementwise graph.";
-  } else {
+  if (compile) {
     EntryVisitor visitor(resources, entry);
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(
@@ -1063,7 +1070,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
   }
 
-  if (poplar_executor->IpuTraceEventsEnabled()) {
+  if (enable_trace_events && compile) {
     std::stringstream report_stream;
 
     if (poplar_executor->CompilerReportingEnabled() && engine != nullptr) {

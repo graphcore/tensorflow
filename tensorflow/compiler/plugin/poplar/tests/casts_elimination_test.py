@@ -53,7 +53,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, [2.0, 0.5, 1.0])
 
-      report.parse_log(assert_len=2)
+      report.parse_log(assert_len=0)
       report.assert_no_compute_set()
 
   def testNoCastsF16ReduceWithReshape(self):
@@ -120,7 +120,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       result = sess.run(c, fd)
       self.assertAllClose(result, [2.0, 0.5, 1.0])
 
-      report.parse_log(assert_len=2)
+      report.parse_log(assert_len=0)
       report.assert_no_compute_set()
 
   def testDontRemoveCastsIfUsed(self):
