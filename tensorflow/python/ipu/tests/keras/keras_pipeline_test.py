@@ -463,6 +463,8 @@ class IPUPipelineTest(test.TestCase):
   def testFitTwice(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
+      ds = test_dataset()
+
       m = ipu.keras.PipelinedModel(fixed_weight_pipeline(), pipeline_depth=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
@@ -476,14 +478,14 @@ class IPUPipelineTest(test.TestCase):
       ipu.ops.summary_ops.get_ipu_reports()
 
       # Fit the weights to the dataset
-      history = m.fit(test_dataset(), steps_per_epoch=2)
+      history = m.fit(ds, steps_per_epoch=2)
       l = history.history['loss'][0]
 
       # # Record weights
       w_1 = [w.numpy() for w in m.weights]
 
       # Fit the weights to the dataset
-      history = m.fit(test_dataset(), steps_per_epoch=2)
+      history = m.fit(ds, steps_per_epoch=2)
 
       # Loss should be different after second training.
       self.assertTrue(l > history.history['loss'][0])
@@ -495,10 +497,26 @@ class IPUPipelineTest(test.TestCase):
         self.assertFalse(np.all(w1 == w2))
 
       # Should have compiled the graph once, and executed twice.
-      # TODO(T18639) fix the number of compiles.
       evts = ipu.ops.summary_ops.get_ipu_reports()
       evts = ipu.utils.extract_compile_reports(evts)
-      self.assertEqual(2, len(evts))
+      self.assertEqual(1, len(evts))
+
+      # Fit the weights with a new dataset
+      history = m.fit(test_dataset(), steps_per_epoch=2)
+
+      # Loss should be different after second training.
+      self.assertTrue(l > history.history['loss'][0])
+
+      w_3 = [w.numpy() for w in m.weights]
+
+      # Weights should be different too.
+      for w2, w3 in zip(w_2, w_3):
+        self.assertFalse(np.all(w2 == w3))
+
+      # Should have compiled the graph once more
+      evts = ipu.ops.summary_ops.get_ipu_reports()
+      evts = ipu.utils.extract_compile_reports(evts)
+      self.assertEqual(1, len(evts))
 
   @test_util.run_v2_only
   def testFitHistoryStepsPerEpochTwoEpochs(self):

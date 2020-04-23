@@ -18,6 +18,7 @@ Pipeline interface for Keras
 """
 
 from functools import partial
+import weakref
 
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
@@ -38,15 +39,6 @@ from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.tracking import base as trackable
-
-
-def next_feed_id(prefix):
-  result = prefix + str(next_feed_id.feed_count)
-  next_feed_id.feed_count += 1
-  return result
-
-
-next_feed_id.feed_count = 0
 
 
 class _TensorflowOptimizerWrapper(Optimizer):
@@ -221,6 +213,10 @@ class PipelinedModel(Model):
     self.args = kwargs
     self.history = None
     self.stages = stages
+    self.infeed = None
+    self.outfeed = None
+    self.last_ds = None
+    self.last_mode = None
 
   def build(self, input_shape):
     pass
@@ -278,6 +274,11 @@ class PipelinedModel(Model):
 
     if kwargs.pop('run_eagerly', False):
       raise ValueError("PipelineModel cannot be run Eagerly.")
+
+    # If a previous run has been done then the data feeds will need to
+    # be reset.
+    self.infeed = None
+    self.outfeed = None
 
     return super(PipelinedModel,
                  self).compile(optimizer=optimizer,
@@ -364,16 +365,6 @@ class PipelinedModel(Model):
 
       return x, targets
 
-    # The pipeline stages, a set of feed forward functions.
-    if mode == ModeKeys.PREDICT:
-      stage_fn = call_inference_stage
-    else:
-      stage_fn = call_training_stage
-
-    stages = []
-    for stage_id in range(len(self.stages)):
-      stages.append(partial(stage_fn, stage_id))
-
     # Function for generating the optimizer config for pipelines.
     def optimizer_function(loss, *_):
 
@@ -398,6 +389,16 @@ class PipelinedModel(Model):
 
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
+    # The pipeline stages, a set of feed forward functions.
+    if mode == ModeKeys.PREDICT:
+      stage_fn = call_inference_stage
+    else:
+      stage_fn = call_training_stage
+
+    stages = []
+    for stage_id in range(len(self.stages)):
+      stages.append(partial(stage_fn, stage_id))
+
     opt = optimizer_function if mode == ModeKeys.TRAIN else None
 
     pipeline = pipelining_ops.pipeline(stages,
@@ -411,14 +412,6 @@ class PipelinedModel(Model):
                                        **self.args)
 
     return pipeline.outputs
-
-  @def_function.function(autograph=False)
-  def _run_helper(self, infeed_queue, outfeed_queue, repeat_count, mode):
-
-    strategy = distribution_strategy_context.get_strategy()
-    return strategy.experimental_run_v2(
-        self._internal_run_loop,
-        args=[infeed_queue, outfeed_queue, repeat_count, mode])
 
   @trackable.no_automatic_dependency_tracking
   def _do_internal(self, mode, ds, epochs, verbose, callbacks, initial_epoch,
@@ -501,10 +494,17 @@ class PipelinedModel(Model):
                                          count_mode='steps',
                                          mode=mode)
 
-    # Create queues
-    infeed_queue = ipu_infeed_queue.IPUInfeedQueue(ds, next_feed_id("infeed"))
+    # If the dataset or mode has changed, then we need to recreate the feeds
+    if not self.last_ds or self.last_ds() != ds or self.last_mode != mode:
+      self.infeed = None
+      self.outfeed = None
+      self.last_ds = weakref.ref(ds)
+      self.last_mode = mode
 
-    outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(next_feed_id("outfeed"))
+    # Create infeed and outfeed
+    if not self.infeed or not self.outfeed:
+      self.infeed = ipu_infeed_queue.IPUInfeedQueue(ds, "infeed")
+      self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
 
     initial_epoch = self._maybe_load_initial_epoch_from_ckpt(
         initial_epoch, mode)
@@ -512,7 +512,7 @@ class PipelinedModel(Model):
     callbacks.on_train_begin(mode)
 
     # Ask the poplar executor to create a dataset iterator
-    infeed_queue.initializer  # pylint: disable=pointless-statement
+    self.infeed.initializer  # pylint: disable=pointless-statement
 
     # Aggregator for combining the various outputs/metrics together
     if mode != ModeKeys.PREDICT:
@@ -544,10 +544,10 @@ class PipelinedModel(Model):
         callbacks.on_batch_begin(batch_num, batch_logs)
 
         # Create and run the pipeline.
-        self._run_helper(infeed_queue=infeed_queue,
-                         outfeed_queue=outfeed_queue,
-                         repeat_count=steps_per_run,
-                         mode=mode)
+        strategy = distribution_strategy_context.get_strategy()
+        strategy.experimental_run_v2(
+            self._internal_run_loop,
+            args=[self.infeed, self.outfeed, steps_per_run, mode])
 
         # Send an end of batches
         callbacks.on_batch_end(batch_num, batch_logs)
@@ -564,11 +564,11 @@ class PipelinedModel(Model):
 
       # Restart the iterator at the end of the epoch if necessary
       if recreate_iterator:
-        infeed_queue.deleter  # pylint: disable=pointless-statement
-        infeed_queue.initializer  # pylint: disable=pointless-statement
+        self.infeed.deleter  # pylint: disable=pointless-statement
+        self.infeed.initializer  # pylint: disable=pointless-statement
 
       # Fetch the outfeed for the history
-      results = outfeed_queue.dequeue()
+      results = self.outfeed.dequeue()
       results = map(lambda x: x.numpy(), results)
       results = enumerate(zip(*results))
 
@@ -590,10 +590,10 @@ class PipelinedModel(Model):
     callbacks.on_train_end(mode)
 
     # Close the infeed queue at the end of the epoch
-    infeed_queue.deleter  # pylint: disable=pointless-statement
+    self.infeed.deleter  # pylint: disable=pointless-statement
 
     # Close the outfeed queue iterator.
-    outfeed_queue.deleter  # pylint: disable=pointless-statement
+    self.outfeed.deleter  # pylint: disable=pointless-statement
 
     # fit() method returns the history object
     if mode == ModeKeys.TRAIN:
@@ -769,7 +769,6 @@ class PipelinedModel(Model):
                        "method to apply batching at the input dataset level.")
 
     structure = dataset_ops.get_structure(x)
-    print(structure)
     if not (isinstance(structure, tensor_spec.TensorSpec) or
             (isinstance(structure, tensor_spec.TensorSpec)
              and len(structure) != 1)):
