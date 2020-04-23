@@ -52,13 +52,6 @@ int64 HloSliceApplyBase::GetStartIndex() const { return start_index_; }
 
 HloOpcode HloSliceApplyBase::GetOperation() const { return operation_; }
 
-std::unique_ptr<HloInstruction> HloSliceApplyBase::CloneWithNewOperandsImpl(
-    const Shape&, absl::Span<HloInstruction* const> new_operands,
-    HloCloneContext*) const {
-  return CreateSliceApply(new_operands[0], new_operands[1], GetApplyDimension(),
-                          GetStartIndex(), GetOperation());
-}
-
 std::vector<std::string> HloSliceApplyBase::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   std::vector<std::string> attributes;
@@ -75,6 +68,13 @@ HloSliceApply::HloSliceApply(HloInstruction* const input,
                              HloOpcode operation)
     : HloSliceApplyBase({input, update}, apply_dimension, start_index,
                         operation, PoplarOp::SliceApply) {}
+
+std::unique_ptr<HloInstruction> HloSliceApply::CloneWithNewOperandsImpl(
+    const Shape&, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return CreateSliceApply(new_operands[0], new_operands[1], GetApplyDimension(),
+                          GetStartIndex(), GetOperation());
+}
 
 std::unique_ptr<HloInstruction> CreateSliceApply(HloInstruction* const input,
                                                  HloInstruction* const update,
@@ -96,6 +96,14 @@ HloSliceApplyaXbY::HloSliceApplyaXbY(HloInstruction* const input,
                         apply_dimension, start_index, operation,
                         PoplarOp::SliceApplyaXbY) {}
 
+std::unique_ptr<HloInstruction> HloSliceApplyaXbY::CloneWithNewOperandsImpl(
+    const Shape&, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return CreateSliceApplyaXbY(new_operands[0], new_operands[1], new_operands[2],
+                              new_operands[3], GetApplyDimension(),
+                              GetStartIndex(), GetOperation());
+}
+
 std::unique_ptr<HloInstruction> CreateSliceApplyaXbY(
     HloInstruction* const input, HloInstruction* const update,
     HloInstruction* const scale_input, HloInstruction* const scale_update,
@@ -114,6 +122,14 @@ HloSliceApplyabY::HloSliceApplyabY(HloInstruction* const input,
     : HloSliceApplyBase({input, update, scale_update}, apply_dimension,
                         start_index, operation, PoplarOp::SliceApplyabY) {}
 
+std::unique_ptr<HloInstruction> HloSliceApplyabY::CloneWithNewOperandsImpl(
+    const Shape&, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return CreateSliceApplyabY(new_operands[0], new_operands[1], new_operands[2],
+                             GetApplyDimension(), GetStartIndex(),
+                             GetOperation());
+}
+
 std::unique_ptr<HloInstruction> CreateSliceApplyabY(
     HloInstruction* const input, HloInstruction* const update,
     HloInstruction* const scale_update, int64 apply_dimensions,
@@ -130,6 +146,14 @@ HloSliceApplyaXb::HloSliceApplyaXb(HloInstruction* const input,
                                    HloOpcode operation)
     : HloSliceApplyBase({input, update, scale_input}, apply_dimension,
                         start_index, operation, PoplarOp::SliceApplyaXb) {}
+
+std::unique_ptr<HloInstruction> HloSliceApplyaXb::CloneWithNewOperandsImpl(
+    const Shape&, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return CreateSliceApplyaXb(new_operands[0], new_operands[1], new_operands[2],
+                             GetApplyDimension(), GetStartIndex(),
+                             GetOperation());
+}
 
 std::unique_ptr<HloInstruction> CreateSliceApplyaXb(
     HloInstruction* const input, HloInstruction* const update,

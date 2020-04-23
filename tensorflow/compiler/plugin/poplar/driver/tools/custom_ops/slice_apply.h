@@ -46,10 +46,6 @@ class HloSliceApplyBase : public HloPoplarInstruction {
       const HloPrintOptions& options) const override;
 
  private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const> operands,
-      HloCloneContext* context) const override;
-
   const int64 apply_dimension_;
   const int64 start_index_;
   const HloOpcode operation_;
@@ -61,6 +57,11 @@ class HloSliceApply : public HloSliceApplyBase {
  public:
   HloSliceApply(HloInstruction* const input, HloInstruction* const update,
                 int64 apply_dimension, int64 start_index, HloOpcode operation);
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* context) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateSliceApply(HloInstruction* const input,
@@ -78,6 +79,11 @@ class HloSliceApplyaXbY : public HloSliceApplyBase {
                     HloInstruction* const scale_input,
                     HloInstruction* const scale_update, int64 apply_dimension,
                     int64 start_index, HloOpcode operation);
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* context) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateSliceApplyaXbY(
@@ -93,6 +99,11 @@ class HloSliceApplyabY : public HloSliceApplyBase {
   HloSliceApplyabY(HloInstruction* const input, HloInstruction* const update,
                    HloInstruction* const scale_update, int64 apply_dimension,
                    int64 start_index, HloOpcode operation);
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* context) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateSliceApplyabY(
@@ -108,6 +119,11 @@ class HloSliceApplyaXb : public HloSliceApplyBase {
   HloSliceApplyaXb(HloInstruction* const input, HloInstruction* const update,
                    HloInstruction* const scale_input, int64 apply_dimension,
                    int64 start_index, HloOpcode operation);
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloCloneContext* context) const override;
 };
 
 std::unique_ptr<HloInstruction> CreateSliceApplyaXb(

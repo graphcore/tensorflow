@@ -875,6 +875,39 @@ StatusOr<HloInstruction*> RemoveParametersFromCall(
   return new_call;
 }
 
+StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
+                                            HloComputation* comp_to_inline,
+                                            bool copy_sharding) {
+  HloComputation* comp = caller->parent();
+  // Hoist the computation out.
+  absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisting_map;
+  for (HloInstruction* inst : comp_to_inline->MakeInstructionPostOrder()) {
+    HloInstruction* hoisted;
+    if (inst->opcode() == HloOpcode::kParameter) {
+      hoisted = caller->mutable_operand(inst->parameter_number());
+    } else {
+      std::vector<HloInstruction*> new_operands(inst->operand_count());
+      absl::c_transform(inst->operands(), new_operands.begin(),
+                        [&hoisting_map](HloInstruction* operand) {
+                          return hoisting_map.at(operand);
+                        });
+      // Clone new instruction inside the computation.
+      hoisted = comp->AddInstruction(
+          inst->CloneWithNewOperands(inst->shape(), new_operands));
+
+      if (copy_sharding) {
+        CopyShardingIfPresent(caller, hoisted);
+      }
+    }
+    hoisting_map[inst] = hoisted;
+  }
+  HloInstruction* new_root =
+      hoisting_map.at(comp_to_inline->root_instruction());
+  // Replace all uses.
+  TF_RETURN_IF_ERROR(comp->ReplaceInstruction(caller, new_root));
+  return new_root;
+}
+
 StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
 GetPipelineSchedule(const HloInstruction* pipeline_op) {
   TF_ASSIGN_OR_RETURN(auto backend_config,

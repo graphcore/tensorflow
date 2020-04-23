@@ -169,6 +169,13 @@ bool IsAllowedTupleSharding(const HloInstruction* inst) {
   }
 }
 
+void CopyShardingIfPresent(HloInstruction* const from,
+                           HloInstruction* const to) {
+  if (from->has_sharding()) {
+    to->set_sharding(from->sharding());
+  }
+}
+
 int64 CountShapes(const Shape& shape) {
   int64 n = 0;
   if (shape.IsTuple()) {

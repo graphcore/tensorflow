@@ -100,6 +100,10 @@ int64 GetSingleShardingDeviceId(const HloInstruction* inst);
 // Returns whether the instruction is allowed to have tuple sharding.
 bool IsAllowedTupleSharding(const HloInstruction* inst);
 
+// If `from` has sharding, then copy it to `to`
+void CopyShardingIfPresent(HloInstruction* const from,
+                           HloInstruction* const to);
+
 // Count the number of leaf shapes in a shape tuple
 int64 CountShapes(const Shape& shape);
 

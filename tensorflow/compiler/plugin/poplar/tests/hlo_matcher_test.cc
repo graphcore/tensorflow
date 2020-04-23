@@ -462,8 +462,7 @@ ENTRY c1 {
   EXPECT_EQ(call_inst->operand(1)->name(), "c1");
 
   // Expect the call body
-  auto* call_root =
-      call_inst->fused_instructions_computation()->root_instruction();
+  auto* call_root = call_inst->fused_expression_root();
   EXPECT_EQ(call_root->opcode(), HloOpcode::kAdd);
   EXPECT_EQ(call_root->operand(1)->opcode(), HloOpcode::kParameter);
   EXPECT_EQ(call_root->operand(1)->parameter_number(), 1);
@@ -533,8 +532,7 @@ ENTRY c1 {
   EXPECT_EQ(call_inst->operand(0)->name(), "c1");
   EXPECT_EQ(call_inst->operand(1)->name(), "sub");
   // Expect the call body
-  auto* call_root =
-      call_inst->fused_instructions_computation()->root_instruction();
+  auto* call_root = call_inst->fused_expression_root();
   EXPECT_EQ(call_root->opcode(), HloOpcode::kAdd);
   EXPECT_EQ(call_root->operand(0)->opcode(), HloOpcode::kParameter);
   EXPECT_EQ(call_root->operand(0)->parameter_number(), 1);
@@ -606,8 +604,7 @@ ENTRY c1 {
   EXPECT_EQ(call_inst->operand(0)->name(), "i1");
   EXPECT_EQ(call_inst->operand(1)->name(), "c1");
   // Expect the call body
-  auto* call_root =
-      call_inst->fused_instructions_computation()->root_instruction();
+  auto* call_root = call_inst->fused_expression_root();
   EXPECT_EQ(call_root->opcode(), HloOpcode::kMultiply);
   EXPECT_EQ(call_root->operand(1)->opcode(), HloOpcode::kParameter);
   EXPECT_EQ(call_root->operand(1)->parameter_number(), 1);

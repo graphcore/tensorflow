@@ -12,10 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/post_serialize_gradient_accumulation.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -30,19 +31,29 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-using GradientAccumulationOptimizerTest = HloTestBase;
+using PostSerializeGradientAccumulationTest = HloTestBase;
 
-TEST_F(GradientAccumulationOptimizerTest, ReplaceGradientAccumulatorAdd) {
+TEST_F(PostSerializeGradientAccumulationTest, LowerGradientAccumulationFusion) {
   const string& hlo_string = R"(
 HloModule main
+
+_pop_op_serialized_gradient_accumulation {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  a0 = f32[] add(p0, p1)
+  p2 = f32[] parameter(2)
+  a1 = f32[] add(a0, p2)
+  p3 = f32[] parameter(3)
+  ROOT a2 = f32[] add(a1, p3)
+}
 
 ENTRY main {
   p0 = f32[] parameter(0)
   p1 = f32[] parameter(1)
   p2 = f32[] parameter(2)
-  x = f32[] add(p2, p1)
-  update = f32[] custom-call(p0, p1), custom_call_target="GradientAccumulatorAdd"
-  ROOT t = (f32[], f32[]) tuple(update, x)
+  p3 = f32[] parameter(3)
+  grad = f32[] fusion(p0, p1, p2, p3), kind=kCustom, calls=_pop_op_serialized_gradient_accumulation
+  ROOT t = (f32[]) tuple(grad)
 }
 )";
   HloModuleConfig config;
@@ -50,33 +61,22 @@ ENTRY main {
 
   auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
   EXPECT_TRUE(module_or_status.ok());
-
   auto* module = module_or_status.ValueOrDie().get();
 
-  CompilerAnnotations annotations(module);
-
-  CustomOpReplacer custom_op_replacer;
-  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+  PostSerializeGradientAccumulation psga;
+  EXPECT_TRUE(psga.Run(module).ValueOrDie());
 
   HloInstruction* root = module->entry_computation()->root_instruction();
-  HloInstruction* update = root->mutable_operand(0);
-  HloInstruction* x = root->mutable_operand(1);
-  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(update));
-  // Add a control dependency.
-  TF_EXPECT_OK(x->AddControlDependencyTo(update));
+  EXPECT_TRUE(Match(
+      root->operand(0),
+      m::Add(m::Add(m::Add(m::Parameter(0), m::Parameter(1)), m::Parameter(2)),
+             m::Parameter(3))));
   HloInstruction* p0 = module->entry_computation()->parameter_instruction(0);
-  EXPECT_EQ(p0->control_predecessors().size(), 0);
-
-  GradientAccumulationOptimizer gao;
-  EXPECT_TRUE(gao.Run(module).ValueOrDie());
-  update = root->mutable_operand(0);
-  EXPECT_EQ(update->opcode(), HloOpcode::kAdd);
-  EXPECT_THAT(update->control_predecessors(), ::testing::ElementsAre(x));
   HloInstruction* p1 = module->entry_computation()->parameter_instruction(1);
   EXPECT_THAT(p0->control_predecessors(), ::testing::ElementsAre(p1));
 }
 
-TEST_F(GradientAccumulationOptimizerTest, AddCreatorControlDeps) {
+TEST_F(PostSerializeGradientAccumulationTest, AddCreatorControlDeps) {
   const string& hlo_string = R"(
 HloModule top
 
@@ -178,8 +178,8 @@ ENTRY e {
   EXPECT_TRUE(
       IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(creator));
 
-  GradientAccumulationOptimizer gao;
-  EXPECT_TRUE(gao.Run(module).ValueOrDie());
+  PostSerializeGradientAccumulation psga;
+  EXPECT_TRUE(psga.Run(module).ValueOrDie());
 
   // Expect the forward stage to be a control dependency.
   EXPECT_THAT(creator->control_predecessors(),

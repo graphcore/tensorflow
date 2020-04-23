@@ -13,15 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/post_serialize_gradient_accumulation.h"
 
 #include <memory>
+#include <queue>
+#include <vector>
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-#include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_reachability.h"
@@ -29,36 +30,56 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-StatusOr<bool> ConvertGradientAccumulatorAdds(HloModule* module) {
+constexpr char kFusionName[] = "serialized_gradient_accumulation";
+
+Status InlineSerializedGradientAccumulation(HloInstruction* fusion) {
+  HloComputation* fusion_comp = fusion->fused_instructions_computation();
+  HloComputation* comp = fusion->parent();
+  HloInstruction* accumulator = fusion->mutable_operand(0);
+  // Inline the computation.
+  TF_ASSIGN_OR_RETURN(
+      HloInstruction * output,
+      InlineComputation(fusion, fusion_comp, /*copy_sharding*/ true));
+
+  // Add a control dependency to the accumulator from all other operands
+  // from its user to make sure it is allocated late as possible.
+  CHECK_EQ(accumulator->user_count(), 1);
+  auto reachability_map = HloReachabilityMap::Build(comp);
+  HloInstruction* accumulator_user = accumulator->users()[0];
+  for (HloInstruction* operand : accumulator_user->operands()) {
+    if (operand == accumulator) {
+      continue;
+    }
+    if (reachability_map->IsReachable(accumulator, operand)) {
+      continue;
+    }
+
+    TF_RETURN_IF_ERROR(operand->AddControlDependencyTo(accumulator));
+    reachability_map->UpdateReachabilityThroughInstruction(accumulator);
+  }
+  return Status::OK();
+}
+
+StatusOr<bool> InlineSerializedGradientAccumulations(HloModule* module) {
   bool changed = false;
   for (HloComputation* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
     }
-    auto reachability_map = HloReachabilityMap::Build(comp);
-    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
-      if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorAdd)(inst)) {
-        continue;
-      }
-      // Convert the GradientAccumulatorAdd into a normal add.
-      HloInstruction* lhs = inst->mutable_operand(0);
-      HloInstruction* rhs = inst->mutable_operand(1);
-      TF_ASSIGN_OR_RETURN(HloInstruction * new_add,
-                          MakeBinaryHlo(HloOpcode::kAdd, lhs, rhs));
-      inst->SetupDerivedInstruction(new_add);
-      // Copy control dependencies.
-      TF_RETURN_IF_ERROR(new_add->CopyAllControlDepsFrom(inst));
-      TF_RETURN_IF_ERROR(inst->DropAllControlDeps());
-      // Add a control dependency from the rhs to lhs to make sure the gradient
-      // accumulation buffer is allocated as late as possible.
-      if (!reachability_map->IsReachable(rhs, lhs)) {
-        TF_CHECK_OK(rhs->AddControlDependencyTo(lhs));
-      }
-      TF_RETURN_IF_ERROR(comp->ReplaceInstruction(inst, new_add));
-      changed = true;
 
-      // Rebuild the map.
-      reachability_map = HloReachabilityMap::Build(comp);
+    // Find the fusions inside of the computations.
+    std::vector<HloInstruction*> accumulator_fusions;
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+      if (IsPopOpsFusion(inst, kFusionName)) {
+        accumulator_fusions.push_back(inst);
+      }
+    }
+
+    // Inline them.
+    for (HloInstruction* accumulator_fusion : accumulator_fusions) {
+      changed = true;
+      TF_RETURN_IF_ERROR(
+          InlineSerializedGradientAccumulation(accumulator_fusion));
     }
   }
   return changed;
@@ -120,16 +141,17 @@ StatusOr<bool> AddAllocationControlDependencies(HloModule* module) {
 }
 }  // namespace
 
-StatusOr<bool> GradientAccumulationOptimizer::Run(HloModule* module) {
-  VLOG(2) << "Before GradientAccumulationOptimizer:";
+StatusOr<bool> PostSerializeGradientAccumulation::Run(HloModule* module) {
+  VLOG(2) << "Before PostSerializeGradientAccumulation:";
   XLA_VLOG_LINES(2, module->ToString());
-  TF_ASSIGN_OR_RETURN(const bool changed_accumulators,
-                      ConvertGradientAccumulatorAdds(module));
+  TF_ASSIGN_OR_RETURN(const bool inlined_accumulators,
+                      InlineSerializedGradientAccumulations(module));
   TF_ASSIGN_OR_RETURN(const bool changed_creators,
                       AddAllocationControlDependencies(module));
-  const bool changed = changed_accumulators || changed_creators;
+
+  const bool changed = inlined_accumulators || changed_creators;
   if (changed) {
-    VLOG(2) << "After GradientAccumulationOptimizer:";
+    VLOG(2) << "After PostSerializeGradientAccumulation:";
     XLA_VLOG_LINES(2, module->ToString());
   } else {
     VLOG(2) << "No changes were made to the module.";

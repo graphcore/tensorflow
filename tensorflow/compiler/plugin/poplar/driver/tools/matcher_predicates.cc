@@ -456,8 +456,7 @@ bool IsAnySliceApply(const HloInstruction* inst) {
 
 bool IsWideConstantZero(const HloInstruction* inst) {
   if (IsPopOpsFusion(inst, "wide_const")) {
-    const HloInstruction* fusion_root =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* fusion_root = inst->fused_expression_root();
     return IsConstantZero(fusion_root->operand(0));
   }
   if (inst->opcode() == HloOpcode::kBroadcast) {

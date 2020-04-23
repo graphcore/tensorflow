@@ -52,7 +52,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_wide_const.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gather_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_fuser.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/gradient_accumulation_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/hlo_computation_name_uniquify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/host_compute_barrier_inserter.h"
@@ -83,6 +82,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_variables_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/post_serialize_gradient_accumulation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_blocked_recompute_suggestions.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/remove_recompute_suggestions.h"
@@ -90,6 +90,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/serialize_gradient_accumulation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/suggest_recompute.h"
@@ -923,6 +924,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     if (poplar_executor->EnableMatmulCombiner()) {
       pipeline.AddPass<MatmulCombiner>(resources.annotations);
     }
+    pipeline.AddPass<SerializeGradientAccumulation>();
     pipeline.AddPass<SliceOptimizer>(resources.annotations);
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();
@@ -962,7 +964,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<PipelineOptimizer>();
     }
     pipeline.AddPass<InterIpuCopyInserter>();
-    pipeline.AddPass<GradientAccumulationOptimizer>();
+    pipeline.AddPass<PostSerializeGradientAccumulation>();
     // Passes below this point need to respect the inplace information.
     pipeline.AddPass<InplaceFinder>();
     pipeline.AddPass<ExpressionOutliner>();
