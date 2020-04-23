@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_GRADIENT_ACCUMULATION_OPTIMIZER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_GRADIENT_ACCUMULATION_OPTIMIZER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_SERIALIZE_GRADIENT_ACCUMULATION_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_SERIALIZE_GRADIENT_ACCUMULATION_H_
 
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
@@ -41,12 +41,15 @@ namespace poplarplugin {
  * This means that a does not need to be live for b to be added to the
  * accumulator.
  *
- * TODO(T17235) - Do the serialization.
+ * The serialized gradient accumulation is outlined into a fusion computation so
+ * that the serialized gradient application cannot be modified by other passes.
+ * After all other passes which could have modified the computation are
+ * executed, the PostSerializeGradientAccumulation pass should be executed.
  */
-class GradientAccumulationOptimizer : public HloModulePass {
+class SerializeGradientAccumulation : public HloModulePass {
  public:
   absl::string_view name() const override {
-    return "gradient-accumulation-optimizer";
+    return "serialize-gradient-accumulation";
   }
 
   StatusOr<bool> Run(HloModule* module) override;
@@ -55,4 +58,4 @@ class GradientAccumulationOptimizer : public HloModulePass {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_GRADIENT_ACCUMULATION_OPTIMIZER_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_SERIALIZE_GRADIENT_ACCUMULATION_H_

@@ -154,6 +154,12 @@ StatusOr<std::map<int64, std::set<int64>>> GetDuplicateCallInputs(
 StatusOr<HloInstruction*> RemoveParametersFromCall(
     HloInstruction* call, const std::set<int64>& parameters_to_remove);
 
+// Inlines the provided computation and replaces the output at caller site with
+// the inlined root instruction.
+StatusOr<HloInstruction*> InlineComputation(HloInstruction* caller,
+                                            HloComputation* comp_to_inline,
+                                            bool copy_sharding = false);
+
 // Get a schedule from a pipeline.
 StatusOr<PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>
 GetPipelineSchedule(const HloInstruction* pipeline_op);

@@ -106,8 +106,7 @@ class WideConstOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
-    const HloInstruction* root =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* root = inst->fused_expression_root();
 
     const HloInstruction* constant = root->operand(0);
     CHECK_EQ(constant->opcode(), HloOpcode::kConstant);
@@ -208,8 +207,7 @@ class MatMulBiasAddOp : public PoplarOpDef {
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
     // Get the broadcast instruction which is required to get the bias size.
-    const HloInstruction* root =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* broadcast = root->operand(1);
     CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
 
@@ -270,8 +268,7 @@ class BiasApplyOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
-    const HloInstruction* root =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* root = inst->fused_expression_root();
 
     // Find the biases.
     TF_ASSIGN_OR_RETURN(TensorVectors inputs,
@@ -338,8 +335,7 @@ class ZeroPadOp : public PoplarOpDef {
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
-    const HloInstruction* root =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* root = inst->fused_expression_root();
     const PaddingConfig& cfg(root->padding_config());
 
     TF_ASSIGN_OR_RETURN(
@@ -386,8 +382,7 @@ class ScaledInplaceabYOp : public PoplarOpDef {
         poplar::Tensor in1,
         FindInstructionInput(tensor_map, res, inst, 1, seq, false));
 
-    const auto* root_inst =
-        inst->fused_instructions_computation()->root_instruction();
+    const auto* root_inst = inst->fused_expression_root();
 
     if (inst->operand_count() == 2) {
       const auto* const_inst = root_inst->operand(1)->operand(1)->operand(0);
@@ -435,8 +430,7 @@ class ScaledInplaceaXbOp : public PoplarOpDef {
         poplar::Tensor in1,
         FindInstructionInput(tensor_map, res, inst, 1, seq, false));
 
-    const auto* root_inst =
-        inst->fused_instructions_computation()->root_instruction();
+    const auto* root_inst = inst->fused_expression_root();
 
     if (inst->operand_count() == 2) {
       const auto* const_inst = root_inst->operand(0)->operand(1)->operand(0);
@@ -492,8 +486,7 @@ class ScaledInplaceaXbYOp : public PoplarOpDef {
         poplar::Tensor in1,
         FindInstructionInput(tensor_map, res, inst, 1, seq, false));
 
-    const auto* root_inst =
-        inst->fused_instructions_computation()->root_instruction();
+    const auto* root_inst = inst->fused_expression_root();
 
     if (inst->operand_count() == 2) {
       const auto* const_inst_a = root_inst->operand(0)->operand(1)->operand(0);
@@ -542,8 +535,7 @@ class PaddingReduceWindowOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     poplar::program::Sequence seq;
 
-    const HloInstruction* root =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* root = inst->fused_expression_root();
     const Window& window(root->window());
 
     TF_ASSIGN_OR_RETURN(
@@ -578,8 +570,7 @@ class ReductionFp16InputOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    const HloInstruction* reduce_inst =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* reduce_inst = inst->fused_expression_root();
     TF_ASSIGN_OR_RETURN(poplar::program::Program prog,
                         CreateSimpleReduction(res, inst, reduce_inst,
                                               output_shape, tensor_map));

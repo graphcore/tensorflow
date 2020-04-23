@@ -599,32 +599,8 @@ Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
         inner_calls.size());
   }
   HloInstruction* call = inner_calls[0];
-  HloComputation* comp_to_hoist = call->to_apply();
-
-  // Hoist the computation out.
-  absl::flat_hash_map<HloInstruction*, HloInstruction*> hoisting_map;
-  for (HloInstruction* inst : comp_to_hoist->MakeInstructionPostOrder()) {
-    HloInstruction* hoisted;
-    if (inst->opcode() == HloOpcode::kParameter) {
-      hoisted = call->mutable_operand(inst->parameter_number());
-    } else {
-      std::vector<HloInstruction*> new_operands(inst->operand_count());
-      absl::c_transform(inst->operands(), new_operands.begin(),
-                        [&hoisting_map](HloInstruction* operand) {
-                          return hoisting_map.at(operand);
-                        });
-      // Clone new instruction inside the computation.
-      hoisted = pipeline_comp->AddInstruction(
-          inst->CloneWithNewOperands(inst->shape(), new_operands));
-    }
-    hoisting_map[inst] = hoisted;
-  }
-  HloInstruction* new_root = hoisting_map.at(comp_to_hoist->root_instruction());
-  // Replace all uses.
-  TF_RETURN_IF_ERROR(call->ReplaceAllUsesWith(new_root));
-  // Remove the old instruction.
-  TF_RETURN_IF_ERROR(pipeline_comp->RemoveInstruction(call));
-
+  HloComputation* comp_to_inline = call->to_apply();
+  TF_RETURN_IF_ERROR(InlineComputation(call, comp_to_inline).status());
   return Status::OK();
 }
 

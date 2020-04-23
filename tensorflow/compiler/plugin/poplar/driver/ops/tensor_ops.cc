@@ -405,8 +405,7 @@ StatusOr<poplar::program::Program> CreateZeroPadOp(CompilerResources& res,
 
   poplar::Graph& graph = GetGraph(res, inst);
 
-  const HloInstruction* root =
-      inst->fused_instructions_computation()->root_instruction();
+  const HloInstruction* root = inst->fused_expression_root();
   const PaddingConfig& cfg(root->padding_config());
 
   TF_ASSIGN_OR_RETURN(

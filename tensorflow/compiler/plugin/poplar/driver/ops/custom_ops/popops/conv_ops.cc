@@ -312,8 +312,7 @@ class ConvScaledInplaceOp : public PoplarOpDef {
     const ConvolutionDimensionNumbers& conv_dims = GetConvolutionDims(inst);
     // Get the root of the fusion - it indicates whether this is add or
     // subtract.
-    const auto* root_inst =
-        inst->fused_instructions_computation()->root_instruction();
+    const auto* root_inst = inst->fused_expression_root();
     auto op_type = root_inst->opcode();
 
     const std::string debug_prefix = GetDebugName(inst);

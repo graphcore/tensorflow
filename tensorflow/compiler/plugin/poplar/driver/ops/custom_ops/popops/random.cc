@@ -55,8 +55,7 @@ class RandomNormalScaleOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    const HloInstruction* root =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* mean1 = LookThroughBroadcast(root->operand(1));
     CHECK_EQ(mean1->opcode(), HloOpcode::kConstant);
     const HloInstruction* sd1 =
@@ -109,8 +108,7 @@ class RandomUniformScaleOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    const HloInstruction* root =
-        inst->fused_instructions_computation()->root_instruction();
+    const HloInstruction* root = inst->fused_expression_root();
     const HloInstruction* shift = LookThroughBroadcast(root->operand(1));
     CHECK_EQ(shift->opcode(), HloOpcode::kConstant);
     const HloInstruction* scale =

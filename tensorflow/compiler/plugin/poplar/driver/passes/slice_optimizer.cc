@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/hlo_matcher.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
@@ -121,6 +122,7 @@ StatusOr<HloInstruction*> ConvertToSliceApplyBase(HloOpcode opcode,
   for (HloInstruction* update_slice : update->operands()) {
     TF_ASSIGN_OR_RETURN(
         output, fn(opcode, output, update_slice, apply_dimension, start_index));
+    CopyShardingIfPresent(input, output);
     start_index += update_slice->shape().dimensions(apply_dimension);
   }
   return output;

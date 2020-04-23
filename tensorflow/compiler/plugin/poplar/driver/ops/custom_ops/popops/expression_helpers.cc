@@ -96,8 +96,7 @@ StatusOr<ExpressionInput> GetElementwiseInput(
     int64 operand_idx, int64 input_idx, poplar::program::Sequence& seq) {
   if (inst->opcode() == HloOpcode::kFusion) {
     // Fusion indicates implicit broadcasting.
-    const auto* root_inst =
-        inst->fused_instructions_computation()->root_instruction();
+    const auto* root_inst = inst->fused_expression_root();
     const auto* input = root_inst->operand(operand_idx);
     if (input->opcode() == HloOpcode::kBroadcast) {
       // We either have a broadcast of a constant or another tensor.
@@ -130,9 +129,8 @@ StatusOr<ExpressionInput> GetElementwiseInput(
 // Get the elementwise instruction when the instruction can be a fused
 // instruction indicating implicit broadcasting op.
 const HloInstruction* GetElementwiseOp(const HloInstruction* inst) {
-  return inst->opcode() == HloOpcode::kFusion
-             ? inst->fused_instructions_computation()->root_instruction()
-             : inst;
+  return inst->opcode() == HloOpcode::kFusion ? inst->fused_expression_root()
+                                              : inst;
 }
 
 // Get all the elementwise input expression and tensors.
