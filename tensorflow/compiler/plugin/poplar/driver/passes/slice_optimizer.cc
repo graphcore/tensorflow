@@ -103,69 +103,135 @@ static const std::vector<HloMatcherPattern> patterns = {
 };
 // clang-format on
 
+// Function which is callled when creating a slice.
+using SliceApplyFn = std::function<StatusOr<HloInstruction*>(
+    HloOpcode, HloInstruction* const, HloInstruction* const, int64, int64)>;
+
+StatusOr<HloInstruction*> ConvertToSliceApplyBase(HloOpcode opcode,
+                                                  HloInstruction* const input,
+                                                  HloInstruction* const update,
+                                                  SliceApplyFn fn) {
+  if (update->opcode() != HloOpcode::kConcatenate) {
+    return FailedPrecondition(
+        "Expected the update to be a concatenate instruction");
+  }
+  HloInstruction* output = input;
+  int64 start_index = 0;
+  const int64 apply_dimension = update->concatenate_dimension();
+  for (HloInstruction* update_slice : update->operands()) {
+    TF_ASSIGN_OR_RETURN(
+        output, fn(opcode, output, update_slice, apply_dimension, start_index));
+    start_index += update_slice->shape().dimensions(apply_dimension);
+  }
+  return output;
+}
+
 Status ReplaceMatch(HloMatcherMatched& match) {
   HloComputation* comp = match.computation;
   auto pattern = patterns[match.pattern_idx];
   HloInstruction* root = match.instruction_mapping.at(0);
   HloInstruction* input = match.instruction_mapping.at(pattern.GetInputs()[0]);
-  HloInstruction* updates =
-      match.instruction_mapping.at(pattern.GetInputs()[1]);
+  HloInstruction* update = match.instruction_mapping.at(pattern.GetInputs()[1]);
+  const HloOpcode opcode = root->opcode();
 
-  HloInstruction* output = input;
-  int64 start_index = 0;
-  const int64 apply_dimension = updates->concatenate_dimension();
-  const HloOpcode operation = root->opcode();
-
-  for (HloInstruction* update : updates->operands()) {
-    switch (match.pattern_idx) {
-      case 0: {
-        // Handle SliceApplyaXbY.
-        HloInstruction* scale_input =
-            match.instruction_mapping.at(pattern.GetInputs()[2]);
-        HloInstruction* scale_update =
-            match.instruction_mapping.at(pattern.GetInputs()[3]);
-
-        output = comp->AddInstruction(
-            CreateSliceApplyaXbY(output, update, scale_input, scale_update,
-                                 apply_dimension, start_index, operation));
-        break;
-      }
-      case 1: {
-        // Handle SliceApplyabY.
-        HloInstruction* scale_update =
-            match.instruction_mapping.at(pattern.GetInputs()[2]);
-
-        output = comp->AddInstruction(
-            CreateSliceApplyabY(output, update, scale_update, apply_dimension,
-                                start_index, operation));
-        break;
-      }
-      case 2: {
-        // Handle SliceApplyaXb.
-        HloInstruction* scale_input =
-            match.instruction_mapping.at(pattern.GetInputs()[2]);
-
-        output = comp->AddInstruction(
-            CreateSliceApplyaXb(output, update, scale_input, apply_dimension,
-                                start_index, operation));
-        break;
-      }
-      case 3: {
-        // Handle SliceApply.
-        output = comp->AddInstruction(CreateSliceApply(
-            output, update, apply_dimension, start_index, operation));
-        break;
-      }
-      default: { return InternalError("Invalid pattern index."); }
+  HloInstruction* output;
+  switch (match.pattern_idx) {
+    case 0: {
+      // Handle SliceApplyaXbY.
+      HloInstruction* scale_input =
+          match.instruction_mapping.at(pattern.GetInputs()[2]);
+      HloInstruction* scale_update =
+          match.instruction_mapping.at(pattern.GetInputs()[3]);
+      TF_ASSIGN_OR_RETURN(
+          output, SliceOptimizer::ConvertToSliceApplyaXbY(
+                      opcode, input, update, scale_input, scale_update));
+      break;
     }
-
-    start_index += update->shape().dimensions(apply_dimension);
+    case 1: {
+      // Handle SliceApplyabY.
+      HloInstruction* scale_update =
+          match.instruction_mapping.at(pattern.GetInputs()[2]);
+      TF_ASSIGN_OR_RETURN(output, SliceOptimizer::ConvertToSliceApplyabY(
+                                      opcode, input, update, scale_update));
+      break;
+    }
+    case 2: {
+      // Handle SliceApplyaXb.
+      HloInstruction* scale_input =
+          match.instruction_mapping.at(pattern.GetInputs()[2]);
+      TF_ASSIGN_OR_RETURN(output, SliceOptimizer::ConvertToSliceApplyaXb(
+                                      opcode, input, update, scale_input));
+      break;
+    }
+    case 3: {
+      // Handle SliceApply.
+      TF_ASSIGN_OR_RETURN(
+          output, SliceOptimizer::ConvertToSliceApply(opcode, input, update));
+      break;
+    }
+    default: { return InternalError("Invalid pattern index."); }
   }
 
   TF_RETURN_IF_ERROR(comp->ReplaceInstruction(root, output));
   return Status::OK();
 }
 };  // namespace
+
+StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApply(
+    HloOpcode opcode, HloInstruction* const input,
+    HloInstruction* const update) {
+  return ConvertToSliceApplyBase(
+      opcode, input, update,
+      [](HloOpcode opcode, HloInstruction* const input,
+         HloInstruction* const update_slice, int64 apply_dimension,
+         int64 start_index) -> StatusOr<HloInstruction*> {
+        return input->parent()->AddInstruction(CreateSliceApply(
+            input, update_slice, apply_dimension, start_index, opcode));
+      });
+}
+
+StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyabY(
+    HloOpcode opcode, HloInstruction* const input, HloInstruction* const update,
+    HloInstruction* const scale_update) {
+  return ConvertToSliceApplyBase(
+      opcode, input, update,
+      [scale_update](HloOpcode opcode, HloInstruction* const input,
+                     HloInstruction* const update_slice, int64 apply_dimension,
+                     int64 start_index) -> StatusOr<HloInstruction*> {
+        return input->parent()->AddInstruction(
+            CreateSliceApplyabY(input, update_slice, scale_update,
+                                apply_dimension, start_index, opcode));
+      });
+}
+
+StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyaXb(
+    HloOpcode opcode, HloInstruction* const input, HloInstruction* const update,
+    HloInstruction* const scale_input) {
+  return ConvertToSliceApplyBase(
+      opcode, input, update,
+      [scale_input](HloOpcode opcode, HloInstruction* const input,
+                    HloInstruction* const update_slice, int64 apply_dimension,
+                    int64 start_index) -> StatusOr<HloInstruction*> {
+        return input->parent()->AddInstruction(
+            CreateSliceApplyaXb(input, update_slice, scale_input,
+                                apply_dimension, start_index, opcode));
+      });
+}
+
+StatusOr<HloInstruction*> SliceOptimizer::ConvertToSliceApplyaXbY(
+    HloOpcode opcode, HloInstruction* const input, HloInstruction* const update,
+    HloInstruction* const scale_input, HloInstruction* const scale_update) {
+  return ConvertToSliceApplyBase(
+      opcode, input, update,
+      [scale_input, scale_update](
+          HloOpcode opcode, HloInstruction* const input,
+          HloInstruction* const update_slice, int64 apply_dimension,
+          int64 start_index) -> StatusOr<HloInstruction*> {
+        return input->parent()->AddInstruction(
+            CreateSliceApplyaXbY(input, update_slice, scale_input, scale_update,
+                                 apply_dimension, start_index, opcode));
+      });
+}
 
 SliceOptimizer::SliceOptimizer(CompilerAnnotations& annotations)
     : HloMatcher(patterns, annotations, false, false) {}
