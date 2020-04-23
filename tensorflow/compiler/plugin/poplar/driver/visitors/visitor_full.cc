@@ -295,18 +295,6 @@ Status FullVisitor::HandleSort(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status FullVisitor::HandleGather(HloInstruction* inst) {
-  VLOG(1) << "Processing " << inst->name();
-
-  TF_ASSIGN_OR_RETURN(
-      auto prog,
-      CreateGather(resources_, Cast<HloGatherInstruction>(inst), tensor_map));
-
-  sequence.add(prog);
-
-  return Status::OK();
-}
-
 Status FullVisitor::HandleOutfeed(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
   TF_ASSIGN_OR_RETURN(auto prog, CreateOutfeed(resources_, inst, tensor_map));
