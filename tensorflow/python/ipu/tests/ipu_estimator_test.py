@@ -586,7 +586,7 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     hooks = [event_trace_hook]
     estimator.train(input_fn=my_input_fn, steps=4, hooks=hooks)
 
-    report.assert_num_events(3)
+    report.assert_num_events(1)
 
   def testLossAveraging(self):
     def my_model_fn(features, labels, mode):

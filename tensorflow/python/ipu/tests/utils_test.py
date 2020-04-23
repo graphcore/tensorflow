@@ -1,4 +1,3 @@
-
 import tempfile
 import numpy as np
 
@@ -443,7 +442,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
 
       e = sess.run(events)
-      self.assertEqual(len(e), 2)  # compile begin/end, no load/execute
+      self.assertEqual(len(e), 0)  # no begin/end, no load/execute
 
   @test_util.deprecated_graph_mode_only
   def testVarsInitializedByStreamsAreLoggedAsOnDevice(self):
