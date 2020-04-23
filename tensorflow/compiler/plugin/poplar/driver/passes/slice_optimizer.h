@@ -47,6 +47,23 @@ class SliceOptimizer : public HloMatcher {
 
   absl::string_view name() const override { return "slice-optimizer"; }
 
+  static StatusOr<HloInstruction*> ConvertToSliceApply(
+      HloOpcode opcode, HloInstruction* const input,
+      HloInstruction* const update);
+
+  static StatusOr<HloInstruction*> ConvertToSliceApplyabY(
+      HloOpcode opcode, HloInstruction* const input,
+      HloInstruction* const update, HloInstruction* const scale_update);
+
+  static StatusOr<HloInstruction*> ConvertToSliceApplyaXb(
+      HloOpcode opcode, HloInstruction* const input,
+      HloInstruction* const update, HloInstruction* const scale_input);
+
+  static StatusOr<HloInstruction*> ConvertToSliceApplyaXbY(
+      HloOpcode opcode, HloInstruction* const input,
+      HloInstruction* const update, HloInstruction* const scale_input,
+      HloInstruction* const scale_update);
+
  private:
   bool HandleMatch(HloMatcherMatched& match,
                    const absl::optional<int64>) override;
