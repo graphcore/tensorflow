@@ -480,6 +480,10 @@ bool IsUniformSingleDimSlice(const HloInstruction* slice) {
   return num_sliced_dims == 1;
 }
 
+bool IsSingleElement(const HloInstruction* inst) {
+  return ShapeUtil::ElementsIn(inst->shape()) == 1;
+}
+
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op) {
   return [op](const HloInstruction* inst) -> bool {
     return IsPoplibsHloCustomOp(inst) &&
