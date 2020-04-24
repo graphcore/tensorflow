@@ -463,6 +463,23 @@ bool IsWideConstantZero(const HloInstruction* inst) {
   return IsConstantZero(inst);
 }
 
+bool IsUniformSingleDimSlice(const HloInstruction* slice) {
+  // All the strides are 1.
+  if (absl::c_any_of(slice->slice_strides(),
+                     [](int64 stride) { return stride != 1; })) {
+    return false;
+  }
+  // Only one dimension is sliced.
+  int64 num_sliced_dims = 0;
+  for (int64 i = 0; i != slice->shape().rank(); ++i) {
+    if (slice->shape().dimensions(i) !=
+        slice->operand(0)->shape().dimensions(i)) {
+      num_sliced_dims++;
+    }
+  }
+  return num_sliced_dims == 1;
+}
+
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op) {
   return [op](const HloInstruction* inst) -> bool {
     return IsPoplibsHloCustomOp(inst) &&

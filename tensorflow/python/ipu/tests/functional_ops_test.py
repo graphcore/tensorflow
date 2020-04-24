@@ -228,12 +228,11 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
           'slice_8*/add.*/Op/Add',
           'slice_9*/add.*/Op/Add',
           '__seed',
-          'host-exchange-local-copy',
           'Copy_',
       ]
       report.assert_all_compute_sets_and_list(ok)
-      report.assert_total_tile_memory(11405248)
-      report.assert_max_tile_memory(10028)
+      report.assert_total_tile_memory(10980622)
+      report.assert_max_tile_memory(9888)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionsNoMatch(self):

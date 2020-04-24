@@ -28,17 +28,8 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-int64 HighestFactorLessOrEqualThanN(int64 to_factor, int64 n) {
-  CHECK_GE(to_factor, n);
-  int64 factor = n;
-  while (to_factor % factor) {
-    factor--;
-  }
-  return factor;
-}
-
 poplar::Tensor SliceInputForBinaryApply(const HloSliceApplyBase* inst,
-                                        const poplar::Tensor input) {
+                                        const poplar::Tensor& input) {
   const int64 slice_dimension = inst->GetApplyDimension();
   const int64 slice_start = inst->GetStartIndex();
   const int64 slice_end =
@@ -48,7 +39,7 @@ poplar::Tensor SliceInputForBinaryApply(const HloSliceApplyBase* inst,
 
 poplar::Tensor CreateSliceFromInput(poplar::Graph& graph,
                                     const HloSliceApplyBase* inst,
-                                    const poplar::Tensor input,
+                                    const poplar::Tensor& input,
                                     CompilerResources& res,
                                     const std::string& name) {
   poplar::Tensor input_slice = SliceInputForBinaryApply(inst, input);
@@ -57,39 +48,17 @@ poplar::Tensor CreateSliceFromInput(poplar::Graph& graph,
 
 poplar::Tensor CreateInputFromSlice(poplar::Graph& graph,
                                     const HloSliceApplyBase* inst,
-                                    const poplar::Tensor update,
+                                    const poplar::Tensor& update,
                                     CompilerResources& res,
                                     const std::string& name) {
   // Allocate the input tensor from the update.
-  // Find the GCD on the dimension we slice in between the input and the
-  // update operand.
   const int64 slice_dimension = inst->GetApplyDimension();
   const int64 inputs_size =
       inst->operand(0)->shape().dimensions(slice_dimension);
   const int64 slice_size =
       inst->operand(1)->shape().dimensions(slice_dimension);
-
-  const int64 rows_to_clone =
-      HighestFactorLessOrEqualThanN(inputs_size, slice_size);
-
-  // Slice out the right number of rows from the update.
-  poplar::Tensor update_slice = update.slice(0, rows_to_clone, slice_dimension);
-
-  // Calculate how many slices are required for the input tensor.
-  const int64 number_of_clones = inputs_size / rows_to_clone;
-  std::vector<poplar::Tensor> output_slices(number_of_clones);
-
-  // Make a clone of the slice.
-  output_slices[0] =
-      TensorCloneAndRebalanceAliasing(graph, res, update_slice, name);
-
-  // The remaining slices will just clone the layout of the first slice.
-  for (int64 i = 1; i != number_of_clones; ++i) {
-    output_slices[i] = graph.clone(output_slices[0], name);
-  }
-
-  // Concatentate all the slices into a single tensor.
-  return poplar::concat(output_slices);
+  return CreateTensorFromSlice(graph, update, slice_dimension, inputs_size, res,
+                               name);
 }
 
 // All the slice apply ops allocate on the first two operands.
