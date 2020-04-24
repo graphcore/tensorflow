@@ -311,10 +311,6 @@ poplar::Tensor ShuffleNormInputToPoplar(const poplar::Tensor& input,
 poplar::Tensor ShuffleNormOutputToTensorflow(const poplar::Tensor& output,
                                              const unsigned feature_dimension);
 
-StatusOr<poplar::program::Program> CreateScatter(
-    CompilerResources& res, const HloScatterInstruction* inst,
-    TensorMap& tensor_map);
-
 StatusOr<poplar::program::Program> CreateSelectScalarFromRows(
     poplar::Graph& graph, CompilerResources& res, const HloInstruction* inst,
     TensorMap& tensor_map);

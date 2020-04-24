@@ -732,47 +732,6 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
 
           break;
         }
-        case HloOpcode::kScatter: {
-          auto scatter = Cast<HloScatterInstruction>(target);
-          switch (input_index) {
-            case 0: {
-              const auto inserted_window_dims =
-                  scatter->scatter_dimension_numbers().inserted_window_dims();
-              xla::Shape slice_shape = target->operand(0)->shape();
-              for (int i = 0; i < tshape.rank(); ++i) {
-                if (absl::c_binary_search(inserted_window_dims, i)) {
-                  slice_shape.set_dimensions(i, 1);
-                }
-              }
-
-              TF_ASSIGN_OR_RETURN(out, AddScatterTensor(graph, debug_name,
-                                                        tshape, slice_shape));
-              break;
-            }
-            case 1: {
-              TF_ASSIGN_OR_RETURN(
-                  out, AddIndicesTensor(graph, debug_name, tshape, resources));
-              break;
-            }
-            case 2: {
-              const auto update_window_dims =
-                  scatter->scatter_dimension_numbers().update_window_dims();
-              xla::Shape slice_shape = target->operand(2)->shape();
-              for (int i = 0; i < tshape.rank(); ++i) {
-                if (!absl::c_binary_search(update_window_dims, i)) {
-                  slice_shape.set_dimensions(i, 1);
-                }
-              }
-
-              TF_ASSIGN_OR_RETURN(out, AddScatterTensor(graph, debug_name,
-                                                        tshape, slice_shape));
-              break;
-            }
-            default:
-              return xla::FailedPrecondition("%s", error_msg);
-          }
-          break;
-        }
         default: { return xla::FailedPrecondition("%s", error_msg); }
       }
     }
