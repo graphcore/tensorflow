@@ -60,8 +60,6 @@ class FullVisitor : public BaseVisitor {
 
   Status HandleReduceWindow(HloInstruction* inst) override;
 
-  Status HandleScatter(HloInstruction* inst) override;
-
   Status HandleSelectAndScatter(HloInstruction* inst) override;
 
   Status HandleWhile(HloInstruction* inst) override;
@@ -84,6 +82,7 @@ class FullVisitor : public BaseVisitor {
   HANDLE_AS_HLO_OP(HandleBatchNormTraining)
   HANDLE_AS_HLO_OP(HandleBatchNormGrad)
   HANDLE_AS_HLO_OP(HandleGather)
+  HANDLE_AS_HLO_OP(HandleScatter)
 };
 
 }  // namespace poplarplugin
