@@ -103,7 +103,7 @@ bool IsPoplibsPool(const HloInstruction*, const HloComputation*);
 
 bool IsSimpleSelection(const HloComputation*);
 
-bool IsReducableArtithmetic(const HloComputation*);
+bool IsReducibleArithmetic(const HloComputation*);
 
 StatusOr<bool> IsParallelMap(const HloInstruction*, const HloComputation*);
 

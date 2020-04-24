@@ -112,7 +112,7 @@ Status FullVisitor::HandleReverse(HloInstruction* inst) {
 
 Status FullVisitor::HandleReduce(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
-  if (IsReducableArtithmetic(inst->to_apply())) {
+  if (IsReducibleArithmetic(inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreateSimpleReduction(resources_, inst, GetOutputShape(inst),
@@ -211,7 +211,7 @@ Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
     sequence.add(prog);
     return Status::OK();
   }
-  if (IsReducableArtithmetic(inst->to_apply())) {
+  if (IsReducibleArithmetic(inst->to_apply())) {
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
         CreateSimpleWindowReduction(resources_, inst, GetOutputShape(inst),
@@ -224,7 +224,7 @@ Status FullVisitor::HandleReduceWindow(HloInstruction* inst) {
 
 Status FullVisitor::HandleSelectAndScatter(HloInstruction* inst) {
   if (IsSimpleSelection(inst->select()) &&
-      IsReducableArtithmetic(inst->scatter())) {
+      IsReducibleArithmetic(inst->scatter())) {
     VLOG(1) << "Processing " << inst->name();
     TF_ASSIGN_OR_RETURN(
         poplar::program::Program prog,
