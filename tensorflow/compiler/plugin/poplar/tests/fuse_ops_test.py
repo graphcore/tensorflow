@@ -27,6 +27,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.compiler.xla import xla
+from tensorflow.random import normal
 
 
 class IpuFuseOpsTest(xla_test.XLATestCase):
@@ -1012,6 +1013,34 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       ok = ['__seed*', 'host-exchange-local-copy-', 'sub/fusion/AddTo']
       report.assert_all_compute_sets_and_list(ok)
+
+
+def testPopOpNormScaleAddLiteralScalars(self):
+  def build_graph():
+    k_constant6 = array_ops.constant([[0.0, 0.0], [0.0, 0.0]])
+    k_constant5 = array_ops.constant([[1.0, 1.0], [1.0, 1.0]])
+    k_rng4 = normal([2, 2],
+                    mean=k_constant6,
+                    stddev=k_constant5,
+                    dtype=np.float32)
+    k_constant3 = array_ops.constant([[2.0, 2.3], [1.0, 2.2]])
+    k_multiply2 = k_rng4 * k_constant3
+    k_constante1 = array_ops.constant([[0.1, 1.5], [0.9, 1.3]])
+    return k_multiply2 + k_constante1
+
+  with self.session() as sess:
+    with ops.device("/device:IPU:0"):
+      r = xla.compile(build_graph, inputs=[])
+    report = tu.ReportJSON(self, sess)
+    report.reset()
+    sess.run(r)
+
+    report.parse_log()
+    ok = [
+        'random_normal/RandomStandardNormal/rng.*/normal',
+        'mul/multiply.*/Op/Multiply', 'add/add.*/Op/Add', '__seed*'
+    ]
+    report.assert_all_compute_sets_and_list(ok)
 
 
 if __name__ == "__main__":
