@@ -40,6 +40,16 @@ namespace ipu {
 
 namespace {
 
+std::string FirstLinesOf(const std::string& lines, int64_t num_lines) {
+  std::stringstream ss(lines);
+  std::string line;
+  std::string res;
+  while (num_lines-- > 0 && std::getline(ss, line, '\n')) {
+    res += absl::StrCat(line, "\n");
+  }
+  return res;
+}
+
 std::string GetRandomNumberSeedStream() { return "__seed_stream"; }
 
 enum PoplarProgramType {
@@ -189,21 +199,22 @@ void WriteJsonToStream(const Json::Value& root, std::ostream* sout) {
 
 }  // namespace
 
-Executable::Executable(StreamReader& stream, int64_t length) {
+IExecutable::IExecutable(StreamReader& stream, int64_t length,
+                         const poplar::OptionFlags& opts) {
   try {
     SubStream sub(stream, length > 0 ? length : stream.NumBytesLeft());
     std::istream sub_stream(&sub);
     poplar::Executable poplar_executable =
         poplar::Executable::deserialize(sub_stream);
-    engine_.reset(new poplar::Engine(std::move(poplar_executable)));
+    engine_.reset(new poplar::Engine(std::move(poplar_executable), opts));
   } catch (const std::exception& e) {
     ERROR("Failed to deserialize " << stream.Filename() << " : " << e.what());
   }
 }
 
-poplar::Engine& Executable::Engine() { return *engine_; }
+poplar::Engine& IExecutable::Engine() { return *engine_; }
 
-std::string Executable::StreamsList(bool summary) const {
+std::string IExecutable::StreamsList(bool summary) const {
   std::stringstream ss;
   if (summary) {
     std::map<std::string, std::set<int>> read_streams, write_streams;
@@ -260,21 +271,63 @@ std::string Executable::StreamsList(bool summary) const {
   return ss.str();
 }
 
+Executable::Executable(StreamReader& stream, int64_t length)
+    : IExecutable(stream, length, {}) {}
+
 void Executable::Load(const poplar::Device& device) {
   std::cout << "Loading program onto the device\n";
   engine_->load(device);
-  PRINT_INFO("Running HOST_TO_DEVICE");
-  engine_->run(PoplarProgramType::HOST_TO_DEVICE);
+  try {
+    LogContext ctx("Running HOST_TO_DEVICE");
+    engine_->run(PoplarProgramType::HOST_TO_DEVICE);
+  } catch (const poplar::poplar_error& err) {
+    PRINT_INFO(err.what());
+    ERROR(FirstLinesOf(err.what(), 3));
+  }
 }
 
 void Executable::Run() {
-  PRINT_INFO("Running MAIN_SEQUENCE");
-  engine_->run(PoplarProgramType::MAIN_SEQUENCE);
+  try {
+    LogContext ctx("Running MAIN_SEQUENCE");
+    engine_->run(PoplarProgramType::MAIN_SEQUENCE);
+  } catch (const poplar::poplar_error& err) {
+    PRINT_INFO(err.what());
+    ERROR(FirstLinesOf(err.what(), 3));
+  }
 }
 
 void Executable::DeviceToHostCopy() {
-  PRINT_INFO("Running DEVICE_TO_HOST");
-  engine_->run(PoplarProgramType::DEVICE_TO_HOST);
+  try {
+    LogContext ctx("Running DEVICE_TO_HOST");
+    engine_->run(PoplarProgramType::DEVICE_TO_HOST);
+  } catch (const poplar::poplar_error& err) {
+    PRINT_INFO(err.what());
+    ERROR(FirstLinesOf(err.what(), 3));
+  }
+}
+
+VerifiedExecutable::VerifiedExecutable(StreamReader& stream, int64_t length,
+                                       bool use_autoloader)
+    : IExecutable(stream, length,
+                  {{"opt.useAutoloader", use_autoloader ? "true" : "false"}}) {}
+
+void VerifiedExecutable::Prepare(poplar::Device& device) {
+  engine_->prepare(device);
+}
+
+void VerifiedExecutable::Deploy() { engine_->deploy(); }
+
+void VerifiedExecutable::Run() {
+  try {
+    LogContext ctx("Running HOST_TO_DEVICE");
+    engine_->run(PoplarProgramType::HOST_TO_DEVICE);
+    ctx.UpdateContext("Running MAIN_SEQUENCE");
+    engine_->run(PoplarProgramType::MAIN_SEQUENCE);
+    ctx.UpdateContext("Running DEVICE_TO_HOST");
+    engine_->run(PoplarProgramType::DEVICE_TO_HOST);
+  } catch (const poplar::poplar_error& err) {
+    ERROR(FirstLinesOf(err.what(), 3));
+  }
 }
 
 DeviceManager::DeviceManager()
@@ -330,7 +383,9 @@ int64_t IpuConfig::ReplicationCount() const { return replication_count_; }
 
 poplar::OptionFlags IpuConfig::OptionFlags() const { return option_flags_; }
 
-TensorManager::TensorManager(const Json::Value& root)
+TensorManager::TensorManager(
+    const Json::Value& root,
+    std::function<size_t(size_t)> output_metadata_size_fn)
     : config_(root["config"]) {
   config_ = IpuConfig(root["config"]);
   absl::c_transform(root["inputs"], std::back_inserter(inputs_),
@@ -339,9 +394,14 @@ TensorManager::TensorManager(const Json::Value& root)
                       return Tensor{TensorInfo{input}};
                     });
   absl::c_transform(root["outputs"], std::back_inserter(outputs_),
-                    [](const Json::Value& output) {
+                    [&](const Json::Value& output) {
                       LogContext ctx(output.toStyledString());
-                      return Tensor{TensorInfo{output}};
+                      TensorInfo info{output};
+                      if (output_metadata_size_fn) {
+                        info.SetMetadataSize(output_metadata_size_fn(
+                            info.Shape().DataSizeInBytes()));
+                      }
+                      return Tensor{info};
                     });
   absl::c_transform(root["infeeds"], std::back_inserter(infeeds_),
                     [](const Json::Value& infeed) {
@@ -349,9 +409,9 @@ TensorManager::TensorManager(const Json::Value& root)
                       return Infeed{infeed};
                     });
   absl::c_transform(root["outfeeds"], std::back_inserter(outfeeds_),
-                    [](const Json::Value& outfeed) {
+                    [&](const Json::Value& outfeed) {
                       LogContext ctx(outfeed.toStyledString());
-                      return Outfeed{outfeed};
+                      return Outfeed{outfeed, output_metadata_size_fn};
                     });
   absl::c_transform(root["checkpoint"]["feeds"],
                     std::back_inserter(feeds_order_),
@@ -464,6 +524,11 @@ void TensorManager::SaveOutputs(TensorType type, BinaryWriter& writer,
   absl::c_for_each(outputs_, [allow_duplicates, type, &writer,
                               &duplicates](const Tensor& out) {
     if (out.Info().Type() == type) {
+      // Checkpoints will be saved separately.
+      if (out.Info().Name() == "checkpointOut" ||
+          out.Info().Name() == "checkpointOutClear") {
+        return;
+      }
       auto& occurrences = duplicates[out.Info().Name()];
       std::string override_name;
       if (occurrences > 0) {
@@ -485,6 +550,17 @@ void TensorManager::SaveOutputsToJson(TensorType type,
   ERROR_ON(type != TensorType::ParameterOut && type != TensorType::OutputData);
   absl::c_for_each(outputs_, [folder, type, &duplicates](const Tensor& out) {
     if (out.Info().Type() == type) {
+      if (out.Info().Shape().HasMetadata()) {
+        PRINT_INFO("Can't save " << out.Info().Name()
+                                 << " as JSON because it has metadata that"
+                                    " can't be saved.");
+        return;
+      }
+      // Checkpoints will be saved separately.
+      if (out.Info().Name() == "checkpointOut" ||
+          out.Info().Name() == "checkpointOutClear") {
+        return;
+      }
       auto& occurrences = duplicates[out.Info().Name()];
       std::string filename = out.Info().Filename();
       if (occurrences > 0) {
@@ -508,41 +584,53 @@ std::list<Tensor*> TensorManager::InputDataTensors() {
 
 const IpuConfig& TensorManager::Config() const { return config_; }
 
-void TensorManager::LoadVerifiedCheckpoint(const BinaryLoader& loader,
-                                           int64_t checkpoint_index) {
-  if (!infeeds_.empty()) {
-    std::unique_ptr<ipu::StreamReader> reader =
-        loader.GetTensorStream("checkpointClear");
-    ipu::Tensor feeds_positions{*reader};
-    const int64_t* positions =
-        reinterpret_cast<int64_t*>(feeds_positions.Data());
+bool TensorManager::ContainsCheckpoint() const { return !infeeds_.empty(); }
 
-    for (auto& feed : infeeds_) {
-      int feed_idx = -1;
-      for (int i = 0; i < feeds_order_.size(); i++) {
-        if (feed.Name() == feeds_order_[i]) {
-          feed_idx = i;
-          break;
-        }
-      }
-      ERROR_ON_MSG(feed_idx < 0,
-                   "Can't find index position for infeed " << feed.Name());
-      for (auto& stream : feed.MutableStreams()) {
-        stream.JumpToTensor(positions[feed_idx]);
-      }
+void TensorManager::SaveCheckpoint(BinaryWriter& writer) {
+  ERROR_ON(!ContainsCheckpoint());
+  absl::c_for_each(outputs_, [&writer](const Tensor& out) {
+    if (out.Info().Name() == "checkpointOut" ||
+        out.Info().Name() == "checkpointOutClear") {
+      writer.WriteTensor(out);
     }
-    verified_checkpoint_index_ = checkpoint_index;
-  }
+  });
 }
 
-void TensorManager::ConnectStreams(Executable& executable) {
+void TensorManager::LoadVerifiedCheckpoint(const BinaryLoader& loader,
+                                           int64_t checkpoint_index) {
+  ERROR_ON(!ContainsCheckpoint());
+
+  std::unique_ptr<ipu::StreamReader> reader =
+      loader.GetTensorStream("checkpointClear");
+  ipu::Tensor feeds_positions{*reader};
+  const int64_t* positions = reinterpret_cast<int64_t*>(feeds_positions.Data());
+
+  for (auto& feed : infeeds_) {
+    int feed_idx = -1;
+    for (int i = 0; i < feeds_order_.size(); i++) {
+      if (feed.Name() == feeds_order_[i]) {
+        feed_idx = i;
+        break;
+      }
+    }
+    ERROR_ON_MSG(feed_idx < 0,
+                 "Can't find index position for infeed " << feed.Name());
+    for (auto& stream : feed.MutableStreams()) {
+      stream.JumpToTensor(positions[feed_idx]);
+    }
+  }
+  for (auto& input : inputs_) {
+    if (input.Info().Handle() == "checkpointIndex") {
+      reinterpret_cast<int64_t*>(input.Data())[0] = checkpoint_index;
+      return;
+    }
+  }
+  ERROR("Couldn't find checkpointIndex in the list of inputs");
+}
+
+void TensorManager::ConnectStreams(IExecutable& executable) {
   auto& engine = executable.Engine();
 
-  // If there was a checkpoint associated to this executable then set the
-  // checkpoint index.
-  if (!feeds_order_.empty()) {
-    engine.connectStream("checkpointIndex", &verified_checkpoint_index_);
-  }
   for (auto& input : inputs_) {
     PRINT_INFO("Connecting " << input.Info().Name() << " to handle "
                              << input.Info().Handle());
@@ -570,6 +658,8 @@ void TensorManager::ConnectStreams(Executable& executable) {
       for (int replica_id = 0; replica_id < config_.ReplicationCount();
            replica_id++) {
         auto callback = absl::make_unique<InfeedCallback>(infeed_stream);
+        PRINT_INFO("Connecting " << infeed_stream.Info().Name() << " to handle "
+                                 << infeed_stream.Info().Handle());
         engine.connectStreamToCallback(infeed_stream.Info().Handle(),
                                        replica_id, std::move(callback));
       }
@@ -579,6 +669,9 @@ void TensorManager::ConnectStreams(Executable& executable) {
     for (auto& outfeed_stream : outfeed.Streams()) {
       for (int replica_id = 0; replica_id < config_.ReplicationCount();
            replica_id++) {
+        PRINT_INFO("Connecting " << outfeed_stream.Info().Name()
+                                 << " to handle "
+                                 << outfeed_stream.Info().Handle());
         engine.connectStreamToCallback(
             outfeed_stream.Info().Handle(), replica_id,
             [&outfeed_stream, this](void* src) {
@@ -598,7 +691,7 @@ SeedManager::SeedManager(const IpuConfig& config) {
   }
 }
 
-void SeedManager::ConnectStreams(Executable& executable) {
+void SeedManager::ConnectStreams(IExecutable& executable) {
   for (int replica_id = 0; replica_id < seeds_.size(); replica_id++) {
     auto callback = [this, replica_id](void* ptr) mutable {
       reinterpret_cast<uint64_t*>(ptr)[0] = this->seeds_[replica_id];
@@ -680,6 +773,7 @@ void InfeedStream::InitializeDataSource(std::shared_ptr<StreamReader> in) {
         "Type and Shape from metadata JSON file: "
             << info_.ToString()
             << " don't match those from binary file: " << info.ToString());
+    info_.SetMetadataSize(info.Shape().MetadataSize());
   }
   num_tensors_ = reader_->ReadInt64();
   ERROR_ON(num_tensors_ <= 0);
@@ -757,12 +851,14 @@ void BinaryLoader::LoadFile(const std::string& filename) {
 }
 
 std::unique_ptr<TensorManager> BinaryLoader::CreateTensorManager(
+    std::function<size_t(size_t)> output_metadata_size_fn,
     const std::string metadata_name) const {
   LogContext ctx{"BinaryLoader::CreateTensorManager " + metadata_name};
   const Object& obj = GetObject(ObjectType::PoplarMetadata, metadata_name);
   StreamReader in{obj.filename};
   in.MoveAbsolute(obj.offset);
-  return absl::make_unique<TensorManager>(LoadJsonFromString(in.ReadString()));
+  return absl::make_unique<TensorManager>(LoadJsonFromString(in.ReadString()),
+                                          output_metadata_size_fn);
 }
 
 std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
@@ -772,6 +868,16 @@ std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
   StreamReader in{obj.filename};
   in.MoveAbsolute(obj.offset);
   return absl::make_unique<Executable>(in, obj.end - obj.offset);
+}
+
+std::unique_ptr<VerifiedExecutable> BinaryLoader::CreateVerifiedExecutable(
+    bool use_autoloader, const std::string executable_name) const {
+  LogContext ctx{"BinaryLoader::CreateVerifiedExecutable " + executable_name};
+  const Object& obj = GetObject(ObjectType::PoplarExecutable, executable_name);
+  StreamReader in{obj.filename};
+  in.MoveAbsolute(obj.offset);
+  return absl::make_unique<VerifiedExecutable>(in, obj.end - obj.offset,
+                                               use_autoloader);
 }
 
 const BinaryLoader::Object BinaryLoader::GetObject(

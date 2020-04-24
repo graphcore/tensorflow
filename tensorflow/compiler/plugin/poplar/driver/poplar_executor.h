@@ -92,8 +92,6 @@ class PoplarExecutable;
 std::string GetRandomNumberSeedStream();
 std::string GetInfeedCopyHandle(const std::string& name, int64 shape_index);
 std::string GetOutfeedCopyHandle(const std::string& name, int64 shape_index);
-std::string GetInputCopyHandle(int64 parameter, int64 index);
-std::string GetOutputCopyHandle(int64 output_index, int64 flat_tensor_index);
 
 xla::poplarplugin::PoplarXfeedManager* GetXfeedManager(int device_ordinal);
 

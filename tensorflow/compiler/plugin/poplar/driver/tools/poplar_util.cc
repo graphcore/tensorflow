@@ -424,7 +424,7 @@ StatusOr<std::string> CreateExecutableMetadataJson(
       return tensorflow::errors::Unimplemented("Tuple inputs not supported");
     }
 
-    const std::string handle = GetInputCopyHandle(inputs.size(), 0);
+    const std::string handle = input.Handles().at(0);
     stream["name"] = UnmangleInputName(input.Name());
     stream["handle"] = handle;
     stream["data_type"] = PrimitiveType_Name(input.Shape().element_type());
@@ -433,8 +433,7 @@ StatusOr<std::string> CreateExecutableMetadataJson(
       stream["type"] = "input_data";
     } else if (input.IsResource()) {
       stream["type"] = "parameter";
-      params_handle_map[GetInputCopyHandle(inputs.size(), 0)] =
-          UnmangleInputName(input.Name());
+      params_handle_map[handle] = UnmangleInputName(input.Name());
     }
     if (use_verified_transfers) {
       auto key_id = indices.at(handle);
@@ -450,7 +449,7 @@ StatusOr<std::string> CreateExecutableMetadataJson(
       return xla::FailedPrecondition("Nested tuples in output not supported");
     }
     Json::Value stream;
-    const std::string handle = GetOutputCopyHandle(outputs.size(), 0);
+    const std::string handle = output.Handles().at(0);
     stream["name"] = output.Name();
     stream["handle"] = handle;
     stream["data_type"] = PrimitiveType_Name(output.Shape().element_type());
@@ -471,6 +470,17 @@ StatusOr<std::string> CreateExecutableMetadataJson(
       auto key_id = indices.at(handle);
       stream["key"] = Json::Value::Int64(key_id.key);
       stream["id"] = Json::Value::Int64(key_id.id);
+      if (output.IsResourceModified()) {
+        const std::string input_handle =
+            GetInputCopyHandle(output.GetInputIndex(), 0);
+        auto input_key_id = indices.at(input_handle);
+        if (key_id.id != input_key_id.id) {
+          return xla::FailedPrecondition(
+              "Parameter out %s's id (%d) is different from the corresponding "
+              "input's id (%d)",
+              handle, key_id.id, input_key_id.id);
+        }
+      }
     }
     outputs.append(stream);
   }
@@ -592,7 +602,7 @@ StatusOr<std::string> CreateExecutableMetadataJson(
       stream["name"] = handle;
       stream["handle"] = handle;
       stream["data_type"] = "S32";
-      stream["shape"] = DimensionsToJson({1});
+      stream["shape"] = DimensionsToJson({2});
       stream["type"] = "input_data";
 
       inputs.append(stream);

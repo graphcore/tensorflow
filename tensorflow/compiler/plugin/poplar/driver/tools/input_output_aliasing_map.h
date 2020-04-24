@@ -25,6 +25,9 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+std::string GetInputCopyHandle(int64 parameter, int64 index);
+std::string GetOutputCopyHandle(int64 output_index, int64 flat_tensor_index);
+
 /*
  * The goal of this class is to categorize the inputs and outputs of the
  * computation into Streamed or ResourceVariable.  Also, if one of the outputs
@@ -53,8 +56,9 @@ class InputOutputAliasingMap {
     };
 
     InputInfo() = delete;
-    InputInfo(const Type type, const std::string& name, const Shape& shape)
-        : type_(type), output_index_(0), name_(name), shape_(shape) {}
+    InputInfo(const Type type, const std::string& name, const Shape& shape,
+              int64 parameter_idx);
+
     void ChangeToResourceModified(uint64 output_index) {
       output_index_ = output_index;
       type_ = Type::ResourceModified;
@@ -66,12 +70,14 @@ class InputOutputAliasingMap {
     const bool IsResource() const;
     const bool IsResourceNotModified() const;
     const uint64 GetOutputIndex() const;
+    const std::vector<std::string>& Handles() const;
 
    private:
     Type type_;
     uint64 output_index_;
     std::string name_;
     xla::Shape shape_;
+    std::vector<std::string> handles_;
   };
 
   // A class which describes the aliasing information of an output
@@ -94,11 +100,12 @@ class InputOutputAliasingMap {
     };
 
     OutputInfo() = delete;
-    OutputInfo(const Type& type, const std::string& name, const Shape& shape)
-        : type_(type), input_index_(0), name_(name), shape_(shape) {}
     OutputInfo(const Type& type, const std::string& name, const Shape& shape,
-               const uint64 input_index)
-        : type_(type), input_index_(input_index), name_(name), shape_(shape) {}
+               int64 parameter_idx)
+        : OutputInfo(type, name, shape, 0, parameter_idx) {}
+
+    OutputInfo(const Type& type, const std::string& name, const Shape& shape,
+               const uint64 input_index, int64 parameter_idx);
 
     const std::string& Name() const;
     const xla::Shape& Shape() const;
@@ -106,12 +113,14 @@ class InputOutputAliasingMap {
     const bool IsResource() const;
     const bool IsResourceModified() const;
     const uint64 GetInputIndex() const;
+    const std::vector<std::string>& Handles() const;
 
    private:
     Type type_;
     uint64 input_index_;
     std::string name_;
     xla::Shape shape_;
+    std::vector<std::string> handles_;
   };
 
   InputOutputAliasingMap(const HloModule* module);

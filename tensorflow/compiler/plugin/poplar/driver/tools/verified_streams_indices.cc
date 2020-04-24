@@ -88,14 +88,14 @@ StatusOr<int64> VerifiedStreamsIndices::GetStreamId(
   return it->second + stream_idx;
 }
 
-poplar::Tensor VerifiedStreamsIndices::GetStreamIndexTensor(
+poplar::Tensor VerifiedStreamsIndices::GetFeedIndexTensor(
     const std::string& feed_name) {
   int i = absl::c_find(feeds_, feed_name) - feeds_.begin();
   if (i == feeds_.size()) {
     feeds_.push_back(feed_name);
   }
   // Each index is one U64 value made of 2x U32.
-  return checkpoint_tensor_.slice(i * 2, i * 2 + 1);
+  return checkpoint_tensor_.slice(i * 2, i * 2 + 2);
 }
 
 const std::vector<std::string>& VerifiedStreamsIndices::CheckpointFeedsOrder()
@@ -127,7 +127,21 @@ Status VerifiedStreamsIndices::InitializeFeedStream(
     }
     Index new_index{stream_handle};
     new_index.IncrementNumTensors();
-    new_index.Initialize(*resources_, GetStreamIndexTensor(feed_name));
+    poplar::Tensor feed_index = GetFeedIndexTensor(feed_name);
+    poplar::Tensor stream_index;
+    if (stream_idx > 0) {
+      // Create a copy to avoid conflicts with other streams.
+      TF_ASSIGN_OR_RETURN(
+          stream_index,
+          AddPlainTensor(GetMasterGraph(*resources_),
+                         absl::StrCat(stream_handle, "Index"),
+                         XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}),
+                         *resources_));
+      load_checkpoint_.add(poplar::program::Copy(feed_index, stream_index));
+    } else {
+      stream_index = feed_index;
+    }
+    new_index.Initialize(*resources_, stream_index);
     new_index.SetKeyAndStartId(info.key(), info.start_id());
     feeds_streams_.insert({stream_handle, new_index});
   }
@@ -150,28 +164,42 @@ Status VerifiedStreamsIndices::InitializeIndexTensors(
       resources.annotations.input_output_aliasing_map;
   const auto& inputs = io_map.GetEntryInputInfos();
   const auto& outputs = io_map.GetEntryOutputInfos();
+  std::list<std::pair<std::string, Index*>> handles;
   for (auto input : inputs) {
-    if (input.IsStreaming()) {
-      input_data_.IncrementNumTensors();
-    } else {
+    Index* index = &input_data_;
+    if (!input.IsStreaming()) {
       if (!input.IsResource()) {
         return xla::FailedPrecondition(
             "Input should be either a stream or a resource");
       }
-      input_parameters_.IncrementNumTensors();
+      index = &input_parameters_;
+    }
+    index->IncrementNumTensors();
+    for (auto handle : input.Handles()) {
+      handles.emplace_back(handle, index);
     }
   }
+
   for (auto output : outputs) {
-    if (output.IsStreaming()) {
-      output_data_.IncrementNumTensors();
-    } else {
+    Index* index = &output_data_;
+    if (!output.IsStreaming()) {
       if (!output.IsResource()) {
         return xla::FailedPrecondition(
             "Output should be either a stream or a resource");
       }
-      output_parameters_.IncrementNumTensors();
+      if (output.IsResourceModified()) {
+        output_parameters_.IncrementNumTensors();
+        continue;
+      } else {
+        index = &output_parameters_;
+      }
+    }
+    index->IncrementNumTensors();
+    for (auto handle : output.Handles()) {
+      handles.emplace_back(handle, index);
     }
   }
+
   if (io_map.GetNumStreamingInputs() != input_data_.NumTensors()) {
     return xla::FailedPrecondition(
         "Number of inputs not matching the one from the aliasing map");
@@ -205,7 +233,35 @@ Status VerifiedStreamsIndices::InitializeIndexTensors(
   input_parameters_.Initialize(*resources_, zero_tensor);
   output_parameters_.Initialize(*resources_, zero_tensor);
 
-  return SetKeysAndStartIds(opts);
+  TF_RETURN_IF_ERROR(SetKeysAndStartIds(opts));
+
+  // Generate the key / id pairs for all the handles
+  for (auto handle : handles) {
+    KeyIdPair new_pair = handle.second->NextKeyIdPair();
+    assigned_ids_.insert({handle.first, new_pair});
+  }
+
+  // For modified resources use the same id as the matching input.
+  for (auto output : outputs) {
+    Index* index = &output_data_;
+    if (!output.IsStreaming() && output.IsResourceModified()) {
+      int index = 0;
+      for (auto handle : output.Handles()) {
+        const std::string input_handle =
+            GetInputCopyHandle(output.GetInputIndex(), index);
+        auto it = assigned_ids_.find(input_handle);
+        if (it == assigned_ids_.end()) {
+          return xla::FailedPrecondition(
+              "Couldn't find output parameter %s's matching input: %s",
+              output.Handles().at(index), input_handle);
+        }
+        KeyIdPair new_pair{output_parameters_.GetKeyIdPair().key,
+                           it->second.id};
+        assigned_ids_.insert({handle, new_pair});
+        index++;
+      }
+    }
+  }
 }
 
 StatusOr<poplar::Tensor> VerifiedStreamsIndices::IndexTensor(
@@ -289,9 +345,11 @@ uint64 VerifiedStreamsIndices::Index::NumTensors() const {
 }
 
 void VerifiedStreamsIndices::Index::SetKeyAndStartId(uint64 key, uint64 id) {
-  key_ = key;
   id_ = id;
+  SetKey(key);
 }
+
+void VerifiedStreamsIndices::Index::SetKey(uint64 key) { key_ = key; }
 
 Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
     const IpuOptions::VerifiedTransfers& opts) {
@@ -306,7 +364,7 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor checkpoint_idx,
       AddPlainTensor(graph, "checkpointIndex",
-                     XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {1}),
+                     XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}),
                      *resources_));
 
   auto fifo_index =
@@ -329,8 +387,9 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
        {opts.checkpoint_in().key(), opts.checkpoint_in().start_id()}});
 
   // Increment the index by one.
-  popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)), {checkpoint_idx},
-                     load_checkpoint_, "CheckpointIndexInc");
+  popops::mapInPlace(graph, pe::Add(pe::_1, pe::Const(1)),
+                     {checkpoint_idx.slice(0, 1)}, load_checkpoint_,
+                     "CheckpointIndexInc");
 
   auto fifo_out = graph.addDeviceToHostFIFO(
       "checkpointOut", checkpoint_tensor_.elementType(),
@@ -381,7 +440,12 @@ Status VerifiedStreamsIndices::SetKeysAndStartIds(
     indices.emplace_back(&output_data_, opts.outputs());
   }
   if (output_parameters_.NumTensors() > 0) {
-    indices.emplace_back(&output_parameters_, opts.output_parameters());
+    // If there are more output parameters than just the modified ones.
+    if (output_parameters_.NumTensors() > input_parameters_.NumTensors()) {
+      indices.emplace_back(&output_parameters_, opts.output_parameters());
+    } else {
+      output_parameters_.SetKey(opts.output_parameters().key());
+    }
   }
 
   // Generate Ids automatically if needed.
@@ -403,19 +467,9 @@ Status VerifiedStreamsIndices::SetKeysAndStartIds(
           "The ids must either all be generated automatically or all set "
           "manually");
     }
-    int64 input_parameters_offset = -1;
     for (auto& pair : indices) {
-      if (pair.first == &input_parameters_) {
-        input_parameters_offset = next_start_id_;
-      }
-      // Make sure the output parameters use the same start id as the input
-      // parameters.
-      if (pair.first == &output_parameters_ && input_parameters_offset >= 0) {
-        pair.second.set_start_id(input_parameters_offset);
-      } else {
-        pair.second.set_start_id(next_start_id_);
-        next_start_id_ += pair.first->NumTensors();
-      }
+      pair.second.set_start_id(next_start_id_);
+      next_start_id_ += pair.first->NumTensors();
     }
   }
 
@@ -426,28 +480,13 @@ Status VerifiedStreamsIndices::SetKeysAndStartIds(
   return Status::OK();
 }
 
-poplar::OptionFlags VerifiedStreamsIndices::GraphInputOptions(
-    const InputOutputAliasingMap::InputInfo& info, const std::string& handle) {
+poplar::OptionFlags VerifiedStreamsIndices::GraphOptions(
+    const std::string& handle) const {
   if (resources_->use_verified_transfers) {
-    Index& idx = info.IsStreaming() ? input_data_ : input_parameters_;
-    KeyIdPair new_pair = idx.NextKeyIdPair();
-    assigned_ids_.insert({handle, new_pair});
+    auto key_id = assigned_ids_.at(handle);
     return {{"streamVerification", "true"},
-            {"key", absl::StrCat(new_pair.key)},
-            {"id", absl::StrCat(new_pair.id)}};
-  }
-  return poplar::OptionFlags();
-}
-
-poplar::OptionFlags VerifiedStreamsIndices::GraphOutputOptions(
-    const InputOutputAliasingMap::OutputInfo& info, const std::string& handle) {
-  if (resources_->use_verified_transfers) {
-    Index& idx = info.IsStreaming() ? output_data_ : output_parameters_;
-    KeyIdPair new_pair = idx.NextKeyIdPair();
-    assigned_ids_.insert({handle, new_pair});
-    return {{"streamVerification", "true"},
-            {"key", absl::StrCat(new_pair.key)},
-            {"id", absl::StrCat(new_pair.id)}};
+            {"key", absl::StrCat(key_id.key)},
+            {"id", absl::StrCat(key_id.id)}};
   }
   return poplar::OptionFlags();
 }

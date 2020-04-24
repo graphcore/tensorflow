@@ -38,17 +38,32 @@ namespace ipu {
 
 class BinaryLoader;
 
-class Executable {
+class IExecutable {
  public:
-  explicit Executable(StreamReader& stream, int64_t length = 0);
+  IExecutable(StreamReader& stream, int64_t length,
+              const poplar::OptionFlags& opts);
   poplar::Engine& Engine();
   std::string StreamsList(bool summmary = false) const;
+  virtual ~IExecutable() = default;
+
+ protected:
+  std::unique_ptr<poplar::Engine> engine_;
+};
+
+class VerifiedExecutable : public IExecutable {
+ public:
+  VerifiedExecutable(StreamReader& stream, int64_t length, bool use_autoloader);
+  void Prepare(poplar::Device& device);
+  void Deploy();
+  void Run();
+};
+
+class Executable : public IExecutable {
+ public:
+  explicit Executable(StreamReader& stream, int64_t length = 0);
   void Load(const poplar::Device& device);
   void Run();
   void DeviceToHostCopy();
-
- private:
-  std::unique_ptr<poplar::Engine> engine_;
 };
 
 class DeviceManager {
@@ -114,7 +129,11 @@ class Infeed {
 
 class TensorManager {
  public:
-  explicit TensorManager(const Json::Value& root);
+  // Json metadata don't contain metadata size information so an optional
+  // function can be passed to compute it.
+  explicit TensorManager(
+      const Json::Value& root,
+      std::function<size_t(size_t)> output_metadata_size_fn = {});
   const std::vector<Tensor>& Inputs() const;
   const std::vector<Tensor>& Outputs() const;
   const std::vector<Infeed>& Infeeds() const;
@@ -130,12 +149,14 @@ class TensorManager {
   void LoadInputsAndParameters(const BinaryLoader& loader);
   void LoadVerifiedCheckpoint(const BinaryLoader& loader,
                               int64_t checkpoint_index);
+  void SaveCheckpoint(BinaryWriter& writer);
   void LoadInputs(const BinaryLoader& loader);
   void LoadInfeeds(const BinaryLoader& loader);
   void SaveOutputs(TensorType type, BinaryWriter& writer,
                    bool allow_duplicates = false) const;
   void SaveOutputsToJson(TensorType type, const std::string& folder) const;
-  void ConnectStreams(Executable& executable);
+  void ConnectStreams(IExecutable& executable);
+  bool ContainsCheckpoint() const;
 
  private:
   std::vector<Tensor> inputs_;
@@ -144,13 +165,12 @@ class TensorManager {
   std::vector<Outfeed> outfeeds_;
   std::vector<std::string> feeds_order_;
   IpuConfig config_;
-  int64_t verified_checkpoint_index_;
 };
 
 class SeedManager {
  public:
   explicit SeedManager(const IpuConfig& config);
-  void ConnectStreams(Executable& executable);
+  void ConnectStreams(IExecutable& executable);
 
  private:
   std::vector<uint64_t> seeds_;
@@ -160,9 +180,12 @@ class BinaryLoader {
  public:
   void LoadFile(const std::string& filename);
   std::unique_ptr<TensorManager> CreateTensorManager(
+      std::function<size_t(size_t)> output_metadata_size_fn = {},
       const std::string metadata_name = "") const;
   std::unique_ptr<Executable> CreateExecutable(
       const std::string executable_name = "") const;
+  std::unique_ptr<VerifiedExecutable> CreateVerifiedExecutable(
+      bool use_autoloader, const std::string executable_name = "") const;
   std::unique_ptr<StreamReader> CreateInfeedStreamReader(
       const std::string infeed_name) const;
   std::unique_ptr<StreamReader> GetTensorStream(const std::string& name) const;

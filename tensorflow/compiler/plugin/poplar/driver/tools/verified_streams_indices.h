@@ -78,15 +78,8 @@ class VerifiedStreamsIndices {
                                        poplar::program::Sequence& seq);
 
   // Return some empty options if verified transfers are disabled otherwise some
-  // options containing the key and id associated to the given info.
-  poplar::OptionFlags GraphInputOptions(
-      const InputOutputAliasingMap::InputInfo& info, const std::string& handle);
-
-  // Return some empty options if verified transfers are disabled otherwise some
-  // options containing the key and id associated to the given info.
-  poplar::OptionFlags GraphOutputOptions(
-      const InputOutputAliasingMap::OutputInfo& info,
-      const std::string& handle);
+  // options containing the key and id associated to the given handle.
+  poplar::OptionFlags GraphOptions(const std::string& handle) const;
 
   // Return some empty options if verified transfers are disabled otherwise some
   // options containing the key and id associated to the given feed stream
@@ -125,7 +118,7 @@ class VerifiedStreamsIndices {
                               const HloInstruction* inst);
   // Retrieve the number of streams in a feed based on its shape.
   StatusOr<int64> GetFeedNumStreams(const HloInstruction* inst);
-  poplar::Tensor GetStreamIndexTensor(const std::string& feed_name);
+  poplar::Tensor GetFeedIndexTensor(const std::string& feed_name);
   // Initialize the key and id values based on the passed IpuOptions.
   Status SetKeysAndStartIds(const IpuOptions::VerifiedTransfers& opts);
   // Create a checkpoint tensor containing the positions of all the streams in
@@ -154,6 +147,7 @@ class VerifiedStreamsIndices {
     // Create KeyIdPair with the current key and id.
     KeyIdPair GetKeyIdPair() const;
     void SetKeyAndStartId(uint64 key, uint64 id);
+    void SetKey(uint64 key);
 
    private:
     std::map<poplar::Graph*, poplar::Tensor> base_indices_;
