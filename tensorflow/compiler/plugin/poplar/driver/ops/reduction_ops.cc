@@ -60,7 +60,7 @@ static const std::string reduction_lt("SelectionLt");
 
 static const std::string unknown("Unknown");
 
-bool IsReducableArtithmetic(const HloComputation* computation) {
+bool IsReducibleArithmetic(const HloComputation* computation) {
   HloInstruction* root(computation->root_instruction());
   if (!hlo_query::AllOperandsAreParameters(*root)) {
     return false;
