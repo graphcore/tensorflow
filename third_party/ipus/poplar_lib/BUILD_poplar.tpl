@@ -31,3 +31,10 @@ cc_library(
     ]),
     deps = [":poplar_headers"],
 )
+
+cc_library(
+    name = "popsec_lib",
+    hdrs = glob(["popsec/include/*.hpp"]),
+    srcs = glob(["popsec/lib*/lib*"]),
+    includes = ["popsec/include"],
+)

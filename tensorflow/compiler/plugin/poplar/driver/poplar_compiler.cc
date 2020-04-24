@@ -908,8 +908,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   const bool all_scalar_elementwise_graph =
       AreAllScalarElementwiseGraph(module.get());
 
-  const bool is_scalar_elementwise_graph =
-      all_scalar_elementwise_graph && !any_computation_has_side_effects;
+  const bool is_scalar_elementwise_graph = all_scalar_elementwise_graph &&
+                                           !any_computation_has_side_effects &&
+                                           !resources.use_verified_transfers;
 
   bool compile = true;
   if (is_constant_graph) {

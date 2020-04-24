@@ -74,7 +74,10 @@ class RemoteParameterLoadOp : public PoplarOpDef {
       }
 
       const std::string remote_buffer_name =
-          GetInputCopyHandle(load_inst->GetParameterNumber(), flat_tuple_index);
+          res.annotations.input_output_aliasing_map
+              .GetEntryInputInfos()[load_inst->GetParameterNumber()]
+              .Handles()
+              .at(flat_tuple_index);
 
       poplar::RemoteBuffer remote_buffer = graph.addRemoteBuffer(
           remote_buffer_name, tensor_destination.elementType(),
@@ -130,7 +133,10 @@ class RemoteParameterStoreOp : public PoplarOpDef {
                                  .GetEntryOutputInfos()[output_idx];
 
       const std::string remote_buffer_name =
-          GetInputCopyHandle(out_info.GetInputIndex(), flat_tuple_index);
+          res.annotations.input_output_aliasing_map
+              .GetEntryInputInfos()[out_info.GetInputIndex()]
+              .Handles()
+              .at(flat_tuple_index);
 
       poplar::RemoteBuffer& remote_buffer =
           res.remote_buffers.at(remote_buffer_name);

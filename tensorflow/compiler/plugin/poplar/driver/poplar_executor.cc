@@ -126,15 +126,6 @@ namespace poplarplugin {
 
 std::string GetRandomNumberSeedStream() { return "__seed_stream"; }
 
-std::string GetInputCopyHandle(int64 parameter, int64 index) {
-  return tensorflow::strings::Printf("%lld.%lld", parameter, index);
-}
-
-std::string GetOutputCopyHandle(int64 output_index, int64 flat_tensor_index) {
-  return tensorflow::strings::Printf("out_%lld.%lld", output_index,
-                                     flat_tensor_index);
-}
-
 std::string GetInfeedCopyHandle(const std::string& name, int64 shape_index) {
   return tensorflow::strings::Printf("infeed_%s.%lld", name.c_str(),
                                      shape_index);
@@ -1713,7 +1704,7 @@ void PoplarExecutor::UpdateArgsHandleMap(
                               is_remote_parameter);
     for (unsigned i = 0; i < bufs.size(); i++) {
       InputDef input = bufs[i];
-      auto input_handle = GetInputCopyHandle(a, i);
+      auto input_handle = input_info.Handles().at(i);
       if (input_info.IsResource() && !input_info.IsResourceNotModified()) {
         if (modified_resources.contains(input.tc)) {
           // We found an alias - we add a copy.
@@ -1876,7 +1867,7 @@ se::DeviceMemoryBase PoplarExecutor::BufferOutputAllocation::GetAllocation(
     tc->size = size;
     tc->on_device = output_info.IsStreaming() ? false : true;
     tc->ref_count++;
-    tc->output_handle = GetOutputCopyHandle(output_index, flat_tensor_index);
+    tc->output_handle = output_info.Handles().at(flat_tensor_index);
     tc->output_convertor = GetOutputConversionFunction(shape);
     return se::DeviceMemoryBase(tc);
   } else {
@@ -1886,7 +1877,7 @@ se::DeviceMemoryBase PoplarExecutor::BufferOutputAllocation::GetAllocation(
     TensorControl* tc = reinterpret_cast<TensorControl*>(allocated.opaque());
     tc->size = size;
     tc->on_device = output_info.IsStreaming() ? false : true;
-    tc->output_handle = GetOutputCopyHandle(output_index, flat_tensor_index);
+    tc->output_handle = output_info.Handles().at(flat_tensor_index);
     tc->output_convertor = GetOutputConversionFunction(shape);
     return allocated;
   }

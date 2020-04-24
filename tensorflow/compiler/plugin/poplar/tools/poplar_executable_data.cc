@@ -47,7 +47,7 @@ class BinaryVersion {
  private:
   // Increment minor only when backward compatibility is maintained (e.g new
   // features are added) Increment major and reset minor to 0 otherwise.
-  int major{1};
+  int major{2};
   int minor{0};
 };
 
@@ -317,7 +317,10 @@ void BinaryVersion::ErrorIfNotCompatible(StreamReader& in) {
   ERROR_ON(matches.size() != 3);
   int stream_major = std::stoi(matches[1].str());
   int stream_minor = std::stoi(matches[2].str());
-  ERROR_ON(stream_major != major);
+  ERROR_ON_MSG(stream_major != major,
+               "Binary file format version mismatch: file uses "
+                   << version_str << " whereas the parser is v" << major << "."
+                   << minor);
   ERROR_ON(stream_minor > minor);
 }
 
@@ -372,7 +375,14 @@ std::string TensorTypeToString(TensorType type) {
 }
 
 LogContext::LogContext(const std::string& context) : saved_context_(context_) {
-  context_ = absl::StrCat(saved_context_, " ", context);
+  UpdateContext(context);
+}
+
+void LogContext::UpdateContext(const std::string& new_context) {
+  context_ = absl::StrCat(saved_context_, " ", new_context);
+  if (InfoEnabled()) {
+    std::cout << "[" << context_ << "]" << std::endl;
+  }
 }
 
 LogContext::~LogContext() { context_ = saved_context_; }
@@ -400,13 +410,26 @@ int64_t TensorShape::NumElements() const {
 }
 
 int64_t TensorShape::DataSizeInBytes() const {
-  return NumElements() * ElementSizeInBytes();
+  return NumElements() * ElementSizeInBytes() + metadata_size_;
+}
+
+bool TensorShape::HasMetadata() const { return metadata_size_ != 0; }
+
+int64_t TensorShape::MetadataSize() const { return metadata_size_; }
+
+void TensorShape::SetMetadataSize(int64_t metadata_size) {
+  metadata_size_ = metadata_size;
 }
 
 DataType TensorShape::Type() const { return type_; }
 
+TensorShape::TensorShape(const TensorShape& shape, int64_t metadata_size)
+    : TensorShape(shape) {
+  metadata_size_ = metadata_size;
+}
+
 TensorShape::TensorShape(DataType type, const Json::Value& array)
-    : type_(type) {
+    : type_(type), metadata_size_(0) {
   ERROR_ON(!array.isArray());
   shape_.reserve(array.size());
   absl::c_transform(array, std::back_inserter(shape_),
@@ -425,14 +448,16 @@ std::string TensorShape::ToString() const {
 void TensorShape::ToStream(StreamWriter& out) const {
   out.WriteInt64(type_);
   out.WriteInt64Array(shape_);
+  out.WriteInt64(metadata_size_);
 }
 
 TensorShape::TensorShape(StreamReader& in)
     : type_(static_cast<DataType>(in.ReadInt64())),
-      shape_(in.ReadInt64Array()) {}
+      shape_(in.ReadInt64Array()),
+      metadata_size_(in.ReadInt64()) {}
 
 TensorShape::TensorShape(const std::vector<int64_t>& shape, DataType type)
-    : shape_(shape), type_(type) {}
+    : shape_(shape), type_(type), metadata_size_(0) {}
 
 std::string Tensor::ToString() const {
   std::stringstream ss;
@@ -462,6 +487,7 @@ void Tensor::LoadDataFromStream(StreamReader& in) {
         "Type and Shape from metadata JSON file: "
             << info_.ToString()
             << " don't match those from binary file: " << info.ToString());
+    info_.SetMetadataSize(info.Shape().MetadataSize());
   }
   data_.resize(info_.Shape().DataSizeInBytes());
   in.ReadData(data_.data(), info_.Shape().DataSizeInBytes());
@@ -504,6 +530,10 @@ TensorInfo::TensorInfo(StreamReader& in)
 TensorInfo::TensorInfo(const std::string& name, const std::string& handle,
                        const TensorShape& shape, TensorType type)
     : name_(name), handle_(handle), shape_(shape), type_(type) {}
+
+void TensorInfo::SetMetadataSize(int64_t metadata_size) {
+  shape_.SetMetadataSize(metadata_size);
+}
 
 bool TensorInfo::TypeAndShapeMatch(const TensorInfo& other) const {
   bool type_match = type_ == other.type_;
@@ -779,13 +809,18 @@ void OutfeedStream::WriteTensor(void* src, int64_t replication_count) {
 
 std::vector<OutfeedStream>& Outfeed::Streams() { return streams_; }
 
-Outfeed::Outfeed(const Json::Value& outfeed)
+Outfeed::Outfeed(const Json::Value& outfeed,
+                 std::function<size_t(size_t)> metadata_size_fn)
     : name_(outfeed["name"].asString()) {
-  absl::c_transform(
-      outfeed["streams"], std::back_inserter(streams_),
-      [](const Json::Value& stream) {
-        return OutfeedStream{TensorInfo{stream, TensorType::Outfeed}};
-      });
+  absl::c_transform(outfeed["streams"], std::back_inserter(streams_),
+                    [&](const Json::Value& stream) {
+                      TensorInfo info{stream, TensorType::Outfeed};
+                      if (metadata_size_fn) {
+                        info.SetMetadataSize(
+                            metadata_size_fn(info.Shape().DataSizeInBytes()));
+                      }
+                      return OutfeedStream{info};
+                    });
 }
 
 void Outfeed::SetOutputFolder(const std::string& output_folder) {

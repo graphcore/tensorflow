@@ -356,7 +356,7 @@ class IpuSerializationTest(xla_test.XLATestCase):
                                         dtype=dtypes.int32,
                                         name="checkpoint:0"), "parameter"),
                 (tensor_spec.TensorSpec(
-                    shape=[1], dtype=dtypes.int32,
+                    shape=[2], dtype=dtypes.int32,
                     name="checkpointIndex:0"), "input_data")
             ], [(tensor_spec.TensorSpec(shape=[],
                                         dtype=dtypes.float32,

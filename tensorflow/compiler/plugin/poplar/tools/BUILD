@@ -61,9 +61,10 @@ genrule(
         ":libpoplar_executable_runner.so",
         ":PoplarExecutableRunner",
         ":PoplarBinaryReader",
+        ":PoplarVerifiedExecutableRunner",
         "@jsoncpp_git//:jsoncpp",
         "@jsoncpp_git//:headers",
-    ] + glob(["poplar_executable_*.h"]),
+    ] + glob(["poplar_*.h"]),
     outs = ["libpoplar_executable_runner.tar.gz"],
     cmd = """
         tmp_root=`mktemp -d`
@@ -160,6 +161,24 @@ cc_binary(
         ":poplar_executable_runner",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+cc_binary(
+    name = "PoplarVerifiedExecutableRunner",
+    srcs = [
+        "poplar_verified_executable_runner_main.cc",
+    ],
+    copts = tf_copts() + [
+        "-fexceptions",
+    ],
+    linkopts = ["-ldl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":poplar_executable_runner",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@local_config_poplar//poplar:popsec_lib",
     ],
 )
 

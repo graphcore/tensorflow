@@ -70,6 +70,7 @@ class LogContext {
   static bool InfoEnabled();
   static void EnableInfo(bool enabled);
   explicit LogContext(const std::string& context);
+  void UpdateContext(const std::string& new_context);
   ~LogContext();
 
  private:
@@ -94,6 +95,7 @@ using ByteVector = std::vector<uint8_t>;
 class TensorShape {
  public:
   TensorShape() = default;
+  TensorShape(const TensorShape& shape, int64_t metadata_size);
   explicit TensorShape(DataType type, const Json::Value& array);
   explicit TensorShape(StreamReader& in);
   TensorShape(const std::vector<int64_t>& shape, DataType type);
@@ -106,10 +108,14 @@ class TensorShape {
   DataType Type() const;
   void ToStream(StreamWriter& out) const;
   bool operator==(const TensorShape& other) const;
+  bool HasMetadata() const;
+  int64_t MetadataSize() const;
+  void SetMetadataSize(int64_t metadata_size);
 
  private:
   DataType type_;
   std::vector<int64_t> shape_;
+  int64_t metadata_size_;
 };
 
 /* Tensor types to connect to the Poplar binary:
@@ -156,6 +162,7 @@ class TensorInfo {
   std::string ToString() const;
   void ToStream(StreamWriter& out) const;
   bool TypeAndShapeMatch(const TensorInfo& other) const;
+  void SetMetadataSize(int64_t metadata_size);
 
  private:
   std::string name_;
@@ -177,6 +184,7 @@ class Tensor {
   void* Data();
   std::string ToString() const;
   void ToStream(StreamWriter& out) const;
+  void SetMetadataSize(int64_t metadata_size);
 
  private:
   TensorInfo info_;
@@ -205,7 +213,8 @@ class OutfeedStream {
 
 class Outfeed {
  public:
-  explicit Outfeed(const Json::Value& Outfeed);
+  explicit Outfeed(const Json::Value& Outfeed,
+                   std::function<size_t(size_t)> metadata_size_fn = {});
   const std::string& Name() const;
   std::vector<OutfeedStream>& Streams();
   void SetOutputFolder(const std::string& output_folder);

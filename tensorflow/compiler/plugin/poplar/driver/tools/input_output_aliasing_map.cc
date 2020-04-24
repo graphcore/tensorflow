@@ -15,12 +15,23 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
+#include "tensorflow/core/lib/strings/stringprintf.h"
 
 #include <vector>
 
 namespace xla {
 namespace poplarplugin {
+
+std::string GetInputCopyHandle(int64 parameter, int64 index) {
+  return tensorflow::strings::Printf("%lld.%lld", parameter, index);
+}
+
+std::string GetOutputCopyHandle(int64 output_index, int64 flat_tensor_index) {
+  return tensorflow::strings::Printf("out_%lld.%lld", output_index,
+                                     flat_tensor_index);
+}
 
 InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
   const auto& inputs = module->entry_computation()->parameter_instructions();
@@ -60,8 +71,9 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
     const InputInfo::Type type = is_resource
                                      ? InputInfo::Type::ResourceNotModified
                                      : InputInfo::Type::StreamedVariable;
-    entry_input_infos_.push_back(InputInfo(
-        type, inputs[idx]->metadata().op_name(), inputs[idx]->shape()));
+    entry_input_infos_.push_back(
+        InputInfo(type, inputs[idx]->metadata().op_name(), inputs[idx]->shape(),
+                  entry_input_infos_.size()));
   }
 
   /*
@@ -97,7 +109,7 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
     if (idx < num_streaming_outputs_) {
       entry_output_infos_.push_back(
           OutputInfo(OutputInfo::Type::StreamedVariable, output_names[idx],
-                     output_shapes[idx]));
+                     output_shapes[idx], entry_output_infos_.size()));
     } else {
       const uint64 resource_idx = idx - num_streaming_outputs_;
       const uint64 input_index = resource_update_to_input_index[resource_idx];
@@ -107,19 +119,19 @@ InputOutputAliasingMap::InputOutputAliasingMap(const HloModule* module) {
             std::distance(input_mapping.begin(), input_map_it);
 
         if (num_streaming_inputs_ <= parameter_index) {
-          entry_output_infos_.push_back(
-              OutputInfo(OutputInfo::Type::ResourceModified, output_names[idx],
-                         output_shapes[idx], parameter_index));
+          entry_output_infos_.push_back(OutputInfo(
+              OutputInfo::Type::ResourceModified, output_names[idx],
+              output_shapes[idx], parameter_index, entry_output_infos_.size()));
           entry_input_infos_[parameter_index].ChangeToResourceModified(idx);
         } else {
-          entry_output_infos_.push_back(
-              OutputInfo(OutputInfo::Type::ResourceOutputOnly,
-                         output_names[idx], output_shapes[idx]));
+          entry_output_infos_.push_back(OutputInfo(
+              OutputInfo::Type::ResourceOutputOnly, output_names[idx],
+              output_shapes[idx], entry_output_infos_.size()));
         }
       } else {
         entry_output_infos_.push_back(
             OutputInfo(OutputInfo::Type::ResourceOutputOnly, output_names[idx],
-                       output_shapes[idx]));
+                       output_shapes[idx], entry_output_infos_.size()));
       }
     }
   }
@@ -172,6 +184,41 @@ const bool InputOutputAliasingMap::InputInfo::IsResourceNotModified() const {
 
 const uint64 InputOutputAliasingMap::InputInfo::GetOutputIndex() const {
   return output_index_;
+}
+
+InputOutputAliasingMap::InputInfo::InputInfo(const Type type,
+                                             const std::string& name,
+                                             const xla::Shape& shape,
+                                             int64 parameter_idx)
+    : type_(type), output_index_(0), name_(name), shape_(shape) {
+  int64 index = 0;
+  for (auto shape : FlattenedXlaShape(shape)) {
+    handles_.push_back(GetInputCopyHandle(parameter_idx, index));
+    index++;
+  }
+}
+
+InputOutputAliasingMap::OutputInfo::OutputInfo(const Type& type,
+                                               const std::string& name,
+                                               const xla::Shape& shape,
+                                               const uint64 input_index,
+                                               int64 parameter_idx)
+    : type_(type), input_index_(input_index), name_(name), shape_(shape) {
+  int64 index = 0;
+  for (auto shape : FlattenedXlaShape(shape)) {
+    handles_.push_back(GetOutputCopyHandle(parameter_idx, index));
+    index++;
+  }
+}
+
+const std::vector<std::string>& InputOutputAliasingMap::InputInfo::Handles()
+    const {
+  return handles_;
+}
+
+const std::vector<std::string>& InputOutputAliasingMap::OutputInfo::Handles()
+    const {
+  return handles_;
 }
 
 const bool InputOutputAliasingMap::OutputInfo::IsStreaming() const {

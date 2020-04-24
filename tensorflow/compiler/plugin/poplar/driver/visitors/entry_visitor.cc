@@ -132,13 +132,12 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
     }
 
     // Create a host stream.
-    const std::string handle =
-        GetInputCopyHandle(inst->parameter_number(), flat_tuple_index);
+    const std::string handle = in_info.Handles().at(flat_tuple_index);
     auto fifo = graph.addHostToDeviceFIFO(
         handle, tensor_destination.elementType(),
         tensor_destination.numElements(),
         poplar::ReplicatedStreamMode::BROADCAST,
-        resources_.streams_indices.GraphInputOptions(in_info, handle));
+        resources_.streams_indices.GraphOptions(handle));
 
     TF_RETURN_IF_ERROR(AddHostToDeviceCopy(
         fifo, tensor_destination,
@@ -254,10 +253,10 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
         poplar::Tensor out = ConvertFromDeviceLayout(
             layout_sub_shapes[tuple_index], out_tensors[tuple_index]);
 
-        const std::string handle = GetOutputCopyHandle(idx, tuple_index);
+        const std::string handle = out_info.Handles().at(tuple_index);
         auto fifo = graph.addDeviceToHostFIFO(
             handle, out.elementType(), out.numElements(),
-            resources_.streams_indices.GraphOutputOptions(out_info, handle));
+            resources_.streams_indices.GraphOptions(handle));
 
         TF_RETURN_IF_ERROR(
             AddDeviceToHostCopy(out, fifo,

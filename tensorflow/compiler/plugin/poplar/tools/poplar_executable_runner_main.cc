@@ -161,9 +161,7 @@ bool AbslParseFlag(absl::string_view text, CheckpointFile* f,
 
 ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
           "List of binary files containing metadata, binaries, weights,"
-          " inputs, feeds, etc. Note if this flag is set then the flags "
-          "model_metadata, model_executable, weights_path, input_data, "
-          "infeed_data are ignored.");
+          " inputs, feeds, etc.");
 ABSL_FLAG(int, iterations, 1, "Number of times to run the executable");
 ABSL_FLAG(int, ckpt_frequency, 1, "Frequency at which to create checkpoints");
 ABSL_FLAG(bool, print_output, false,
