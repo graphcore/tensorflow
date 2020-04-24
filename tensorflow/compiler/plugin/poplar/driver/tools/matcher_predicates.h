@@ -70,6 +70,8 @@ bool IsMultiUpdateScatter(const HloInstruction*);
 bool IsMultiUpdateAddScatter(const HloInstruction*);
 bool IsMultiSliceGather(const HloInstruction*);
 bool IsAnySliceApply(const HloInstruction*);
+bool IsUniformSingleDimSlice(const HloInstruction*);
+
 /**
  * Construct a unary predicate which checks if a given HloInstruction is a
  * custom Poplibs instruction of a specified type.

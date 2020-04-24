@@ -369,9 +369,53 @@ StatusOr<int64> GetSliceIndex(const HloInstruction* inst,
   return xla::InternalError("Failed to find slice in operands");
 }
 
+namespace {
+int64 HighestFactorLessOrEqualThanN(int64 to_factor, int64 n) {
+  CHECK_GE(to_factor, n);
+  int64 factor = n;
+  while (to_factor % factor) {
+    factor--;
+  }
+  return factor;
+}
+}  // namespace
+
+poplar::Tensor CreateTensorFromSlice(poplar::Graph& graph,
+                                     const poplar::Tensor& slice,
+                                     int64 slice_dimension, int64 output_size,
+                                     CompilerResources& resources,
+                                     const std::string& name) {
+  const int64 slice_size = slice.dim(slice_dimension);
+  // Find the higher number of rows we can slice out.
+  const int64 rows_to_clone =
+      HighestFactorLessOrEqualThanN(output_size, slice_size);
+
+  // Slice out the right number of rows from the slice.
+  poplar::Tensor adjusted_slice = slice;
+  if (rows_to_clone != slice_size) {
+    adjusted_slice = adjusted_slice.slice(0, rows_to_clone, slice_dimension);
+  }
+
+  // Calculate how many slices are required for the input tensor.
+  const int64 number_of_clones = output_size / rows_to_clone;
+  std::vector<poplar::Tensor> output_slices(number_of_clones);
+
+  // Make a clone of the slice.
+  output_slices[0] =
+      TensorCloneAndRebalanceAliasing(graph, resources, adjusted_slice, name);
+
+  // The remaining slices will just clone the layout of the first slice.
+  for (int64 i = 1; i != number_of_clones; ++i) {
+    output_slices[i] = graph.clone(output_slices[0], name);
+  }
+
+  // Concatentate all the slices into a single tensor.
+  return poplar::concat(output_slices, slice_dimension);
+}
+
 static StatusOr<poplar::Tensor> PathTransform(
-    poplar::Graph& graph, poplar::Tensor in, int64 input_index,
-    const std::vector<const HloInstruction*>& path) {
+    poplar::Graph& graph, CompilerResources& resources, poplar::Tensor in,
+    int64 input_index, const std::vector<const HloInstruction*>& path) {
   // Now revert any transformations required by the path from the source to
   // the target
 
@@ -429,6 +473,26 @@ static StatusOr<poplar::Tensor> PathTransform(
                                               ->padding_config(),
                                           in));
         }
+        break;
+      }
+      case HloOpcode::kSlice: {
+        std::vector<int64> slice_dimensions;
+        for (int64 i = 0; i != inst->shape().rank(); ++i) {
+          if (inst->shape().dimensions(i) !=
+              inst->operand(0)->shape().dimensions(i)) {
+            slice_dimensions.push_back(i);
+          }
+        }
+        if (slice_dimensions.size() != 1) {
+          return InternalErrorStrCat(
+              "Expected to allocate for a slice operation in a single "
+              "dimension, instead got a slice in ",
+              slice_dimensions.size(), " dimensions.");
+        }
+        const int64 slice_dimension = slice_dimensions[0];
+        in = CreateTensorFromSlice(
+            graph, in, slice_dimension,
+            inst->operand(0)->shape().dimensions(slice_dimension), resources);
         break;
       }
       default: {
@@ -737,8 +801,8 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
     }
   }
 
-  TF_ASSIGN_OR_RETURN(
-      out, PathTransform(graph, out, input_index, tensor_target.backward_path));
+  TF_ASSIGN_OR_RETURN(out, PathTransform(graph, resources, out, input_index,
+                                         tensor_target.backward_path));
   return out;
 }
 

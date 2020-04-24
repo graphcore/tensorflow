@@ -166,6 +166,9 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
         return inst->operand_index(op_source) == 0 &&
                output_and_all_operands_same_type(inst);
       }
+      case HloOpcode::kSlice: {
+        return IsUniformSingleDimSlice(inst);
+      }
       default:
         break;
     }

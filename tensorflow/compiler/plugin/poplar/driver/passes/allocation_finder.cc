@@ -295,6 +295,12 @@ void AllocationFinder::FindConsumers(const TensorLocation& src,
           FindConsumers(src, user, index);
           break;
         }
+        case HloOpcode::kSlice: {
+          if (IsUniformSingleDimSlice(user)) {
+            FindConsumers(src, user, index);
+          }
+          break;
+        }
         case HloOpcode::kPad: {
           if (op_index == 0) {
             FindConsumers(src, user, index);
