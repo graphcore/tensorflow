@@ -246,6 +246,116 @@ HloModule top
   EXPECT_EQ(seq[4]->name(), "tuple");
 }
 
+TEST_F(ShortestPathSchedulerTest, TestUnusedParameter) {
+  //   p0
+  //   |
+  // cos0  p1
+  //   |  /
+  // add0   p2
+  //   |  /
+  //  add1
+  //   |
+  //  tuple
+  std::string hlo_string = R"(
+HloModule top
+%cluster_1  {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  p2 = f32[] parameter(2)
+  p_unused = f32[] parameter(3)
+  cos0 = f32[] cosine(p0)
+  add0 = f32[] add(cos0, p1)
+  add1 = f32[] add(add0, p2)
+  ROOT tuple = (f16[]) tuple(add1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  ASSERT_EQ(seq.size(), 8);
+
+  EXPECT_EQ(seq[0]->name(), "p0");
+  EXPECT_EQ(seq[1]->name(), "cos0");
+  EXPECT_EQ(seq[2]->name(), "p1");
+  EXPECT_EQ(seq[3]->name(), "add0");
+  EXPECT_EQ(seq[4]->name(), "p2");
+  EXPECT_EQ(seq[5]->name(), "add1");
+  EXPECT_EQ(seq[6]->name(), "tuple");
+  EXPECT_EQ(seq[7]->name(), "p_unused");
+}
+
+TEST_F(ShortestPathSchedulerTest, TestReachableInfeedOutfeed) {
+  //  after-all
+  //   |
+  //  infeed
+  //   |
+  //  tuple
+  //   |
+  //  input  after-all.36
+  //   |    /
+  //  outfeed.37
+  std::string hlo_string = R"(
+HloModule top
+%cluster_1  {
+  after-all = token[] after-all()
+  infeed = ((f32[1,4,4,2], f32[]), token[]) infeed(after-all), infeed_config="01234567"
+  tuple = (f32[1,4,4,2], f32[]) get-tuple-element(infeed), index=0
+  input = f32[1,4,4,2] get-tuple-element(tuple), index=0
+  after-all.36 = token[] after-all()
+  outfeed.37 = token[] outfeed(input, after-all.36), outfeed_config="\010\001\022\005feed3\"\001\001(\001"
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  HloMemoryScheduler scheduler(
+      [](const BufferValue& buffer) {
+        return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
+      },
+      ComputationSchedulerToModuleScheduler(
+          IpuToMemorySchedulerAlgorithm(CreateShortestPathScheduler(
+              {64 * 1024, 64 * 1024, 64 * 1024, 64 * 1024, 0, 0}))));
+
+  EXPECT_TRUE(scheduler.Run(module).ValueOrDie());
+
+  auto s = module->schedule().sequence(module->entry_computation());
+  auto seq = s.instructions();
+
+  ASSERT_EQ(seq.size(), 6);
+
+  EXPECT_EQ(seq[0]->name(), "after-all.36");
+  EXPECT_EQ(seq[1]->name(), "after-all");
+  EXPECT_EQ(seq[2]->name(), "infeed");
+  EXPECT_EQ(seq[3]->name(), "tuple");
+  EXPECT_EQ(seq[4]->name(), "input");
+  EXPECT_EQ(seq[5]->name(), "outfeed.37");
+}
+
 TEST_F(ShortestPathSchedulerTest, TestShortestPathScheduler2lines) {
   //   p0
   //   |
