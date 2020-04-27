@@ -15,8 +15,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
 
 #include <functional>
+#include <map>
 #include <queue>
-#include <unordered_map>
+#include <set>
+#include <utility>
+#include <vector>
 
 namespace xla {
 namespace poplarplugin {
@@ -81,9 +84,9 @@ class SequenceCosts {
     if (my_map.count(cost) > 0) {
       my_map.at(cost).insert(inst);
     } else {
-      std::unordered_set<const HloInstruction*> un_set;
+      HloInstructionSet un_set;
       un_set.insert(inst);
-      my_map.insert(std::make_pair(cost, un_set));
+      my_map.insert(std::make_pair(cost, std::move(un_set)));
     }
   }
 
@@ -155,6 +158,10 @@ class SequenceCosts {
         } else {
           InsertIntoNotReady(inst);
         }
+      } else if (inst->user_count() == 0 &&
+                 inst->control_successors().empty()) {
+        // unreachable/unused kParameter
+        unused_parameters_.push_back(inst);
       }
     }
   }
@@ -277,6 +284,9 @@ class SequenceCosts {
         ScheduleParamOfHighestNotReady();
       }
     }
+    for (auto inst : unused_parameters_) {
+      InsertToSequence(inst);
+    }
   }
 
   HloInstructionSequence GetScheduleSequence() { return sequence_; }
@@ -288,13 +298,13 @@ class SequenceCosts {
   // not_ready_- list of instructions which can not be schedule yet.
   // Parameters are not on ready_, not_ready_. Having scheduled_ is sufficient
   // for them.
+  using HloInstructionSet = std::set<const HloInstruction*, HloPtrComparator>;
   absl::flat_hash_map<const HloInstruction*, int64> costs_;
   HloInstructionSequence sequence_;
   absl::flat_hash_set<const HloInstruction*> scheduled_;
-  std::map<int64, std::unordered_set<const HloInstruction*> > ready_;
-  std::map<int64, std::unordered_set<const HloInstruction*>,
-           std::greater<int64> >
-      not_ready_;
+  std::map<int64, HloInstructionSet> ready_;
+  std::map<int64, HloInstructionSet, std::greater<int64> > not_ready_;
+  std::vector<const HloInstruction*> unused_parameters_;
 };
 
 StatusOr<HloInstructionSequence> ScheduleInstructions(
