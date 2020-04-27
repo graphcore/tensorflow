@@ -460,6 +460,10 @@ bool IsWideConstantZero(const HloInstruction* inst) {
         inst->fused_instructions_computation()->root_instruction();
     return IsConstantZero(fusion_root->operand(0));
   }
+  if (inst->opcode() == HloOpcode::kBroadcast) {
+    auto dims = inst->dimensions();
+    return dims.size() == 0 ? IsConstantZero(inst->operand(0)) : false;
+  }
   return IsConstantZero(inst);
 }
 

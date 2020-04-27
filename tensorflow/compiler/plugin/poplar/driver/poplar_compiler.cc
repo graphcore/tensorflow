@@ -75,6 +75,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_feed_hoisting.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fifo_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_fixer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_gradient_accumulation_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_update_fixer.h"
@@ -746,6 +747,13 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
     pipeline.AddPass<HloCSE>(false);
     pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
+    {
+      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "pipeline-gradient-accumulation-optimizer-wrapper");
+      pass.AddPass<PipelineGradientAccumulationOptimizer>();
+      pass.AddPass<PipelineOptimizer>();
+      pass.AddPass<HloDCE>();
+    }
     pipeline.AddPass<SortSimplifier>();
     pipeline.AddPass<RootTokenReplacer>();
     pipeline.AddPass<ReshapeMover>();

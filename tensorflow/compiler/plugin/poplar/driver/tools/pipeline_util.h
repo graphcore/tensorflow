@@ -320,10 +320,10 @@ class PipelinePath {
   std::vector<uint64>& GetOutputsPath();
   StatusOr<int64> GetFifoDepth(const HloInstruction* pipeline_op);
   // The pipeline stage which should now be consuming the value.
-  HloInstruction* GetNewConsumerStage();
+  HloInstruction* GetNewConsumerStage() const;
   // The old pipeline stage which is currently consuming the value.
-  HloInstruction* GetOldConsumerStage();
-  Type GetType();
+  HloInstruction* GetOldConsumerStage() const;
+  Type GetType() const;
 
  private:
   // The fields below are populated by the FinishPath function.

@@ -33,6 +33,9 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
 
   poplar::program::Sequence GetSequence() const override;
 
+  // Returns whether the output needs a copy.
+  virtual ShapeTree<bool> GetOutputCopies(const HloInstruction* inst) const;
+
  private:
   // Caching fields for the GetSequence call
   mutable bool has_function_ = false;
@@ -58,6 +61,9 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
   // Same as above, but all tensors are allocated.
   poplar::program::Sequence GetSequence(const HloInstruction* callsite,
                                         const TensorVectors& inputs) const;
+
+  // Returns whether the output needs a copy.
+  ShapeTree<bool> GetOutputCopies(const HloInstruction* inst) const override;
 
  private:
   const HloInstruction* callsite_;

@@ -822,13 +822,21 @@ StatusOr<std::unique_ptr<PipelineStageVisitor>> CreatePipelineStageOp(
 
   // Set the outputs.
   const TensorVector& pipeline_outputs = visitor->outputs();
-  for (size_t i = 0; i < pipeline_outputs.size(); i++) {
-    auto output = poputil::duplicate(
-        graph, pipeline_outputs[i], seq,
-        absl::StrCat(GetDebugName(inst), "/output/", i),
-        poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
+  const ShapeTree<bool> add_copies = visitor->GetOutputCopies(inst);
+  size_t flat_tuple_index = 0;
+  for (const auto& leaf : add_copies.leaves()) {
+    poplar::Tensor output = pipeline_outputs[flat_tuple_index];
+    if (leaf.second) {
+      output = poputil::duplicate(
+          graph, output, seq,
+          absl::StrCat(GetDebugName(inst), "/output/", flat_tuple_index),
+          poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
+    }
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index, output));
+
+    flat_tuple_index++;
   }
+  CHECK_EQ(pipeline_outputs.size(), flat_tuple_index);
 
   return visitor;
 }
