@@ -46,7 +46,7 @@ StatusOr<bool> AddCopyIfParameterModifiedInplace(HloInstruction* call,
   return false;
 }
 
-StatusOr<bool> InsertStageParamterCopies(PipelineStages& pipeline_stages) {
+StatusOr<bool> InsertStageParameterCopies(PipelineStages& pipeline_stages) {
   bool changed = false;
   for (auto stages : {pipeline_stages.forward, pipeline_stages.backward}) {
     for (HloInstruction* stage : stages) {
@@ -254,7 +254,7 @@ StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
   // We first make sure that stages do not modify parameters inplace (only the
   // resource update can modify them).
   TF_ASSIGN_OR_RETURN(bool inserted_parameter_copies,
-                      InsertStageParamterCopies(stages));
+                      InsertStageParameterCopies(stages));
   // Insert copies for any read-only pipeline inputs.
   TF_ASSIGN_OR_RETURN(bool inserted_ro_copies,
                       InsertReadOnlyVariableCopies(pipeline_op));

@@ -165,6 +165,7 @@ cc_library(
         "driver/passes/pipeline_feed_hoisting.cc",
         "driver/passes/pipeline_fifo_inserter.cc",
         "driver/passes/pipeline_fixer.cc",
+        "driver/passes/pipeline_gradient_accumulation_optimizer.cc",
         "driver/passes/pipeline_optimizer.cc",
         "driver/passes/pipeline_recomputation.cc",
         "driver/passes/pipeline_resource_update_fixer.cc",
@@ -302,6 +303,7 @@ cc_library(
         "driver/passes/pipeline_feed_hoisting.h",
         "driver/passes/pipeline_fifo_inserter.h",
         "driver/passes/pipeline_fixer.h",
+        "driver/passes/pipeline_gradient_accumulation_optimizer.h",
         "driver/passes/pipeline_optimizer.h",
         "driver/passes/pipeline_recomputation.h",
         "driver/passes/pipeline_resource_update_fixer.h",
@@ -2404,6 +2406,21 @@ xla_test(
 )
 
 xla_test(
+    name = "pipeline_gradient_accumulation_optimizer_test",
+    size = "small",
+    srcs = ["tests/pipeline_gradient_accumulation_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
+xla_test(
     name = "multi_update_apply_test",
     size = "small",
     srcs = ["tests/multi_update_apply_test.cc"],
@@ -4116,6 +4133,7 @@ test_suite(
         "pipeline_feed_hoisting_test",
         "pipeline_fifo_inserter_test",
         "pipeline_fixer_test",
+        "pipeline_gradient_accumulation_optimizer_test",
         "pipeline_grouped_recomputation_test",
         "pipeline_grouped_visitor_test",
         "pipeline_optimizer_test",

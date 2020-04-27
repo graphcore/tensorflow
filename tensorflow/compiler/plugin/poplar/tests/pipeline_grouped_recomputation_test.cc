@@ -411,7 +411,7 @@ ENTRY cluster {
   for (auto pair : stages.recomputation) {
     // Given a recomputation stage, go through the corresponding forward stage.
     // Expect a fifo for each operand of the forward stage which is not a
-    // paramter.
+    // parameter.
     auto stage_id = pair.first;
     auto recomp_stage = pair.second;
     auto fwd_stage = stages.forward[stage_id];

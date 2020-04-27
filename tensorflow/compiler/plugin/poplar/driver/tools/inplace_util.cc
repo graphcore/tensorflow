@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -469,7 +470,19 @@ HloInstructionDescription::HloInstructionDescription(
         std::iota(indexes.begin(), indexes.end(), 0);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = indexes;
-      } else if (IsAnyPipelineStageOp(inst)) {
+      } else if (IsPipelineStageBackward(inst)) {
+        // Backward pipeline stages are only inplace on operands which are not
+        // parameters/gradient accumulators.
+        for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
+          const HloInstruction* operand = inst->operand(op_idx);
+          if (operand->opcode() != HloOpcode::kParameter &&
+              !IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
+                  operand)) {
+            inplace_operands_.push_back(op_idx);
+          }
+        }
+        type_ = HloInstructionType::kInplaceReadWrite;
+      } else if (IsPipelineStage(inst) || IsPipelineStageRecomputation(inst)) {
         // Pipeline stages are only inplace on operands which are not
         // parameters.
         for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {

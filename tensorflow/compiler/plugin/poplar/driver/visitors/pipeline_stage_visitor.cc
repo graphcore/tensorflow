@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -47,6 +48,23 @@ poplar::program::Sequence PipelineStageVisitor::GetSequence() const {
   has_function_ = true;
 
   return poplar::program::Sequence(poplar::program::Call(function_));
+}
+
+ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
+    const HloInstruction* inst) const {
+  ShapeTree<bool> output_tree(inst->shape(), true);
+  // Don't add copies for any outputs used by the gradient accumulation sinks.
+  for (HloInstruction* user : inst->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    // If the user is a sink.
+    if (user->user_count() == 1 &&
+        IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(
+            user->users()[0])) {
+      ShapeTree<bool> user_tree(user->shape(), false);
+      output_tree.CopySubtreeFrom(user_tree, {}, {user->tuple_index()});
+    }
+  }
+  return output_tree;
 }
 
 ReusablePipelineStageVisitor::ReusablePipelineStageVisitor(
@@ -134,6 +152,13 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetSequence(
   // Add the actual sequence for the stage.
   seq.add(PipelineStageVisitor::GetSequence());
   return seq;
+}
+
+ShapeTree<bool> ReusablePipelineStageVisitor::GetOutputCopies(
+    const HloInstruction* inst) const {
+  // Reusable stages need a copy on all their outputs.
+  ShapeTree<bool> output_tree(inst->shape(), true);
+  return output_tree;
 }
 
 }  // namespace poplarplugin

@@ -332,7 +332,7 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesInputs() {
   for (HloInstruction* stage : GetOrderedStages()) {
     TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(stage));
 
-    // Store paramter number and instruction which needs lowering.
+    // Store parameter number and instruction which needs lowering.
     // Stored in order by parameter number.
     std::map<int64, HloInstruction*> parameters_to_replace;
 

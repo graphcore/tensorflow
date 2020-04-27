@@ -105,7 +105,7 @@ Status PipelineVerifier::VerifyGradientAccumulation(HloModule* module,
         }
         if (expect_lowered_inplace && !IsLoweredInplace(user)) {
           return InternalErrorStrCat("Expected the pipeline backward stage ",
-                                     inst->ToString(),
+                                     user->ToString(),
                                      " to have been lowered inplace.");
         }
         HloComputation* pipeline_stage_comp = user->to_apply();
@@ -171,8 +171,7 @@ Status PipelineVerifier::VerifyGradientAccumulation(HloModule* module,
         HloInstruction* gte = *std::begin(gtes);
         if (gte->user_count() != 1) {
           return InternalErrorStrCat(
-              "Expected the gradient accumulation buffer to only have a "
-              "single "
+              "Expected the gradient accumulation buffer to only have a single "
               "user, but it has ",
               gte->user_count(), " users.");
         }

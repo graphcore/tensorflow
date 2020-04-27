@@ -1788,21 +1788,49 @@ StatusOr<int64> PipelinePath::GetFifoDepth(const HloInstruction* pipeline_op) {
   }
 }
 
-HloInstruction* PipelinePath::GetNewConsumerStage() { return new_consumer_; }
+HloInstruction* PipelinePath::GetNewConsumerStage() const {
+  return new_consumer_;
+}
 
-HloInstruction* PipelinePath::GetOldConsumerStage() {
+HloInstruction* PipelinePath::GetOldConsumerStage() const {
   CHECK(finished_);
   return old_consumer_;
 }
 
+PipelinePath::Type PipelinePath::GetType() const { return type_; }
+
 StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
     PipelineStages& stages) {
   const uint64 num_stages = stages.forward.size() + stages.backward.size();
-  // Set up stages in last to to first order.
+  // Set up stages in last to first order.
   std::vector<HloInstruction*> stages_last_to_first(num_stages);
   absl::c_copy(stages.backward, stages_last_to_first.begin());
   std::copy(stages.forward.rbegin(), stages.forward.rend(),
             std::next(stages_last_to_first.begin(), stages.backward.size()));
+
+  // Set up the sharding in last to first order.
+  std::vector<int64> sharding_last_to_first(stages_last_to_first.size());
+  {
+    // Get the sharding from the forward stages - they are always expected to
+    // have it.
+    std::vector<int64> forward_sharding_devices(stages.forward.size());
+    for (uint64 i = 0; i != stages.forward.size(); ++i) {
+      HloInstruction* forward_stage = stages.forward[i];
+      auto optional_device = forward_stage->sharding_unique_device();
+      if (!optional_device) {
+        return InternalErrorStrCat("Expected stage ", forward_stage->ToString(),
+                                   " to have sharding information.");
+      }
+      forward_sharding_devices[i] = *optional_device;
+    }
+
+    if (stages.backward.size()) {
+      absl::c_copy(forward_sharding_devices, sharding_last_to_first.begin());
+    }
+    std::copy(
+        forward_sharding_devices.rbegin(), forward_sharding_devices.rend(),
+        std::next(sharding_last_to_first.begin(), stages.backward.size()));
+  }
 
   // For each stage we store a map which represents tensors being passed-through
   // the stage. For example given a stage:
@@ -1840,11 +1868,7 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
   // Build the intra and inter maps.
   for (uint64 stage_idx = 0; stage_idx != num_stages; ++stage_idx) {
     HloInstruction* stage = stages_last_to_first[stage_idx];
-    // We expect all stages to have sharding for this algorithm to work.
-    if (!stage->sharding_unique_device()) {
-      return InternalErrorStrCat("Expected stage ", stage->ToString(),
-                                 " to have sharding information.");
-    }
+
     HloComputation* stage_computation = stage->to_apply();
     // Building the intra map.
     // To build up the intra map, we go through the tuple elements of the root
@@ -1896,7 +1920,7 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
   // there can only be at most one path.
   for (uint64 stage_idx = 0; stage_idx != num_stages; ++stage_idx) {
     HloInstruction* stage = stages_last_to_first[stage_idx];
-    const int64 shard = *stage->sharding_unique_device();
+    const int64 shard = sharding_last_to_first[stage_idx];
     for (uint64 input_idx = 0; input_idx != stage->operand_count();
          ++input_idx) {
       if (!inter_stage_input_to_previous_output_map[stage_idx].contains(
@@ -1912,7 +1936,7 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
       for (uint64 next_stage_idx = stage_idx + 1; next_stage_idx != num_stages;
            ++next_stage_idx) {
         HloInstruction* next_stage = stages_last_to_first[next_stage_idx];
-        const int64 next_shard = *next_stage->sharding_unique_device();
+        const int64 next_shard = sharding_last_to_first[next_stage_idx];
         const bool shard_matches = next_shard == shard;
         path.GetVisitedStages().push_back(next_stage_idx);
 
