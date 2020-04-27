@@ -120,6 +120,14 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
 
     TF_RETURN_IF_ERROR(poplarExecutor->AttachToPoplarDevice());
   }
+
+  if (poplar_engine_.get() != nullptr &&
+      poplarExecutor->UseVerifiedTransfers()) {
+    return InvalidArgument(
+        "Executables using verified transfers can't be run "
+        "in Tensorflow");
+  }
+
   se::DeviceMemoryAllocator* memory_allocator = run_options->allocator();
 
   se::DeviceMemoryBase result;

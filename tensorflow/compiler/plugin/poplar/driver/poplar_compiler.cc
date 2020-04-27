@@ -1021,6 +1021,16 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     progs.push_back(main_program);
     progs.push_back(visitor.GetDeviceToHost());
 
+    // For verified transfers fuse all 3 programs in a single one.
+    if (poplar_executor->UseVerifiedTransfers()) {
+      poplar::program::Sequence fused_program;
+      for (auto& prog : progs) {
+        fused_program.add(prog);
+      }
+      progs.clear();
+      progs.push_back(fused_program);
+    }
+
     if (!PoplarXlaFlags::Get().save_vertex_graph.empty()) {
       auto filename =
           tensorflow::io::JoinPath(PoplarXlaFlags::Get().save_vertex_graph,

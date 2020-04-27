@@ -319,12 +319,8 @@ void VerifiedExecutable::Deploy() { engine_->deploy(); }
 
 void VerifiedExecutable::Run() {
   try {
-    LogContext ctx("Running HOST_TO_DEVICE");
-    engine_->run(PoplarProgramType::HOST_TO_DEVICE);
-    ctx.UpdateContext("Running MAIN_SEQUENCE");
-    engine_->run(PoplarProgramType::MAIN_SEQUENCE);
-    ctx.UpdateContext("Running DEVICE_TO_HOST");
-    engine_->run(PoplarProgramType::DEVICE_TO_HOST);
+    LogContext ctx("Running FUSED_SEQUENCE");
+    engine_->run(0);
   } catch (const poplar::poplar_error& err) {
     ERROR(FirstLinesOf(err.what(), 3));
   }
