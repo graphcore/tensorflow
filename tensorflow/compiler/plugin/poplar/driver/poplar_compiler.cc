@@ -616,7 +616,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     std::call_once(help_flag_printed, &PrintHelpString);
   }
 
-  VLOG(1) << "Begin compilation: " << module->name() << " " << std::hex
+  VLOG(1) << "Begin XLA compilation: " << module->name() << " " << std::hex
           << " (Hash: 0x" << HloHash(module.get()).GetHash() << std::dec
           << ") for ordinal  " << stream_exec->device_ordinal();
 
@@ -884,6 +884,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     TF_RETURN_IF_ERROR(pipeline.Run(module.get()).status());
   }
 
+  VLOG(1) << "End XLA compilation: " << module->name() << " (Hash: 0x"
+          << std::hex << HloHash(module.get()).GetHash() << ")";
+
   HloComputation* entry = module->entry_computation();
 
   if (poplar_executor->IpuTraceEventsEnabled()) {
@@ -957,10 +960,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         CreatePoplarGraphs(resources, module.get(), poplar_executor));
     auto& main_graph = GetMasterGraph(resources);
 
-    EmbeddingPlansPreplanning embeddings_preplanning;
-    TF_RETURN_IF_ERROR(embeddings_preplanning.Plan(module.get(), resources));
-
     try {
+      VLOG(1) << "Preplanning of Poplar operations.";
+
+      EmbeddingPlansPreplanning embeddings_preplanning;
+      TF_RETURN_IF_ERROR(embeddings_preplanning.Plan(module.get(), resources));
       ConvolutionPreplanning convolution_preplanning;
       TF_RETURN_IF_ERROR(convolution_preplanning.Plan(module.get(), resources));
       MatMulPreplanning matmul_preplanning;
@@ -971,7 +975,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           resources, poplar_executor->VerifiedTransfers()));
 
       // The following line starts the lowering in poplar.
+      VLOG(1) << "Begin Poplar graph contruction.";
       TF_RETURN_IF_ERROR(entry->AcceptOrdered(&visitor, order));
+      VLOG(1) << "End Poplar graph contruction.";
     } catch (const std::exception& e) {
       return PoplarExceptionToTensorflowStatus("[Build graph] ", e);
     }
@@ -1017,7 +1023,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
 
     try {
-      VLOG(1) << "Compile engine " << module->name();
+      VLOG(1) << "Begin compiling Poplar engine " << module->name();
 
       map_json = GetTensorMappingJson(module->name(), main_graph,
                                       resources.tensor_maps);
@@ -1054,6 +1060,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       }
 
       engine.reset(new poplar::Engine(std::move(exec), opts));
+      VLOG(1) << "End compiling Poplar engine.";
 
     } catch (const std::exception& e) {
       if (poplar_executor->CompilerReportingEnabled()) {
@@ -1118,9 +1125,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     poplar_executor->AddCompileEndEventRecord(
         module->name(), report_stream.str(), map_json, inst_info, duration);
   }
-
-  VLOG(1) << "End compilation: " << module->name() << " (Hash: 0x" << std::hex
-          << HloHash(module.get()).GetHash() << ")";
 
   std::unique_ptr<Executable> executable;
   PoplarExecutable* poplar_executable = new PoplarExecutable(
