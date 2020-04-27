@@ -790,11 +790,12 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     self._run_workers_in_processes(self._test_reduction_in_compiled_cluster,
                                    cluster_spec)
 
-  def _test_optimizer_in_compiled_cluster(self, _task_id):
+  def _test_optimizer_in_compiled_cluster(self, task_id):
     strategy, target, sess_config = self._create_test_objects(
         variables_on_host=False)
 
-    x = 1.5
+    per_worker_x = [i + 1.0 for i in range(strategy.num_replicas_in_sync)]
+    x = per_worker_x[task_id]
     initial_w = 2.0
     learning_rate = 0.5
 
@@ -815,13 +816,12 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       config = ipu_utils.auto_select_ipus(config, num_ipus=1)
       ipu_utils.configure_ipu_system(config)
 
-      num_workers = strategy.num_replicas_in_sync
       [w] = variables.global_variables()
 
       with session_lib.Session(target=target, config=sess_config) as sess:
         sess.run(w.initializer)
         sess.run(train_op)
-        expected_w = initial_w - num_workers * learning_rate * x
+        expected_w = initial_w - learning_rate * np.sum(per_worker_x)
         self.assertEqual(expected_w, sess.run(w))
 
   def test_optimizer_in_compiled_cluster(self):
