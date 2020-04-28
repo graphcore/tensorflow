@@ -16,18 +16,17 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -187,11 +186,85 @@ StatusOr<bool> MoveParameterInputsToBackwardStages(
   }
   return changed;
 }
+
+StatusOr<bool> PropagateConstantOutputs(HloInstruction* const stage) {
+  std::map<int64, std::vector<HloInstruction*>> constant_outputs;
+  HloComputation* stage_comp = stage->to_apply();
+  HloInstruction* root = stage_comp->root_instruction();
+
+  // Find any constant outputs.
+  for (int64 i = 0; i != root->operand_count(); ++i) {
+    std::vector<HloInstruction*> insts;
+    HloInstruction* output = root->mutable_operand(i);
+    // Look through broadcasts.
+    if (output->opcode() == HloOpcode::kBroadcast) {
+      insts.push_back(output);
+      output = output->mutable_operand(0);
+    }
+    if (output->opcode() == HloOpcode::kConstant) {
+      insts.push_back(output);
+      constant_outputs.emplace(i, std::move(insts));
+    }
+  }
+  // Get all the GTEs by tuple index.
+  absl::flat_hash_map<int64, std::vector<HloInstruction*>> gte_users;
+  for (HloInstruction* user : stage->users()) {
+    CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+    gte_users[user->tuple_index()].push_back(user);
+  }
+
+  // Go through all the constant outputs and replace the users of the constants
+  // with constants.
+  bool changed = false;
+  for (auto& constant_output_pair : constant_outputs) {
+    auto itr = gte_users.find(constant_output_pair.first);
+    if (itr == gte_users.end()) {
+      continue;
+    }
+
+    // Go through all the users of the output.
+    for (HloInstruction* gte : itr->second) {
+      for (HloInstruction* gte_user : gte->users()) {
+        // Only propagate the constant to other computations.
+        if (gte_user->opcode() == HloOpcode::kCall) {
+          HloComputation* comp = gte_user->to_apply();
+          // Create the constant inside of the computation.
+          auto& insts_to_lower = constant_output_pair.second;
+          HloInstruction* propagated_const =
+              comp->AddInstruction(insts_to_lower.back()->Clone());
+          // Handle the broadcast case.
+          if (insts_to_lower.size() == 2) {
+            HloInstruction* broadcast = insts_to_lower[0];
+            CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
+            propagated_const =
+                comp->AddInstruction(broadcast->CloneWithNewOperands(
+                    broadcast->shape(), {propagated_const}));
+          }
+
+          for (int64 input_index : gte_user->OperandIndices(gte)) {
+            // Get the parameter instruction for this operand.
+            HloInstruction* parameter =
+                comp->parameter_instruction(input_index);
+            // Replace all the users with the constant.
+            TF_RETURN_IF_ERROR(parameter->ReplaceAllUsesWith(propagated_const));
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  return changed;
+}
 }  // namespace
 
 StatusOr<HloInstruction*> PipelineOptimizer::OptimizeCallInstruction(
     HloInstruction* inst, bool* changed) {
   VLOG(2) << "Optimizing: " << inst->ToString();
+  // Find any constant outputs and propagate them into the users.
+  TF_ASSIGN_OR_RETURN(bool propagated_constants,
+                      PropagateConstantOutputs(inst));
+
   // Find any duplicate outputs.
   TF_ASSIGN_OR_RETURN(auto duplicate_outputs, GetDuplicateCallOutputs(inst));
   if (duplicate_outputs.size()) {
@@ -226,8 +299,9 @@ StatusOr<HloInstruction*> PipelineOptimizer::OptimizeCallInstruction(
     TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(inst->to_apply()).status());
   }
 
-  (*changed) |= (duplicate_outputs.size() || unused_outputs.size() ||
-                 duplicate_inputs.size() || unused_parameters.size());
+  (*changed) |= (propagated_constants || duplicate_outputs.size() ||
+                 unused_outputs.size() || duplicate_inputs.size() ||
+                 unused_parameters.size());
   return inst;
 }
 

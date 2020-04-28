@@ -14,8 +14,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -546,6 +546,97 @@ ENTRY e {
   EXPECT_THAT(stages.backward[1]->operand_count(), 3);
   EXPECT_THAT(stages.backward[1]->operand(2),
               FindInstruction(module0, "pipeline_weights1"));
+}
+
+TEST_F(PipelineOptimizerTest, TestPropagateConstant) {
+  std::string hlo = R"(
+HloModule cluster
+
+stage_0 {
+  arg0 = f32[1,4,4,2] parameter(0)
+  c = f32[] constant(1)
+  b = f32[1,4,4,2] broadcast(c), dimensions={}
+  a = f32[1,4,4,2] add(b, arg0)
+  c2 = f32[2] constant({10, 10})
+  c3 = f32[2] constant({10, 11})
+  ROOT tuple.8 = (f32[1,4,4,2], f32[1,4,4,2], f32[2], f32[2]) tuple(a, b, c2, c3)
+}
+
+stage_1 {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,2] parameter(1)
+  a = f32[1,4,4,2] add(arg0, arg1)
+  arg2 = f32[2] parameter(2)
+  tuple = (f32[1,4,4,2], f32[2]) tuple(a, arg2)
+  after-all = token[] after-all()
+  outfeed = token[] outfeed(tuple, after-all), outfeed_config="\010\001\022\005feed0\"\002\001\001(\001"
+  ROOT tuple.1 = () tuple()
+}
+
+pipeline {
+  ROOT tuple.27 = () tuple()
+  arg0.19 = f32[1,4,4,2] parameter(0)
+  call.21 = (f32[1,4,4,2], f32[1,4,4,2], f32[2], f32[2]) call(arg0.19), to_apply=stage_0, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  get-tuple-element.0 = f32[1,4,4,2] get-tuple-element(call.21), index=0
+  get-tuple-element.1 = f32[1,4,4,2] get-tuple-element(call.21), index=1
+  get-tuple-element.2 = f32[2] get-tuple-element(call.21), index=2
+  call = () call(get-tuple-element.0, get-tuple-element.1, get-tuple-element.2), to_apply=stage_1, frontend_attributes={CALL_CONFIG_TYPE=PipelineStage}, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+}
+
+ENTRY cluster {
+  arg0.1 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  call.28 = () call(f32[1,4,4,2] arg0.1), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  ROOT tuple.29 = () tuple()
+}
+)";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+  auto module0 = module.get();
+  HloComputation* pipeline_computation = FindComputation(module0, "pipeline");
+  TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
+  auto stage_0 = stages.forward[0];
+  EXPECT_TRUE(
+      Match(stage_0->to_apply()->root_instruction(),
+            m::Tuple(m::Add(m::Broadcast(m::ConstantScalar()), m::Parameter(0)),
+                     m::Broadcast(m::ConstantScalar()), m::Constant(),
+                     m::Constant())));
+
+  auto stage_1 = stages.forward[1];
+  auto find_outfeed = [](HloInstruction* stage) {
+    return *std::find_if(stage->to_apply()->instructions().begin(),
+                         stage->to_apply()->instructions().end(),
+                         [](const HloInstruction* inst) {
+                           return inst->opcode() == HloOpcode::kOutfeed;
+                         });
+  };
+  auto outfeed = find_outfeed(stage_1);
+  EXPECT_TRUE(Match(
+      outfeed, m::Outfeed(m::Tuple(m::Add(m::Parameter(0), m::Parameter(1)),
+                                   m::Parameter(2)),
+                          m::Op())));
+
+  PipelineOptimizer optimizer;
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, optimizer.Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(changed, optimizer.Run(module.get()));
+  EXPECT_TRUE(changed);
+  TF_ASSERT_OK_AND_ASSIGN(stages, GetPipelineStages(pipeline_computation));
+  stage_0 = stages.forward[0];
+  // Only the non constant output is in the pipeline stage output now.
+  EXPECT_TRUE(Match(
+      stage_0->to_apply()->root_instruction(),
+      m::Tuple(m::Add(m::Broadcast(m::ConstantScalar()), m::Parameter(0)))));
+
+  stage_1 = stages.forward[1];
+  outfeed = find_outfeed(stage_1);
+  EXPECT_TRUE(Match(
+      outfeed, m::Outfeed(m::Tuple(m::Add(m::Parameter(0),
+                                          m::Broadcast(m::ConstantScalar())),
+                                   m::Constant()),
+                          m::Op())));
 }
 
 }  // namespace
