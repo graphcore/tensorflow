@@ -196,7 +196,7 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
                                                         labels=label))
         return loss
 
-    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
         [stage1, stage2, stage3], lambda: [], [], repeat_count, pipeline_depth,
         dataset_fn, optimizer, self, 23984, True,
         pipelining_ops.PipelineSchedule.Grouped)
