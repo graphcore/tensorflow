@@ -14,6 +14,7 @@
 # ==============================================================================
 """Gradients for Popnn operators."""
 
+from six.moves import xrange  # pylint: disable=redefined-builtin
 from tensorflow.compiler.plugin.poplar.ops import gen_poputil_ops
 from tensorflow.python.framework import ops
 """
@@ -55,92 +56,88 @@ def _poputil_block_recompute_backward(op, grads):
   return grads
 
 
+def _filter_inputs(inputs, inputs_with_gradients):
+  inputs_with_gradients = set(inputs_with_gradients)
+  return [
+      t if i in inputs_with_gradients else None for i, t in enumerate(inputs)
+  ]
+
+
+def _expand_result(outputs, n, inputs_with_gradients):
+  result = []
+  for i in xrange(n):
+    if i in inputs_with_gradients:
+      result.append(outputs.pop(0))
+    else:
+      result.append(None)
+  assert not outputs and len(result) == n
+  return result
+
+
+def _poputil_op_layer_backward(op, grads, add_op):
+  separate_grads = op.get_attr("separate_gradients")
+  inputs_with_gradients = op.get_attr("inputs_with_gradients")
+
+  result = []
+  layout = list(grads) + list(op.outputs) + list(op.inputs)
+  inputs = _filter_inputs(op.inputs, inputs_with_gradients)
+  if separate_grads:
+    for op_input_index, op_input in enumerate(inputs):
+      if op_input is not None:
+        result.append(
+            add_op(layout, True, op_input_index, [0], [op_input.dtype],
+                   [op_input.shape])[0])
+  else:
+    result = add_op(layout, False, 0, inputs_with_gradients,
+                    [t.dtype for t in inputs if t is not None],
+                    [t.shape for t in inputs if t is not None])
+
+  return _expand_result(result, len(op.inputs), inputs_with_gradients)
+
+
 @ops.RegisterGradient("IpuUserReadWriteOp")
 def _poputil_cpu_user_operation_layer_backward(op, *grads):
   library_path = op.get_attr("library_path").decode("utf-8")
-  op_name = op.get_attr("op_name").decode("utf-8")
+  op_name = op.get_attr("op_name").decode("utf-8") + "_grad"
+  name = op.name + "_grad"
 
-  separate_grads = op.get_attr("separate_gradients")
+  def add_op(layout, separate_gradients, op_input_index, inputs_with_gradients,
+             output_types, output_shapes):
+    return gen_poputil_ops.ipu_user_read_write_op(
+        layout,
+        library_path=library_path,
+        op_name=op_name,
+        name=name,
+        separate_gradients=separate_gradients,
+        is_gradient=True,
+        partial_derivative_index=op_input_index,
+        inputs_with_gradients=inputs_with_gradients,
+        output_types=output_types,
+        output_shapes=output_shapes)
 
-  result = []
-  if separate_grads:
-    for t in enumerate(op.inputs):
-      outs = {
-          "output_types": [t[1].dtype],
-          "output_shapes": [t[1].shape],
-      }
-      o = gen_poputil_ops.ipu_user_read_write_op(list(grads) +
-                                                 list(op.outputs) +
-                                                 list(op.inputs),
-                                                 library_path=library_path,
-                                                 op_name=op_name + "_grad",
-                                                 name=op.name + "_grad",
-                                                 separate_gradients=True,
-                                                 is_gradient=True,
-                                                 partial_derivative_index=t[0],
-                                                 **outs)[0]
-      result.append(o)
-  else:
-    outs = {
-        "output_types": [t.dtype for t in op.inputs],
-        "output_shapes": [t.shape for t in op.inputs],
-    }
-
-    result = gen_poputil_ops.ipu_user_read_write_op(list(grads) +
-                                                    list(op.outputs) +
-                                                    list(op.inputs),
-                                                    library_path=library_path,
-                                                    op_name=op_name + "_grad",
-                                                    name=op.name + "_grad",
-                                                    separate_gradients=False,
-                                                    is_gradient=True,
-                                                    partial_derivative_index=0,
-                                                    **outs)
-
-  return result
+  return _poputil_op_layer_backward(op, grads, add_op)
 
 
 @ops.RegisterGradient("IpuUserOp")
 def _poputil_precompiled_user_op_layer_backward(op, *grads):
   library_path = op.get_attr("library_path").decode("utf-8")
-  op_name = op.get_attr("op_name").decode("utf-8")
+  op_name = op.get_attr("op_name").decode("utf-8") + "_grad"
   gp_path = op.get_attr("gp_path").decode("utf-8")
+  name = op.name + "_grad"
 
-  separate_grads = op.get_attr("separate_gradients")
+  def add_op(layout, separate_gradients, op_input_index, inputs_with_gradients,
+             output_types, output_shapes):
+    return gen_poputil_ops.ipu_user_op(
+        layout,
+        library_path=library_path,
+        op_name=op_name,
+        gp_path=gp_path,
+        name=name,
+        separate_gradients=separate_gradients,
+        is_gradient=True,
+        partial_derivative_index=op_input_index,
+        inputs_with_gradients=inputs_with_gradients,
+        output_types=output_types,
+        output_shapes=output_shapes)
 
-  result = []
-  if separate_grads:
-    for t in enumerate(op.inputs):
-      outs = {
-          "output_types": [t[1].dtype],
-          "output_shapes": [t[1].shape],
-      }
-      o = gen_poputil_ops.ipu_user_op(list(grads) + list(op.outputs) +
-                                      list(op.inputs),
-                                      library_path=library_path,
-                                      op_name=op_name + "_grad",
-                                      gp_path=gp_path,
-                                      name=op.name + "_grad",
-                                      separate_gradients=True,
-                                      is_gradient=True,
-                                      partial_derivative_index=t[0],
-                                      **outs)[0]
-      result.append(o)
-  else:
-    outs = {
-        "output_types": [t.dtype for t in op.inputs],
-        "output_shapes": [t.shape for t in op.inputs],
-    }
-
-    result = gen_poputil_ops.ipu_user_op(list(grads) + list(op.outputs) +
-                                         list(op.inputs),
-                                         library_path=library_path,
-                                         op_name=op_name + "_grad",
-                                         gp_path=gp_path,
-                                         name=op.name + "_grad",
-                                         separate_gradients=False,
-                                         is_gradient=True,
-                                         partial_derivative_index=0,
-                                         **outs)
-
-  return result
+  return _poputil_op_layer_backward(op, grads, add_op)

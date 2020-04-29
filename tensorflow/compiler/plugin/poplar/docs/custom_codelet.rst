@@ -274,3 +274,16 @@ the TensorFlow graph.
 Python operators which are supported in the function are ``+``, ``-``, ``*``, and
 ``abs``.
 
+API Level Versioning
+~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: C++
+
+  extern "C" int32_t Build_api_level;
+
+This is reserved for the future changes in API which may render current binary
+modules incompatible with current code. Loader checks its value and refuses to
+load modules with different API level.
+
+Current default value is 0, so it's not necessary to specify api_level of 0,
+but this might change in the future.

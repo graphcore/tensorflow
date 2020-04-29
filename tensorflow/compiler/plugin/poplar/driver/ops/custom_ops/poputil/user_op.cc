@@ -222,8 +222,14 @@ class UserOpImpl : public PoplarOpDef {
         // There is a gradient for each output and if we are doing the backward
         // pass then the input will be packed like: | Gradients |
         // previous_outputs | previous_inputs |
-        const size_t size_of_gradient =
-            (user_op_inst->NumInputs() - number_of_outputs) / 2;
+        const ssize_t size_of_gradient =
+            (number_of_inputs - number_of_outputs) / 2;
+
+        if (size_of_gradient <= 0) {
+          return xla::InternalErrorStrCat("Instruction ", inst->name(),
+                                          " has wrong gradient size",
+                                          size_of_gradient);
+        }
 
         std::vector<poplar::Tensor> gradients;
         std::vector<poplar::Tensor> previous_outputs;
@@ -263,6 +269,12 @@ class UserOpImpl : public PoplarOpDef {
     }
 
     // Register each of the returned tuple elements (if any) as outputs.
+    if (outputs.size() < number_of_outputs) {
+      return xla::InternalErrorStrCat(
+          "Instruction ", inst->name(),
+          " has mismatched outputs number, expected: ", number_of_outputs,
+          ", returned: ", outputs.size());
+    }
     for (uint32_t i = 0; i < number_of_outputs; ++i) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
     }

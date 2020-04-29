@@ -30,6 +30,7 @@ REGISTER_OP("IpuUserOp")
     .Attr("gp_path: string")
     .Attr("separate_gradients: bool")
     .Attr("is_gradient: bool")
+    .Attr("inputs_with_gradients: list(int) >= 0")
     .Attr("partial_derivative_index: int")
     // We don't know what the user is going to do.
     .SetIsStateful()
@@ -48,6 +49,8 @@ REGISTER_OP("IpuUserOp")
             create one grad op per input.  When false, one grad op will be
             created that should generate all partial derivatives.
         is_gradient: when true, this is the gradient form of the op.
+        inputs_with_gradients: List of input indices indicating which input
+            needs gradient.
         partial_derivative_index: the list of inputs for which the op should
             produce gradients w.r.t. the outputs.
     )doc");
@@ -62,6 +65,7 @@ REGISTER_OP("IpuUserReadWriteOp")
     .Attr("op_name: string")
     .Attr("separate_gradients: bool")
     .Attr("is_gradient: bool")
+    .Attr("inputs_with_gradients: list(int) >= 0")
     .Attr("partial_derivative_index: int")
     // We don't know what the user is going to do.
     .SetIsStateful()
@@ -79,6 +83,8 @@ REGISTER_OP("IpuUserReadWriteOp")
             create one grad op per input.  When false, one grad op will be
             created that should generate all partial derivatives.
         is_gradient: when true, this is the gradient form of the op.
+        inputs_with_gradients: List of input indices indicating which input
+            needs gradient.
         partial_derivative_index: the list of inputs for which the op should
             produce gradients w.r.t. the outputs.
 
