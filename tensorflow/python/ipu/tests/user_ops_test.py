@@ -13,18 +13,22 @@
 #  limitations under the License.
 #  =============================================================================
 
-
 import os
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import ipu
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import errors_impl
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import init_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
+from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 
@@ -189,6 +193,62 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(np.zeros([20]), gradients[0][0])
       self.assertAllEqual(np.zeros([5, 2]), gradients[1][0])
       self.assertAllEqual(np.full([10], 3.0), gradients[2][0])
+
+  @test_util.deprecated_graph_mode_only
+  def testUserReadWriteOpBackwardsUnusedGradients(self):
+    SIZE = 5
+
+    def scaled_add_op(x, scale, y):
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32],
+          "output_shapes": [tensor_shape.TensorShape([SIZE])],
+      }
+      base_dir = os.path.join(cwd, "tensorflow/python/ipu")
+      gp_path = os.path.join(base_dir,
+                             "tests/add_scaled_vector_add_codelet.cc")
+      lib_path = os.path.join(base_dir, "libadd_partial_gradients_custom.so")
+
+      return ipu.custom_ops.precompiled_user_op([x, scale, y],
+                                                lib_path,
+                                                gp_path,
+                                                outs=outputs,
+                                                inputs_with_gradients=[0, 2])
+
+    def model(scale, y, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        x = variable_scope.get_variable(
+            "x",
+            shape=[SIZE],
+            initializer=init_ops.ones_initializer(),
+            dtype=np.float32)
+      z = math_ops.reduce_mean(scaled_add_op(x, scale, y), axis=1)
+      loss = losses.mean_squared_error(label, z)
+      return loss, gradient_descent.GradientDescentOptimizer(0.01).minimize(
+          loss)
+
+    with ipu.scopes.ipu_scope('/device:IPU:0'):
+      scale_data = array_ops.placeholder(np.float32, [])
+      y_data = array_ops.placeholder(np.float32, [SIZE])
+      label_data = array_ops.placeholder(np.int32, [1])
+
+      xla_result = ipu.ipu_compiler.compile(model,
+                                            [scale_data, y_data, label_data])
+
+    with tu.ipu_session() as sess:
+      scale = 2
+      b = np.full([SIZE], 3)
+      label = np.ones([1])
+      sess.run(variables.global_variables_initializer())
+
+      result = sess.run(xla_result,
+                        feed_dict={
+                            y_data: b,
+                            scale_data: scale,
+                            label_data: label
+                        })
+
+      self.assertEqual(result[0], 36)
 
   @test_util.deprecated_graph_mode_only
   def testUserReadWriteOpBackwards(self):
@@ -387,6 +447,56 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
 
       # The third part is the sum of the last two so 20*7 + 1000*3.
       self.assertAllEqual(np.full([1], 3140.0), res[2])
+
+  @test_util.deprecated_graph_mode_only
+  def testUserOpLoadNonExistentSharedLibrary(self):
+    with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32],
+          "output_shapes": [
+              tensor_shape.TensorShape([20]),
+          ],
+      }
+      lib_path = cwd + "/and-now-for-something-completely-different.so"
+
+      def my_net(x):
+        return ipu.custom_ops.precompiled_user_op([x], lib_path, outs=outputs)
+
+      with self.assertRaises(errors_impl.NotFoundError):
+        with ipu.scopes.ipu_scope('/device:IPU:0'):
+          x = array_ops.placeholder(np.float32, shape=[20])
+          model = ipu.ipu_compiler.compile(my_net, inputs=[x])
+
+        sess.run(variables.global_variables_initializer())
+        sess.run(model, {
+            x: np.ones([20]),
+        })
+
+  @test_util.deprecated_graph_mode_only
+  def testUserOpLoadLibraryWithWrongApiLevel(self):
+    with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32],
+          "output_shapes": [
+              tensor_shape.TensorShape([20]),
+          ],
+      }
+      lib_path = cwd + "/tensorflow/python/ipu/libwrong_api_level_custom.so"
+
+      def my_net(x):
+        return ipu.custom_ops.precompiled_user_op([x], lib_path, outs=outputs)
+
+      with self.assertRaises(errors_impl.InternalError):
+        with ipu.scopes.ipu_scope('/device:IPU:0'):
+          x = array_ops.placeholder(np.float32, shape=[20])
+          model = ipu.ipu_compiler.compile(my_net, inputs=[x])
+
+        sess.run(variables.global_variables_initializer())
+        sess.run(model, {
+            x: np.ones([20]),
+        })
 
 
 if __name__ == "__main__":

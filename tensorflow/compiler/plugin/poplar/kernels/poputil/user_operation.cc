@@ -34,15 +34,27 @@ limitations under the License.
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "tensorflow/compiler/xla/shape_util.h"
+#include "tensorflow/compiler/xla/statusor.h"
 
 #include <iostream>
 #include "absl/container/flat_hash_set.h"
+
+#define TF_ASSIGN_OR_DEFAULT(lhs, rexpr, default_value)                        \
+  TF_ASSIGN_OR_DEFAULT_IMPL(                                                   \
+      TF_STATUS_MACROS_CONCAT_NAME(_status_or_value, __COUNTER__), lhs, rexpr, \
+      default_value)
+
+#define TF_ASSIGN_OR_DEFAULT_IMPL(statusor, lhs, rexpr, default_value) \
+  auto statusor = (rexpr);                                             \
+  lhs = (statusor.ok()) ? statusor.ValueOrDie() : (default_value)
 
 using namespace xla::poplarplugin;
 
 namespace tensorflow {
 
 namespace {
+
+static constexpr int32 kApiLevel = 0;
 
 // From kernels/datatsteam/feeds.cc
 void XlaShapesFromAttr(OpKernelConstruction* ctx,
@@ -73,21 +85,22 @@ struct LibraryLoadInfo {
   size_t size;
 };
 
-int64 GetSymbolAddressAsInt64(const LibraryLoadInfo& library,
-                              const std::string& sym_name) {
+xla::StatusOr<void*> GetSymbolAddress(const LibraryLoadInfo& library,
+                                      const std::string& sym_name) {
+  void* ptr = nullptr;
+  TF_RETURN_IF_ERROR(Env::Default()->GetSymbolFromLibrary(
+      library.handle, sym_name.c_str(), &ptr));
+  return ptr;
+}
+
+xla::StatusOr<uint64> GetSymbolAddressAsInt64(const LibraryLoadInfo& library,
+                                              const std::string& sym_name) {
   // Extract the function from the library. We expect (and require) the user
   // function to be an undecorated 'C' type symbol
-  void* function_ptr = nullptr;
-  Status status = Env::Default()->GetSymbolFromLibrary(
-      library.handle, sym_name.c_str(), &function_ptr);
-
-  if (!status.ok()) {
-    return 0l;
-  }
-
   // Convert the pointer to a uint64 (attribute map/json doesn't store
   // pointers).
-  return reinterpret_cast<uint64>(function_ptr);
+  TF_ASSIGN_OR_RETURN(void* addr, GetSymbolAddress(library, sym_name));
+  return reinterpret_cast<uint64>(addr);
 }
 
 }  // namespace
@@ -119,27 +132,30 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
 
   IPUCustomKernelsUtil::AttributeMap& GetAttrMap() { return attribute_map_; }
 
-  // This is void so the OP_REQUIRES_OK work.
-  void LoadLibrary(LibraryLoadInfo& library, XlaOpKernelContext* context) {
-    Status status = ::tensorflow::LoadLibrary(
-        library_path.c_str(), &library.handle, &library.buffer, &library.size);
+  Status LoadLibrary(LibraryLoadInfo& library, XlaOpKernelContext* context) {
+    TF_RETURN_IF_ERROR(::tensorflow::LoadLibrary(
+        library_path.c_str(), &library.handle, &library.buffer, &library.size));
 
-    if (!status.ok()) {
-      OP_REQUIRES_OK(context,
-                     errors::InvalidArgument(
-                         "Couldn't read shared library: " + library_path +
-                         " with error:" + status.ToString()));
+    TF_ASSIGN_OR_DEFAULT(const void* api_level_ptr,
+                         GetSymbolAddress(library, op_name + "_api_level"),
+                         nullptr);
+
+    int32 api_level =
+        api_level_ptr ? *reinterpret_cast<const int32*>(api_level_ptr) : 0;
+    if (api_level != kApiLevel) {
+      return xla::InternalErrorStrCat("Api level of module ", library_path,
+                                      " is ", api_level, ", expected ",
+                                      kApiLevel,
+                                      ". See section `API Level Versioning` in "
+                                      "documentation for more details.");
     }
 
     // Initialize the symbols which are common to all types of user op.
-    int64 fn_ptr = GetSymbolAddressAsInt64(library, op_name);
-    if (fn_ptr == 0) {
-      OP_REQUIRES_OK(context, errors::InvalidArgument(
-                                  "Couldn't read " + op_name +
-                                  " symbol from library " + library_path));
-    }
+    TF_ASSIGN_OR_RETURN(int64 fn_ptr,
+                        GetSymbolAddressAsInt64(library, op_name));
 
     attribute_map_.AddAttribute("operation_fn", fn_ptr);
+    return Status::OK();
   }
 
   void CreateCustomCall(XlaOpKernelContext* context) {
@@ -199,26 +215,33 @@ class PoputilUserOp : public PoputilUserOpBase {
   }
 
   void Compile(XlaOpKernelContext* context) final {
+    OP_REQUIRES_OK(context, LoadSymbols(context));
+    // Set up all the context information to actually create the custom call.
+    CreateCustomCall(context);
+  }
+
+ private:
+  Status LoadSymbols(XlaOpKernelContext* context) {
     // Load the shared library.
     LibraryLoadInfo library;
-    LoadLibrary(library, context);
+    TF_RETURN_IF_ERROR(LoadLibrary(library, context));
 
     // Handle the metadata specific to this type of user op.
-    int64 metadata_fn_ptr =
-        GetSymbolAddressAsInt64(library, op_name + "_metadata");
-    int64 allocator_fn_ptr =
-        GetSymbolAddressAsInt64(library, op_name + "_allocator");
+    TF_ASSIGN_OR_DEFAULT(
+        int64 metadata_fn_ptr,
+        GetSymbolAddressAsInt64(library, op_name + "_metadata"), 0l);
+    TF_ASSIGN_OR_DEFAULT(
+        int64 allocator_fn_ptr,
+        GetSymbolAddressAsInt64(library, op_name + "_allocator"), 0l);
 
     GetAttrMap().AddAttribute("metadata_function", metadata_fn_ptr);
     GetAttrMap().AddAttribute("allocator_function", allocator_fn_ptr);
     GetAttrMap().AddAttribute("gp_path", gp_path);
     GetAttrMap().AddAttribute("is_user_read_write", false);
 
-    // Set up all the context information to actually create the custom call.
-    CreateCustomCall(context);
+    return Status::OK();
   }
 
- private:
   TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOp);
 
   std::string gp_path;
@@ -232,7 +255,7 @@ class PoputilUserReadWriteOp : public PoputilUserOpBase {
   void Compile(XlaOpKernelContext* context) final {
     // Load the shared library.
     LibraryLoadInfo library;
-    LoadLibrary(library, context);
+    OP_REQUIRES_OK(context, LoadLibrary(library, context));
 
     GetAttrMap().AddAttribute("metadata_function", (int64)0);
     GetAttrMap().AddAttribute("allocator_function", (int64)0);

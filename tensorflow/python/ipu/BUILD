@@ -721,8 +721,28 @@ cc_binary(
 )
 
 cc_binary(
+    name = "libadd_partial_gradients_custom.so",
+    srcs = ["tests/add_partial_gradients_custom.cc"],
+    copts = ["-fexceptions"],
+    linkshared = True,
+    deps = [
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+cc_binary(
     name = "libadd_incrementing_custom_with_metadata.so",
     srcs = ["tests/add_incrementing_custom_with_metadata.cc"],
+    copts = ["-fexceptions"],
+    linkshared = True,
+    deps = [
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+cc_binary(
+    name = "libwrong_api_level_custom.so",
+    srcs = ["tests/wrong_api_level_custom.cc"],
     copts = ["-fexceptions"],
     linkshared = True,
     deps = [
@@ -746,9 +766,12 @@ tf_py_test(
         "//tensorflow/python:platform",
     ],
     data = [
+        "tests/add_scaled_vector_add_codelet.cc",
         ":libadd_incrementing_custom.so",
         ":libadd_incrementing_custom_with_metadata.so",
+        ":libadd_partial_gradients_custom.so",
         ":libadd_tensors_custom.so",
+        ":libwrong_api_level_custom.so",
     ],
 )
 

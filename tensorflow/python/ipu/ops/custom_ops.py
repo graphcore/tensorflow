@@ -45,13 +45,22 @@ def codelet_expression_op(vertex_expression, *args):
                                                source=expr)
 
 
+def _validate_inputs_with_gradients(inputs_with_gradients, inputs):
+  if inputs_with_gradients is None:
+    return list(range(0, len(inputs)))
+  if isinstance(inputs_with_gradients, list):
+    return inputs_with_gradients
+  return list(inputs_with_gradients)
+
+
 def precompiled_user_op(inputs,
                         library_path,
                         gp_path="",
                         outs=None,
                         name="UserOp",
                         op_name="Build",
-                        separate_gradients=False):
+                        separate_gradients=False,
+                        inputs_with_gradients=None):
   """Call the poplar function located in the shared library at 'library_path'
   as part of the normal tensorflow execution with the given 'inputs'.
 
@@ -76,6 +85,8 @@ def precompiled_user_op(inputs,
     separate_gradients:  When set to true, multiple gradient ops will be
       generated, one for each input.  When false, a single gradient op will be
       generated, which should produce the partial derivatives for all inputs.
+    inputs_with_gradients: When set, produce derivatives only for specified
+      inputs. List of input indices expected.
 
   Returns:
     The array of tensor outputs.
@@ -88,15 +99,20 @@ def precompiled_user_op(inputs,
         "output_shapes": [],
     }
 
-  return gen_poputil_ops.ipu_user_op(inputs,
-                                     library_path=library_path,
-                                     gp_path=gp_path,
-                                     op_name=op_name,
-                                     name=name,
-                                     separate_gradients=separate_gradients,
-                                     is_gradient=False,
-                                     partial_derivative_index=0,
-                                     **outs)
+  inputs_with_gradients = _validate_inputs_with_gradients(
+      inputs_with_gradients, inputs)
+
+  return gen_poputil_ops.ipu_user_op(
+      inputs,
+      library_path=library_path,
+      gp_path=gp_path,
+      op_name=op_name,
+      name=name,
+      separate_gradients=separate_gradients,
+      is_gradient=False,
+      partial_derivative_index=0,
+      inputs_with_gradients=inputs_with_gradients,
+      **outs)
 
 
 def cpu_user_operation(inputs,
@@ -104,7 +120,8 @@ def cpu_user_operation(inputs,
                        outs=None,
                        name="UserOp",
                        op_name="Callback",
-                       separate_gradients=False):
+                       separate_gradients=False,
+                       inputs_with_gradients=None):
   """Call the CPU function located in the shared library at 'library_path'
     as part of the normal tensorflow execution with the given 'inputs'
     copied from the IPU to the CPU, and the outputs are copied back to the
@@ -130,6 +147,8 @@ def cpu_user_operation(inputs,
     separate_gradients:  When set to true, multiple gradient ops will be
       generated, one for each input.  When false, a single gradient op will be
       generated, which should produce the partial derivatives for all inputs.
+    inputs_with_gradients: When set, produce derivatives only for specified
+      inputs. List of input indices expected.
 
   Returns:
     The array of tensor outputs.
@@ -141,6 +160,9 @@ def cpu_user_operation(inputs,
         "output_shapes": [],
     }
 
+  inputs_with_gradients = _validate_inputs_with_gradients(
+      inputs_with_gradients, inputs)
+
   return gen_poputil_ops.ipu_user_read_write_op(
       inputs,
       library_path=library_path,
@@ -149,4 +171,5 @@ def cpu_user_operation(inputs,
       separate_gradients=separate_gradients,
       is_gradient=False,
       partial_derivative_index=0,
+      inputs_with_gradients=inputs_with_gradients,
       **outs)
