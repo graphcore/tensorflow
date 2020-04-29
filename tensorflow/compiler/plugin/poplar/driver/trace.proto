@@ -25,6 +25,9 @@ message IpuTraceCompileEndEvent {
   // A JSON structure describing the allocation targets
   // and convolution/matmul classifications
   bytes instruction_info = 5;
+
+  // A serialized form of the poplar graph
+  bytes poplar_graph = 6;
 };
 
 message IpuTraceDataTransferEvent {
