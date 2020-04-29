@@ -341,6 +341,10 @@ void PoplarExecutor::Deallocate(se::DeviceMemoryBase* mem) {
 
 Status PoplarExecutor::ConnectSendCallbacksToRendezvous(
     const SendRecvInfos& send_infos) {
+  if (send_infos.empty()) {
+    return Status::OK();
+  }
+
   const int64 num_replicas = current_replication_factor_;
 
   const bool can_buffers_overlap =
