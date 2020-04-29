@@ -595,6 +595,62 @@ StatusOr<std::vector<IpuSchedulerAlgorithm>> GetSchedulerList(
   return schedulers;
 }
 
+void GetCompileProfileStream(const std::unique_ptr<poplar::Engine>& engine,
+                             PoplarExecutor* poplar_executor,
+                             std::stringstream& report_stream) {
+  auto rep = engine->getGraphProfile();
+  if (poplar_executor->CompilerReportingTextFormat()) {
+    auto opts = poplar_executor->GetReportGraphFlags();
+    SetFlagIfNotPresent(opts, "showVarStorage", "true");
+    poplar::printGraphSummary(report_stream, rep, opts);
+  } else if (poplar_executor->CompilerReportingCborFormat()) {
+    poplar::serializeToCBOR(report_stream, rep);
+  } else {
+    poplar::serializeToJSON(report_stream, rep);
+  }
+
+  if (PoplarXlaFlags::Get().dump_text_reports_to_stdio) {
+    auto opts = poplar_executor->GetReportGraphFlags();
+    SetFlagIfNotPresent(opts, "showVarStorage", "true");
+    poplar::printGraphSummary(std::cout, rep, opts);
+  }
+
+  if (report_stream.tellp() > poplar_executor->MaxReportSize()) {
+    LOG(INFO)
+        << "Dropping a Poplar compilation report of size "
+        << report_stream.tellp()
+        << " which is larger than the configured maximum report size "
+        << std::to_string(poplar_executor->MaxReportSize())
+        << ". To change the maximum report size use the max_report_size"
+        << " argument in ipu.utils.create_ipu_config.\n"
+        << "Example:\n"
+        << "cfg = ipu.utils.create_ipu_config(max_report_size=0x100000000) "
+        << "Note that the max report size is in bytes.";
+    report_stream.str(std::string());
+  }
+}
+
+void GetPoplarSerializedGraphStream(
+    const poplar::Graph& graph,
+    const std::vector<poplar::program::Program>& progs,
+    PoplarExecutor* poplar_executor, std::stringstream& report_stream) {
+  graph.serialize(report_stream, progs, poplar::SerializationFormat::Binary);
+
+  if (report_stream.tellp() > poplar_executor->MaxReportSize()) {
+    LOG(INFO)
+        << "Dropping a Poplar serialized graph of size "
+        << report_stream.tellp()
+        << " which is larger than the configured maximum report size "
+        << std::to_string(poplar_executor->MaxReportSize())
+        << ". To change the maximum report size use the max_report_size"
+        << " argument in ipu.utils.create_ipu_config.\n"
+        << "Example:\n"
+        << "cfg = ipu.utils.create_ipu_config(max_report_size=0x100000000) "
+        << "Note that the max report size is in bytes.";
+    report_stream.str(std::string());
+  }
+}
+
 }  // namespace
 
 StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
@@ -1100,55 +1156,38 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       }
       return PoplarExceptionToTensorflowStatus("[Compile engine] ", e);
     }
-  }
 
-  if (enable_trace_events && compile) {
-    std::stringstream report_stream;
+    if (enable_trace_events && compile) {
+      std::stringstream report_stream;
+      std::stringstream graph_stream;
 
-    if (poplar_executor->CompilerReportingEnabled() && engine != nullptr) {
-      try {
-        auto rep = engine->getGraphProfile();
-        if (poplar_executor->CompilerReportingTextFormat()) {
-          auto opts = poplar_executor->GetReportGraphFlags();
-          SetFlagIfNotPresent(opts, "showVarStorage", "true");
-          poplar::printGraphSummary(report_stream, rep, opts);
-        } else if (poplar_executor->CompilerReportingCborFormat()) {
-          poplar::serializeToCBOR(report_stream, rep);
-        } else {
-          poplar::serializeToJSON(report_stream, rep);
+      if (poplar_executor->CompilerReportingEnabled() && engine != nullptr) {
+        try {
+          GetCompileProfileStream(engine, poplar_executor, report_stream);
+        } catch (const std::exception& e) {
+          return PoplarExceptionToTensorflowStatus("[Compiler report] ", e);
         }
 
-        if (PoplarXlaFlags::Get().dump_text_reports_to_stdio) {
-          auto opts = poplar_executor->GetReportGraphFlags();
-          SetFlagIfNotPresent(opts, "showVarStorage", "true");
-          poplar::printGraphSummary(std::cout, rep, opts);
+        if (poplar_executor->IncludePoplarSerializedGraph()) {
+          try {
+            GetPoplarSerializedGraphStream(main_graph, progs, poplar_executor,
+                                           graph_stream);
+          } catch (const std::exception& e) {
+            return PoplarExceptionToTensorflowStatus(
+                "[Compiler serialize graph] ", e);
+          }
         }
-      } catch (const std::exception& e) {
-        return PoplarExceptionToTensorflowStatus("[Compiler report] ", e);
       }
+
+      uint64 duration = tensorflow::Env::Default()->NowMicros() - start_micros;
+
+      TF_ASSIGN_OR_RETURN(auto inst_info,
+                          GetInstructionCompilationInfo(module, resources));
+
+      poplar_executor->AddCompileEndEventRecord(
+          module->name(), report_stream.str(), graph_stream.str(), map_json,
+          inst_info, duration);
     }
-
-    uint64 duration = tensorflow::Env::Default()->NowMicros() - start_micros;
-
-    if (report_stream.tellp() > poplar_executor->MaxReportSize()) {
-      LOG(INFO)
-          << "Dropping a Poplar compilation report of size "
-          << report_stream.tellp()
-          << " which is larger than the configured maximum report size "
-          << std::to_string(poplar_executor->MaxReportSize())
-          << ". To change the maximum report size use the max_report_size"
-          << " argument in ipu.utils.create_ipu_config.\n"
-          << "Example:\n"
-          << "cfg = ipu.utils.create_ipu_config(max_report_size=0x100000000) "
-          << "Note that the max report size is in bytes.";
-      report_stream.str(std::string());
-    }
-
-    TF_ASSIGN_OR_RETURN(auto inst_info,
-                        GetInstructionCompilationInfo(module, resources));
-
-    poplar_executor->AddCompileEndEventRecord(
-        module->name(), report_stream.str(), map_json, inst_info, duration);
   }
 
   std::unique_ptr<Executable> executable;

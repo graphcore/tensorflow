@@ -1,3 +1,4 @@
+import os
 import tempfile
 import numpy as np
 
@@ -240,6 +241,39 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       self.assertTrue(len(dump) > 100)
 
   @test_util.deprecated_graph_mode_only
+  def testPoplarSerializedGraph(self):
+    with ops.device("/device:IPU:0"):
+      a = array_ops.placeholder(np.float32, [1], name="a")
+      b = array_ops.placeholder(np.float32, [1], name="b")
+      out = a + b
+
+    events = gen_ipu_ops.ipu_event_trace()
+
+    cfg = ipu.utils.create_ipu_config(profiling=True,
+                                      enable_poplar_serialized_graph=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+
+    with sl.Session() as sess:
+      # Discard any existing events
+      sess.run(events)
+
+      fd = {
+          a: [1.0],
+          b: [2.0],
+      }
+      result = sess.run(out, fd)
+      self.assertAllClose(result, [3.0])
+
+      # 1x compile begin, 1x compile end, 1x load engine, 1x execute
+      e = sess.run(events)
+      self.assertEqual(len(e), 4)
+
+      dump = ipu.utils.extract_poplar_serialized_graphs(e)
+      self.assertTrue(len(dump) == 1)
+      self.assertTrue(len(dump[0][1]) > 100)
+
+  @test_util.deprecated_graph_mode_only
   def testMaxReportSize(self):
     with ops.device("/device:IPU:0"):
       a = array_ops.placeholder(np.float32, [1], name="a")
@@ -250,6 +284,7 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
 
     cfg = ipu.utils.create_ipu_config(profiling=True,
                                       profile_execution=True,
+                                      enable_poplar_serialized_graph=True,
                                       max_report_size=10)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     ipu.utils.configure_ipu_system(cfg)
@@ -271,6 +306,9 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       reps = ipu.utils.extract_execute_reports(e)
       self.assertEqual(len(reps), 0)
 
+      reps = ipu.utils.extract_poplar_serialized_graphs(e)
+      self.assertEqual(len(reps), 0)
+
   @test_util.deprecated_graph_mode_only
   def testDumpReportsToFile(self):
     with ops.device("/device:IPU:0"):
@@ -279,11 +317,13 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       out = a + b
 
     tmpdir = tempfile.mkdtemp()
+    self.assertEqual(len(os.listdir(tmpdir)), 0)
 
     events = gen_ipu_ops.ipu_event_trace()
 
     cfg = ipu.utils.create_ipu_config(profiling=True,
                                       profile_execution=True,
+                                      enable_poplar_serialized_graph=True,
                                       report_directory=tmpdir)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
     ipu.utils.configure_ipu_system(cfg)
@@ -299,17 +339,31 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       e = sess.run(events)
       self.assertEqual(len(e), 4)
 
+      # One subdirectory added
+      print(os.listdir(tmpdir))
+      self.assertEqual(len(os.listdir(tmpdir)), 1)
+
       reps = ipu.utils.extract_compile_reports(e)
       self.assertEqual(len(reps), 1)
       self.assertTrue(reps[0][1].startswith(tmpdir))
+      self.assertTrue(reps[0][1].endswith("graph.json"))
       with open(reps[0][1]) as f:
         rep = f.read()
         self.assertTrue(len(rep) > 1000)
         self.assertEqual(rep[0], '{')
 
+      reps = ipu.utils.extract_poplar_serialized_graphs(e)
+      self.assertEqual(len(reps), 1)
+      self.assertTrue(reps[0][1].startswith(tmpdir))
+      self.assertTrue(reps[0][1].endswith("serialized_graph.capnp"))
+      with open(reps[0][1], "rb") as f:
+        rep = f.read()
+        self.assertTrue(len(rep) > 1000)
+
       reps = ipu.utils.extract_execute_reports(e)
       self.assertEqual(len(reps), 1)
       self.assertTrue(reps[0][1].startswith(tmpdir))
+      self.assertTrue(reps[0][1].endswith("execution.json"))
       with open(reps[0][1]) as f:
         rep = f.read()
         self.assertTrue(len(rep) > 1000)

@@ -211,6 +211,7 @@ def create_ipu_config(profiling=False,
                       use_poplar_text_report=False,
                       use_poplar_cbor_report=False,
                       profile_execution=None,
+                      enable_poplar_serialized_graph=False,
                       report_every_nth_execution=0,
                       max_report_size=0x10000000,
                       report_directory="",
@@ -237,6 +238,8 @@ def create_ipu_config(profiling=False,
       events. Can only be enabled if `profling` is also enabled. If set, can be
       `True`, 'False`, or a member of the `ExecutionProfileType` enumeration.
       A `True` value indicates `ExecutionProfileType.DEVICE_PROFILE`.
+    include_poplar_serialized_graph: Create the Poplar serialized graph and
+      include in the IPU compilation trace events.
     report_every_nth_execution: Only produce an execution report on every Nth
       execution.  0 = One report only.
     max_report_size: The maximum size of Poplar profiles to include in the
@@ -330,6 +333,7 @@ def create_ipu_config(profiling=False,
   opts.profiling.execution_trace_type = profile_execution.value
   opts.profiling.enable_poplar_reports_text = use_poplar_text_report
   opts.profiling.enable_poplar_reports_cbor = use_poplar_cbor_report
+  opts.profiling.enable_poplar_graph = enable_poplar_serialized_graph
   opts.profiling.report_every_nth_execution = report_every_nth_execution
   opts.profiling.max_report_size = max_report_size
   opts.profiling.report_directory = report_directory
@@ -1232,10 +1236,10 @@ def extract_compile_reports(events):
   """Get a list of all compiler reports in the event list.
 
   Args:
-    events: A list of trace event serialized protobufs
+    events: A list of trace event serialized protobufs.
 
   Returns:
-    A list of tuples containing the module namd and report."""
+    A list of tuples containing the module name and report."""
   result = []
   for e in events:
     evt = IpuTraceEvent.FromString(e)
@@ -1250,14 +1254,37 @@ def extract_compile_reports(events):
   return result
 
 
+def extract_poplar_serialized_graphs(events):
+  """Get a list of all poplar serialized graphs in the event list.
+
+  Args:
+    events: A list of trace event serialized protobufs.
+
+  Returns:
+    A list of tuples containing the module name and report."""
+  result = []
+  for e in events:
+    evt = IpuTraceEvent.FromString(e)
+    if evt.type == IpuTraceEvent.COMPILE_END:
+      try:
+        rep = evt.compile_end.poplar_graph.decode('utf-8')
+      except UnicodeDecodeError:
+        rep = evt.compile_end.poplar_graph
+
+      module = evt.compile_end.module_name.decode('utf-8')
+      if rep:
+        result += [(module, rep)]
+  return result
+
+
 def extract_execute_reports(events):
   """Get a list of all compiler reports in the event list.
 
   Args:
-    events: A list of trace event serialized protobufs
+    events: A list of trace event serialized protobufs.
 
   Returns:
-    A list of tuples containing the module namd and report."""
+    A list of tuples containing the module name and report."""
   result = []
   for e in events:
     evt = IpuTraceEvent.FromString(e)

@@ -1554,34 +1554,47 @@ std::string PoplarExecutor::ReportFileExtension() const {
 
 void PoplarExecutor::AddCompileEndEventRecord(
     const std::string& module_name, const std::string& report,
-    const std::string& tensor_map, const std::string& instruction_info,
-    int64 duration) {
+    const std::string& poplar_graph, const std::string& tensor_map,
+    const std::string& instruction_info, int64 duration) {
   std::string rep = std::move(report);
   std::string map = std::move(tensor_map);
+  std::string gph = std::move(poplar_graph);
 
   if (ReportDirectory().size() > 0) {
     std::unique_ptr<tensorflow::WritableFile> file;
 
     std::string report_file_extension = ReportFileExtension();
 
-    std::string filename = tensorflow::io::JoinPath(
-        ReportDirectory(),
-        module_name + ".compile_report." + report_file_extension);
+    std::string report_dir =
+        tensorflow::io::JoinPath(ReportDirectory(), module_name);
+    CreateDirIfMissing(report_dir);
 
-    CreateDirIfMissing(ReportDirectory());
+    if (rep.size() > 0) {
+      std::string filename = tensorflow::io::JoinPath(
+          report_dir, "graph." + report_file_extension);
+      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
+      TF_CHECK_OK(file->Append(rep));
+      TF_CHECK_OK(file->Close());
+      rep = filename;
+    }
 
-    TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
-    TF_CHECK_OK(file->Append(rep));
-    TF_CHECK_OK(file->Close());
-    rep = filename;
+    if (map.size() > 0) {
+      std::string filename =
+          tensorflow::io::JoinPath(report_dir, "tensor_map.json");
+      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
+      TF_CHECK_OK(file->Append(map));
+      TF_CHECK_OK(file->Close());
+      map = filename;
+    }
 
-    filename = tensorflow::io::JoinPath(
-        ReportDirectory(),
-        module_name + ".tensor_map." + report_file_extension);
-    TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
-    TF_CHECK_OK(file->Append(map));
-    TF_CHECK_OK(file->Close());
-    map = filename;
+    if (gph.size() > 0) {
+      std::string filename =
+          tensorflow::io::JoinPath(report_dir, "serialized_graph.capnp");
+      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
+      TF_CHECK_OK(file->Append(gph));
+      TF_CHECK_OK(file->Close());
+      gph = filename;
+    }
   }
 
   auto evt = NewTraceEvent();
@@ -1590,6 +1603,7 @@ void PoplarExecutor::AddCompileEndEventRecord(
   auto* compile_end = evt.mutable_compile_end();
   compile_end->set_module_name(std::move(module_name));
   compile_end->set_compilation_report(std::move(rep));
+  compile_end->set_poplar_graph(std::move(gph));
   compile_end->set_duration(duration);
   compile_end->set_tensor_map(std::move(map));
   compile_end->set_instruction_info(std::move(instruction_info));
@@ -1624,14 +1638,17 @@ void PoplarExecutor::AddLoadEngineEventRecord(const std::string& module_name) {
 void PoplarExecutor::AddExecuteEventRecord(const std::string& module_name,
                                            const std::string& report) {
   std::string rep = std::move(report);
-  if (ReportDirectory().size() > 0 && report.size()) {
+  if (ReportDirectory().size() > 0 && rep.size()) {
     std::unique_ptr<tensorflow::WritableFile> file;
 
     std::string report_file_extension = ReportFileExtension();
 
+    std::string report_dir =
+        tensorflow::io::JoinPath(ReportDirectory(), module_name);
+    CreateDirIfMissing(report_dir);
+
     std::string filename = tensorflow::io::JoinPath(
-        ReportDirectory(),
-        module_name + ".execute_report." + report_file_extension);
+        report_dir, "execution." + report_file_extension);
     TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
     TF_CHECK_OK(file->Append(rep));
     TF_CHECK_OK(file->Close());

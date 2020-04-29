@@ -51,41 +51,45 @@ message IpuOptions {
 
   // Options to control IPU profiling
   message Profiling {
-    // Set to enable compilation trace
+    // Set to enable compilation trace.
     bool enable_compilation_trace = 1;
 
-    // Set to have the poplar reports in text, not JSON
+    // Set to have the poplar reports in text, not JSON.
     bool enable_poplar_reports_text = 2;
 
-    // Set to enable I/O trace
+    // Set to enable I/O trace.
     bool enable_io_trace = 3;
 
-    // Execution trace type
+    // Execution trace type.
     IpuExecutionProfileType execution_trace_type = 4;
 
-    // Report every N'th execution (0=once only)
+    // Report every N'th execution (0=once only).
     int64 report_every_nth_execution = 5;
 
     // retired = 6;
 
-    // Enable IPU trace events - indpendently of poplar reporting
+    // Enable IPU trace events - indpendently of poplar reporting.
     bool enable_ipu_trace_events = 7;
 
-    // Set to have the poplar reports in CBOR, not JSON
+    // Set to have the poplar reports in CBOR, not JSON.
     bool enable_poplar_reports_cbor = 8;
 
     // When non-empty, reports will be written into this directory, instead of
-    // into the Tensorboard events
+    // into the Tensorboard events.
     string report_directory = 9;
 
-    // Reports over this size (in bytes) will be discarded
+    // Reports over this size (in bytes) will be discarded.
     int64 max_report_size = 10;
 
-    // Options for controlling graph profile report generation
+    // Options for controlling graph profile report generation.
     repeated PoplarOptionFlag graph_options = 11;
 
-    // Options for controlling execution profile report generation    
-    repeated PoplarOptionFlag execution_options = 12;    
+    // Options for controlling execution profile report generation.
+    repeated PoplarOptionFlag execution_options = 12;
+
+    // Set to have the Poplar serialized graph to be included with the
+    // compiler report.
+    bool enable_poplar_graph = 13;
   };
   Profiling profiling = 2;
 
