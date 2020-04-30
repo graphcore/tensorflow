@@ -52,7 +52,7 @@ class IExecutable {
 
 class VerifiedExecutable : public IExecutable {
  public:
-  VerifiedExecutable(StreamReader& stream, int64_t length, bool use_autoloader);
+  VerifiedExecutable(StreamReader& stream, int64_t length);
   void Prepare(poplar::Device& device);
   void Deploy();
   void Run();
@@ -187,7 +187,7 @@ class BinaryLoader {
   std::unique_ptr<Executable> CreateExecutable(
       const std::string executable_name = "") const;
   std::unique_ptr<VerifiedExecutable> CreateVerifiedExecutable(
-      bool use_autoloader, const std::string executable_name = "") const;
+      const std::string executable_name = "") const;
   std::unique_ptr<StreamReader> CreateInfeedStreamReader(
       const std::string infeed_name) const;
   std::unique_ptr<StreamReader> GetTensorStream(const std::string& name) const;
