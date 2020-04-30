@@ -698,18 +698,37 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   CHECK(!inst->shape().IsTuple());
 
   TensorLocation output_location{inst, 0};
-  // Whether this input has an allocation target.
-  const bool has_allocation_target =
-      HasTensorAllocationTarget(output_location, resources_);
+  // If the this instruction has multiple uses, then allocate it now with the
+  // same layout as its input (the variable).
+
+  // Whether to allocate now.
+  const bool allocate_now =
+      HasTensorAllocationTarget(output_location, resources_) ||
+      inst->user_count() > 1;
 
   // Function which is called when allocating this tensor.
   DeferredAllocateFunction allocate_fn =
       [this,
        inst](TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
-    // Allocate the tensor.
-    TF_ASSIGN_OR_RETURN(
-        auto tensor,
-        AllocateInput(allocation_location, inst->shape(), absl::nullopt));
+    poplar::Tensor tensor;
+    poplar::Graph& graph = GetGraph(resources_, inst);
+
+    // Get the layout of the variable passed into the gradient accumulator.
+    TensorVector outputs =
+        FindInstructionOutputs(tensor_map, resources_, inst->operand(0));
+    CHECK_EQ(outputs.size(), 1);
+    poplar::Tensor variable_tensor = outputs[0];
+
+    if (inst->user_count() > 1) {
+      tensor = TensorCloneAndRebalanceAliasing(
+          graph, resources_, variable_tensor, GetDebugName(inst));
+    } else {
+      // Allocate the accumulator, and if there isn't a layout to use, use the
+      // variable layout.
+      TF_ASSIGN_OR_RETURN(
+          tensor,
+          AllocateInput(allocation_location, inst->shape(), variable_tensor));
+    }
     return tensor;
   };
 
@@ -733,7 +752,7 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
     return tensor;
   };
 
-  if (has_allocation_target) {
+  if (allocate_now) {
     // If a tensor can be allocated now, then do it immediately.
     poplar::Tensor output;
     TF_ASSIGN_OR_RETURN(output, allocate_fn(output_location));
@@ -1174,14 +1193,14 @@ InplaceDeferredVisitor::GetSequenceForAliasingCopy() {
 
 std::pair<int64, int64> InplaceDeferredVisitor::GetParameterNumberAndFlatIndex(
     int64 output_flat_index) {
-  int64 paramter_number = 0;
+  int64 parameter_number = 0;
   int64 flat_index = output_flat_index;
   while (flat_index >
-         static_cast<int64>(computation_inputs_[paramter_number].size())) {
-    flat_index -= computation_inputs_[paramter_number].size();
-    paramter_number++;
+         static_cast<int64>(computation_inputs_[parameter_number].size())) {
+    flat_index -= computation_inputs_[parameter_number].size();
+    parameter_number++;
   }
-  return {paramter_number, flat_index};
+  return {parameter_number, flat_index};
 }
 
 }  // namespace poplarplugin

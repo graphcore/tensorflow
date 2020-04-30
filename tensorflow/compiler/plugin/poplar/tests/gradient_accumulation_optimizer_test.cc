@@ -16,9 +16,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_slice.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
@@ -75,6 +74,116 @@ ENTRY main {
   EXPECT_THAT(update->control_predecessors(), ::testing::ElementsAre(x));
   HloInstruction* p1 = module->entry_computation()->parameter_instruction(1);
   EXPECT_THAT(p0->control_predecessors(), ::testing::ElementsAre(p1));
+}
+
+TEST_F(GradientAccumulationOptimizerTest, AddCreatorControlDeps) {
+  const string& hlo_string = R"(
+HloModule top
+
+stage_0_fwd {
+  stage_0_fwd_p0 = f32[2] parameter(0)
+  l = f32[2] log(stage_0_fwd_p0)
+  ROOT stage_0_fwd_tuple = (f32[2]) tuple(l)
+}
+
+stage_1_fwd {
+  stage_1_fwd_p0 = f32[2] parameter(0)
+  l = f32[2] log(stage_1_fwd_p0)
+  ROOT stage_1_fwd_tuple = (f32[2]) tuple(l)
+}
+
+stage_2_fwd {
+  stage_2_fwd_p0 = f32[2] parameter(0)
+  l = f32[2] log(stage_2_fwd_p0)
+  ROOT stage_2_fwd_tuple = (f32[2]) tuple(l)
+}
+
+stage_2_bwd {
+  stage_2_bwd_p0 = f32[2] parameter(0)
+  ROOT stage_2_bwd_tuple = (f32[2]) tuple(stage_2_bwd_p0)
+}
+
+stage_1_bwd {
+  stage_1_bwd_p0 = f32[2] parameter(0)
+  stage_1_bwd_p1 = f32[2] parameter(1)
+  ROOT stage_1_bwd_tuple = (f32[2], f32[2]) tuple(stage_1_bwd_p0, stage_1_bwd_p1)
+}
+
+stage_0_bwd {
+  stage_0_bwd_p0 = f32[2] parameter(0)
+  stage_0_bwd_p1 = f32[2] parameter(1)
+  stage_0_bwd_accumulator = f32[2] parameter(2)
+  stage_0_bwd_add_grads = f32[2] add(stage_0_bwd_p0, stage_0_bwd_p1)
+  stage_0_bwd_accumulator_update = f32[2] custom-call(stage_0_bwd_accumulator, stage_0_bwd_add_grads), custom_call_target="GradientAccumulatorAdd"
+  ROOT stage_0_bwd_tuple = (f32[2]) tuple(stage_0_bwd_accumulator_update)
+}
+
+resource_update {
+  resource_update_p0 = f32[2] parameter(0)
+  ROOT t = (f32[2]) tuple(resource_update_p0)
+}
+
+pipeline {
+  pipeline_p0 = f32[2] parameter(0), sharding={maximal device=0}
+  pipeline_stage_0 = (f32[2]) call(pipeline_p0), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  pipeline_stage_0.0 = f32[2] get-tuple-element(pipeline_stage_0), index=0
+
+  pipeline_stage_1 = (f32[2]) call(pipeline_stage_0.0), to_apply=stage_1_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}", sharding={maximal device=1}
+  pipeline_stage_1.0 = f32[2] get-tuple-element(pipeline_stage_1), index=0
+
+  pipeline_stage_2 = (f32[2]) call(pipeline_stage_1.0), to_apply=stage_2_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}", sharding={maximal device=0}
+  pipeline_stage_2.0 = f32[2] get-tuple-element(pipeline_stage_2), index=0
+
+  pipeline_stage_2_bwd = (f32[2]) call(pipeline_stage_2.0), to_apply=stage_2_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
+  pipeline_stage_2_bwd.0 = f32[2] get-tuple-element(pipeline_stage_2_bwd), index=0
+
+  pipeline_stage_1_bwd = (f32[2], f32[2]) call(pipeline_stage_2_bwd.0, pipeline_stage_1.0), to_apply=stage_1_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"1\"}}}"
+  pipeline_stage_1_bwd.0 = f32[2] get-tuple-element(pipeline_stage_1_bwd), index=0
+  pipeline_stage_1_bwd.1 = f32[2] get-tuple-element(pipeline_stage_1_bwd), index=1
+
+  pipeline_accumulator = f32[2] custom-call(pipeline_p0), custom_call_target="GradientAccumulatorCreate"
+  pipeline_stage_0_bwd = (f32[2]) call(pipeline_stage_1_bwd.0, pipeline_stage_0.0, pipeline_accumulator), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
+  pipeline_stage_0_bwd.0 = f32[2] get-tuple-element(pipeline_stage_0_bwd), index=0
+
+
+  pipeline_accumulator_sink = f32[2] custom-call(pipeline_stage_0_bwd.0), custom_call_target="GradientAccumulatorSink", backend_config="{\"num_mini_batches\":1}\n"
+
+  call_ru = (f32[2]) call(pipeline_accumulator_sink), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  pipeline_p0_updated = f32[2] get-tuple-element(call_ru), index=0
+  ROOT pipeline_tuple = (f32[2]) tuple(pipeline_p0_updated)
+}
+
+ENTRY e {
+  e.weights0 = f32[2] parameter(0), parameter_replication={false}
+  ROOT e.call = (f32[2]) call(e.weights0), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"schedule\":0}}}"
+}
+)";
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module);
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module).ValueOrDie());
+
+  HloComputation* pipeline_computation = FindComputation(module, "pipeline");
+  TF_ASSERT_OK_AND_ASSIGN(PipelineStages stages,
+                          GetPipelineStages(pipeline_computation));
+  auto creator = stages.backward[0]->operand(2);
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(creator));
+
+  GradientAccumulationOptimizer gao;
+  EXPECT_TRUE(gao.Run(module).ValueOrDie());
+
+  // Expect the forward stage to be a control dependency.
+  EXPECT_THAT(creator->control_predecessors(),
+              ::testing::ElementsAre(stages.forward[0]));
 }
 }  // namespace
 }  // namespace poplarplugin

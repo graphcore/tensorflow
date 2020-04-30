@@ -95,7 +95,7 @@ pipeline {
   pipeline_stage_1_bwd.0 = f32[2] get-tuple-element(pipeline_stage_1_bwd), index=0
   pipeline_stage_1_bwd.1 = f32[2] get-tuple-element(pipeline_stage_1_bwd), index=1
 
-  pipeline_accumulator = f32[2] custom-call(), custom_call_target="GradientAccumulatorCreate"
+  pipeline_accumulator = f32[2] custom-call(pipeline_p0), custom_call_target="GradientAccumulatorCreate"
   pipeline_stage_0_bwd = (f32[2]) call(pipeline_stage_1_bwd.0, pipeline_stage_0.0, pipeline_accumulator), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   pipeline_stage_0_bwd.0 = f32[2] get-tuple-element(pipeline_stage_0_bwd), index=0
 
@@ -249,7 +249,7 @@ pipeline {
   pipeline_stage_2 = (f32[2]) call(pipeline_stage_1.0), to_apply=stage_2_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}", sharding={maximal device=0}
   pipeline_stage_2.0 = f32[2] get-tuple-element(pipeline_stage_2), index=0
 
-  pipeline_accumulator = f32[2] custom-call(), custom_call_target="GradientAccumulatorCreate"
+  pipeline_accumulator = f32[2] custom-call(pipeline_p0), custom_call_target="GradientAccumulatorCreate"
 
   pipeline_stage_2_bwd = (f32[2], f32[2]) call(pipeline_stage_2.0, pipeline_accumulator), to_apply=stage_2_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"2\"}}}"
   pipeline_stage_2_bwd.0 = f32[2] get-tuple-element(pipeline_stage_2_bwd), index=0

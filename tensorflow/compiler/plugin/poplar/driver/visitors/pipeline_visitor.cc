@@ -333,28 +333,28 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     }
   }
 
-  // Partition out parameters - these are assigned to the first stage in which
-  // they are used in.
-  auto parameters_end = std::stable_partition(
-      fifos_end, instructions.end(), HasHloOpcode(HloOpcode::kParameter));
-  for (auto itr = fifos_end; itr != parameters_end; ++itr) {
+  // Partition out the gradient accumulation buffers - these are assigned to the
+  // first stage in which they are used in.
+  auto gradient_accumulators_end = std::stable_partition(
+      fifos_end, instructions.end(), IsGradientAccumulatorCreateInstruction());
+  for (auto itr = fifos_end; itr != gradient_accumulators_end; ++itr) {
     HloInstruction* inst = *itr;
     result[inst] = get_stage_from_users(inst);
   }
 
-  // Partition out the gradient accumulation buffers - these are assigned to the
-  // first stage in which they are used in.
-  auto gradient_accumulators_end =
-      std::stable_partition(parameters_end, instructions.end(),
-                            IsGradientAccumulatorCreateInstruction());
-  for (auto itr = parameters_end; itr != gradient_accumulators_end; ++itr) {
+  // Partition out parameters - these are assigned to the first stage in which
+  // they are used in.
+  auto parameters_end =
+      std::stable_partition(gradient_accumulators_end, instructions.end(),
+                            HasHloOpcode(HloOpcode::kParameter));
+  for (auto itr = gradient_accumulators_end; itr != parameters_end; ++itr) {
     HloInstruction* inst = *itr;
     result[inst] = get_stage_from_users(inst);
   }
 
   // Go through the remaining instructions and assign them to stages given their
   // operands. Note that we are visiting in post-order.
-  for (auto itr = gradient_accumulators_end; itr != instructions.end(); ++itr) {
+  for (auto itr = parameters_end; itr != instructions.end(); ++itr) {
     HloInstruction* inst = *itr;
     // Only assign the stage if no other instruction assigned it for us.
     if (!result.contains(inst)) {

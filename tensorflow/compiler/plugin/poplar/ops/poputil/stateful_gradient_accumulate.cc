@@ -36,18 +36,11 @@ REGISTER_OP("IpuStatefulGradientAccumulateWithMomentum")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 REGISTER_OP("GradientAccumulatorCreate")
+    .Input("variable: dtype")
     .Output("output: dtype")
     .Attr("dtype: {float16, float32}")
-    .Attr("output_shape: shape")
     .SetIsStateful()
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      PartialTensorShape output_shape;
-      TF_RETURN_IF_ERROR(c->GetAttr("output_shape", &output_shape));
-      shape_inference::ShapeHandle s;
-      TF_RETURN_IF_ERROR(c->MakeShapeFromPartialTensorShape(output_shape, &s));
-      c->set_output(0, s);
-      return Status::OK();
-    });
+    .SetShapeFn(shape_inference::UnchangedShape);
 
 REGISTER_OP("GradientAccumulatorAdd")
     .Input("accumulator: dtype")

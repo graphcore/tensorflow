@@ -560,9 +560,8 @@ def pipeline(computational_stages,
       for grad, var in grads_and_vars:
         if grad is not None:
           with ops.colocate_with(grad):
-            # Create an accumulator.
-            accumulator = gen_poputil_ops.gradient_accumulator_create(
-                dtype=grad.dtype, output_shape=grad.shape)
+            # Create an accumulator - variable is used as reference for shape/layout.
+            accumulator = gen_poputil_ops.gradient_accumulator_create(var)
             # Add the gradients to the accumulator.
             accumulator = gen_poputil_ops.gradient_accumulator_add(
                 accumulator, grad)
