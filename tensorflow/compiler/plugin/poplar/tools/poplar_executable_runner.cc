@@ -275,10 +275,10 @@ Executable::Executable(StreamReader& stream, int64_t length)
     : IExecutable(stream, length, {}) {}
 
 void Executable::Load(const poplar::Device& device) {
+  LogContext ctx("Running HOST_TO_DEVICE");
   std::cout << "Loading program onto the device\n";
   engine_->load(device);
   try {
-    LogContext ctx("Running HOST_TO_DEVICE");
     engine_->run(PoplarProgramType::HOST_TO_DEVICE);
   } catch (const poplar::poplar_error& err) {
     PRINT_INFO(err.what());
@@ -287,8 +287,8 @@ void Executable::Load(const poplar::Device& device) {
 }
 
 void Executable::Run() {
+  LogContext ctx("Running MAIN_SEQUENCE");
   try {
-    LogContext ctx("Running MAIN_SEQUENCE");
     engine_->run(PoplarProgramType::MAIN_SEQUENCE);
   } catch (const poplar::poplar_error& err) {
     PRINT_INFO(err.what());
@@ -297,8 +297,8 @@ void Executable::Run() {
 }
 
 void Executable::DeviceToHostCopy() {
+  LogContext ctx("Running DEVICE_TO_HOST");
   try {
-    LogContext ctx("Running DEVICE_TO_HOST");
     engine_->run(PoplarProgramType::DEVICE_TO_HOST);
   } catch (const poplar::poplar_error& err) {
     PRINT_INFO(err.what());
@@ -316,10 +316,11 @@ void VerifiedExecutable::Prepare(poplar::Device& device) {
 void VerifiedExecutable::Deploy() { engine_->deploy(); }
 
 void VerifiedExecutable::Run() {
+  LogContext ctx("Running FUSED_SEQUENCE");
   try {
-    LogContext ctx("Running FUSED_SEQUENCE");
     engine_->run(0);
   } catch (const poplar::poplar_error& err) {
+    PRINT_INFO(err.what());
     ERROR(FirstLinesOf(err.what(), 3));
   }
 }
@@ -858,33 +859,49 @@ void BinaryLoader::LoadFile(const std::string& filename) {
   }
 }
 
+std::unique_ptr<StreamReader> BinaryLoader::GetObjectReader(
+    ObjectType type, const std::string& name) const {
+  const Object& obj = GetObject(type, name);
+  std::unique_ptr<StreamReader> in =
+      absl::make_unique<StreamReader>(obj.filename);
+  in->MoveAbsolute(obj.offset);
+  in->SetEnd(obj.end);
+  return in;
+}
+
+std::unique_ptr<StreamReader> BinaryLoader::CreateMetadataReader(
+    const std::string metadata_name) const {
+  LogContext ctx{"BinaryLoader::CreateMetadataReader" + metadata_name};
+  return GetObjectReader(ObjectType::PoplarMetadata, metadata_name);
+}
+
 std::unique_ptr<TensorManager> BinaryLoader::CreateTensorManager(
     std::function<size_t(size_t)> output_metadata_size_fn,
     const std::string metadata_name) const {
   LogContext ctx{"BinaryLoader::CreateTensorManager " + metadata_name};
-  const Object& obj = GetObject(ObjectType::PoplarMetadata, metadata_name);
-  StreamReader in{obj.filename};
-  in.MoveAbsolute(obj.offset);
-  return absl::make_unique<TensorManager>(LoadJsonFromString(in.ReadString()),
+  auto in = CreateMetadataReader(metadata_name);
+  return absl::make_unique<TensorManager>(LoadJsonFromString(in->ReadString()),
                                           output_metadata_size_fn);
+}
+
+std::unique_ptr<StreamReader> BinaryLoader::CreateExecutableReader(
+    const std::string executable_name) const {
+  LogContext ctx{"BinaryLoader::CreateExecutableReader " + executable_name};
+  return GetObjectReader(ObjectType::PoplarExecutable, executable_name);
 }
 
 std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
     const std::string executable_name) const {
   LogContext ctx{"BinaryLoader::CreateExecutable " + executable_name};
-  const Object& obj = GetObject(ObjectType::PoplarExecutable, executable_name);
-  StreamReader in{obj.filename};
-  in.MoveAbsolute(obj.offset);
-  return absl::make_unique<Executable>(in, obj.end - obj.offset);
+  auto in = CreateExecutableReader(executable_name);
+  return absl::make_unique<Executable>(*in, in->NumBytesLeft());
 }
 
 std::unique_ptr<VerifiedExecutable> BinaryLoader::CreateVerifiedExecutable(
     const std::string executable_name) const {
   LogContext ctx{"BinaryLoader::CreateVerifiedExecutable " + executable_name};
-  const Object& obj = GetObject(ObjectType::PoplarExecutable, executable_name);
-  StreamReader in{obj.filename};
-  in.MoveAbsolute(obj.offset);
-  return absl::make_unique<VerifiedExecutable>(in, obj.end - obj.offset);
+  auto in = CreateExecutableReader(executable_name);
+  return absl::make_unique<VerifiedExecutable>(*in, in->NumBytesLeft());
 }
 
 const BinaryLoader::Object BinaryLoader::GetObject(
@@ -913,11 +930,8 @@ const BinaryLoader::Object BinaryLoader::GetObject(
 
 std::unique_ptr<StreamReader> BinaryLoader::CreateInfeedStreamReader(
     const std::string infeed_name) const {
-  const Object& obj = GetObject(ObjectType::Feed, infeed_name);
-  std::unique_ptr<StreamReader> in =
-      absl::make_unique<StreamReader>(obj.filename);
-  in->MoveAbsolute(obj.offset);
-  return in;
+  LogContext ctx{"BinaryLoader::CreateInfeedStreamReader" + infeed_name};
+  return GetObjectReader(ObjectType::Feed, infeed_name);
 }
 
 bool BinaryLoader::ContainsObject(ObjectType type,
@@ -931,11 +945,8 @@ bool BinaryLoader::ContainsObject(ObjectType type,
 
 std::unique_ptr<StreamReader> BinaryLoader::GetTensorStream(
     const std::string& name) const {
-  const Object& obj = GetObject(ObjectType::Tensor, name);
-  std::unique_ptr<StreamReader> in =
-      absl::make_unique<StreamReader>(obj.filename);
-  in->MoveAbsolute(obj.offset);
-  return in;
+  LogContext ctx{"BinaryLoader::GetTensorStream" + name};
+  return GetObjectReader(ObjectType::Tensor, name);
 }
 
 std::set<std::string> BinaryLoader::GetObjectNames(ObjectType type) const {

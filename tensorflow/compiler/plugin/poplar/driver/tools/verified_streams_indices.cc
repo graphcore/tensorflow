@@ -262,6 +262,7 @@ Status VerifiedStreamsIndices::InitializeIndexTensors(
       }
     }
   }
+  return Status::OK();
 }
 
 StatusOr<poplar::Tensor> VerifiedStreamsIndices::IndexTensor(

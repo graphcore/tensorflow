@@ -232,6 +232,7 @@ class StreamWriter {
   void WriteInt64(int64_t value);
   void WriteInt64Array(const std::vector<int64_t>& values);
   void WriteData(const void* data, size_t size);
+  void CopyFromStream(StreamReader& in, size_t size);
   void MoveAbsolute(std::streampos position);
   std::streampos CurrentPosition();
   void Close();
@@ -250,6 +251,7 @@ class StreamReader {
   void ReadData(void* dst, int64_t length);
   void MoveRelative(std::streamoff offset);
   void MoveAbsolute(std::streampos position);
+  void SetEnd(std::streampos end);
   std::streampos CurrentPosition();
   int64_t ReadInt64();
   std::vector<int64_t> ReadInt64Array();
@@ -281,6 +283,7 @@ class ExecutableWriter {
  public:
   ExecutableWriter(std::shared_ptr<StreamWriter> writer,
                    std::function<void()> on_write_complete);
+  StreamWriter& Writer();
   std::fstream& Stream();
   void WriteComplete();
   ~ExecutableWriter();

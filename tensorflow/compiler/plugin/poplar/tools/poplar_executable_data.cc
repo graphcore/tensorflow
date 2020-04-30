@@ -661,6 +661,8 @@ void StreamWriter::WriteString(const std::string& value) {
   }
 }
 
+void StreamReader::SetEnd(std::streampos end) { end_ = end; }
+
 const std::string& StreamReader::Filename() const { return filename_; }
 
 std::string StreamReader::ReadString(int64_t max_len) {
@@ -688,6 +690,14 @@ void StreamWriter::Close() {
   if (fd_.is_open()) {
     fd_.close();
   }
+}
+
+void StreamWriter::CopyFromStream(StreamReader& in, size_t size) {
+  ERROR_ON(size > in.NumBytesLeft());
+  std::vector<char> buffer;
+  buffer.resize(size);
+  in.ReadData(buffer.data(), buffer.size());
+  WriteData(buffer.data(), buffer.size());
 }
 
 void StreamWriter::MoveAbsolute(std::ios::streampos position) {
@@ -720,6 +730,8 @@ int64_t StreamReader::NumBytesLeft() { return end_ - fd_.tellg(); }
 
 void StreamReader::ReadData(void* dst, int64_t length) {
   ERROR_ON(length <= 0);
+  ERROR_ON_MSG(fd_.tellg() + length > end_,
+               "Trying to read past the end of the stream");
   fd_.read(reinterpret_cast<char*>(dst), length);
 }
 
@@ -922,6 +934,8 @@ void ExecutableWriter::WriteComplete() {
     writer_ = nullptr;
   }
 }
+
+StreamWriter& ExecutableWriter::Writer() { return *writer_; }
 
 ExecutableWriter::~ExecutableWriter() { WriteComplete(); }
 

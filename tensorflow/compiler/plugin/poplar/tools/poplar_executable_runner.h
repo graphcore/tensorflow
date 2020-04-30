@@ -184,7 +184,11 @@ class BinaryLoader {
   std::unique_ptr<TensorManager> CreateTensorManager(
       std::function<size_t(size_t)> output_metadata_size_fn = {},
       const std::string metadata_name = "") const;
+  std::unique_ptr<StreamReader> CreateMetadataReader(
+      const std::string metadata_name = "") const;
   std::unique_ptr<Executable> CreateExecutable(
+      const std::string executable_name = "") const;
+  std::unique_ptr<StreamReader> CreateExecutableReader(
       const std::string executable_name = "") const;
   std::unique_ptr<VerifiedExecutable> CreateVerifiedExecutable(
       const std::string executable_name = "") const;
@@ -200,6 +204,8 @@ class BinaryLoader {
     std::streampos offset;
     std::streampos end;
   };
+  std::unique_ptr<StreamReader> GetObjectReader(ObjectType type,
+                                                const std::string& name) const;
   const Object GetObject(ObjectType type, const std::string& name) const;
   std::map<ObjectType, std::map<std::string, Object>> objects_;
 };
