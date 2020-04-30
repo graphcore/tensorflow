@@ -209,11 +209,7 @@ class IPUPipelineTest(test.TestCase):
 
   @test_util.run_v2_only
   def testCannotCallEagerly(self):
-    outfeed = ipu.ipu_outfeed_queue.IPUOutfeedQueue(feed_name=next_feed_id())
-
-    p = ipu.keras.PipelinedModel(simple_pipeline(),
-                                 pipeline_depth=4,
-                                 outfeed_queue=outfeed)
+    p = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=4)
 
     c = constant_op.constant(np.zeros([1, 12], dtype=np.float32))
 
@@ -276,7 +272,7 @@ class IPUPipelineTest(test.TestCase):
         m.evaluate(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
-  def testNeedTupleDatasetPredict(self):
+  def testNeedNonTupleDatasetPredict(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
       m = ipu.keras.PipelinedModel(simple_pipeline(), pipeline_depth=24)
@@ -325,7 +321,8 @@ class IPUPipelineTest(test.TestCase):
       # Fit the weights to the dataset
       with self.assertRaisesRegex(
           ValueError,
-          r"Steps per epoch times pipeline depth \(14 x 12\) is greater than"):
+          r"Steps per epoch times accumulation count \(14 x 12\) is greater than"
+      ):
         m.fit(test_dataset(length=144), steps_per_epoch=14)
 
   @test_util.run_v2_only
