@@ -306,10 +306,8 @@ void Executable::DeviceToHostCopy() {
   }
 }
 
-VerifiedExecutable::VerifiedExecutable(StreamReader& stream, int64_t length,
-                                       bool use_autoloader)
-    : IExecutable(stream, length,
-                  {{"opt.useAutoloader", use_autoloader ? "true" : "false"}}) {}
+VerifiedExecutable::VerifiedExecutable(StreamReader& stream, int64_t length)
+    : IExecutable(stream, length, {{"opt.useAutoloader", "false"}}) {}
 
 void VerifiedExecutable::Prepare(poplar::Device& device) {
   engine_->prepare(device);
@@ -881,13 +879,12 @@ std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
 }
 
 std::unique_ptr<VerifiedExecutable> BinaryLoader::CreateVerifiedExecutable(
-    bool use_autoloader, const std::string executable_name) const {
+    const std::string executable_name) const {
   LogContext ctx{"BinaryLoader::CreateVerifiedExecutable " + executable_name};
   const Object& obj = GetObject(ObjectType::PoplarExecutable, executable_name);
   StreamReader in{obj.filename};
   in.MoveAbsolute(obj.offset);
-  return absl::make_unique<VerifiedExecutable>(in, obj.end - obj.offset,
-                                               use_autoloader);
+  return absl::make_unique<VerifiedExecutable>(in, obj.end - obj.offset);
 }
 
 const BinaryLoader::Object BinaryLoader::GetObject(

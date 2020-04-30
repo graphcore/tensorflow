@@ -139,7 +139,6 @@ ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
           "List of binary files containing metadata, binaries, weights,"
           " inputs, feeds, etc.");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
-ABSL_FLAG(bool, use_autoloader, false, "Enable the autoloader");
 ABSL_FLAG(int, checkpoint_index, 0, "Index of the checkpoint");
 ABSL_FLAG(int, device, -1, "Device to use (-1 for any)");
 ABSL_FLAG(std::string, output_folder, ".",
@@ -161,7 +160,6 @@ int main(int argc, char** argv) {
 
   const BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
-  const bool use_autoloader = absl::GetFlag(FLAGS_use_autoloader);
   const int checkpoint_index = absl::GetFlag(FLAGS_checkpoint_index);
   const int requested_device_id = absl::GetFlag(FLAGS_device);
   const std::string output_folder = absl::GetFlag(FLAGS_output_folder);
@@ -185,7 +183,7 @@ int main(int argc, char** argv) {
   std::unique_ptr<ipu::TensorManager> tensors =
       loader.CreateTensorManager(popsec::computeNonPayloadSize);
   std::unique_ptr<ipu::VerifiedExecutable> exe =
-      loader.CreateVerifiedExecutable(use_autoloader);
+      loader.CreateVerifiedExecutable();
 
   tensors->AssertAllTensorsProvided(loader);
   tensors->LoadInputsAndParameters(loader);
