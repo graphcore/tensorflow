@@ -164,10 +164,10 @@ PoplarXlaFlags::PoplarXlaFlags() {
   }
 
   // Hash all the flags which affect the graph generation and compilation only.
-  hlo_hash = hash_util::hash(
-      use_synthetic_data, synthetic_data_initializer, use_ipu_model,
-      while_loop_brute_force_max_trip_count, executable_cache_path,
-      fallback_scheduler, allow_nans, log_cycle_count);
+  hlo_hash =
+      hash_util::hash(use_synthetic_data, synthetic_data_initializer,
+                      use_ipu_model, while_loop_brute_force_max_trip_count,
+                      fallback_scheduler, allow_nans, log_cycle_count);
 }
 
 const PoplarXlaFlags& PoplarXlaFlags::Get() {
