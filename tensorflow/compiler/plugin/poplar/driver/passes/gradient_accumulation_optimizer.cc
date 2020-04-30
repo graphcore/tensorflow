@@ -18,6 +18,7 @@ limitations under the License.
 #include <memory>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
@@ -62,14 +63,71 @@ StatusOr<bool> ConvertGradientAccumulatorAdds(HloModule* module) {
   }
   return changed;
 }
+
+// Find all the gradient accumulation buffer creators and add dependencies so
+// that these are executed as late as possible to make sure the variable has
+// been allocated before (incase it was a deferred allocation).
+StatusOr<bool> AddAllocationControlDependencies(HloModule* module) {
+  bool changed = false;
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
+    auto reachability_map = HloReachabilityMap::Build(comp);
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+      if (!IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst)) {
+        continue;
+      }
+
+      HloInstruction* layout_input = inst->mutable_operand(0);
+      // Try and add control dependencies to other layout input users.
+      for (HloInstruction* peer : layout_input->users()) {
+        // Skip current instruction.
+        if (peer == inst) {
+          continue;
+        }
+        // Skip if there already is a dependency.
+        if (reachability_map->IsReachable(inst, peer)) {
+          continue;
+        }
+        // Skip if the peer uses layout_input inplace - we prioritize inplace
+        // instructions.
+        const HloInstructionDescription description =
+            HloInstructionDescription(peer);
+
+        absl::flat_hash_set<int64> inplace_indicies = {
+            description.GetInplaceOperandIndexes().begin(),
+            description.GetInplaceOperandIndexes().end()};
+
+        const bool can_be_inplace =
+            absl::c_any_of(peer->OperandIndices(layout_input),
+                           [&inplace_indicies](int64 operand_idx) {
+                             return inplace_indicies.contains(operand_idx);
+                           });
+
+        if (can_be_inplace) {
+          continue;
+        }
+
+        TF_RETURN_IF_ERROR(peer->AddControlDependencyTo(inst));
+        reachability_map->UpdateReachabilityThroughInstruction(inst);
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
+}
 }  // namespace
 
 StatusOr<bool> GradientAccumulationOptimizer::Run(HloModule* module) {
   VLOG(2) << "Before GradientAccumulationOptimizer:";
   XLA_VLOG_LINES(2, module->ToString());
-  TF_ASSIGN_OR_RETURN(const bool changed,
+  TF_ASSIGN_OR_RETURN(const bool changed_accumulators,
                       ConvertGradientAccumulatorAdds(module));
-
+  TF_ASSIGN_OR_RETURN(const bool changed_creators,
+                      AddAllocationControlDependencies(module));
+  const bool changed = changed_accumulators || changed_creators;
   if (changed) {
     VLOG(2) << "After GradientAccumulationOptimizer:";
     XLA_VLOG_LINES(2, module->ToString());

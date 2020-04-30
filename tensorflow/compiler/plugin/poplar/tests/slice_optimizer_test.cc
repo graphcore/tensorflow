@@ -349,7 +349,7 @@ ENTRY c1 {
   EXPECT_TRUE(so.Run(module0).ValueOrDie());
 
   int64 start_index = 0;
-  int64 paramter_index = 0;
+  int64 parameter_index = 0;
   HloInstruction* input = p4;
   const std::vector<bool> is_constant{false, false, true, false, false, true};
   const std::vector<int64> offsets{5, 2, 2, 2, 2, 3};
@@ -370,13 +370,13 @@ ENTRY c1 {
 
       // Check the instruction operands.
       EXPECT_EQ(rhs->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(rhs->parameter_number(), paramter_index);
-      paramter_index++;
+      EXPECT_EQ(rhs->parameter_number(), parameter_index);
+      parameter_index++;
     }
     start_index += offsets[i];
   }
   EXPECT_EQ(start_index, 16);
-  EXPECT_EQ(paramter_index, 4);
+  EXPECT_EQ(parameter_index, 4);
   EXPECT_EQ(module0->entry_computation()->root_instruction(), input);
 
   {
@@ -431,7 +431,7 @@ ENTRY c1 {
   EXPECT_TRUE(so.Run(module0).ValueOrDie());
 
   int64 start_index = 0;
-  int64 paramter_index = 0;
+  int64 parameter_index = 0;
   HloInstruction* input = p4;
   const std::vector<bool> is_constant{false, false, true, false, false, true};
   const std::vector<int64> offsets{5, 2, 2, 2, 2, 3};
@@ -453,14 +453,14 @@ ENTRY c1 {
 
       // Check the instruction operands.
       EXPECT_EQ(rhs->opcode(), HloOpcode::kParameter);
-      EXPECT_EQ(rhs->parameter_number(), paramter_index);
+      EXPECT_EQ(rhs->parameter_number(), parameter_index);
       EXPECT_EQ(input->operand(2), scale);
-      paramter_index++;
+      parameter_index++;
     }
     start_index += offsets[i];
   }
   EXPECT_EQ(start_index, 16);
-  EXPECT_EQ(paramter_index, 4);
+  EXPECT_EQ(parameter_index, 4);
   EXPECT_EQ(module0->entry_computation()->root_instruction(), input);
 
   {

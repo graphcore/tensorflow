@@ -334,7 +334,7 @@ class DeferredVisitor : public FullVisitor {
       TensorLocation location, const Shape& shape,
       poplar::program::Sequence& sequence, poplar::Tensor tensor);
 
-  // Called by AllocateInput when allocating an input for a paramter.
+  // Called by AllocateInput when allocating an input for a parameter.
   // By default, inplace evaluator does no post processing for parameters.
   virtual StatusOr<poplar::Tensor> PostProcessParameterAllocation(
       TensorLocation location, const Shape& shape,
@@ -417,7 +417,7 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   // into.
   virtual poplar::program::Sequence& GetSequenceForAliasingCopy();
 
-  // Given an output flat index get the corresponding paramter number and flat
+  // Given an output flat index get the corresponding parameter number and flat
   // index.
   std::pair<int64, int64> GetParameterNumberAndFlatIndex(
       int64 output_flat_index);
