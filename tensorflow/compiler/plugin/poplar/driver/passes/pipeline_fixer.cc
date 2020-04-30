@@ -266,7 +266,7 @@ StatusOr<bool> PipelineFixer::BreakUpElementwiseOperations() {
 
       // Start from beginning as user instructions have been modified.
       if (progress_made) {
-        continue;
+        break;
       }
     }
   }
