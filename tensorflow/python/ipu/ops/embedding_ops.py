@@ -213,5 +213,6 @@ def create_host_embedding(name,
     embedding_tensor = variable_scope.get_variable(name,
                                                    shape=shape,
                                                    dtype=dtype,
-                                                   initializer=initializer)
+                                                   initializer=initializer,
+                                                   use_resource=False)
   return HostEmbedding(name, embedding_tensor, optimizer_spec=optimizer_spec)
