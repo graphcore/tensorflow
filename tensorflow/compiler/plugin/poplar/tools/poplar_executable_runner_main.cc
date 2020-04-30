@@ -164,6 +164,7 @@ ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
           " inputs, feeds, etc.");
 ABSL_FLAG(int, iterations, 1, "Number of times to run the executable");
 ABSL_FLAG(int, ckpt_frequency, 1, "Frequency at which to create checkpoints");
+ABSL_FLAG(int, device, -1, "Device to use (-1 for any)");
 ABSL_FLAG(bool, print_output, false,
           "Print the content of the output buffers to stdout");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
@@ -196,6 +197,7 @@ int main(int argc, char** argv) {
   const bool strict = absl::GetFlag(FLAGS_strict);
   const int iterations = absl::GetFlag(FLAGS_iterations);
   const int ckpt_frequency = absl::GetFlag(FLAGS_ckpt_frequency);
+  const int requested_device_id = absl::GetFlag(FLAGS_device);
   const std::string output_folder = absl::GetFlag(FLAGS_output_folder);
 
   ipu::LogContext::EnableInfo(verbose);
@@ -234,8 +236,14 @@ int main(int argc, char** argv) {
 
   std::cout << "\n[Initialising IPU]\n";
   ipu::DeviceManager manager;
-  poplar::Device device = manager.GetDevice(tensors->Config().NumIpus(),
-                                            tensors->Config().OptionFlags());
+  poplar::Device device;
+  if (requested_device_id >= 0) {
+    device = manager.GetSpecificDevice(requested_device_id,
+                                       tensors->Config().OptionFlags());
+  } else {
+    device = manager.GetDevice(tensors->Config().NumIpus(),
+                               tensors->Config().OptionFlags());
+  }
   auto init_end = std::chrono::high_resolution_clock::now();
   std::cout << "Done in "
             << SecondsToTimeString(seconds(init_end - init_start).count())

@@ -336,6 +336,20 @@ DeviceManager::DeviceManager()
                "No physical IPU detected on this host");
 }
 
+poplar::Device DeviceManager::GetSpecificDevice(
+    int64_t device_id, const poplar::OptionFlags& opts) {
+  poplar::Device device = manager_.getDevice(device_id, opts);
+
+  ERROR_ON_MSG(!device.attach(), "Failed to attach to device " << device_id);
+  unsigned mj, mn, pt;
+  device.getDriverVersion(mj, mn, pt);
+  const auto& ids = device.getDriverIDs();
+  std::cout << "Poplar driver: " << mj << "." << mn << "." << pt << std::endl;
+  std::cout << "Successfully attached to IPU" << (ids.size() > 1 ? "s" : "")
+            << ": " << absl::StrJoin(ids, ",") << std::endl;
+  return std::move(device);
+}
+
 poplar::Device DeviceManager::GetDevice(int64_t num_ipus,
                                         const poplar::OptionFlags& opts) {
   auto device_list =

@@ -70,6 +70,8 @@ class DeviceManager {
  public:
   DeviceManager();
   poplar::Device GetDevice(int64_t num_ipus, const poplar::OptionFlags& opts);
+  poplar::Device GetSpecificDevice(int64_t device_id,
+                                   const poplar::OptionFlags& opts);
 
  private:
   poplar::DeviceManager manager_;
