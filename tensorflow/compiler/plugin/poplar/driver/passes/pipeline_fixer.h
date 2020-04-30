@@ -54,6 +54,10 @@ class PipelineFixer : public HloModulePass {
   // it.
   Status RemovePipelineWrapper(HloComputation* pipeline_comp);
 
+  // Breaks up any elementwise operations which have inputs originating from
+  // different pipeline stages as much as possible.
+  StatusOr<bool> BreakUpElementwiseOperations();
+
   // Performs the lowering (if possible) of any operations which need to be
   // lowered for this pipeline to be correct.
   StatusOr<bool> LowerOpsIntoPipelineStages();

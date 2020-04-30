@@ -634,7 +634,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
 
   // Keep track of instructions which are being lowered and have users outside
   // of this lowering. Using a map so that we iterate in the same order.
-  std::map<HloInstruction*, absl::flat_hash_set<HloInstruction*>> external_uses;
+  HloInstructionMap<HloInstructionSet> external_uses;
   for (HloInstruction* inst : ordered_lowering) {
     // Go through all the users.
     for (HloInstruction* user : inst->users()) {

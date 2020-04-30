@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
@@ -191,8 +192,80 @@ std::string GenerateBackwardStageOpName(const PipelineStages& stages,
   return absl::StrReplaceAll(
       src_name, {{std::to_string(src_id), std::to_string(stage_id)}});
 }
-
 }  // namespace
+
+StatusOr<bool> PipelineFixer::BreakUpElementwiseOperations() {
+  bool changed = false;
+
+  TF_ASSIGN_OR_RETURN(auto analysis,
+                      PipelineDataflowAnalysis::GetAnalysis(stages_));
+
+  // We only break up elementwise operations which are not inside of stages yet.
+  HloComputation* comp = stages_.forward[0]->parent();
+  bool progress_made = true;
+  while (progress_made) {
+    progress_made = false;
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+      if (inst->opcode() != HloOpcode::kAdd) {
+        continue;
+      }
+
+      // Currently only try to breakup if all the values come from different
+      // backward pipeline stages which are placed on the same shard.
+      HloValueSet value_set = analysis->GetOperandsValueSet(inst);
+      absl::flat_hash_set<int64> backward_pipeline_stages;
+      absl::flat_hash_set<int64> shards;
+      for (const HloValue* value : value_set.values()) {
+        HloInstruction* producer = value->instruction();
+        if (IsPipelineStageBackward(producer)) {
+          TF_ASSIGN_OR_RETURN(StageID stage_id, analysis->GetStageID(producer));
+          TF_ASSIGN_OR_RETURN(const int64 shard,
+                              analysis->GetShardForStage(stage_id));
+
+          backward_pipeline_stages.insert(stage_id.id);
+          shards.insert(shard);
+        }
+      }
+      // Skip if the backward stages are not unique.
+      if (value_set.values().size() != backward_pipeline_stages.size()) {
+        continue;
+      }
+      // Skip if they are not on the same shard.
+      if (shards.size() != 1) {
+        continue;
+      }
+
+      for (HloInstruction* user : inst->users()) {
+        const auto indices = user->OperandIndices(inst);
+        // Convert Multiply(A, Add(B, C))
+        // to Add(Multiply(A, B), Multiply(A, C))
+        // Note that the order of operands to multiply can be swapped.
+        if (indices.size() == 1 && user->opcode() == HloOpcode::kMultiply) {
+          HloInstruction* scale = user->mutable_operand((indices[0] + 1) % 2);
+          HloInstruction* add_lhs = inst->mutable_operand(0);
+          HloInstruction* add_rhs = inst->mutable_operand(1);
+          TF_ASSIGN_OR_RETURN(
+              HloInstruction * multiply_lhs,
+              MakeBinaryHlo(HloOpcode::kMultiply, scale, add_lhs));
+          TF_ASSIGN_OR_RETURN(
+              HloInstruction * multiply_rhs,
+              MakeBinaryHlo(HloOpcode::kMultiply, scale, add_rhs));
+          TF_ASSIGN_OR_RETURN(
+              HloInstruction * new_add,
+              MakeBinaryHlo(HloOpcode::kAdd, multiply_lhs, multiply_rhs));
+          TF_RETURN_IF_ERROR(comp->ReplaceInstruction(user, new_add));
+
+          // Recompute the analysis.
+          TF_ASSIGN_OR_RETURN(analysis,
+                              PipelineDataflowAnalysis::GetAnalysis(stages_));
+          progress_made = true;
+        }
+      }
+    }
+  }
+
+  return changed;
+}
 
 // Lowers any outputs of the stage into the stage.
 // Returns true if the stage has changed.
@@ -491,6 +564,9 @@ StatusOr<bool> PipelineFixer::LowerParameterUsagesIntoStages() {
 }
 
 StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages() {
+  // Breakup elementwise operations where the inputs originate from different
+  // stages.
+  TF_ASSIGN_OR_RETURN(bool breakup_gradients, BreakUpElementwiseOperations());
   // Lower any outputs from stages into stages if possible.
   TF_ASSIGN_OR_RETURN(bool lowered_outputs, LowerPipelineStagesOutputs());
   // Lower any inputs into stages if possible.
@@ -499,7 +575,8 @@ StatusOr<bool> PipelineFixer::LowerOpsIntoPipelineStages() {
   TF_ASSIGN_OR_RETURN(bool lowered_params_uses,
                       LowerParameterUsagesIntoStages());
 
-  return lowered_inputs || lowered_outputs || lowered_params_uses;
+  return breakup_gradients || lowered_inputs || lowered_outputs ||
+         lowered_params_uses;
 }
 
 Status PipelineFixer::RemovePipelineWrapper(HloComputation* pipeline_comp) {
