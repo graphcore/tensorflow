@@ -259,7 +259,14 @@ StatusOr<bool> PipelineFixer::BreakUpElementwiseOperations() {
           TF_ASSIGN_OR_RETURN(analysis,
                               PipelineDataflowAnalysis::GetAnalysis(stages_));
           progress_made = true;
+          // Need to stop as user instructions have been modified.
+          break;
         }
+      }
+
+      // Start from beginning as user instructions have been modified.
+      if (progress_made) {
+        continue;
       }
     }
   }
