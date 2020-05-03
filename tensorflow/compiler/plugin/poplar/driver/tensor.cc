@@ -691,8 +691,8 @@ static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
 
 static StatusOr<poplar::Tensor> AddElementwiseBinary(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
-    const HloInstruction* layout, uint64 layout_output_idx,
-    const TensorMap& tensor_map) {
+    const xla::Shape& shape, const HloInstruction* layout,
+    uint64 layout_output_idx, const TensorMap& tensor_map) {
   TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
@@ -702,7 +702,16 @@ static StatusOr<poplar::Tensor> AddElementwiseBinary(
   }
 
   poplar::Tensor other_side = outputs[layout_output_idx];
-  return TensorCloneAndRebalanceAliasing(graph, res, other_side, debug_name);
+
+  TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape));
+  poplar::Tensor output =
+      TensorCloneAndRebalanceAliasing(graph, res, other_side, debug_name);
+
+  if (output.elementType() != poplar_type) {
+    output = graph.clone(poplar_type, output, debug_name);
+  }
+
+  return output;
 }
 
 bool HasTensorAllocationTarget(const TensorLocation& src,
@@ -726,9 +735,10 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
 
   poplar::Tensor out;
   if (IsPopOpsElementwiseBinary(target)) {
-    TF_ASSIGN_OR_RETURN(out, AddElementwiseBinary(
-                                 graph, resources, debug_name, *optional_layout,
-                                 *optional_layout_output_idx, tensor_map));
+    TF_ASSIGN_OR_RETURN(
+        out, AddElementwiseBinary(graph, resources, debug_name, tshape,
+                                  *optional_layout, *optional_layout_output_idx,
+                                  tensor_map));
   } else {
     const bool is_poplar_custom_op = GetPoplarCustomOp(target).has_value();
     const bool is_hlo_op_with_allocator = HloOpManager::HasOp(target->opcode());
