@@ -89,6 +89,39 @@ TEST_F(ArithmeticExprTest, TestArithmeticExpr) {
       LiteralTestUtil::NearOrEqual(expected, result, ErrorSpec{1e-4, 1e-4}));
 }
 
+TEST_F(ArithmeticExprTest, TestArithmeticExpr2) {
+  //   p0   p1
+  //   |    |
+  //   |   cast
+  //   |    |
+  //    \  /
+  //   divide
+  //     |
+  HloComputation::Builder builder = HloComputation::Builder("BuilderHloComp0");
+
+  Shape s1 = ShapeUtil::MakeShape(F32, {2, 2});
+  Shape s2 = ShapeUtil::MakeShape(S32, {2, 2});
+
+  auto p0 =
+      builder.AddInstruction(HloInstruction::CreateParameter(0, s1, "p0"));
+  auto p1 =
+      builder.AddInstruction(HloInstruction::CreateParameter(1, s2, "p1"));
+
+  auto cast = builder.AddInstruction(HloInstruction::CreateConvert(s1, p1));
+  auto div = builder.AddInstruction(
+      HloInstruction::CreateBinary(s1, HloOpcode::kDivide, p0, cast));
+  builder.AddInstruction(HloInstruction::CreateTuple({p0, p1, div}));
+
+  auto computation = builder.Build();
+  auto module = CreateNewVerifiedModule();
+  module->AddEntryComputation(std::move(computation));
+
+  Literal param0 = LiteralUtil::CreateR2<float>({{1.1, 1}, {1, 1}});
+  Literal param1 = LiteralUtil::CreateR2<int32>({{3, 3}, {3, 3}});
+  std::vector<Literal*> inputs = {&param0, &param1};
+  EXPECT_TRUE(RunAndCompare(std::move(module), inputs, ErrorSpec{1e-4, 1e-4}));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
