@@ -172,6 +172,19 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "gcl_test",
+    size = "small",
+    srcs = ["tests/gcl_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+    ],
+)
+
+tf_py_test(
     name = "map_gradient_optimizer_test",
     size = "medium",
     srcs = ["tests/map_gradient_optimizer_test.py"],
@@ -831,6 +844,7 @@ test_suite(
         "fifo_test",
         "frontend_attributes_test",
         "functional_ops_test",
+        "gcl_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",
         "ipu_compiler_test",

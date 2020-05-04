@@ -44,9 +44,8 @@ def _poplar_autoconf_impl(repository_ctx):
                     repository_ctx.symlink(popsec_base + "/lib", "poplar/popsec/lib")
                     if repository_ctx.path(popsec_base + "/lib64").exists:
                         repository_ctx.symlink(popsec_base + "/lib64", "poplar/popsec/lib64")
-
-            # Poplar sandbox
         else:
+            # Poplar sandbox
             poplar_base = repository_ctx.os.environ["TF_POPLAR_SANDBOX"].strip()
 
             if poplar_base == "":
@@ -68,6 +67,11 @@ def _poplar_autoconf_impl(repository_ctx):
             repository_ctx.symlink(poplar_base + "/popsec/lib", "poplar/popsec/lib")
             if repository_ctx.path(poplar_base + "/popsec/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/popsec/lib64", "poplar/popsec/lib64")
+
+            repository_ctx.symlink(poplar_base + "/gcl/include", "poplar/gcl/include")
+            repository_ctx.symlink(poplar_base + "/gcl/lib", "poplar/lib/gcl")
+            if repository_ctx.path(poplar_base + "/gcl/lib64").exists:
+                repository_ctx.symlink(poplar_base + "/gcl/lib64", "poplar/lib64/gcl")
 
             if repository_ctx.path(poplar_base + "/poplar/lib64").exists:
                 repository_ctx.symlink(poplar_base + "/poplibs/lib64", "poplar/poplibs/lib64/poplibs")
