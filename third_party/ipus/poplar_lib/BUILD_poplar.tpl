@@ -11,12 +11,17 @@ filegroup(
 cc_library(
     name = "poplar_headers",
     hdrs = glob(["**/*.hpp"]),
-    includes = ["poplar/include", "poplibs/include"],
+    includes = [
+        "gcl/include",
+        "poplar/include",
+        "poplibs/include",
+    ],
 )
 
 cc_library(
     name = "poplar_libs",
     srcs = glob([
+        "lib*/**/libgcl_ct*",
         "lib*/**/libpoplar*",
         "lib*/**/libpoplin*",
         "lib*/**/libpopnn*",

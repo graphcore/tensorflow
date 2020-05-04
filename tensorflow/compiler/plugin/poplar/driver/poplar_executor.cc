@@ -219,6 +219,24 @@ int64 GetConfigHash(const IpuOptions& to_hash) {
   return std::hash<string>()(config_proto_str);
 }
 
+std::vector<int64> GetGclHashes() {
+  std::vector<int64> hashes;
+
+  // Add a hash for each environment variable known to impact the GCL
+  // compilation result.
+  // TODO(T20018) - get this from GCL.
+  for (const char* name :
+       {"GCL_NUM_IO_TILES", "GCL_REAL_COLLECTIVES", "GCL_LIBRARY_PATH",
+        "GCL_MAX_BYTES_PER_TILE", "GCL_GP_PATH"}) {
+    const char* value = std::getenv(name);
+    if (value != nullptr) {
+      hashes.push_back(std::hash<string>()(value));
+    }
+  }
+
+  return hashes;
+}
+
 int64 CombinedHash(const std::vector<int64>& components) {
   int64 hash = 42;
   for (int64 h : components) {
@@ -1458,6 +1476,9 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
 
   // Get remote memory support.
   target_hash.push_back(SupportsRemoteBuffers());
+
+  // Get hashes for GCL compilation parameters.
+  absl::c_copy(GetGclHashes(), std::back_inserter(target_hash));
 
   poplar_device_hash_ = CombinedHash(target_hash);
 

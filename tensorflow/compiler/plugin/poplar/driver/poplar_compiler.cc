@@ -24,6 +24,7 @@ limitations under the License.
 #include <mutex>
 #include <random>
 
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_compiler.h"
@@ -140,6 +141,8 @@ limitations under the License.
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/random/random.h"
 
+#include <gcl/ct/TileAllocation.hpp>
+
 #include <poplar/exceptions.hpp>
 #include <poputil/exceptions.hpp>
 
@@ -161,6 +164,12 @@ using ::absl::StrCat;
 namespace xla {
 namespace poplarplugin {
 namespace {
+
+constexpr char kNumIoTilesEnvVarName[] = "GCL_NUM_IO_TILES";
+constexpr int kNumIoTilesMinValue = 32;
+constexpr int kNumIoTilesMaxValue = 192;
+constexpr int kNumIoTilesMultiple = 2;
+
 std::once_flag help_flag_printed;
 
 int64 SizeFunction(const BufferValue& buffer) {
@@ -470,6 +479,30 @@ void setFpBehaviour(poplar::Graph& graph,
 
 void PrintHelpString() { LOG(INFO) << PoplarXlaFlags::GetFlagUsageString(); }
 
+StatusOr<int> GetNumIoTiles() {
+  const char* env_var_value = std::getenv(kNumIoTilesEnvVarName);
+  if (env_var_value == nullptr) {
+    return 0;
+  }
+
+  int value;
+  if (!absl::SimpleAtoi(env_var_value, &value)) {
+    return InvalidArgument(
+        "Cannot parse value of the environment variable %s as an integer: %s",
+        kNumIoTilesEnvVarName, env_var_value);
+  }
+
+  if (value < kNumIoTilesMinValue || value > kNumIoTilesMaxValue ||
+      value % kNumIoTilesMultiple != 0) {
+    return InvalidArgument(
+        "%d is an invalid number of IO tiles. The number of IO tiles must be "
+        "in the range [%d, %d] and divisible by %d",
+        value, kNumIoTilesMinValue, kNumIoTilesMaxValue, kNumIoTilesMultiple);
+  }
+
+  return value;
+}
+
 Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
                           PoplarExecutor* poplar_executor) {
   try {
@@ -488,11 +521,25 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
         << resources.replication_factor << ".";
   }
 
+  TF_ASSIGN_OR_RETURN(const int num_io_tiles, GetNumIoTiles());
+
   auto& main_graph = GetMasterGraph(resources);
   const poplar::Target& target = main_graph.getTarget();
   if (ShardingEnabled(module)) {
     auto num_ipus = target.getNumIPUs();
     auto tiles_per_ipu = target.getTilesPerIPU();
+
+    absl::optional<std::vector<unsigned>> per_ipu_compute_tiles;
+    if (num_io_tiles > 0) {
+      CHECK_LT(num_io_tiles, tiles_per_ipu);
+      const int num_compute_tiles = tiles_per_ipu - num_io_tiles;
+      per_ipu_compute_tiles =
+          gcl::perIPUTiles(main_graph, num_io_tiles, num_compute_tiles);
+      CHECK_EQ(per_ipu_compute_tiles->size(), num_compute_tiles);
+
+      LOG(INFO) << "Reserving " << num_io_tiles
+                << " IO tiles for GCL collective operations on each IPU.";
+    }
 
     IpuSelectionOrder order = poplar_executor->GetSelectionOrder();
     if (order == IpuSelectionOrder::AUTO) {
@@ -545,8 +592,17 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
           break;
         }
       }
-      resources.shard_graphs.emplace_back(main_graph.createVirtualGraph(
-          ipu * tiles_per_ipu, (ipu + 1) * tiles_per_ipu));
+
+      poplar::Graph ipu_graph = main_graph.createVirtualGraph(
+          ipu * tiles_per_ipu, (ipu + 1) * tiles_per_ipu);
+
+      if (per_ipu_compute_tiles.has_value()) {
+        resources.shard_graphs.emplace_back(
+            ipu_graph.createVirtualGraph(*per_ipu_compute_tiles));
+      } else {
+        resources.shard_graphs.emplace_back(std::move(ipu_graph));
+      }
+
       resources.shard_to_ipu_id.push_back(ipu);
     }
     VLOG(1) << "Created " << num_ipus << " IPU shards";
@@ -555,7 +611,15 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     for (unsigned hw_id : resources.shard_to_ipu_id) {
       VLOG(1) << "  * Shard " << next_shard_id++ << " mapped to IPU " << hw_id;
     }
+  } else {
+    if (num_io_tiles > 0) {
+      LOG(WARNING)
+          << "No IO tiles were reserved for GCL collective operations, even "
+          << "though " << num_io_tiles << " were requested, as virtual graphs "
+          << "(i.e. sharding) is not in use by this TensorFlow model.";
+    }
   }
+
   TF_ASSIGN_OR_RETURN(const std::string codelets_path,
                       GetPathToGraphProgFile("tf.gp"));
   main_graph.addCodelets(codelets_path);
