@@ -90,8 +90,8 @@ class CombinedWeightsTest(xla_test.XLATestCase):
       download_weights_index = report.get_first_program_of_type(
           'Switch')['children'][0]
 
-      self.assertTrue(
-          len(report.get_program(download_weights_index)['children']) < 7,
+      self.assertLess(
+          len(report.get_program(download_weights_index)['children']), 8,
           "The download weights sequence should not have lots of entries "
           "(because the copies will have been merged)")
 
