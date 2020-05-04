@@ -59,25 +59,34 @@ struct TensorTarget {
   // at the target site.
   std::vector<const HloInstruction*> backward_path;
 
+  // Optional permutation of the dimensions at the input to the dimensions at
+  // the allocation location created by traversing the path from the input to
+  // the allocation.
+  absl::optional<std::vector<int64>> permutation;
+
+  // Optional indicator for requesting a particular input dimension to be
+  // sliceable.
+  absl::optional<int64> sliceable_dimension = absl::nullopt;
+
   TensorTarget(const HloInstruction* tgt, int64 input_index,
-               const HloInstruction* layout, const int64 layout_output_idx,
+               absl::optional<const HloInstruction*> layout,
+               absl::optional<int64> layout_output_idx,
                const std::vector<const HloInstruction*>& forward_path = {},
-               const std::vector<const HloInstruction*>& backward_path = {})
+               const std::vector<const HloInstruction*>& backward_path = {},
+               absl::optional<std::vector<int64>> permutation = absl::nullopt)
       : tgt(tgt),
         input_index(input_index),
         layout(layout),
         layout_output_idx(layout_output_idx),
         forward_path(forward_path),
-        backward_path(backward_path) {}
+        backward_path(backward_path),
+        permutation(permutation) {}
 
   TensorTarget(const HloInstruction* tgt, int64 input_index,
-               const std::vector<const HloInstruction*>& backward_path = {})
-      : tgt(tgt),
-        input_index(input_index),
-        layout(absl::nullopt),
-        layout_output_idx(absl::nullopt),
-        forward_path({}),
-        backward_path(backward_path) {}
+               const std::vector<const HloInstruction*>& backward_path = {},
+               absl::optional<std::vector<int64>> permutation = absl::nullopt)
+      : TensorTarget(tgt, input_index, absl::nullopt, absl::nullopt, {},
+                     backward_path, permutation) {}
 
   TensorTarget() = default;
 };
@@ -101,7 +110,8 @@ class AllocationFinder : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
-  void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64);
+  void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64,
+                     absl::optional<std::vector<int64>>);
 
   // Should return true when target 'a' should be used over 'b'
   bool ReplaceTarget(const TensorTarget& a, const TensorTarget& b);
