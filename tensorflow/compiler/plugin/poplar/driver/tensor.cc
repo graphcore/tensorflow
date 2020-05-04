@@ -622,11 +622,12 @@ StatusOr<poplar::Tensor> AddScatterTensor(poplar::Graph& graph,
 }
 
 static StatusOr<poplar::Tensor> AddLeftMatMul(poplar::Graph& graph,
+                                              CompilerResources& resources,
                                               const std::string& debug_name,
-                                              const xla::Shape& shape,
-                                              const HloInstruction* target,
-                                              CompilerResources& resources) {
+                                              const TensorTarget& tensor_target,
+                                              const xla::Shape& shape) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shape));
+  const HloInstruction* target = tensor_target.tgt;
   auto dot_dims = target->dot_dimension_numbers();
 
   // Find the permutations
@@ -655,12 +656,12 @@ static StatusOr<poplar::Tensor> AddLeftMatMul(poplar::Graph& graph,
   return result.dimShuffle(ToUnsignedVector(permutations));
 }
 
-static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
-                                               const std::string& debug_name,
-                                               const xla::Shape& shape,
-                                               const HloInstruction* target,
-                                               CompilerResources& resources) {
+static StatusOr<poplar::Tensor> AddRightMatMul(
+    poplar::Graph& graph, CompilerResources& resources,
+    const std::string& debug_name, const TensorTarget& tensor_target,
+    const xla::Shape& shape) {
   TF_ASSIGN_OR_RETURN(poplar::Type type, PoplarDataType(shape));
+  const HloInstruction* target = tensor_target.tgt;
   auto dot_dims = target->dot_dimension_numbers();
 
   // Find the permutations
@@ -677,9 +678,50 @@ static StatusOr<poplar::Tensor> AddRightMatMul(poplar::Graph& graph,
   TF_ASSIGN_OR_RETURN(const poplar::OptionFlags opts,
                       GetMatMulOptionsForInst(target, resources));
 
-  auto result = poplin::createMatMulGroupedInputRHS(
-      graph, type, type, PoplarShapeFromXlaShape(a_shape),
-      PoplarShapeFromXlaShape(b_shape), name, opts, &resources.dot_cache);
+  // Support RHS being sliceable on the output dimension.
+  bool make_output_dimension_sliceable = false;
+  if (tensor_target.permutation && tensor_target.sliceable_dimension) {
+    const std::vector<int64> permutation = *tensor_target.permutation;
+    const int64 sliceable_dimension = *tensor_target.sliceable_dimension;
+
+    // Get the dimension in the output which is sliced.
+    const int64 sliceable_output_dimension = permutation[sliceable_dimension];
+
+    // We want the matmul to be sliceable if sliceable_output_dimension is one
+    // of the output dimensions - the output dimensions are all the dimensions
+    // after the batch and contracting dimensions.
+    const int64 first_output_dimension =
+        dot_dims.rhs_batch_dimensions_size() +
+        dot_dims.rhs_contracting_dimensions_size();
+
+    for (int64 d = first_output_dimension; d != permutations.size(); ++d) {
+      make_output_dimension_sliceable |=
+          permutations[d] == sliceable_output_dimension;
+    }
+  }
+
+  poplar::Tensor result;
+  std::vector<size_t> poplar_a_shape = PoplarShapeFromXlaShape(a_shape);
+  std::vector<size_t> poplar_b_shape = PoplarShapeFromXlaShape(b_shape);
+  if (make_output_dimension_sliceable) {
+    VLOG(2) << "Allocating the tensor " << debug_name << " as sliceable.";
+    // Swap the contracting dimension and output dimension on b.
+    std::swap(poplar_b_shape[1], poplar_b_shape[2]);
+    // Set the correct contracting dimension in a as well.
+    poplar_a_shape[2] = poplar_b_shape[1];
+
+    result = poplin::createMatMulGroupedInputRHS(
+        graph, type, type, poplar_a_shape, poplar_b_shape, name, opts,
+        &resources.dot_cache);
+
+    // Move the contracting dimension and output dimension into the right
+    // locations.
+    result = result.dimShuffle({0, 2, 1});
+  } else {
+    result = poplin::createMatMulGroupedInputRHS(
+        graph, type, type, poplar_a_shape, poplar_b_shape, name, opts,
+        &resources.dot_cache);
+  }
 
   // Unpack matrix
   result = result.reshape(PoplarShapeFromXlaShape(shuffled_shape));
@@ -758,13 +800,15 @@ StatusOr<poplar::Tensor> AddTensorForTarget(poplar::Graph& graph,
         case HloOpcode::kDot: {
           switch (input_index) {
             case 0: {
-              TF_ASSIGN_OR_RETURN(out, AddLeftMatMul(graph, debug_name, tshape,
-                                                     target, resources));
+              TF_ASSIGN_OR_RETURN(out,
+                                  AddLeftMatMul(graph, resources, debug_name,
+                                                tensor_target, shape));
               break;
             }
             case 1: {
-              TF_ASSIGN_OR_RETURN(out, AddRightMatMul(graph, debug_name, tshape,
-                                                      target, resources));
+              TF_ASSIGN_OR_RETURN(out,
+                                  AddRightMatMul(graph, resources, debug_name,
+                                                 tensor_target, shape));
               break;
             }
             default:

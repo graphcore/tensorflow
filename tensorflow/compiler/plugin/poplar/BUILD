@@ -3952,6 +3952,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/allocation_finder_priority_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 2,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",

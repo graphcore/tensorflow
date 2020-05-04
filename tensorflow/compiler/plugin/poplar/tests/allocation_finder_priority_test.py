@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
+from absl.testing import parameterized
 import test_utils as tu
 
 from tensorflow.python import ipu
@@ -29,26 +30,39 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 
 
-def _matmulAndEmbeddingFwd(ids):
+def _matmulAndEmbeddingFwd(ids, transpose_matmul):
   VOCAB_SIZE = 20000
   EMBEDDED_SIZE = 128
+  shape = [VOCAB_SIZE, EMBEDDED_SIZE] \
+     if transpose_matmul else [EMBEDDED_SIZE, VOCAB_SIZE]
   with variable_scope.variable_scope("embedding_and_matmul",
                                      use_resource=True):
     shared_params = variable_scope.get_variable("shared_weights",
-                                                [VOCAB_SIZE, EMBEDDED_SIZE],
+                                                shape,
                                                 dtype=np.float16)
 
+  if transpose_matmul:
     out = ipu.embedding_ops.embedding_lookup(shared_params, ids)
     logits = math_ops.matmul(out, shared_params, transpose_b=True)
+  else:
+    out = ipu.embedding_ops.embedding_lookup(
+        array_ops.transpose(shared_params), ids)
+    logits = math_ops.matmul(out, shared_params)
   return logits
 
 
-class AllocationFinderPriorityTest(xla_test.XLATestCase):
-  def testMatmulAndEmbedding(self):
+# pylint: disable=abstract-method
+class AllocationFinderPriorityTest(xla_test.XLATestCase,
+                                   parameterized.TestCase):
+
+  # Run the same test with the transpose on either the embedding or the matmul.
+  # The memory usage should be similar.
+  @parameterized.parameters([True, False])
+  def testMatmulAndEmbedding(self, transpose_matmul):
     with self.session() as sess:
 
       def model(ids):
-        return _matmulAndEmbeddingFwd(ids)
+        return _matmulAndEmbeddingFwd(ids, transpose_matmul=transpose_matmul)
 
       ids_ph = array_ops.placeholder(np.int32, shape=[50])
 
@@ -63,7 +77,7 @@ class AllocationFinderPriorityTest(xla_test.XLATestCase):
       sess.run(output, {ids_ph: np.ones([50])})
 
       report.parse_log()
-      report.assert_total_tile_memory(56722994)
+      report.assert_total_tile_memory(50961750)
 
 
 if __name__ == "__main__":
