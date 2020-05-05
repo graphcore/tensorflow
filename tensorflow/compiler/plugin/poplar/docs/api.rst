@@ -58,9 +58,6 @@ Python API
 .. automodule:: tensorflow.python.ipu.loops
   :members:
 
-.. automodule:: tensorflow.python.ipu.ops
-  :members:
-
 .. automodule:: tensorflow.python.ipu.sharded_optimizer
   :members:
 
@@ -69,6 +66,9 @@ Python API
 
 .. automodule:: tensorflow.python.ipu.utils
   :members:
+
+.. automodule:: tensorflow.python.ipu.ops.internal_ops
+  :members: print_tensor
 
 .. automodule:: tensorflow.python.ipu.ops.all_to_all_op
   :members:

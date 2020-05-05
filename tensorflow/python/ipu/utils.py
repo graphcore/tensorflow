@@ -115,6 +115,7 @@ class SelectionOrder(Enum):
 
   This Enum class is used to control the order in which the IPUs are selected.
   Currently, the following IPU selection orderings are supported:
+
   * `AUTO`: automatically try and select the best selection given the network.
   * `ZIGZAG`: follow the natural ordering of IPUs. In the above example, the
     IPUs would be selected in the following order:
@@ -598,7 +599,7 @@ def set_convolution_options(opts, convolution_options=None):
     opts: An IpuOptions session control protobuf.
     convolution_options: A dictionary of poplar option flags for
       convolutions. The "availableMemoryProportion" flag indicates the
-      proportion of tile memory to be made available asß
+      proportion of tile memory to be made available as
       temporary memory for convolutions (float between 0 and 1.0).
       Less temporary memory will generally result in a convolution that
       takes more cycles to complete. However, because always live memory
