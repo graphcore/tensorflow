@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """
-Pipeline interface for Keras
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Keras Model interfaces for IPU
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from functools import partial
@@ -25,18 +25,20 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import tensor_spec
+from tensorflow.python.ipu import ipu_infeed_queue
+from tensorflow.python.ipu import ipu_outfeed_queue
+from tensorflow.python.ipu import loops
+from tensorflow.python.ipu.ops import pipelining_ops
+from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as cbks
 from tensorflow.python.keras import backend
+from tensorflow.python.keras import Model as KerasModel
 from tensorflow.python.keras import optimizers
-from tensorflow.python.keras import Model
+from tensorflow.python.keras.layers import Layer
 from tensorflow.python.keras.engine import training
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 from tensorflow.python.keras.utils.mode_keys import ModeKeys
-from tensorflow.python.util.tf_export import keras_export
-from tensorflow.python.ipu import ipu_infeed_queue
-from tensorflow.python.ipu import ipu_outfeed_queue
-from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.training.optimizer import Optimizer
 from tensorflow.python.training.tracking import base as trackable
 
@@ -136,7 +138,7 @@ class _KerasOptimizerWrapper(Optimizer):
     raise NotImplementedError()
 
 
-class _IpuModelBase(Model):
+class _IpuModelBase(KerasModel):
   """Base class for IPU Keras models"""
   def __init__(self, accumulation_count, **kwargs):
     name = kwargs.pop("name", None)
@@ -157,9 +159,9 @@ class _IpuModelBase(Model):
 
   # pylint: disable=arguments-differ
   def call(self, _):
-    raise ValueError(
-        "PipelineModel can only be called through the `fit`, `evaluate` "
-        "or `predict` interfaces.")
+    raise ValueError(self.__class__.__name__ +
+                     " can only be called through the `fit`, "
+                     "`evaluate` or `predict` interfaces.")
 
   @trackable.no_automatic_dependency_tracking
   def compile(self,
@@ -240,8 +242,25 @@ class _IpuModelBase(Model):
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
     raise NotImplementedError(
-        "_IpuModelBase should not be used directly.  Use PipelinedModel "
-        "instead.")
+        "_IpuModelBase should not be used directly.  Use PipelinedModel or "
+        "Model instead.")
+
+  def _get_optimizer(self):
+    opt = self.optimizer
+
+    # Unwrap native TF optimizers from a Keras wrapper
+    if isinstance(opt, optimizers.TFOptimizer):
+      return _TensorflowOptimizerWrapper(self, opt.optimizer)
+
+    # Convert native Keras optimizers to TF optimizers
+    elif isinstance(opt, optimizer_v2.OptimizerV2):
+      return _KerasOptimizerWrapper(self, opt)
+
+    # Other optimizer types are not supported
+    else:
+      raise ValueError(
+          "Only Keras optimizer_v2.Optimizer and Tensorflow native "
+          "training.Optimizer subclasses are supported.")
 
   @trackable.no_automatic_dependency_tracking
   def _do_internal(self, mode, ds, epochs, verbose, callbacks, initial_epoch,
@@ -276,7 +295,7 @@ class _IpuModelBase(Model):
             "When using an infinitely repeating dataset, you must provide "
             "the number of steps per epoch (steps_per_epoch).")
 
-    # Find out how many mini-batches, steps, pipeline repeats, and outer loops.
+    # Find out how many mini-batches, steps, repeats, and outer loops.
     mini_batches_per_epoch = steps_per_epoch
     if mini_batches_per_epoch is not None:
       mini_batches_per_epoch = mini_batches_per_epoch * self.accumulation_count
@@ -295,8 +314,8 @@ class _IpuModelBase(Model):
 
     if mini_batches_per_epoch % self.accumulation_count != 0:
       raise ValueError(
-          "PipelineModels require the number of batches in the dataset (%d) "
-          "to be a multiple of the accumulated batch size (%d)" %
+          self.__class__.__name__ + " requires the number of batches in the "
+          "dataset (%d) to be a multiple of the accumulated batch size (%d)" %
           (mini_batches_per_epoch, self.accumulation_count))
 
     steps_per_epoch = mini_batches_per_epoch / self.accumulation_count
@@ -306,9 +325,9 @@ class _IpuModelBase(Model):
 
     if steps_per_epoch % steps_per_run != 0:
       raise ValueError(
-          "PipelineModels require the number of steps per execution of the "
-          "on device training loop 'steps_per_run' (%d) to be a multiple of "
-          "the number of steps in the epoch (%d)." %
+          self.__class__.__name__ + " requires the number of steps per "
+          "execution of the on device training loop 'steps_per_run' (%d) "
+          "to be a multiple of the number of steps in the epoch (%d)." %
           (mini_batches_per_epoch, steps_per_epoch))
 
     outer_loop_count = int(steps_per_epoch / steps_per_run)
@@ -352,78 +371,78 @@ class _IpuModelBase(Model):
       aggregator = training_utils.OutputsAggregator(use_steps=False,
                                                     num_samples=total_samples)
 
-    # Training
-    for epoch in range(initial_epoch, epochs):
-      if callbacks.model.stop_training:
-        break
+    # Outer loop
+    try:
+      for epoch in range(initial_epoch, epochs):
+        if callbacks.model.stop_training:
+          break
 
-      epoch_logs = {}
-      callbacks.on_epoch_begin(epoch, epoch_logs)
+        epoch_logs = {}
+        callbacks.on_epoch_begin(epoch, epoch_logs)
 
-      # Clear metrics
-      self.reset_metrics()
+        # Clear metrics
+        self.reset_metrics()
 
-      for run in range(outer_loop_count):
+        for run in range(outer_loop_count):
 
-        batch_num = run * steps_per_run
-        batch_logs = {
-            'batch': batch_num,
-            'size': 1,
-            'num_steps': steps_per_run
-        }
-        callbacks.on_batch_begin(batch_num, batch_logs)
+          batch_num = run * steps_per_run
+          batch_logs = {
+              'batch': batch_num,
+              'size': 1,
+              'num_steps': steps_per_run
+          }
+          callbacks.on_batch_begin(batch_num, batch_logs)
 
-        # Create and run the pipeline.
-        strategy = distribution_strategy_context.get_strategy()
-        strategy.experimental_run_v2(
-            self._internal_run_loop,
-            args=[self.infeed, self.outfeed, steps_per_run, mode])
+          # Create and run the core graph.
+          strategy = distribution_strategy_context.get_strategy()
+          strategy.experimental_run_v2(
+              self._internal_run_loop,
+              args=[self.infeed, self.outfeed, steps_per_run, mode])
 
-        # Send an end of batches
-        callbacks.on_batch_end(batch_num, batch_logs)
+          # Send an end of batches
+          callbacks.on_batch_end(batch_num, batch_logs)
 
-        # After the first call we can update the callbacks to include
-        # the metrics.
-        if epoch == initial_epoch and run == 0:
-          cbks.set_callback_parameters(callbacks,
-                                       self,
-                                       epochs=epochs,
-                                       steps_per_epoch=steps_per_epoch,
-                                       verbose=verbose,
-                                       mode=mode)
+          # After the first call we can update the callbacks to include
+          # the metrics.
+          if epoch == initial_epoch and run == 0:
+            cbks.set_callback_parameters(callbacks,
+                                         self,
+                                         epochs=epochs,
+                                         steps_per_epoch=steps_per_epoch,
+                                         verbose=verbose,
+                                         mode=mode)
 
-      # Restart the iterator at the end of the epoch if necessary
-      if recreate_iterator:
-        self.infeed.deleter  # pylint: disable=pointless-statement
-        self.infeed.initializer  # pylint: disable=pointless-statement
+        # Restart the iterator at the end of the epoch if necessary
+        if recreate_iterator:
+          self.infeed.deleter  # pylint: disable=pointless-statement
+          self.infeed.initializer  # pylint: disable=pointless-statement
 
-      # Fetch the outfeed for the history
-      results = self.outfeed.dequeue()
-      results = map(lambda x: x.numpy(), results)
-      results = enumerate(zip(*results))
+        # Fetch the outfeed for the history
+        results = self.outfeed.dequeue()
+        results = map(lambda x: x.numpy(), results)
+        results = enumerate(zip(*results))
 
-      # Get the final loss and metrics
-      i, r = next(results)
-      aggregator.create(r)
-      aggregator.aggregate(r, 0, 1)
+        # Get the final loss and metrics
+        i, r = next(results)
+        aggregator.create(r)
+        aggregator.aggregate(r, 0, 1)
 
-      for i, r in results:
-        aggregator.aggregate(r, i, i + 1)
+        for i, r in results:
+          aggregator.aggregate(r, i, i + 1)
 
-      aggregator.finalize()
-      results = aggregator.results
+        aggregator.finalize()
+        results = aggregator.results
 
-      # Store only the final losses/metrics for the epoch log
-      cbks.make_logs(self, epoch_logs, results, mode)
-      callbacks.on_epoch_end(epoch, epoch_logs)
+        # Store only the final losses/metrics for the epoch log
+        cbks.make_logs(self, epoch_logs, results, mode)
+        callbacks.on_epoch_end(epoch, epoch_logs)
 
-    callbacks.on_train_end(mode)
+      callbacks.on_train_end(mode)
 
-    # Close the infeed queue at the end of the epoch
-    self.infeed.deleter  # pylint: disable=pointless-statement
-
-    # Close the outfeed queue iterator.
-    self.outfeed.deleter  # pylint: disable=pointless-statement
+    # Close the infeed and outfeed queues at the end of the epoch
+    finally:
+      self.infeed.deleter  # pylint: disable=pointless-statement
+      self.outfeed.deleter  # pylint: disable=pointless-statement
 
     # fit() method returns the history object
     if mode == ModeKeys.TRAIN:
@@ -436,25 +455,27 @@ class _IpuModelBase(Model):
   def fit(self, x, *, epochs, verbose, callbacks, shuffle, initial_epoch,
           steps_per_epoch, steps_per_run, **kwargs):
     if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(
-          "PipelineModels can only `fit` with a `tf.data.Dataset` as input.")
+      raise ValueError(self.__class__.__name__ +
+                       " can only `fit` with a `tf.data.Dataset` "
+                       "as input.")
 
     if 'y' in kwargs:
       raise ValueError(
           "Labels should be provided by the 'x' DataSet containing a tuple.")
 
     if 'batch_size' in kwargs:
-      raise ValueError("Do not specify `batch_size` in PipelineModels.fit(). "
-                       "Use the DataSet.batch() method to apply batching at "
-                       "the input dataset level.")
+      raise ValueError("Do not specify `batch_size` in " +
+                       self.__class__.__name__ + ".fit(). Use the "
+                       "DataSet.batch() method to apply batching at the input "
+                       "dataset level.")
 
     _validate_args(kwargs, "fit")
 
     structure = dataset_ops.get_structure(x)
     if not isinstance(structure, tuple) or len(structure) != 2:
       raise ValueError(
-          "PipelineModel.fit requires a dataset containing a tuple of "
-          "two elements, the data value and the target value.")
+          self.__class__.__name__ + ".fit requires a dataset containing a "
+          "tuple of two elements, the data value and the target value.")
 
     self._assert_compile_was_called()
 
@@ -471,17 +492,16 @@ class _IpuModelBase(Model):
                steps_per_run=None,
                **kwargs):
     if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(
-          "PipelineModels can only `evaluate` with a `tf.data.Dataset` as "
-          "input.")
+      raise ValueError(self.__class__.__name__ + " can only `evaluate` with a "
+                       "`tf.data.Dataset` as input.")
 
     _validate_args(kwargs, "evaluate")
 
     structure = dataset_ops.get_structure(x)
     if not isinstance(structure, tuple) or len(structure) != 2:
       raise ValueError(
-          "PipelineModel.evaluate requires a dataset containing a tuple of "
-          "two elements, the data value and the target value.")
+          self.__class__.__name__ + ".evaluate requires a dataset containing "
+          "a tuple of two elements, the data value and the target value.")
 
     self._assert_compile_was_called()
 
@@ -497,9 +517,8 @@ class _IpuModelBase(Model):
               steps_per_run=None,
               **kwargs):
     if not isinstance(x, dataset_ops.DatasetV2):
-      raise ValueError(
-          "PipelineModels can only `predict` with a `tf.data.Dataset` as "
-          "input.")
+      raise ValueError(self.__class__.__name__ + " can only `predict` with a "
+                       "`tf.data.Dataset` as input.")
 
     _validate_args(kwargs, "predict")
 
@@ -508,17 +527,17 @@ class _IpuModelBase(Model):
             (isinstance(structure, tensor_spec.TensorSpec)
              and len(structure) != 1)):
       raise ValueError(
-          "PipelineModel.predict requires a dataset containing either a "
-          "tuple of one single data value, or just a single data value.")
+          self.__class__.__name__ + ".predict requires a dataset containing "
+          "either a tuple of one single data value, or just a single data "
+          "value.")
 
     return self._do_internal(ModeKeys.PREDICT, x, 1, verbose, callbacks, 0,
                              steps, steps_per_run, **kwargs)
 
 
-@keras_export(v1=['keras.ipu.PipelinedModel'])
 class PipelinedModel(_IpuModelBase):
-  """Model for encapsulating a pipeline of stages to be run in parallel on an
-  IPU system.
+  """Keras Model for encapsulating a pipeline of stages to be run in parallel
+  on an IPU system.
 
   A pipelined model will execute multiple sections (stages) of a model on more
   than one IPU at the same time, by pipelining mini-batches of data through
@@ -600,6 +619,10 @@ class PipelinedModel(_IpuModelBase):
       if not isinstance(s, list):
         raise ValueError("An IPU pipeline may only contain lists of "
                          "stages, where each stage is a list of Keras Layers.")
+      for l in s:
+        if not isinstance(l, Layer):
+          raise ValueError("Each list in the `stages` list must contain "
+                           "only Keras Layers.")
 
     if not pipeline_depth:
       raise ValueError(
@@ -666,21 +689,7 @@ class PipelinedModel(_IpuModelBase):
       if not self.trainable_weights:
         raise ValueError("Model must have at least one trainable parameter.")
 
-      opt = self.optimizer
-
-      # Unwrap native TF optimizers from a Keras wrapper
-      if isinstance(opt, optimizers.TFOptimizer):
-        opt = _TensorflowOptimizerWrapper(self, opt.optimizer)
-
-      # Convert native Keras optimizers to TF optimizers
-      elif isinstance(opt, optimizer_v2.OptimizerV2):
-        opt = _KerasOptimizerWrapper(self, opt)
-
-      # Other optimizer types are not supported
-      else:
-        raise ValueError(
-            "Only Keras optimizer_v2.Optimizer and Tensorflow native "
-            "training.Optimizer subclasses are supported.")
+      opt = self._get_optimizer()
 
       return pipelining_ops.OptimizerFunctionOutput(opt, loss)
 
@@ -798,6 +807,249 @@ class PipelinedModel(_IpuModelBase):
                                                callbacks=callbacks,
                                                steps_per_run=steps_per_run,
                                                **kwargs)
+
+  def save(self,
+           filepath,
+           overwrite=True,
+           include_optimizer=True,
+           save_format=None,
+           signatures=None,
+           options=None):
+    raise NotImplementedError(
+        "IPU models do not support the `save` interface.")
+
+
+class Model(_IpuModelBase):
+  """A Keras Model class specifically tergetting the IPU.  This class is
+  similar to the Keras Sequential model class, but it also supports the
+  accumulation of gradient deltas, and an on-device training loop.
+
+  There are some limitations with the Model compared to the standard
+  Keras Model.
+
+  - The input must be provided by a tf.DataSet.
+  - Keras V1 optimizers cannot be used.
+  - Loss weightings can only be specified as a list, not a callable.
+  - Weighted metrics, target tensors and sample weight mode are not supported.
+  - Validation cannot be performed as part of the `fit` loop.
+  - The model cannot be called using the __call__() interface.
+
+  The model will only be constructed after the first call to the `fit` method,
+  so a summary of the model will not be possible until after some training
+  has occurred.  Related to this, the `build` method does not build the
+  model.
+
+  Example:
+
+  .. code-block:: python
+
+    dataset = ...
+
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      m = ipu.keras.Model([
+        keras.layers.Dense(4),
+        keras.layers.Dense(4),
+        keras.layers.Dense(4),
+      ])
+
+      m.compile('sgd', loss='mse')
+
+      m.fit(dataset, steps_per_epoch=144)
+
+  """
+  def __init__(self, layers=None, accumulation_count=1):
+    """
+    Creates a Keras model, optimized to run on the IPU.
+
+    Args:
+        layers: A python list of Keras Layers.
+        accumulation_count: The number of mini-batches to process
+            while accumulating their gradients, before running a
+            parameter/weight update step.
+    """
+    super(Model, self).__init__(accumulation_count)
+
+    if not isinstance(layers, list):
+      raise ValueError("An IPU Model must take a list of Layers.")
+
+    for s in layers:
+      if not isinstance(s, Layer):
+        raise ValueError("An IPU Model may only contain lists of Keras "
+                         "Layers.")
+
+    self.accumulation_count = accumulation_count
+    self.model_layers = layers
+
+  @trackable.no_automatic_dependency_tracking
+  def compile(self,
+              optimizer='rmsprop',
+              loss=None,
+              metrics=None,
+              loss_weights=None,
+              **kwargs):
+    """
+    This provides the same functionality as the Keras Model ``compile``
+    method.
+
+    Certain features are not supported by the IPU Model:
+    - sample_weight_mode
+    - weighted_metrics
+    - target_tensors
+    """
+    return super(Model, self).compile(optimizer, loss, metrics, loss_weights,
+                                      **kwargs)
+
+  @def_function.function(autograph=False)
+  def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
+                         mode):
+    def main_body(inputs):
+
+      if not self.inputs:
+        self._set_input_attrs(inputs)
+
+      x = inputs
+      for l in self.model_layers:
+        x = l(x)
+
+      return x
+
+    def inference_body(inputs):
+      x = main_body(inputs)
+
+      outfeed = outfeed_queue.enqueue([x])
+      return outfeed
+
+    def training_body(inputs, targets):
+
+      x = main_body(inputs)
+      self._set_output_attrs(x)
+
+      l = self._add_loss(targets)
+
+      outfeed = outfeed_queue.enqueue(l)
+
+      if not self.trainable_weights:
+        raise ValueError("Model must have at least one trainable parameter.")
+
+      opt = self._get_optimizer()
+      if opt and mode == ModeKeys.TRAIN:
+
+        # If it is gradient accumulation then wrap in that too
+        if self.accumulation_count > 1:
+          # TODO(T16260) generalize this when we support an alternative
+          # gradient accumulation method.
+          opt = gradient_accumulation_optimizer.GradientAccumulationOptimizer(
+              opt, self.accumulation_count)
+
+        # Get gradients and apply them to the trainable variables
+        grads_and_vars = opt.compute_gradients(l[0], self.trainable_variables)
+        opt.apply_gradients(grads_and_vars)
+
+      return outfeed
+
+    # The pipeline stages, a set of feed forward functions.
+    if mode == ModeKeys.PREDICT:
+      body = inference_body
+    else:
+      body = training_body
+
+    result = loops.repeat(int(repeat_count * self.accumulation_count),
+                          body,
+                          infeed_queue=infeed_queue)
+
+    return result.outputs
+
+  @trackable.no_automatic_dependency_tracking
+  def fit(self,
+          x=None,
+          *,
+          epochs=1,
+          verbose=1,
+          callbacks=None,
+          shuffle=True,
+          initial_epoch=0,
+          steps_per_epoch=None,
+          steps_per_run=None,
+          **kwargs):  # pylint: disable=useless-super-delegation
+    """
+    This provides the same functionality as the Keras Model `fit` method.
+
+    The pipeline itself can be wrapped in a loop in order to execute a larger
+    training run in a single call to hardware.  The `steps_per_run` argument
+    is needed to describe how many steps should be performed on each hardware
+    execution.  The dataset should be able to provide enough samples to run
+    for the mini-batch size multiplied by the pipeline depth multiplied by the
+    steps_per_run value.  If the dataset is infinite, because it has been
+    repeated indefinitely, then this will be ok.
+    """
+    return super(Model, self).fit(x,
+                                  epochs=epochs,
+                                  verbose=verbose,
+                                  callbacks=callbacks,
+                                  shuffle=shuffle,
+                                  initial_epoch=initial_epoch,
+                                  steps_per_epoch=steps_per_epoch,
+                                  steps_per_run=steps_per_run,
+                                  **kwargs)
+
+  def evaluate(self,
+               x=None,
+               *,
+               verbose=1,
+               steps=None,
+               callbacks=None,
+               steps_per_run=None,
+               **kwargs):  # pylint: disable=useless-super-delegation
+    """
+    This provides the same functionality as the Keras Model `evaluate` method.
+
+    The pipeline itself can be wrapped in a loop in order to execute a larger
+    evaluation run in a single call to hardware.  The `steps_per_run` argument
+    is needed to describe how many steps should be performed on each hardware
+    execution.  The dataset should be able to provide enough samples to run
+    for the mini-batch size multiplied by the pipeline depth multiplied by the
+    steps_per_run value.  If the dataset is infinite, because it has been
+    repeated indefinitely, then this will be ok.
+    """
+    return super(Model, self).evaluate(x,
+                                       verbose=verbose,
+                                       steps=steps,
+                                       callbacks=callbacks,
+                                       steps_per_run=steps_per_run,
+                                       **kwargs)
+
+  def predict(self,
+              x,
+              *,
+              verbose=0,
+              steps=None,
+              callbacks=None,
+              steps_per_run=None,
+              **kwargs):  # pylint: disable=useless-super-delegation
+    """
+    This provides the same functionality as the Keras Model `predict` method.
+
+    The predict method operates on a DataSet, because the IPU pipelining
+    mechanism relies on feeding data to the system in a stream.  So single
+    predictions cannot be performed using this method.  Exporting the model
+    parameters, and importing them into the same model but not pipelined will
+    allow single mini-batches.
+
+    The pipeline itself can be wrapped in a loop in order to execute a larger
+    prediction run in a single call to hardware.  The `steps_per_run` argument
+    is needed to describe how many steps should be performed on each hardware
+    execution.  The dataset should be able to provide enough samples to run
+    for the mini-batch size multiplied by the pipeline depth multiplied by the
+    steps_per_run value.  If the dataset is infinite, because it has been
+    repeated indefinitely, then this will be ok.
+    """
+    return super(Model, self).predict(x,
+                                      verbose=verbose,
+                                      steps=steps,
+                                      callbacks=callbacks,
+                                      steps_per_run=steps_per_run,
+                                      **kwargs)
 
   def save(self,
            filepath,

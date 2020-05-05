@@ -98,8 +98,27 @@ The outer training function should be called using the ``experimental_run_v2``
 method on the ``IPUStrategy`` object, to ensure that it is executed using the
 strategy's configuration.
 
-PipelinedModel
-______________
+Model class
+___________
+
+An higher performance alternative to using the standard Keras Model is
+available.  It is called ``Model``, and found at
+``tensorflow.python.ipu.keras.Model``.  It supports the following features:
+
+* On device training loop for reduction of communication overhead.
+* Gradient accumulation for simulating larger batch sizes.
+
+It is a substitute for the Keras Sequentual class, when only a single IPU
+is used for training.  For a high performance multi-IPU solution use the
+``PipelinedModel`` described below.
+
+Unlike the standard Keras model classes, it must be trained, evaluated and
+operatored with the ``fit``, ``evaluate`` and ``predict`` methods.  It
+cannot be called directly.  For a similar reason, you cannot get the list
+of trainable variables before you have executed it.
+
+PipelinedModel class
+____________________
 
 ``PipelinedModel`` is a substitute for the Keras Sequential model class, with
 support for multi-device IPU pipelines.  Using pipelined execution allows the
