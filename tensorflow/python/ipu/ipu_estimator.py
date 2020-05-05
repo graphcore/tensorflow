@@ -1210,7 +1210,7 @@ class IPUEstimator(_IPUEstimatorBase):
 
   Args:
     model_fn: The model function. Refer to
-      https://www.tensorflow.org/guide/custom_estimators#write_a_model_function
+      https://github.com/tensorflow/docs/blob/master/site/en/r1/guide/custom_estimators.md#write-a-model-function
       for details on how to write this function.
     model_dir: Directory to save model parameters, graph and etc. This can
       also be used to load checkpoints from the directory into an estimator to
@@ -1231,7 +1231,7 @@ class IPUEstimator(_IPUEstimatorBase):
     train_batch_size: If not None, an int representing the global training
       batch size. This global batch size is transformed to a local batch size
       passed as `params['batch_size']` to the `input_fn` and `model_fn` during
-      training. Must be divisble by the number of replicas multiplied by the
+      training. Must be divisible by the number of replicas multiplied by the
       number of distributed workers.
     eval_batch_size: If not None, an int representing the global evaluation
       batch size. Same behaviour as train_batch_size, only during evaluation.
