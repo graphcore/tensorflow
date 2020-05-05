@@ -212,7 +212,7 @@ HloModule top
   }
 }
 
-TEST_F(CommutativeInstructionReorderOperandsTest, DontReorderBothReshaping) {
+TEST_F(CommutativeInstructionReorderOperandsTest, DontReorderBothBroadcast) {
   std::string hlo_string = R"(
 HloModule top
 
@@ -245,6 +245,80 @@ HloModule top
     EXPECT_THAT(root_inst->operand(1)->opcode(), HloOpcode::kBroadcast);
     EXPECT_THAT(root_inst->operand(0), b1);
     EXPECT_THAT(root_inst->operand(1), b2);
+  }
+}
+
+TEST_F(CommutativeInstructionReorderOperandsTest, MoveBroadcast) {
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  i1 = f16[] parameter(0)
+  b1 = f16[2, 2] broadcast(i1), dimensions={}
+  zero = f16[] constant(0)
+  i2 = f16[2, 1] parameter(1)
+  p1 = f16[2, 2] pad(i2, zero), padding=0_0x0_1
+  ROOT a1 = f16[2, 2] add(b1, p1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  auto* b1 = comp->GetInstructionWithName("b1");
+  auto* p1 = comp->GetInstructionWithName("p1");
+
+  CommutativeInstructionReorderOperands ciro;
+  EXPECT_TRUE(ciro.Run(module).ValueOrDie());
+
+  {
+    const auto* root_inst = comp->root_instruction();
+    EXPECT_THAT(root_inst->operand(0)->opcode(), HloOpcode::kPad);
+    EXPECT_THAT(root_inst->operand(1)->opcode(), HloOpcode::kBroadcast);
+    EXPECT_THAT(root_inst->operand(0), p1);
+    EXPECT_THAT(root_inst->operand(1), b1);
+  }
+}
+
+TEST_F(CommutativeInstructionReorderOperandsTest, DontMoveBroadcast) {
+  std::string hlo_string = R"(
+HloModule top
+
+%cluster_1  {
+  i1 = f16[] parameter(0)
+  b1 = f16[2, 2] broadcast(i1), dimensions={}
+  zero = f16[] constant(0)
+  i2 = f16[2, 1] parameter(1)
+  p1 = f16[2, 2] pad(i2, zero), padding=0_0x0_1
+  ROOT a1 = f16[2, 2] add(p1, b1)
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+  auto* module = module_or_status.ValueOrDie().get();
+  auto* comp = module->entry_computation();
+
+  auto* b1 = comp->GetInstructionWithName("b1");
+  auto* p1 = comp->GetInstructionWithName("p1");
+
+  CommutativeInstructionReorderOperands ciro;
+  EXPECT_FALSE(ciro.Run(module).ValueOrDie());
+
+  {
+    const auto* root_inst = comp->root_instruction();
+    EXPECT_THAT(root_inst->operand(0)->opcode(), HloOpcode::kPad);
+    EXPECT_THAT(root_inst->operand(1)->opcode(), HloOpcode::kBroadcast);
+    EXPECT_THAT(root_inst->operand(0), p1);
+    EXPECT_THAT(root_inst->operand(1), b1);
   }
 }
 
