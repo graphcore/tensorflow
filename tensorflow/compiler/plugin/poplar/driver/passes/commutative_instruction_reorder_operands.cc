@@ -26,12 +26,22 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace {
-bool PreferOnRhs(const HloInstruction* inst) {
+bool ShouldAlwaysBeRhs(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kAddDependency) {
     inst = inst->operand(0);
   }
   switch (inst->opcode()) {
     case HloOpcode::kBroadcast:
+      return true;
+    default:
+      return false;
+  }
+}
+bool PreferRhs(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kAddDependency) {
+    inst = inst->operand(0);
+  }
+  switch (inst->opcode()) {
     case HloOpcode::kConcatenate:
     case HloOpcode::kReshape:
     case HloOpcode::kPad:
@@ -62,12 +72,20 @@ StatusOr<bool> CommutativeInstructionReorderOperands::Run(HloModule* module) {
     }
 
     for (auto* inst : comp->MakeInstructionPostOrder()) {
-      if (IsElementwiseBinaryCommutative(inst) &&
-          PreferOnRhs(inst->operand(0)) && !PreferOnRhs(inst->operand(1))) {
-        auto* op0 = inst->mutable_operand(0);
-        auto* op1 = inst->mutable_operand(1);
-        inst->ReplaceOperandWith(0, op1);
-        inst->ReplaceOperandWith(1, op0);
+      if (!IsElementwiseBinaryCommutative(inst)) {
+        continue;
+      }
+      HloInstruction* lhs = inst->mutable_operand(0);
+      HloInstruction* rhs = inst->mutable_operand(1);
+
+      bool reorder = false;
+      // Check if this is something which is always wanted as rhs.
+      reorder |= ShouldAlwaysBeRhs(lhs) && !ShouldAlwaysBeRhs(rhs);
+      // Check if this is something that should be on the rhs.
+      reorder |= PreferRhs(lhs) && !(PreferRhs(rhs) || ShouldAlwaysBeRhs(rhs));
+      if (reorder) {
+        TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(0, rhs));
+        TF_RETURN_IF_ERROR(inst->ReplaceOperandWith(1, lhs));
         changed = true;
       }
     }
