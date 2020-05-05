@@ -109,9 +109,9 @@ def print_tensor(input, name=""):
        ...
        ...
 
-     2. Including the print operation in session.run:
+    2. Including the print operation in session.run:
 
-     .. code-block:: python
+    .. code-block:: python
 
        import numpy as np
        import tensorflow as tf
@@ -130,9 +130,9 @@ def print_tensor(input, name=""):
        ...
        ...
 
-     3. Using control dependencies:
+    3. Using control dependencies:
 
-     .. code-block:: python
+    .. code-block:: python
 
        import numpy as np
        import tensorflow as tf
