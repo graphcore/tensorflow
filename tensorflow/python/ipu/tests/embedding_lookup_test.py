@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-
 import numpy as np
 
 from tensorflow.python import ipu
@@ -278,6 +277,48 @@ class EmbeddingLookupTest(test_util.TensorFlowTestCase):
       sess.run(variables.global_variables_initializer())
       # Just checking that graph construction succeeds and the program runs
       sess.run(r, {i: i_h})
+
+  @test_util.deprecated_graph_mode_only
+  def testSerializedEmbeddingLookup(self):
+    with sl.Session() as sess:
+
+      def body(table, indices):
+        return ipu.ops.embedding_ops.embedding_lookup(table,
+                                                      indices,
+                                                      serialization_factor=4)
+
+      with ops.device('cpu'):
+        table = array_ops.placeholder(np.float16, [2000, 4, 4, 8])
+        indices = array_ops.placeholder(np.int32, [4, 4, 8])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(body, inputs=[table, indices])
+
+      table_h = np.arange(128, dtype=np.float16).reshape([4, 4, 8]) * np.ones(
+          [2000, 4, 4, 8], dtype=np.float16)
+      indices_h = np.random.random_integers(0, 2000, [4, 4, 8])
+      result = sess.run(res, {table: table_h, indices: indices_h})
+      self.assertAllClose(result[0], np.take(table_h, indices_h, axis=0))
+
+  @test_util.deprecated_graph_mode_only
+  def testSerializedEmbeddingLookupDoesntDivide(self):
+    with sl.Session():
+
+      def body(table, indices):
+        return ipu.ops.embedding_ops.embedding_lookup(table,
+                                                      indices,
+                                                      serialization_factor=7)
+
+      with ops.device('cpu'):
+        table = array_ops.placeholder(np.float16, [2000, 4, 4, 8])
+        indices = array_ops.placeholder(np.int32, [4, 4, 8])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"The serialization_factor \(7\) must divide the size of the 0th "
+            r"dimension of params \(2000\)."):
+          ipu.ipu_compiler.compile(body, inputs=[table, indices])
 
 
 if __name__ == "__main__":
