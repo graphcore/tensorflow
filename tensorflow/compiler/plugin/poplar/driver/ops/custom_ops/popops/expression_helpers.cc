@@ -14,7 +14,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops/expression_helpers.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_util.h"
+
+#include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/core/util/bcast.h"
 
 namespace xla {
@@ -31,17 +32,25 @@ std::vector<poplar::Tensor> GetTensorsFromExpressionInputs(
   }
   return tensors;
 }
-
+namespace {
 // Get the input tensor and create a PlaceHolder Expression.
 StatusOr<ExpressionInput> GetTensorInput(CompilerResources& res,
                                          const HloInstruction* inst,
                                          TensorMap& tensor_map,
                                          int64 operand_idx, int64 input_idx,
                                          poplar::program::Sequence& seq) {
-  // For elementwise, operand 0 might be inplace.
   poplar::Tensor tensor;
-  if (operand_idx == 0 &&
-      AreInplaceOutputTensorsWritable(tensor_map, res, inst)) {
+
+  // Check whether this is the inplace input to the elementwise operation.
+  bool inplace_input = false;
+  HloInstructionDescription description(inst);
+  if (description.IsInplaceType()) {
+    const auto inplace_operands = description.GetInplaceOperandIndexes();
+    CHECK_EQ(inplace_operands.size(), 1);
+    inplace_input = inplace_operands[0] == input_idx;
+  }
+
+  if (inplace_input && AreInplaceOutputTensorsWritable(tensor_map, res, inst)) {
     TF_ASSIGN_OR_RETURN(
         TensorVectors inputs,
         FindInplaceOutputTensors(tensor_map, res, inst, seq, false));
@@ -52,9 +61,7 @@ StatusOr<ExpressionInput> GetTensorInput(CompilerResources& res,
     TF_ASSIGN_OR_RETURN(tensor, FindInstructionInput(tensor_map, res, inst,
                                                      input_idx, seq, false));
   }
-  // Poplar PlaceHolders start at 1
-  auto expr = absl::make_unique<popops::expr::PlaceHolder>(input_idx + 1);
-  return ExpressionInput(std::move(expr), tensor);
+  return ExpressionInput(tensor);
 }
 
 StatusOr<ExpressionInput> GetConstantInput(const HloInstruction* inst) {
@@ -125,6 +132,7 @@ StatusOr<ExpressionInput> GetElementwiseInput(
     return GetTensorInput(res, inst, tensor_map, operand_idx, input_idx, seq);
   }
 }
+}  // namespace
 
 // Get the elementwise instruction when the instruction can be a fused
 // instruction indicating implicit broadcasting op.
@@ -135,16 +143,15 @@ const HloInstruction* GetElementwiseOp(const HloInstruction* inst) {
 
 // Get all the elementwise input expression and tensors.
 StatusOr<ExpressionInputs> GetElementwiseInputs(
-    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
+    CompilerResources& res, const HloInstruction* inst,
+    const std::vector<int64>& inputs_permutation, TensorMap& tensor_map,
     poplar::program::Sequence& seq) {
-  std::vector<ExpressionInput> expression_inputs;
-
   auto operation = GetElementwiseOp(inst);
 
-  int64 input_idx = 0;
   // Go over all the inputs to the operation, and figure out what type they are.
-  for (int64 operand_idx = 0; operand_idx < operation->operand_count();
-       operand_idx++) {
+  std::vector<ExpressionInput> expression_inputs;
+  for (int64 operand_idx = 0, input_idx = 0;
+       operand_idx != operation->operand_count(); ++operand_idx) {
     TF_ASSIGN_OR_RETURN(auto expression_input,
                         GetElementwiseInput(res, inst, tensor_map, operand_idx,
                                             input_idx, seq));
@@ -153,11 +160,21 @@ StatusOr<ExpressionInputs> GetElementwiseInputs(
       input_idx++;
     }
   }
-  return expression_inputs;
+
+  // Now permute the expression and create placeholder expressions.
+  // Note that popops placeholders start from 1.
+  std::vector<ExpressionInput> permuted_expression_inputs;
+  for (int64 i = 0, placeholder_idx = 1; i != operation->operand_count(); ++i) {
+    ExpressionInput& input = expression_inputs[inputs_permutation[i]];
+    if (input.tensor) {
+      input.expr =
+          absl::make_unique<popops::expr::PlaceHolder>(placeholder_idx++);
+    }
+    permuted_expression_inputs.push_back(input);
+  }
+  return permuted_expression_inputs;
 }
 
 }  // namespace helper
-
 }  // namespace poplarplugin
-
 }  // namespace xla

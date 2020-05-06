@@ -272,11 +272,11 @@ TEST_F(ElementwiseBroadcastConvert, TernaryArg0Bcast) {
 HloModule top
 
 ENTRY c1 {
-  p0 = f16[4] parameter(0)
-  bcast = f16[1,16,16,4] broadcast(p0), dimensions={3}
+  c = f16[] constant(0)
+  bcast = f16[1,16,16,4] broadcast(c), dimensions={}
+  p0 = f16[1,16,16,4] parameter(0)
   p1 = f16[1,16,16,4] parameter(1)
-  p2 = f16[1,16,16,4] parameter(2)
-  ROOT %clamp = f16[1,16,16,4] clamp(bcast, p1, p2)
+  ROOT %clamp = f16[1,16,16,4] clamp(bcast, p0, p1)
 }
 )";
 
@@ -289,9 +289,65 @@ ENTRY c1 {
   auto* root = module0->entry_computation()->root_instruction();
   auto opcode = root->opcode();
   const auto* bcast = root->operand(0);
-  const auto* p0 = bcast->operand(0);
+  const auto* c = bcast->operand(0);
+  const auto* p0 = root->operand(1);
+  const auto* p1 = root->operand(2);
+
+  ElementwiseBroadcastConverter ebc;
+  EXPECT_TRUE(ebc.Run(module0).ValueOrDie());
+
+  root = module0->entry_computation()->root_instruction();
+  EXPECT_EQ(root->operand_count(), 2);
+  EXPECT_EQ(root->opcode(), HloOpcode::kFusion);
+  EXPECT_EQ(root->operand(0), p0);
+  EXPECT_EQ(root->operand(1), p1);
+  auto* fusion_comp = root->fused_instructions_computation();
+  EXPECT_EQ(fusion_comp->name(), "_pop_op_implicit_ternary_inplace");
+  auto fusion_config =
+      root->backend_config<PoplarBackendConfig>().ValueOrDie().fusion_config();
+  auto repeated_inplace_operands = fusion_config.inplace_operands();
+  std::vector<int64> inplace_operands = {repeated_inplace_operands.begin(),
+                                         repeated_inplace_operands.end()};
+  EXPECT_EQ(inplace_operands.size(), 1);
+  EXPECT_EQ(inplace_operands[0], 0);
+  auto* fusion_root = fusion_comp->root_instruction();
+  EXPECT_EQ(opcode, fusion_root->opcode());
+  auto* fusion_op0 = fusion_root->operand(0);
+  EXPECT_EQ(fusion_op0->opcode(), HloOpcode::kBroadcast);
+  EXPECT_EQ(fusion_op0->operand(0)->opcode(), HloOpcode::kConstant);
+  auto* fusion_op1 = fusion_root->operand(1);
+  EXPECT_EQ(fusion_op1->opcode(), HloOpcode::kParameter);
+  EXPECT_EQ(fusion_op1->parameter_number(), 0);
+  auto* fusion_op2 = fusion_root->operand(2);
+  EXPECT_EQ(fusion_op2->opcode(), HloOpcode::kParameter);
+  EXPECT_EQ(fusion_op2->parameter_number(), 1);
+}
+
+TEST_F(ElementwiseBroadcastConvert, TernaryArg2Bcast) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f16[4] parameter(0)
+  bcast = f16[1,16,16,4] broadcast(p0), dimensions={3}
+  p1 = f16[1,16,16,4] parameter(1)
+  p2 = f16[1,16,16,4] parameter(2)
+  ROOT %clamp = f16[1,16,16,4] clamp(p1, p2, bcast)
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  auto* root = module0->entry_computation()->root_instruction();
+  auto opcode = root->opcode();
+  const auto* p0 = root->operand(0);
   const auto* p1 = root->operand(1);
-  const auto* p2 = root->operand(2);
+  const auto* bcast = root->operand(2);
+  const auto* p2 = bcast->operand(0);
 
   ElementwiseBroadcastConverter ebc;
   EXPECT_TRUE(ebc.Run(module0).ValueOrDie());
@@ -303,19 +359,26 @@ ENTRY c1 {
   EXPECT_EQ(root->operand(1), p1);
   EXPECT_EQ(root->operand(2), p2);
   auto* fusion_comp = root->fused_instructions_computation();
-  EXPECT_EQ(fusion_comp->name(), "_pop_op_implicit_ternary");
+  EXPECT_EQ(fusion_comp->name(), "_pop_op_implicit_ternary_inplace");
+  auto fusion_config =
+      root->backend_config<PoplarBackendConfig>().ValueOrDie().fusion_config();
+  auto repeated_inplace_operands = fusion_config.inplace_operands();
+  std::vector<int64> inplace_operands = {repeated_inplace_operands.begin(),
+                                         repeated_inplace_operands.end()};
+  EXPECT_EQ(inplace_operands.size(), 1);
+  EXPECT_EQ(inplace_operands[0], 1);
   auto* fusion_root = fusion_comp->root_instruction();
   EXPECT_EQ(opcode, fusion_root->opcode());
   auto* fusion_op0 = fusion_root->operand(0);
-  EXPECT_EQ(fusion_op0->opcode(), HloOpcode::kBroadcast);
-  EXPECT_EQ(fusion_op0->operand(0)->opcode(), HloOpcode::kParameter);
-  EXPECT_EQ(fusion_op0->operand(0)->parameter_number(), 0);
+  EXPECT_EQ(fusion_op0->opcode(), HloOpcode::kParameter);
+  EXPECT_EQ(fusion_op0->parameter_number(), 0);
   auto* fusion_op1 = fusion_root->operand(1);
   EXPECT_EQ(fusion_op1->opcode(), HloOpcode::kParameter);
   EXPECT_EQ(fusion_op1->parameter_number(), 1);
   auto* fusion_op2 = fusion_root->operand(2);
-  EXPECT_EQ(fusion_op2->opcode(), HloOpcode::kParameter);
-  EXPECT_EQ(fusion_op2->parameter_number(), 2);
+  EXPECT_EQ(fusion_op2->opcode(), HloOpcode::kBroadcast);
+  EXPECT_EQ(fusion_op2->operand(0)->opcode(), HloOpcode::kParameter);
+  EXPECT_EQ(fusion_op2->operand(0)->parameter_number(), 2);
 }
 
 TEST_F(ElementwiseBroadcastConvert, TernaryArg1ConstArg2Bcast) {
