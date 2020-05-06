@@ -16,6 +16,8 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_OPS_CUSTOM_OPS_POPOPS_EXPRESSION_HELPERS_H_
 #include <algorithm>
 #include <memory>
+#include <poplar/Engine.hpp>
+#include <poplar/Graph.hpp>
 #include <utility>
 #include <vector>
 
@@ -30,9 +32,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 
-#include <poplar/Engine.hpp>
-#include <poplar/Graph.hpp>
-
 namespace xla {
 namespace poplarplugin {
 namespace helper {
@@ -43,14 +42,14 @@ struct ExpressionInput {
   absl::optional<poplar::Tensor> tensor;
   ExpressionInput() = delete;
 
-  ExpressionInput(std::unique_ptr<popops::expr::Expr> expr,
-                  poplar::Tensor& tensor)
-      : expr(std::move(expr)), tensor(tensor) {}
+  explicit ExpressionInput(poplar::Tensor& tensor) : tensor(tensor) {}
   explicit ExpressionInput(std::unique_ptr<popops::expr::Expr> expr)
       : expr(std::move(expr)), tensor(absl::nullopt) {}
 
   ExpressionInput(const ExpressionInput& other) {
-    expr = other.expr->clone();
+    if (other.expr) {
+      expr = other.expr->clone();
+    }
     tensor = other.tensor;
   }
 };
@@ -59,28 +58,15 @@ using ExpressionInputs = std::vector<ExpressionInput>;
 std::vector<poplar::Tensor> GetTensorsFromExpressionInputs(
     ExpressionInputs& expression_inputs);
 
-// Get the input tensor and create a PlaceHolder Expression.
-StatusOr<ExpressionInput> GetTensorInput(CompilerResources& res,
-                                         const HloInstruction* inst,
-                                         TensorMap& tensor_map,
-                                         int64 operand_idx, int64 input_idx,
-                                         poplar::program::Sequence& seq);
-
-StatusOr<ExpressionInput> GetConstantInput(const HloInstruction* inst);
-
-StatusOr<ExpressionInput> GetElementwiseInput(
-    CompilerResources& res, const HloInstruction* inst, TensorMap& tensor_map,
-    int64 operand_idx, int64 input_idx, poplar::program::Sequence& seq);
-
 // Get the elementwise instruction when the instruction can be a fused
 // instruction indicating implicit broadcasting op.
 const HloInstruction* GetElementwiseOp(const HloInstruction* inst);
 
 // Get all the elementwise input expression and tensors.
-StatusOr<ExpressionInputs> GetElementwiseInputs(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                TensorMap& tensor_map,
-                                                poplar::program::Sequence& seq);
+StatusOr<ExpressionInputs> GetElementwiseInputs(
+    CompilerResources& res, const HloInstruction* inst,
+    const std::vector<int64>& inputs_permutation, TensorMap& tensor_map,
+    poplar::program::Sequence& seq);
 
 }  // namespace helper
 }  // namespace poplarplugin

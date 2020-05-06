@@ -61,6 +61,8 @@ StatusOr<popops::expr::UnaryOpType> LookupUnaryFn(const HloInstruction*);
 
 StatusOr<popops::expr::BinaryOpType> LookupBinaryFn(const HloInstruction*);
 
+StatusOr<popops::expr::TernaryOpType> LookupTernaryFn(const HloInstruction*);
+
 StatusOr<popops::expr::BinaryOpType> LookupComparisonFn(
     const HloInstruction* inst);
 

@@ -207,6 +207,20 @@ StatusOr<popops::expr::BinaryOpType> LookupBinaryFn(
       StrCat("[Poplar] Invalid opcode lookup ", HloOpcodeString(opcode)));
 }
 
+StatusOr<popops::expr::TernaryOpType> LookupTernaryFn(
+    const HloInstruction* inst) {
+  const HloOpcode opcode = inst->opcode();
+  switch (opcode) {
+    case HloOpcode::kClamp:
+      return popops::expr::TernaryOpType::CLAMP;
+    case HloOpcode::kSelect:
+      return popops::expr::TernaryOpType::SELECT;
+    default:
+      return tensorflow::errors::Unknown(
+          StrCat("[Poplar] Invalid opcode lookup ", HloOpcodeString(opcode)));
+  }
+}
+
 StatusOr<poplar::program::Program> CreateTupleSelectOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map) {

@@ -15,13 +15,11 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
-
-#include "absl/container/flat_hash_set.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -157,9 +155,20 @@ StatusOr<bool> ConvertBroadcastsToImplicit(HloInstruction* inst) {
   auto* cfg = backend_config.mutable_fusion_config();
   if (is_inplace) {
     auto inplace_operands = inplace_description.GetInplaceOperandIndexes();
-    *(cfg->mutable_inplace_operands()) = {inplace_operands.begin(),
-                                          inplace_operands.end()};
+    CHECK_EQ(inplace_operands.size(), 1);
+    // Adjust the inplace operand depending on the whether other operands have
+    // been lowered in.
+    for (int64 input_index = 0, operand_index = 0;
+         input_index != inst->operand_count(); ++input_index) {
+      if (input_index == inplace_operands[0]) {
+        cfg->add_inplace_operands(operand_index);
+        break;
+      } else if (!constant_broadcast_operands.contains(input_index)) {
+        operand_index++;
+      }
+    }
   }
+
   fusion->set_backend_config(backend_config);
   VLOG(1) << "Replacing " << inst->ToString() << " with " << fusion->ToString()
           << " and fusion " << fusion_computation->ToString();

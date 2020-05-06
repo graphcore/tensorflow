@@ -37,7 +37,7 @@ class UnaryElementwiseOp : public PoplarOpDef {
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(
         auto expression_inputs,
-        helper::GetElementwiseInputs(res, inst, tensor_map, seq));
+        helper::GetElementwiseInputs(res, inst, {0}, tensor_map, seq));
     auto input_tensors =
         helper::GetTensorsFromExpressionInputs(expression_inputs);
 
@@ -96,7 +96,7 @@ class BinaryElementwiseOp : public PoplarOpDef {
     poplar::program::Sequence seq;
     TF_ASSIGN_OR_RETURN(
         auto expression_inputs,
-        helper::GetElementwiseInputs(res, inst, tensor_map, seq));
+        helper::GetElementwiseInputs(res, inst, {0, 1}, tensor_map, seq));
     auto input_tensors =
         helper::GetTensorsFromExpressionInputs(expression_inputs);
 
@@ -147,34 +147,19 @@ class TernaryElementwiseOp : public PoplarOpDef {
                                              const HloInstruction* inst,
                                              const xla::Shape& output_shape,
                                              TensorMap& tensor_map) override {
-    // Non of the ternary ops currently support in-placing.
-    const bool is_inplace =
-        AreInplaceOutputTensorsWritable(tensor_map, res, inst);
-    CHECK(!is_inplace);
-
     poplar::program::Sequence seq;
-    TF_ASSIGN_OR_RETURN(
-        auto expression_inputs,
-        helper::GetElementwiseInputs(res, inst, tensor_map, seq));
-    auto input_tensors =
-        helper::GetTensorsFromExpressionInputs(expression_inputs);
 
-    // Get the actual ternary operation.
+    // Get the ternary operation.
     auto operation = helper::GetElementwiseOp(inst);
-
-    // Create the expression depending on the operation.
-    std::unique_ptr<popops::expr::TernaryOp> expr;
+    // Create the permutation of the inputs expected by popops.
+    std::vector<int64> permutation;
     switch (operation->opcode()) {
       case HloOpcode::kClamp: {
-        expr = absl::make_unique<popops::expr::TernaryOp>(
-            popops::expr::TernaryOpType::CLAMP, *expression_inputs[1].expr,
-            *expression_inputs[0].expr, *expression_inputs[2].expr);
+        permutation = {1, 0, 2};
         break;
       }
       case HloOpcode::kSelect: {
-        expr = absl::make_unique<popops::expr::TernaryOp>(
-            popops::expr::TernaryOpType::SELECT, *expression_inputs[1].expr,
-            *expression_inputs[2].expr, *expression_inputs[0].expr);
+        permutation = {1, 2, 0};
         break;
       }
       default: {
@@ -184,9 +169,28 @@ class TernaryElementwiseOp : public PoplarOpDef {
       }
     }
 
-    poplar::Tensor out =
-        popops::map(graph, *expr, input_tensors, seq, GetDebugName(inst));
+    TF_ASSIGN_OR_RETURN(
+        auto expression_inputs,
+        helper::GetElementwiseInputs(res, inst, permutation, tensor_map, seq));
+    auto input_tensors =
+        helper::GetTensorsFromExpressionInputs(expression_inputs);
 
+    TF_ASSIGN_OR_RETURN(popops::expr::TernaryOpType op,
+                        LookupTernaryFn(operation));
+    auto expr = popops::expr::TernaryOp(op, *expression_inputs[0].expr,
+                                        *expression_inputs[1].expr,
+                                        *expression_inputs[2].expr);
+
+    poplar::Tensor out;
+    const bool is_inplace =
+        AreInplaceOutputTensorsWritable(tensor_map, res, inst);
+
+    if (is_inplace) {
+      popops::mapInPlace(graph, expr, input_tensors, seq, GetDebugName(inst));
+      out = input_tensors[0];
+    } else {
+      out = popops::map(graph, expr, input_tensors, seq, GetDebugName(inst));
+    }
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
     return seq;
   }
