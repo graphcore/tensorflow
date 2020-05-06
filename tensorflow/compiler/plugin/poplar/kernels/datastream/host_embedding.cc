@@ -105,7 +105,7 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
                       int lookup_count, int update_count,
                       AsyncOpKernel::DoneCallback done)
         : encoding_width_(embedding.dim_size(1)),
-          access_count_(lookup_count + update_count),
+          access_count_(replication_factor * (lookup_count + update_count)),
           embedding_(std::move(embedding)),
           done_(std::move(done)),
           lookup_indices_(replication_factor),
