@@ -292,4 +292,4 @@ be loaded into a JSON object using the native JSON library, for example:
 
   with tf.Session() as sess:
       json_string = sess.run(benchmark_op)
-      json_object = json.loads(j_str[0])
+      json_object = json.loads(json_string[0])
