@@ -255,6 +255,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers",
     ],
+    shard_count = 5,
 )
 
 py_test(

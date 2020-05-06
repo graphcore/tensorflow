@@ -20,7 +20,7 @@ Embedding Keras layer
 from functools import reduce
 from operator import mul
 
-from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+from tensorflow.python.ipu.ops import embedding_ops
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
@@ -82,8 +82,8 @@ class Embedding(Layer):
         The entries of the embedding tensor corresponding to the ids tensor
         indices.
     """
-    return gen_popops_ops.ipu_multi_slice(self.embeddings,
-                                          inputs,
+    return embedding_ops.embedding_lookup(self.embeddings,
+                                          ids=inputs,
                                           name=self.name)
 
   @tf_utils.shape_type_conversion

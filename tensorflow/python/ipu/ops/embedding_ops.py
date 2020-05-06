@@ -21,7 +21,10 @@ from functools import reduce
 from operator import mul
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popops_ops
+from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import custom_gradient
 from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import deprecation
@@ -36,6 +39,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 def embedding_lookup(params,
                      ids,
                      name=None,
+                     serialization_factor=1,
                      one_hot_threshold=0,
                      min_encoding_size=1216):
   """Looks up `ids` in a list of embedding tensors.
@@ -48,13 +52,23 @@ def embedding_lookup(params,
         ids: A `Tensor` with type `int32` containing the slices to be extracted
              from `params`.
         name: A name for the operation.
-        one_hot_threshold: The threshold below which the embedding lookup will
-                           become a one-hot with matmul.
-        min_encoding_size: The minimum encoding size for the embedding. This is
-                           used to decide whether to split the embedding tensor.
+        serialization_factor: If greater than 1, the embedding lookup will be
+             broken up into `serialization_factor` smaller lookups, serialized
+             along the 0th dimension. This option should not be used unless
+             `params` is used by another operation, such as matrix
+             multiplication. If `params` has multiple users, then serialization
+             can reduce the maximum memory at the cost of extra computation.
+        one_hot_threshold: Deprecated.
+        min_encoding_size: Deprecated.
     Returns:
         A `Tensor` with the same type as the tensors in `params`.
     """
+  serialization_factor = int(serialization_factor)
+  if serialization_factor < 1:
+    raise ValueError(
+        'serialization_factor has to be at least 1, but was {}.'.format(
+            serialization_factor))
+
   name = name or "embedding_lookup"
   ids_shape = ids.shape.as_list()
   params_shape = params.shape.as_list()
@@ -68,8 +82,70 @@ def embedding_lookup(params,
   embedding_size = reduce(mul, params_shape, 1)
   params_2d = array_ops.reshape(params, [slice_dim_size, embedding_size])
 
+  if (slice_dim_size % serialization_factor) != 0:
+    raise ValueError(
+        'The serialization_factor ({}) must divide the size of the 0th '
+        'dimension of params ({}).'.format(serialization_factor,
+                                           slice_dim_size))
+
   # Do the lookup.
-  result = gen_popops_ops.ipu_multi_slice(params_2d, ids_flat, name=name)
+  if serialization_factor == 1:
+    result = gen_popops_ops.ipu_multi_slice(params_2d, ids_flat, name=name)
+  else:
+
+    @custom_gradient.custom_gradient
+    def serialized_embedding_lookup(table, indices):
+      @functional_ops.function
+      def func(sliced_table, indices, min_idx, max_idx):
+        # Do a serialized embedding lookup by adjusting the indices.
+        adjusted_indices = indices - min_idx
+        x = gen_popops_ops.ipu_multi_slice(sliced_table,
+                                           adjusted_indices,
+                                           name=name)
+
+        # Mask out any outputs which are not in range [min_idx, max_idx).
+        mask_max = indices < max_idx
+        mask_min = indices >= min_idx
+        mask = math_ops.logical_and(mask_max, mask_min)
+        mask = array_ops.expand_dims(mask, 1)
+        return array_ops.where_v2(mask,
+                                  x,
+                                  array_ops.constant(0, x.dtype),
+                                  name=name + "_mask")
+
+      table_shape = table.shape.as_list()
+      assert len(table_shape) == 2
+      assert (table_shape[0] % serialization_factor) == 0
+      split_size = table_shape[0] // serialization_factor
+
+      # Create the first lookup.
+      table_sliced = array_ops.slice(table, [0, 0],
+                                     [split_size, table_shape[1]])
+      output = func(table_sliced, indices, 0, split_size)
+
+      for i in range(1, serialization_factor):
+        min_idx = split_size * i
+        max_idx = split_size * (i + 1)
+
+        table_sliced = array_ops.slice(table, [min_idx, 0],
+                                       [split_size, table_shape[1]])
+        masked_output = func(table_sliced, indices, min_idx, max_idx)
+        # Add the masked slice
+        output = math_ops.add(output, masked_output, name=f"slice_{i}")
+
+      # Need to redefine the gradient function.
+      def grad(*dy):
+        return [
+            gen_popops_ops.ipu_multi_update_add(array_ops.zeros_like(table),
+                                                indices=indices,
+                                                updates=dy[0],
+                                                scale=array_ops.constant(
+                                                    1, table.dtype)), None
+        ]
+
+      return output, grad
+
+    result = serialized_embedding_lookup(params_2d, ids_flat)
 
   # Reshape into [ids[0], ... , ids[n - 1], params[1], ..., params[n - 1]]
   return array_ops.reshape(result, list(ids_shape) + list(params_shape))
