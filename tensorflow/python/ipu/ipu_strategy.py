@@ -23,7 +23,9 @@ from tensorflow.python.distribute import distribute_lib
 from tensorflow.python.distribute import input_lib
 from tensorflow.python.distribute import reduce_util
 from tensorflow.python.distribute import values
+from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
+from tensorflow.python.eager import function
 from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -75,6 +77,10 @@ class IPUStrategy(distribute_lib.StrategyV1):
     """
     super().__init__(IPUExtended(self, ipu_device, cpu_device))
 
+  def experimental_run_v2(self, fn, args=(), kwargs=None):
+    _validate_experimental_run_v2_function(fn)
+    return super().experimental_run_v2(fn, args, kwargs)
+
 
 def _get_variable_creator_initial_value(device, **kwargs):
   def initial_value_fn():
@@ -94,6 +100,15 @@ def _is_current_device_ipu():
   return current_device.device_type == "IPU"
 
 
+def _validate_experimental_run_v2_function(fn):
+  if context.executing_eagerly() and not isinstance(
+      fn, (def_function.Function, function.ConcreteFunction)):
+    raise ValueError(
+        "IPUStrategy.experimental_run_v2(fn, ...) does not support eager "
+        "execution. Either convert `fn` into a tf.function or consider "
+        "calling strategy.experimental_run_v2 inside a tf.function.")
+
+
 _UNSUPPORTED_DTYPES = (dtypes.float64,)
 
 
@@ -104,7 +119,7 @@ def _validate_dtypes(tensors, name):
           name, t.dtype.name))
 
 
-def _validate_function(fn, args, kwargs):
+def _validate_function_for_arguments(fn, args, kwargs):
   if isinstance(fn, def_function.Function):
     concrete_fn = fn.get_concrete_function(*args, **kwargs)
     _validate_dtypes(concrete_fn.inputs, "input")
@@ -150,7 +165,7 @@ class IPUExtended(distribute_lib.StrategyExtendedV1):  # pylint: disable=abstrac
       xla_context = control_flow_ops.XLAControlFlowContext()
       try:
         xla_context.Enter()
-        _validate_function(fn, args, kwargs)
+        _validate_function_for_arguments(fn, args, kwargs)
         return fn(*args, **kwargs)
       finally:
         xla_context.Exit()

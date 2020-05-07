@@ -17,8 +17,11 @@ import numpy as np
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.python import keras
+from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
 from tensorflow.python.eager.backprop import GradientTape
+from tensorflow.python.framework import constant_op
+from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_strategy
 from tensorflow.python.ops import math_ops
@@ -454,6 +457,42 @@ class IPUStrategyTest(test_util.TensorFlowTestCase):
                                   "Unsupported data type for output: float64"):
         strategy.experimental_run_v2(cast_float64,
                                      args=[np.array(1.0, dtype=np.float32)])
+
+  @test_util.run_v2_only
+  def test_allowed_function_types_in_eager_mode(self):
+    def identity(x):
+      self.assertFalse(context.executing_eagerly())
+      return x
+
+    inputs = constant_op.constant(1.0, dtype=np.float32)
+
+    strategy = ipu_strategy.IPUStrategy()
+
+    with strategy.scope():
+      self.assertTrue(context.executing_eagerly())
+
+      # Passing plain function in eager mode is not allowed.
+      with self.assertRaisesRegex(ValueError,
+                                  "does not support eager execution"):
+        strategy.experimental_run_v2(identity, args=[inputs])
+
+      # But calling it from inside a `tf.function` is fine.
+      @def_function.function
+      def wrapper():
+        return strategy.experimental_run_v2(identity, args=[inputs])
+
+      self.assertEqual(wrapper(), inputs)
+
+      # Converted to `tf.function` also fine.
+      tf_function = def_function.function(identity)
+      result = strategy.experimental_run_v2(tf_function, args=[inputs])
+      self.assertEqual(result, inputs)
+
+      # `ConcreteFunction` is fine as well.
+      concrete_function = tf_function.get_concrete_function(
+          tensor_spec.TensorSpec(inputs.shape, inputs.dtype))
+      result = strategy.experimental_run_v2(concrete_function, args=[inputs])
+      self.assertEqual(result, inputs)
 
 
 if __name__ == "__main__":
