@@ -26,6 +26,7 @@ from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ipu.ops import functional_ops_grad
 from tensorflow.python.ipu.ops import internal_ops
 from tensorflow.python.ipu.ops import internal_ops_grad
+from tensorflow.python.ipu.ops import math_ops
 from tensorflow.python.ipu.ops import nn_ops
 from tensorflow.python.ipu.ops import nn_ops_grad
 from tensorflow.python.ipu.ops import normalization_ops
