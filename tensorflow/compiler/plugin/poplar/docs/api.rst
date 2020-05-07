@@ -76,6 +76,12 @@ Python API
 .. automodule:: tensorflow.python.ipu.ops.embedding_ops
   :members:
 
+.. automodule:: tensorflow.python.ipu.ops.maths_ops
+  :members:
+
+.. automodule:: tensorflow.python.ipu.ops.nn_ops
+  :members:
+
 .. automodule:: tensorflow.python.ipu.ops.normalization_ops
   :members:
 

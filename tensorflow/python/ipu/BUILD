@@ -16,6 +16,7 @@ py_library(
         "ops/embedding_ops.py",
         "ops/functional_ops.py",
         "ops/internal_ops.py",
+        "ops/math_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
         "ops/pipelining_ops.py",
@@ -122,6 +123,7 @@ py_library(
         "ops/experimental/popfloat_cast_to_gfloat.py",
         "ops/functional_ops.py",
         "ops/internal_ops.py",
+        "ops/math_ops.py",
         "ops/nn_ops.py",
         "ops/normalization_ops.py",
         "ops/pipelining_ops.py",
@@ -256,6 +258,20 @@ tf_py_test(
         "//tensorflow/python/keras:layers",
     ],
     shard_count = 5,
+)
+
+tf_py_test(
+    name = "math_ops_test",
+    size = "large",
+    srcs = ["tests/math_ops_test.py"],
+    additional_deps = [
+        ":ipu_grad_ops_lib",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python/keras:layers",
+    ],
+    shard_count = 40,
 )
 
 py_test(
@@ -858,6 +874,7 @@ test_suite(
         "keras_normalization_test",
         "keras_rnn_test",
         "map_gradient_optimizer_test",
+        "math_ops_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",
         "pipelining_grouped_test",
