@@ -21,7 +21,7 @@ namespace tensorflow {
 
 const string LogMemory::kLogMemoryLabel = "__LOG_MEMORY__";
 
-bool LogMemory::IsEnabled() { return VLOG_IS_ON(2); }
+bool LogMemory::IsEnabled() { return VLOG_IS_ON(6); }
 
 namespace {
 
