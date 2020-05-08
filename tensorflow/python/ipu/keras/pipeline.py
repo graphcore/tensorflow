@@ -25,6 +25,7 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import tensor_spec
+from tensorflow.python.framework.errors_impl import NotFoundError
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
@@ -153,6 +154,7 @@ class _IpuModelBase(KerasModel):
     self.outfeed = None
     self.last_ds = None
     self.last_mode = None
+    self.internal_loop_fn = None
 
   def build(self, input_shape):
     pass
@@ -238,7 +240,11 @@ class _IpuModelBase(KerasModel):
 
     return [self.total_loss] + metrics
 
-  @def_function.function(autograph=False)
+  def _get_internal_run_loop(self):
+    raise NotImplementedError(
+        "_IpuModelBase should not be used directly.  Use PipelinedModel or "
+        "Model instead.")
+
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
     raise NotImplementedError(
@@ -395,9 +401,9 @@ class _IpuModelBase(KerasModel):
 
           # Create and run the core graph.
           strategy = distribution_strategy_context.get_strategy()
+          func = self._get_internal_run_loop()
           strategy.experimental_run_v2(
-              self._internal_run_loop,
-              args=[self.infeed, self.outfeed, steps_per_run, mode])
+              func, args=[self.infeed, self.outfeed, steps_per_run, mode])
 
           # Send an end of batches
           callbacks.on_batch_end(batch_num, batch_logs)
@@ -441,8 +447,12 @@ class _IpuModelBase(KerasModel):
 
     # Close the infeed and outfeed queues at the end of the epoch
     finally:
-      self.infeed.deleter  # pylint: disable=pointless-statement
-      self.outfeed.deleter  # pylint: disable=pointless-statement
+      try:
+        self.infeed.deleter  # pylint: disable=pointless-statement
+        self.outfeed.deleter  # pylint: disable=pointless-statement
+      except NotFoundError as e:
+        if str(e).startswith("Outfeed with id="):
+          pass
 
     # fit() method returns the history object
     if mode == ModeKeys.TRAIN:
@@ -655,7 +665,14 @@ class PipelinedModel(_IpuModelBase):
     return super(PipelinedModel, self).compile(optimizer, loss, metrics,
                                                loss_weights, **kwargs)
 
-  @def_function.function(autograph=False)
+  def _get_internal_run_loop(self):
+    if not self.internal_loop_fn:
+      fn = partial(PipelinedModel._internal_run_loop, self)
+      self.internal_loop_fn = def_function.function(fn,
+                                                    autograph=False,
+                                                    experimental_compile=True)
+    return self.internal_loop_fn
+
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
 
@@ -900,7 +917,14 @@ class Model(_IpuModelBase):
     return super(Model, self).compile(optimizer, loss, metrics, loss_weights,
                                       **kwargs)
 
-  @def_function.function(autograph=False)
+  def _get_internal_run_loop(self):
+    if not self.internal_loop_fn:
+      fn = partial(Model._internal_run_loop, self)
+      self.internal_loop_fn = def_function.function(fn,
+                                                    autograph=False,
+                                                    experimental_compile=True)
+    return self.internal_loop_fn
+
   def _internal_run_loop(self, infeed_queue, outfeed_queue, repeat_count,
                          mode):
     def main_body(inputs):
