@@ -159,9 +159,7 @@ class PipelineTester(object):
                                     profile_execution=profiling)
       cfg = utils.auto_select_ipus(cfg, 4)
       if recomp:
-        cfg = utils.set_recomputation_options(cfg,
-                                              allow_recompute=True,
-                                              allow_stateful_recompute=True)
+        cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
 
@@ -220,9 +218,7 @@ class PipelineTester(object):
                                     profile_execution=profiling)
       cfg = utils.auto_select_ipus(cfg, 4)
       if recomp:
-        cfg = utils.set_recomputation_options(cfg,
-                                              allow_recompute=True,
-                                              allow_stateful_recompute=True)
+        cfg = utils.set_recomputation_options(cfg, allow_recompute=True)
       utils.configure_ipu_system(cfg)
       utils.move_variable_initialization_to_cpu()
 

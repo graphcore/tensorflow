@@ -120,9 +120,9 @@ message IpuOptions {
     // Option to disable caching of sub-graphs containing convolutions
     bool disable_graph_outlining = 3;
 
-    // Option to enable re-computation of non linearities.
+    // Option to enable re-computation.
     bool allow_recompute = 4;
-    bool allow_stateful_recompute = 5;
+    // retired = 5;
 
     // Merge all streaming reads into a block to reduce the host-sync round-trip
     // count.  This may decrease the device->host read latency at the expense of

@@ -325,7 +325,6 @@ def create_ipu_config(profiling=False,
   opts.enable_gather_simplifier = False
   opts.device_connection_type = DeviceConnectionType.ALWAYS.value
   opts.speed_size_config.allow_recompute = False
-  opts.speed_size_config.allow_stateful_recompute = False
 
   # Configure IpuOptions according to the passed arguments.
   opts.profiling.enable_ipu_trace_events = profiling or enable_ipu_events
@@ -780,9 +779,15 @@ def set_ipu_model_options(opts, compile_ipu_code=True):
   return opts
 
 
+@deprecation.deprecated_args(
+    None,
+    "Pipelining recomputation will recompute all the non-stateful operations "
+    "when recomputation is enabled.",
+    "allow_stateful_recompute",
+)
 def set_recomputation_options(opts,
                               allow_recompute=True,
-                              allow_stateful_recompute=True):
+                              allow_stateful_recompute=None):  # pylint: disable=unused-argument
   """Set re-computation options.
 
   Args:
@@ -791,17 +796,15 @@ def set_recomputation_options(opts,
       instructions/pipeline stages in the forward pass and recompute them in the
       backward pass to avoid having to preserve activations which increase the
       maximum memory liveness. Enabling this option can reduce memory usage at
-      the expense of extra computation.
-    allow_stateful_recompute: Whether or not to extend the re-compute of
-      pipeline stages to stages containing stateful operations (Has no effect
-      if allow_recompute is False).
+      the expense of extra computation. Any stateful operations cannot be
+      recomputed.
+    allow_stateful_recompute: Deprecated.
 
   Returns:
     The IpuOptions configuration protobuf.
   """
 
   opts.speed_size_config.allow_recompute = allow_recompute
-  opts.speed_size_config.allow_stateful_recompute = allow_stateful_recompute
 
   return opts
 

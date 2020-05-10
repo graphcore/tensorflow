@@ -837,6 +837,9 @@ tf_py_test(
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],
+    data = [
+        ":libpipelining_stateful_op.so",
+    ],
     shard_count = 4,
 )
 
@@ -858,6 +861,16 @@ tf_py_test(
     shard_count = 16,
 )
 
+cc_binary(
+    name = "libpipelining_stateful_op.so",
+    srcs = ["tests/pipelining_stateful_op.cc"],
+    copts = ["-fexceptions"],
+    linkshared = True,
+    deps = [
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
 tf_py_test(
     name = "pipelining_recomputation_test",
     size = "large",
@@ -872,6 +885,9 @@ tf_py_test(
         "//tensorflow/python:platform",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
+    ],
+    data = [
+        ":libpipelining_stateful_op.so",
     ],
     shard_count = 4,
 )
