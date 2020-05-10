@@ -369,10 +369,6 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.speed_size_config().allow_recompute();
   }
 
-  bool StatefulRecomputationEnabled() const {
-    return current_config_.speed_size_config().allow_stateful_recompute();
-  }
-
   poplar::OptionFlags GetConvolutionOptions() const { return conv_options_; }
 
   poplar::OptionFlags GetMatMulOptions() const { return matmul_options_; }

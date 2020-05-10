@@ -973,8 +973,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ExpressionOutliner>();
     pipeline.AddPass<PipelineCopyInserter>();
     pipeline.AddPass<PipelineRecomputation>(
-        poplar_executor->RecomputationEnabled(),
-        poplar_executor->StatefulRecomputationEnabled());
+        poplar_executor->RecomputationEnabled());
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<FlattenCallGraph>();
     }

@@ -29,11 +29,7 @@ namespace poplarplugin {
  */
 class PipelineRecomputation : public HloModulePass {
  public:
-  // allow_statetful_recomputation: allow recomputation of stages with stateful
-  //                                ops. (Has no effect if allow_recomputation
-  //                                is disabled).
-  PipelineRecomputation(bool allow_recomputation,
-                        bool allow_stateful_recomputation);
+  explicit PipelineRecomputation(bool allow_recomputation);
 
   absl::string_view name() const override { return "pipeline_recomputation"; }
 
@@ -44,7 +40,6 @@ class PipelineRecomputation : public HloModulePass {
   StatusOr<bool> RecomputePipeline(HloInstruction* pipeline_op);
 
   bool allow_recomputation_;
-  bool allow_stateful_recomputation_;
 };
 
 }  // namespace poplarplugin

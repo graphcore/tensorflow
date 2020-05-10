@@ -13,6 +13,7 @@
 # limitations under the License.
 # =============================================================================
 
+import os
 import numpy as np
 
 from tensorflow.keras import layers
@@ -28,6 +29,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import momentum
+from tensorflow.python.ipu import custom_ops
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import internal_ops
 from tensorflow.python.ipu import pipelining_ops
@@ -366,84 +368,55 @@ class PipeliningGroupedRecomputationTest(test_util.TensorFlowTestCase):
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare6(self):
-    if not utils.running_on_ipu_model():
-      self.skipTest("Real HW uses a different random number generator "
-                    "therefore the final result does not match the hardcoded "
-                    "expected values.")
-    # Stage2 has a stateful op whose state will be stored and the rest of the stage should be recomputed..
+    # Stage2 has a stateful op whose state will be stored and the rest of the
+    # stage should be recomputed.
     def dataset_fn():
-      dataset = tu.create_single_increasing_dataset(7, shape=[4, 4, 2])
-      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+      dataset = tu.create_single_increasing_dataset(7, shape=[1, 10])
+      return dataset.repeat().batch(4, drop_remainder=True)
 
-      def dataset_parser(value):
-        img = value / 7
-        label = value[0][0][0][0]
-        return img, label
-
-      return dataset.map(dataset_parser)
-
-    pipeline_depth = 16
+    pipeline_depth = 6
     repeat_count = 2
     optimizer = gradient_descent.GradientDescentOptimizer(0.01)
 
-    def stage1(c, img, label):
+    cwd = os.getcwd()
+    lib_path = os.path.join(
+        cwd, "tensorflow/python/ipu/libpipelining_stateful_op.so")
+
+    def stage1(x):
       with variable_scope.variable_scope("stage1", use_resource=True):
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.constant_initializer(0.5),
-            bias_initializer=init_ops.constant_initializer(0.5),
-            name='conv1')(img)
-        return y, c, label
+        weight = variable_scope.get_variable(
+            'weight',
+            shape=(x.shape[-1],),
+            dtype=np.float32,
+            initializer=init_ops.ones_initializer())
+        activations = weight * (x + x)
+        outputs = {
+            "output_types": [np.float32],
+            "output_shapes": [activations.shape],
+        }
+        activations, = custom_ops.precompiled_user_op([activations],
+                                                      lib_path,
+                                                      separate_gradients=True,
+                                                      outs=outputs)
+        return activations * 2
 
-    def stage2(x, c, label):
-      with variable_scope.variable_scope("stage2", use_resource=True):
-        rng = random_ops.random_uniform(x.shape, seed=1)
-        y = layers.Conv2D(
-            2,
-            1,
-            use_bias=True,
-            kernel_initializer=init_ops.constant_initializer(0.5),
-            bias_initializer=init_ops.constant_initializer(0.5),
-            name='conv1')(rng)
-        return x + y, c, label
+    def stage2(activations):
+      return activations * 2
 
-    def stage3(x, c, label):
-      with variable_scope.variable_scope("stage3", use_resource=True):
-        return layers.Dense(
-            2,
-            kernel_initializer=init_ops.constant_initializer(0.5),
-            bias_initializer=init_ops.constant_initializer(0.5))(x), c, label
+    def stage3(activations):
+      return math_ops.reduce_sum(math_ops.reduce_mean(activations**2, -1))
 
-    def stage4(x, c, label):
-      with variable_scope.variable_scope("stage4", use_resource=True):
-        return math_ops.reduce_sum(
-            layers.Dense(2,
-                         kernel_initializer=init_ops.constant_initializer(0.5),
-                         bias_initializer=init_ops.constant_initializer(0.5))
-            (x)) + c + label
-
-    def inputs_fn():
-      with ops.device('cpu'):
-        return [array_ops.placeholder(np.float32, shape=[])]
-
-    pipeline_losses = pipelining_test_util.PipelineTester.pipeline_on_ipu(
-        [stage1, stage2, stage3, stage4], inputs_fn, [10.01], repeat_count,
-        pipeline_depth, dataset_fn, optimizer, self, 15590, True,
-        pipelining_ops.PipelineSchedule.Grouped)
-    reference = [
-        1.7649060e+02, 1.9677632e+02, 2.1706201e+02, 2.0534773e+02,
-        1.8663341e+02, 2.0691913e+02, 2.2720490e+02, 1.7649060e+02,
-        1.9677632e+02, 2.1706201e+02, 2.0534773e+02, 1.8663341e+02,
-        2.0691913e+02, 2.2720490e+02, 1.7649060e+02, 1.9677632e+02,
-        -3.8413266e+05, -3.6496094e+05, -3.4579641e+05, -3.7135381e+05,
-        -3.9691150e+05, -3.3301759e+05, -3.5857522e+05, -3.8413266e+05,
-        -3.6496094e+05, -3.4579641e+05, -3.7135381e+05, -3.9691150e+05,
-        -3.3301759e+05, -3.5857522e+05, -3.8413266e+05, -3.6496094e+05
-    ]
-
-    self.assertAllClose(pipeline_losses, reference)
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, stage2, stage3],
+        lambda: [], [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        12609,
+        True,
+        schedule=pipelining_ops.PipelineSchedule.Grouped)
 
   @test_util.deprecated_graph_mode_only
   def testPipelineCompare7(self):
