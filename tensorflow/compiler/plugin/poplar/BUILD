@@ -255,6 +255,7 @@ cc_library(
         "driver/tools/custom_ops/topk.cc",
         "driver/tools/custom_ops/truncated_normal.cc",
         "driver/tools/custom_ops/user_op_hlo.cc",
+        "driver/tools/custom_ops/weights_transpose_chans_flip_xy.cc",
         "driver/tools/find_all_users.cc",
         "driver/tools/hlo_hash.cc",
         "driver/tools/hlo_matcher.cc",
@@ -392,6 +393,7 @@ cc_library(
         "driver/tools/custom_ops/topk.h",
         "driver/tools/custom_ops/truncated_normal.h",
         "driver/tools/custom_ops/user_op_hlo.h",
+        "driver/tools/custom_ops/weights_transpose_chans_flip_xy.h",
         "driver/tools/find_all_users.h",
         "driver/tools/hlo_hash.h",
         "driver/tools/hlo_matcher.h",
@@ -506,6 +508,7 @@ cc_library(
         "driver/ops/custom_ops/host_embedding.cc",
         "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
         "driver/ops/custom_ops/popfloat/gfloat_ops_utils.cc",
+        "driver/ops/custom_ops/poplin/weights_transpose_chans_flip_xy.cc",
         "driver/ops/custom_ops/popnn/arg_min_max.cc",
         "driver/ops/custom_ops/popnn/gelu.cc",
         "driver/ops/custom_ops/popnn/gru.cc",
@@ -3964,6 +3967,18 @@ tf_xla_py_test(
     ],
 )
 
+xla_test(
+    name = "weights_transpose_chans_flip_xy_test",
+    srcs = ["tests/weights_transpose_chans_flip_xy_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 tf_xla_py_test(
     name = "allocation_finder_priority_test",
     size = "large",
@@ -4175,6 +4190,7 @@ test_suite(
         "topk_onehot_test",
         "update_op_dependencies_test",
         "variable_test",
+        "weights_transpose_chans_flip_xy_test",
         "while_loop_alias_copy_test",
         "while_loop_condition_simplify_test",
         "while_loop_perf_test",

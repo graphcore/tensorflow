@@ -13,7 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/weights_transpose_chans_flip_xy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
@@ -25,6 +28,15 @@ Window GetConvolutionWindow(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kFusion) {
     auto cfg = inst->backend_config<PoplarBackendConfig>();
     return cfg.ValueOrDie().fusion_config().window();
+  } else if (inst->opcode() == HloOpcode::kCustomCall) {
+    if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
+      auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
+      return inst_wtxy->window();
+    } else {
+      LOG(FATAL) << "Trying to access window on non "
+                    "HloWeightsTransposeChansFlipXYInstruction"
+                    "operation.";
+    }
   } else {
     if (!CastOrNull<HloConvolutionInstruction>(inst)) {
       LOG(FATAL) << "Trying to access convolution window on a non convolution "
@@ -38,6 +50,14 @@ ConvolutionDimensionNumbers GetConvolutionDims(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kFusion) {
     auto cfg = inst->backend_config<PoplarBackendConfig>();
     return cfg.ValueOrDie().fusion_config().dimension_numbers();
+  } else if (inst->opcode() == HloOpcode::kCustomCall) {
+    if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
+      auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
+      return inst_wtxy->convolution_dimension_numbers();
+    } else {
+      LOG(FATAL) << "Trying to access convolution_dimension_numbersn on a non "
+                    "HloWeightsTransposeChansFlipXYInstruction.";
+    }
   } else {
     if (!CastOrNull<HloConvolutionInstruction>(inst)) {
       LOG(FATAL) << "Trying to access convolution dimension numbers on a non "
@@ -51,6 +71,14 @@ int64 GetFeatureGroupCount(const HloInstruction* inst) {
   if (inst->opcode() == HloOpcode::kFusion) {
     auto cfg = inst->backend_config<PoplarBackendConfig>();
     return cfg.ValueOrDie().fusion_config().feature_group_count();
+  } else if (inst->opcode() == HloOpcode::kCustomCall) {
+    if (IsPoplarInstruction(PoplarOp::WeightsTransposeChansFlipXY)(inst)) {
+      auto inst_wtxy = Cast<HloWeightsTransposeChansFlipXYInstruction>(inst);
+      return inst_wtxy->feature_group_count();
+    } else {
+      LOG(FATAL) << "Trying to access feature_group_count on non "
+                    "HloWeightsTransposeChansFlipXYInstruction.";
+    }
   } else {
     if (!CastOrNull<HloConvolutionInstruction>(inst)) {
       LOG(FATAL) << "Trying to access convolution feature group count numbers "
