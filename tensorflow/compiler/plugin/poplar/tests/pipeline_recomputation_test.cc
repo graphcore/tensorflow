@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -1083,6 +1084,12 @@ ENTRY e {
   // Expect the control dependency.
   EXPECT_THAT(copy->control_successors(),
               ::testing::ElementsAre(root->operand(1)));
+  // Make sure the root tuple is inplace.
+  EXPECT_TRUE(IsLoweredInplace(root));
+  // Make sure that the extra GTE is inplace.
+  auto gte = fifo->operand(0);
+  EXPECT_EQ(gte->opcode(), HloOpcode::kGetTupleElement);
+  EXPECT_TRUE(IsLoweredInplace(gte));
 }
 }  // namespace
 }  // namespace poplarplugin
