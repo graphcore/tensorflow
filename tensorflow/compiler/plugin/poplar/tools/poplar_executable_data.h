@@ -308,6 +308,55 @@ class BinaryWriter {
   std::shared_ptr<StreamWriter> writer_;
 };
 
+class InfeedStream {
+ public:
+  explicit InfeedStream(std::shared_ptr<StreamReader> in);
+  explicit InfeedStream(const TensorInfo& info);
+  const TensorInfo& Info() const;
+  void InitializeDataSource(const std::string& filename);
+  void InitializeDataSource(std::shared_ptr<StreamReader> in);
+  void LoadTensor(void* dst);
+  void ResetToFirstTensor();
+  void MoveToNextTensor();
+  void JumpToTensor(int64_t tensor_index);
+  int64_t NumTensors() const;
+  int64_t TensorIndex() const;
+  std::string ToString();
+
+ private:
+  TensorInfo info_;
+  bool current_tensor_loaded_;
+  std::streampos first_tensor_pos_;
+  int64_t num_tensors_;
+  int64_t tensor_idx_;
+  std::shared_ptr<StreamReader> reader_;
+};
+
+class BinaryReader {
+ public:
+  void LoadFile(const std::string& filename);
+  std::unique_ptr<StreamReader> CreateMetadataReader(
+      const std::string metadata_name = "") const;
+  std::unique_ptr<StreamReader> CreateExecutableReader(
+      const std::string executable_name = "") const;
+  std::unique_ptr<StreamReader> CreateInfeedStreamReader(
+      const std::string infeed_name) const;
+  std::unique_ptr<StreamReader> GetTensorStream(const std::string& name) const;
+  std::set<std::string> GetObjectNames(ObjectType type) const;
+  bool ContainsObject(ObjectType type, const std::string& name) const;
+
+ private:
+  struct Object {
+    std::string filename;
+    std::streampos offset;
+    std::streampos end;
+  };
+  std::unique_ptr<StreamReader> GetObjectReader(ObjectType type,
+                                                const std::string& name) const;
+  const Object GetObject(ObjectType type, const std::string& name) const;
+  std::map<ObjectType, std::map<std::string, Object>> objects_;
+};
+
 }  // namespace ipu
 
 #endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_TOOLS_POPLAR_EXECUTABLE_DATA_H_
