@@ -36,9 +36,19 @@ cc_library(
     deps = [":poplar_headers"],
 )
 
+filegroup(
+    name = "popsec_headers",
+    srcs = glob(["popsec/include/**/*.hpp"]),
+)
+
+filegroup(
+    name = "popsec_libs",
+    srcs = glob(["popsec/lib*/lib*"]),
+)
+
 cc_library(
     name = "popsec_lib",
-    hdrs = glob(["popsec/include/*.hpp"]),
-    srcs = glob(["popsec/lib*/lib*"]),
+    hdrs = [":popsec_headers"],
+    srcs = [":popsec_libs"],
     includes = ["popsec/include"],
 )
