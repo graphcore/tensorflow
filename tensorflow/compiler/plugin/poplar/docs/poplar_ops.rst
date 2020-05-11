@@ -47,7 +47,7 @@ The original paper on instance normalisation is
 Dmitry Ulyanov, Andrea Vedaldi, Victor Lempitsky
 <https://arxiv.org/abs/1607.08022>`_.
 
-See :py:func:`tensorflow.python.ipu.normalization_ops.group_norm`.
+See :py:func:`tensorflow.python.ipu.normalization_ops.instance_norm`.
 
 Layer normalisation
 ~~~~~~~~~~~~~~~~~~~
