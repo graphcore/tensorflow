@@ -58,25 +58,6 @@ enum PoplarProgramType {
   DEVICE_TO_HOST,
 };
 
-std::string ObjectTypeToString(ObjectType type) {
-  switch (type) {
-    case ObjectType::Feed: {
-      return "feed";
-    }
-    case ObjectType::Tensor: {
-      return "tensor";
-    }
-    case ObjectType::PoplarExecutable: {
-      return "Poplar executable";
-    }
-    case ObjectType::PoplarMetadata: {
-      return "Poplar metadata";
-    }
-    default:
-      ERROR("Unknown ObjectType " << static_cast<int64_t>(type));
-  }
-}
-
 poplar::OptionFlags ParseOptionFlags(const Json::Value& options) {
   poplar::OptionFlags opts;
   if (!options.isNull()) {
@@ -108,15 +89,6 @@ class InfeedCallback : public poplar::StreamCallback {
  private:
   InfeedStream& stream_;
 };
-
-template <typename Key, typename Value>
-std::list<Key> GetMapKeys(const std::map<Key, Value>& m) {
-  std::list<Key> keys;
-  absl::c_transform(
-      m, std::back_inserter(keys),
-      [](const std::pair<Key, Value>& pair) { return pair.first; });
-  return keys;
-}
 
 class SubStream : public std::streambuf {
  public:
@@ -744,137 +716,6 @@ void Infeed::InitializeDataSources(const BinaryLoader& loader) {
   return absl::StrCat(basename, ".", stream_idx, extension);
 }
 
-InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {}
-
-const TensorInfo& InfeedStream::Info() const { return info_; }
-
-std::string InfeedStream::ToString() {
-  // Backup current position
-  int64_t tensor_idx = tensor_idx_;
-  std::ios::streampos current_pos = reader_->CurrentPosition();
-
-  ResetToFirstTensor();
-  Tensor tmp{info_};
-  std::list<std::string> tensors;
-  for (; TensorIndex() < NumTensors(); MoveToNextTensor()) {
-    LoadTensor(tmp.Data());
-    tensors.push_back(tmp.ToString());
-  }
-
-  reader_->MoveAbsolute(current_pos);
-  tensor_idx_ = tensor_idx;
-  return absl::StrCat("[", absl::StrJoin(tensors, "\n"), "]");
-}
-
-InfeedStream::InfeedStream(std::shared_ptr<StreamReader> in) {
-  InitializeDataSource(in);
-}
-
-void InfeedStream::InitializeDataSource(std::shared_ptr<StreamReader> in) {
-  reader_ = in;
-  TensorInfo info{*reader_};
-  // If there is no metadata then keep these ones.
-  if (info_.Type() == TensorType::NotSet) {
-    info_ = std::move(info);
-  } else {
-    ERROR_ON_MSG(
-        !info_.TypeAndShapeMatch(info),
-        "Type and Shape from metadata JSON file: "
-            << info_.ToString()
-            << " don't match those from binary file: " << info.ToString());
-    info_.SetMetadataSize(info.Shape().MetadataSize());
-  }
-  num_tensors_ = reader_->ReadInt64();
-  ERROR_ON(num_tensors_ <= 0);
-  ERROR_ON(reader_->NumBytesLeft() <
-           num_tensors_ * info_.Shape().DataSizeInBytes());
-  first_tensor_pos_ = reader_->CurrentPosition();
-  current_tensor_loaded_ = false;
-  tensor_idx_ = 0;
-}
-
-void InfeedStream::LoadTensor(void* dst) {
-  if (tensor_idx_ >= num_tensors_) {
-    ResetToFirstTensor();
-  }
-  if (current_tensor_loaded_) {
-    // Current tensor has already been read so move back the file descriptor
-    // position.
-    reader_->MoveRelative(-info_.Shape().DataSizeInBytes());
-  }
-  reader_->ReadData(dst, info_.Shape().DataSizeInBytes());
-  current_tensor_loaded_ = true;
-}
-
-void InfeedStream::JumpToTensor(int64_t tensor_index) {
-  ERROR_ON(tensor_index >= num_tensors_);
-  reader_->MoveAbsolute(first_tensor_pos_ +
-                        info_.Shape().DataSizeInBytes() * tensor_index);
-  tensor_idx_ = tensor_index;
-  current_tensor_loaded_ = false;
-}
-
-void InfeedStream::MoveToNextTensor() {
-  if (!current_tensor_loaded_) {
-    reader_->MoveRelative(info_.Shape().DataSizeInBytes());
-  }
-  current_tensor_loaded_ = false;
-  tensor_idx_++;
-}
-
-void InfeedStream::ResetToFirstTensor() {
-  PRINT_INFO("Infeed " << info_.Name() << " reached the end of its "
-                       << num_tensors_ << " elements: resetting to the start");
-  current_tensor_loaded_ = false;
-  tensor_idx_ = 0;
-  reader_->MoveAbsolute(first_tensor_pos_);
-}
-
-int64_t InfeedStream::NumTensors() const { return num_tensors_; }
-int64_t InfeedStream::TensorIndex() const { return tensor_idx_; }
-
-void BinaryLoader::LoadFile(const std::string& filename) {
-  LogContext ctx{"Loading binary file '" + filename + "'"};
-  StreamReader reader{filename};
-  while (reader.NumBytesLeft() > 0) {
-    int64_t type_int = reader.ReadInt64();
-    ERROR_ON_MSG(type_int < 0 || type_int > static_cast<int64_t>(
-                                                ObjectType::PoplarMetadata),
-                 "Invalid ObjectType '" << type_int << "'");
-    ObjectType type = static_cast<ObjectType>(type_int);
-    std::string name = reader.ReadString();
-    Object obj;
-    int64_t size = reader.ReadInt64();
-    ERROR_ON_MSG(size <= 0, "Invalid object size " << size << " for "
-                                                   << ObjectTypeToString(type)
-                                                   << " '" << name << "': ");
-    obj.filename = filename;
-    obj.offset = reader.CurrentPosition();
-    reader.MoveRelative(size);
-    obj.end = reader.CurrentPosition();
-    PRINT_INFO("Obj " << obj.filename << " off " << obj.offset << " end "
-                      << obj.end << " Name " << name << " Type "
-                      << ObjectTypeToString(type));
-    objects_[type][name] = obj;
-  }
-}
-
-std::unique_ptr<StreamReader> BinaryLoader::GetObjectReader(
-    ObjectType type, const std::string& name) const {
-  const Object& obj = GetObject(type, name);
-  std::unique_ptr<StreamReader> in =
-      absl::make_unique<StreamReader>(obj.filename);
-  in->MoveAbsolute(obj.offset);
-  in->SetEnd(obj.end);
-  return in;
-}
-
-std::unique_ptr<StreamReader> BinaryLoader::CreateMetadataReader(
-    const std::string metadata_name) const {
-  LogContext ctx{"BinaryLoader::CreateMetadataReader" + metadata_name};
-  return GetObjectReader(ObjectType::PoplarMetadata, metadata_name);
-}
-
 std::unique_ptr<TensorManager> BinaryLoader::CreateTensorManager(
     std::function<size_t(size_t)> output_metadata_size_fn,
     const std::string metadata_name) const {
@@ -882,12 +723,6 @@ std::unique_ptr<TensorManager> BinaryLoader::CreateTensorManager(
   auto in = CreateMetadataReader(metadata_name);
   return absl::make_unique<TensorManager>(LoadJsonFromString(in->ReadString()),
                                           output_metadata_size_fn);
-}
-
-std::unique_ptr<StreamReader> BinaryLoader::CreateExecutableReader(
-    const std::string executable_name) const {
-  LogContext ctx{"BinaryLoader::CreateExecutableReader " + executable_name};
-  return GetObjectReader(ObjectType::PoplarExecutable, executable_name);
 }
 
 std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
@@ -902,62 +737,6 @@ std::unique_ptr<VerifiedExecutable> BinaryLoader::CreateVerifiedExecutable(
   LogContext ctx{"BinaryLoader::CreateVerifiedExecutable " + executable_name};
   auto in = CreateExecutableReader(executable_name);
   return absl::make_unique<VerifiedExecutable>(*in, in->NumBytesLeft());
-}
-
-const BinaryLoader::Object BinaryLoader::GetObject(
-    ObjectType type, const std::string& name) const {
-  auto objects_it = objects_.find(type);
-  ERROR_ON_MSG(objects_it == objects_.end(),
-               "No object of type " << ObjectTypeToString(type) << " loaded");
-  auto objects = objects_it->second;
-  ERROR_ON_MSG(name.empty() && objects.size() > 1,
-               "BinaryLoader contains more than one "
-                   << ObjectTypeToString(type)
-                   << " and "
-                      "you did not specify which one to load: ["
-                   << absl::StrJoin(GetMapKeys(objects), ", ") << "]");
-  if (name.empty()) {
-    return objects.begin()->second;
-  } else {
-    auto object_it = objects.find(name);
-    ERROR_ON_MSG(object_it == objects.end(),
-                 "Could not find "
-                     << ObjectTypeToString(type) << " named '" << name << "': ["
-                     << absl::StrJoin(GetMapKeys(objects), ", ") << "]");
-    return object_it->second;
-  }
-}
-
-std::unique_ptr<StreamReader> BinaryLoader::CreateInfeedStreamReader(
-    const std::string infeed_name) const {
-  LogContext ctx{"BinaryLoader::CreateInfeedStreamReader" + infeed_name};
-  return GetObjectReader(ObjectType::Feed, infeed_name);
-}
-
-bool BinaryLoader::ContainsObject(ObjectType type,
-                                  const std::string& name) const {
-  auto objects_it = objects_.find(type);
-  if (objects_it == objects_.end()) {
-    return false;
-  }
-  return objects_it->second.find(name) != objects_it->second.end();
-}
-
-std::unique_ptr<StreamReader> BinaryLoader::GetTensorStream(
-    const std::string& name) const {
-  LogContext ctx{"BinaryLoader::GetTensorStream" + name};
-  return GetObjectReader(ObjectType::Tensor, name);
-}
-
-std::set<std::string> BinaryLoader::GetObjectNames(ObjectType type) const {
-  std::set<std::string> names;
-  auto objects_it = objects_.find(type);
-  if (objects_it != objects_.end()) {
-    for (auto obj : objects_it->second) {
-      names.insert(obj.first);
-    }
-  }
-  return names;
 }
 
 }  // namespace ipu
