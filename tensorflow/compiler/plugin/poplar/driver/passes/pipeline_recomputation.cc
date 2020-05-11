@@ -111,6 +111,15 @@ StatusOr<HloComputation*> CloneStageCompWithStates(
       HloSharding::SingleTuple(stage->shape(), *optional_sharding));
   stage_comp->set_root_instruction(new_root, true);
 
+  // Make sure that the root tuple preserves the inplace information - any extra
+  // outputs had to insert copies if the stateful output was used inplace
+  // elsewhere so if the root instruction was inplace before, it can be inplace
+  // now. Also note that tuples support inplace even if the same operand appears
+  // twice (every occurrence but the first one adds a copy.)
+  if (IsLoweredInplace(root)) {
+    MakeUsedInplace(new_root);
+  }
+
   TF_RETURN_IF_ERROR(stage_comp->RemoveInstruction(root));
   return stage_comp;
 }
@@ -133,6 +142,8 @@ StatusOr<HloInstruction*> CreateRecomputationStage(
       TF_ASSIGN_OR_RETURN(HloInstruction * gte,
                           MakeGetTupleElementHlo(stage, tuple_index++));
       gte->set_sharding(sharding);
+      // Mark the new GTEs as inplace - it is guaranteed that they are unique.
+      MakeUsedInplace(gte);
 
       recomp_operands.push_back(gte);
       auto param = HloInstruction::CreateParameter(
