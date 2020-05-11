@@ -422,15 +422,6 @@ HloInstructionDescription::HloInstructionDescription(
       break;
     }
 
-    // Clamp is inplace on the `operand` operand (index 1).
-    case HloOpcode::kClamp:
-    // Select is inplace on the `on_true` operand (index 1).
-    case HloOpcode::kSelect: {
-      type_ = HloInstructionType::kInplaceReadWrite;
-      inplace_operands_ = {1};
-      break;
-    }
-
     // Inplace on all operands.
     case HloOpcode::kAllReduce:
     case HloOpcode::kConditional:
@@ -616,6 +607,13 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kRoundNearestAfz:
     case HloOpcode::kSelectAndScatter:
     case HloOpcode::kTupleSelect: {
+      type_ = HloInstructionType::kNotInplace;
+      break;
+    }
+
+    // TODO(T20398): Clamp and Select could be inplace on operand index 1.
+    case HloOpcode::kClamp:
+    case HloOpcode::kSelect: {
       type_ = HloInstructionType::kNotInplace;
       break;
     }
