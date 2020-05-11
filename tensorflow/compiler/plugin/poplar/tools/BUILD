@@ -61,6 +61,8 @@ genrule(
         ":libpoplar_executable_runner.so",
         ":PoplarExecutableRunner",
         ":PoplarBinaryReader",
+        "@local_config_poplar//poplar:popsec_libs",
+        "@local_config_poplar//poplar:popsec_headers",
         "@jsoncpp_git//:jsoncpp",
         "@jsoncpp_git//:headers",
     ] + glob(["poplar_*.h"]),
@@ -77,11 +79,12 @@ genrule(
         for f in $(SRCS); do
             dst=$$f
             case $$dst in
-                *.so|*.a)
+                *.so|*.a|*.so.*)
                     dst=$$dst_lib
                     ;;
-                *.h)
+                *.h|*.hpp)
                     dst=$${dst/*jsoncpp_git/$$dst_headers}
+                    dst=$${dst/*popsec\/include/$$dst_headers}
                     dst=$${dst/tensorflow/$$dst_headers\/tensorflow}
                     mkdir -p `dirname $$dst`
                     ;;
