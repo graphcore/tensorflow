@@ -107,11 +107,10 @@ def embedding_lookup(params,
         mask_max = indices < max_idx
         mask_min = indices >= min_idx
         mask = math_ops.logical_and(mask_max, mask_min)
+        # TODO(T20398): use select rather than cast and multiply.
+        mask = math_ops.cast(mask, x.dtype)
         mask = array_ops.expand_dims(mask, 1)
-        return array_ops.where_v2(mask,
-                                  x,
-                                  array_ops.constant(0, x.dtype),
-                                  name=name + "_mask")
+        return x * mask
 
       table_shape = table.shape.as_list()
       assert len(table_shape) == 2
