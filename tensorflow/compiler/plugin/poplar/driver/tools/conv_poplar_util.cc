@@ -18,29 +18,19 @@ limitations under the License.
 
 namespace xla {
 namespace poplarplugin {
+namespace {
 
-StatusOr<poplin::ConvParams> GetConvolutionParameters(
-    const HloInstruction* inst, int64 input_index, int64 kernel_index) {
-  const Shape& input = inst->operand(input_index)->shape();
-  const Shape& kernel = inst->operand(kernel_index)->shape();
-  const Shape& output = inst->shape();
-
-  const Window& window = GetConvolutionWindow(inst);
-
-  TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(input));
-
-  std::vector<size_t> input_dims = PoplarShapeFromXlaShape(input);
-  std::vector<size_t> kernel_dims = PoplarShapeFromXlaShape(kernel);
-  std::vector<size_t> output_dims = PoplarShapeFromXlaShape(output);
-
-  const auto& dims = GetConvolutionDims(inst);
+StatusOr<poplin::ConvParams> GetConvolutionParametersCore(
+    const HloInstruction* inst, const std::vector<size_t>& input_dims,
+    const std::vector<size_t>& kernel_dims,
+    const std::vector<size_t>& output_dims, int64 n_g,
+    const xla::ConvolutionDimensionNumbers& dims, const Window& window,
+    poplar::Type dtype) {
   unsigned int n_b = input_dims[dims.input_batch_dimension()];
   unsigned int n_i = input_dims[dims.input_feature_dimension()];
   unsigned int n_j = kernel_dims[dims.kernel_input_feature_dimension()];
   unsigned int n_o = output_dims[dims.output_feature_dimension()];
   unsigned int n_p = kernel_dims[dims.kernel_output_feature_dimension()];
-
-  unsigned int n_g = GetFeatureGroupCount(inst);
 
   if ((n_i >= n_j) && (n_o >= n_p)) {
     // Forward and backward passes
@@ -108,6 +98,46 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
                             {zeros, zeros, w_s, zeros, zeros});
 
   return params;
+}
+
+}  // namespace
+
+StatusOr<poplin::ConvParams> GetConvolutionParameters(
+    const HloInstruction* inst, int64 input_index, int64 kernel_index) {
+  const Shape& input = inst->operand(input_index)->shape();
+  const Shape& kernel = inst->operand(kernel_index)->shape();
+  const Shape& output = inst->shape();
+
+  TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(input));
+
+  std::vector<size_t> input_dims = PoplarShapeFromXlaShape(input);
+  std::vector<size_t> kernel_dims = PoplarShapeFromXlaShape(kernel);
+  std::vector<size_t> output_dims = PoplarShapeFromXlaShape(output);
+
+  const Window& window = GetConvolutionWindow(inst);
+  unsigned int n_g = GetFeatureGroupCount(inst);
+  const auto& dims = GetConvolutionDims(inst);
+
+  return GetConvolutionParametersCore(inst, input_dims, kernel_dims,
+                                      output_dims, n_g, dims, window, dtype);
+}
+
+StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
+    const HloInstruction* inst, const std::vector<size_t>& conv_input_shape,
+    const std::vector<size_t>& conv_output_shape) {
+  const Shape& kernel = inst->operand(0)->shape();
+  const Window& window = GetConvolutionWindow(inst);
+
+  TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(kernel));
+
+  std::vector<size_t> kernel_shape = PoplarShapeFromXlaShape(kernel);
+
+  const auto& dims = GetConvolutionDims(inst);
+  unsigned int n_g = GetFeatureGroupCount(inst);
+
+  return GetConvolutionParametersCore(inst, conv_input_shape, kernel_shape,
+                                      conv_output_shape, n_g, dims, window,
+                                      dtype);
 }
 
 poplar::Tensor ShuffleConvolutionInputToPoplar(
@@ -224,6 +254,43 @@ poplar::Tensor ShuffleConvolutionOutputToTensorflow(
     const HloInstruction* inst, const poplar::Tensor& tensor) {
   const ConvolutionDimensionNumbers& d(GetConvolutionDims(inst));
   return ShuffleConvolutionOutputToTensorflow(d, tensor);
+}
+
+// This function operates on the poplibs format weights (GOI...)
+poplar::Tensor AddGroupsDimensionToWeights(const poplin::ConvParams& p,
+                                           const poplar::Tensor& t,
+                                           bool flipped) {
+  poplar::Tensor out = t;
+
+  unsigned int out_dim = flipped ? 1 : 0;
+  unsigned int in_dim = 1 - out_dim;
+
+  if (p.getNumConvGroups() == 1) {
+    // Non-grouped case
+    return out.reshapePartial(0, 0, {1});
+  } else {
+    unsigned int chan_div[2];
+    chan_div[in_dim] = out.dim(in_dim) / p.getNumInputChansPerConvGroup();
+    chan_div[out_dim] = out.dim(out_dim) / p.getNumOutputChansPerConvGroup();
+
+    // OI... ->(GO)(GI)...
+    out = out.reshapePartial(0, 2,
+                             {chan_div[0], out.dim(0) / chan_div[0],
+                              chan_div[1], out.dim(1) / chan_div[1]});
+
+    // (GO)(GI)... -> (GG)OI...
+    out = out.dimShufflePartial({2}, {1});
+
+    // (GG)OI... -> GOI...
+    return out.reshapePartial(0, 2, {out.dim(0) * out.dim(1)});
+  }
+}
+
+// This function operates on the poplibs format weights (GOI...)
+poplar::Tensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
+                                                const poplar::Tensor& t) {
+  poplar::Tensor out = t;
+  return out.reshapePartial(0, 2, {out.dim(0) * out.dim(1)});
 }
 
 }  // namespace poplarplugin

@@ -15,6 +15,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CONV_POPLAR_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CONV_POPLAR_UTIL_H_
 
+#include <vector>
+
 #include <poplin/Convolution.hpp>
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
@@ -23,6 +25,10 @@ namespace poplarplugin {
 
 StatusOr<poplin::ConvParams> GetConvolutionParameters(
     const HloInstruction* operand_op, int64 input_index, int64 kernel_index);
+
+StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
+    const HloInstruction* inst, const std::vector<size_t>& conv_input_shape,
+    const std::vector<size_t>& conv_output_shape);
 
 poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
                                                const poplar::Tensor& tensor);
@@ -62,6 +68,12 @@ poplar::Tensor ShuffleConvolutionOutputToTensorflow(
 poplar::Tensor ShuffleConvolutionOutputToTensorflow(
     const ConvolutionDimensionNumbers& dims, const poplar::Tensor& tensor);
 
+poplar::Tensor AddGroupsDimensionToWeights(const poplin::ConvParams& p,
+                                           const poplar::Tensor& t,
+                                           bool flipped);
+
+poplar::Tensor RemoveGroupsDimensionFromWeights(const poplin::ConvParams& p,
+                                                const poplar::Tensor& t);
 }  // namespace poplarplugin
 }  // namespace xla
 
