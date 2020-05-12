@@ -377,7 +377,6 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
   const std::string debug_prefix = GetDebugName(inst);
 
   // Created a cached dot.
-  using namespace poputil::graphfn;
   auto func = [&graph, &res, &output_shape, dot_dims, dot_type_s, &opts,
                debug_prefix](std::vector<poplar::Tensor>& args,
                              poplar::program::Sequence& prog) {
@@ -426,8 +425,9 @@ StatusOr<poplar::program::Program> CreateMatMulForDotOp(
 
   poplar::Tensor output;
   std::vector<poplar::Tensor> args = {arg_lhs, arg_rhs, output};
-  Signature sig = {input(arg_lhs, "lhs"), input(arg_rhs, "rhs"),
-                   created("output")};
+  poputil::graphfn::Signature sig = {poputil::graphfn::input(arg_lhs, "lhs"),
+                                     poputil::graphfn::input(arg_rhs, "rhs"),
+                                     poputil::graphfn::created("output")};
   TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq, func,
                                                    sig, args, {0, 1}));
 

@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/generic_graph_caching.h"
 
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -34,8 +36,6 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 namespace generic_graph_caching {
-
-using namespace poputil::graphfn;
 
 size_t GenericGraphCache::HloInstructionHash::operator()(
     const HloInstruction* inst) const {
@@ -84,7 +84,8 @@ bool GenericGraphCache::HloInstructionEquals::operator()(
 Status GenericGraphCache::ExecuteCached(
     const HloInstruction* inst, poplar::Graph& graph,
     CompilerResources& resources, poplar::program::Sequence& seq,
-    PoplarFunction func, Signature signature, std::vector<poplar::Tensor>& args,
+    PoplarFunction func, poputil::graphfn::Signature signature,
+    std::vector<poplar::Tensor>& args,
     const absl::flat_hash_set<int64>& allocating_indices,
     const absl::flat_hash_map<int64, int64>& layout_dependencies) {
   // Check if we have already executed this instruction.
@@ -96,8 +97,9 @@ Status GenericGraphCache::ExecuteCached(
     // Get the allocation order.
     std::list<int64> alloc_order;
     for (size_t sig_idx = 0; sig_idx != signature.size(); ++sig_idx) {
-      ArgSig& sig = signature[sig_idx];
-      if (sig.type == ArgType::InputArg || sig.type == ArgType::InOutArg) {
+      poputil::graphfn::ArgSig& sig = signature[sig_idx];
+      if (sig.type == poputil::graphfn::ArgType::InputArg ||
+          sig.type == poputil::graphfn::ArgType::InOutArg) {
         if (layout_dependencies.contains(sig_idx)) {
           alloc_order.push_back(sig_idx);
         } else {
@@ -112,15 +114,15 @@ Status GenericGraphCache::ExecuteCached(
     TensorMap local_map;
     for (int64 arg_idx : alloc_order) {
       const HloInstruction* operand = inst->operand(arg_idx);
-      ArgSig& sig = signature[arg_idx];
+      poputil::graphfn::ArgSig& sig = signature[arg_idx];
       poplar::Tensor input = sig.similarTensor;
       bool needs_reallocating = false;
       switch (sig.type) {
-        case ArgType::InOutArg: {
+        case poputil::graphfn::ArgType::InOutArg: {
           needs_reallocating = !input.isParallelWriteable();
           break;
         }
-        case ArgType::InputArg:
+        case poputil::graphfn::ArgType::InputArg:
         default: {
           needs_reallocating = input.containsAliases();
           break;
@@ -169,7 +171,7 @@ Status GenericGraphCache::ExecuteCached(
     }
 
     // Create the function.
-    auto void_func = VoidFunction(graph, signature, func);
+    auto void_func = poputil::graphfn::VoidFunction(graph, signature, func);
     void_func(args, seq);
     table_.insert({inst, std::move(void_func)});
   }
