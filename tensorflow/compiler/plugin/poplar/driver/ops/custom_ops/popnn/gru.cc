@@ -150,7 +150,6 @@ class GRULayerFwdOp : public PoplarOpDef {
     auto gru_inst = Cast<HloRNNInstruction>(inst);
     bool is_training = gru_inst->is_training();
 
-    using namespace poputil::graphfn;
     const std::string debug_prefix = GetDebugName(inst);
     auto func = [&graph, &res, gru_params, gru_opts, is_training, input_size,
                  output_size, debug_prefix](std::vector<poplar::Tensor>& args,
@@ -177,15 +176,16 @@ class GRULayerFwdOp : public PoplarOpDef {
     std::vector<poplar::Tensor> args = {arg_input_seq, arg_input_state,
                                         arg_kernel,    arg_biases,
                                         output,        output_state};
-    Signature signature = {input(arg_input_seq, "input_seq"),
-                           input(arg_input_state, "input_state"),
-                           input(arg_kernel, "kernel"),
-                           input(arg_biases, "biases"),
-                           created("output"),
-                           created("output_state")};
+    poputil::graphfn::Signature signature = {
+        poputil::graphfn::input(arg_input_seq, "input_seq"),
+        poputil::graphfn::input(arg_input_state, "input_state"),
+        poputil::graphfn::input(arg_kernel, "kernel"),
+        poputil::graphfn::input(arg_biases, "biases"),
+        poputil::graphfn::created("output"),
+        poputil::graphfn::created("output_state")};
     if (is_training) {
       args.push_back(intermediates);
-      signature.push_back(created("intermediates"));
+      signature.push_back(poputil::graphfn::created("intermediates"));
     }
 
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(
@@ -251,7 +251,6 @@ class GRULayerBwdOp : public PoplarOpDef {
     auto input_size = ShapeUtil::GetDimension(inst->operand(0)->shape(), 2);
     auto output_size = ShapeUtil::GetDimension(inst->operand(1)->shape(), 1);
 
-    using namespace poputil::graphfn;
     const std::string debug_prefix = GetDebugName(inst);
     auto func = [&graph, &res, gru_params, gru_opts, input_size, output_size,
                  debug_prefix](std::vector<poplar::Tensor>& args,
@@ -293,20 +292,21 @@ class GRULayerBwdOp : public PoplarOpDef {
         arg_intermediates, arg_output_backprop,  arg_output_state_backprop,
         input_backprop,    input_state_backprop, kernel_backprop,
         biases_backprop};
-    Signature signature = {
-        input(arg_input_seq, "input_seq"),
-        input(arg_input_state, "input_state"),
-        input(arg_kernel, "kernel"),
-        input(arg_biases, "biases"),
-        input(arg_output, "output"),
-        input(arg_output_state, "output_state"),
-        input(arg_intermediates, "intermediates"),
-        input(arg_output_backprop, "output_backprop"),
-        input(arg_output_state_backprop, "output_state_backprop"),
-        created("input_backprop"),
-        created("input_state_backprop"),
-        created("kernel_backprop"),
-        created("biases_backprop")};
+    poputil::graphfn::Signature signature = {
+        poputil::graphfn::input(arg_input_seq, "input_seq"),
+        poputil::graphfn::input(arg_input_state, "input_state"),
+        poputil::graphfn::input(arg_kernel, "kernel"),
+        poputil::graphfn::input(arg_biases, "biases"),
+        poputil::graphfn::input(arg_output, "output"),
+        poputil::graphfn::input(arg_output_state, "output_state"),
+        poputil::graphfn::input(arg_intermediates, "intermediates"),
+        poputil::graphfn::input(arg_output_backprop, "output_backprop"),
+        poputil::graphfn::input(arg_output_state_backprop,
+                                "output_state_backprop"),
+        poputil::graphfn::created("input_backprop"),
+        poputil::graphfn::created("input_state_backprop"),
+        poputil::graphfn::created("kernel_backprop"),
+        poputil::graphfn::created("biases_backprop")};
 
     TF_RETURN_IF_ERROR(res.graph_cache.ExecuteCached(inst, graph, res, seq,
                                                      func, signature, args));

@@ -68,9 +68,11 @@ void CreateCachedBwdWeights(poplar::Graph& graph, CompilerResources& res,
     f(args, prog);
     return;
   }
-  using namespace poputil::graphfn;
-  auto f = VoidFunction(
-      graph, {input(weights, "weights"), output(bwd_weights, "bwd_weights")},
+
+  auto f = poputil::graphfn::VoidFunction(
+      graph,
+      {poputil::graphfn::input(weights, "weights"),
+       poputil::graphfn::output(bwd_weights, "bwd_weights")},
       [&](std::vector<poplar::Tensor>& args, poplar::program::Sequence& prog) {
         poplin::weightsTransposeChansFlipXY(graph, args[0], args[1], prog,
                                             debug_prefix);
@@ -185,9 +187,10 @@ StatusOr<poplar::Tensor> DoCachedConvolution(
     }
   }
 
-  using namespace poputil::graphfn;
-  auto f = TensorFunction(
-      graph, {input(sig_in, "in"), input(sig_weights, "weights")},
+  auto f = poputil::graphfn::TensorFunction(
+      graph,
+      {poputil::graphfn::input(sig_in, "in"),
+       poputil::graphfn::input(sig_weights, "weights")},
       [&](std::vector<poplar::Tensor>& args, poplar::program::Sequence& prog) {
         return convolution(graph, args[0], args[1], params,
                            transpose_and_flip_weights, prog, debug_prefix, opts,
