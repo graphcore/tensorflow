@@ -29,6 +29,7 @@ from tensorflow.python.framework.errors_impl import NotFoundError
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 from tensorflow.python.keras import callbacks as cbks
@@ -941,8 +942,8 @@ class Model(_IpuModelBase):
     def inference_body(inputs):
       x = main_body(inputs)
 
-      outfeed = outfeed_queue.enqueue([x])
-      return outfeed
+      outfeed_queue.enqueue([x])
+      return []
 
     def training_body(inputs, targets):
 
@@ -951,7 +952,7 @@ class Model(_IpuModelBase):
 
       l = self._add_loss(targets)
 
-      outfeed = outfeed_queue.enqueue(l)
+      outfeed_queue.enqueue(l)
 
       if not self.trainable_weights:
         raise ValueError("Model must have at least one trainable parameter.")
@@ -970,13 +971,12 @@ class Model(_IpuModelBase):
         grads_and_vars = opt.compute_gradients(l[0], self.trainable_variables)
         opt.apply_gradients(grads_and_vars)
 
-      return outfeed
+      return []
 
-    # The pipeline stages, a set of feed forward functions.
-    if mode == ModeKeys.PREDICT:
-      body = inference_body
-    else:
-      body = training_body
+    def body(*args):
+      fn = functional_ops.function(inference_body if mode ==
+                                   ModeKeys.PREDICT else training_body)
+      return fn(*args)
 
     result = loops.repeat(int(repeat_count * self.accumulation_count),
                           body,

@@ -620,31 +620,31 @@ class IPUModelTest(test.TestCase):
       evts = ipu.ops.summary_ops.get_ipu_reports()
       self.assertEqual(1, _count_host_to_device_events(evts))
 
-  # @test_util.run_v2_only  #----- ERROR causing poplar crash
-  # def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
-  #   strategy = ipu.ipu_strategy.IPUStrategy()
-  #   with strategy.scope():
-  #     # Clear old reports
-  #     ipu.ops.summary_ops.get_ipu_reports()
+  @test_util.run_v2_only
+  def testFitWithPiecewiseConstantDecayLearningRateSchedule(self):
+    strategy = ipu.ipu_strategy.IPUStrategy()
+    with strategy.scope():
+      # Clear old reports
+      ipu.ops.summary_ops.get_ipu_reports()
 
-  #     m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
 
-  #     cfg = ipu.utils.create_ipu_config(profiling=True)
-  #     cfg = ipu.utils.auto_select_ipus(cfg, 1)
-  #     ipu.utils.configure_ipu_system(cfg)
+      cfg = ipu.utils.create_ipu_config(profiling=True)
+      cfg = ipu.utils.auto_select_ipus(cfg, 1)
+      ipu.utils.configure_ipu_system(cfg)
 
-  #     lrs = keras.optimizer_v2.learning_rate_schedule.PiecewiseConstantDecay(
-  #         boundaries=[8, 16], values=[0.001, 0.0005, 0.0001])
-  #     opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=lrs)
-  #     m.compile(opt, loss='mse')
+      lrs = keras.optimizer_v2.learning_rate_schedule.PiecewiseConstantDecay(
+          boundaries=[8, 16], values=[0.001, 0.0005, 0.0001])
+      opt = keras.optimizer_v2.gradient_descent.SGD(learning_rate=lrs)
+      m.compile(opt, loss='mse')
 
-  #     # Fit the weights to the dataset
-  #     m.fit(test_dataset(length=72), epochs=2)
+      # Fit the weights to the dataset
+      m.fit(test_dataset(length=72), epochs=2)
 
-  #     # Ensure that we are not downloading the weights each time even though
-  #     # the 'learning rate' hyper is being updated
-  #     evts = ipu.ops.summary_ops.get_ipu_reports()
-  #     self.assertEqual(1, _count_host_to_device_events(evts))
+      # Ensure that we are not downloading the weights each time even though
+      # the 'learning rate' hyper is being updated
+      evts = ipu.ops.summary_ops.get_ipu_reports()
+      self.assertEqual(1, _count_host_to_device_events(evts))
 
   @test_util.run_v2_only
   def testFitWithMetrics(self):
