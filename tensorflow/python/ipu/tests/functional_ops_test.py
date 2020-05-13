@@ -87,6 +87,9 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       report.assert_total_tile_memory(954492)
       report.assert_max_tile_memory(1690)
 
+      # Entry computation and outlined one.
+      self.assertEqual(len(report.tensor_map.computation_names()), 2)
+
   @test_util.deprecated_graph_mode_only
   def testFunctionTraining(self):
     with tu.ipu_session() as sess:
@@ -157,6 +160,9 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       report.assert_all_compute_sets_and_list(ok)
       report.assert_total_tile_memory(1193804)
       report.assert_max_tile_memory(4108)
+
+      # Entry computastion and 2 outlined ones.
+      self.assertEqual(len(report.tensor_map.computation_names()), 3)
 
   @test_util.deprecated_graph_mode_only
   def testFunctionSerializedLookup(self):
@@ -234,6 +240,9 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       report.assert_total_tile_memory(10980622)
       report.assert_max_tile_memory(9888)
 
+      # Main computation and outlined serialized one.
+      self.assertEqual(len(report.tensor_map.computation_names()), 2)
+
   @test_util.deprecated_graph_mode_only
   def testFunctionsNoMatch(self):
     with tu.ipu_session() as sess:
@@ -266,11 +275,49 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       # Two non-linearties, as one of them has a different type.
       ok = [
           'Relu/custom-call/Nonlinearity',
-          'Relu/custom-call.2/Nonlinearity',
+          'Relu/custom-call.*/Nonlinearity',
           '__seed',
           'Copy_',
       ]
       report.assert_all_compute_sets_and_list(ok)
+
+      # Main computation (including inlined fp32 one, and the fp16 outlined).
+      self.assertEqual(len(report.tensor_map.computation_names()), 2)
+
+  @test_util.deprecated_graph_mode_only
+  def testSingleFunctionElided(self):
+    with tu.ipu_session() as sess:
+
+      @ipu.function
+      def func(a):
+        return nn.relu(a)
+
+      def body(a):
+        return func(a)
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float16, [64, 64])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(body, inputs=[a])
+
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      report = tu.ReportJSON(self, sess)
+      result = sess.run(res, {a: np.ones(a.shape)})
+      self.assertAllClose(result[0], np.broadcast_to(1.0, [64, 64]))
+
+      report.parse_log()
+
+      ok = [
+          'Relu/custom-call*/Nonlinearity',
+          '__seed',
+      ]
+      report.assert_all_compute_sets_and_list(ok)
+
+      # Function inlined into the entry computation.
+      self.assertEqual(len(report.tensor_map.computation_names()), 1)
 
 
 if __name__ == "__main__":
