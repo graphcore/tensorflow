@@ -18,7 +18,6 @@ Functional operators
 """
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
-
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import func_graph as func_graph_module
@@ -68,6 +67,12 @@ def function(func, name=None):
             to_apply=util.create_new_tf_function(func_graph),
             Tout=func_graph.output_types,
             output_shapes=func_graph.output_shapes)
+
+        # pack_sequence_as requires a list of Tensors, but the gen_ operation
+        # returns an Operation under some circumstances (probably when that
+        # list would be empty)
+        if isinstance(outputs, ops.Operation):
+          outputs = outputs.outputs
 
       return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
                                                 outputs)

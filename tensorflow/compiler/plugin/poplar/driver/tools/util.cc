@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/shape_inference.h"
 #include "tensorflow/compiler/xla/shape_util.h"
+#include "tensorflow/core/lib/hash/hash.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -633,6 +634,23 @@ Shape GetConcatenatedShape(std::vector<HloInstruction*> insts,
     LOG(FATAL) << "Failed concatentating shapes together.";
   }
   return statusor.ValueOrDie();
+}
+
+size_t HloComputationHash::operator()(const HloComputation* comp) const {
+  // A computation hash is the hash of all its parameters and its root
+  // instruction. We are reluctant to hash all the instructions as the order
+  // might not be the same but the instructions still represent the same
+  // computation.
+  size_t hash = 7;
+  for (HloInstruction* param : comp->parameter_instructions()) {
+    hash = tensorflow::Hash64Combine(hash, param->Hash());
+  }
+  return tensorflow::Hash64Combine(hash, comp->root_instruction()->Hash());
+}
+
+bool HloComputationEquals::operator()(const HloComputation* a,
+                                      const HloComputation* b) const {
+  return a->Equal(*b, false, true);
 }
 
 }  // namespace poplarplugin

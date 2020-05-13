@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/computation_flattener.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/call_inliner.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -27,56 +26,84 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-namespace {
-StatusOr<bool> ShouldInlineComputation(const HloInstruction* inst) {
-  if (inst->opcode() != HloOpcode::kCall) {
-    return false;
-  }
-  TF_ASSIGN_OR_RETURN(PoplarBackendConfig config,
-                      inst->backend_config<PoplarBackendConfig>());
-
-  switch (config.call_config().type()) {
-    case PoplarBackendConfig::CallConfig::Call: {
-      // Always inline default call type.
-      return true;
-    }
-    case PoplarBackendConfig::CallConfig::Function: {
-      // Inline function calls if they have side effect.
-      const bool has_side_effect = inst->to_apply()->HasSideEffect();
-      if (has_side_effect) {
-        LOG(INFO)
-            << "Inlining function " << inst->to_apply()->name()
-            << " because it contains stateful operations which means that "
-               "the Poplar function cannot be reused.";
-      }
-      return has_side_effect;
-    }
-    default: { return false; }
-  }
-}
-
-// If this computation has only one caller, and the callsite is a kCall
-// operation, then merge with the calling computation.
-Status FlattenNode(const CallGraphNode& node) {
+Status ComputationFlattener::FlattenNode(const CallGraphNode& node) {
   if (node.caller_callsites().size() == 1 &&
       !IsPopOpsFusion(node.computation())) {
     CallSite call_site = node.caller_callsites()[0];
-    TF_ASSIGN_OR_RETURN(bool inline_computation,
-                        ShouldInlineComputation(call_site.instruction()));
+    HloInstruction* call_op = call_site.instruction();
+
+    if (call_op->opcode() != HloOpcode::kCall) {
+      return Status::OK();
+    }
+    TF_ASSIGN_OR_RETURN(PoplarBackendConfig config,
+                        call_op->backend_config<PoplarBackendConfig>());
+
+    bool inline_computation = false;
+    switch (config.call_config().type()) {
+      case PoplarBackendConfig::CallConfig::Call: {
+        // Always inline default call type.
+        inline_computation = true;
+        break;
+      }
+      case PoplarBackendConfig::CallConfig::Function: {
+        if (all_function_comps_.count(node.computation()) == 1) {
+          // Inline functions if they are called from a single site.
+          VLOG(1) << "Inlining function " << node.computation()->name()
+                  << " because it is only called from one call site.";
+          inline_computation = true;
+
+        } else if (node.computation()->HasSideEffect()) {
+          // Inline function calls if they have side effect.
+          LOG(INFO)
+              << "Inlining function " << node.computation()->name()
+              << " because it contains stateful operations which means that "
+                 "the Poplar function cannot be reused.";
+          inline_computation = true;
+        }
+        break;
+      }
+      default:
+        break;
+    }
 
     if (inline_computation) {
       TF_ASSIGN_OR_RETURN(CallInliner::InlinedInstructionMap map,
-                          CallInliner::Inline(call_site.instruction()));
+                          CallInliner::Inline(call_op));
     }
   }
   return Status::OK();
 }
 
-}  // namespace
+// Construct a set of Function computations for equality comparison
+Status ComputationFlattener::GenerateFunctionSet(const CallGraphNode& node) {
+  if (node.caller_callsites().size() == 1 &&
+      !IsPopOpsFusion(node.computation())) {
+    CallSite call_site = node.caller_callsites()[0];
+    const HloInstruction* caller = call_site.instruction();
+
+    if (caller->opcode() != HloOpcode::kCall) {
+      return Status::OK();
+    }
+
+    TF_ASSIGN_OR_RETURN(PoplarBackendConfig config,
+                        caller->backend_config<PoplarBackendConfig>());
+
+    auto type = config.call_config().type();
+    if (type == PoplarBackendConfig::CallConfig::Function) {
+      all_function_comps_.insert(node.computation());
+    }
+  }
+
+  return Status::OK();
+}
 
 StatusOr<bool> ComputationFlattener::Run(HloModule* module) {
   std::unique_ptr<CallGraph> call_graph = CallGraph::Build(module);
-  TF_RETURN_IF_ERROR(call_graph->VisitNodes(FlattenNode));
+
+  TF_RETURN_IF_ERROR(call_graph->VisitNodes(
+      [this](const CallGraphNode& node) { return GenerateFunctionSet(node); }));
+  TF_RETURN_IF_ERROR(call_graph->VisitNodes(
+      [this](const CallGraphNode& node) { return FlattenNode(node); }));
   return true;
 }
 

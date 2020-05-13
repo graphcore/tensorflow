@@ -41,13 +41,6 @@ class SubcomputationGraphCache {
       const HloComputation* computation);
 
  private:
-  // Helper structs for the unordered map.
-  struct HloComputationHash {
-    size_t operator()(const HloComputation* comp) const;
-  };
-  struct HloComputationEquals {
-    bool operator()(const HloComputation* a, const HloComputation* b) const;
-  };
   std::unordered_map<const HloComputation*,
                      std::shared_ptr<const DeferredVisitor>, HloComputationHash,
                      HloComputationEquals>

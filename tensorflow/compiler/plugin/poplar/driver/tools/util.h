@@ -226,6 +226,14 @@ std::vector<unsigned> ToUnsignedVector(const std::vector<Input>& input) {
   return results;
 }
 
+// Helper structs for hashing and comparing computations.
+struct HloComputationHash {
+  size_t operator()(const HloComputation* comp) const;
+};
+struct HloComputationEquals {
+  bool operator()(const HloComputation* a, const HloComputation* b) const;
+};
+
 }  // namespace poplarplugin
 }  // namespace xla
 
