@@ -54,7 +54,7 @@ namespace tensorflow {
 
 namespace {
 
-static constexpr int32 kApiLevel = 0;
+static constexpr int32 kApiLevel = 1;
 
 // From kernels/datatsteam/feeds.cc
 void XlaShapesFromAttr(OpKernelConstruction* ctx,
@@ -137,15 +137,16 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
         library_path.c_str(), &library.handle, &library.buffer, &library.size));
 
     TF_ASSIGN_OR_DEFAULT(const void* api_level_ptr,
-                         GetSymbolAddress(library, op_name + "_api_level"),
+                         GetSymbolAddress(library, "custom_op_api_level"),
                          nullptr);
 
     int32 api_level =
         api_level_ptr ? *reinterpret_cast<const int32*>(api_level_ptr) : 0;
+
     if (api_level != kApiLevel) {
       return xla::InternalErrorStrCat("Api level of module ", library_path,
-                                      " is ", api_level, ", expected ",
-                                      kApiLevel,
+                                      ", op name ", op_name, " is ", api_level,
+                                      ", expected ", kApiLevel,
                                       ". See section `API Level Versioning` in "
                                       "documentation for more details.");
     }

@@ -106,7 +106,7 @@ must have the following signature:
   extern "C"
   void Build_metadata(std::vector<std::int64_t>& allocating_indices,
     std::uint32_t& num_inplace, bool& is_elementwise,
-    std::uint32_t num_inputs)
+    bool& is_stateless, std::uint32_t num_inputs)
 
 The arguments are:
 
@@ -118,6 +118,9 @@ The arguments are:
   ``num_inplace`` of the inputs will be considered to be in-place.
 
 * ``is_elementwise``: indicates that this operation is element-wise.
+
+* ``is_stateless``: indicates that this operation is stateless. Custom ops
+  are stateful by default.
 
 * ``num_inputs``: indicates how many inputs are on the operation.
 
@@ -205,6 +208,15 @@ the partial differential with respect to only one of the forward pass inputs.
 The specific input will be given by the ``input_grad_index`` input of the call
 to the sharded object ``Build_grad`` function.
 
+Stateless operations
+____________________
+
+If an operation's outputs depend only on the value of their inputs, and not any
+internally stored state, then the operation is said to be stateless. Marking an
+operation as stateless in the metadata function will allow the Tensorflow backend
+to perform optimizations which would otherwise be disallowed, such as common
+code removal.
+
 Example
 _______
 
@@ -277,13 +289,19 @@ Python operators which are supported in the function are ``+``, ``-``, ``*``, an
 API Level Versioning
 ~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: C++
 
-  extern "C" int32_t Build_api_level;
+.. literalinclude:: custom_rotate_op.cc
+  :language: C++
+  :start-at: // Export the API level symbol
+  :end-at: }
 
-This is reserved for the future changes in API which may render current binary
-modules incompatible with current code. Loader checks its value and refuses to
-load modules with different API level.
+You must include the code above in your source code. Custom op loader checks
+API level of custom op and refuses to load if it does not match current api
+level. Different API level normally means that it's binary incompatible with
+previous version.
 
-Current default value is 0, so it's not necessary to specify api_level of 0,
-but this might change in the future.
+Changes in API Level
+____________________
+
+API level:
+  1. ``is_stateless`` has been added to metadata function.

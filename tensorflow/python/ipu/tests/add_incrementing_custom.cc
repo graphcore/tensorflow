@@ -22,6 +22,11 @@ limitations under the License.
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
+
+extern "C" {
+int32_t custom_op_api_level = 1;
+}
+
 namespace pe = popops::expr;
 
 // Custom poplar kernel.

@@ -18,6 +18,10 @@ limitations under the License.
 #include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 
+extern "C" {
+int32_t custom_op_api_level = 1;
+}
+
 extern "C" void Callback(const std::vector<void*>& data,
                          const std::vector<uint32_t>& number_of_elements,
                          std::vector<void*>& outputs, const std::string& name) {

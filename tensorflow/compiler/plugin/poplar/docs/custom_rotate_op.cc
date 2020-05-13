@@ -21,9 +21,14 @@ limitations under the License.
 #include <poputil/VertexTemplates.hpp>
 #include <poputil/exceptions.hpp>
 
+// Export the API level symbol
+extern "C" {
+int32_t custom_op_api_level = 1;
+}
+
 extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
                                std::uint32_t& num_inplace, bool& is_elementwise,
-                               std::uint32_t num_inputs) {
+                               bool& is_stateless, std::uint32_t num_inputs) {
   allocating_indices.clear();
   num_inplace = 0;
   is_elementwise = true;
