@@ -38,21 +38,22 @@ HloUserOpInstruction::HloUserOpInstruction(
       is_gradient_(is_gradient),
       partial_derivative_index_(partial_derivative_index),
       is_user_read_write_(is_user_read_write) {
-  set_custom_call_has_side_effect(true);
   num_inputs_ = inputs.size();
 
   // If there is a metadata function, call it to populate the metadata_ struct.
+  bool stateless = false;
   if (metadata_function_ptr_ != nullptr) {
     void (*metadataSignature)(std::vector<std::int64_t> & allocating_indices,
                               std::uint32_t & num_inplace, bool& is_elementwise,
-                              std::uint32_t num_inputs);
+                              bool& is_stateless, std::uint32_t num_inputs);
 
     metadataSignature =
         reinterpret_cast<decltype(metadataSignature)>(metadata_function_ptr_);
 
     metadataSignature(metadata_.allocating_indices_, metadata_.num_inplace_,
-                      metadata_.is_elementwise_, num_inputs_);
+                      metadata_.is_elementwise_, stateless, num_inputs_);
   }
+  set_custom_call_has_side_effect(!stateless);
 }
 
 absl::flat_hash_set<int64> HloUserOpInstruction::AllocatingIndices() const {

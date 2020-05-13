@@ -138,6 +138,60 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(found, 2)
       self.assertAllEqual(np.full([128], 2.0), res[0])
 
+  def runCustomUserOpWithUnusedOutput(self, op_name, ok):
+    with tu.ipu_session() as sess:
+      cwd = os.getcwd()
+      outputs = {
+          "output_types": [dtypes.float32],
+          "output_shapes": [tensor_shape.TensorShape([128])],
+      }
+
+      lib_path = os.path.join(
+          cwd,
+          "tensorflow/python/ipu/libadd_incrementing_custom_with_metadata.so")
+
+      def my_net(x, y):
+        ipu.custom_ops.precompiled_user_op([x, y],
+                                           lib_path,
+                                           op_name=op_name,
+                                           outs=outputs)
+        return [x + y]
+
+      with ipu.scopes.ipu_scope('/device:IPU:0'):
+        x = array_ops.placeholder(np.float32, shape=[128])
+        y = array_ops.placeholder(np.float32, shape=[128])
+
+        model = ipu.ipu_compiler.compile(my_net, inputs=[x, y])
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      sess.run(variables.global_variables_initializer())
+      sess.run(model, {
+          x: np.ones([128]),
+          y: np.ones([128]),
+      })
+
+      report.parse_log()
+      report.assert_all_compute_sets_and_list(ok)
+
+  @test_util.deprecated_graph_mode_only
+  def testStatefulUserOp(self):
+    ok = [
+        '__seed*',
+        'add/add.*/Op/Add',
+        'Stateful/Op/Add',
+    ]
+    return self.runCustomUserOpWithUnusedOutput("Stateful", ok)
+
+  @test_util.deprecated_graph_mode_only
+  def testStatelessUserOp(self):
+    ok = [
+        '__seed*',
+        'add/add.*/Op/Add',
+    ]
+    return self.runCustomUserOpWithUnusedOutput("Stateless", ok)
+
   @test_util.deprecated_graph_mode_only
   def testUserOpBackwards(self):
     with tu.ipu_session() as sess:

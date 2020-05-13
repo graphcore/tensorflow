@@ -27,7 +27,9 @@ namespace pe = popops::expr;
 // This program simulates custom op with different API Level.
 // Function prototypes have been changed to test that they are not executed.
 
-extern "C" int32_t Build_api_level = 0x0bad0ab1;
+extern "C" {
+int32_t custom_op_api_level = 0x0bad0ab1;
+}
 
 extern "C" poplar::program::Program Build(poplar::Graph& graph) {
   poplar::program::Sequence seq;

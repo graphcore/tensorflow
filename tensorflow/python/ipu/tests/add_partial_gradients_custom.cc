@@ -20,11 +20,19 @@ limitations under the License.
 #include <poputil/VertexTemplates.hpp>
 #include <poputil/exceptions.hpp>
 
+extern "C" {
+int32_t custom_op_api_level = 1;
+}
+
 // If an operation takes one or more tensors of the same shape,
 // and performs an expression on only corresponding elements in
 // the input tensors, and produces a tensor of the same shape,
 // then it is elementwise.
-extern "C" bool IsElementWise() { return true; }
+extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
+                               std::uint32_t& num_inplace, bool& is_elementwise,
+                               bool& is_stateless, std::uint32_t num_inputs) {
+  is_elementwise = true;
+}
 
 // The Build function constructs the Poplar graph that computes the custom op.
 extern "C" poplar::program::Program Build(

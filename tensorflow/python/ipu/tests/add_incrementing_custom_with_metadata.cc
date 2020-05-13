@@ -20,6 +20,10 @@ limitations under the License.
 #include <poplar/Tensor.hpp>
 #include <popops/ElementWise.hpp>
 
+extern "C" {
+int32_t custom_op_api_level = 1;
+}
+
 namespace pe = popops::expr;
 
 // Custom poplar kernel.
@@ -62,7 +66,7 @@ extern "C" poplar::program::Program Build_grad(
 
 extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
                                std::uint32_t& num_inplace, bool& is_elementwise,
-                               std::uint32_t num_inputs) {
+                               bool& is_stateless, std::uint32_t num_inputs) {
   num_inplace = num_inputs;
   is_elementwise = num_inputs < 2;
 }
@@ -127,4 +131,45 @@ extern "C" poplar::Tensor AllocTest_allocator(poplar::Graph& graph,
   auto t = graph.addVariable(type, shape);
   graph.setTileMapping(t, 0);
   return t;
+}
+
+// Stateful test op
+
+extern "C" poplar::program::Program Stateful(
+    poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
+    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+  poplar::program::Sequence seq;
+
+  outputs.resize(1);
+
+  outputs[0] = popops::map(graph, pe::Add(pe::_1, pe::_2),
+                           {inputs[0], inputs[1]}, seq, "Stateful");
+  return seq;
+}
+
+extern "C" void Stateful_metadata(std::vector<std::int64_t>& allocating_indices,
+                                  std::uint32_t& num_inplace,
+                                  bool& is_elementwise, bool& is_stateless,
+                                  std::uint32_t num_inputs) {
+  // default value must indicate stateful op
+}
+
+// Stateless test op
+
+extern "C" poplar::program::Program Stateless(
+    poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
+    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+  poplar::program::Sequence seq;
+
+  outputs.resize(1);
+
+  outputs[0] = popops::map(graph, pe::Add(pe::_1, pe::_2),
+                           {inputs[0], inputs[1]}, seq, "Stateless");
+  return seq;
+}
+
+extern "C" void Stateless_metadata(
+    std::vector<std::int64_t>& allocating_indices, std::uint32_t& num_inplace,
+    bool& is_elementwise, bool& is_stateless, std::uint32_t num_inputs) {
+  is_stateless = true;
 }

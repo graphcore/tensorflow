@@ -22,6 +22,10 @@ limitations under the License.
 #include <unordered_map>
 #include <unordered_set>
 
+extern "C" {
+int32_t custom_op_api_level = 1;
+}
+
 namespace pe = popops::expr;
 
 // Custom poplar kernel.
@@ -34,7 +38,7 @@ extern "C" poplar::program::Program Build(
 
 extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
                                std::uint32_t& num_inplace, bool& is_elementwise,
-                               std::uint32_t num_inputs) {
+                               bool& is_stateless, std::uint32_t num_inputs) {
   num_inplace = 12;
   is_elementwise = true;
 
