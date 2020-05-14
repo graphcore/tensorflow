@@ -97,10 +97,12 @@ class IpuSerializationTest(xla_test.XLATestCase):
       expected_tensor, expected_type = expected_inputs[idx]
       self.assertEqual(
           expected_tensor.dtype.as_numpy_dtype,
-          PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
+          PrimitiveTypeStringToNumpyDtype(
+              stream.get("shape", {}).get("data_type")))
       self.assertEqual(expected_tensor.name, stream.get("name") + ":0")
       self.assertEqual(expected_type, stream.get("type"))
-      self.assertEqual(expected_tensor.shape, stream.get("shape"))
+      self.assertEqual(expected_tensor.shape,
+                       stream.get("shape", {}).get("shape"))
 
     outputs = streams.get("outputs", [])
     self.assertEqual(len(outputs), len(expected_outputs or []))
@@ -108,10 +110,12 @@ class IpuSerializationTest(xla_test.XLATestCase):
       expected_tensor, expected_type = expected_outputs[idx]
       self.assertEqual(
           expected_tensor.dtype.as_numpy_dtype,
-          PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
+          PrimitiveTypeStringToNumpyDtype(
+              stream.get("shape", {}).get("data_type")))
       self.assertEqual(expected_tensor.name, stream.get("name") + ":0")
       self.assertEqual(expected_type, stream.get("type"))
-      self.assertEqual(expected_tensor.shape, stream.get("shape"))
+      self.assertEqual(expected_tensor.shape,
+                       stream.get("shape", {}).get("shape"))
 
     infeeds = streams.get("infeeds", [])
     self.assertEqual(len(infeeds), len(expected_infeeds or []))
@@ -123,8 +127,10 @@ class IpuSerializationTest(xla_test.XLATestCase):
                          stream.get("name"))
         self.assertEqual(
             expected_tensor.dtype.as_numpy_dtype,
-            PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
-        self.assertEqual(expected_tensor.shape, stream.get("shape"))
+            PrimitiveTypeStringToNumpyDtype(
+                stream.get("shape", {}).get("data_type")))
+        self.assertEqual(expected_tensor.shape,
+                         stream.get("shape", {}).get("shape"))
 
     outfeeds = streams.get("outfeeds", [])
     self.assertEqual(len(outfeeds), len(expected_outfeeds or []))
@@ -136,9 +142,11 @@ class IpuSerializationTest(xla_test.XLATestCase):
                          stream.get("name"))
         self.assertEqual(
             expected_tensor.dtype,
-            PrimitiveTypeStringToNumpyDtype(stream.get("data_type")))
+            PrimitiveTypeStringToNumpyDtype(
+                stream.get("shape", {}).get("data_type")))
         # First dimension is the number of tensors in the feed: ignore it
-        self.assertEqual(list(expected_tensor.shape[1:]), stream.get("shape"))
+        self.assertEqual(list(expected_tensor.shape[1:]),
+                         stream.get("shape", {}).get("shape"))
 
   def _find_feed_streams(self, feeds, feed_name):
     matches = [f for f in feeds if f["name"] == feed_name]
@@ -147,55 +155,64 @@ class IpuSerializationTest(xla_test.XLATestCase):
     return matches[0]["streams"]
 
   def _validate_feeds(self, expected_feeds, test_feeds, auto_ids,
-                      checkpoint_feeds):
+                      checkpoint_feeds, verification_info):
     self.assertEqual(len(expected_feeds), len(test_feeds))
     for feed, expected in expected_feeds.items():
       self.assertTrue(feed in checkpoint_feeds)
       streams = self._find_feed_streams(test_feeds, feed)
       seen_ids = []
       for stream in streams:
-        self.assertEqual(expected.key, stream.get("key"))
-        self.assertTrue(isinstance(stream.get("id"), int))
+        info = verification_info.get(stream.get("handle"), {})
+        self.assertEqual(expected.key, info.get("key"))
+        self.assertTrue(isinstance(info.get("id"), int))
         if expected.start_id < 0:
-          self.assertTrue(stream["id"] not in auto_ids)
-          auto_ids.append(stream["id"])
+          self.assertTrue(info["id"] not in auto_ids)
+          auto_ids.append(info["id"])
         else:
-          sid = stream["id"]
+          sid = info["id"]
           self.assertTrue(sid in range(expected.start_id, expected.start_id +
                                        len(streams)))
           self.assertTrue(sid not in seen_ids)
           seen_ids.append(sid)
 
-  def _validate_tensors(self, expected, tensors, tensor_type, auto_ids):
+  def _validate_tensors(self, expected, tensors, tensor_type, auto_ids,
+                        verification_info):
     for tensor in [t for t in tensors if t.get("type") == tensor_type]:
       if "checkpoint" in tensor.get("name"):
         continue
-      self.assertEqual(expected.key, tensor.get("key"))
-      self.assertTrue(isinstance(tensor.get("id"), int))
+      info = verification_info[tensor.get("handle")]
+      self.assertEqual(expected.key, info.get("key"))
+      self.assertTrue(isinstance(info.get("id"), int))
       if expected.start_id < 0:
-        self.assertTrue(tensor["id"] not in auto_ids)
-        auto_ids.append(tensor["id"])
+        self.assertTrue(info["id"] not in auto_ids)
+        auto_ids.append(info["id"])
       else:
-        self.assertEqual(expected.start_id, data["id"])
+        self.assertEqual(expected.start_id, info["id"])
 
   def _validate_secure_metadata(self, opts, metadata):
     auto_ids = []
     infeeds = metadata.get("infeeds", [])
     outfeeds = metadata.get("outfeeds", [])
+    verification_info = metadata.get("verification_info", {})
     checkpoint_feeds = metadata.get("checkpoint", {}).get("feeds", [])
     self.assertEqual(
         len(opts.infeeds) + len(opts.outfeeds), len(checkpoint_feeds))
 
-    self._validate_feeds(opts.infeeds, infeeds, auto_ids, checkpoint_feeds)
-    self._validate_feeds(opts.outfeeds, outfeeds, auto_ids, checkpoint_feeds)
+    self._validate_feeds(opts.infeeds, infeeds, auto_ids, checkpoint_feeds,
+                         verification_info)
+    self._validate_feeds(opts.outfeeds, outfeeds, auto_ids, checkpoint_feeds,
+                         verification_info)
     self._validate_tensors(opts.inputs, metadata.get("inputs"), "input_data",
-                           auto_ids)
+                           auto_ids, metadata.get("verification_info"))
     self._validate_tensors(opts.input_parameters, metadata.get("inputs"),
-                           "parameter", auto_ids)
+                           "parameter", auto_ids,
+                           metadata.get("verification_info"))
     self._validate_tensors(opts.outputs, metadata.get("outputs"),
-                           "parameter_out", auto_ids)
+                           "parameter_out", auto_ids,
+                           metadata.get("verification_info"))
     self._validate_tensors(opts.output_parameters, metadata.get("outputs"),
-                           "output_data", auto_ids)
+                           "output_data", auto_ids,
+                           metadata.get("verification_info"))
 
   @test_util.deprecated_graph_mode_only
   def testSimpleFeedsInfoSerialization(self):
