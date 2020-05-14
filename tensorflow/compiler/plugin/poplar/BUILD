@@ -594,7 +594,6 @@ cc_library(
         "driver/visitors/visitor_arithmetic_expr.cc",
         "driver/visitors/visitor_base.cc",
         "driver/visitors/visitor_full.cc",
-        "driver/visitors/visitor_inline_call.cc",
         "driver/visitors/visitor_map.cc",
     ],
     hdrs = [
@@ -638,7 +637,6 @@ cc_library(
         "driver/visitors/visitor_arithmetic_expr.h",
         "driver/visitors/visitor_base.h",
         "driver/visitors/visitor_full.h",
-        "driver/visitors/visitor_inline_call.h",
         "driver/visitors/visitor_map.h",
     ],
     copts = [
