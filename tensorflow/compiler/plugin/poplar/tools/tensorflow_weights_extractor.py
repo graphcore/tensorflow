@@ -20,9 +20,9 @@ from tensorflow.python.saved_model import saved_model
 class _Variable:
   type_map = {"F32": tf.float32, "F16": tf.float16}
 
-  def __init__(self, shape, type_str):
-    self.type = _Variable.type_map[type_str]
-    self.shape = shape
+  def __init__(self, shape):
+    self.type = _Variable.type_map[shape["data_type"]]
+    self.shape = shape["shape"]
     self.validated = False
 
   def validate(self, graph_shape, graph_type):
@@ -46,7 +46,7 @@ class _Metadata:
         assert var["name"] not in self.variables, (
             "There is more than one variable "
             "with the name %s") % var["name"]
-        self.variables[var["name"]] = _Variable(var["shape"], var["data_type"])
+        self.variables[var["name"]] = _Variable(var["shape"])
 
   def validate(self, name, shape, dtype):
     # Remove :0 suffix from TF
