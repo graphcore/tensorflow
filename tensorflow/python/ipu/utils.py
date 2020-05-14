@@ -839,6 +839,32 @@ def set_floating_point_behaviour_options(opts,
   return opts
 
 
+def set_gcl_options(opts, num_io_tiles=0, gcl_options=None):
+  """Set the IPU options for the Graphcore Communication Library.
+
+  Args:
+    num_io_tiles: Number of tiles to reserve per IPU for the GCL collective
+      operations.
+    gcl_options: A dictionary with options for configuring the GCL collective
+      operations.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+  opts.gcl_num_io_tiles = num_io_tiles
+
+  if gcl_options:
+    if not isinstance(gcl_options, dict):
+      raise TypeError("`gcl_options` must be a dictionary")
+
+    for (option_name, value) in gcl_options.items():
+      opt = opts.gcl_options.add()
+      opt.option = option_name
+      opt.value = value
+
+  return opts
+
+
 def auto_select_ipus(opts, num_ipus):
   """Configure the IPUs to be used by the session.
 

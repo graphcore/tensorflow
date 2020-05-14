@@ -413,6 +413,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   bool SupportsRemoteBuffers() const;
 
+  int64 GclNumIoTiles() const { return current_config_.gcl_num_io_tiles(); }
+
+  poplar::OptionFlags GclOptions() const { return gcl_options_; }
+
   int64 GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }
@@ -802,6 +806,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   poplar::OptionFlags graph_options_;
 
   poplar::OptionFlags execution_options_;
+
+  poplar::OptionFlags gcl_options_;
 
   std::list<TensorControl*> allocations_;
 

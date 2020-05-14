@@ -1415,6 +1415,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     execution_options_.set(opt.option(), opt.value());
   }
 
+  for (const auto& opt : current_config_.gcl_options()) {
+    gcl_options_.set(opt.option(), opt.value());
+  }
+
   const auto max_compilation_threads =
       PoplarXlaFlags::Get().max_compilation_threads;
   if (max_compilation_threads > 0) {
@@ -1451,6 +1455,10 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
 
   for (auto opt : execution_options_) {
     VLOG(1) << "Execution report option: " << opt.first << " = " << opt.second;
+  }
+
+  for (auto opt : gcl_options_) {
+    VLOG(1) << "GCL option: " << opt.first << " = " << opt.second;
   }
 
   // Generate Target hash

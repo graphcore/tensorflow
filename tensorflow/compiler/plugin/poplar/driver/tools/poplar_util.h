@@ -91,7 +91,7 @@ Status PoplarExceptionToTensorflowStatus(const std::string& origin,
 void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
                          const std::string& value);
 
-poplar::OptionFlags GetReplicateAllReduceOptions();
+poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res);
 
 // Try and dump the profiler report to a file if a OOM exception occurs.
 void DumpIfPoplarOutOfMemoryAllocationException(

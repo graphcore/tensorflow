@@ -21,6 +21,7 @@ from tensorflow.python.framework import errors
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_compiler
+from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.scopes import ipu_shard
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -28,34 +29,6 @@ from tensorflow.python.platform import test
 
 
 class GclTest(test_util.TensorFlowTestCase):
-  @test_util.deprecated_graph_mode_only
-  def testInvaildNumberOfIoTilesRaisesException(self):
-    def my_net(a):
-      with ipu_shard(0):
-        aa = math_ops.matmul(a, a)
-      with ipu_shard(1):
-        return math_ops.matmul(aa, aa)
-
-    inputs = array_ops.placeholder(np.float32, [2, 2])
-    with ops.device("/device:IPU:0"):
-      compiled_net = ipu_compiler.compile(my_net, inputs=[inputs])
-
-    with session.Session() as sess:
-      ReportJSON(self, sess, sharded=True)
-      with test.mock.patch.dict("os.environ", {"GCL_NUM_IO_TILES": "foo"}):
-        with self.assertRaisesRegex(
-            errors.InvalidArgumentError,
-            "Cannot parse value of the environment variable "
-            "GCL_NUM_IO_TILES as an integer: foo"):
-          sess.run(compiled_net, {inputs: np.ones(inputs.shape)})
-
-    with session.Session() as sess:
-      ReportJSON(self, sess, sharded=True)
-      with test.mock.patch.dict("os.environ", {"GCL_NUM_IO_TILES": "-1"}):
-        with self.assertRaisesRegex(errors.InvalidArgumentError,
-                                    "-1 is an invalid number of IO tiles"):
-          sess.run(compiled_net, {inputs: np.ones(inputs.shape)})
-
   @test_util.deprecated_graph_mode_only
   def testIoTilesAreExcludedFromShard(self):
     def my_net(a, b):
@@ -72,23 +45,24 @@ class GclTest(test_util.TensorFlowTestCase):
       compiled_net = ipu_compiler.compile(my_net, inputs=[input_a, input_b])
 
     num_io_tiles = 128
+    cfg = ipu_utils.create_ipu_config(profiling=True)
+    cfg = ipu_utils.set_gcl_options(cfg, num_io_tiles=num_io_tiles)
+    cfg = ipu_utils.auto_select_ipus(cfg, num_ipus=2)
+    ipu_utils.configure_ipu_system(cfg)
 
-    with test.mock.patch.dict("os.environ",
-                              {"GCL_NUM_IO_TILES": str(num_io_tiles)}):
+    with session.Session() as sess:
+      report = ReportJSON(self, sess, configure_device=False)
+      report.reset()
 
-      with session.Session() as sess:
-        report = ReportJSON(self, sess, sharded=True)
-        report.reset()
+      sess.run(compiled_net, {
+          input_a: np.ones(input_a.shape),
+          input_b: np.ones(input_b.shape)
+      })
 
-        sess.run(compiled_net, {
-            input_a: np.ones(input_a.shape),
-            input_b: np.ones(input_b.shape)
-        })
-
-        report.parse_log()
-        num_compute_tiles = report.get_num_tiles_per_ipu() - num_io_tiles
-        for t in report.get_tensor_map().all_tensors():
-          self.assertLessEqual(len(t.tiles), num_compute_tiles)
+      report.parse_log()
+      num_compute_tiles = report.get_num_tiles_per_ipu() - num_io_tiles
+      for t in report.get_tensor_map().all_tensors():
+        self.assertLessEqual(len(t.tiles), num_compute_tiles)
 
 
 if __name__ == "__main__":
