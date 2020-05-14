@@ -903,7 +903,7 @@ StatusOr<poplar::program::Program> CreateReplicatedAllReduce(
     // Replicated sum the concatenated tensor.
     popops::replicatedAllReduceInPlace(
         GetMasterGraph(res), flat_tensor, popops::Operation::ADD, seq,
-        GetDebugName(inst), GetReplicateAllReduceOptions());
+        GetDebugName(inst), GetReplicateAllReduceOptions(res));
   }
 
   for (int64 i = 0; i != flat_tensors.size(); ++i) {

@@ -696,6 +696,25 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     self.assertFalse(cfg.profiling.graph_options)
     self.assertFalse(cfg.profiling.execution_options)
 
+  @test_util.deprecated_graph_mode_only
+  def testGclOptions(self):
+    cfg = ipu.utils.create_ipu_config()
+    self.assertEqual(len(cfg.gcl_options), 0)
+    self.assertEqual(cfg.gcl_num_io_tiles, 0)
+
+    with self.assertRaisesRegex(TypeError,
+                                "`gcl_options` must be a dictionary"):
+      ipu.utils.set_gcl_options(cfg, gcl_options=123)
+
+    cfg = ipu.utils.set_gcl_options(cfg,
+                                    num_io_tiles=32,
+                                    gcl_options={"maxBytesPerTile": "128"})
+
+    self.assertEqual(cfg.gcl_num_io_tiles, 32)
+    self.assertEqual(len(cfg.gcl_options), 1)
+    self.assertEqual(cfg.gcl_options[0].option, "maxBytesPerTile")
+    self.assertEqual(cfg.gcl_options[0].value, "128")
+
 
 if __name__ == "__main__":
   googletest.main()

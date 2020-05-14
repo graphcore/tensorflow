@@ -69,7 +69,8 @@ std::unique_ptr<CompilerResources> GetMockResources(
       poplar::OptionFlags(), poplar::OptionFlags(), poplar::OptionFlags(),
       false, false, false, false, merge_infeeds, 1, 0, 0,
       max_inter_ipu_copies_buffer_size, 0, 1, 64, module,
-      IpuOptions::FloatingPointBehaviour(), false, "", false, false, false);
+      IpuOptions::FloatingPointBehaviour(), false, "", false, false, false,
+      poplar::OptionFlags());
   resources->streams_indices.InitializeIndexTensors(*resources, {});
   resources->module_call_graph = CallGraph::Build(module);
   resources->main_graph =

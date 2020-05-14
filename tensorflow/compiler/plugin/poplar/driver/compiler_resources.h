@@ -125,6 +125,8 @@ struct CompilerResources {
 
   bool remote_memory_supported;
 
+  poplar::OptionFlags gcl_options;
+
   std::unique_ptr<CallGraph> module_call_graph;
 
   absl::flat_hash_map<std::string, poplar::RemoteBuffer> remote_buffers;
@@ -145,7 +147,8 @@ struct CompilerResources {
       const IpuOptions::FloatingPointBehaviour& floating_point_behaviour,
       bool always_rearrange_copies_on_host,
       const std::string& scheduler_selection, bool recomputation_enabled,
-      bool use_stable_norm_statistics, bool remote_memory_supported)
+      bool use_stable_norm_statistics, bool remote_memory_supported,
+      const poplar::OptionFlags& gcl_options)
       : annotations(module),
         information(max_all_reduce_buffer_size, max_reduce_scatter_buffer_size,
                     max_inter_ipu_copies_buffer_size,
@@ -165,7 +168,8 @@ struct CompilerResources {
         scheduler_selection(scheduler_selection),
         recomputation_enabled(recomputation_enabled),
         use_stable_norm_statistics(use_stable_norm_statistics),
-        remote_memory_supported(remote_memory_supported) {}
+        remote_memory_supported(remote_memory_supported),
+        gcl_options(gcl_options) {}
 };
 
 }  // namespace poplarplugin

@@ -166,11 +166,6 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 
-constexpr char kNumIoTilesEnvVarName[] = "GCL_NUM_IO_TILES";
-constexpr int kNumIoTilesMinValue = 32;
-constexpr int kNumIoTilesMaxValue = 192;
-constexpr int kNumIoTilesMultiple = 2;
-
 std::once_flag help_flag_printed;
 
 int64 SizeFunction(const BufferValue& buffer) {
@@ -450,18 +445,15 @@ void setFpBehaviour(poplar::Graph& graph,
 
 void PrintHelpString() { LOG(INFO) << PoplarXlaFlags::GetFlagUsageString(); }
 
-StatusOr<int> GetNumIoTiles() {
-  const char* env_var_value = std::getenv(kNumIoTilesEnvVarName);
-  if (env_var_value == nullptr) {
+StatusOr<int> GetNumIoTiles(const PoplarExecutor* poplar_executor) {
+  const int64 value = poplar_executor->GclNumIoTiles();
+  if (value == 0) {
     return 0;
   }
 
-  int value;
-  if (!absl::SimpleAtoi(env_var_value, &value)) {
-    return InvalidArgument(
-        "Cannot parse value of the environment variable %s as an integer: %s",
-        kNumIoTilesEnvVarName, env_var_value);
-  }
+  constexpr int kNumIoTilesMinValue = 32;
+  constexpr int kNumIoTilesMaxValue = 192;
+  constexpr int kNumIoTilesMultiple = 2;
 
   if (value < kNumIoTilesMinValue || value > kNumIoTilesMaxValue ||
       value % kNumIoTilesMultiple != 0) {
@@ -492,7 +484,7 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
         << resources.replication_factor << ".";
   }
 
-  TF_ASSIGN_OR_RETURN(const int num_io_tiles, GetNumIoTiles());
+  TF_ASSIGN_OR_RETURN(const int num_io_tiles, GetNumIoTiles(poplar_executor));
 
   auto& main_graph = GetMasterGraph(resources);
   const poplar::Target& target = main_graph.getTarget();
@@ -817,7 +809,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->GetSchedulerSelection(),
       poplar_executor->RecomputationEnabled(),
       poplar_executor->UseStableNormStatistics(),
-      poplar_executor->SupportsRemoteBuffers());
+      poplar_executor->SupportsRemoteBuffers(), poplar_executor->GclOptions());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";

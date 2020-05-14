@@ -40,7 +40,7 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
-// NEXT ID 30
+// NEXT ID 32
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -235,4 +235,9 @@ message IpuOptions {
   // Options controlling the configuration of Poplar data transfers.
   VerifiedTransfers verified_transfers = 29;
 
+  // How many tiles to reserve per IPU for the Graphcore Communication Library.
+  int64 gcl_num_io_tiles = 30;
+
+  // Collective operations options for the Graphcore Communication Library.
+  repeated PoplarOptionFlag gcl_options = 31;
 };
