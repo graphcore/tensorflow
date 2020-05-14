@@ -177,36 +177,6 @@ int64 SizeFunction(const BufferValue& buffer) {
   return ShapeUtil::ByteSizeOf(buffer.shape(), 1);
 }
 
-StatusOr<std::string> GetPathToGraphProgFile(std::string filename) {
-  Dl_info dlInfo;
-  static const void* dummy;
-  if (dladdr(&dummy, &dlInfo)) {
-    std::string path(dlInfo.dli_fname);
-    path = path.substr(0, path.find_last_of('/') + 1);
-    path = path + "../compiler/plugin/poplar/" + filename;
-    if (access(path.c_str(), R_OK) != -1) {
-      return path;
-    }
-  }
-
-  // This is for unit tests
-  {
-    char buf[256];
-    if (!getcwd(buf, 255)) {
-      return xla::InternalErrorStrCat("Failed to retrieve current working ",
-                                      "directory when looking for '", filename,
-                                      "' codelets");
-    }
-    std::string path(buf);
-    path = path + "/tensorflow/compiler/plugin/poplar/" + filename;
-    if (access(path.c_str(), R_OK) != -1) {
-      return path;
-    }
-  }
-
-  return xla::InternalErrorStrCat("Failed to find '", filename, "' codelets");
-}
-
 bool GetConstantSubOutput(const HloInstruction* root, const Shape& layout,
                           std::vector<Literal>& sub_result) {
   if (root->opcode() == HloOpcode::kConstant) {
@@ -621,9 +591,17 @@ Status CreatePoplarGraphs(CompilerResources& resources, const HloModule* module,
     }
   }
 
-  TF_ASSIGN_OR_RETURN(const std::string codelets_path,
-                      GetPathToGraphProgFile("tf.gp"));
-  main_graph.addCodelets(codelets_path);
+  std::stringstream codelets_src{
+#include "tensorflow/compiler/plugin/poplar/tf.cppembed"
+  };
+
+  std::stringstream compile_output;
+  try {
+    main_graph.addCodelets(codelets_src, "-DNDEBUG -O3", compile_output);
+  } catch (const poplar::graph_program_compilation_error) {
+    return xla::InternalError("Failed to compile Poplar TF codelets: %s",
+                              compile_output.str());
+  }
   poplin::addCodelets(main_graph);
   popnn::addCodelets(main_graph);
   popops::addCodelets(main_graph);
