@@ -31,7 +31,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
-#include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_inline_call.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
@@ -174,14 +173,15 @@ StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
   for (int64 op = 0; op < inst->operand_count(); op++) {
     CHECK_EQ(inputs[op].size(), CountShapes(inst->operand(op)->shape()));
   }
-  InlineCallVisitor inline_visitor(res, inputs);
-  TF_RETURN_IF_ERROR(comp->Accept(&inline_visitor));
 
-  seq.add(inline_visitor.GetSequence());
+  DeferredArgVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
+  InplaceDeferredVisitor inplace_visitor(res, deferred_inputs);
+  TF_RETURN_IF_ERROR(comp->Accept(&inplace_visitor));
 
-  for (size_t i = 0; i < inline_visitor.outputs().size(); i++) {
-    TF_CHECK_OK(
-        AddOutputTensor(tensor_map, inst, i, inline_visitor.outputs()[i]));
+  seq.add(inplace_visitor.GetSequence());
+  const TensorVector& outputs = inplace_visitor.outputs();
+  for (size_t i = 0; i < outputs.size(); i++) {
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
   }
 
   return seq;
