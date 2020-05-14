@@ -79,7 +79,7 @@ class DeviceManager {
 
 class IpuConfig {
  public:
-  explicit IpuConfig(const Json::Value& config);
+  explicit IpuConfig(const Metadata& meta);
   int64_t NumIpus() const;
   int64_t ReplicationCount() const;
   poplar::OptionFlags OptionFlags() const;
@@ -92,7 +92,7 @@ class IpuConfig {
 
 class Infeed {
  public:
-  explicit Infeed(const Json::Value& infeed);
+  explicit Infeed(const FeedInfo& infeed);
   void InitializeDataSources(const BinaryLoader& loader);
   const std::string& Name() const;
   std::vector<InfeedStream>& MutableStreams();
@@ -107,11 +107,7 @@ class Infeed {
 
 class TensorManager {
  public:
-  // Json metadata don't contain metadata size information so an optional
-  // function can be passed to compute it.
-  explicit TensorManager(
-      const Json::Value& root,
-      std::function<size_t(size_t)> output_metadata_size_fn = {});
+  explicit TensorManager(const Metadata& metadata);
   const std::vector<Tensor>& Inputs() const;
   const std::vector<Tensor>& Outputs() const;
   const std::vector<Infeed>& Infeeds() const;
@@ -128,7 +124,6 @@ class TensorManager {
   void LoadVerifiedCheckpoint(const BinaryLoader& loader,
                               int64_t checkpoint_index);
   void SaveCheckpoint(BinaryWriter& writer);
-  void LoadInputs(const BinaryLoader& loader);
   void LoadInfeeds(const BinaryLoader& loader);
   void SaveOutputs(TensorType type, BinaryWriter& writer,
                    bool allow_duplicates = false) const;
@@ -157,7 +152,6 @@ class SeedManager {
 class BinaryLoader : public BinaryReader {
  public:
   std::unique_ptr<TensorManager> CreateTensorManager(
-      std::function<size_t(size_t)> output_metadata_size_fn = {},
       const std::string metadata_name = "") const;
   std::unique_ptr<Executable> CreateExecutable(
       const std::string executable_name = "") const;

@@ -47,9 +47,59 @@ class BinaryVersion {
  private:
   // Increment minor only when backward compatibility is maintained (e.g new
   // features are added) Increment major and reset minor to 0 otherwise.
-  int major{2};
+  int major{3};
   int minor{0};
 };
+
+class TensorTypeInfo {
+  struct TypeInfo {
+    TensorType type;
+    std::string type_str;
+  };
+
+ public:
+  static TensorType FromString(const std::string& type_str);
+  static const std::string& ToString(TensorType type);
+  static std::vector<TensorTypeInfo::TypeInfo> CreateInfo();
+
+ private:
+  static const std::vector<TypeInfo> info_;
+};
+
+const std::vector<TensorTypeInfo::TypeInfo> TensorTypeInfo::info_ =
+    TensorTypeInfo::CreateInfo();
+
+/* static */ std::vector<TensorTypeInfo::TypeInfo>
+TensorTypeInfo::CreateInfo() {
+  std::vector<TensorTypeInfo::TypeInfo> m;
+  m.emplace_back(TensorTypeInfo::TypeInfo{TensorType::Parameter, "parameter"});
+  m.emplace_back(TensorTypeInfo::TypeInfo{TensorType::InputData, "input_data"});
+  m.emplace_back(
+      TensorTypeInfo::TypeInfo{TensorType::OutputData, "output_data"});
+  m.emplace_back(
+      TensorTypeInfo::TypeInfo{TensorType::ParameterOut, "parameter_out"});
+  m.emplace_back(TensorTypeInfo::TypeInfo{TensorType::Infeed, "infeed"});
+  m.emplace_back(TensorTypeInfo::TypeInfo{TensorType::Outfeed, "outfeed"});
+
+  return m;
+}
+
+/* static */ TensorType TensorTypeInfo::FromString(
+    const std::string& type_str) {
+  auto it = absl::c_find_if(info_, [type_str](const TypeInfo& info) {
+    return info.type_str == type_str;
+  });
+  ERROR_ON_MSG(it == info_.end(), "Unknown TensorType '" << type_str << "'");
+  return it->type;
+}
+
+/* static */ const std::string& TensorTypeInfo::ToString(TensorType type) {
+  auto it = absl::c_find_if(
+      info_, [type](const TypeInfo& info) { return info.type == type; });
+  ERROR_ON_MSG(it == info_.end(),
+               "Unknown TensorType '" << static_cast<int64_t>(type) << "'");
+  return it->type_str;
+}
 
 class DataTypeInfo {
   struct TypeInfo {
@@ -198,23 +248,6 @@ void SetIteratorToJsonValue(const Json::Value& value, DataType type,
     }
     default: { ERROR("DataType " << type << " not supported"); }
   }
-}
-
-TensorType ParseTensorType(const std::string& str) {
-  if (str == "parameter") {
-    return TensorType::Parameter;
-  } else if (str == "input_data") {
-    return TensorType::InputData;
-  } else if (str == "output_data") {
-    return TensorType::OutputData;
-  } else if (str == "parameter_out") {
-    return TensorType::ParameterOut;
-  } else if (str == "infeed") {
-    return TensorType::Infeed;
-  } else if (str == "outfeed") {
-    return TensorType::Outfeed;
-  }
-  ERROR("Unknown TensorType '" << str << "'");
 }
 
 /* Recursively parse a JSON array of floats, validating the shape against the
@@ -379,28 +412,12 @@ std::list<Key> GetMapKeys(const std::map<Key, Value>& m) {
 }  // namespace
 
 std::string TensorTypeToString(TensorType type) {
-  switch (type) {
-    case TensorType::Parameter: {
-      return "parameter";
-    }
-    case TensorType::ParameterOut: {
-      return "output parameter";
-    }
-    case TensorType::InputData: {
-      return "input";
-    }
-    case TensorType::OutputData: {
-      return "output";
-    }
-    case TensorType::Infeed: {
-      return "infeed";
-    }
-    case TensorType::Outfeed: {
-      return "outfeed";
-    }
-    default: { ERROR("Unknown TensorType"); }
-  }
+  return TensorTypeInfo::ToString(type);
 }
+
+Exception::Exception(const std::string& msg) : std::runtime_error(msg) {}
+
+LogContext::LogContext() : saved_context_(), cleared_(true) {}
 
 LogContext::LogContext(const std::string& context) : saved_context_(context_) {
   UpdateContext(context);
@@ -408,12 +425,24 @@ LogContext::LogContext(const std::string& context) : saved_context_(context_) {
 
 void LogContext::UpdateContext(const std::string& new_context) {
   context_ = absl::StrCat(saved_context_, " ", new_context);
+  cleared_ = false;
   if (InfoEnabled()) {
     std::cout << "[" << context_ << "]" << std::endl;
   }
 }
 
-LogContext::~LogContext() { context_ = saved_context_; }
+void LogContext::Clear() {
+  if (!cleared_) {
+    // Don't restore the saved context if we're handling an exception
+    // we might want to recover the context later.
+    if (!std::uncaught_exception()) {
+      context_ = saved_context_;
+    }
+    cleared_ = true;
+  }
+}
+
+LogContext::~LogContext() { Clear(); }
 /* static */ const std::string& LogContext::Context() { return context_; }
 
 /* static */ bool LogContext::InfoEnabled() { return info_enabled_; }
@@ -456,22 +485,30 @@ TensorShape::TensorShape(const TensorShape& shape, int64_t metadata_size)
   metadata_size_ = metadata_size;
 }
 
-TensorShape::TensorShape(DataType type, const Json::Value& array)
-    : type_(type), metadata_size_(0) {
+TensorShape::TensorShape(const Json::Value& shape) {
+  type_ = DataTypeInfo::FromString(shape["data_type"].asString());
+  metadata_size_ = shape["metadata"].asInt64();
+  Json::Value array = shape["shape"];
   ERROR_ON(!array.isArray());
   shape_.reserve(array.size());
-  absl::c_transform(array, std::back_inserter(shape_),
-                    [](const Json::Value& value) {
-                      ERROR_ON(!value.isInt64());
-                      return value.asInt64();
-                    });
-  ERROR_ON(shape_.size() != array.size());
+  for (auto dim : array) {
+    shape_.push_back(dim.asInt64());
+  }
 }
 
-std::string TensorShape::ToString() const {
-  return absl::StrCat("[", absl::StrJoin(shape_, ", "),
-                      "] type = ", DataTypeInfo::ToString(type_));
+Json::Value TensorShape::ToJson() const {
+  Json::Value shape;
+  shape["data_type"] = DataTypeInfo::ToString(type_);
+  Json::Value dims{Json::arrayValue};
+  for (auto dim : shape_) {
+    dims.append(Json::Value::Int64(dim));
+  }
+  shape["shape"] = dims;
+  shape["metadata"] = Json::Value::Int64(metadata_size_);
+  return shape;
 }
+
+std::string TensorShape::ToString() const { return ToJson().toStyledString(); }
 
 void TensorShape::ToStream(StreamWriter& out) const {
   out.WriteInt64(type_);
@@ -486,6 +523,10 @@ TensorShape::TensorShape(StreamReader& in)
 
 TensorShape::TensorShape(const std::vector<int64_t>& shape, DataType type)
     : shape_(shape), type_(type), metadata_size_(0) {}
+
+bool TensorShape::operator==(const TensorShape& other) const {
+  return type_ == other.type_ && shape_ == other.shape_;
+}
 
 std::string Tensor::ToString() const {
   std::stringstream ss;
@@ -538,16 +579,22 @@ void Tensor::SaveDataToJsonStream(std::ostream* sout) const {
 }
 
 TensorInfo::TensorInfo(const Json::Value& info, TensorType type)
-    : TensorInfo(
-          info["name"].asString(), info["handle"].asString(),
-          TensorShape{DataTypeInfo::FromString(info["data_type"].asString()),
-                      info["shape"]},
-          type) {
+    : TensorInfo(info["name"].asString(), info["handle"].asString(),
+                 TensorShape{info["shape"]}, type) {
   PRINT_INFO("Found " << ToString());
 }
 
+Json::Value TensorInfo::ToJson() const {
+  Json::Value info;
+  info["name"] = name_;
+  info["handle"] = handle_;
+  info["shape"] = shape_.ToJson();
+  info["type"] = TensorTypeInfo::ToString(type_);
+  return info;
+}
+
 TensorInfo::TensorInfo(const Json::Value& info)
-    : TensorInfo(info, ParseTensorType(info["type"].asString())) {}
+    : TensorInfo(info, TensorTypeInfo::FromString(info["type"].asString())) {}
 
 TensorInfo::TensorInfo(StreamReader& in)
     : name_(in.ReadString()),
@@ -562,6 +609,14 @@ TensorInfo::TensorInfo(const std::string& name, const std::string& handle,
 void TensorInfo::SetMetadataSize(int64_t metadata_size) {
   shape_.SetMetadataSize(metadata_size);
 }
+
+void TensorInfo::SetShape(const TensorShape& shape) { shape_ = shape; }
+
+void TensorInfo::SetName(const std::string& name) { name_ = name; }
+
+void TensorInfo::SetHandle(const std::string& handle) { handle_ = handle; }
+
+void TensorInfo::SetType(const TensorType type) { type_ = type; }
 
 bool TensorInfo::TypeAndShapeMatch(const TensorInfo& other) const {
   bool type_match = type_ == other.type_;
@@ -586,11 +641,7 @@ void TensorInfo::ToStream(StreamWriter& out) const {
   out.WriteInt64(static_cast<int64_t>(type_));
 }
 
-std::string TensorInfo::ToString() const {
-  return absl::StrCat("{ name = '", name_, "' type = '",
-                      TensorTypeToString(type_), "' shape = '",
-                      shape_.ToString(), "' handle='", handle_, "' }");
-}
+std::string TensorInfo::ToString() const { return ToJson().toStyledString(); }
 
 std::string TensorInfo::Filename() const {
   std::string data_filename = name_;
@@ -599,10 +650,6 @@ std::string TensorInfo::Filename() const {
 }
 
 const TensorShape& TensorInfo::Shape() const { return shape_; }
-
-bool TensorShape::operator==(const TensorShape& other) const {
-  return type_ == other.type_ && shape_ == other.shape_;
-}
 
 const std::string& TensorInfo::Name() const { return name_; }
 const std::string& TensorInfo::Handle() const { return handle_; }
@@ -621,9 +668,9 @@ Tensor::Tensor(const TensorInfo& info, const void* data) : Tensor(info) {
 const TensorInfo& Tensor::Info() const { return info_; }
 
 void Tensor::LoadDataFromJson(const std::string& data_filename) {
-  LogContext ctx(absl::StrCat("Loading ", TensorTypeToString(info_.Type()), " ",
-                              info_.Name(), " from JSON file '", data_filename,
-                              "'"));
+  LogContext ctx(
+      absl::StrCat("Loading ", TensorTypeInfo::ToString(info_.Type()), " ",
+                   info_.Name(), " from JSON file '", data_filename, "'"));
   try {
     NDArrayParser parser;
     data_.clear();
@@ -849,18 +896,10 @@ void OutfeedStream::WriteTensor(void* src, int64_t replication_count) {
 
 std::vector<OutfeedStream>& Outfeed::Streams() { return streams_; }
 
-Outfeed::Outfeed(const Json::Value& outfeed,
-                 std::function<size_t(size_t)> metadata_size_fn)
-    : name_(outfeed["name"].asString()) {
-  absl::c_transform(outfeed["streams"], std::back_inserter(streams_),
-                    [&](const Json::Value& stream) {
-                      TensorInfo info{stream, TensorType::Outfeed};
-                      if (metadata_size_fn) {
-                        info.SetMetadataSize(
-                            metadata_size_fn(info.Shape().DataSizeInBytes()));
-                      }
-                      return OutfeedStream{info};
-                    });
+Outfeed::Outfeed(const FeedInfo& info) : name_(info.name) {
+  for (auto stream : info.streams) {
+    streams_.emplace_back(stream);
+  }
 }
 
 void Outfeed::SetOutputFolder(const std::string& output_folder) {
@@ -926,11 +965,11 @@ ExecutableWriter BinaryWriter::CreateExecutable(const std::string& name) {
 }
 
 void BinaryWriter::WriteMetadata(const std::string& name,
-                                 const std::string& json_metadata) {
+                                 const Metadata& metadata) {
   writer_->WriteInt64(static_cast<int64_t>(ObjectType::PoplarMetadata));
   writer_->WriteString(name);
   DeferredSizeWriter object_size{writer_};
-  writer_->WriteString(json_metadata);
+  writer_->WriteString(metadata.ToJson());
 }
 
 void BinaryWriter::WriteTensor(const Tensor& tensor,
@@ -1007,10 +1046,11 @@ std::unique_ptr<StreamReader> BinaryReader::GetObjectReader(
   return in;
 }
 
-std::unique_ptr<StreamReader> BinaryReader::CreateMetadataReader(
+std::unique_ptr<Metadata> BinaryReader::ReadMetadata(
     const std::string metadata_name) const {
   LogContext ctx{"BinaryReader::CreateMetadataReader" + metadata_name};
-  return GetObjectReader(ObjectType::PoplarMetadata, metadata_name);
+  auto reader = GetObjectReader(ObjectType::PoplarMetadata, metadata_name);
+  return absl::make_unique<Metadata>(LoadJsonFromString(reader->ReadString()));
 }
 
 std::unique_ptr<StreamReader> BinaryReader::CreateExecutableReader(
@@ -1060,7 +1100,7 @@ bool BinaryReader::ContainsObject(ObjectType type,
 
 std::unique_ptr<StreamReader> BinaryReader::GetTensorStream(
     const std::string& name) const {
-  LogContext ctx{"BinaryLoader::GetTensorStream" + name};
+  LogContext ctx{"BinaryLoader::GetTensorStream " + name};
   return GetObjectReader(ObjectType::Tensor, name);
 }
 
@@ -1163,5 +1203,344 @@ void InfeedStream::ResetToFirstTensor() {
 
 int64_t InfeedStream::NumTensors() const { return num_tensors_; }
 int64_t InfeedStream::TensorIndex() const { return tensor_idx_; }
+
+/* static */ const std::string& Metadata::CheckpointName() {
+  static const std::string value = "checkpoint";
+  return value;
+}
+
+/* static */ const std::string& Metadata::ClearCheckpointName() {
+  static const std::string value = "checkpointClear";
+  return value;
+}
+
+/* static */ const std::string& Metadata::InputCheckpointIndexHandle() {
+  static const std::string value = "checkpointIndex";
+  return value;
+}
+
+/* static */ const std::string& Metadata::InputCheckpointIndexName() {
+  return InputCheckpointIndexHandle();
+}
+
+/* static */ const std::string& Metadata::InputCheckpointHandle() {
+  static const std::string value = "checkpointIn";
+  return value;
+}
+
+/* static */ const std::string& Metadata::OutputCheckpointHandle() {
+  static const std::string value = "checkpointOut";
+  return value;
+}
+
+/* static */ const std::string& Metadata::OutputClearCheckpointHandle() {
+  static const std::string value = "checkpointOutClear";
+  return value;
+}
+
+FeedInfo::FeedInfo(const Json::Value& info) : name(info["name"].asString()) {
+  for (auto stream : info["streams"]) {
+    streams.push_back(TensorInfo{stream});
+  }
+  ERROR_ON(streams.empty());
+}
+
+Json::Value FeedInfo::ToJson() const {
+  ERROR_ON(streams.empty());
+  Json::Value feed;
+  Json::Value json_streams;
+  feed["name"] = name;
+  for (auto stream : streams) {
+    json_streams.append(stream.ToJson());
+  }
+  feed["streams"] = json_streams;
+  return feed;
+}
+
+std::string Metadata::ToJson() const {
+  Json::Value json_inputs;
+  for (auto input : inputs) {
+    json_inputs.append(input.ToJson());
+  }
+
+  Json::Value json_outputs;
+  for (auto output : outputs) {
+    json_outputs.append(output.ToJson());
+  }
+
+  Json::Value json_infeeds;
+  for (auto infeed : infeeds) {
+    json_infeeds.append(infeed.ToJson());
+  }
+
+  Json::Value json_outfeeds;
+  for (auto outfeed : outfeeds) {
+    json_outfeeds.append(outfeed.ToJson());
+  }
+
+  Json::Value config;
+  Json::Value json_options;
+  for (auto opt : options) {
+    json_options[opt.first] = opt.second;
+  }
+  if (!json_options.empty()) {
+    config["options"] = json_options;
+  }
+  config["replication_count"] = Json::Value::Int64(replication_count);
+  config["num_ipus"] = Json::Value::Int64(num_ipus);
+
+  Json::Value checkpoint;
+  if (!feeds_order.empty()) {
+    Json::Value streams;
+    for (auto feed : feeds_order) {
+      streams.append(feed);
+    }
+    checkpoint["feeds"] = streams;
+  }
+
+  Json::Value verification;
+  for (auto info : verification_info) {
+    verification[info.first] = info.second.ToJson();
+  }
+
+  Json::Value root;
+  if (!json_inputs.empty()) {
+    root["inputs"] = json_inputs;
+  }
+  if (!json_outputs.empty()) {
+    root["outputs"] = json_outputs;
+  }
+  if (!json_infeeds.empty()) {
+    root["infeeds"] = json_infeeds;
+  }
+  if (!json_outfeeds.empty()) {
+    root["outfeeds"] = json_outfeeds;
+  }
+  if (!feeds_order.empty()) {
+    root["checkpoint"] = checkpoint;
+  }
+  if (!verification.empty()) {
+    root["verification_info"] = verification;
+  }
+  root["config"] = config;
+
+  Json::StreamWriterBuilder json_builder;
+  json_builder["indentation"] = "";
+  json_builder["commentStyle"] = "None";
+
+  return Json::writeString(json_builder, root);
+}
+
+Metadata::Metadata(const Json::Value& root) {
+  for (auto input : root["inputs"]) {
+    inputs.push_back(TensorInfo{input});
+  }
+  for (auto output : root["outputs"]) {
+    outputs.push_back(TensorInfo{output});
+  }
+  for (auto infeed : root["infeeds"]) {
+    infeeds.push_back(FeedInfo{infeed});
+  }
+  for (auto outfeed : root["outfeeds"]) {
+    outfeeds.push_back(FeedInfo{outfeed});
+  }
+  Json::Value config = root["config"];
+  replication_count = config["replication_count"].asInt64();
+  num_ipus = config["num_ipus"].asInt64();
+  Json::Value json_options = config["options"];
+  if (!json_options.isNull()) {
+    for (auto key : json_options.getMemberNames()) {
+      options[key] = json_options[key].asString();
+    }
+  }
+  Json::Value checkpoint = root["checkpoint"];
+  for (auto feed : checkpoint["feeds"]) {
+    feeds_order.push_back(feed.asString());
+  }
+
+  Json::Value verification = root["verification_info"];
+  if (!verification.isNull()) {
+    for (auto handle : verification.getMemberNames()) {
+      verification_info[handle] = VerificationInfo(verification[handle]);
+    }
+  }
+}
+
+VerificationInfo::VerificationInfo() : initialised_(false), key_(-1), id_(-1) {}
+
+VerificationInfo::VerificationInfo(int64_t key, int64_t id) {
+  SetInfo(key, id);
+}
+
+bool VerificationInfo::Initialised() const { return initialised_; }
+
+int64_t VerificationInfo::Key() const { return key_; }
+
+int64_t VerificationInfo::Id() const { return id_; }
+
+void VerificationInfo::SetInfo(int64_t key, int64_t id) {
+  initialised_ = true;
+  key_ = key;
+  id_ = id;
+}
+
+VerificationInfo::VerificationInfo(const Json::Value& info)
+    : key_(info["key"].asInt64()),
+      id_(info["id"].asInt64()),
+      initialised_(true) {}
+
+Json::Value VerificationInfo::ToJson() const {
+  ERROR_ON(!Initialised());
+  Json::Value out;
+  out["key"] = Json::Value::Int64(key_);
+  out["id"] = Json::Value::Int64(id_);
+  return out;
+}
+
+void MetadataBuilder::AddVerificationInfo(const std::string& handle,
+                                          const VerificationInfo& info) {
+  ERROR_ON_MSG(
+      meta_.verification_info.find(handle) != meta_.verification_info.end(),
+      "Handle " << handle << " already in use");
+  if (info.Initialised()) {
+    meta_.verification_info.emplace(handle, info);
+  }
+}
+
+void MetadataBuilder::AddInput(const TensorInfo& tensor,
+                               const VerificationInfo& info) {
+  AddVerificationInfo(tensor.Handle(), info);
+  meta_.inputs.push_back(tensor);
+  meta_.inputs.back().SetType(TensorType::InputData);
+}
+
+void MetadataBuilder::AddInputParameter(const TensorInfo& tensor,
+                                        const VerificationInfo& info) {
+  AddVerificationInfo(tensor.Handle(), info);
+  ERROR_ON_MSG(!input_parameters_.emplace(tensor.Handle(), tensor).second,
+               "Already contains an input parameter with handle '"
+                   << tensor.Handle() << "'");
+  meta_.inputs.push_back(tensor);
+  meta_.inputs.back().SetType(TensorType::Parameter);
+}
+
+void MetadataBuilder::AddOutput(const TensorInfo& tensor,
+                                const VerificationInfo& info) {
+  AddVerificationInfo(tensor.Handle(), info);
+  meta_.outputs.push_back(tensor);
+  meta_.outputs.back().SetType(TensorType::OutputData);
+}
+
+void MetadataBuilder::AddOutputParameter(const TensorInfo& tensor,
+                                         const VerificationInfo& info) {
+  AddVerificationInfo(tensor.Handle(), info);
+  meta_.outputs.push_back(tensor);
+  meta_.outputs.back().SetType(TensorType::ParameterOut);
+}
+
+void MetadataBuilder::AddOutputModifiedParameter(
+    const std::string& input_handle, const TensorInfo& tensor,
+    const VerificationInfo& info) {
+  ERROR_ON_MSG(input_parameters_.find(input_handle) == input_parameters_.end(),
+               "Input parameter " << input_handle << " not found");
+  auto input = input_parameters_.at(input_handle);
+  ERROR_ON_MSG(!input.TypeAndShapeMatch(tensor), "Input/output shape mismatch");
+  ERROR_ON_MSG(input.Name() != tensor.Name(),
+               "Output parameters name "
+                   << tensor.Name() << " doesn't match the name of the input "
+                   << input.Name());
+  if (info.Initialised()) {
+    ERROR_ON_MSG(meta_.verification_info.at(input_handle).Id() != info.Id(),
+                 "Input/Output VerificationInfo's ID mismatch");
+  } else {
+    ERROR_ON_MSG(meta_.verification_info.find(input_handle) !=
+                     meta_.verification_info.end(),
+                 "Input has some VerificationInfo but the output doesn't");
+  }
+  AddVerificationInfo(tensor.Handle(), info);
+  meta_.outputs.push_back(tensor);
+  meta_.outputs.back().SetType(TensorType::ParameterOut);
+}
+
+void MetadataBuilder::CreateInfeed(const std::string& name) {
+  ERROR_ON_MSG(infeeds_.find(name) != infeeds_.end(),
+               "Infeed " << name << " already exists");
+  meta_.infeeds.emplace_back();
+  meta_.infeeds.back().name = name;
+  infeeds_[name] = meta_.infeeds.size() - 1;
+}
+
+void MetadataBuilder::AddInfeedStream(const std::string& infeed_name,
+                                      const TensorInfo& tensor,
+                                      const VerificationInfo& info) {
+  auto& streams = meta_.infeeds.at(infeeds_.at(infeed_name)).streams;
+  AddVerificationInfo(tensor.Handle(), info);
+  streams.push_back(tensor);
+  streams.back().SetType(TensorType::Infeed);
+}
+
+void MetadataBuilder::CreateOutfeed(const std::string& name) {
+  ERROR_ON_MSG(outfeeds_.find(name) != outfeeds_.end(),
+               "Outfeed " << name << " exists already");
+  meta_.outfeeds.emplace_back();
+  meta_.outfeeds.back().name = name;
+  outfeeds_[name] = meta_.outfeeds.size() - 1;
+}
+
+void MetadataBuilder::AddOutfeedStream(const std::string& outfeed_name,
+                                       const TensorInfo& tensor,
+                                       const VerificationInfo& info) {
+  auto& streams = meta_.outfeeds.at(outfeeds_.at(outfeed_name)).streams;
+  AddVerificationInfo(tensor.Handle(), info);
+  streams.push_back(tensor);
+  streams.back().SetType(TensorType::Outfeed);
+}
+
+void MetadataBuilder::AddOption(const std::string& key,
+                                const std::string& value) {
+  ERROR_ON_MSG(!meta_.options.emplace(key, value).second,
+               "Option " << key << " already added");
+}
+
+void MetadataBuilder::SetConfig(int64_t replication_count, int64_t num_ipus) {
+  meta_.replication_count = replication_count;
+  meta_.num_ipus = num_ipus;
+}
+
+void MetadataBuilder::AddCheckpoint(const std::vector<std::string>& feeds_order,
+                                    const VerificationInfo& checkpointInInfo,
+                                    const VerificationInfo& checkpointOutInfo) {
+  ERROR_ON_MSG(!meta_.feeds_order.empty(), "Checkpoint already added");
+  // Indices are 64 bits but Poplar only supports S32, so multiply by 2:
+  TensorInfo inputCheckpoint{
+      Metadata::CheckpointName(), Metadata::InputCheckpointHandle(),
+      TensorShape({static_cast<int64_t>(2 * feeds_order.size())},
+                  DataType::S32),
+      TensorType::Parameter};
+  AddVerificationInfo(inputCheckpoint.Handle(), checkpointInInfo);
+  meta_.inputs.push_back(inputCheckpoint);
+
+  TensorInfo inputCheckpointIndex{Metadata::InputCheckpointIndexName(),
+                                  Metadata::InputCheckpointIndexHandle(),
+                                  TensorShape({2}, DataType::S32),
+                                  TensorType::InputData};
+  meta_.inputs.push_back(inputCheckpointIndex);
+
+  TensorInfo outputCheckpoint = inputCheckpoint;
+  outputCheckpoint.SetHandle(Metadata::OutputCheckpointHandle());
+  outputCheckpoint.SetType(TensorType::ParameterOut);
+  AddVerificationInfo(outputCheckpoint.Handle(), checkpointOutInfo);
+  meta_.outputs.push_back(outputCheckpoint);
+
+  TensorInfo outputClearCheckpoint = outputCheckpoint;
+  outputClearCheckpoint.SetHandle(Metadata::OutputClearCheckpointHandle());
+  outputClearCheckpoint.SetName(Metadata::ClearCheckpointName());
+  outputClearCheckpoint.SetType(TensorType::OutputData);
+  meta_.outputs.push_back(outputClearCheckpoint);
+
+  meta_.feeds_order = feeds_order;
+}
+
+Metadata MetadataBuilder::BuildMetadata() const { return meta_; }
 
 }  // namespace ipu

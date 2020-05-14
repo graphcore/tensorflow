@@ -325,18 +325,17 @@ Status ExportInternal(const ModuleFilenames& filenames,
 
   // Write poplar executable to a file
   try {
-    TF_ASSIGN_OR_RETURN(std::string json_metadata,
-                        CreateExecutableMetadataJson(
+    TF_ASSIGN_OR_RETURN(ipu::Metadata metadata,
+                        CreateExecutableMetadata(
                             io_map, infeeds, outfeeds, replication_count, opts,
                             target, indices, checkpoint_feeds_order));
-    TF_ASSIGN_OR_RETURN(std::string json_metadata_no_verif,
-                        CreateExecutableMetadataJson(
-                            io_map, infeeds, outfeeds, replication_count, opts,
-                            target, {}, checkpoint_feeds_order));
+    std::string json_metadata = metadata.ToJson();
+    VLOG(1) << "Module JSON Metadata: " << json_metadata;
     // For security reasons don't store the verification information inside the
     // binary.
+    metadata.verification_info.clear();
     ipu::BinaryWriter writer(filenames.SerializedExecutableFilename());
-    writer.WriteMetadata(filenames.Name(), json_metadata_no_verif);
+    writer.WriteMetadata(filenames.Name(), metadata);
     {
       ipu::ExecutableWriter exec_writer =
           writer.CreateExecutable(filenames.Name());

@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
+#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_data.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -156,10 +157,9 @@ std::string GetTensorMappingJson(const std::string& module_name,
                                  const poplar::Graph& graph,
                                  const TensorMaps& tensor_map);
 
-/* Save the inputs / outputs metadata from the compiler resources in a Json
- * file.
+/* Create an inputs / outputs metadata structure from the compiler resources
  */
-StatusOr<std::string> CreateExecutableMetadataJson(
+StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const InputOutputAliasingMap& io_map, const InfeedInfos& infeed_infos,
     const OutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& opts, const poplar::Target& target,

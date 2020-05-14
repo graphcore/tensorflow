@@ -37,7 +37,7 @@ limitations under the License.
     if (!ipu::LogContext::Context().empty()) {                                \
       __error_msg << " Context:" << ipu::LogContext::Context();               \
     }                                                                         \
-    throw std::runtime_error(__error_msg.str());                              \
+    throw ipu::Exception(__error_msg.str());                                  \
   } while (0)
 
 #define PRINT_INFO(msg)                                                    \
@@ -58,28 +58,49 @@ limitations under the License.
 
 #define ERROR_ON(condition) ERROR_ON_MSG(condition, #condition)
 
+// This is needed to catch STL exceptions and attach some context to them.
+#define CATCH_AND_RETHROW_AS_IPU_EXCEPTION                            \
+  catch (const ipu::Exception& e) {                                   \
+    throw e;                                                          \
+  }                                                                   \
+  catch (const std::out_of_range& e) {                                \
+    ERROR(absl::StrCat("'std::out_of_range' exception: ", e.what())); \
+  }                                                                   \
+  catch (const std::exception& e) {                                   \
+    ERROR(absl::StrCat("'std::exception' exception: ", e.what()));    \
+  }
+
 namespace poplar {
 class Executable;
 }  // namespace poplar
 
 namespace ipu {
 
+class Exception : public std::runtime_error {
+ public:
+  explicit Exception(const std::string& msg);
+};
+
 class LogContext {
  public:
   static const std::string& Context();
   static bool InfoEnabled();
   static void EnableInfo(bool enabled);
+  LogContext();
   explicit LogContext(const std::string& context);
   void UpdateContext(const std::string& new_context);
+  void Clear();
   ~LogContext();
 
  private:
   static std::string context_;
   static bool info_enabled_;
-  const std::string saved_context_;
+  bool cleared_;
+  std::string saved_context_;
 };
 
 class BinaryWriter;
+struct FeedInfo;
 class Outfeed;
 class StreamReader;
 class StreamWriter;
@@ -96,7 +117,7 @@ class TensorShape {
  public:
   TensorShape() = default;
   TensorShape(const TensorShape& shape, int64_t metadata_size);
-  explicit TensorShape(DataType type, const Json::Value& array);
+  explicit TensorShape(const Json::Value& shape);
   explicit TensorShape(StreamReader& in);
   TensorShape(const std::vector<int64_t>& shape, DataType type);
   int64_t NumElements() const;
@@ -104,6 +125,7 @@ class TensorShape {
   int64_t DataSizeInBytes() const;
   int64_t NumDimensions() const;
   int64_t operator[](int64_t idx) const;
+  Json::Value ToJson() const;
   std::string ToString() const;
   DataType Type() const;
   void ToStream(StreamWriter& out) const;
@@ -148,7 +170,7 @@ class TensorInfo {
   explicit TensorInfo(const Json::Value& info);
   TensorInfo(const Json::Value& info, TensorType type);
   TensorInfo(const std::string& name, const std::string& handle,
-             const TensorShape& shape, TensorType type);
+             const TensorShape& shape, TensorType type = TensorType::NotSet);
   explicit TensorInfo(StreamReader& in);
 
   /* Return the filename where the values for this Tensors are stored.
@@ -159,10 +181,15 @@ class TensorInfo {
   const std::string& Name() const;
   const std::string& Handle() const;
   TensorType Type() const;
-  std::string ToString() const;
-  void ToStream(StreamWriter& out) const;
   bool TypeAndShapeMatch(const TensorInfo& other) const;
   void SetMetadataSize(int64_t metadata_size);
+  void SetShape(const TensorShape& shape);
+  void SetName(const std::string& name);
+  void SetHandle(const std::string& handle);
+  void SetType(TensorType type);
+  std::string ToString() const;
+  void ToStream(StreamWriter& out) const;
+  Json::Value ToJson() const;
 
  private:
   std::string name_;
@@ -213,8 +240,7 @@ class OutfeedStream {
 
 class Outfeed {
  public:
-  explicit Outfeed(const Json::Value& Outfeed,
-                   std::function<size_t(size_t)> metadata_size_fn = {});
+  explicit Outfeed(const FeedInfo& info);
   const std::string& Name() const;
   std::vector<OutfeedStream>& Streams();
   void SetOutputFolder(const std::string& output_folder);
@@ -223,6 +249,90 @@ class Outfeed {
  private:
   const std::string name_;
   std::vector<OutfeedStream> streams_;
+};
+
+struct FeedInfo {
+  FeedInfo() = default;
+  explicit FeedInfo(const Json::Value& info);
+  Json::Value ToJson() const;
+  std::string name;
+  std::vector<TensorInfo> streams;
+};
+
+class VerificationInfo {
+ public:
+  VerificationInfo();
+  explicit VerificationInfo(const Json::Value& info);
+  Json::Value ToJson() const;
+  VerificationInfo(int64_t key, int64_t id);
+  void SetInfo(int64_t key, int64_t id);
+  bool Initialised() const;
+  int64_t Key() const;
+  int64_t Id() const;
+
+ private:
+  int64_t key_;
+  int64_t id_;
+  bool initialised_;
+};
+
+struct Metadata {
+ public:
+  Metadata() = default;
+  std::string ToJson() const;
+  explicit Metadata(const Json::Value& root);
+  static const std::string& CheckpointName();
+  static const std::string& ClearCheckpointName();
+  static const std::string& InputCheckpointIndexHandle();
+  static const std::string& InputCheckpointIndexName();
+  static const std::string& InputCheckpointHandle();
+  static const std::string& OutputCheckpointHandle();
+  static const std::string& OutputClearCheckpointHandle();
+
+  std::vector<TensorInfo> inputs;
+  std::vector<TensorInfo> outputs;
+  std::vector<FeedInfo> infeeds;
+  std::vector<FeedInfo> outfeeds;
+  std::vector<std::string> feeds_order;
+  std::map<std::string, VerificationInfo> verification_info;
+  int64_t replication_count;
+  int64_t num_ipus;
+  std::map<std::string, std::string> options;
+};
+
+class MetadataBuilder {
+ public:
+  MetadataBuilder() = default;
+  void AddInput(const TensorInfo& tensor, const VerificationInfo& info = {});
+  void AddInputParameter(const TensorInfo& tensor,
+                         const VerificationInfo& info = {});
+  void AddOutput(const TensorInfo& tensor, const VerificationInfo& info = {});
+  void AddOutputParameter(const TensorInfo& tensor,
+                          const VerificationInfo& info = {});
+  void AddOutputModifiedParameter(const std::string& input_handle,
+                                  const TensorInfo& tensor,
+                                  const VerificationInfo& info = {});
+  void CreateInfeed(const std::string& name);
+  void AddInfeedStream(const std::string& infeed_name, const TensorInfo& tensor,
+                       const VerificationInfo& info = {});
+  void CreateOutfeed(const std::string& name);
+  void AddOutfeedStream(const std::string& outfeed_name,
+                        const TensorInfo& tensor,
+                        const VerificationInfo& info = {});
+  void AddOption(const std::string& key, const std::string& value);
+  void SetConfig(int64_t replication_count, int64_t num_ipus);
+  void AddCheckpoint(const std::vector<std::string>& feeds_order,
+                     const VerificationInfo& checkpointInInfo,
+                     const VerificationInfo& checkpointOutInfo);
+  Metadata BuildMetadata() const;
+
+ private:
+  void AddVerificationInfo(const std::string& handle,
+                           const VerificationInfo& info);
+  Metadata meta_;
+  std::map<std::string, TensorInfo> input_parameters_;
+  std::map<std::string, int64_t> infeeds_;
+  std::map<std::string, int64_t> outfeeds_;
 };
 
 class StreamWriter {
@@ -299,7 +409,7 @@ class BinaryWriter {
   FeedWriter CreateFeed(const std::string& name, const TensorInfo& info,
                         int64_t num_elements);
   ExecutableWriter CreateExecutable(const std::string& name);
-  void WriteMetadata(const std::string& name, const std::string& json_metadata);
+  void WriteMetadata(const std::string& name, const Metadata& metadata);
   void WriteTensor(const Tensor& tensor, const std::string override_name = "");
   void Close();
   ~BinaryWriter();
@@ -335,7 +445,7 @@ class InfeedStream {
 class BinaryReader {
  public:
   void LoadFile(const std::string& filename);
-  std::unique_ptr<StreamReader> CreateMetadataReader(
+  std::unique_ptr<Metadata> ReadMetadata(
       const std::string metadata_name = "") const;
   std::unique_ptr<StreamReader> CreateExecutableReader(
       const std::string executable_name = "") const;

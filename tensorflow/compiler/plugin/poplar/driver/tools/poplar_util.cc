@@ -399,268 +399,180 @@ std::string UnmangleInputName(std::string name) {
   return name;
 }
 
-Json::Value DimensionsToJson(const absl::Span<const int64> dimensions) {
-  Json::Value js_dims{Json::arrayValue};
-  for (auto dim : dimensions) {
-    js_dims.append(Json::Value::Int64(dim));
+Status SetIpuShape(ipu::TensorInfo& info, const xla::Shape& xla_shape) {
+  ipu::DataType type;
+  switch (xla_shape.element_type()) {
+    case xla::S32:
+      type = ipu::DataType::S32;
+      break;
+    case xla::F32:
+      type = ipu::DataType::F32;
+      break;
+    case xla::PrimitiveType::F16:
+      type = ipu::DataType::F16;
+      break;
+    default:
+      return xla::InvalidArgument("PrimitiveType not supported");
   }
-  return js_dims;
+  std::vector<int64_t> dimensions;
+  for (auto dim : xla_shape.dimensions()) {
+    dimensions.push_back(dim);
+  }
+  info.SetShape(ipu::TensorShape(dimensions, type));
+  return Status::OK();
 }
 
 }  // namespace
 
-StatusOr<std::string> CreateExecutableMetadataJson(
+StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const InputOutputAliasingMap& io_map, const InfeedInfos& infeed_infos,
     const OutfeedInfos& outfeed_infos, uint32 replication_count,
     const poplar::OptionFlags& opts, const poplar::Target& target,
     const VerifiedStreamsIndices::KeyIdMappings& indices,
     const std::vector<string>& checkpoint_feeds_order) {
-  Json::Value inputs;
-  std::map<std::string, std::string> params_handle_map;
-  const bool use_verified_transfers = !indices.empty();
-  for (auto input : io_map.GetEntryInputInfos()) {
-    Json::Value stream;
-    if (input.Shape().IsTuple()) {
-      return tensorflow::errors::Unimplemented("Tuple inputs not supported");
-    }
-
-    const std::string handle = input.Handles().at(0);
-    stream["name"] = UnmangleInputName(input.Name());
-    stream["handle"] = handle;
-    stream["data_type"] = PrimitiveType_Name(input.Shape().element_type());
-    stream["shape"] = DimensionsToJson(input.Shape().dimensions());
-    if (input.IsStreaming()) {
-      stream["type"] = "input_data";
-    } else if (input.IsResource()) {
-      stream["type"] = "parameter";
-      params_handle_map[handle] = UnmangleInputName(input.Name());
-    }
-    if (use_verified_transfers) {
-      auto key_id = indices.at(handle);
-      stream["key"] = Json::Value::Int64(key_id.key);
-      stream["id"] = Json::Value::Int64(key_id.id);
-    }
-    inputs.append(stream);
-  }
-
-  Json::Value outputs;
-  for (auto output : io_map.GetEntryOutputInfos()) {
-    if (output.Shape().IsTuple()) {
-      return xla::FailedPrecondition("Nested tuples in output not supported");
-    }
-    Json::Value stream;
-    const std::string handle = output.Handles().at(0);
-    stream["name"] = output.Name();
-    stream["handle"] = handle;
-    stream["data_type"] = PrimitiveType_Name(output.Shape().element_type());
-    stream["shape"] = DimensionsToJson(output.Shape().dimensions());
-    if (output.IsStreaming()) {
-      stream["type"] = "output_data";
-    } else if (output.IsResource()) {
-      stream["type"] = "parameter_out";
-      if (output.IsResourceModified()) {
-        const std::string input_handle =
-            GetInputCopyHandle(output.GetInputIndex(), 0);
-        stream["input_handle"] = input_handle;
-        // Override the name to make sure it matches the one from the input.
-        stream["name"] = params_handle_map.at(input_handle);
+  try {
+    ipu::MetadataBuilder builder;
+    std::map<std::string, std::string> params_handle_map;
+    const bool use_verified_transfers = !indices.empty();
+    for (auto input : io_map.GetEntryInputInfos()) {
+      VLOG(1) << "Processing input " << input.Name();
+      if (input.Shape().IsTuple()) {
+        return tensorflow::errors::Unimplemented("Tuple inputs not supported");
+      }
+      ipu::TensorInfo t;
+      ipu::VerificationInfo info;
+      t.SetHandle(input.Handles().at(0));
+      t.SetName(UnmangleInputName(input.Name()));
+      if (use_verified_transfers) {
+        auto key_id = indices.at(t.Handle());
+        info.SetInfo(key_id.key, key_id.id);
+      }
+      TF_RETURN_IF_ERROR(SetIpuShape(t, input.Shape()));
+      if (input.IsStreaming()) {
+        builder.AddInput(t, info);
+      } else if (input.IsResource()) {
+        builder.AddInputParameter(t, info);
+        params_handle_map[t.Handle()] = t.Name();
       }
     }
-    if (use_verified_transfers) {
-      auto key_id = indices.at(handle);
-      stream["key"] = Json::Value::Int64(key_id.key);
-      stream["id"] = Json::Value::Int64(key_id.id);
-      if (output.IsResourceModified()) {
-        const std::string input_handle =
-            GetInputCopyHandle(output.GetInputIndex(), 0);
-        auto input_key_id = indices.at(input_handle);
-        if (key_id.id != input_key_id.id) {
-          return xla::FailedPrecondition(
-              "Parameter out %s's id (%d) is different from the corresponding "
-              "input's id (%d)",
-              handle, key_id.id, input_key_id.id);
+
+    for (auto output : io_map.GetEntryOutputInfos()) {
+      VLOG(1) << "Processing output " << output.Name();
+      if (output.Shape().IsTuple()) {
+        return xla::FailedPrecondition("Nested tuples in output not supported");
+      }
+      ipu::TensorInfo t;
+      ipu::VerificationInfo info;
+      t.SetName(output.Name());
+      t.SetHandle(output.Handles().at(0));
+      if (use_verified_transfers) {
+        auto key_id = indices.at(t.Handle());
+        info.SetInfo(key_id.key, key_id.id);
+      }
+      TF_RETURN_IF_ERROR(SetIpuShape(t, output.Shape()));
+      if (output.IsStreaming()) {
+        builder.AddOutput(t, info);
+      } else if (output.IsResource()) {
+        if (output.IsResourceModified()) {
+          const std::string input_handle =
+              GetInputCopyHandle(output.GetInputIndex(), 0);
+          // Override the name to make sure it matches the one from the
+          // input.
+          t.SetName(params_handle_map.at(input_handle));
+          builder.AddOutputModifiedParameter(input_handle, t, info);
+        } else {
+          builder.AddOutputParameter(t, info);
         }
       }
     }
-    outputs.append(stream);
-  }
 
-  Json::Value infeeds;
-  for (auto infeed : infeed_infos) {
-    if (!infeed.shape.IsTuple() || infeed.shape.tuple_shapes_size() != 2 ||
-        !infeed.shape.tuple_shapes(0).IsTuple()) {
-      return xla::FailedPrecondition(
-          "Expected the shape of the infeed %s to be of the shape ((shape), "
-          "token[]).",
-          infeed.config.feed_id());
-    }
-    Json::Value feed;
-    Json::Value streams;
-    feed["name"] = infeed.config.feed_id();
-    for (auto shape : infeed.shape.tuple_shapes(0).tuple_shapes()) {
-      if (shape.IsTuple()) {
+    for (auto infeed : infeed_infos) {
+      VLOG(1) << "Processing infeed " << infeed.config.feed_id();
+      if (!infeed.shape.IsTuple() || infeed.shape.tuple_shapes_size() != 2 ||
+          !infeed.shape.tuple_shapes(0).IsTuple()) {
         return xla::FailedPrecondition(
-            "Nested tuples in infeed not supported: shape for %s expected to "
-            "be something like ((shape), token[]).",
+            "Expected the shape of the infeed %s to be of the shape ((shape), "
+            "token[]).",
             infeed.config.feed_id());
       }
-      Json::Value stream;
-      const std::string handle =
-          GetInfeedCopyHandle(infeed.stream_prefix, streams.size());
-      stream["name"] =
-          absl::StrCat(infeed.config.feed_id(), ".", streams.size());
-      stream["handle"] = handle;
-      stream["shape"] = DimensionsToJson(shape.dimensions());
-      stream["data_type"] = PrimitiveType_Name(shape.element_type());
-      if (use_verified_transfers) {
-        auto key_id = indices.at(handle);
-        stream["key"] = Json::Value::Int64(key_id.key);
-        stream["id"] = Json::Value::Int64(key_id.id);
+      builder.CreateInfeed(infeed.config.feed_id());
+      int64_t stream_idx = 0;
+      for (auto shape : infeed.shape.tuple_shapes(0).tuple_shapes()) {
+        if (shape.IsTuple()) {
+          return xla::FailedPrecondition(
+              "Nested tuples in infeed not supported: shape for %s expected to "
+              "be something like ((shape), token[]).",
+              infeed.config.feed_id());
+        }
+        ipu::TensorInfo t;
+        ipu::VerificationInfo info;
+        t.SetHandle(GetInfeedCopyHandle(infeed.stream_prefix, stream_idx));
+        t.SetName(absl::StrCat(infeed.config.feed_id(), ".", stream_idx));
+        TF_RETURN_IF_ERROR(SetIpuShape(t, shape));
+        if (use_verified_transfers) {
+          auto key_id = indices.at(t.Handle());
+          info.SetInfo(key_id.key, key_id.id);
+        }
+        builder.AddInfeedStream(infeed.config.feed_id(), t, info);
+        stream_idx++;
       }
-      streams.append(stream);
     }
-    feed["streams"] = streams;
-    infeeds.append(feed);
-  }
 
-  Json::Value outfeeds;
-  for (auto outfeed : outfeed_infos) {
-    auto shapes = outfeed.shape.IsTuple()
-                      ? outfeed.shape.tuple_shapes()
-                      : std::vector<xla::Shape>({outfeed.shape});
-    Json::Value streams;
-    Json::Value feed;
-    feed["name"] = outfeed.config.feed_id();
-    for (auto shape : shapes) {
-      if (shape.IsTuple()) {
+    for (auto outfeed : outfeed_infos) {
+      VLOG(1) << "Processing outfeed " << outfeed.config.feed_id();
+      auto shapes = outfeed.shape.IsTuple()
+                        ? outfeed.shape.tuple_shapes()
+                        : std::vector<xla::Shape>({outfeed.shape});
+      builder.CreateOutfeed(outfeed.config.feed_id());
+      int64_t stream_idx = 0;
+      for (auto shape : shapes) {
+        if (shape.IsTuple()) {
+          return xla::FailedPrecondition(
+              "Nested tuples in outfeed not supported: shape for tuple %d in "
+              "%s is a tuple %s",
+              stream_idx, outfeed.config.feed_id(), shape.ToString());
+        }
+        ipu::TensorInfo t;
+        ipu::VerificationInfo info;
+        t.SetHandle(GetOutfeedCopyHandle(outfeed.stream_prefix, stream_idx));
+        t.SetName(absl::StrCat(outfeed.config.feed_id(), ".", stream_idx));
+        TF_RETURN_IF_ERROR(SetIpuShape(t, shape));
+        if (use_verified_transfers) {
+          auto key_id = indices.at(t.Handle());
+          info.SetInfo(key_id.key, key_id.id);
+        }
+        builder.AddOutfeedStream(outfeed.config.feed_id(), t, info);
+        stream_idx++;
+      }
+    }
+
+    for (auto opt : opts) {
+      builder.AddOption(opt.first, opt.second);
+    }
+    builder.SetConfig(replication_count, target.getNumIPUs());
+    if (target.getTargetType() != poplar::TargetType::IPU) {
+      return xla::FailedPrecondition(
+          "The target's type must be poplar::TargetType::IPU");
+    }
+
+    if (!checkpoint_feeds_order.empty()) {
+      VLOG(1) << "Creating checkpoint";
+      if (!use_verified_transfers) {
         return xla::FailedPrecondition(
-            "Nested tuples in outfeed not supported: shape for tuple %d in %s "
-            "is a tuple %s",
-            streams.size(), outfeed.config.feed_id(), shape.ToString());
+            "Can't use checkpoints without verified transfers");
       }
-      Json::Value stream;
-      const std::string handle =
-          GetOutfeedCopyHandle(outfeed.stream_prefix, streams.size());
-      stream["name"] =
-          absl::StrCat(outfeed.config.feed_id(), ".", streams.size());
-      stream["handle"] = handle;
-      stream["data_type"] = PrimitiveType_Name(shape.element_type());
-      stream["shape"] = DimensionsToJson(shape.dimensions());
-      if (use_verified_transfers) {
-        auto key_id = indices.at(handle);
-        stream["key"] = Json::Value::Int64(key_id.key);
-        stream["id"] = Json::Value::Int64(key_id.id);
-      }
-      streams.append(stream);
+      ipu::VerificationInfo checkpointIn, checkpointOut;
+      auto key_id = indices.at(ipu::Metadata::InputCheckpointHandle());
+      checkpointIn.SetInfo(key_id.key, key_id.id);
+      key_id = indices.at(ipu::Metadata::OutputCheckpointHandle());
+      checkpointOut.SetInfo(key_id.key, key_id.id);
+      builder.AddCheckpoint(checkpoint_feeds_order, checkpointIn,
+                            checkpointOut);
     }
-    feed["streams"] = streams;
-    outfeeds.append(feed);
+    return builder.BuildMetadata();
+  } catch (const std::exception& e) {
+    return tensorflow::errors::Internal(e.what());
   }
-
-  Json::Value config;
-  Json::Value options;
-  for (auto opt : opts) {
-    options[opt.first] = opt.second;
-  }
-  if (!options.empty()) {
-    config["options"] = options;
-  }
-  config["replication_count"] = Json::Value::Int64(replication_count);
-  config["num_ipus"] = Json::Value::Int64(target.getNumIPUs());
-  if (target.getTargetType() != poplar::TargetType::IPU) {
-    return xla::FailedPrecondition(
-        "The target's type must be poplar::TargetType::IPU");
-  }
-
-  Json::Value checkpoint;
-  Json::Value streams;
-  for (auto feed : checkpoint_feeds_order) {
-    streams.append(feed);
-  }
-  checkpoint["feeds"] = streams;
-
-  if (!checkpoint_feeds_order.empty()) {
-    {
-      const std::string handle = "checkpointIn";
-      Json::Value stream;
-      stream["name"] = "checkpoint";
-      stream["handle"] = handle;
-      stream["data_type"] = "S32";
-      stream["shape"] = DimensionsToJson({2 * checkpoint_feeds_order.size()});
-      stream["type"] = "parameter";
-
-      if (use_verified_transfers) {
-        auto key_id = indices.at(handle);
-        stream["key"] = Json::Value::Int64(key_id.key);
-        stream["id"] = Json::Value::Int64(key_id.id);
-      }
-      inputs.append(stream);
-    }
-    {
-      const std::string handle = "checkpointIndex";
-      Json::Value stream;
-      stream["name"] = handle;
-      stream["handle"] = handle;
-      stream["data_type"] = "S32";
-      stream["shape"] = DimensionsToJson({2});
-      stream["type"] = "input_data";
-
-      inputs.append(stream);
-    }
-    {
-      Json::Value stream;
-      const std::string handle = "checkpointOut";
-      stream["handle"] = handle;
-      stream["data_type"] = "S32";
-      stream["shape"] = DimensionsToJson({2 * checkpoint_feeds_order.size()});
-      stream["type"] = "parameter_out";
-      stream["input_handle"] = "checkpointIn";
-      // Override the name to make sure it matches the one from the input.
-      stream["name"] = "checkpoint";
-      if (use_verified_transfers) {
-        auto key_id = indices.at(handle);
-        stream["key"] = Json::Value::Int64(key_id.key);
-        stream["id"] = Json::Value::Int64(key_id.id);
-      }
-      outputs.append(stream);
-    }
-    {
-      Json::Value stream;
-      const std::string handle = "checkpointOutClear";
-      stream["name"] = "checkpointClear";
-      stream["handle"] = handle;
-      stream["data_type"] = "S32";
-      stream["shape"] = DimensionsToJson({2 * checkpoint_feeds_order.size()});
-      stream["type"] = "output_data";
-      outputs.append(stream);
-    }
-  }
-
-  Json::Value root;
-  if (!inputs.empty()) {
-    root["inputs"] = inputs;
-  }
-  if (!outputs.empty()) {
-    root["outputs"] = outputs;
-  }
-  if (!infeeds.empty()) {
-    root["infeeds"] = infeeds;
-  }
-  if (!outfeeds.empty()) {
-    root["outfeeds"] = outfeeds;
-  }
-  if (!checkpoint_feeds_order.empty()) {
-    root["checkpoint"] = checkpoint;
-  }
-  root["config"] = config;
-
-  Json::StreamWriterBuilder json_builder;
-  json_builder["indentation"] = "";
-  json_builder["commentStyle"] = "None";
-
-  std::string json_msg = Json::writeString(json_builder, root);
-  VLOG(1) << "Module JSON Metadata: " << json_msg;
-  return json_msg;
 }
 
 std::string GetTensorMappingJson(const std::string& module_name,

@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_data.h"
 
 #include <poplar/Tensor.hpp>
 #include <popops/ElementWise.hpp>
@@ -357,25 +358,25 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
   poplar::Graph& graph = GetMasterGraph(*resources_);
   TF_ASSIGN_OR_RETURN(
       checkpoint_tensor_,
-      AddPlainTensor(graph, "checkpoint",
+      AddPlainTensor(graph, ipu::Metadata::CheckpointName(),
                      XlaShapeFromPoplarShape(xla::PrimitiveType::U32,
                                              {2 * feeds_info_.size()}),
                      *resources_));
 
   TF_ASSIGN_OR_RETURN(
       poplar::Tensor checkpoint_idx,
-      AddPlainTensor(graph, "checkpointIndex",
+      AddPlainTensor(graph, ipu::Metadata::InputCheckpointIndexName(),
                      XlaShapeFromPoplarShape(xla::PrimitiveType::U32, {2}),
                      *resources_));
 
-  auto fifo_index =
-      graph.addHostToDeviceFIFO("checkpointIndex", checkpoint_idx.elementType(),
-                                checkpoint_idx.numElements());
+  auto fifo_index = graph.addHostToDeviceFIFO(
+      ipu::Metadata::InputCheckpointIndexHandle(), checkpoint_idx.elementType(),
+      checkpoint_idx.numElements());
   load_checkpoint_.add(
       poplar::program::Copy(fifo_index, checkpoint_idx, false));
 
   auto fifo_in = graph.addHostToDeviceFIFO(
-      "checkpointIn", checkpoint_tensor_.elementType(),
+      ipu::Metadata::InputCheckpointHandle(), checkpoint_tensor_.elementType(),
       checkpoint_tensor_.numElements(), poplar::ReplicatedStreamMode::BROADCAST,
       {{"streamVerification", "true"},
        {"key", absl::StrCat(opts.checkpoint_in().key())},
@@ -393,7 +394,7 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
                      "CheckpointIndexInc");
 
   auto fifo_out = graph.addDeviceToHostFIFO(
-      "checkpointOut", checkpoint_tensor_.elementType(),
+      ipu::Metadata::OutputCheckpointHandle(), checkpoint_tensor_.elementType(),
       checkpoint_tensor_.numElements(),
       {{"streamVerification", "true"},
        {"key", absl::StrCat(opts.checkpoint_out().key())},
@@ -405,8 +406,8 @@ Status VerifiedStreamsIndices::CreateCheckpointLoadSave(
       {fifo_out.handle(),
        {opts.checkpoint_out().key(), opts.checkpoint_out().start_id()}});
   auto fifo_out_clear = graph.addDeviceToHostFIFO(
-      "checkpointOutClear", checkpoint_tensor_.elementType(),
-      checkpoint_tensor_.numElements());
+      ipu::Metadata::OutputClearCheckpointHandle(),
+      checkpoint_tensor_.elementType(), checkpoint_tensor_.numElements());
   save_checkpoint_.add(
       poplar::program::Copy(checkpoint_tensor_, fifo_out_clear, false));
 

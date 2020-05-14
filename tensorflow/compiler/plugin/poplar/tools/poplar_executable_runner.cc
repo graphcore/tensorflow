@@ -58,13 +58,29 @@ enum PoplarProgramType {
   DEVICE_TO_HOST,
 };
 
-poplar::OptionFlags ParseOptionFlags(const Json::Value& options) {
-  poplar::OptionFlags opts;
-  if (!options.isNull()) {
-    for (auto key : options.getMemberNames()) {
-      std::string value = options[key].asString();
-      opts.set(key, value);
+std::string ObjectTypeToString(ObjectType type) {
+  switch (type) {
+    case ObjectType::Feed: {
+      return "feed";
     }
+    case ObjectType::Tensor: {
+      return "tensor";
+    }
+    case ObjectType::PoplarExecutable: {
+      return "Poplar executable";
+    }
+    case ObjectType::PoplarMetadata: {
+      return "Poplar metadata";
+    }
+    default:
+      ERROR("Unknown ObjectType " << static_cast<int64_t>(type));
+  }
+}
+
+poplar::OptionFlags ParseOptionFlags(const Metadata& meta) {
+  poplar::OptionFlags opts;
+  for (auto option : meta.options) {
+    opts.set(option.first, option.second);
   }
   return opts;
 }
@@ -354,49 +370,30 @@ poplar::Device DeviceManager::GetDevice(int64_t num_ipus,
   ERROR("Failed to attach to any of the IPU devices");
 }
 
-IpuConfig::IpuConfig(const Json::Value& config)
-    : replication_count_(config["replication_count"].asInt64()),
-      num_ipus_(config["num_ipus"].asInt64()),
-      option_flags_(ParseOptionFlags(config["options"])) {}
+IpuConfig::IpuConfig(const Metadata& meta)
+    : replication_count_(meta.replication_count),
+      num_ipus_(meta.num_ipus),
+      option_flags_(ParseOptionFlags(meta)) {}
 
 int64_t IpuConfig::NumIpus() const { return num_ipus_; }
 int64_t IpuConfig::ReplicationCount() const { return replication_count_; }
 
 poplar::OptionFlags IpuConfig::OptionFlags() const { return option_flags_; }
 
-TensorManager::TensorManager(
-    const Json::Value& root,
-    std::function<size_t(size_t)> output_metadata_size_fn)
-    : config_(root["config"]) {
-  config_ = IpuConfig(root["config"]);
-  absl::c_transform(root["inputs"], std::back_inserter(inputs_),
-                    [](const Json::Value& input) {
-                      LogContext ctx(input.toStyledString());
-                      return Tensor{TensorInfo{input}};
-                    });
-  absl::c_transform(root["outputs"], std::back_inserter(outputs_),
-                    [&](const Json::Value& output) {
-                      LogContext ctx(output.toStyledString());
-                      TensorInfo info{output};
-                      if (output_metadata_size_fn) {
-                        info.SetMetadataSize(output_metadata_size_fn(
-                            info.Shape().DataSizeInBytes()));
-                      }
-                      return Tensor{info};
-                    });
-  absl::c_transform(root["infeeds"], std::back_inserter(infeeds_),
-                    [](const Json::Value& infeed) {
-                      LogContext ctx(infeed.toStyledString());
-                      return Infeed{infeed};
-                    });
-  absl::c_transform(root["outfeeds"], std::back_inserter(outfeeds_),
-                    [&](const Json::Value& outfeed) {
-                      LogContext ctx(outfeed.toStyledString());
-                      return Outfeed{outfeed, output_metadata_size_fn};
-                    });
-  absl::c_transform(root["checkpoint"]["feeds"],
-                    std::back_inserter(feeds_order_),
-                    [](const Json::Value& feed) { return feed.asString(); });
+TensorManager::TensorManager(const Metadata& meta) : config_(meta) {
+  for (auto input : meta.inputs) {
+    inputs_.emplace_back(input);
+  }
+  for (auto output : meta.outputs) {
+    outputs_.emplace_back(output);
+  }
+  for (auto infeed : meta.infeeds) {
+    infeeds_.emplace_back(infeed);
+  }
+  for (auto outfeed : meta.outfeeds) {
+    outfeeds_.emplace_back(outfeed);
+  }
+  feeds_order_ = meta.feeds_order;
 }
 
 void TensorManager::LoadCheckpointMetadataFromJson(
@@ -464,7 +461,7 @@ void TensorManager::AssertAllTensorsProvided(const BinaryLoader& loader) {
       loader.GetObjectNames(ObjectType::Feed);
   std::string errors_msg;
   for (auto& input : inputs_) {
-    if (input.Info().Name() == "checkpointIndex") {
+    if (input.Info().Name() == Metadata::InputCheckpointIndexName()) {
       continue;
     }
     if (tensors_provided.find(input.Info().Name()) == tensors_provided.end()) {
@@ -506,8 +503,8 @@ void TensorManager::SaveOutputs(TensorType type, BinaryWriter& writer,
                               &duplicates](const Tensor& out) {
     if (out.Info().Type() == type) {
       // Checkpoints will be saved separately.
-      if (out.Info().Name() == "checkpointOut" ||
-          out.Info().Name() == "checkpointOutClear") {
+      if (out.Info().Name() == Metadata::CheckpointName() ||
+          out.Info().Name() == Metadata::ClearCheckpointName()) {
         return;
       }
       auto& occurrences = duplicates[out.Info().Name()];
@@ -538,8 +535,8 @@ void TensorManager::SaveOutputsToJson(TensorType type,
         return;
       }
       // Checkpoints will be saved separately.
-      if (out.Info().Name() == "checkpointOut" ||
-          out.Info().Name() == "checkpointOutClear") {
+      if (out.Info().Name() == Metadata::CheckpointName() ||
+          out.Info().Name() == Metadata::ClearCheckpointName()) {
         return;
       }
       auto& occurrences = duplicates[out.Info().Name()];
@@ -570,8 +567,8 @@ bool TensorManager::ContainsCheckpoint() const { return !infeeds_.empty(); }
 void TensorManager::SaveCheckpoint(BinaryWriter& writer) {
   ERROR_ON(!ContainsCheckpoint());
   absl::c_for_each(outputs_, [&writer](const Tensor& out) {
-    if (out.Info().Name() == "checkpointOut" ||
-        out.Info().Name() == "checkpointOutClear") {
+    if (out.Info().Name() == Metadata::CheckpointName() ||
+        out.Info().Name() == Metadata::ClearCheckpointName()) {
       writer.WriteTensor(out);
     }
   });
@@ -579,10 +576,11 @@ void TensorManager::SaveCheckpoint(BinaryWriter& writer) {
 
 void TensorManager::LoadVerifiedCheckpoint(const BinaryLoader& loader,
                                            int64_t checkpoint_index) {
+  LogContext ctx("LoadVerifiedCheckpoint");
   ERROR_ON(!ContainsCheckpoint());
 
   std::unique_ptr<ipu::StreamReader> reader =
-      loader.GetTensorStream("checkpointClear");
+      loader.GetTensorStream(Metadata::ClearCheckpointName());
   ipu::Tensor feeds_positions{*reader};
   const int64_t* positions = reinterpret_cast<int64_t*>(feeds_positions.Data());
 
@@ -601,7 +599,7 @@ void TensorManager::LoadVerifiedCheckpoint(const BinaryLoader& loader,
     }
   }
   for (auto& input : inputs_) {
-    if (input.Info().Handle() == "checkpointIndex") {
+    if (input.Info().Handle() == Metadata::InputCheckpointIndexHandle()) {
       reinterpret_cast<int64_t*>(input.Data())[0] = checkpoint_index;
       return;
     }
@@ -688,12 +686,10 @@ const std::vector<InfeedStream>& Infeed::Streams() const { return streams_; }
 
 const std::string& Infeed::Name() const { return name_; }
 
-Infeed::Infeed(const Json::Value& infeed) : name_(infeed["name"].asString()) {
-  absl::c_transform(
-      infeed["streams"], std::back_inserter(streams_),
-      [](const Json::Value& stream) {
-        return InfeedStream{TensorInfo{stream, TensorType::Infeed}};
-      });
+Infeed::Infeed(const FeedInfo& infeed) : name_(infeed.name) {
+  for (auto stream : infeed.streams) {
+    streams_.emplace_back(stream);
+  }
 }
 
 void Infeed::InitializeDataSources(const BinaryLoader& loader) {
@@ -717,12 +713,10 @@ void Infeed::InitializeDataSources(const BinaryLoader& loader) {
 }
 
 std::unique_ptr<TensorManager> BinaryLoader::CreateTensorManager(
-    std::function<size_t(size_t)> output_metadata_size_fn,
     const std::string metadata_name) const {
   LogContext ctx{"BinaryLoader::CreateTensorManager " + metadata_name};
-  auto in = CreateMetadataReader(metadata_name);
-  return absl::make_unique<TensorManager>(LoadJsonFromString(in->ReadString()),
-                                          output_metadata_size_fn);
+  auto metadata = ReadMetadata(metadata_name);
+  return absl::make_unique<TensorManager>(*metadata);
 }
 
 std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
