@@ -13,13 +13,20 @@ load(
 )
 load("//tensorflow/compiler/xla:xla.bzl", "xla_proto_library")
 
-# Rule for creating the vertex program pre-compiled object
 genrule(
-    name = "tf_graph_program",
+    name = "convert_tf_graph_sources_to_literal",
     srcs = ["vertices/tf.cpp"],
-    outs = ["tf.gp"],
-    cmd = "$(location @local_config_poplar//poplar:popc) -DNDEBUG -O3 -I . -o $@ $<",
-    tools = ["@local_config_poplar//poplar:popc"],
+    outs = ["tf.cppembed"],
+    cmd = """
+        echo 'R"(' > $@
+        cat $(SRCS) >> $@
+        echo ')"'>> $@
+        """,
+)
+
+cc_library(
+    name = "tf_graph_sources",
+    hdrs = [":convert_tf_graph_sources_to_literal"],
 )
 
 # Rule for generating the custom codelet example
@@ -645,6 +652,7 @@ cc_library(
         ":optimizers",
         ":option_flag_cc_impl",
         ":pipeline_config_cc_impl",
+        ":tf_graph_sources",
         "//tensorflow/compiler/plugin/poplar/tools:poplar_executable_runner",
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/compiler/xla:xla_headers_lib",
@@ -1168,7 +1176,6 @@ cc_library(
     hdrs = [],
     data = [
         ":config_protos_py",
-        ":tf_graph_program",
     ],
     linkstatic = 1,
     deps = [
