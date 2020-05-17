@@ -91,7 +91,8 @@ class DeferredAllocations {
       absl::optional<int64> opt_tensors_start = absl::nullopt,
       absl::optional<int64> opt_tensors_end = absl::nullopt);
 
-  // Called during FinishVisit to make sure everything is allocated at the end.
+  // Called during FinishScopedVisit to make sure everything is allocated at the
+  // end.
   Status AllocateRemainingLocations();
 
  private:
@@ -233,6 +234,7 @@ class DeferredVisitor : public FullVisitor {
    */
   DeferredVisitor(
       CompilerResources& res, const DeferredArgVectors& callsite_inputs,
+      const std::string& name,
       const bool mark_all_input_tensors_as_used = false,
       const bool allocate_all_input_tensors = true,
       const std::vector<const DeferredVisitor*>& dependent_computations = {});
@@ -264,18 +266,14 @@ class DeferredVisitor : public FullVisitor {
 
   // Finish visit always sets the output tensors and moves the tensor map and
   // then calls FinishDeferedAllocationVisit.
-  Status FinishVisit(HloInstruction* inst) final;
+  Status FinishScopedVisit(HloInstruction* inst) final;
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a tensor.
   Status PropagateDeferredAllocations(const HloInstruction* callsite_inst);
 
-  poplar::program::Sequence GetSequence() const override {
-    poplar::program::Sequence seq;
-    seq.add(merged_infeed_sequence);
-    seq.add(sequence);
-    return seq;
-  }
+  poplar::program::Sequence GetSequence(
+      bool copy_execution_counters = true) final;
 
  protected:
   // Returns the sequence to be used by the given instruction.
@@ -306,7 +304,7 @@ class DeferredVisitor : public FullVisitor {
     return false;
   }
 
-  // FinishVisit which is aware of deferred allocations.
+  // FinishScopedVisit which is aware of deferred allocations.
   virtual Status FinishDeferedAllocationVisit(HloInstruction* inst);
 
   // Function called for each tensor in a parameter HloInstruction.
@@ -388,6 +386,7 @@ class InplaceDeferredVisitor : public DeferredVisitor {
  public:
   InplaceDeferredVisitor(
       CompilerResources& res, const DeferredArgVectors& inputs,
+      const std::string& name,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations = {},
       bool reallocate_inputs = false);
 

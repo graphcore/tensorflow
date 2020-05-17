@@ -89,8 +89,13 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
   return Status::OK();
 }
 
-BaseVisitor::BaseVisitor(CompilerResources& res) : resources_(res) {
-  stochastic_rounding_enabled_ = res.global_floating_point_behaviour.esr();
+BaseVisitor::BaseVisitor(CompilerResources& resources, const std::string& name)
+    : resources_(resources), execution_counters_(resources, name) {
+  stochastic_rounding_enabled_ =
+      resources_.global_floating_point_behaviour.esr();
+
+  // Push the execution counters onto the stack.
+  resources_.execution_counter_scopes.push(&execution_counters_);
 }
 
 const Shape& BaseVisitor::GetOutputShape(HloInstruction* inst) const {
@@ -231,7 +236,8 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   if (IsArithmeticExpressionFusion(inst)) {
     TensorVectors args =
         GetFusionInputs(resources_, inst, tensor_map, sequence);
-    ArithmeticExprVisitor arithmetic_visitor(resources_, args);
+    ArithmeticExprVisitor arithmetic_visitor(resources_, args,
+                                             GetDebugName(inst));
     TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));
     prog = arithmetic_visitor.GetSequence();
 
@@ -365,6 +371,29 @@ Status BaseVisitor::HandleInfeed(HloInstruction* inst) {
   return xla::FailedPrecondition(
       "Unsupported use of infeed operation - it's only supported inside of "
       "loops.");
+}
+
+Status BaseVisitor::FinishVisit(HloInstruction* root) {
+  resources_.execution_counter_scopes.pop();
+  return FinishScopedVisit(root);
+}
+
+ExecutionCounters& BaseVisitor::GetExecutionCounters() {
+  return execution_counters_;
+}
+
+poplar::program::Sequence BaseVisitor::GetSequence(
+    bool copy_execution_counters) {
+  if (copy_execution_counters) {
+    poplar::program::Sequence seq;
+    TF_CHECK_OK(
+        CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
+    seq.add(sequence);
+    return seq;
+  } else {
+    CHECK(execution_counters_.Initialized());
+    return sequence;
+  }
 }
 }  // namespace poplarplugin
 }  // namespace xla

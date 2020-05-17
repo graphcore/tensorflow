@@ -576,6 +576,7 @@ cc_library(
         "driver/tools/convolution_preplanning.cc",
         "driver/tools/data_initializer.cc",
         "driver/tools/embedding_plans_preplanning.cc",
+        "driver/tools/execution_counter_util.cc",
         "driver/tools/generic_graph_caching.cc",
         "driver/tools/io_thread.cc",
         "driver/tools/mapping_helper.cc",
@@ -617,6 +618,7 @@ cc_library(
         "driver/tools/convolution_preplanning.h",
         "driver/tools/data_initializer.h",
         "driver/tools/embedding_plans_preplanning.h",
+        "driver/tools/execution_counter_util.h",
         "driver/tools/generic_graph_caching.h",
         "driver/tools/io_thread.h",
         "driver/tools/mapping_helper.h",
@@ -2649,6 +2651,24 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "execution_counter_util_test",
+    srcs = ["tests/execution_counter_util_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla/service:hlo",
+        "//tensorflow/compiler/xla/service:hlo_runner",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:test",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4099,6 +4119,7 @@ test_suite(
         "dynamic_slice_test",
         "elementwise_broadcast_converter_test",
         "executable_cache_test",
+        "execution_counter_util_test",
         "expression_outliner_test",
         "extract_outside_compilation_pass_test",
         "f16_constant_folding_test",

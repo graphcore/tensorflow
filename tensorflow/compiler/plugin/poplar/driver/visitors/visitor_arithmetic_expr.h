@@ -20,6 +20,8 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_ARITHMETIC_EXPR_H_
 
 #include <map>
+#include <string>
+
 #include <popops/Expr.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_base.h"
@@ -34,7 +36,8 @@ namespace poplarplugin {
 
 class ArithmeticExprVisitor : public BaseVisitor {
  public:
-  ArithmeticExprVisitor(CompilerResources& res, const TensorVectors& inputs);
+  ArithmeticExprVisitor(CompilerResources& res, const TensorVectors& inputs,
+                        const std::string& name);
 
   Status HandleElementwiseUnary(HloInstruction* inst) override;
   Status HandleElementwiseBinary(HloInstruction* inst) override;
@@ -43,7 +46,7 @@ class ArithmeticExprVisitor : public BaseVisitor {
   Status HandleSelect(HloInstruction* inst) override;
   Status HandleClamp(HloInstruction* inst) override;
   Status HandleParameter(HloInstruction* inst) override;
-  Status FinishVisit(HloInstruction* inst) override;
+  Status FinishScopedVisit(HloInstruction* inst) override;
 
 #define ARITHMETIC_EXPR_VISITOR_UNIMPLEMENTED(Name) \
   Status Name(HloInstruction* inst) override { return Unimplemented(inst); };

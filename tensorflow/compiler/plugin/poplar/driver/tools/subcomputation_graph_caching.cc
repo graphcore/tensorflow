@@ -24,7 +24,7 @@ namespace xla {
 namespace poplarplugin {
 namespace subcomputation_graph_caching {
 
-StatusOr<std::shared_ptr<const DeferredVisitor>>
+StatusOr<std::shared_ptr<DeferredVisitor>>
 SubcomputationGraphCache::GetOrCompileSubcomputation(
     CompilerResources& res, TensorVectors& inputs,
     const HloComputation* computation) {
@@ -36,8 +36,9 @@ SubcomputationGraphCache::GetOrCompileSubcomputation(
 
     auto order =
         computation->parent()->schedule().sequence(computation).instructions();
-    std::shared_ptr<const DeferredVisitor> deferred_visitor =
-        std::make_shared<const DeferredVisitor>(res, deferred_inputs);
+    std::shared_ptr<DeferredVisitor> deferred_visitor =
+        std::make_shared<DeferredVisitor>(res, deferred_inputs,
+                                          computation->name());
 
     DeferredVisitor* def_visitor =
         const_cast<DeferredVisitor*>(deferred_visitor.get());

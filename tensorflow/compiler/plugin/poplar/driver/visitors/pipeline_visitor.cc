@@ -1034,8 +1034,9 @@ PipelineVisitor::PipelineVisitor(
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     const absl::flat_hash_set<int> stages_with_recomputation,
     int64 num_backward_stages, CompilerResources& res,
-    const DeferredArgVectors& inputs)
-    : InplaceDeferredVisitor(res, inputs, {}),
+    const DeferredArgVectors& inputs,
+    const std::string& name)
+    : InplaceDeferredVisitor(res, inputs, name, {}),
       schedule_(schedule),
       copy_sequences_(stage_count),
       inter_ipu_copy_sequences_(stage_count),
@@ -1056,14 +1057,15 @@ PipelineVisitor::PipelineVisitor(
 
 PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                                  CompilerResources& res,
-                                 const DeferredArgVectors& inputs)
+                                 const DeferredArgVectors& inputs,
+                                 const std::string& name)
     : PipelineVisitor(GetPipelineSchedule(pipeline).ValueOrDie(),
                       GetPipelineStageCount(pipeline),
                       GetPipelineStageDeviceMapping(pipeline),
                       GetPipelineInstStageMapping(pipeline),
                       GetPipelineStagesWithStatelessRecomputation(pipeline),
                       GetNumberOfBackwardPipelineStages(pipeline), res,
-                      inputs) {}
+                      inputs, name) {}
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
@@ -1091,6 +1093,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
       GetPipelineRampDownSequence(iterations % overlap_length);
 
   poplar::program::Sequence program;
+  program.add(pipeline_execution_counters_initialize_sequence_);
   program.add(pipeline_tensors_zeroing_sequence_);
   program.add(pipeline_write_undef_sequence_);
   program.add(ramp_up);
@@ -1338,6 +1341,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   poplar::program::Sequence seq;
   poplar::Graph& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
+  const std::string debug_name = GetDebugName(inst);
 
   TF_ASSIGN_OR_RETURN(
       DeferredArgVectors inputs,
@@ -1357,8 +1361,8 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
            ++flat_idx) {
         auto optional_tensor = visitor_inputs[inplace_idx][flat_idx];
         if (optional_tensor) {
-          const std::string name = absl::StrCat(GetDebugName(inst), "/clone/",
-                                                inplace_idx, "/", flat_idx);
+          const std::string name =
+              absl::StrCat(debug_name, "/clone/", inplace_idx, "/", flat_idx);
           VLOG(1) << "Adding a clone for inplace input (" << inplace_idx << ", "
                   << flat_idx << ").";
           visitor_inputs[inplace_idx][flat_idx] = graph.clone(
@@ -1367,10 +1371,11 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
         }
       }
     }
-    visitor = absl::make_unique<ReusablePipelineStageVisitor>(resources_,
-                                                              visitor_inputs);
+    visitor = absl::make_unique<ReusablePipelineStageVisitor>(
+        resources_, visitor_inputs, debug_name);
   } else {
-    visitor = absl::make_unique<PipelineStageVisitor>(resources_, inputs);
+    visitor =
+        absl::make_unique<PipelineStageVisitor>(resources_, inputs, debug_name);
   }
 
   HloComputation* stage_computation = inst->to_apply();
@@ -1387,9 +1392,40 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   if (has_recomputation) {
     ReusablePipelineStageVisitor* reusable_visitor =
         static_cast<ReusablePipelineStageVisitor*>(visitor.get());
-    seq.add(reusable_visitor->GetSequence(inst, inputs, tensor_map));
+
+    // Since the sequence is reused, separate execution counters are required to
+    // make sure they are correct and independent of the sequence being used for
+    // the recomputation stage.
+    ExecutionCounters& sequence_counters =
+        reusable_visitor->GetExecutionCounters();
+    ExecutionCounters forward_counters = sequence_counters.Clone();
+
+    // Initialize the counters once from the outer scope.
+    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
+        resources_, forward_counters,
+        pipeline_execution_counters_initialize_sequence_));
+
+    // Before every execution of the sequence, copy the counters in.
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence counters_in,
+        sequence_counters.SetInitialValuesFrom(&forward_counters));
+    seq.add(counters_in);
+
+    // Execute the shared sequence.
+    seq.add(
+        reusable_visitor->GetForwardStageSequence(inst, inputs, tensor_map));
+
+    // After every execution of the sequence, copy the counters out.
+    TF_ASSIGN_OR_RETURN(poplar::program::Sequence counters_out,
+                        sequence_counters.UpdateCounters(&forward_counters));
+    seq.add(counters_out);
   } else {
-    seq.add(visitor->GetSequence());
+    // Initialize the counters once from the outer scope.
+    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
+        resources_, visitor->GetExecutionCounters(),
+        pipeline_execution_counters_initialize_sequence_));
+    // Execute the sequence.
+    seq.add(visitor->GetCachedSequence());
   }
 
   // Set the outputs.
@@ -1401,7 +1437,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
     if (leaf.second) {
       output = poputil::duplicate(
           graph, output, seq,
-          absl::StrCat(GetDebugName(inst), "/output/", flat_tuple_index),
+          absl::StrCat(debug_name, "/output/", flat_tuple_index),
           poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
     }
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index, output));
@@ -1441,19 +1477,25 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
   // inputs of the forward stage then this is a stateful recomputation and we
   // need to create a new sequence.
   if (forward_stage_visitor->inputs().size() != inputs.size()) {
-    PipelineStageVisitor visitor(resources_,
-                                 ConvertInputsToDeferredInputs(inputs));
+    PipelineStageVisitor visitor(
+        resources_, ConvertInputsToDeferredInputs(inputs), GetDebugName(inst));
     HloComputation* stage_computation = inst->to_apply();
     auto order = stage_computation->parent()
                      ->schedule()
                      .sequence(stage_computation)
                      .instructions();
     TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(&visitor, order));
+
+    // Initialize the counters once from the outer scope.
+    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
+        resources_, visitor.GetExecutionCounters(),
+        pipeline_execution_counters_initialize_sequence_));
+
     // Note that it is not required to propagate any deferred allocations here
     // as recomputations do not have any deferred inputs.
 
     // Get the sequence for the stage.
-    seq.add(visitor.GetSequence());
+    seq.add(visitor.GetCachedSequence());
 
     // Set the outputs.
     const TensorVector& pipeline_outputs = visitor.outputs();
@@ -1464,7 +1506,32 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
   } else {
     ReusablePipelineStageVisitor* reusable_visitor =
         static_cast<ReusablePipelineStageVisitor*>(forward_stage_visitor);
-    seq.add(reusable_visitor->GetSequence(inst, inputs));
+
+    // Since the sequence is reused, separate execution counters are required to
+    // make sure they are correct and independent of the sequence being used for
+    // the forward stage.
+    ExecutionCounters& sequence_counters =
+        reusable_visitor->GetExecutionCounters();
+    ExecutionCounters recomputation_counters = sequence_counters.Clone();
+    // Initialize the counters once from the outer scope.
+    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
+        resources_, recomputation_counters,
+        pipeline_execution_counters_initialize_sequence_));
+
+    // Before every execution of the sequence, copy the counters in.
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence counters_in,
+        sequence_counters.SetInitialValuesFrom(&recomputation_counters));
+    seq.add(counters_in);
+
+    // Execute the shared sequence.
+    seq.add(reusable_visitor->GetRecomputationStageSequence(inst, inputs));
+
+    // After every execution of the sequence, copy the counters out.
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence counters_out,
+        sequence_counters.UpdateCounters(&recomputation_counters));
+    seq.add(counters_out);
 
     // Set the outputs.
     const TensorVector& pipeline_outputs = forward_stage_visitor->outputs();
@@ -1495,7 +1562,7 @@ PipelineVisitor::CreatePipelineResourceUpdateOp(const HloInstruction* inst) {
 
   poplar::program::Sequence seq;
   // Create a visitor for the resource update.
-  InplaceDeferredVisitor visitor(resources_, inputs);
+  InplaceDeferredVisitor visitor(resources_, inputs, GetDebugName(inst));
   auto order = resource_update_comp->parent()
                    ->schedule()
                    .sequence(resource_update_comp)
@@ -1505,6 +1572,7 @@ PipelineVisitor::CreatePipelineResourceUpdateOp(const HloInstruction* inst) {
   TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
   // Add to the sequence.
   seq.add(visitor.GetSequence());
+  seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());
   // Set up the outputs.
   const TensorVector& outputs = visitor.outputs();
   for (size_t i = 0; i < outputs.size(); i++) {
