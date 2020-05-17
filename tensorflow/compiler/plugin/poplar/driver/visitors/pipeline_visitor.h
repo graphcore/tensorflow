@@ -141,6 +141,18 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   poplar::program::Program GetPipelineRepeatBlockSequence() const;
 
   Status HandleNotImplemented(HloInstruction* hlo);
+
+  // Creator for PipelineStage(Backward).
+  StatusOr<poplar::program::Sequence> CreatePipelineStageOp(
+      const HloInstruction* inst);
+
+  // Creator for PipelineStageRecomputation.
+  StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
+      const HloInstruction* inst);
+
+  // Creator for ResourceUpdate.
+  StatusOr<poplar::program::Sequence> CreatePipelineResourceUpdateOp(
+      const HloInstruction* inst);
 };
 
 #undef HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED
