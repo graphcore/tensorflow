@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_VISITOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_VISITOR_H_
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
@@ -36,10 +38,10 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
       const absl::flat_hash_set<int> stages_with_recomputation,
       int64 num_backward_stages, CompilerResources& res,
-      const DeferredArgVectors& inputs);
+      const DeferredArgVectors& inputs, const std::string& name);
 
   PipelineVisitor(const HloInstruction* pipeline, CompilerResources& res,
-                  const DeferredArgVectors& inputs);
+                  const DeferredArgVectors& inputs, const std::string& name);
 
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleClamp);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleSelect);
@@ -122,6 +124,9 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   std::vector<poplar::program::Sequence> program_sequences_;
   std::vector<poplar::program::Sequence> recomputation_sequences_;
   poplar::program::Sequence resource_update_;
+
+  // Sequence which sets the initial values for all the execution counters.
+  poplar::program::Sequence pipeline_execution_counters_initialize_sequence_;
 
   // Sequence which zeros pipeline specific tensors before the pipeline is
   // executed.

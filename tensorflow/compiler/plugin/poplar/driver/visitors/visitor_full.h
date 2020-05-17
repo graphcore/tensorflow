@@ -19,6 +19,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_FULL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_FULL_H_
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_base.h"
 
@@ -34,7 +36,7 @@ namespace poplarplugin {
  */
 class FullVisitor : public BaseVisitor {
  public:
-  FullVisitor(CompilerResources&);
+  FullVisitor(CompilerResources& resources, const std::string& name);
 
   Status HandleConcatenate(HloInstruction* inst) override;
 

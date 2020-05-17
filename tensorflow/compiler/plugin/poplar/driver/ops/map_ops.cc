@@ -109,7 +109,7 @@ StatusOr<poplar::program::Program> CreateParallelMap(CompilerResources& res,
   for (int64 op = 0; op < inst->operand_count(); op++) {
     CHECK_EQ(inputs[op].size(), CountShapes(inst->operand(op)->shape()));
   }
-  MapVisitor visitor(res, inputs, output);
+  MapVisitor visitor(res, inputs, output, GetDebugName(inst));
   TF_RETURN_IF_ERROR(inst->to_apply()->Accept(&visitor));
 
   seq.add(visitor.GetSequence());
@@ -175,7 +175,8 @@ StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
   }
 
   DeferredArgVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
-  InplaceDeferredVisitor inplace_visitor(res, deferred_inputs);
+  InplaceDeferredVisitor inplace_visitor(res, deferred_inputs,
+                                         GetDebugName(inst));
   TF_RETURN_IF_ERROR(comp->Accept(&inplace_visitor));
 
   seq.add(inplace_visitor.GetSequence());
@@ -226,14 +227,12 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
 
   poplar::Graph& graph = GetGraph(res, inst);
 
-  poplar::program::Sequence main_seq;
-
   // Create a visitor for the condition computation.
   // Conditional should not change the inputs - therefore it's not inplace.
   // Note that the visitor explicitly doesn't allocate all the input tensors for
   // the conditional computation in order to allow the body to visitor to create
   // the tensors.
-  DeferredVisitor condition_visitor(res, inputs,
+  DeferredVisitor condition_visitor(res, inputs, GetDebugName(inst) + "/Cond",
                                     /*mark_all_input_tensors_as_used*/ false,
                                     /*allocate_all_input_tensors*/ false);
   const HloComputation* condition_comp = inst->while_condition();
@@ -247,8 +246,8 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   }
 
   // Create an inplace visitor for the loop body.
-  InplaceDeferredVisitor body_visitor(res, inputs, {&condition_visitor},
-                                      reallocate_inputs);
+  InplaceDeferredVisitor body_visitor(res, inputs, GetDebugName(inst) + "/Body",
+                                      {&condition_visitor}, reallocate_inputs);
   const HloComputation* body_comp = inst->while_body();
   {
     auto order =
@@ -278,32 +277,57 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
     return xla::FailedPrecondition("Invalid number of condition outputs.");
   }
 
+  ExecutionCounters& cond_counters = condition_visitor.GetExecutionCounters();
+  ExecutionCounters& body_counters = body_visitor.GetExecutionCounters();
+
+  poplar::program::Sequence main_seq;
+  // Add copies for any inputs which were reallocated.
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence copy_seq,
                       body_visitor.GetPreambleCopies());
   main_seq.add(copy_seq);
 
-  // Before executing the condition, copy inputs which are required by
-  // the condition to cond_inputs.
+  // Only add the copies for the execution counters in the condition and body
+  // visitors once before the execution of the loop so that they are not reset
+  // at the beginning of each iteration.
+  TF_RETURN_IF_ERROR(
+      CopyExecutionCountersFromScope(res, cond_counters, main_seq));
+  TF_RETURN_IF_ERROR(
+      CopyExecutionCountersFromScope(res, body_counters, main_seq));
+
+  // Create a sequence and predicate for the condition.
   poplar::program::Sequence cond_seq;
-  for (uint64 i = 0; i < param_count; i++) {
-    if (condition_visitor.InputIsUsed(0, i)) {
-      cond_seq.add(poplar::program::Copy(body_inputs[i], cond_inputs[i]));
+  poplar::Tensor predicate;
+  {
+    // Before executing the condition, copy inputs which are required by
+    // the condition to cond_inputs.
+    for (uint64 i = 0; i < param_count; i++) {
+      if (condition_visitor.InputIsUsed(0, i)) {
+        cond_seq.add(poplar::program::Copy(body_inputs[i], cond_inputs[i]));
+      }
     }
+    cond_seq.add(
+        condition_visitor.GetSequence(/*copy_execution_counters*/ false));
+
+    predicate =
+        popops::allTrue(graph, cond_outputs[0], cond_seq, GetDebugName(inst));
+    // Increase the local execution counters at the end of each iteration.
+    cond_seq.add(cond_counters.IncrementLiveCounters());
   }
-  cond_seq.add(condition_visitor.GetSequence());
-
-  // Create the predicate.
-  poplar::Tensor pred =
-      popops::allTrue(graph, cond_outputs[0], cond_seq, GetDebugName(inst));
-
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
   TF_ASSIGN_OR_RETURN(const TensorVector loop_state,
                       body_visitor.AddLoopInputOutputAliasingCopies(
                           graph, body_comp, GetDebugName(inst)));
+  // Create a sequence for the body.
+  poplar::program::Sequence body_seq;
+  {
+    body_seq.add(body_visitor.GetSequence(/*copy_execution_counters*/ false));
+    // Increase the local execution counters at the end of each iteration.
+    body_seq.add(body_counters.IncrementLiveCounters());
+  }
 
-  main_seq.add(poplar::program::RepeatWhileTrue(cond_seq, pred,
-                                                body_visitor.GetSequence()));
+  // Create the while loop.
+  main_seq.add(poplar::program::RepeatWhileTrue(cond_seq, predicate, body_seq));
 
   for (uint64 i = 0; i < param_count; i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
@@ -339,8 +363,6 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   CHECK_EQ(inputs.size(), 1);
   const bool reallocate_inputs = CanRealloteInputs(inst);
 
-  poplar::program::Sequence main_seq;
-
   poplar::Graph& graph = GetGraph(res, inst);
 
   TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
@@ -351,7 +373,8 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
       loop_body->parent()->schedule().sequence(loop_body).instructions();
 
   // Create the visitor.
-  InplaceDeferredVisitor visitor(res, inputs, {}, reallocate_inputs);
+  InplaceDeferredVisitor visitor(res, inputs, GetDebugName(inst), {},
+                                 reallocate_inputs);
   // Evaluate the loop body in a order.
   TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
 
@@ -371,17 +394,30 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
     return xla::FailedPrecondition("Invalid number of body outputs.");
   }
 
+  ExecutionCounters& execution_counters = visitor.GetExecutionCounters();
+
+  poplar::program::Sequence main_seq;
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence copy_seq,
                       visitor.GetPreambleCopies());
   main_seq.add(copy_seq);
+  // Only add the copies for the execution counters in the body visitor once
+  // before the execution of the loop so that they are not reset at the
+  // beginning of each iteration.
+  TF_RETURN_IF_ERROR(
+      CopyExecutionCountersFromScope(res, execution_counters, main_seq));
 
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
   TF_ASSIGN_OR_RETURN(const TensorVector loop_state,
                       visitor.AddLoopInputOutputAliasingCopies(
                           graph, loop_body, GetDebugName(inst)));
-
-  main_seq.add(poplar::program::Repeat(repeat_count, visitor.GetSequence()));
+  poplar::program::Sequence repeat_seq;
+  {
+    repeat_seq.add(visitor.GetSequence(/*copy_execution_counters*/ false));
+    // Increase the local execution counters at the end of each iteration.
+    repeat_seq.add(execution_counters.IncrementLiveCounters());
+  }
+  main_seq.add(poplar::program::Repeat(repeat_count, repeat_seq));
 
   for (uint64 i = 0; i < param_count; i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
@@ -418,8 +454,10 @@ StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
     }
   }
 
+  // Add the function.
   seq.add(subcomp_visitor->GetSequence());
 
+  // Propagate the outputs.
   for (size_t i = 0; i < subcomp_visitor->outputs().size(); i++) {
     auto name = StrCat(GetDebugName(inst), "_out_", i);
     poplar::Tensor output = poputil::duplicate(
@@ -467,7 +505,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
   CHECK_EQ(inputs.size(), inst->operand_count());
 
   // Compile the pipeline.
-  PipelineVisitor visitor(inst, res, inputs);
+  PipelineVisitor visitor(inst, res, inputs, GetDebugName(inst));
   auto order = pipeline_computation->parent()
                    ->schedule()
                    .sequence(pipeline_computation)
@@ -482,10 +520,17 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
   TF_ASSIGN_OR_RETURN(auto pipeline_state,
                       visitor.AddLoopInputOutputAliasingCopies(
                           graph, pipeline_computation, GetDebugName(inst)));
+  ExecutionCounters& execution_counters = visitor.GetExecutionCounters();
+  // Initialize the counters.
+  TF_RETURN_IF_ERROR(
+      CopyExecutionCountersFromScope(res, execution_counters, seq));
 
   // Get the pipeline sequence.
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,
                       visitor.GetPipelineSequence(pipeline_depth));
+  // Increase the counters at the end of each pipeline execution.
+  pipeline_prog.add(execution_counters.IncrementLiveCounters());
+
   seq.add(poplar::program::Repeat(repeat_count, pipeline_prog));
 
   for (size_t i = 0; i < pipeline_state.size(); i++) {
@@ -526,7 +571,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   CHECK_EQ(inputs[0].size(), 1);
   poplar::Tensor pred = inputs[0][0];
 
-  std::vector<std::shared_ptr<const DeferredVisitor>> bodies(n_branches);
+  std::vector<std::shared_ptr<DeferredVisitor>> bodies(n_branches);
   const auto& comps = inst->called_computations();
 
   // Compile each branch into a sequence
@@ -566,7 +611,7 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
       }
     }
 
-    // Add the actual body
+    // Add the actual body.
     seqs[b].add(bodies[b]->GetSequence());
 
     // Add output copies

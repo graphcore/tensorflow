@@ -126,10 +126,7 @@ class ScatterOp : public PoplarOpDef {
     graph.setTileMapping(tmp, 0);
     TensorVectors args = {{tmp}, {graph.clone(tmp)}};
 
-    TF_ASSIGN_OR_RETURN(auto update_comp_visitor,
-                        res.subcomputation_cache.GetOrCompileSubcomputation(
-                            res, args, update_computation));
-
+    std::shared_ptr<DeferredVisitor> update_comp_visitor;
     // Fast path the gradient accumulation case
     if (root_inst->opcode() == HloOpcode::kAdd &&
         root_inst->operand_count() == 2 &&
@@ -143,6 +140,10 @@ class ScatterOp : public PoplarOpDef {
         return b;
       };
     } else {
+      TF_ASSIGN_OR_RETURN(update_comp_visitor,
+                          res.subcomputation_cache.GetOrCompileSubcomputation(
+                              res, args, update_computation));
+
       // Handle the general case
       update_computation_func =
           [&](poplar::Graph& g, poplar::Tensor& a, poplar::Tensor& b,
@@ -164,7 +165,7 @@ class ScatterOp : public PoplarOpDef {
                                         update_comp_visitor->inputs()[1][0]));
           }
 
-          // Add the sequence
+          // Add the sequence.
           p.add(update_comp_visitor->GetSequence());
 
           // Copy the output out

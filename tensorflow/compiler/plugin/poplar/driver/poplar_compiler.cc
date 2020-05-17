@@ -1057,12 +1057,12 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   std::string map_json;
 
   if (compile) {
-    EntryVisitor visitor(resources, entry);
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(
         CreatePoplarGraphs(resources, module.get(), poplar_executor));
     auto& main_graph = GetMasterGraph(resources);
 
+    EntryVisitor visitor(resources, entry);
     try {
       VLOG(1) << "Preplanning of Poplar operations.";
 
@@ -1102,7 +1102,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     main_program.add(ZeroTensors(resources));
 
     // Add the main program sequence
-    main_program.add(visitor.GetSequence());
+    main_program.add(visitor.GetSequenceAndInitializeCounters());
 
     if (InitializeCycleCounter(main_graph, main_program)) {
       poplar_executor->SetHasCycleCounter();
