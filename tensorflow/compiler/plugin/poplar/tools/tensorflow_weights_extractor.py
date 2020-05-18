@@ -214,7 +214,9 @@ if __name__ == '__main__':
       "--output",
       type=str,
       default=".",
-      help="Directory where to write the extracted weights / updated model.")
+      help=
+      "Directory or file where to write the extracted weights / updated model."
+  )
   parser.add_argument("-f",
                       "--force",
                       action='store_true',
@@ -249,5 +251,12 @@ if __name__ == '__main__':
       files = [args.import_data]
     import_data_in_model(args.save_path, args.output, files)
   else:
-    export_model(args.save_path, os.path.join(args.output, "weights.bin"),
-                 args.metadata)
+    output_file = args.output
+    # Check if --output is a folder or a file
+    if args.output.endswith(".bin"):
+      # If it's a file use it  as is.
+      output_file = args.output
+    else:
+      # If it's a folder append a file name.
+      output_file = os.path.join(args.output, "weights.bin")
+    export_model(args.save_path, output_file, args.metadata)
