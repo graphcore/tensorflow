@@ -1129,7 +1129,10 @@ tf_custom_op_py_library(
 cc_library(
     name = "dataset_exporters",
     srcs = ["ops/datastream/exporters.cc"],
-    deps = ["//tensorflow/core:framework"],
+    deps = [
+        ":common_shape_fns",
+        "//tensorflow/core:framework",
+    ],
     alwayslink = True,
 )
 

@@ -689,6 +689,20 @@ void* Tensor::Data() {
   return data_.data();
 }
 
+bool IsJsonFile(const std::string& filename) {
+  std::ifstream json_file(filename);
+  if (!json_file.is_open()) {
+    return false;
+  }
+  char first_char;
+  json_file >> first_char;
+  // Note: This is only intended as a quick check to differentiate binary files
+  // from text json files. This relies on the fact that binary files start by a
+  // BinaryVersion::ToStream()(i.e vXX.YY in binary) while Json files are text
+  // files starting by an ascii '{'
+  return first_char == '{';
+}
+
 Json::Value LoadJsonFromFile(const std::string& filename) {
   std::ifstream json_file(filename);
   ERROR_ON_MSG(!json_file.is_open(), "Failed to open file " << filename);

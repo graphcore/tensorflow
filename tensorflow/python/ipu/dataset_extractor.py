@@ -67,8 +67,69 @@ def dataset_extractor(dataset,
                                                  **dataset._flat_structure)  # pylint: disable=protected-access
 
 
-def export_variables(variables, filename, is_input=True, print_stats=True):
+def export_variables(variables,
+                     filename,
+                     is_input=True,
+                     metadata=None,
+                     print_stats=True):
+  """Allows the user to export to file the content of the variables.
+
+    Args:
+      variables: List of variables to export to file.
+      filename: Where to save the extracted elements to.
+      is_input: True if the variables are inputs, False if they're parameters.
+      metadata: (optional) Path to a metadata file to validate the variables
+        against. If provided then the list of variables must exactly match the
+        number, type and shape of the parameters or inputs from the metadata
+        file.
+      print_stats: Whether to print progress messages to the
+        console.
+
+    Note:
+      All the variables will be saved in the same binary file.
+
+    Returns:
+      The operation that will export the content of the variables to file.
+
+    """
   names = [v.name for v in variables]
 
   return gen_dataset_exporters.variables_exporter(variables, print_stats,
-                                                  is_input, filename, names)
+                                                  is_input, filename, names,
+                                                  metadata or "")
+
+
+def import_variables(variables,
+                     filenames,
+                     is_input=True,
+                     strict=True,
+                     print_stats=True):
+  """Allows the user to import from some data files the content of the variables
+
+    Args:
+      variables: List of variables to import from file.
+      filenames: List of binary files containing the variables' data.
+      is_input: True if the variables are inputs, False if they're parameters.
+      strict: If true then the list of variables must exactly match the
+        number, type and shape of the parameters or inputs from the metadata
+        stored in the binary files.
+      print_stats: Whether to print progress messages to the
+        console.
+
+    Returns:
+      The operation that will load the content of the variables from file.
+
+    """
+  names = [v.name for v in variables]
+  shapes = [v.shape for v in variables]
+  types = [v.dtype for v in variables]
+  new_values = gen_dataset_exporters.variables_importer(print_stats,
+                                                        is_input,
+                                                        filenames,
+                                                        names,
+                                                        strict,
+                                                        output_types=types,
+                                                        output_shapes=shapes)
+  return [
+      variable.assign(new_values[i]) for i, variable in enumerate(variables)
+  ]

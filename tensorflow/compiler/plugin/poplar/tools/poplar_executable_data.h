@@ -218,6 +218,7 @@ class Tensor {
   ByteVector data_;
 };
 
+bool IsJsonFile(const std::string& filename);
 Json::Value LoadJsonFromFile(const std::string& filename);
 Json::Value LoadJsonFromString(const std::string& json_content);
 
