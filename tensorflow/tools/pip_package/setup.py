@@ -47,7 +47,7 @@ DOCLINES = __doc__.split('\n')
 # result for pip.
 # Also update tensorflow/tensorflow.bzl and
 # tensorflow/core/public/version.h
-_VERSION = '2.1.0'
+_VERSION = '2.1.1'
 
 if '--version' in sys.argv:
   version_idx = sys.argv.index('--version')
@@ -64,7 +64,7 @@ REQUIRED_PACKAGES = [
     'gast == 0.2.2',
     'google_pasta >= 0.1.6',
     'keras_applications >= 1.0.8',
-    'keras_preprocessing >= 1.1.0',
+    'keras_preprocessing == 1.1.0',
     'networkx >= 2.2',
     'numpy >= 1.16.0, < 2.0',
     'opt_einsum >= 2.3.2',
