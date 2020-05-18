@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_DROPOUT_H
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_DROPOUT_H
 
+#include <string>
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
@@ -27,8 +28,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
  public:
   explicit HloUserOpInstruction(absl::Span<HloInstruction* const> operands,
                                 const Shape& shape, const std::string& gp_path,
-                                void*, void*, void*, bool is_gradient,
-                                int partial_derivative_index,
+                                void*, void*, void*, int64 gradient_size,
+                                int64 partial_derivative_index,
                                 bool is_user_read_write);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
@@ -45,7 +46,9 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   const std::string& GetPath() const { return gp_path_; }
 
-  bool IsGradient() const { return is_gradient_; }
+  bool IsGradient() const { return gradient_size_ != 0; }
+
+  int GetGradientSize() const { return gradient_size_; }
 
   int PartialDerivativeIndex() const { return partial_derivative_index_; }
 
@@ -87,13 +90,13 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
   MetadataStructure metadata_;
 
-  // When true, this is a gradient operation, rather than a forward pass
-  // operation.
-  bool is_gradient_;
+  // When greater than zero, this is a gradient operation with given gradients,
+  // rather than a forward pass operation.
+  int64 gradient_size_;
 
   // If this is a grad function, and it is the partial derivative for only one
   // input, then this is the index of that input.
-  int partial_derivative_index_;
+  int64 partial_derivative_index_;
 
   // Is this a read/write user op. That is an operation which streams the
   // tensors to host, executes some processing, then streams the outputs back.
@@ -102,8 +105,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> operands, const Shape& shape,
-    const std::string& gp_path, void*, void*, void*, bool is_gradient,
-    int partial_derivative_index, bool is_user_read_write);
+    const std::string& gp_path, void*, void*, void*, int64 gradient_size,
+    int64 partial_derivative_index, bool is_user_read_write);
 
 }  // namespace poplarplugin
 }  // namespace xla
