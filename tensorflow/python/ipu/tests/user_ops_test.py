@@ -36,7 +36,7 @@ from tensorflow.python.training import gradient_descent
 def count_grad_ops(graph):
   num_grad_ops = 0
   for op in graph.get_operations():
-    if op.type == "IpuUserOp" and op.get_attr("is_gradient"):
+    if op.type == "IpuUserOp" and op.get_attr("gradient_size") > 0:
       num_grad_ops = num_grad_ops + 1
   return num_grad_ops
 
@@ -263,11 +263,13 @@ class UserProvidedOpsTest(test_util.TensorFlowTestCase):
                              "tests/add_scaled_vector_add_codelet.cc")
       lib_path = os.path.join(base_dir, "libadd_partial_gradients_custom.so")
 
-      return ipu.custom_ops.precompiled_user_op([x, scale, y],
-                                                lib_path,
-                                                gp_path,
-                                                outs=outputs,
-                                                inputs_with_gradients=[0, 2])
+      return ipu.custom_ops.precompiled_user_op(
+          [x, scale, y, math_ops.cos(x),
+           math_ops.cosh(y)],
+          lib_path,
+          gp_path,
+          outs=outputs,
+          inputs_with_gradients=[0, 2])
 
     def model(scale, y, label):
       with variable_scope.variable_scope("vs", use_resource=True):

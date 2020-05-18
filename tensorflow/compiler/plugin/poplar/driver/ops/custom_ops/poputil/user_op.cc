@@ -45,7 +45,7 @@ class UserOpImpl : public PoplarOpDef {
 
     const std::string& gp_path = user_op_inst->GetPath();
 
-    bool is_gradient = user_op_inst->IsGradient();
+    const bool is_gradient = user_op_inst->IsGradient();
 
     // Add the codelet if needed.
     if (gp_path.empty() == false &&
@@ -61,7 +61,7 @@ class UserOpImpl : public PoplarOpDef {
 
     // Get the function pointer from the HLO.
     poplar::program::Program (*as_function_ptr_gradient)(
-        poplar::Graph&, int partial_derivative_index,
+        poplar::Graph&, int64 partial_derivative_index,
         const std::vector<poplar::Tensor>& gradients_in,
         const std::vector<poplar::Tensor>& fwd_outputs,
         const std::vector<poplar::Tensor>& fwd_inputs,
@@ -222,11 +222,11 @@ class UserOpImpl : public PoplarOpDef {
         // There is a gradient for each output and if we are doing the backward
         // pass then the input will be packed like: | Gradients |
         // previous_outputs | previous_inputs |
-        const ssize_t size_of_gradient =
-            (number_of_inputs - number_of_outputs) / 2;
+        const ssize_t size_of_gradient = user_op_inst->GetGradientSize();
+        const ssize_t outputs_index = size_of_gradient * 2;
 
         if (size_of_gradient <= 0) {
-          return xla::InternalErrorStrCat("Instruction ", inst->name(),
+          return xla::InternalErrorStrCat("Instruction ", GetDebugName(inst),
                                           " has wrong gradient size",
                                           size_of_gradient);
         }
@@ -236,7 +236,7 @@ class UserOpImpl : public PoplarOpDef {
         std::vector<poplar::Tensor> previous_inputs;
 
         // Get the gradients.s
-        for (size_t i = 0; i < size_of_gradient; ++i) {
+        for (ssize_t i = 0; i < size_of_gradient; ++i) {
           TF_ASSIGN_OR_RETURN(
               poplar::Tensor in,
               FindInstructionInput(tensor_map, res, inst, i, seq, false));
@@ -245,7 +245,7 @@ class UserOpImpl : public PoplarOpDef {
         }
 
         // Get the previous inputs.
-        for (size_t i = size_of_gradient; i < size_of_gradient * 2; ++i) {
+        for (ssize_t i = size_of_gradient; i < outputs_index; ++i) {
           TF_ASSIGN_OR_RETURN(
               poplar::Tensor in,
               FindInstructionInput(tensor_map, res, inst, i, seq, false));
@@ -253,8 +253,7 @@ class UserOpImpl : public PoplarOpDef {
         }
 
         // Get the previous outputs.
-        for (size_t i = size_of_gradient * 2; i < user_op_inst->NumInputs();
-             ++i) {
+        for (size_t i = outputs_index; i < user_op_inst->NumInputs(); ++i) {
           TF_ASSIGN_OR_RETURN(
               poplar::Tensor in,
               FindInstructionInput(tensor_map, res, inst, i, seq, false));
@@ -271,7 +270,7 @@ class UserOpImpl : public PoplarOpDef {
     // Register each of the returned tuple elements (if any) as outputs.
     if (outputs.size() < number_of_outputs) {
       return xla::InternalErrorStrCat(
-          "Instruction ", inst->name(),
+          "Instruction ", GetDebugName(inst),
           " has mismatched outputs number, expected: ", number_of_outputs,
           ", returned: ", outputs.size());
     }
