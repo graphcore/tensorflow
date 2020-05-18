@@ -27,7 +27,16 @@ from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.driver import config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 # pylint: disable=unused-import
-from tensorflow.compiler.plugin.poplar.tools.tensorflow_weights_extractor import export_variables_from_live_session, export_variables_from_live_model
+# These imports are only here to make it easier for the Tensorflow Wheel users
+# to use these functions:
+# ```
+# from tensorflow.python import ipu
+# ...
+# ipu.utils.export_variables_from_live_session(...)
+# ```
+from tensorflow.compiler.plugin.poplar.tools.tensorflow_weights_extractor import (
+    export_variables_from_live_session, export_variables_from_live_model,
+    import_data_in_live_session, import_data_in_live_model)
 # pylint: enable=unused-import
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
