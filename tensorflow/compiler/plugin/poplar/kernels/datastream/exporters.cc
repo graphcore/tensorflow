@@ -57,6 +57,78 @@ xla::StatusOr<ipu::DataType> PrimitiveTypeToDataType(xla::PrimitiveType type) {
   }
 }
 
+xla::StatusOr<ipu::TensorShape> ConvertShapeToIpuTensorInfo(
+    const xla::Shape& xla_shape) {
+  TF_ASSIGN_OR_RETURN(ipu::DataType data_type,
+                      PrimitiveTypeToDataType(xla_shape.element_type()));
+
+  // Convert from vector<int64> to vector<int64_t> (long long int vs long
+  // int)
+  std::vector<int64_t> dimensions;
+  absl::c_transform(xla_shape.dimensions(), std::back_inserter(dimensions),
+                    [](int64 dim) { return dim; });
+
+  return ipu::TensorShape{dimensions, data_type};
+}
+
+xla::StatusOr<ipu::TensorShape> ConvertTensorToIpuTensorInfo(
+    const Tensor& tensor) {
+  xla::PrimitiveType xla_type;
+  TF_RETURN_IF_ERROR(DataTypeToPrimitiveType(tensor.dtype(), &xla_type));
+  xla::Shape xla_shape = TensorShapeToXLAShape(xla_type, tensor.shape());
+  return ConvertShapeToIpuTensorInfo(xla_shape);
+}
+
+void CleanUpNames(std::vector<std::string>& names) {
+  // Remove the ":0" suffix added by TF:
+  absl::c_for_each(names, [](std::string& name) {
+    if (name.size() > 2 && name.substr(name.size() - 2, 2) == ":0") {
+      name = name.substr(0, name.size() - 2);
+    }
+  });
+}
+
+void FindMissingTensors(const ipu::Metadata& metadata,
+                        ipu::TensorType tensor_type,
+                        const std::vector<std::string>& tf_names,
+                        std::vector<std::string>& missing_from_tf,
+                        std::vector<std::string>& missing_from_files) {
+  auto data_found = [&metadata, tensor_type](const std::string& name) {
+    for (auto tensor : metadata.inputs) {
+      if (tensor.Name() == name && tensor.Type() == tensor_type) {
+        return true;
+      }
+    }
+    return false;
+  };
+  auto tensor_found = [tf_names](const std::string& name) {
+    return absl::c_find(tf_names, name) != tf_names.end();
+  };
+
+  for (auto name : tf_names) {
+    if (!data_found(name)) {
+      missing_from_files.push_back(name);
+    }
+  }
+  for (auto tensor : metadata.inputs) {
+    if (tensor.Type() != tensor_type) {
+      continue;
+    }
+    if (!tensor_found(tensor.Name())) {
+      missing_from_tf.push_back(tensor.Name());
+    }
+  }
+}
+
+std::shared_ptr<ipu::Metadata> LoadMetadata(const std::string& filename) {
+  if (ipu::IsJsonFile(filename)) {
+    return std::make_shared<ipu::Metadata>(ipu::LoadJsonFromFile(filename));
+  }
+  ipu::BinaryReader loader;
+  loader.LoadFile(filename);
+  return loader.ReadMetadata();
+}
+
 }  // namespace
 
 class DatasetExtractor : public OpKernel {
@@ -172,6 +244,7 @@ class DatasetExtractor : public OpKernel {
 
 REGISTER_KERNEL_BUILDER(Name("DatasetExtractor").Device(DEVICE_CPU),
                         DatasetExtractor);
+
 class VariablesExporter : public OpKernel {
  public:
   explicit VariablesExporter(OpKernelConstruction* ctx) : OpKernel(ctx) {
@@ -179,44 +252,54 @@ class VariablesExporter : public OpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("is_input", &is_input_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("filename", &filename_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("names", &names_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("metadata_file", &metadata_));
     // Remove the ":0" suffix added by TF:
-    absl::c_for_each(names_, [](std::string& name) {
-      if (name.size() > 2 && name.substr(name.size() - 2, 2) == ":0") {
-        name = name.substr(0, name.size() - 2);
-      }
-    });
+    CleanUpNames(names_);
   }
 
   ~VariablesExporter() override {}
 
   void Compute(OpKernelContext* ctx) override {
     OP_REQUIRES_OK(ctx, [&]() {
-      ipu::BinaryWriter writer{filename_};
-      for (int i = 0; i < ctx->num_inputs(); i++) {
-        Tensor input = ctx->input(i);
-        xla::PrimitiveType xla_type;
-        TF_RETURN_IF_ERROR(DataTypeToPrimitiveType(input.dtype(), &xla_type));
-        xla::Shape xla_shape = TensorShapeToXLAShape(xla_type, input.shape());
-        TF_ASSIGN_OR_RETURN(ipu::DataType data_type,
-                            PrimitiveTypeToDataType(xla_shape.element_type()));
+      try {
+        const ipu::TensorType tensor_type =
+            is_input_ ? ipu::TensorType::InputData : ipu::TensorType::Parameter;
+        if (!metadata_.empty()) {
+          auto meta = LoadMetadata(metadata_);
+          std::vector<std::string> missing_metadata;
+          std::vector<std::string> missing_tensors;
+          FindMissingTensors(*meta, tensor_type, names_, missing_tensors,
+                             missing_metadata);
+          std::string error;
+          if (!missing_metadata.empty()) {
+            error += " The metadata doesn't contain the following tensors: " +
+                     absl::StrJoin(missing_metadata, ",");
+          }
+          if (!missing_tensors.empty()) {
+            error +=
+                " The following tensors are present in the metadata but not in "
+                "the graph: " +
+                absl::StrJoin(missing_tensors, ",");
+          }
+          if (!error.empty()) {
+            return tensorflow::errors::InvalidArgument(error);
+          }
+        }
+        ipu::BinaryWriter writer{filename_};
+        for (int i = 0; i < ctx->num_inputs(); i++) {
+          Tensor input = ctx->input(i);
+          TF_ASSIGN_OR_RETURN(ipu::TensorShape shape,
+                              ConvertTensorToIpuTensorInfo(input));
+          ipu::TensorInfo info{names_[i], "", shape, tensor_type};
 
-        // Convert from vector<int64> to vector<int64_t> (long long int vs long
-        // int)
-        std::vector<int64_t> dimensions;
-        absl::c_transform(xla_shape.dimensions(),
-                          std::back_inserter(dimensions),
-                          [](int64 dim) { return dim; });
-
-        ipu::TensorShape shape(dimensions, data_type);
-        ipu::TensorInfo info{names_[i], "", shape,
-                             is_input_ ? ipu::TensorType::InputData
-                                       : ipu::TensorType::Parameter};
-
-        TensorBuffer* tb = tensorflow::DMAHelper::buffer(&input);
-        ipu::Tensor out{info, tb->data()};
-        writer.WriteTensor(out);
+          TensorBuffer* tb = tensorflow::DMAHelper::buffer(&input);
+          ipu::Tensor out{info, tb->data()};
+          writer.WriteTensor(out);
+        }
+        return Status::OK();
+      } catch (const std::runtime_error& err) {
+        return xla::InvalidArgument(err.what());
       }
-      return Status::OK();
     }());
   }
 
@@ -225,10 +308,124 @@ class VariablesExporter : public OpKernel {
   bool is_input_;
   std::string filename_;
   std::vector<std::string> names_;
+  std::string metadata_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(VariablesExporter);
 };  // namespace tensorflow
 
 REGISTER_KERNEL_BUILDER(Name("VariablesExporter").Device(DEVICE_CPU),
                         VariablesExporter);
+
+class VariablesImporter : public OpKernel {
+ public:
+  explicit VariablesImporter(OpKernelConstruction* ctx) : OpKernel(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("print_stats", &print_stats_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("is_input", &is_input_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("strict", &strict_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("filenames", &filenames_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("names", &names_));
+    XlaShapesFromAttr(ctx, shapes_);
+    // Remove the ":0" suffix added by TF:
+    CleanUpNames(names_);
+  }
+
+  ~VariablesImporter() override {}
+
+  void Compute(OpKernelContext* ctx) override {
+    OP_REQUIRES_OK(ctx, [&]() {
+      try {
+        ipu::BinaryReader loader;
+        // Parse all the provided binary files
+        // Note: this builds a list of all the objects stored
+        // in the files but doesn't actually load any data.
+        for (auto file : filenames_) {
+          loader.LoadFile(file);
+        }
+        const ipu::TensorType tensor_type =
+            is_input_ ? ipu::TensorType::InputData : ipu::TensorType::Parameter;
+        if (strict_) {
+          // If we're in strict mode: load the metadata from the binaries and
+          // check the graph contains exactly the same inputs / parameters.
+          std::shared_ptr<ipu::Metadata> metadata = loader.ReadMetadata();
+          std::vector<std::string> missing_data;
+          std::vector<std::string> missing_tensors;
+          FindMissingTensors(*metadata, tensor_type, names_, missing_tensors,
+                             missing_data);
+          std::string error;
+          if (!missing_data.empty()) {
+            error +=
+                " The binaries provided didn't contain any data for the "
+                "following tensors: " +
+                absl::StrJoin(missing_data, ",");
+          }
+          if (!missing_tensors.empty()) {
+            error +=
+                " The binaries provided contain data for the following tensors "
+                "which cannot be found in the graph: " +
+                absl::StrJoin(missing_tensors, ",");
+          }
+          if (!error.empty()) {
+            return tensorflow::errors::InvalidArgument(error);
+          }
+        }
+
+        // For each tensor in the graph
+        for (int i = 0; i < shapes_.size(); i++) {
+          TF_ASSIGN_OR_RETURN(ipu::TensorShape shape,
+                              ConvertShapeToIpuTensorInfo(shapes_[i]));
+          ipu::TensorInfo info{names_[i], "", shape, tensor_type};
+          // Check if the binaries provided contains data for it.
+          if (!loader.ContainsObject(ipu::ObjectType::Tensor, names_[i])) {
+            // No data available for this tensor: skip it.
+            continue;
+          }
+          // Get a data stream from the Loader
+          std::unique_ptr<ipu::StreamReader> reader =
+              loader.GetTensorStream(names_[i]);
+          // Load the data in a temporary Tensor
+          ipu::Tensor out{*reader};
+          // Make sure the tensor in the graph has the same shape and
+          // type as the one from the binary files.
+          if (!info.TypeAndShapeMatch(out.Info())) {
+            return tensorflow::errors::InvalidArgument(
+                "For tensor ", names_[i], " the tensorflow info ",
+                info.ToString(), " doesn't match the one from the ipu::Tensor ",
+                out.Info().ToString());
+          }
+          // Allocate the output Tensorflow tensor.
+          Tensor* output = nullptr;
+          TensorShape tensor_shape;
+          TF_RETURN_IF_ERROR(XLAShapeToTensorShape(shapes_[i], &tensor_shape));
+          TF_RETURN_IF_ERROR(ctx->allocate_output(i, tensor_shape, &output));
+          TensorBuffer* tb = tensorflow::DMAHelper::buffer(output);
+          if (tb->size() != out.Info().Shape().DataSizeInBytes()) {
+            return tensorflow::errors::InvalidArgument(
+                "Tensorflow tensor size ", tb->size(),
+                " doesn't match the size of the ipu::Tensor size ",
+                out.Info().Shape().DataSizeInBytes(), " for tensor ",
+                names_[i]);
+          }
+          // Copy the data from the ipu::Tensor to the Tensorflow tensor.
+          memcpy(tb->data(), out.Data(), tb->size());
+        }
+        return Status::OK();
+      } catch (const std::exception& e) {
+        return tensorflow::errors::InvalidArgument(e.what());
+      }
+    }());
+  }
+
+ private:
+  bool print_stats_;
+  bool is_input_;
+  bool strict_;
+  std::vector<std::string> filenames_;
+  std::vector<std::string> names_;
+  std::vector<xla::Shape> shapes_;
+
+  TF_DISALLOW_COPY_AND_ASSIGN(VariablesImporter);
+};  // namespace tensorflow
+
+REGISTER_KERNEL_BUILDER(Name("VariablesImporter").Device(DEVICE_CPU),
+                        VariablesImporter);
 }  // namespace tensorflow

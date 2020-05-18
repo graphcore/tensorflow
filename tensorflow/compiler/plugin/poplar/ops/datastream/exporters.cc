@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/ops/common_shape_fns.h"
 #include "tensorflow/core/framework/common_shape_fns.h"
 #include "tensorflow/core/framework/op.h"
 
@@ -35,8 +36,21 @@ REGISTER_OP("VariablesExporter")
     .Attr("is_input: bool")
     .Attr("filename: string")
     .Attr("names: list(string)")
+    .Attr("metadata_file: string")
     .Attr("output_types: list(type) >= 1")
     .SetIsStateful()
     .SetShapeFn(shape_inference::NoOutputs);
+
+REGISTER_OP("VariablesImporter")
+    .Output("outputs: output_types")
+    .Attr("print_stats: bool")
+    .Attr("is_input: bool")
+    .Attr("filenames: list(string)")
+    .Attr("names: list(string)")
+    .Attr("strict: bool")
+    .Attr("output_types: list(type) >= 1")
+    .Attr("output_shapes: list(shape) >= 1")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute);
 
 }  // namespace tensorflow
