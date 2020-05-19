@@ -712,12 +712,8 @@ class IPUPipelineTest(test.TestCase):
                                 loss_cpu, None)
     cpu_loss = list(map(lambda x: x.numpy(), cpu_loss))
     cpu_loss = aggregate_cpu_out(training_utils.MetricsAggregator, cpu_loss)
-    cpu_loss = cpu_loss[0]
 
-    # result is the single aggregated loss value
-    ipu_loss = result[0]
-
-    self.assertEqual(ipu_loss, cpu_loss)
+    self.assertAllClose(result, cpu_loss)
 
   @test_util.run_v2_only
   def testPredict_CpuMatch(self):
@@ -746,7 +742,7 @@ class IPUPipelineTest(test.TestCase):
     # result is the predicted values
     ipu_output = result[0]
 
-    self.assertAllEqual(ipu_output, cpu_out)
+    self.assertAllClose(ipu_output, cpu_out)
 
 
 if __name__ == '__main__':
