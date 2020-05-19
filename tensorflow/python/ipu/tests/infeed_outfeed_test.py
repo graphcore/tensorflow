@@ -1211,7 +1211,7 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
 
       report.parse_log()
       report.assert_max_tile_memory(50775)
-      report.assert_total_tile_memory(57042815)
+      report.assert_total_tile_memory(58607078)
 
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:
@@ -1265,8 +1265,8 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       self.assertAllClose(outfed, expected)
 
       report.parse_log()
-      report.assert_max_tile_memory(50645)
-      report.assert_total_tile_memory(56489822)
+      report.assert_max_tile_memory(51780)
+      report.assert_total_tile_memory(59443202)
 
       total_outfeeds = 0
       for s in report.get_execution_reports()[0]['simulation']['steps']:
