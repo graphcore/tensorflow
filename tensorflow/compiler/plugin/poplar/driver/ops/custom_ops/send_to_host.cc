@@ -34,7 +34,7 @@ class SendToHostOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     if (res.use_verified_transfers) {
       return FailedPrecondition(
-          "Verified transfers cannot be used with Host embeddings");
+          "Verified transfers cannot be used with SendToHost operations");
     }
     poplar::program::Sequence seq;
 
@@ -63,6 +63,16 @@ class SendToHostOp : public PoplarOpDef {
     }
 
     return seq;
+  }
+
+  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
+                                     CompilerResources& res,
+                                     const std::string& name,
+                                     const TensorTarget& tensor_target,
+                                     const TensorMap& tensor_map) override {
+    const int64 input_index = tensor_target.input_index;
+    const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
+    return AddHostCopyTensor(graph, name, input_shape);
   }
 };
 
