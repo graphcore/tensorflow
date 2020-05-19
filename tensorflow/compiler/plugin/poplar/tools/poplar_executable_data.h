@@ -347,10 +347,10 @@ class StreamWriter {
   void MoveAbsolute(std::streampos position);
   std::streampos CurrentPosition();
   void Close();
-  std::fstream& Stream();
+  std::ofstream& Stream();
 
  private:
-  std::fstream fd_;
+  std::ofstream fd_;
 };
 
 class StreamReader {
@@ -395,7 +395,7 @@ class ExecutableWriter {
   ExecutableWriter(std::shared_ptr<StreamWriter> writer,
                    std::function<void()> on_write_complete);
   StreamWriter& Writer();
-  std::fstream& Stream();
+  std::ofstream& Stream();
   void WriteComplete();
   ~ExecutableWriter();
 
