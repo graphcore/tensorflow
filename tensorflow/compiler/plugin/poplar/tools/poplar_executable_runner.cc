@@ -187,14 +187,13 @@ void WriteJsonToStream(const Json::Value& root, std::ostream* sout) {
 
 }  // namespace
 
-IExecutable::IExecutable(StreamReader& stream, int64_t length,
-                         const poplar::OptionFlags& opts) {
+IExecutable::IExecutable(StreamReader& stream, int64_t length) {
   try {
     SubStream sub(stream, length > 0 ? length : stream.NumBytesLeft());
     std::istream sub_stream(&sub);
     poplar::Executable poplar_executable =
         poplar::Executable::deserialize(sub_stream);
-    engine_.reset(new poplar::Engine(std::move(poplar_executable), opts));
+    engine_.reset(new poplar::Engine(std::move(poplar_executable)));
   } catch (const std::exception& e) {
     ERROR("Failed to deserialize " << stream.Filename() << " : " << e.what());
   }
@@ -260,7 +259,7 @@ std::string IExecutable::StreamsList(bool summary) const {
 }
 
 Executable::Executable(StreamReader& stream, int64_t length)
-    : IExecutable(stream, length, {}) {}
+    : IExecutable(stream, length) {}
 
 void Executable::Load(const poplar::Device& device) {
   LogContext ctx("Running HOST_TO_DEVICE");
@@ -294,8 +293,11 @@ void Executable::DeviceToHostCopy() {
   }
 }
 
-VerifiedExecutable::VerifiedExecutable(StreamReader& stream, int64_t length)
-    : IExecutable(stream, length, {{"opt.useAutoloader", "false"}}) {}
+VerifiedExecutable::VerifiedExecutable(StreamReader& stream, int64_t length,
+                                       bool is_verified)
+    : IExecutable(stream, length), is_verified_(is_verified) {}
+
+bool VerifiedExecutable::IsVerified() const { return is_verified_; }
 
 void VerifiedExecutable::Prepare(poplar::Device& device) {
   engine_->prepare(device);
@@ -723,6 +725,8 @@ std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
     const std::string executable_name) const {
   LogContext ctx{"BinaryLoader::CreateExecutable " + executable_name};
   auto in = CreateExecutableReader(executable_name);
+  bool is_verified = static_cast<bool>(in->ReadInt64());
+  ERROR_ON_MSG(is_verified, "Regular Executables cannot be verified");
   return absl::make_unique<Executable>(*in, in->NumBytesLeft());
 }
 
@@ -730,7 +734,9 @@ std::unique_ptr<VerifiedExecutable> BinaryLoader::CreateVerifiedExecutable(
     const std::string executable_name) const {
   LogContext ctx{"BinaryLoader::CreateVerifiedExecutable " + executable_name};
   auto in = CreateExecutableReader(executable_name);
-  return absl::make_unique<VerifiedExecutable>(*in, in->NumBytesLeft());
+  bool is_verified = static_cast<bool>(in->ReadInt64());
+  return absl::make_unique<VerifiedExecutable>(*in, in->NumBytesLeft(),
+                                               is_verified);
 }
 
 }  // namespace ipu
