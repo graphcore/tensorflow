@@ -101,7 +101,8 @@ using TensorAllocationMap = std::map<TensorLocation, TensorTarget>;
  */
 class AllocationFinder : public HloModulePass {
  public:
-  AllocationFinder(CompilerAnnotations& annotations);
+  AllocationFinder(CompilerAnnotations& annotations,
+                   bool always_rearrange_copies_on_host = false);
 
   ~AllocationFinder() = default;
 
@@ -112,6 +113,8 @@ class AllocationFinder : public HloModulePass {
  private:
   void FindConsumers(const TensorLocation&, const HloInstruction* tgt, int64,
                      absl::optional<std::vector<int64>>);
+
+  int64 GetAllocationPriority(const TensorTarget& inst) const;
 
   // Should return true when target 'a' should be used over 'b'
   bool ReplaceTarget(const TensorTarget& a, const TensorTarget& b);
@@ -124,6 +127,7 @@ class AllocationFinder : public HloModulePass {
 
   const CompilerAnnotations& annotations;
   TensorAllocationMap& tensor_allocation_map;
+  const bool always_rearrange_copies_on_host;
 };
 
 }  // namespace poplarplugin

@@ -134,8 +134,20 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
   }
   std::vector<AllocationLocation> allocation_locations;
 };
+}  // namespace
 
-int64 GetAllocationPriority(const TensorTarget& target) {
+int64 AllocationFinder::GetAllocationPriority(
+    const TensorTarget& target) const {
+  const bool is_host_copy =
+      IsPoplarInstruction(PoplarOp::SendToHost)(target.tgt) ||
+      IsPoplarInstruction(PoplarOp::RecvFromHost)(target.tgt);
+  if (is_host_copy && !always_rearrange_copies_on_host) {
+    // The memory cost of doing on-device stream copy rearrangment is large
+    // enough that it is usually beneficial to prioritise the allocation layout
+    // desired by the host exchange to avoid this rearrangement.
+    return 2;
+  }
+
   switch (target.tgt->opcode()) {
     case HloOpcode::kConvolution:
     case HloOpcode::kDot: {
@@ -147,7 +159,6 @@ int64 GetAllocationPriority(const TensorTarget& target) {
     default: { return 0; }
   }
 }
-}  // namespace
 
 bool AllocationFinder::ReplaceTarget(const TensorTarget& new_target,
                                      const TensorTarget& existing_target) {
@@ -402,9 +413,11 @@ StatusOr<bool> AllocationFinder::Run(HloModule* module) {
   return true;
 }
 
-AllocationFinder::AllocationFinder(CompilerAnnotations& annotations)
+AllocationFinder::AllocationFinder(CompilerAnnotations& annotations,
+                                   bool always_rearrange_copies_on_host)
     : annotations(annotations),
-      tensor_allocation_map(annotations.tensor_allocation_map) {}
+      tensor_allocation_map(annotations.tensor_allocation_map),
+      always_rearrange_copies_on_host(always_rearrange_copies_on_host) {}
 
 }  // namespace poplarplugin
 }  // namespace xla

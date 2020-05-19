@@ -971,7 +971,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pipeline.AddPass<CombineInstructions>();
       pipeline.AddPass<HloDescheduler>();
     }
-    pipeline.AddPass<AllocationFinder>(resources.annotations);
+    pipeline.AddPass<AllocationFinder>(
+        resources.annotations, resources.always_rearrange_copies_on_host);
     pipeline.AddPass<HloPassFix<ForwardAllocation>>(resources.annotations);
 
     TF_ASSIGN_OR_RETURN(auto schedulers, GetSchedulerList(resources));
