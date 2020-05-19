@@ -365,7 +365,7 @@ class DeferredSizeWriter {
   }
   void WriteSize() {
     if (writer_) {
-      std::ios::streampos end = writer_->CurrentPosition();
+      std::streampos end = writer_->CurrentPosition();
       ERROR_ON(static_cast<int64_t>(start_) + sizeof(int64_t) > end);
       writer_->MoveAbsolute(start_);
       writer_->WriteInt64(static_cast<int64_t>(end) -
@@ -377,7 +377,7 @@ class DeferredSizeWriter {
 
  private:
   std::shared_ptr<StreamWriter> writer_;
-  std::ios::streampos start_;
+  std::streampos start_;
 };
 
 DeferredSizeWriter CreateObject(ObjectType type, const std::string& name,
@@ -731,7 +731,7 @@ Json::Value LoadJsonFromString(const std::string& json_content) {
   return root;
 }
 
-std::fstream& StreamWriter::Stream() { return fd_; }
+std::ofstream& StreamWriter::Stream() { return fd_; }
 
 void StreamWriter::WriteInt64(int64_t value) {
   WriteData(&value, sizeof(value));
@@ -775,7 +775,7 @@ std::string StreamReader::ReadString(int64_t max_len) {
 }
 
 StreamWriter::StreamWriter(const std::string& filename)
-    : fd_(filename, std::ostream::binary | std::ostream::out) {
+    : fd_(filename, std::ostream::binary) {
   ERROR_ON_MSG(!fd_.is_open(), "Failed to open file '" << filename << "'");
   fd_.exceptions(std::ofstream::failbit | std::ofstream::badbit);
   BinaryVersion().ToStream(*this);
@@ -795,21 +795,21 @@ void StreamWriter::CopyFromStream(StreamReader& in, size_t size) {
   WriteData(buffer.data(), buffer.size());
 }
 
-void StreamWriter::MoveAbsolute(std::ios::streampos position) {
-  fd_.seekg(position);
+void StreamWriter::MoveAbsolute(std::streampos position) {
+  fd_.seekp(position);
 }
 
-std::ios::streampos StreamWriter::CurrentPosition() { return fd_.tellg(); }
+std::streampos StreamWriter::CurrentPosition() { return fd_.tellp(); }
 
 StreamReader::StreamReader(const std::string& filename, bool is_versioned)
-    : fd_(filename, std::ios::binary), filename_(filename) {
+    : fd_(filename, std::ifstream::binary), filename_(filename) {
   ERROR_ON_MSG(!fd_.is_open(), "Failed to open file '" << filename << "'");
   fd_.exceptions(std::ifstream::eofbit | std::ifstream::failbit |
                  std::ifstream::badbit);
   std::streampos begin = fd_.tellg();
-  fd_.seekg(0, std::ios::end);
+  fd_.seekg(0, std::ifstream::end);
   end_ = fd_.tellg();
-  fd_.seekg(0, std::ios::beg);
+  fd_.seekg(0, std::ifstream::beg);
   if (is_versioned) {
     BinaryVersion().ErrorIfNotCompatible(*this);
   }
@@ -847,15 +847,15 @@ std::vector<int64_t> StreamReader::ReadInt64Array() {
   return out;
 }
 
-void StreamReader::MoveRelative(std::ios::streamoff offset) {
-  fd_.seekg(offset, std::ios::cur);
+void StreamReader::MoveRelative(std::streamoff offset) {
+  fd_.seekg(offset, std::ifstream::cur);
 }
 
-void StreamReader::MoveAbsolute(std::ios::streampos position) {
+void StreamReader::MoveAbsolute(std::streampos position) {
   fd_.seekg(position);
 }
 
-std::ios::streampos StreamReader::CurrentPosition() { return fd_.tellg(); }
+std::streampos StreamReader::CurrentPosition() { return fd_.tellg(); }
 
 std::ifstream& StreamReader::Stream() { return fd_; }
 
@@ -950,7 +950,7 @@ FeedWriter::FeedWriter(std::shared_ptr<StreamWriter> writer,
 void FeedWriter::AppendTensor(const void* data) {
   ERROR_ON(current_pos_ >= end_pos_);
   // Save the current writer's position
-  std::ios::streampos saved_pos = writer_->CurrentPosition();
+  std::streampos saved_pos = writer_->CurrentPosition();
   // Jump to the feed's location in the file
   writer_->MoveAbsolute(current_pos_);
   // Write the tensor
@@ -1011,7 +1011,7 @@ void BinaryWriter::Close() {
 
 BinaryWriter::~BinaryWriter() { Close(); }
 
-std::fstream& ExecutableWriter::Stream() { return writer_->Stream(); }
+std::ofstream& ExecutableWriter::Stream() { return writer_->Stream(); }
 
 void ExecutableWriter::WriteComplete() {
   if (writer_) {
@@ -1140,7 +1140,7 @@ const TensorInfo& InfeedStream::Info() const { return info_; }
 std::string InfeedStream::ToString() {
   // Backup current position
   int64_t tensor_idx = tensor_idx_;
-  std::ios::streampos current_pos = reader_->CurrentPosition();
+  std::streampos current_pos = reader_->CurrentPosition();
 
   ResetToFirstTensor();
   Tensor tmp{info_};
