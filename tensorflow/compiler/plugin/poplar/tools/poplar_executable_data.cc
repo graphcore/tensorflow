@@ -47,7 +47,7 @@ class BinaryVersion {
  private:
   // Increment minor only when backward compatibility is maintained (e.g new
   // features are added) Increment major and reset minor to 0 otherwise.
-  int major{3};
+  int major{4};
   int minor{0};
 };
 
@@ -374,12 +374,18 @@ class DeferredSizeWriter {
       writer_ = nullptr;
     }
   }
-  ~DeferredSizeWriter() { WriteSize(); }
 
  private:
   std::shared_ptr<StreamWriter> writer_;
   std::ios::streampos start_;
 };
+
+DeferredSizeWriter CreateObject(ObjectType type, const std::string& name,
+                                std::shared_ptr<StreamWriter> writer) {
+  writer->WriteInt64(static_cast<int64_t>(type));
+  writer->WriteString(name);
+  return DeferredSizeWriter{writer};
+}
 
 std::string ObjectTypeToString(ObjectType type) {
   switch (type) {
@@ -961,41 +967,39 @@ BinaryWriter::BinaryWriter(const std::string& filename)
 FeedWriter BinaryWriter::CreateFeed(const std::string& name,
                                     const TensorInfo& info,
                                     int64_t num_tensors) {
-  writer_->WriteInt64(static_cast<int64_t>(ObjectType::Feed));
-  writer_->WriteString(name);
-  DeferredSizeWriter object_size{writer_};
+  DeferredSizeWriter size_writer{CreateObject(ObjectType::Feed, name, writer_)};
   info.ToStream(*writer_);
   writer_->WriteInt64(num_tensors);
-  return FeedWriter{writer_, info.Shape().DataSizeInBytes(), num_tensors};
+  FeedWriter feed{writer_, info.Shape().DataSizeInBytes(), num_tensors};
+  size_writer.WriteSize();
+  return feed;
 }
 
-ExecutableWriter BinaryWriter::CreateExecutable(const std::string& name) {
-  writer_->WriteInt64(static_cast<int64_t>(ObjectType::PoplarExecutable));
-  writer_->WriteString(name);
-  DeferredSizeWriter object_size{writer_};
+ExecutableWriter BinaryWriter::CreateExecutable(const std::string& name,
+                                                bool is_verified) {
+  DeferredSizeWriter size_writer{
+      CreateObject(ObjectType::PoplarExecutable, name, writer_)};
+  writer_->WriteInt64(static_cast<int64_t>(is_verified));
   std::function<void()> on_write_complete =
-      std::bind(&DeferredSizeWriter::WriteSize, object_size);
+      std::bind(&DeferredSizeWriter::WriteSize, size_writer);
   return ExecutableWriter(writer_, on_write_complete);
 }
 
 void BinaryWriter::WriteMetadata(const std::string& name,
                                  const Metadata& metadata) {
-  writer_->WriteInt64(static_cast<int64_t>(ObjectType::PoplarMetadata));
-  writer_->WriteString(name);
-  DeferredSizeWriter object_size{writer_};
+  DeferredSizeWriter size_writer{
+      CreateObject(ObjectType::PoplarMetadata, name, writer_)};
   writer_->WriteString(metadata.ToJson());
+  size_writer.WriteSize();
 }
 
 void BinaryWriter::WriteTensor(const Tensor& tensor,
                                const std::string override_name) {
-  writer_->WriteInt64(static_cast<int64_t>(ObjectType::Tensor));
-  if (!override_name.empty()) {
-    writer_->WriteString(override_name);
-  } else {
-    writer_->WriteString(tensor.Info().Name());
-  }
-  DeferredSizeWriter object_size{writer_};
+  DeferredSizeWriter size_writer{CreateObject(
+      ObjectType::Tensor,
+      override_name.empty() ? tensor.Info().Name() : override_name, writer_)};
   tensor.ToStream(*writer_);
+  size_writer.WriteSize();
 }
 
 void BinaryWriter::Close() {

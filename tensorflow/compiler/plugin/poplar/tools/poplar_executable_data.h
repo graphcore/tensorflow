@@ -409,7 +409,8 @@ class BinaryWriter {
   explicit BinaryWriter(const std::string& filename);
   FeedWriter CreateFeed(const std::string& name, const TensorInfo& info,
                         int64_t num_elements);
-  ExecutableWriter CreateExecutable(const std::string& name);
+  ExecutableWriter CreateExecutable(const std::string& name,
+                                    bool is_verified = false);
   void WriteMetadata(const std::string& name, const Metadata& metadata);
   void WriteTensor(const Tensor& tensor, const std::string override_name = "");
   void Close();
