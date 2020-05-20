@@ -291,9 +291,10 @@ void AllocationFinder::FindConsumers(
               // sliceable on dimension 0 if we have a valid dimension
               // permutation.
               if (op_index == 0 && tensor_target.permutation &&
-                  (IsPoplarInstruction(PoplarOp::MultiSlice) ||
-                   IsPoplarInstruction(PoplarOp::MultiUpdate) ||
-                   IsPoplarInstruction(PoplarOp::MultiUpdateAdd))) {
+                  (IsPoplarInstruction(PoplarOp::MultiSlice)(user) ||
+                   IsPoplarInstruction(PoplarOp::MultiUpdate)(user) ||
+                   IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(user))) {
+                CHECK(!tensor_target.permutation->empty());
                 tensor_target.sliceable_dimension =
                     (*tensor_target.permutation)[0];
               }

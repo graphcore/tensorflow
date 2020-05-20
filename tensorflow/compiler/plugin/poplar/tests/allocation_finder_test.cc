@@ -4152,6 +4152,42 @@ ENTRY pipeline {
   EXPECT_EQ(t.backward_path.size(), 0);
 }
 
+TEST_F(AllocationFinderTest, FindAllocationTargetScalar) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p = (f32[]) parameter(0)
+  ROOT c = f32[] custom-call(p), custom_call_target="LstmLayerFwd", backend_config="{\"num_channels\":1, \"is_training\":false, \"partials_dtype\":\"DT_FLOAT\"}\n"
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
+
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 1);
+
+  const auto* param = module0->entry_computation()->parameter_instruction(0);
+  const auto* lstm = module0->entry_computation()->root_instruction();
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{param, 0});
+  EXPECT_EQ(t.tgt, lstm);
+  EXPECT_EQ(t.input_index, 0ll);
+  EXPECT_TRUE(t.permutation.has_value());
+  EXPECT_EQ(t.permutation->size(), 0);
+}
+
 // // TODO:
 // // - can forward path traverse in-place ops
 // // - is forward path rejected when going through non-layout preserving
