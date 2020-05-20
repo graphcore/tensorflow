@@ -240,4 +240,7 @@ message IpuOptions {
 
   // Collective operations options for the Graphcore Communication Library.
   repeated PoplarOptionFlag gcl_options = 31;
+
+  // Block size for triangular solve expander pass.
+  int64 triangular_solve_expander_block_size = 32;
 };

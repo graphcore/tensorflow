@@ -438,6 +438,12 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return current_config_.max_send_recv_cluster_size();
   }
 
+  int64 GetTriangularSolveExpanderBlockSize() const {
+    // 128 is XLA default block size used in TriangularSolveExpander
+    auto block_size = current_config_.triangular_solve_expander_block_size();
+    return block_size <= 0 ? 128 : block_size;
+  }
+
   IpuSelectionOrder GetSelectionOrder() const {
     return current_config_.selection_order();
   }
