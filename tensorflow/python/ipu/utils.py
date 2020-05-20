@@ -403,7 +403,8 @@ def set_optimization_options(opts,
                              max_reduce_scatter_buffer_size=0,
                              max_inter_ipu_copies_buffer_size=0,
                              max_send_recv_cluster_size=0,
-                             gather_simplifier=False):
+                             gather_simplifier=False,
+                             triangular_solve_expander_block_size=0):
   """Set the IPU options related to performance / optimizations.
 
   .. code-block:: python
@@ -433,6 +434,8 @@ def set_optimization_options(opts,
       These are lowered to stream copies that can be merged by Poplar.
     gather_simplifier: Will enable more aggressive optimisation
       for embedding lookups.
+    triangular_solve_expander_block_size: Defines size for triangular solver
+      expander blocks. 0 - implementation defined default.
 
   Returns:
     The IpuOptions configuration protobuf.
@@ -445,6 +448,8 @@ def set_optimization_options(opts,
   opts.max_inter_ipu_copies_buffer_size = max_inter_ipu_copies_buffer_size
   opts.max_send_recv_cluster_size = max_send_recv_cluster_size
   opts.enable_gather_simplifier = gather_simplifier
+  opts.triangular_solve_expander_block_size = \
+    triangular_solve_expander_block_size
 
   return opts
 
