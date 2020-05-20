@@ -35,7 +35,8 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       int64 stage_count, const std::vector<int>& stage_ipu_mapping,
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
       const absl::flat_hash_set<int> stages_with_recomputation,
-      CompilerResources& res, const DeferredArgVectors& inputs);
+      int64 num_backward_stages, CompilerResources& res,
+      const DeferredArgVectors& inputs);
 
   PipelineVisitor(const HloInstruction* pipeline, CompilerResources& res,
                   const DeferredArgVectors& inputs);
@@ -133,8 +134,10 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;
   absl::flat_hash_set<int> stages_with_recomputation_;
+  const int64 num_backward_stages_;
   absl::flat_hash_map<int, std::unique_ptr<PipelineStageVisitor>>
       fwd_stage_visitors_;
+
   poplar::program::Program GetPipelineRampUpSequence() const;
   poplar::program::Program GetPipelineRampDownSequence(
       int additional_iterations = 0) const;
