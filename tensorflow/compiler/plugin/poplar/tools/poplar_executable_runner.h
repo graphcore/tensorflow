@@ -40,8 +40,7 @@ class BinaryLoader;
 
 class IExecutable {
  public:
-  IExecutable(StreamReader& stream, int64_t length,
-              const poplar::OptionFlags& opts);
+  IExecutable(StreamReader& stream, int64_t length);
   poplar::Engine& Engine();
   std::string StreamsList(bool summmary = false) const;
   virtual ~IExecutable() = default;
@@ -52,10 +51,14 @@ class IExecutable {
 
 class VerifiedExecutable : public IExecutable {
  public:
-  VerifiedExecutable(StreamReader& stream, int64_t length);
+  VerifiedExecutable(StreamReader& stream, int64_t length, bool is_verified);
   void Prepare(poplar::Device& device);
   void Deploy();
   void Run();
+  bool IsVerified() const;
+
+ private:
+  bool is_verified_;
 };
 
 class Executable : public IExecutable {

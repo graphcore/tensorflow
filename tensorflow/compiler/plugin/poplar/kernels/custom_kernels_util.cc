@@ -242,6 +242,15 @@ StatusOr<uint64> AttributeMap::GetAttributeAsUInt64(
   return attributes_[field_name].asUInt64();
 }
 
+StatusOr<int64> AttributeMap::GetAttributeAsInt64(
+    const std::string& field_name) const {
+  if (!HasAttribute(field_name)) {
+    return xla::FailedPrecondition(
+        "Could not obtain the field %s for the custom op.", field_name.c_str());
+  }
+  return attributes_[field_name].asInt64();
+}
+
 StatusOr<bool> AttributeMap::GetAttributeAsBool(
     const std::string& field_name) const {
   if (!HasAttribute(field_name)) {
