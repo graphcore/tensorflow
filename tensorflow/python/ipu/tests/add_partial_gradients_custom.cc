@@ -38,8 +38,8 @@ extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
 extern "C" poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
     std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
-  if (inputs.size() != 3) {
-    throw poputil::poplibs_error("ScaledVectorAdd requires 3 inputs");
+  if (inputs.size() != 5) {
+    throw poputil::poplibs_error("ScaledVectorAdd requires 5 inputs");
   }
 
   if (inputs[0].numElements() == 0) {
@@ -142,7 +142,8 @@ extern "C" poplar::program::Program Build_grad(
   {
     outputs[0] = graph.clone(fwd_inputs[0]);
     std::vector<poplar::Tensor> ins = {fwd_inputs[2], fwd_inputs[1],
-                                       gradients[0]};
+                                       gradients[0], fwd_inputs[3],
+                                       fwd_inputs[4]};
     std::vector<poplar::Tensor> outs = {outputs[0]};
     seq.add(Build(graph, ins, outs, "gradX"));
   }
@@ -152,7 +153,8 @@ extern "C" poplar::program::Program Build_grad(
   {
     outputs[1] = graph.clone(fwd_inputs[2]);
     std::vector<poplar::Tensor> ins = {fwd_inputs[0], fwd_inputs[1],
-                                       gradients[0]};
+                                       gradients[0], fwd_inputs[3],
+                                       fwd_inputs[4]};
     std::vector<poplar::Tensor> outs = {outputs[1]};
     seq.add(Build(graph, ins, outs, "gradY"));
   }

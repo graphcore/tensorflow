@@ -347,10 +347,10 @@ class StreamWriter {
   void MoveAbsolute(std::streampos position);
   std::streampos CurrentPosition();
   void Close();
-  std::fstream& Stream();
+  std::ofstream& Stream();
 
  private:
-  std::fstream fd_;
+  std::ofstream fd_;
 };
 
 class StreamReader {
@@ -395,7 +395,7 @@ class ExecutableWriter {
   ExecutableWriter(std::shared_ptr<StreamWriter> writer,
                    std::function<void()> on_write_complete);
   StreamWriter& Writer();
-  std::fstream& Stream();
+  std::ofstream& Stream();
   void WriteComplete();
   ~ExecutableWriter();
 
@@ -409,7 +409,8 @@ class BinaryWriter {
   explicit BinaryWriter(const std::string& filename);
   FeedWriter CreateFeed(const std::string& name, const TensorInfo& info,
                         int64_t num_elements);
-  ExecutableWriter CreateExecutable(const std::string& name);
+  ExecutableWriter CreateExecutable(const std::string& name,
+                                    bool is_verified = false);
   void WriteMetadata(const std::string& name, const Metadata& metadata);
   void WriteTensor(const Tensor& tensor, const std::string override_name = "");
   void Close();

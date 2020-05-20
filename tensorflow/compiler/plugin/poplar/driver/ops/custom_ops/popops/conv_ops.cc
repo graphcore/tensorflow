@@ -86,12 +86,14 @@ class Conv2DOp : public PoplarOpDef {
     poplar::program::Sequence prog;
 
     // Find the input tensor
-    TF_ASSIGN_OR_RETURN(poplar::Tensor in,
-                        FindInstructionInput(tensor_map, res, inst, 0, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor in,
+        FindInstructionInput(tensor_map, res, inst, 0, prog, false));
 
     // Find the kernel tensor
-    TF_ASSIGN_OR_RETURN(poplar::Tensor kernel,
-                        FindInstructionInput(tensor_map, res, inst, 1, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor kernel,
+        FindInstructionInput(tensor_map, res, inst, 1, prog, false));
 
     TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                         GetConvolutionParameters(inst, 0, 1));
@@ -157,12 +159,14 @@ class Conv2DReverseOp : public PoplarOpDef {
     poplar::program::Sequence prog;
 
     // Find the input tensor
-    TF_ASSIGN_OR_RETURN(poplar::Tensor in,
-                        FindInstructionInput(tensor_map, res, inst, 0, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor in,
+        FindInstructionInput(tensor_map, res, inst, 0, prog, false));
 
     // Find the kernel tensor
-    TF_ASSIGN_OR_RETURN(poplar::Tensor kernel,
-                        FindInstructionInput(tensor_map, res, inst, 1, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor kernel,
+        FindInstructionInput(tensor_map, res, inst, 1, prog, false));
 
     TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                         GetConvolutionParameters(inst, 0, 1));
@@ -196,12 +200,14 @@ class DepthwiseBackpropFilterOp : public PoplarOpDef {
     poplar::program::Sequence prog;
 
     // Find the input tensor
-    TF_ASSIGN_OR_RETURN(poplar::Tensor in,
-                        FindInstructionInput(tensor_map, res, inst, 0, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor in,
+        FindInstructionInput(tensor_map, res, inst, 0, prog, false));
 
     // Find the kernel tensor
-    TF_ASSIGN_OR_RETURN(poplar::Tensor kernel,
-                        FindInstructionInput(tensor_map, res, inst, 1, prog));
+    TF_ASSIGN_OR_RETURN(
+        poplar::Tensor kernel,
+        FindInstructionInput(tensor_map, res, inst, 1, prog, false));
 
     TF_ASSIGN_OR_RETURN(poplin::ConvParams params,
                         GetConvolutionParameters(inst, 0, 1));

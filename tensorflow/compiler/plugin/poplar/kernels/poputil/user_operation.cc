@@ -120,7 +120,7 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
 
     OP_REQUIRES_OK(context, context->GetAttr("op_name", &op_name));
 
-    OP_REQUIRES_OK(context, context->GetAttr("is_gradient", &is_gradient));
+    OP_REQUIRES_OK(context, context->GetAttr("gradient_size", &gradient_size));
 
     OP_REQUIRES_OK(context,
                    context->GetAttr("partial_derivative_index", &pd_index));
@@ -160,7 +160,7 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
   }
 
   void CreateCustomCall(XlaOpKernelContext* context) {
-    GetAttrMap().AddAttribute("is_gradient", is_gradient);
+    GetAttrMap().AddAttribute("gradient_size", gradient_size);
     GetAttrMap().AddAttribute("partial_derivative_index", pd_index);
 
     const size_t num_inputs = context->num_inputs();
@@ -200,9 +200,9 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
 
   std::vector<xla::Shape> output_shape;
 
-  bool is_gradient;
+  int64 gradient_size;
 
-  int pd_index;
+  int64 pd_index;
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOpBase);

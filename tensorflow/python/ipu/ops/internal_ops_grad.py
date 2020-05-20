@@ -85,10 +85,10 @@ def _poputil_op_layer_backward(op, grads, add_op):
     for op_input_index, op_input in enumerate(inputs):
       if op_input is not None:
         result.append(
-            add_op(layout, True, op_input_index, [0], [op_input.dtype],
-                   [op_input.shape])[0])
+            add_op(layout, len(grads), True, op_input_index, [0],
+                   [op_input.dtype], [op_input.shape])[0])
   else:
-    result = add_op(layout, False, 0, inputs_with_gradients,
+    result = add_op(layout, len(grads), False, 0, inputs_with_gradients,
                     [t.dtype for t in inputs if t is not None],
                     [t.shape for t in inputs if t is not None])
 
@@ -101,15 +101,15 @@ def _poputil_cpu_user_operation_layer_backward(op, *grads):
   op_name = op.get_attr("op_name").decode("utf-8") + "_grad"
   name = op.name + "_grad"
 
-  def add_op(layout, separate_gradients, op_input_index, inputs_with_gradients,
-             output_types, output_shapes):
+  def add_op(layout, gradient_size, separate_gradients, op_input_index,
+             inputs_with_gradients, output_types, output_shapes):
     return gen_poputil_ops.ipu_user_read_write_op(
         layout,
         library_path=library_path,
         op_name=op_name,
         name=name,
         separate_gradients=separate_gradients,
-        is_gradient=True,
+        gradient_size=gradient_size,
         partial_derivative_index=op_input_index,
         inputs_with_gradients=inputs_with_gradients,
         output_types=output_types,
@@ -125,8 +125,8 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
   gp_path = op.get_attr("gp_path").decode("utf-8")
   name = op.name + "_grad"
 
-  def add_op(layout, separate_gradients, op_input_index, inputs_with_gradients,
-             output_types, output_shapes):
+  def add_op(layout, gradient_size, separate_gradients, op_input_index,
+             inputs_with_gradients, output_types, output_shapes):
     return gen_poputil_ops.ipu_user_op(
         layout,
         library_path=library_path,
@@ -134,7 +134,7 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
         gp_path=gp_path,
         name=name,
         separate_gradients=separate_gradients,
-        is_gradient=True,
+        gradient_size=gradient_size,
         partial_derivative_index=op_input_index,
         inputs_with_gradients=inputs_with_gradients,
         output_types=output_types,
