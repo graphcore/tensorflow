@@ -30,7 +30,6 @@ def _poputil_dropout_layer_backward(op, grads, seed_grads):
   return [
       gen_poprand_ops.ipu_dropout(grads,
                                   seed=seed,
-                                  user_seed=1,
                                   rate=rate,
                                   scale=scale,
                                   name=op.name + "_grad",
