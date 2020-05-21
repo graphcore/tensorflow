@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/dropout_hlo.h"
+
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -31,9 +32,7 @@ HloDropoutInstruction::HloDropoutInstruction(HloInstruction* X,
       scale(scale_),
       rate(rate_),
       seed_modifier(seed_mod),
-      is_user_seed(should_use_user_seed) {
-  set_custom_call_has_side_effect(true);
-}
+      is_user_seed(should_use_user_seed) {}
 
 absl::flat_hash_set<int64> HloDropoutInstruction::AllocatingIndices() const {
   return {};

@@ -15,9 +15,11 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
 
+#include <string>
+#include <vector>
+
 #include <poplar/Tensor.hpp>
 #include <poputil/Util.hpp>
-#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
@@ -31,8 +33,9 @@ namespace xla {
 namespace poplarplugin {
 
 PipelineStageVisitor::PipelineStageVisitor(CompilerResources& res,
-                                           const DeferredArgVectors& inputs)
-    : InplaceDeferredVisitor(res, inputs) {}
+                                           const DeferredArgVectors& inputs,
+                                           const std::string& name)
+    : InplaceDeferredVisitor(res, inputs, name) {}
 
 bool PipelineStageVisitor::TupleOutputsNeedToPreserveAliasing(
     const HloInstruction* inst) {
@@ -40,13 +43,16 @@ bool PipelineStageVisitor::TupleOutputsNeedToPreserveAliasing(
   return inst->parent()->root_instruction() == inst;
 }
 
-poplar::program::Sequence PipelineStageVisitor::GetSequence() const {
+poplar::program::Sequence PipelineStageVisitor::GetCachedSequence() {
   if (!has_function_) {
-    poplar::program::Sequence seq = InplaceDeferredVisitor::GetSequence();
-    function_ = GetMasterGraph(resources_).addFunction(seq);
-  }
-  has_function_ = true;
+    poplar::program::Sequence seq =
+        InplaceDeferredVisitor::GetSequence(/*copy_execution_counters*/ false);
 
+    // Always increment the execution counters.
+    seq.add(execution_counters_.IncrementLiveCounters());
+    function_ = GetMasterGraph(resources_).addFunction(seq);
+    has_function_ = true;
+  }
   return poplar::program::Sequence(poplar::program::Call(function_));
 }
 
@@ -68,8 +74,9 @@ ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
 }
 
 ReusablePipelineStageVisitor::ReusablePipelineStageVisitor(
-    CompilerResources& res, const DeferredArgVectors& inputs)
-    : PipelineStageVisitor(res, inputs) {}
+    CompilerResources& res, const DeferredArgVectors& inputs,
+    const std::string& name)
+    : PipelineStageVisitor(res, inputs, name) {}
 
 Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst) {
@@ -86,9 +93,9 @@ Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
                                                        add_clones);
 }
 
-poplar::program::Sequence ReusablePipelineStageVisitor::GetSequence(
+poplar::program::Sequence ReusablePipelineStageVisitor::GetForwardStageSequence(
     const HloInstruction* callsite, const DeferredArgVectors& deferred_inputs,
-    TensorMap& callsite_tensor_map) const {
+    TensorMap& callsite_tensor_map) {
   poplar::program::Sequence seq;
   // Convert deferred args to actual tensors, filling gaps where required.
   CHECK_EQ(callsite->operand_count(), deferred_inputs.size());
@@ -115,12 +122,18 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetSequence(
       }
     }
   }
-  seq.add(GetSequence(callsite, inputs));
+  seq.add(GetCachedSequence(callsite, inputs));
   return seq;
 }
 
-poplar::program::Sequence ReusablePipelineStageVisitor::GetSequence(
-    const HloInstruction* callsite, const TensorVectors& inputs) const {
+poplar::program::Sequence
+ReusablePipelineStageVisitor::GetRecomputationStageSequence(
+    const HloInstruction* callsite, const TensorVectors& inputs) {
+  return GetCachedSequence(callsite, inputs);
+}
+
+poplar::program::Sequence ReusablePipelineStageVisitor::GetCachedSequence(
+    const HloInstruction* callsite, const TensorVectors& inputs) {
   poplar::Graph& graph = GetGraph(resources_, callsite);
   // When recomputation is enabled, copies need to be inserted for all the non
   // parameter inputs as we are re-using the forward stage Poplar
@@ -150,7 +163,7 @@ poplar::program::Sequence ReusablePipelineStageVisitor::GetSequence(
     }
   }
   // Add the actual sequence for the stage.
-  seq.add(PipelineStageVisitor::GetSequence());
+  seq.add(PipelineStageVisitor::GetCachedSequence());
   return seq;
 }
 

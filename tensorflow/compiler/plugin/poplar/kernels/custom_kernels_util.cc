@@ -206,66 +206,54 @@ bool AttributeMap::HasAttribute(const std::string& field_name) const {
   return attributes_.isMember(field_name);
 }
 
-StatusOr<std::string> AttributeMap::GetAttributeAsString(
-    const std::string& field_name) const {
+Status AttributeMap::CheckHasAttribute(const std::string& field_name) const {
   if (!HasAttribute(field_name)) {
     return xla::FailedPrecondition(
         "Could not obtain the field %s for the custom op.", field_name.c_str());
+  } else {
+    return Status::OK();
   }
+}
+
+StatusOr<std::string> AttributeMap::GetAttributeAsString(
+    const std::string& field_name) const {
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   return attributes_[field_name].asString();
 }
 
 StatusOr<float> AttributeMap::GetAttributeAsFloat(
     const std::string& field_name) const {
-  if (!HasAttribute(field_name)) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
-  }
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   return attributes_[field_name].asFloat();
 }
 
 StatusOr<int> AttributeMap::GetAttributeAsInt(
     const std::string& field_name) const {
-  if (!HasAttribute(field_name)) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
-  }
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   return attributes_[field_name].asInt();
 }
 
 StatusOr<uint64> AttributeMap::GetAttributeAsUInt64(
     const std::string& field_name) const {
-  if (!HasAttribute(field_name)) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
-  }
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   return attributes_[field_name].asUInt64();
 }
 
 StatusOr<int64> AttributeMap::GetAttributeAsInt64(
     const std::string& field_name) const {
-  if (!HasAttribute(field_name)) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
-  }
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   return attributes_[field_name].asInt64();
 }
 
 StatusOr<bool> AttributeMap::GetAttributeAsBool(
     const std::string& field_name) const {
-  if (!HasAttribute(field_name)) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
-  }
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   return attributes_[field_name].asBool();
 }
 
 StatusOr<tensorflow::DataType> AttributeMap::GetAttributeAsTFDataType(
     const std::string& field_name) const {
-  if (!HasAttribute(field_name)) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
-  }
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   const std::string dtype_string = attributes_[field_name].asString();
   tensorflow::DataType data_type;
   if (!DataType_Parse(dtype_string, &data_type)) {
@@ -277,9 +265,10 @@ StatusOr<tensorflow::DataType> AttributeMap::GetAttributeAsTFDataType(
 
 StatusOr<absl::flat_hash_set<int64>> AttributeMap::GetAttributeFlatHashSet(
     const std::string& field_name) const {
-  if (!HasAttribute(field_name) || !attributes_[field_name].isArray()) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
+  if (!attributes_[field_name].isArray()) {
+    return xla::FailedPrecondition("Custom op field %s is not an array.",
+                                   field_name.c_str());
   }
   absl::flat_hash_set<int64> result;
   for (auto val : attributes_[field_name]) {
@@ -290,10 +279,11 @@ StatusOr<absl::flat_hash_set<int64>> AttributeMap::GetAttributeFlatHashSet(
 
 StatusOr<absl::flat_hash_map<int64, int64>>
 AttributeMap::GetAttributeFlatHashMap(const std::string& field_name) const {
-  if (!HasAttribute(field_name) || !attributes_[field_name].isMember("keys") ||
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
+  if (!attributes_[field_name].isMember("keys") ||
       !attributes_[field_name].isMember("values")) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
+    return xla::FailedPrecondition("Custom op field %s is not a map.",
+                                   field_name.c_str());
   }
   auto keys = attributes_[field_name]["keys"];
   auto values = attributes_[field_name]["values"];
@@ -314,10 +304,7 @@ AttributeMap::GetAttributeFlatHashMap(const std::string& field_name) const {
 
 StatusOr<Window> AttributeMap::GetAttributeAsWindow(
     const std::string& field_name) const {
-  if (!HasAttribute(field_name)) {
-    return xla::FailedPrecondition(
-        "Could not obtain the field %s for the custom op.", field_name.c_str());
-  }
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
   std::string window_proto_str = attributes_[field_name].asString();
   Window window;
   TF_RETURN_IF_ERROR(

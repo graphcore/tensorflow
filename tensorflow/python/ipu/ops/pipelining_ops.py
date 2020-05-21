@@ -453,6 +453,15 @@ def pipeline(computational_stages,
     raise TypeError("The given pipeline_schedule is not a member of the "
                     "PipelineSchedule enumeration.")
 
+  # TODO(T18660) interleaved schedule does not support multiple stages on the
+  # same IPU during training.
+  if pipeline_schedule == PipelineSchedule.Interleaved and len(
+      device_mapping) != len(set(device_mapping)) and optimizer_function:
+    raise NotImplementedError(
+        "The pipelining schedule 'Interleaved' does not currently support "
+        "multiple pipeline stages on the same device for training graphs. "
+        "Please use a different pipeline schedule.")
+
   # Function for setting up and validating the per stage Poplar options.
   def validate_stage_options_and_populate_proto(stages_poplar_options,
                                                 proto_list, name):

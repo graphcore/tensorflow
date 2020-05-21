@@ -199,14 +199,9 @@ class _PopnnRNN(Layer):
     if not training:
       return inputs
 
-    if self._dropout_seed is None:
-      # User did not provide a seed
-      self._dropout_seed = [0, 0]
-
     return rand_ops.dropout(inputs,
                             seed=self._dropout_seed,
                             rate=self._dropout,
-                            scale=1.,
                             name=self.name + "_dropout")
 
 

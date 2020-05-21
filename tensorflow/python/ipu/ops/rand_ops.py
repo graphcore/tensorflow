@@ -64,7 +64,6 @@ def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
   # that value is kept rather than disgarded.
   return gen_poprand_ops.ipu_dropout(x,
                                      seed=seed,
-                                     user_seed=1,
                                      rate=(1 - rate),
                                      scale=scale,
                                      name=name,

@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_STAGE_VISITOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_STAGE_VISITOR_H_
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 
@@ -26,20 +28,20 @@ struct CompilerResources;
 
 class PipelineStageVisitor : public InplaceDeferredVisitor {
  public:
-  PipelineStageVisitor(CompilerResources& res,
-                       const DeferredArgVectors& inputs);
+  PipelineStageVisitor(CompilerResources& res, const DeferredArgVectors& inputs,
+                       const std::string& name);
 
   bool TupleOutputsNeedToPreserveAliasing(const HloInstruction* inst) override;
 
-  poplar::program::Sequence GetSequence() const override;
+  poplar::program::Sequence GetCachedSequence();
 
   // Returns whether the output needs a copy.
   virtual ShapeTree<bool> GetOutputCopies(const HloInstruction* inst) const;
 
  private:
   // Caching fields for the GetSequence call
-  mutable bool has_function_ = false;
-  mutable poplar::Function function_;
+  bool has_function_ = false;
+  poplar::Function function_;
 };
 
 // Similar to PipelineStageVisitor, however it adds copies for any non-inplace
@@ -47,25 +49,30 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
 class ReusablePipelineStageVisitor : public PipelineStageVisitor {
  public:
   ReusablePipelineStageVisitor(CompilerResources& res,
-                               const DeferredArgVectors& inputs);
+                               const DeferredArgVectors& inputs,
+                               const std::string& name);
 
   // A function which propagates any tensors which were not allocated at call
   // site but now have a tensor.
   Status PropagateDeferredAllocations(const HloInstruction* callsite);
 
-  // Get the sequence for this stage, adding any copies for inplace inputs.
-  poplar::program::Sequence GetSequence(const HloInstruction* callsite,
-                                        const DeferredArgVectors& inputs,
-                                        TensorMap& callsite_tensor_map) const;
+  // Get the sequence for the forward stage, adding any copies for inplace
+  // inputs.
+  poplar::program::Sequence GetForwardStageSequence(
+      const HloInstruction* callsite, const DeferredArgVectors& inputs,
+      TensorMap& callsite_tensor_map);
 
-  // Same as above, but all tensors are allocated.
-  poplar::program::Sequence GetSequence(const HloInstruction* callsite,
-                                        const TensorVectors& inputs) const;
+  // Get the sequence for the recomputation stage.
+  poplar::program::Sequence GetRecomputationStageSequence(
+      const HloInstruction* callsite, const TensorVectors& inputs);
 
   // Returns whether the output needs a copy.
   ShapeTree<bool> GetOutputCopies(const HloInstruction* inst) const override;
 
  private:
+  poplar::program::Sequence GetCachedSequence(const HloInstruction* callsite,
+                                              const TensorVectors& inputs);
+
   const HloInstruction* callsite_;
 };
 

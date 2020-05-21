@@ -969,17 +969,19 @@ class PipeliningTest(test_util.TensorFlowTestCase):
       with ops.device('cpu'):
         return []
 
-    pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
-        [stage1, stage2, stage3, stage4, stage5],
-        inputs_fn, [10.01],
-        repeat_count,
-        pipeline_depth,
-        dataset_fn,
-        optimizer,
-        self,
-        21458,
-        schedule=pipelining_ops.PipelineSchedule.Interleaved,
-        device_mapping=[0, 1, 2, 3, 0])
+    with self.assertRaisesRegex(NotImplementedError,
+                                "The pipelining schedule"):
+      pipelining_test_util.PipelineTester.compare_pipeline_to_cpu(
+          [stage1, stage2, stage3, stage4, stage5],
+          inputs_fn, [10.01],
+          repeat_count,
+          pipeline_depth,
+          dataset_fn,
+          optimizer,
+          self,
+          21458,
+          schedule=pipelining_ops.PipelineSchedule.Interleaved,
+          device_mapping=[0, 1, 2, 3, 0])
 
   @test_util.deprecated_graph_mode_only
   def testStageOptionsNotEnough(self):

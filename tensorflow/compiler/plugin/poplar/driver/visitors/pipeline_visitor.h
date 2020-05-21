@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_VISITOR_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_PIPELINE_VISITOR_H_
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_stage_visitor.h"
@@ -35,10 +37,11 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       int64 stage_count, const std::vector<int>& stage_ipu_mapping,
       const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
       const absl::flat_hash_set<int> stages_with_recomputation,
-      CompilerResources& res, const DeferredArgVectors& inputs);
+      int64 num_backward_stages, CompilerResources& res,
+      const DeferredArgVectors& inputs, const std::string& name);
 
   PipelineVisitor(const HloInstruction* pipeline, CompilerResources& res,
-                  const DeferredArgVectors& inputs);
+                  const DeferredArgVectors& inputs, const std::string& name);
 
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleClamp);
   HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED(HandleSelect);
@@ -122,6 +125,9 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   std::vector<poplar::program::Sequence> recomputation_sequences_;
   poplar::program::Sequence resource_update_;
 
+  // Sequence which sets the initial values for all the execution counters.
+  poplar::program::Sequence pipeline_execution_counters_initialize_sequence_;
+
   // Sequence which zeros pipeline specific tensors before the pipeline is
   // executed.
   poplar::program::Sequence pipeline_tensors_zeroing_sequence_;
@@ -133,8 +139,10 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   std::vector<int> stage_ipu_mapping_;
   absl::flat_hash_map<const HloInstruction*, int> inst_stage_mapping_;
   absl::flat_hash_set<int> stages_with_recomputation_;
+  const int64 num_backward_stages_;
   absl::flat_hash_map<int, std::unique_ptr<PipelineStageVisitor>>
       fwd_stage_visitors_;
+
   poplar::program::Program GetPipelineRampUpSequence() const;
   poplar::program::Program GetPipelineRampDownSequence(
       int additional_iterations = 0) const;

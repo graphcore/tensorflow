@@ -38,6 +38,7 @@ from tensorflow.python.ipu import ipu_run_config
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import metrics_impl
 from tensorflow.python.ops import variable_scope
@@ -1368,8 +1369,10 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
 
       direction = feature_column.categorical_column_with_vocabulary_list(
           "direction", ["north", "east", "south", "west"])
-      direction_one_hot = feature_column.indicator_column(direction)
-      feature_columns.append(direction_one_hot)
+
+      embedding = feature_column.embedding_column(
+          direction, dimension=4, initializer=init_ops.Identity())
+      feature_columns.append(embedding)
 
       dataset = dataset_ops.Dataset.from_tensor_slices({
           "age": [[18], [25], [55], [90]],

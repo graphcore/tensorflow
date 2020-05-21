@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
 
+#include <poplar/ReplicatedStreamMode.hpp>
 #include <string>
 #include <vector>
 
@@ -24,8 +25,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
-#include <poplar/ReplicatedStreamMode.hpp>
 
 namespace xla {
 namespace poplarplugin {
@@ -86,7 +85,7 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
 
 EntryVisitor::EntryVisitor(CompilerResources& resources,
                            const HloComputation* comp)
-    : DeferredVisitor(resources, MakeArgVector(comp), true) {}
+    : DeferredVisitor(resources, MakeArgVector(comp), "Entry", true) {}
 
 StatusOr<poplar::program::Sequence*> EntryVisitor::GetSequenceForInstruction(
     const HloInstruction* inst) {
@@ -165,9 +164,18 @@ StatusOr<poplar::Tensor> EntryVisitor::PostProcessParameterAllocation(
   return tensor;
 }
 
+const poplar::program::Sequence
+EntryVisitor::GetSequenceAndInitializeCounters() {
+  poplar::program::Sequence seq;
+  seq.add(execution_counters_.SetInitialValuesToZero());
+  seq.add(DeferredVisitor::GetSequence(/*copy_execution_counters*/ false));
+  return seq;
+}
+
 Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
   VLOG(1) << "Processing FinishVisit";
   HloComputation* comp = root->parent();
+
   if (ShapeUtil::IsEmptyTuple(root->shape())) {
     VLOG(1) << "Root instruction shape is an empty tuple";
     return Status::OK();
