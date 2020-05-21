@@ -400,6 +400,23 @@ absl::flat_hash_set<int> GetPipelineStagesWithStatelessRecomputation(
 }
 
 /**
+ * Get the number of backward stages in the pipeline.
+ *
+ * @param pipeline The outer pipeline instruction.
+ *
+ * @returns The number of backward stages in the pipeline.
+ *
+ * @note Assumes the pipeline is correctly constructed.
+ */
+int64 GetNumberOfBackwardPipelineStages(const HloInstruction* pipeline) {
+  HloComputation* pipeline_computation = pipeline->to_apply();
+  // Cannot reasonably return StatusOr because this is called inside a
+  // constructor.
+  auto stages = GetPipelineStages(pipeline_computation).ValueOrDie();
+  return stages.backward.size();
+}
+
+/**
  * Find the indices of all possible non-overlapping circular unions.
  *
  * @param input The sequence of input elements.
@@ -610,14 +627,14 @@ std::vector<std::vector<ElementType>> ConstructSchedule(
 
 /**
  * Construct a "ramp-up" pipeline schedule given an offset and some schedulable
- * components. Additionally, blank spaces are inserted into the schedule where a
+ * components. Additionally, empty stages are inserted into the schedule where a
  * stage cannot be executed.
  *
  * @param offsets The offsets of each parallel sequence of inputs.
  * @param input The input sequence to schedule.
  * @param empty_element The empty element, or identity element, on the
- *                      ElementType. This is what is inserted into the "blank
- *                      spaces" of the schedule.
+ *                      ElementType. This is what is inserted into the "empty
+ *                      stages" of the schedule.
  *
  * @returns A 2D array of pipeline schedule where each row represents the
  *          parallel sequence, and each column represents a single timestep
@@ -638,15 +655,141 @@ std::vector<std::vector<ElementType>> ConstructRampUpSchedule(
 }
 
 /**
+ * Construct a "ramp-up" pipeline schedule for recomputation given an offset and
+ * some schedulable components. Additionally, empty stages are inserted into the
+ * schedule where a recomputation stage cannot be executed.
+ *
+ * @param offsets The offsets of each parallel sequence of inputs.
+ * @param input The input sequence to schedule.
+ * @param empty_element The empty element, or identity element, on the
+ *                      ElementType. This is what is inserted into the "empty
+ *                      stages" of the schedule.
+ *
+ * @returns A 2D array of pipeline recomputation schedule where each row
+ *          represents the parallel sequence, and each column represents a
+ *          single timestep where a single step of the input is scheduled.
+ */
+template <typename ElementType>
+std::vector<std::vector<ElementType>> ConstructRecomputationRampUpSchedule(
+    const std::vector<int>& offsets, const std::vector<ElementType>& input,
+    int64 num_backward_stages, ElementType empty_element = {}) {
+  // If there are no backward stages, there is no recomputation.
+  if (num_backward_stages == 0) {
+    return std::vector<std::vector<ElementType>>(
+        offsets.size(), std::vector<ElementType>(input.size(), empty_element));
+  }
+  CHECK_EQ(input.size() / num_backward_stages, 2);
+  CHECK_EQ(input.size() % num_backward_stages, 0);
+
+  // The pipelining implementation expects the recomputation for backward stage
+  // X at timestep 't2' to be done along with forward stage X at timestep `t1`
+  // such that `t1` < `t2`.
+
+  // Worked example:
+  // num_backward_stages = 4
+  // offsets = {0, 2, 4, 6}
+  // First construct the ramp up schedule given those parameters
+  // {-1,-1,-1,-1,-1,-1,-1, 0}
+  // {-1,-1,-1,-1,-1, 0, 1, 2}
+  // {-1,-1,-1, 0, 1, 2, 3, 4}
+  // {-1, 0, 1, 2, 3, 4, 5, 6}
+  // where each column represents a timestep, and each value represents a
+  // pipeline stage and -1 represents nothing being executed.
+  // Transpose it so that each row represents a timestep.
+  // t = 0 {-1,-1,-1,-1}
+  // t = 1 {-1,-1,-1, 0}
+  // t = 2 {-1,-1,-1, 1}
+  // t = 3 {-1,-1, 0, 2}
+  // t = 4 {-1,-1, 1, 3}
+  // t = 5 {-1, 0, 2, 4}
+  // t = 6 {-1, 1, 3, 5}
+  // t = 7 { 0, 2, 4, 6}
+  // Now a recomputation needs to be placed at timestep t1 for stage with id x,
+  // if there is a corresponding stage with id (2*num_backward_stages - 1 - x)
+  // in timestep t2, where t2 > t1 and there is no other t3 for between t1 and
+  // t2 in which x is executed.
+  // For example at t=2, stage 1 is executed, its backward stage is 6, which is
+  // executed in t=7. However between those stages, 1 is also executed at t=4
+  // and t=6, so recomputation only needs to be placed at time step 6.
+  // If the stage, for example stage 0, executed at t = 1, t = 3, t = 5 and
+  // t = 7, has no corresponding backward stage in the ramp up, then only the
+  // last execution of that stage in the ramp up needs to perform recomputation.
+
+  // Create an execution trace which shows which fwd/bwd stages are exected
+  // during ramp up - a value of -1 indicates no stage being executed.
+  std::vector<int64> stages(input.size());
+  absl::c_iota(stages, 0);
+  std::vector<std::vector<int64>> stage_schedule =
+      ConstructRampUpSchedule(offsets, stages, -1LL);
+  // Transpose so that each row represents a single timestep.
+  stage_schedule = TransposeSchedule(stage_schedule);
+  // Create a lookup for what stages are executed in each timestep.
+  std::vector<absl::flat_hash_set<int64>> stage_schedule_lookup(
+      stage_schedule.size());
+  absl::c_transform(
+      stage_schedule, stage_schedule_lookup.begin(),
+      [](const std::vector<int64>& timestep_schedule)
+          -> absl::flat_hash_set<int64> {
+        return {timestep_schedule.begin(), timestep_schedule.end()};
+      });
+
+  std::vector<std::vector<ElementType>> result =
+      ConstructScheduleInternal(offsets, input);
+  // Transpose so that each row represents a single timestep.
+  result = TransposeSchedule(result);
+
+  // Go through all the elements in the ramp up schedule, and insert empty
+  // elements as appropriate.
+  for (int64 t1 = 0; t1 != stage_schedule.size(); ++t1) {
+    for (int64 j = 0; j != stage_schedule[t1].size(); ++j) {
+      const int64 stage_id = stage_schedule[t1][j];
+      // Mask if the stage is not meant to be executed or it is a backward
+      // stage.
+      if (stage_id == -1 || stage_id >= num_backward_stages) {
+        result[t1][j] = empty_element;
+        continue;
+      }
+      // Given the current stage at the current timestep, we do not need to
+      // perform recomputation iff there is another stage in the future time
+      // steps with the same stage_id executed before the corresponding bwd
+      // stage.
+      const int64 bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
+
+      bool replace_with_empty_element = false;
+      for (int64 t2 = t1 + 1; t2 != stage_schedule.size(); ++t2) {
+        if (stage_schedule_lookup[t2].contains(bwd_stage_id)) {
+          // Found a corresponding bwd stage before another forward stage with
+          // the same id, need to recompute.
+          break;
+        }
+        if (stage_schedule_lookup[t2].contains(stage_id)) {
+          // Found another forward stage with the same id before a corresponding
+          // bwd stage, don't need to recompute.
+          replace_with_empty_element = true;
+          break;
+        }
+      }
+
+      if (replace_with_empty_element) {
+        result[t1][j] = empty_element;
+      }
+    }
+  }
+  // Transpose the schedule back to the expected format.
+  result = TransposeSchedule(result);
+  return result;
+}
+
+/**
  * Construct a "ramp-down" pipeline schedule given an offset and some
- * schedulable components. Additionally, blank spaces are inserted into the
+ * schedulable components. Additionally, empty stages are inserted into the
  * schedule where a stage cannot be executed.
  *
  * @param offsets The offsets of each parallel sequence of inputs.
  * @param input The input sequence to schedule.
  * @param empty_element The empty element, or identity element, on the
- *                      ElementType. This is what is inserted into the "blank
- *                      spaces" of the schedule.
+ *                      ElementType. This is what is inserted into the "empty
+ *                      stages" of the schedule.
  * @param additional_iterations The number of additional iterations that should
  *                              be executed to completely flush the pipeline.
  *
@@ -665,6 +808,138 @@ std::vector<std::vector<ElementType>> ConstructRampDownSchedule(
               empty_element);
   }
 
+  return result;
+}
+
+/**
+ * Construct a "ramp-down" pipeline schedule for recomputation given an offset
+ * and some schedulable components. Additionally, empty stages are inserted into
+ * the schedule where a recomputation stage cannot be executed.
+ *
+ * @param offsets The offsets of each parallel sequence of inputs.
+ * @param input The input sequence to schedule.
+ * @param empty_element The empty element, or identity element, on the
+ *                      ElementType. This is what is inserted into the "empty
+ *                      stages" of the schedule.
+ *
+ * @returns A 2D array of pipeline recomputation schedule where each row
+ *          represents the parallel sequence, and each column represents a
+ *          single timestep where a single step of the input is scheduled.
+ */
+template <typename ElementType>
+std::vector<std::vector<ElementType>> ConstructRecomputationRampDownSchedule(
+    const std::vector<int>& offsets, const std::vector<ElementType>& input,
+    int64 num_backward_stages, ElementType empty_element = {},
+    const int additional_iterations = 0) {
+  // If there are no backward stages, there is no recomputation.
+  if (num_backward_stages == 0) {
+    return std::vector<std::vector<ElementType>>(
+        offsets.size(), std::vector<ElementType>(input.size(), empty_element));
+  }
+  CHECK_EQ(input.size() / num_backward_stages, 2);
+  CHECK_EQ(input.size() % num_backward_stages, 0);
+
+  // The pipelining implementation expects the recomputation for backward stage
+  // X at timestep 't2' to be done along with forward stage X at timestep `t1`
+  // such that `t1` < `t2`.
+
+  // Worked example:
+  // num_backward_stages = 4
+  // offsets = {0, 2, 4, 6}
+  // First construct the ramp down schedule given those parameters
+  // { 1, 2, 3, 4, 5, 6, 7,-1}
+  // { 3, 4, 5, 6, 7,-1,-1,-1}
+  // { 5, 6, 7,-1,-1,-1,-1,-1}
+  // { 7,-1,-1,-1,-1,-1,-1,-1}
+  // where each column represents a timestep, and each value represents a
+  // pipeline stage and -1 represents nothing being executed.
+  // Also construct a schedule without ramp down:
+  // { 1, 2, 3, 4, 5, 6, 7, 0}
+  // { 3, 4, 5, 6, 7, 0, 1, 2}
+  // { 5, 6, 7, 0, 1, 2, 3, 4}
+  // { 7, 0, 1, 2, 3, 4, 5, 6}
+  // This shows where a recomputation stage needs to be placed - as those are
+  // only placed in 'slots' with the forward stages.
+  // Transpose both of those:
+  // Ramp down schedule:     "Normal" schedule:
+  // t = 0 { 1, 3, 5, 7}     { 1, 3, 5, 7}
+  // t = 1 { 2, 4, 6,-1}     { 2, 4, 6, 0}
+  // t = 2 { 3, 5, 7,-1}     { 3, 5, 7, 1}
+  // t = 3 { 4, 6,-1,-1}     { 4, 6, 0, 2}
+  // t = 4 { 5, 7,-1,-1}     { 5, 7, 1, 3}
+  // t = 5 { 6,-1,-1,-1}     { 6, 0, 2, 4}
+  // t = 6 { 7,-1,-1,-1}     { 7, 1, 3, 5}
+  // t = 7 {-1,-1,-1,-1}     { 0, 2, 4, 6}
+  // Now a recomputation needs to be placed at timestep t1 for stage with id x,
+  // if there is a corresponding stage with id (2*num_backward_stages - 1 - x)
+  // in timestep t2, where t2 > t1.
+  // For example at t=1, stage 6 is executed, its recomputation stage is 1,
+  // which in the "normal" schedule is executed at t=0, so a recomputation stage
+  // needs to be placed there.
+
+  // Create an execution trace which shows which fwd/bwd stages are exected
+  // during ramp down.
+  std::vector<int64> stages(input.size());
+  absl::c_iota(stages, 0);
+  std::vector<std::vector<int64>> ramp_down_schedule =
+      ConstructRampDownSchedule(offsets, stages, -1LL, additional_iterations);
+  // Transpose so that each row represents a single timestep.
+  ramp_down_schedule = TransposeSchedule(ramp_down_schedule);
+  // Create a lookup for what stages are executed in each timestep.
+  std::vector<absl::flat_hash_set<int64>> ramp_down_schedule_lookup(
+      ramp_down_schedule.size());
+  absl::c_transform(
+      ramp_down_schedule, ramp_down_schedule_lookup.begin(),
+      [](const std::vector<int64>& timestep_schedule)
+          -> absl::flat_hash_set<int64> {
+        return {timestep_schedule.begin(), timestep_schedule.end()};
+      });
+
+  // Create an execution trace without ramp-down to show at what time slots the
+  // recomputation has to be performed in (it has to be performed in a time-slot
+  // for the corresponding forward stage).
+  std::vector<std::vector<int64>> stage_schedule =
+      ConstructScheduleInternal(offsets, stages);
+  // Transpose so that each row represents a single timestep.
+  stage_schedule = TransposeSchedule(stage_schedule);
+
+  std::vector<std::vector<ElementType>> result =
+      ConstructScheduleInternal(offsets, input);
+  // Transpose so that each row represents a single timestep.
+  result = TransposeSchedule(result);
+
+  // Go through all the elements in the ramp down schedule, and insert empty
+  // elements as appropriate.
+  for (int64 t1 = 0; t1 != stage_schedule.size(); ++t1) {
+    for (int64 j = 0; j != stage_schedule[t1].size(); ++j) {
+      const int64 stage_id = stage_schedule[t1][j];
+      // Mask if the stage is a backward stage.
+      if (stage_id >= num_backward_stages) {
+        result[t1][j] = empty_element;
+        continue;
+      }
+      // Given the current stage at the current timestep, we only need to
+      // perform recomputation if there is a corresponding bwd stage in a
+      // future time step being executed.
+      const int64 bwd_stage_id = num_backward_stages * 2 - 1 - stage_id;
+
+      bool replace_with_empty_element = true;
+      for (int64 t2 = t1 + 1; t2 != ramp_down_schedule.size(); ++t2) {
+        const auto& timestep_schedule = ramp_down_schedule[t2];
+        if (ramp_down_schedule_lookup[t2].contains(bwd_stage_id)) {
+          // Found a corresponding bwd stage, need to recompute.
+          replace_with_empty_element = false;
+          break;
+        }
+      }
+
+      if (replace_with_empty_element) {
+        result[t1][j] = empty_element;
+      }
+    }
+  }
+  // Transpose the schedule back to the expected format.
+  result = TransposeSchedule(result);
   return result;
 }
 
@@ -758,8 +1033,10 @@ PipelineVisitor::PipelineVisitor(
     int64 stage_count, const std::vector<int>& stage_ipu_mapping,
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     const absl::flat_hash_set<int> stages_with_recomputation,
-    CompilerResources& res, const DeferredArgVectors& inputs)
-    : InplaceDeferredVisitor(res, inputs, {}),
+    int64 num_backward_stages, CompilerResources& res,
+    const DeferredArgVectors& inputs,
+    const std::string& name)
+    : InplaceDeferredVisitor(res, inputs, name, {}),
       schedule_(schedule),
       copy_sequences_(stage_count),
       inter_ipu_copy_sequences_(stage_count),
@@ -770,7 +1047,8 @@ PipelineVisitor::PipelineVisitor(
       recomputation_sequences_(stage_count),
       stage_ipu_mapping_(stage_ipu_mapping),
       inst_stage_mapping_(inst_stage_mapping),
-      stages_with_recomputation_(stages_with_recomputation) {
+      stages_with_recomputation_(stages_with_recomputation),
+      num_backward_stages_(num_backward_stages) {
   // Push a new vector for the zeroing sequences onto the stack.
   res.gradient_accumulation_zeroing_sequences.push({});
   // Push a new vector for the write undef sequences onto the stack.
@@ -779,13 +1057,15 @@ PipelineVisitor::PipelineVisitor(
 
 PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                                  CompilerResources& res,
-                                 const DeferredArgVectors& inputs)
+                                 const DeferredArgVectors& inputs,
+                                 const std::string& name)
     : PipelineVisitor(GetPipelineSchedule(pipeline).ValueOrDie(),
                       GetPipelineStageCount(pipeline),
                       GetPipelineStageDeviceMapping(pipeline),
                       GetPipelineInstStageMapping(pipeline),
                       GetPipelineStagesWithStatelessRecomputation(pipeline),
-                      res, inputs) {}
+                      GetNumberOfBackwardPipelineStages(pipeline), res,
+                      inputs, name) {}
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
@@ -813,6 +1093,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
       GetPipelineRampDownSequence(iterations % overlap_length);
 
   poplar::program::Sequence program;
+  program.add(pipeline_execution_counters_initialize_sequence_);
   program.add(pipeline_tensors_zeroing_sequence_);
   program.add(pipeline_write_undef_sequence_);
   program.add(ramp_up);
@@ -840,8 +1121,8 @@ poplar::program::Program PipelineVisitor::GetPipelineRampUpSequence() const {
   auto infeed_sequences = ConstructRampUpSchedule(offsets, infeed_sequences_);
   auto program_sequences = ConstructRampUpSchedule(offsets, program_sequences_);
   auto fifo_sequences = ConstructRampUpSchedule(offsets, fifo_sequences_);
-  auto recomputation_sequences =
-      ConstructRampUpSchedule(offsets, recomputation_sequences_);
+  auto recomputation_sequences = ConstructRecomputationRampUpSchedule(
+      offsets, recomputation_sequences_, num_backward_stages_);
   auto copy_sequences =
       ConstructSchedule(offsets, copy_sequences_, !is_grouped);
   auto inter_ipu_copy_sequences =
@@ -895,8 +1176,9 @@ poplar::program::Program PipelineVisitor::GetPipelineRampDownSequence(
       offsets, program_sequences_, {}, additional_iterations);
   auto fifo_sequences =
       ConstructSchedule(offsets, fifo_sequences_, !is_grouped);
-  auto recomputation_sequences =
-      ConstructSchedule(offsets, recomputation_sequences_, !is_grouped);
+  auto recomputation_sequences = ConstructRecomputationRampDownSchedule(
+      offsets, recomputation_sequences_, num_backward_stages_, {},
+      additional_iterations);
   auto copy_sequences =
       ConstructSchedule(offsets, copy_sequences_, !is_grouped);
   auto inter_ipu_copy_sequences =
@@ -1059,6 +1341,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   poplar::program::Sequence seq;
   poplar::Graph& graph = GetGraph(resources_, inst);
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
+  const std::string debug_name = GetDebugName(inst);
 
   TF_ASSIGN_OR_RETURN(
       DeferredArgVectors inputs,
@@ -1078,8 +1361,8 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
            ++flat_idx) {
         auto optional_tensor = visitor_inputs[inplace_idx][flat_idx];
         if (optional_tensor) {
-          const std::string name = absl::StrCat(GetDebugName(inst), "/clone/",
-                                                inplace_idx, "/", flat_idx);
+          const std::string name =
+              absl::StrCat(debug_name, "/clone/", inplace_idx, "/", flat_idx);
           VLOG(1) << "Adding a clone for inplace input (" << inplace_idx << ", "
                   << flat_idx << ").";
           visitor_inputs[inplace_idx][flat_idx] = graph.clone(
@@ -1088,10 +1371,11 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
         }
       }
     }
-    visitor = absl::make_unique<ReusablePipelineStageVisitor>(resources_,
-                                                              visitor_inputs);
+    visitor = absl::make_unique<ReusablePipelineStageVisitor>(
+        resources_, visitor_inputs, debug_name);
   } else {
-    visitor = absl::make_unique<PipelineStageVisitor>(resources_, inputs);
+    visitor =
+        absl::make_unique<PipelineStageVisitor>(resources_, inputs, debug_name);
   }
 
   HloComputation* stage_computation = inst->to_apply();
@@ -1108,9 +1392,40 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   if (has_recomputation) {
     ReusablePipelineStageVisitor* reusable_visitor =
         static_cast<ReusablePipelineStageVisitor*>(visitor.get());
-    seq.add(reusable_visitor->GetSequence(inst, inputs, tensor_map));
+
+    // Since the sequence is reused, separate execution counters are required to
+    // make sure they are correct and independent of the sequence being used for
+    // the recomputation stage.
+    ExecutionCounters& sequence_counters =
+        reusable_visitor->GetExecutionCounters();
+    ExecutionCounters forward_counters = sequence_counters.Clone();
+
+    // Initialize the counters once from the outer scope.
+    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
+        resources_, forward_counters,
+        pipeline_execution_counters_initialize_sequence_));
+
+    // Before every execution of the sequence, copy the counters in.
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence counters_in,
+        sequence_counters.SetInitialValuesFrom(&forward_counters));
+    seq.add(counters_in);
+
+    // Execute the shared sequence.
+    seq.add(
+        reusable_visitor->GetForwardStageSequence(inst, inputs, tensor_map));
+
+    // After every execution of the sequence, copy the counters out.
+    TF_ASSIGN_OR_RETURN(poplar::program::Sequence counters_out,
+                        sequence_counters.UpdateCounters(&forward_counters));
+    seq.add(counters_out);
   } else {
-    seq.add(visitor->GetSequence());
+    // Initialize the counters once from the outer scope.
+    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
+        resources_, visitor->GetExecutionCounters(),
+        pipeline_execution_counters_initialize_sequence_));
+    // Execute the sequence.
+    seq.add(visitor->GetCachedSequence());
   }
 
   // Set the outputs.
@@ -1122,7 +1437,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
     if (leaf.second) {
       output = poputil::duplicate(
           graph, output, seq,
-          absl::StrCat(GetDebugName(inst), "/output/", flat_tuple_index),
+          absl::StrCat(debug_name, "/output/", flat_tuple_index),
           poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
     }
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, flat_tuple_index, output));
@@ -1162,19 +1477,25 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
   // inputs of the forward stage then this is a stateful recomputation and we
   // need to create a new sequence.
   if (forward_stage_visitor->inputs().size() != inputs.size()) {
-    PipelineStageVisitor visitor(resources_,
-                                 ConvertInputsToDeferredInputs(inputs));
+    PipelineStageVisitor visitor(
+        resources_, ConvertInputsToDeferredInputs(inputs), GetDebugName(inst));
     HloComputation* stage_computation = inst->to_apply();
     auto order = stage_computation->parent()
                      ->schedule()
                      .sequence(stage_computation)
                      .instructions();
     TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(&visitor, order));
+
+    // Initialize the counters once from the outer scope.
+    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
+        resources_, visitor.GetExecutionCounters(),
+        pipeline_execution_counters_initialize_sequence_));
+
     // Note that it is not required to propagate any deferred allocations here
     // as recomputations do not have any deferred inputs.
 
     // Get the sequence for the stage.
-    seq.add(visitor.GetSequence());
+    seq.add(visitor.GetCachedSequence());
 
     // Set the outputs.
     const TensorVector& pipeline_outputs = visitor.outputs();
@@ -1185,7 +1506,32 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
   } else {
     ReusablePipelineStageVisitor* reusable_visitor =
         static_cast<ReusablePipelineStageVisitor*>(forward_stage_visitor);
-    seq.add(reusable_visitor->GetSequence(inst, inputs));
+
+    // Since the sequence is reused, separate execution counters are required to
+    // make sure they are correct and independent of the sequence being used for
+    // the forward stage.
+    ExecutionCounters& sequence_counters =
+        reusable_visitor->GetExecutionCounters();
+    ExecutionCounters recomputation_counters = sequence_counters.Clone();
+    // Initialize the counters once from the outer scope.
+    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
+        resources_, recomputation_counters,
+        pipeline_execution_counters_initialize_sequence_));
+
+    // Before every execution of the sequence, copy the counters in.
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence counters_in,
+        sequence_counters.SetInitialValuesFrom(&recomputation_counters));
+    seq.add(counters_in);
+
+    // Execute the shared sequence.
+    seq.add(reusable_visitor->GetRecomputationStageSequence(inst, inputs));
+
+    // After every execution of the sequence, copy the counters out.
+    TF_ASSIGN_OR_RETURN(
+        poplar::program::Sequence counters_out,
+        sequence_counters.UpdateCounters(&recomputation_counters));
+    seq.add(counters_out);
 
     // Set the outputs.
     const TensorVector& pipeline_outputs = forward_stage_visitor->outputs();
@@ -1216,7 +1562,7 @@ PipelineVisitor::CreatePipelineResourceUpdateOp(const HloInstruction* inst) {
 
   poplar::program::Sequence seq;
   // Create a visitor for the resource update.
-  InplaceDeferredVisitor visitor(resources_, inputs);
+  InplaceDeferredVisitor visitor(resources_, inputs, GetDebugName(inst));
   auto order = resource_update_comp->parent()
                    ->schedule()
                    .sequence(resource_update_comp)
@@ -1226,6 +1572,7 @@ PipelineVisitor::CreatePipelineResourceUpdateOp(const HloInstruction* inst) {
   TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
   // Add to the sequence.
   seq.add(visitor.GetSequence());
+  seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());
   // Set up the outputs.
   const TensorVector& outputs = visitor.outputs();
   for (size_t i = 0; i < outputs.size(); i++) {

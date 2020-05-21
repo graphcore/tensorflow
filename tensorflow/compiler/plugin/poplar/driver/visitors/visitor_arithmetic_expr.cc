@@ -19,7 +19,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 
 #include <map>
+#include <string>
 #include <utility>
+
+#include <popops/ElementWise.hpp>
 
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
@@ -32,16 +35,15 @@ limitations under the License.
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
 
-#include <popops/ElementWise.hpp>
-
 using ::absl::StrCat;
 
 namespace xla {
 namespace poplarplugin {
 
 ArithmeticExprVisitor::ArithmeticExprVisitor(CompilerResources& res,
-                                             const TensorVectors& inputs)
-    : BaseVisitor(res), inputs_(std::move(inputs)) {}
+                                             const TensorVectors& inputs,
+                                             const std::string& name)
+    : BaseVisitor(res, name), inputs_(std::move(inputs)) {}
 
 StatusOr<std::unique_ptr<popops::expr::Expr>>
 ArithmeticExprVisitor::FindExpressionInput(const HloInstruction* inst) {
@@ -166,7 +168,7 @@ Status ArithmeticExprVisitor::HandleParameter(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status ArithmeticExprVisitor::FinishVisit(HloInstruction* inst) {
+Status ArithmeticExprVisitor::FinishScopedVisit(HloInstruction* inst) {
   poplar::Graph& graph = GetGraph(resources_, inst);
 
   // get the expression

@@ -19,6 +19,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_MAP_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_VISITORS_VISITOR_MAP_H_
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_base.h"
 
 namespace poplar {
@@ -32,10 +34,10 @@ namespace poplarplugin {
 class MapVisitor : public BaseVisitor {
  public:
   MapVisitor(CompilerResources& res, const TensorVectors& inputs,
-             const xla::Shape& shape);
+             const xla::Shape& shape, const std::string& name);
 
   Status HandleParameter(HloInstruction* inst) override;
-  Status FinishVisit(HloInstruction* inst) override;
+  Status FinishScopedVisit(HloInstruction* inst) override;
 
   const Shape& GetOutputShape(HloInstruction*) const override { return shape_; }
 

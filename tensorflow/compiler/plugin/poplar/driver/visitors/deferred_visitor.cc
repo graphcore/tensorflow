@@ -206,10 +206,10 @@ Status DeferredAllocations::PostProcessAllocation(
 
 DeferredVisitor::DeferredVisitor(
     CompilerResources& res, const DeferredArgVectors& callsite_inputs,
-    const bool mark_all_input_tensors_as_used,
+    const std::string& name, const bool mark_all_input_tensors_as_used,
     const bool allocate_all_input_tensors,
     const std::vector<const DeferredVisitor*>& dependent_computations)
-    : FullVisitor(res),
+    : FullVisitor(res, name),
       callsite_inputs_(callsite_inputs),
       computation_inputs_(callsite_inputs.size()),
       dependent_computations_(dependent_computations),
@@ -769,7 +769,7 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status DeferredVisitor::FinishVisit(HloInstruction* inst) {
+Status DeferredVisitor::FinishScopedVisit(HloInstruction* inst) {
   // By default allocate all inputs into a callsite.
   if (allocate_all_input_tensors_) {
     // Force all deferred allocations to be executed.
@@ -958,11 +958,25 @@ bool DeferredVisitor::InputIsUsedInDependentComputations(
   return false;
 }
 
+poplar::program::Sequence DeferredVisitor::GetSequence(
+    bool copy_execution_counters) {
+  poplar::program::Sequence seq;
+  if (copy_execution_counters) {
+    TF_CHECK_OK(
+        CopyExecutionCountersFromScope(resources_, execution_counters_, seq));
+  }
+  seq.add(merged_infeed_sequence);
+  seq.add(sequence);
+  return seq;
+}
+
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgVectors& inputs,
+    const std::string& name,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     bool reallocate_inputs)
-    : DeferredVisitor(res, inputs, false, true, dependent_subcomputations),
+    : DeferredVisitor(res, inputs, name, false, true,
+                      dependent_subcomputations),
       reallocate_inputs_(reallocate_inputs) {}
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocations(

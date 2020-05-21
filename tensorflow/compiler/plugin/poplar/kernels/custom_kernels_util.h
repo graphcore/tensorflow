@@ -52,6 +52,7 @@ class AttributeMap {
   void AddAttribute(const std::string& field_name, const absl::any& attr);
 
   bool HasAttribute(const std::string& field_name) const;
+  Status CheckHasAttribute(const std::string& field_name) const;
   StatusOr<std::string> GetAttributeAsString(
       const std::string& field_name) const;
   StatusOr<float> GetAttributeAsFloat(const std::string& field_name) const;

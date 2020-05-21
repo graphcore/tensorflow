@@ -62,7 +62,6 @@ from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_pipeline_estimator
 from tensorflow.python.ipu import vertex_edsl
 
-from tensorflow.python.ipu.keras.sequential import Sequential
 from tensorflow.python.ipu.keras import layers
 
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer

@@ -56,7 +56,8 @@ namespace se = ::stream_executor;
 namespace xla {
 namespace poplarplugin {
 
-FullVisitor::FullVisitor(CompilerResources& res) : BaseVisitor(res) {}
+FullVisitor::FullVisitor(CompilerResources& res, const std::string& name)
+    : BaseVisitor(res, name) {}
 
 Status FullVisitor::HandleConcatenate(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();

@@ -117,7 +117,6 @@ py_library(
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
         "keras/pipeline.py",
-        "keras/sequential.py",
         "loops.py",
         "ops/all_to_all_op.py",
         "ops/cross_replica_ops.py",
@@ -363,18 +362,6 @@ tf_py_test(
         "//third_party/py/numpy",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python:framework_test_lib",
-    ],
-)
-
-tf_py_test(
-    name = "sequential_test",
-    size = "medium",
-    srcs = ["tests/keras/sequential_test.py"],
-    additional_deps = [
-        "//tensorflow/compiler/plugin/poplar:test_utils_py",
-        "//tensorflow/python:framework_test_lib",
-        "//tensorflow/python/ipu:ipu_lib",
-        "//tensorflow/python/keras:layers",
     ],
 )
 
@@ -1018,7 +1005,6 @@ test_suite(
         "popops_cross_replica_sum_test",
         "random_constant_matmul_test",
         "recompute_suggestion_test",
-        "sequential_test",
         "user_ops_test",
         "utils_test",
     ],

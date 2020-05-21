@@ -18,6 +18,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"
 
+#include <string>
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 
@@ -25,8 +28,8 @@ namespace xla {
 namespace poplarplugin {
 
 MapVisitor::MapVisitor(CompilerResources& res, const TensorVectors& inputs,
-                       const xla::Shape& shape)
-    : BaseVisitor(res), operands_(std::move(inputs)), shape_(shape) {}
+                       const xla::Shape& shape, const std::string& name)
+    : BaseVisitor(res, name), operands_(std::move(inputs)), shape_(shape) {}
 
 Status MapVisitor::HandleParameter(HloInstruction* inst) {
   VLOG(1) << "Processing " << inst->name();
@@ -37,7 +40,7 @@ Status MapVisitor::HandleParameter(HloInstruction* inst) {
   return Status::OK();
 }
 
-Status MapVisitor::FinishVisit(HloInstruction* inst) {
+Status MapVisitor::FinishScopedVisit(HloInstruction* inst) {
   outputs_ = FindInstructionOutputs(tensor_map, resources_, inst);
   tensor_map.Clear();
   return Status::OK();
