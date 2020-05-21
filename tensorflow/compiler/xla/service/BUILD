@@ -1714,7 +1714,6 @@ tf_cc_test(
         "//tensorflow/compiler/xla:literal",
         "//tensorflow/compiler/xla:reference_util",
         "//tensorflow/compiler/xla:test",
-        "//tensorflow/compiler/xla/tests:verified_hlo_module",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
         "//tensorflow/core:test",
