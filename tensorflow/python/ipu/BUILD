@@ -175,7 +175,7 @@ tf_py_test(
 
 tf_py_test(
     name = "gcl_test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/gcl_test.py"],
     additional_deps = [
         "//tensorflow/compiler/plugin/poplar:test_utils_py",

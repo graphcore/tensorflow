@@ -809,7 +809,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->GetSchedulerSelection(),
       poplar_executor->RecomputationEnabled(),
       poplar_executor->UseStableNormStatistics(),
-      poplar_executor->SupportsRemoteBuffers(), poplar_executor->GclOptions());
+      poplar_executor->SupportsRemoteBuffers(), poplar_executor->GclOptions(),
+      poplar_executor->GetTriangularSolveExpanderBlockSize());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -829,7 +830,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<GradientAccumulationFuser>(resources.annotations);
     pipeline.AddPass<HloComputationNameUniquify>();
     pipeline.AddPass<CholeskyExpander>();
-    pipeline.AddPass<TriangularSolveExpander>();
+    pipeline.AddPass<TriangularSolveExpander>(
+        resources.triangular_solve_expander_block_size);
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<NotSupportedGatherExpander>();
     pipeline.AddPass<NotSupportedScatterExpander>();

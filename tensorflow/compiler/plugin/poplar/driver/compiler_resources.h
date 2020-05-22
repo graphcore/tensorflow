@@ -130,6 +130,8 @@ struct CompilerResources {
 
   poplar::OptionFlags gcl_options;
 
+  int64 triangular_solve_expander_block_size;
+
   std::unique_ptr<CallGraph> module_call_graph;
 
   absl::flat_hash_map<std::string, poplar::RemoteBuffer> remote_buffers;
@@ -151,7 +153,8 @@ struct CompilerResources {
       bool always_rearrange_copies_on_host,
       const std::string& scheduler_selection, bool recomputation_enabled,
       bool use_stable_norm_statistics, bool remote_memory_supported,
-      const poplar::OptionFlags& gcl_options)
+      const poplar::OptionFlags& gcl_options,
+      int64 triangular_solve_expander_block_size)
       : annotations(module),
         information(max_all_reduce_buffer_size, max_reduce_scatter_buffer_size,
                     max_inter_ipu_copies_buffer_size,
@@ -172,7 +175,9 @@ struct CompilerResources {
         recomputation_enabled(recomputation_enabled),
         use_stable_norm_statistics(use_stable_norm_statistics),
         remote_memory_supported(remote_memory_supported),
-        gcl_options(gcl_options) {}
+        gcl_options(gcl_options),
+        triangular_solve_expander_block_size(
+            triangular_solve_expander_block_size) {}
 };
 
 }  // namespace poplarplugin

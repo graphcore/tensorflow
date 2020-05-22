@@ -59,7 +59,8 @@ contain a separate function with the same name as the forward pass builder.
 The function must be given the same name as the forward operation with ``_grad``
 appended.  The signature of the builder function is slightly different, as it
 takes the forward pass inputs and outputs as arguments, as well as the
-gradient outputs.
+gradient outputs. Gradient builders have their own metadata functions.
+E.g. metadata function name for the example below will be ``Build_grad_metadata``.
 
 .. code-block:: cpp
 
@@ -124,7 +125,7 @@ The arguments are:
 
 * ``num_inputs``: indicates how many inputs are on the operation.
 
-The function should fill in the values of the first three arguments, which
+The function should fill in the values of the first four arguments, which
 are all reference types.
 
 

@@ -77,6 +77,10 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
     cfg = ipu.utils.set_optimization_options(cfg, combine_matmuls=True)
     self.assertTrue(cfg.enable_matmul_combiner)
 
+    cfg = ipu.utils.set_optimization_options(
+        cfg, triangular_solve_expander_block_size=42)
+    self.assertEqual(cfg.triangular_solve_expander_block_size, 42)
+
     self.assertFalse(cfg.use_stable_norm_statistics)
     cfg = ipu.utils.set_norm_options(cfg, use_stable_statistics=True)
     self.assertTrue(cfg.use_stable_norm_statistics)

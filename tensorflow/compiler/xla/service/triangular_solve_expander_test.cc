@@ -102,7 +102,7 @@ TEST_P(TriangularExpanderTest, TestBlockSize) {
 // - full 1-256 range test takes too long to run
 
 INSTANTIATE_TEST_CASE_P(TriangularExpanderTestInstances, TriangularExpanderTest,
-                        ::testing::Range(1, 256, 7));
+                        ::testing::Range(2, 256, 7));
 
 }  // namespace
 }  // namespace xla

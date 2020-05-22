@@ -1707,6 +1707,8 @@ cc_library(
 tf_cc_test(
     name = "triangular_solve_expander_test",
     srcs = ["triangular_solve_expander_test.cc"],
+    shard_count = 3,
+    size = "medium",
     deps = [
         ":hlo",
         ":triangular_solve_expander",
@@ -1714,7 +1716,6 @@ tf_cc_test(
         "//tensorflow/compiler/xla:literal",
         "//tensorflow/compiler/xla:reference_util",
         "//tensorflow/compiler/xla:test",
-        "//tensorflow/compiler/xla/tests:verified_hlo_module",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:xla_internal_test_main",
         "//tensorflow/core:test",
