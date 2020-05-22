@@ -95,7 +95,7 @@ class WideConstExpansionTest(xla_test.XLATestCase):
       report.assert_all_compute_sets_and_list(ok)
 
       report.assert_max_tile_memory(9008)
-      report.assert_always_live_memory(315556)
+      report.assert_always_live_memory(323748)
 
   def testCheckMaxTileSizePadding(self):
     with self.session() as sess:
