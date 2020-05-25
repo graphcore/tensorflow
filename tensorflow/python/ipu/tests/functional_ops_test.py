@@ -162,6 +162,88 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       self.assertEqual(len(report.tensor_map.computation_names()), 3)
 
   @test_util.deprecated_graph_mode_only
+  def testNestedFunctionTraining(self):
+    with tu.ipu_session() as sess:
+
+      def matmul_with_bias(x, scope_name):
+        @ipu.function
+        def func(x):
+          with variable_scope.variable_scope(scope_name, use_resource=True):
+            w = variable_scope.get_variable(
+                "w",
+                shape=[64, 64],
+                dtype=np.float32,
+                initializer=init_ops.ones_initializer())
+          x = x @ w
+          with variable_scope.variable_scope(scope_name, use_resource=True):
+            bias = variable_scope.get_variable(
+                "bias",
+                shape=[x.shape.as_list()[-1]],
+                dtype=np.float32,
+                initializer=init_ops.ones_initializer())
+          return x + bias
+
+        return func(x)
+
+      def cached_func(x, scope_name):
+        @ipu.function
+        def func(x):
+          x = matmul_with_bias(x, scope_name)
+          x = math_ops.sigmoid(x)
+          return x
+
+        return func(x)
+
+      def body(x, labels):
+        x = cached_func(x, "1")
+        x = cached_func(x, "2")
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=x,
+                                                        labels=labels))
+        train_op = gradient_descent.GradientDescentOptimizer(0.001).minimize(
+            loss)
+        return x, train_op
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [64, 64])
+        labels = array_ops.placeholder(np.int32, [64])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(body, inputs=[a, labels])
+
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      report = tu.ReportJSON(self, sess)
+      result = sess.run(res, {x: np.ones(x.shape) for x in [a, labels]})
+      self.assertAllClose(result[0], np.broadcast_to(1., [64, 64]))
+
+      report.parse_log()
+      # There would be multiple non-linearities(grads) if the function was not
+      # cached.
+      ok = [
+          '__seed/set/setMasterSeed',
+          'matmul/dot*/Conv_1',
+          'add_0/fusion/Op/Add',
+          'Sigmoid/custom-call/Nonlinearity',
+          'SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits',
+          'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/',
+          'gradients/Sigmoid_grad/SigmoidGrad/custom-call.2/NonLinearityGrad',
+          'gradients/add_grad/Sum/reduce*/Reduce',
+          'GradientDescent/update_1/bias/ResourceApplyGradientDescent/fusion.5/AddTo',
+          'GradientDescent/update_1/w/ResourceApplyGradientDescent/fusion.4/AddTo',
+          'GradientDescent/update_2/bias/ResourceApplyGradientDescent/fusion.3/AddTo',
+          'GradientDescent/update_2/w/ResourceApplyGradientDescent/fusion.2/AddTo',
+          'Copy_',
+      ]
+      report.assert_all_compute_sets_and_list(ok)
+      report.assert_total_tile_memory(1148984)
+      report.assert_max_tile_memory(4098)
+
+      # Entry computastion and 4 outlined ones.
+      self.assertEqual(len(report.tensor_map.computation_names()), 5)
+
+  @test_util.deprecated_graph_mode_only
   def testFunctionSerializedLookup(self):
     with tu.ipu_session() as sess:
 
