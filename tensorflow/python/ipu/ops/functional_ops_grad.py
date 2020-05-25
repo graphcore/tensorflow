@@ -56,13 +56,13 @@ class _XlaFuncGradGraph(FuncGraph):
 
   def _capture_helper(self, tensor, name):
     if (tensor.graph is not self._forward_graph
-        or id(tensor) in map(id, self._forward_graph.outputs)):
+        or any(tensor is t for t in self._forward_graph.outputs)):
       return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
 
     if control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph()):
       # Capture the intermidate so that it can be added as an extra output
       # which will be used in the gradient calculations.
-      if id(tensor) not in map(id, self.captures):
+      if all(tensor is not capture for capture in self.external_captures):
         self.xla_intermediates.append(tensor)
         self.op_needs_rewrite = True
     return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
@@ -89,18 +89,20 @@ def _resolve_grad_inputs(graph, grad_graph, op):
   for t in grad_graph.external_captures:
     # `t` must either be in `grad_graph.outer_graph` or in the forward
     # `graph`.
-    if t.graph == graph:
-      for i, output in enumerate(t.graph.outputs):
-        if output is t:
-          t = op.outputs[i]
-          break
+    if t.graph != grad_graph.outer_graph:
+      if t.graph == graph:
+        for i, output in enumerate(t.graph.outputs):
+          if output is t:
+            t = op.outputs[i]
+            break
+      # Note: We rely on the capturing logic of the gradient op graph to
+      # correctly capture the tensors in `graph.outer_graph`. This is handled
+      # when building the gradient function.
+      if t.graph != graph.outer_graph:
+        raise ValueError(
+            "Attempting to capture tensor %s which is not an output." %
+            (str(t)))
 
-    # Note: We rely on the capturing logic of the gradient op graph to
-    # correctly capture the tensors in `graph.outer_graph`. This is handled
-    # when building the gradient function.
-    if t.graph != graph.outer_graph:
-      raise ValueError(
-          "Attempting to capture tensor %s which is not an output." % (str(t)))
     new_inputs.append(t)
 
   return new_inputs
