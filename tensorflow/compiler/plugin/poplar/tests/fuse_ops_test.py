@@ -560,6 +560,35 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       ]
       report.assert_all_compute_sets_and_list(ok)
 
+  def testBatchedMatmulWithBias(self):
+    with self.session() as sess:
+      with ops.device("/device:IPU:0"):
+        x = array_ops.placeholder(np.float32, shape=[2, 2, 2])
+        weights = array_ops.placeholder(np.float32, shape=[2, 2])
+        bias = array_ops.placeholder(np.float32, shape=[2])
+        x_new = x @ weights + bias
+
+      report = tu.ReportJSON(self, sess)
+      report.reset()
+
+      out = sess.run(
+          x_new, {
+              x: np.full([2, 2, 2], 3),
+              weights: np.full([2, 2], 4),
+              bias: np.ones([2]),
+          })
+      self.assertAllClose(np.full([2, 2, 2], 25), out)
+
+      report.parse_log(
+          assert_len=4,
+          assert_msg="Expected 1x compile, 1x load, 1x download, 1x execute")
+
+      ok = [
+          '__seed*', 'host-exchange-local-copy', 'Copy_', 'matmul/dot*/Conv',
+          'add/fusion/Op/Add'
+      ]
+      report.assert_all_compute_sets_and_list(ok)
+
   def testConvWithBnAndRelu(self):
     with self.session() as sess:
       with ops.device("/device:IPU:0"):

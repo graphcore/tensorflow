@@ -254,7 +254,9 @@ class MatMulBiasAddOp : public PoplarOpDef {
     poplar::Tensor acts = outputs[layout_output_idx];
     TF_ASSIGN_OR_RETURN(acts, ReversePathTransform(graph, acts, forward_path));
 
-    return graph.clone(acts[0], StrCat(name, "/biases"));
+    // Get a slice representing the last dimension.
+    const std::vector<size_t> index(acts.rank() - 1);
+    return graph.clone(acts.index(index), StrCat(name, "/biases"));
   }
 };
 
