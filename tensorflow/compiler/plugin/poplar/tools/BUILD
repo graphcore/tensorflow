@@ -145,6 +145,24 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "poplar_command_line_utils",
+    srcs = [
+        "poplar_command_line_utils.cc",
+    ],
+    hdrs = [
+        "poplar_command_line_utils.h",
+    ],
+    copts = ["-fexceptions"],
+    linkstatic = 1,
+    deps = [
+        ":poplar_executable_data",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@jsoncpp_git//:jsoncpp",
+    ],
+)
+
 cc_binary(
     name = "PoplarBinaryReader",
     srcs = [
@@ -156,6 +174,7 @@ cc_binary(
     linkopts = ["-ldl"],
     visibility = ["//visibility:public"],
     deps = [
+        ":poplar_command_line_utils",
         ":poplar_executable_runner",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
@@ -173,6 +192,7 @@ cc_binary(
     linkopts = ["-ldl"],
     visibility = ["//visibility:public"],
     deps = [
+        ":poplar_command_line_utils",
         ":poplar_executable_runner",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",

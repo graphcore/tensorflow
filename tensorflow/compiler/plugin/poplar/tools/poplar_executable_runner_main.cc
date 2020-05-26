@@ -14,10 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_runner.h"
 
-#include <dirent.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fstream>
 #include <iostream>
 #include <map>
 #include <string>
@@ -32,134 +28,9 @@ limitations under the License.
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 
-bool FileExists(const std::string& filename) {
-  return std::ifstream(filename).is_open();
-}
+#include "tensorflow/compiler/plugin/poplar/tools/poplar_command_line_utils.h"
 
-bool IsDir(const std::string& path) {
-  DIR* dirp = opendir(path.c_str());
-  if (dirp) {
-    closedir(dirp);
-  }
-  return dirp != NULL;
-}
-
-bool CreateDirIfNeeded(const std::string& dir) {
-  DIR* dp = opendir(dir.c_str());
-  if (dp == NULL) {
-    if (mkdir(dir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0) {
-      return false;
-    }
-  } else {
-    closedir(dp);
-  }
-  return true;
-}
-
-std::string SecondsToTimeString(int64_t sec) {
-  int hours = sec / 3600;
-  int minutes = (sec - hours * 3600) / 60;
-  sec -= hours * 3600 + minutes * 60;
-  std::stringstream ss;
-  if (hours > 0) {
-    ss << hours << "h ";
-  }
-  if (minutes > 0) {
-    ss << minutes << "m ";
-  }
-  ss << sec << "s";
-  return ss.str();
-}
-
-std::string FileExtension(const std::string& filename,
-                          bool no_extension_allowed = false) {
-  size_t dot_pos = filename.rfind(".");
-  if (dot_pos == std::string::npos) {
-    ERROR_ON_MSG(!no_extension_allowed,
-                 "Invalid filename '" << filename << "': no extension");
-    return "";
-  }
-  return filename.substr(dot_pos + 1);
-}
-
-std::vector<std::string> ListFiles(const std::string& folder,
-                                   std::string* error) {
-  std::vector<std::string> files;
-  DIR* dirp = opendir(folder.c_str());
-  if (dirp == NULL) {
-    *error = absl::StrCat("Can't open folder '", folder, "'");
-    return {};
-  }
-  struct dirent* dp;
-  while ((dp = readdir(dirp)) != NULL) {
-    files.push_back(dp->d_name);
-  }
-  closedir(dirp);
-  return files;
-}
-
-struct BinaryFiles {
-  std::vector<std::string> filenames;
-};
-
-struct CheckpointFile {
-  std::string filename;
-};
-
-std::string AbslUnparseFlag(BinaryFiles f) {
-  return absl::UnparseFlag(f.filenames);
-}
-
-std::string AbslUnparseFlag(CheckpointFile f) {
-  return absl::UnparseFlag(f.filename);
-}
-
-bool AbslParseFlag(absl::string_view text, BinaryFiles* f, std::string* error) {
-  std::vector<std::string> filenames;
-  if (!absl::ParseFlag(text, &filenames, error)) {
-    return false;
-  }
-  for (auto name : filenames) {
-    if (IsDir(name)) {
-      std::vector<std::string> files = ListFiles(name, error);
-      if (!error->empty()) {
-        return false;
-      }
-      for (auto file : files) {
-        if (FileExtension(file, true) == "bin" ||
-            FileExtension(file, true) == "ipu_bin") {
-          f->filenames.push_back(absl::StrCat(name, "/", file));
-        }
-      }
-    } else {
-      if (!FileExists(name)) {
-        *error = absl::StrCat("Could not open file '", name, "'.");
-        return false;
-      }
-      f->filenames.push_back(name);
-    }
-  }
-  return true;
-}
-
-bool AbslParseFlag(absl::string_view text, CheckpointFile* f,
-                   std::string* error) {
-  if (!absl::ParseFlag(text, &f->filename, error)) {
-    return false;
-  }
-  if (IsDir(f->filename)) {
-    ERROR_ON(!error->empty());
-    f->filename = absl::StrCat(f->filename, "/ckpt.json");
-  }
-
-  if (!FileExists(f->filename)) {
-    *error = absl::StrCat("Could not open checkpoint file '", f->filename, "'");
-    return false;
-  }
-  return true;
-}
-
-ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
+ABSL_FLAG(ipu::BinaryFiles, binaries, ipu::BinaryFiles(),
           "List of binary files containing metadata, binaries, weights,"
           " inputs, feeds, etc.");
 ABSL_FLAG(int, iterations, 1, "Number of times to run the executable");
@@ -168,7 +39,7 @@ ABSL_FLAG(int, device, -1, "Device to use (-1 for any)");
 ABSL_FLAG(bool, print_output, false,
           "Print the content of the output buffers to stdout");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
-ABSL_FLAG(CheckpointFile, ckpt, CheckpointFile(),
+ABSL_FLAG(ipu::CheckpointFile, ckpt, ipu::CheckpointFile(),
           "Load the checkpoint config from the given file");
 ABSL_FLAG(bool, strict, false,
           "Enable strict mode: all the input data files must be provided by "
@@ -190,7 +61,7 @@ int main(int argc, char** argv) {
 
   absl::ParseCommandLine(argc, argv);
 
-  const BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
+  const ipu::BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
   const bool print_output = absl::GetFlag(FLAGS_print_output);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
   const std::string ckpt_file = absl::GetFlag(FLAGS_ckpt).filename;
@@ -203,7 +74,7 @@ int main(int argc, char** argv) {
   ipu::LogContext::EnableInfo(verbose);
 
   auto init_start = std::chrono::high_resolution_clock::now();
-  ERROR_ON_MSG(!output_folder.empty() && !CreateDirIfNeeded(output_folder),
+  ERROR_ON_MSG(!output_folder.empty() && !ipu::CreateDirIfNeeded(output_folder),
                "Failed to create output folder '" << output_folder << "'");
 
   ERROR_ON_MSG(binaries.filenames.empty(),
@@ -242,7 +113,7 @@ int main(int argc, char** argv) {
   }
   auto init_end = std::chrono::high_resolution_clock::now();
   std::cout << "Done in "
-            << SecondsToTimeString(seconds(init_end - init_start).count())
+            << ipu::SecondsToTimeString(seconds(init_end - init_start).count())
             << std::endl;
   std::cout << "\n[Executing]\n";
   exe->Load(device);
@@ -252,16 +123,16 @@ int main(int argc, char** argv) {
     float remaining =
         iteration > 0 ? ((elapsed * iterations) / iteration) - elapsed : 0.0;
     std::cout << "Iteration " << iteration << "/" << iterations - 1
-              << " Elapsed: " << SecondsToTimeString(elapsed)
-              << ", Estimated remaining: " << SecondsToTimeString(remaining)
-              << std::endl;
+              << " Elapsed: " << ipu::SecondsToTimeString(elapsed)
+              << ", Estimated remaining: "
+              << ipu::SecondsToTimeString(remaining) << std::endl;
     std::string iteration_folder = output_folder;
     bool create_ckpt =
         !output_folder.empty() &&
         (iteration == (iterations - 1) || (iteration % ckpt_frequency == 0));
     if (create_ckpt && iterations > 1) {
       iteration_folder = absl::StrCat(iteration_folder, "/", iteration);
-      ERROR_ON_MSG(!CreateDirIfNeeded(iteration_folder),
+      ERROR_ON_MSG(!ipu::CreateDirIfNeeded(iteration_folder),
                    "Failed to create output folder '" << iteration_folder);
     }
     if (create_ckpt) {
