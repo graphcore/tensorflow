@@ -17,7 +17,6 @@ Distributed training with IPUs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.distribute import collective_all_reduce_strategy
 from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
@@ -289,12 +288,6 @@ class IPUMultiWorkerExtended(
     assert primary_var is None
 
     def initial_value_fn():  # pylint: disable=g-missing-docstring
-      # Only the first device participates in the broadcast of initial values.
-      group_key = self._collective_keys.get_group_key([device])
-      group_size = self._num_workers
-      collective_instance_key = (
-          self._collective_keys.get_variable_instance_key())
-
       # Override colocation and XLA attributes for initializers.
       attrs = {
           "_class": attr_value_pb2.AttrValue(s=b'loc:@cpu'),
@@ -309,20 +302,7 @@ class IPUMultiWorkerExtended(
         assert not callable(initial_value)
         initial_value = ops.convert_to_tensor(initial_value,
                                               dtype=kwargs.get("dtype", None))
-
-        if self._num_workers > 1:
-          if self._is_chief:
-            bcast_send = collective_ops.broadcast_send(
-                initial_value, initial_value.shape, initial_value.dtype,
-                group_size, group_key, collective_instance_key)
-            with ops.control_dependencies([bcast_send]):
-              return array_ops.identity(initial_value)
-          else:
-            return collective_ops.broadcast_recv(initial_value.shape,
-                                                 initial_value.dtype,
-                                                 group_size, group_key,
-                                                 collective_instance_key)
-        return initial_value
+        return self._broadcast_implementation(initial_value, device)
 
     return initial_value_fn
 
@@ -398,7 +378,7 @@ class IPUMultiWorkerExtended(
       with ops.device(self._host_device):
         value = _make_identity_op(value)
 
-      return super()._reduce_to(reduce_op, value, destinations)
+      return self._reduce_implementation(reduce_op, value, destinations)
 
   def _batch_reduce_to(self, reduce_op, value_destination_pairs):
     with _outside_compilation_scope_if_needed("host_batch_reduce"):
@@ -410,7 +390,8 @@ class IPUMultiWorkerExtended(
         value_destination_pairs = [(_make_identity_op(v), d)
                                    for (v, d) in value_destination_pairs]
 
-      return super()._batch_reduce_to(reduce_op, value_destination_pairs)
+      return self._batch_reduce_implementation(reduce_op,
+                                               value_destination_pairs)
 
   def _call_for_each_replica(self, fn, args, kwargs):
     with distribute_lib.ReplicaContext(
@@ -422,3 +403,36 @@ class IPUMultiWorkerExtended(
     if colocate_with_variable.device != self._variable_device:
       raise ValueError("Unexpected colocated variable device: {}".format(
           colocate_with_variable.device))
+
+  def _reduce_implementation(self, reduce_op, value, destinations):
+    # This is an extension point for overriding, try to keep a stable API.
+    return super()._reduce_to(reduce_op, value, destinations)
+
+  def _batch_reduce_implementation(self, reduce_op, value_destination_pairs):
+    # This is an extension point for overriding, try to keep a stable API.
+    return super()._batch_reduce_to(reduce_op, value_destination_pairs)
+
+  def _broadcast_implementation(self, initial_value, device):
+    # This is an extension point for overriding, try to keep a stable API.
+
+    if self._num_workers <= 1:
+      return initial_value
+
+    # Only the first device participates in the broadcast of initial values.
+    group_key = self._collective_keys.get_group_key([device])
+    group_size = self._num_workers
+    collective_instance_key = (
+        self._collective_keys.get_variable_instance_key())
+
+    if self._is_chief:
+      bcast_send = collective_ops.broadcast_send(initial_value,
+                                                 initial_value.shape,
+                                                 initial_value.dtype,
+                                                 group_size, group_key,
+                                                 collective_instance_key)
+      with ops.control_dependencies([bcast_send]):
+        return array_ops.identity(initial_value)
+    else:
+      return collective_ops.broadcast_recv(initial_value.shape,
+                                           initial_value.dtype, group_size,
+                                           group_key, collective_instance_key)
