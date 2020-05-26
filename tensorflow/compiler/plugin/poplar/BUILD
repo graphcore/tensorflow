@@ -3817,6 +3817,17 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "outfeed_example",
+    size = "small",
+    srcs = ["docs/outfeed_example.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 py_test(
     name = "distributed_training_example",
     size = "large",
@@ -4286,6 +4297,7 @@ test_suite(
         "ipu_estimator_example",
         "ipu_pipeline_estimator_example",
         "logging_example_1",
+        "outfeed_example",
         "perf_training_example",
         "tutorial_basic",
         "tutorial_custom_codelet",
