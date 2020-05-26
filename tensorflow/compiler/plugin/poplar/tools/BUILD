@@ -59,6 +59,7 @@ genrule(
     name = "libpoplar_executable_runner",
     srcs = [
         ":libpoplar_executable_runner.so",
+        ":libpoplar_executable_data.so",
         ":PoplarExecutableRunner",
         ":PoplarBinaryReader",
         "@local_config_poplar//poplar:popsec_libs",
@@ -97,6 +98,18 @@ genrule(
         tar czf $@ -C $$tmp_root libpoplar_executable_runner
         rm -rf $$tmp_root
         """,
+)
+
+cc_binary(
+    name = "libpoplar_executable_data.so",
+    linkshared = 1,
+    linkstatic = 1,
+    deps = [
+        ":poplar_executable_data",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/strings",
+        "@jsoncpp_git//:jsoncpp",
+    ],
 )
 
 cc_binary(

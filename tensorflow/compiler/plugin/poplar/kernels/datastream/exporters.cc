@@ -120,6 +120,18 @@ void FindMissingTensors(const ipu::Metadata& metadata,
   }
 }
 
+const ipu::TensorInfo& InputInfoFromMetadata(const ipu::Metadata& metadata,
+                                             ipu::TensorType tensor_type,
+                                             const std::string& name) {
+  for (auto& tensor : metadata.inputs) {
+    if (tensor.Type() == tensor_type && tensor.Name() == name) {
+      return tensor;
+    }
+  }
+  VLOG(0) << "Unreachable: FindMissingTensors should have already checked all "
+             "the tensors are present";
+}
+
 std::shared_ptr<ipu::Metadata> LoadMetadata(const std::string& filename) {
   if (ipu::IsJsonFile(filename)) {
     return std::make_shared<ipu::Metadata>(ipu::LoadJsonFromFile(filename));
@@ -264,8 +276,9 @@ class VariablesExporter : public OpKernel {
       try {
         const ipu::TensorType tensor_type =
             is_input_ ? ipu::TensorType::InputData : ipu::TensorType::Parameter;
+        std::shared_ptr<ipu::Metadata> meta;
         if (!metadata_.empty()) {
-          auto meta = LoadMetadata(metadata_);
+          meta = LoadMetadata(metadata_);
           std::vector<std::string> missing_metadata;
           std::vector<std::string> missing_tensors;
           FindMissingTensors(*meta, tensor_type, names_, missing_tensors,
@@ -291,6 +304,13 @@ class VariablesExporter : public OpKernel {
           TF_ASSIGN_OR_RETURN(ipu::TensorShape shape,
                               ConvertTensorToIpuTensorInfo(input));
           ipu::TensorInfo info{names_[i], "", shape, tensor_type};
+          if (meta && !info.TypeAndShapeMatch(InputInfoFromMetadata(
+                          *meta, tensor_type, names_[i]))) {
+            return tensorflow::errors::InvalidArgument(
+                absl::StrCat("Mismatch in type/shape between the metadata and "
+                             "the graph tensor for ",
+                             names_[i]));
+          }
 
           TensorBuffer* tb = tensorflow::DMAHelper::buffer(&input);
           ipu::Tensor out{info, tb->data()};

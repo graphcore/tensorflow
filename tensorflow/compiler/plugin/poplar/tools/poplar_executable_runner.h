@@ -38,6 +38,8 @@ namespace ipu {
 
 class BinaryLoader;
 
+/* Base class for all executables
+ */
 class IExecutable {
  public:
   IExecutable(StreamReader& stream, int64_t length);
@@ -49,6 +51,11 @@ class IExecutable {
   std::unique_ptr<poplar::Engine> engine_;
 };
 
+/* Class to use for executables which use verified data transfers.
+ * is_verified should be set to true if the executable itself is verified too.
+ *
+ * This type of executables is expected to only contain one single program.
+ */
 class VerifiedExecutable : public IExecutable {
  public:
   VerifiedExecutable(StreamReader& stream, int64_t length, bool is_verified);
@@ -61,6 +68,13 @@ class VerifiedExecutable : public IExecutable {
   bool is_verified_;
 };
 
+/* Class to use for regular Poplar executables.
+ *
+ * This type of executable is expected to contain 3 distinct programs:
+ * - HOST_TO_DEVICE
+ * - MAIN_SEQUENCE
+ * - DEVICE_TO_HOST
+ */
 class Executable : public IExecutable {
  public:
   explicit Executable(StreamReader& stream, int64_t length = 0);
@@ -69,6 +83,8 @@ class Executable : public IExecutable {
   void DeviceToHostCopy();
 };
 
+/* Helper class to select which device to run on.
+ */
 class DeviceManager {
  public:
   DeviceManager();
@@ -80,19 +96,8 @@ class DeviceManager {
   poplar::DeviceManager manager_;
 };
 
-class IpuConfig {
- public:
-  explicit IpuConfig(const Metadata& meta);
-  int64_t NumIpus() const;
-  int64_t ReplicationCount() const;
-  poplar::OptionFlags OptionFlags() const;
-
- private:
-  int64_t replication_count_;
-  int64_t num_ipus_;
-  poplar::OptionFlags option_flags_;
-};
-
+/* Infeed instance (Made of one or more InfeedStream)
+ */
 class Infeed {
  public:
   explicit Infeed(const FeedInfo& infeed);
@@ -100,39 +105,58 @@ class Infeed {
   const std::string& Name() const;
   std::vector<InfeedStream>& MutableStreams();
   const std::vector<InfeedStream>& Streams() const;
-  static std::string StreamFilename(const std::string& filename,
-                                    int64_t stream_idx);
 
  private:
   const std::string name_;
   std::vector<InfeedStream> streams_;
 };
 
+/* Owns and keep track of all the tensors and feeds for a given graph.
+ */
 class TensorManager {
  public:
   explicit TensorManager(const Metadata& metadata);
   const std::vector<Tensor>& Inputs() const;
   const std::vector<Tensor>& Outputs() const;
   const std::vector<Infeed>& Infeeds() const;
+  // Create a non-verified checkpoint: save the position of all the infeeds so
+  // that they can be fast forwarded to the same position at the beginning of
+  // the next iteration.
   void CreateCheckpointMetadataJson(const std::string& filename) const;
+  // Load a non-verified checkpoint.
   void LoadCheckpointMetadataFromJson(const std::string& filename);
+  // Sets the folder where the outfeeds will save the tensors produced by the
+  // graph.
   void SetOutfeedsFolder(const std::string& output_folder);
+  // Don't save the outfeeds produced by the graph: just discard them.
   void IgnoreOutfeeds();
   std::vector<Infeed>& MutableInfeeds();
-  const IpuConfig& Config() const;
+  // Allocate all the tensors.
   void AllocateTensors();
   std::list<Tensor*> InputDataTensors();
+  // Ensure the loader contains data for all the tensors stored in thie manager.
   void AssertAllTensorsProvided(const BinaryLoader& loader);
+  // Load data for all the inputs and parameters from the provided loader.
   void LoadInputsAndParameters(const BinaryLoader& loader);
+  // Load a verified checkpoint from the loader with the given index.
   void LoadVerifiedCheckpoint(const BinaryLoader& loader,
                               int64_t checkpoint_index);
-  void SaveCheckpoint(BinaryWriter& writer);
+  // Create a verified checkpoint
+  void SaveVerifiedCheckpoint(BinaryWriter& writer);
+  // Connect the infeeds from the provided loader.
   void LoadInfeeds(const BinaryLoader& loader);
+  // Export all the outputs using the provided binary writer.
   void SaveOutputs(TensorType type, BinaryWriter& writer,
                    bool allow_duplicates = false) const;
+  // Export all the outputs to individual Json files in the specified folder
   void SaveOutputsToJson(TensorType type, const std::string& folder) const;
+  // Connect all the tensors and feeds to the provided executable.
   void ConnectStreams(IExecutable& executable);
+  // Does this manager contains a check point ? i.e does it contain any infeeds
+  // whose position needs saving.
   bool ContainsCheckpoint() const;
+  int64_t NumIpus() const;
+  poplar::OptionFlags OptionFlags() const;
 
  private:
   std::vector<Tensor> inputs_;
@@ -140,18 +164,15 @@ class TensorManager {
   std::vector<Infeed> infeeds_;
   std::vector<Outfeed> outfeeds_;
   std::vector<std::string> feeds_order_;
-  IpuConfig config_;
-};
-
-class SeedManager {
- public:
-  explicit SeedManager(const IpuConfig& config);
-  void ConnectStreams(IExecutable& executable);
-
- private:
   std::vector<uint64_t> seeds_;
+  int64_t num_ipus_;
+  int64_t replication_count_;
+  poplar::OptionFlags option_flags_;
 };
 
+/* TensorManager / Executable / VerifiedExecutable factories from
+ * one or more binary files.
+ */
 class BinaryLoader : public BinaryReader {
  public:
   std::unique_ptr<TensorManager> CreateTensorManager(
