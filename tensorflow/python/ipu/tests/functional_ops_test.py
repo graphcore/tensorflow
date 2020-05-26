@@ -398,6 +398,86 @@ class FunctionalOpsTest(test_util.TensorFlowTestCase):
       # Function inlined into the entry computation.
       self.assertEqual(len(report.tensor_map.computation_names()), 1)
 
+  @test_util.deprecated_graph_mode_only
+  def testFunctionTrainingConstants(self):
+    with tu.ipu_session() as sess:
+
+      @ipu.function
+      def func(lhs, rhs, a):
+        # Number of splits needs to be passed to the grad function.
+        rhs_1, rhs_2 = array_ops.split(rhs, 2, -1)
+        x1 = math_ops.matmul(lhs, rhs_1)
+        x2 = math_ops.matmul(lhs, rhs_2)
+        x = array_ops.concat([x1, x2], axis=1)
+        x = x + a
+        x = math_ops.sigmoid(x)
+        return x
+
+      def body(a, b, c, labels):
+        with variable_scope.variable_scope("vs", use_resource=True):
+          w0 = variable_scope.get_variable(
+              "w0",
+              shape=[64, 64],
+              dtype=np.float32,
+              initializer=init_ops.ones_initializer())
+          w1 = variable_scope.get_variable(
+              "w1",
+              shape=[64, 64],
+              dtype=np.float32,
+              initializer=init_ops.ones_initializer())
+        a = func(a, w0, b)
+        a = a - func(a, w1, c)
+        loss = math_ops.reduce_mean(
+            nn.sparse_softmax_cross_entropy_with_logits(logits=a,
+                                                        labels=labels))
+        train_op = gradient_descent.GradientDescentOptimizer(0.001).minimize(
+            loss)
+        return a, train_op
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [64, 64])
+        b = array_ops.placeholder(np.float32, [64, 64])
+        c = array_ops.placeholder(np.float32, [64, 64])
+        labels = array_ops.placeholder(np.int32, [64])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(body, inputs=[a, b, c, labels])
+
+      tu.move_variable_initialization_to_cpu()
+      sess.run(variables.global_variables_initializer())
+
+      report = tu.ReportJSON(self, sess)
+      result = sess.run(res, {x: np.ones(x.shape) for x in [a, b, c, labels]})
+      self.assertAllClose(result[0], np.broadcast_to(0., [64, 64]))
+
+      report.parse_log()
+      # There would be multiple non-linearities(grads) if the function was not
+      # cached.
+      ok = [
+          'MatMul/dot*/Conv_1',
+          '*/custom-call*/Op/Add',
+          'Sigmoid/custom-call/Nonlinearity',
+          'sub/subtract*/Op/Subtract',
+          '__seed',
+          'Copy_',
+          'SparseSoftmaxCrossEntropyWithLogits',
+          'gradients/SparseSoftmaxCrossEntropyWithLogits/SparseSoftmaxCrossEntropyWithLogits_grad/mul',
+          'gradients/sub_grad/Neg/negate*/Op/Negate',
+          'gradients/Sigmoid_grad/SigmoidGrad/custom-call*/NonLinearityGrad',
+          'gradients/AddN/fusion/scaledAdd/Op/Multiply',
+          'gradients/AddN/fusion/AddTo',
+          'gradients/AddN/add*/Op/Add',
+          'GradientDescent/update_vs/w*/ResourceApplyGradientDescent/fusion*/AddTo',
+          'gradients/AddN/fusion/scaledAdd/Op/Multiply/OnTileCopyPre',
+          'gradients/MatMul_1_grad/MatMul/dot*/Conv_1',
+      ]
+      report.assert_all_compute_sets_and_list(ok)
+      report.assert_total_tile_memory(1342820)
+      report.assert_max_tile_memory(5292)
+
+      # Entry computastion and 2 outlined ones.
+      self.assertEqual(len(report.tensor_map.computation_names()), 3)
+
 
 if __name__ == "__main__":
   googletest.main()
