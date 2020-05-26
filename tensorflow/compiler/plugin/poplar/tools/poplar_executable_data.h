@@ -70,26 +70,34 @@ limitations under the License.
     ERROR(absl::StrCat("'std::exception' exception: ", e.what()));    \
   }
 
-namespace poplar {
-class Executable;
-}  // namespace poplar
-
 namespace ipu {
 
+/* Custom exception type used throughout the library to raise exceptions
+ * with some context attached to them if available.
+ */
 class Exception : public std::runtime_error {
  public:
   explicit Exception(const std::string& msg);
 };
 
+/* Context stack used to attach extra information to exceptions when they're
+ * raised. All contexts changes can be printed by enabling the info mode.
+ */
 class LogContext {
  public:
+  // Current context stack as a string
   static const std::string& Context();
   static bool InfoEnabled();
   static void EnableInfo(bool enabled);
   LogContext();
+  // Push the context at the top of the context stack.
   explicit LogContext(const std::string& context);
+  // Replace the top of the context stack with new_context.
   void UpdateContext(const std::string& new_context);
+  // Pop the top of the context stack.
   void Clear();
+  // Implicitly pop the top of the context stack if Clear() hasn't been
+  // explicitly called.
   ~LogContext();
 
  private:
@@ -111,8 +119,15 @@ enum DataType {
   S32,
 };
 
+// Vector of bytes used to store binary data.
 using ByteVector = std::vector<uint8_t>;
 
+/* Represent the shape of a tensor.
+ *
+ * metadata_size is the extra space needed to store some extra metadata along
+ * the tensor. (0 by default). DataSizeInBytes() is computed as NumElements() *
+ * ElementSizeInBytes() + metadata_size
+ */
 class TensorShape {
  public:
   TensorShape() = default;
@@ -164,6 +179,11 @@ enum class TensorType {
 
 std::string TensorTypeToString(TensorType type);
 
+/* Tensor description.
+ *
+ * Contains the shape of the tensor, its type, but also the Poplar `Handle()` it
+ * is linked to and its `Name()` in the original graph.
+ */
 class TensorInfo {
  public:
   TensorInfo() = default;
@@ -172,10 +192,6 @@ class TensorInfo {
   TensorInfo(const std::string& name, const std::string& handle,
              const TensorShape& shape, TensorType type = TensorType::NotSet);
   explicit TensorInfo(StreamReader& in);
-
-  /* Return the filename where the values for this Tensors are stored.
-   */
-  std::string Filename() const;
 
   const TensorShape& Shape() const;
   const std::string& Name() const;
@@ -198,6 +214,8 @@ class TensorInfo {
   TensorType type_{TensorType::NotSet};
 };
 
+/* Tensor instance (Description + data)
+ */
 class Tensor {
  public:
   explicit Tensor(StreamReader& reader);
@@ -207,7 +225,7 @@ class Tensor {
   void SaveDataToJsonFile(const std::string& filename) const;
   void SaveDataToJsonStream(std::ostream* sout) const;
   void LoadDataFromStream(StreamReader& in);
-  void LoadDataFromJson(const std::string& data_filename);
+  void LoadDataFromJsonFile(const std::string& data_filename);
   void* Data();
   std::string ToString() const;
   void ToStream(StreamWriter& out) const;
@@ -222,6 +240,8 @@ bool IsJsonFile(const std::string& filename);
 Json::Value LoadJsonFromFile(const std::string& filename);
 Json::Value LoadJsonFromString(const std::string& json_content);
 
+/* Individual stream of an Outfeed
+ */
 class OutfeedStream {
  public:
   explicit OutfeedStream(const TensorInfo& info);
@@ -239,6 +259,8 @@ class OutfeedStream {
   std::streampos data_size_pos_;
 };
 
+/* Outfeed instance (Made of one or more OutfeedStream)
+ */
 class Outfeed {
  public:
   explicit Outfeed(const FeedInfo& info);
@@ -252,6 +274,8 @@ class Outfeed {
   std::vector<OutfeedStream> streams_;
 };
 
+/* Metadata representing an Outfeed or Infeed
+ */
 struct FeedInfo {
   FeedInfo() = default;
   explicit FeedInfo(const Json::Value& info);
@@ -260,6 +284,8 @@ struct FeedInfo {
   std::vector<TensorInfo> streams;
 };
 
+/* Opional verification information associated to a tensor or a feed.
+ */
 class VerificationInfo {
  public:
   VerificationInfo();
@@ -277,6 +303,8 @@ class VerificationInfo {
   bool initialised_;
 };
 
+/* Contains the metadata for all the tensors and feeds in the graph.
+ */
 struct Metadata {
  public:
   Metadata() = default;
@@ -294,13 +322,17 @@ struct Metadata {
   std::vector<TensorInfo> outputs;
   std::vector<FeedInfo> infeeds;
   std::vector<FeedInfo> outfeeds;
-  std::vector<std::string> feeds_order;
-  std::map<std::string, VerificationInfo> verification_info;
   int64_t replication_count;
   int64_t num_ipus;
+  // PoplarOptions to pass to the poplar::Engine.
   std::map<std::string, std::string> options;
+  // Verified mode only
+  std::vector<std::string> feeds_order;
+  std::map<std::string, VerificationInfo> verification_info;
 };
 
+/* Helper class to be used by the Frameworks to generate a Metadata object.
+ */
 class MetadataBuilder {
  public:
   MetadataBuilder() = default;
@@ -336,6 +368,8 @@ class MetadataBuilder {
   std::map<std::string, int64_t> outfeeds_;
 };
 
+/* Utility class to create binary files.
+ */
 class StreamWriter {
  public:
   explicit StreamWriter(const std::string& filename);
@@ -353,6 +387,8 @@ class StreamWriter {
   std::ofstream fd_;
 };
 
+/* Utility class to read binary files.
+ */
 class StreamReader {
  public:
   explicit StreamReader(const std::string& filename, bool is_versioned = true);
@@ -377,6 +413,8 @@ class StreamReader {
 
 enum class ObjectType { Feed, Tensor, PoplarExecutable, PoplarMetadata };
 
+/* Utility class to populate the tensors of an infeed stream.
+ */
 class FeedWriter {
  public:
   FeedWriter(std::shared_ptr<StreamWriter> writer, int64_t tensor_size,
@@ -390,6 +428,8 @@ class FeedWriter {
   std::streampos current_pos_;
 };
 
+/* Utility class to export to file Poplar executables.
+ */
 class ExecutableWriter {
  public:
   ExecutableWriter(std::shared_ptr<StreamWriter> writer,
@@ -404,6 +444,8 @@ class ExecutableWriter {
   std::function<void()> on_write_complete_;
 };
 
+/* High level helper to export an entire graph to a binary file.
+ */
 class BinaryWriter {
  public:
   explicit BinaryWriter(const std::string& filename);
@@ -420,6 +462,8 @@ class BinaryWriter {
   std::shared_ptr<StreamWriter> writer_;
 };
 
+/* Individual stream of an Infeed
+ */
 class InfeedStream {
  public:
   explicit InfeedStream(std::shared_ptr<StreamReader> in);
@@ -444,6 +488,8 @@ class InfeedStream {
   std::shared_ptr<StreamReader> reader_;
 };
 
+/* High level helper to load a serialised graph from one or more binary files
+ */
 class BinaryReader {
  public:
   void LoadFile(const std::string& filename);

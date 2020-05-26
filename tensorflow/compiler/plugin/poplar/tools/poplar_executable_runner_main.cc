@@ -231,18 +231,14 @@ int main(int argc, char** argv) {
   PRINT_INFO("List of streams:\n" << exe->StreamsList());
   tensors->ConnectStreams(*exe);
 
-  ipu::SeedManager seeds{tensors->Config()};
-  seeds.ConnectStreams(*exe);
-
   std::cout << "\n[Initialising IPU]\n";
   ipu::DeviceManager manager;
   poplar::Device device;
   if (requested_device_id >= 0) {
-    device = manager.GetSpecificDevice(requested_device_id,
-                                       tensors->Config().OptionFlags());
+    device =
+        manager.GetSpecificDevice(requested_device_id, tensors->OptionFlags());
   } else {
-    device = manager.GetDevice(tensors->Config().NumIpus(),
-                               tensors->Config().OptionFlags());
+    device = manager.GetDevice(tensors->NumIpus(), tensors->OptionFlags());
   }
   auto init_end = std::chrono::high_resolution_clock::now();
   std::cout << "Done in "
