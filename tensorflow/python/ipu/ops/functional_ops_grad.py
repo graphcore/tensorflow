@@ -15,8 +15,10 @@
 """Gradients for Functional operators."""
 
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import func_graph as func_graph_module
 from tensorflow.python.framework import ops
+from tensorflow.python.framework import tensor_util
 from tensorflow.python.framework.func_graph import FuncGraph
 from tensorflow.python.ops import cond_v2
 from tensorflow.python.ops import control_flow_util
@@ -48,6 +50,9 @@ class _XlaFuncGradGraph(FuncGraph):
     # Raw intermediates captured from the forward graph. Populated iff we're in
     # an XLA context.
     self._xla_intermediates = []
+    # Maps forward intermediate constant valued tensor's id to the constant
+    # created in this graph for that tensor.
+    self._captured_constants = {}
 
   @property
   def xla_intermediates(self):
@@ -58,6 +63,16 @@ class _XlaFuncGradGraph(FuncGraph):
     if (tensor.graph is not self._forward_graph
         or any(tensor is t for t in self._forward_graph.outputs)):
       return super(_XlaFuncGradGraph, self)._capture_helper(tensor, name)
+
+    # If `tensor` is a graph-building time constant, we create a constant with
+    # the same value in the backward graph instead of capturing it.
+    tensor_id = ops.tensor_id(tensor)
+    if tensor_id in self._captured_constants:
+      return self._captured_constants[tensor_id]
+    elif constant_op.is_constant(tensor):
+      self._captured_constants[tensor_id] = constant_op.constant(
+          tensor_util.constant_value(tensor), dtype=tensor.dtype)
+      return self._captured_constants[tensor_id]
 
     if control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph()):
       # Capture the intermidate so that it can be added as an extra output
