@@ -23,6 +23,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.util import deprecation
 
 
 class IPUOutfeedMode(Enum):
@@ -30,10 +31,11 @@ class IPUOutfeedMode(Enum):
 
   Contains the following values:
 
-  * `ALL`: When used with an IPUOutfeedQueue, all the elements which were
-           enqueued to the queue will be returned by the outfeed.
-  * `LAST`: When used with an IPUOutfeedQueue, only the last element which was
-            enqueued to the queue will be returned by the outfeed.
+  * `ALL` - When used with an IPUOutfeedQueue, all the elements which were
+    enqueued to the queue will be returned by the outfeed.
+  * `LAST` - When used with an IPUOutfeedQueue, only the last element which was
+    enqueued to the queue will be returned by the outfeed.
+
   """
   ALL = "all"
   LAST = "get_last"
@@ -45,11 +47,13 @@ class IPUOutfeedQueue:
   The queue has two modes of operation - outfeed all or outfeed last.
   In outfeed all mode every element that is enqueued will be stored
   for a subsequent dequeue. All of the enqueued elements will be returned
-  when the dequeue operation is run.
+  when the dequeue operation is run. This is the default behaviour.
 
   In outfeed last mode only the last enqueued element is stored. The dequeue
   operation will in this case return a single element.
   """
+  @deprecation.deprecated_args(None, "Use outfeed_mode instead.",
+                               "outfeed_all")
   def __init__(self,
                feed_name,
                outfeed_mode=None,
@@ -61,20 +65,21 @@ class IPUOutfeedQueue:
 
     Args:
         feed_name: a user provided name for the outfeed operation. Must be
-        unique within all IPUOutfeedQueue and IPUInfeedQueue
-        operations.
+          unique within all IPUOutfeedQueue and IPUInfeedQueue
+          operations.
         outfeed_mode: `ipu_outfeed_queue.IPUOutfeedMode` type used to control the
-        outfeed behaviour.
+          outfeed behaviour. If not specified then all elements will be
+          returned by the outfeed when the dequeue operation is run.
         outfeed_all: deprecated.
-        elements should be stored or only the last one.
-        device_ordinal: ordinal of the device on which this queue will be
-        used.
+        device_ordinal: ordinal of the IPU device on which this queue will be
+          used. By default the queue will be used on "/device/IPU:0".
         replication_factor: the number of replicated graphs this Outfeed
-        will be used in.
+          will be used in.
         io_batch_size: Output tensors will be batched into this number of samples
-        before being sent to the host.  This reduces the amount of device->host
-        communication at the expense of needing to store the tensors on the device,
-        and the extra computation required to operate the batching.
+          before being sent to the host.  This reduces the amount of
+          device->host communication at the expense of needing to store the
+          tensors on the device, and the extra computation required to operate
+          the batching.
 
     Raises:
       ValueError: if the types or values are incorrect
@@ -124,6 +129,7 @@ class IPUOutfeedQueue:
     returning it or using tf.control_dependencies(...))
 
     Examples:
+
     1. Outfeed returning a single tensor:
 
     .. code-block:: python
@@ -145,9 +151,9 @@ class IPUOutfeedQueue:
        ...
        ...
 
-     2. Outfeed returning a tuple of tensors:
+    2. Outfeed returning a tuple of tensors:
 
-     .. code-block:: python
+    .. code-block:: python
 
        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
 
@@ -167,9 +173,9 @@ class IPUOutfeedQueue:
        ...
        ...
 
-     3. Outfeed returning a dictionary of tensors:
+    3. Outfeed returning a dictionary of tensors:
 
-     .. code-block:: python
+    .. code-block:: python
 
        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed")
 
@@ -221,11 +227,14 @@ class IPUOutfeedQueue:
     The return value of this operation depends on the enqueued tensors,
     replication factor and the execution mode.
 
+    Examples:
+
     1. Outfeed returning a single tensor:
 
     .. code-block:: python
 
-        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed", replication_factor=2)
+        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed",
+                                                          replication_factor=2)
 
         def body(input):
           output = input + 1
@@ -307,7 +316,8 @@ class IPUOutfeedQueue:
 
     .. code-block:: python
 
-        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed", replication_factor=8)
+        outfeed_queue = ipu_outfeed_queue.IPUOutfeedQueue(feed_name="outfeed",
+                                                          replication_factor=8)
 
         def body(input):
           output = input + 1
