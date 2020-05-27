@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/literal_comparison.h"
@@ -4186,6 +4187,58 @@ ENTRY c1 {
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_TRUE(t.permutation.has_value());
   EXPECT_EQ(t.permutation->size(), 0);
+}
+
+TEST_F(AllocationFinderTest, FindAllocationTargetWithSendToHost) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f16[1,16,16,2] parameter(0)
+  p1 = f16[3,3,2,4] parameter(1)
+
+  merged = (f16[1,16,16,2], f16[3,3,2,4]) tuple(p0, p1)
+  send = () custom-call((f16[1,16,16,2], f16[3,3,2,4]) merged), custom_call_target="SendToHost", backend_config="{\"rendezvous_key\":\"\"}"
+  ROOT conv = f16[1,16,16,4] convolution(p0, p1), window={size=3x3 pad=1_1x1_1}, dim_labels=b01f_01io->b01f
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
+
+  const auto* conv = module0->entry_computation()->root_instruction();
+  const auto* p0 = module0->entry_computation()->parameter_instruction(0);
+  const auto* p1 = module0->entry_computation()->parameter_instruction(1);
+
+  for (const bool always_rearrange_on_host : {false, true}) {
+    CompilerAnnotations annotations(module0);
+    AllocationFinder finder(annotations, always_rearrange_on_host);
+    EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+    EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+    const auto t0 = annotations.tensor_allocation_map.at(TensorLocation{p0, 0});
+    const auto t1 = annotations.tensor_allocation_map.at(TensorLocation{p1, 0});
+
+    if (always_rearrange_on_host) {
+      // Conv should have highest priority.
+      EXPECT_EQ(t0.tgt, conv);
+      EXPECT_EQ(t1.tgt, conv);
+      EXPECT_EQ(t0.input_index, 0ll);
+      EXPECT_EQ(t1.input_index, 1ll);
+    } else {
+      // SendToHost should have highest priority.
+      EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SendToHost)(t0.tgt));
+      EXPECT_TRUE(IsPoplarInstruction(PoplarOp::SendToHost)(t1.tgt));
+      EXPECT_EQ(t0.input_index, 0ll);
+      EXPECT_EQ(t1.input_index, 0ll);
+    }
+  }
 }
 
 // // TODO:

@@ -649,12 +649,6 @@ void TensorInfo::ToStream(StreamWriter& out) const {
 
 std::string TensorInfo::ToString() const { return ToJson().toStyledString(); }
 
-std::string TensorInfo::Filename() const {
-  std::string data_filename = name_;
-  std::replace(data_filename.begin(), data_filename.end(), '/', '_');
-  return absl::StrCat(data_filename, ".data");
-}
-
 const TensorShape& TensorInfo::Shape() const { return shape_; }
 
 const std::string& TensorInfo::Name() const { return name_; }
@@ -673,7 +667,7 @@ Tensor::Tensor(const TensorInfo& info, const void* data) : Tensor(info) {
 
 const TensorInfo& Tensor::Info() const { return info_; }
 
-void Tensor::LoadDataFromJson(const std::string& data_filename) {
+void Tensor::LoadDataFromJsonFile(const std::string& data_filename) {
   LogContext ctx(
       absl::StrCat("Loading ", TensorTypeInfo::ToString(info_.Type()), " ",
                    info_.Name(), " from JSON file '", data_filename, "'"));

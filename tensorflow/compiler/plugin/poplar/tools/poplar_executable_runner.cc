@@ -185,6 +185,22 @@ void WriteJsonToStream(const Json::Value& root, std::ostream* sout) {
   writer->write(root, sout);
 }
 
+std::string SanitizeName(std::string name) {
+  std::replace(name.begin(), name.end(), '/', '_');
+  return name;
+}
+
+/* InsertNumberBeforeExtension("MyFile.txt", 1) -> "MyFile.1.txt"
+ */
+std::string InsertNumberBeforeExtension(const std::string& filename,
+                                        int64_t number) {
+  size_t dot_pos = filename.rfind(".");
+  ERROR_ON_MSG(dot_pos == std::string::npos, "Invalid filename: no extension");
+  std::string basename = filename.substr(0, dot_pos);
+  std::string extension = filename.substr(dot_pos);
+  return absl::StrCat(basename, ".", number, extension);
+}
+
 }  // namespace
 
 IExecutable::IExecutable(StreamReader& stream, int64_t length) {
@@ -372,17 +388,7 @@ poplar::Device DeviceManager::GetDevice(int64_t num_ipus,
   ERROR("Failed to attach to any of the IPU devices");
 }
 
-IpuConfig::IpuConfig(const Metadata& meta)
-    : replication_count_(meta.replication_count),
-      num_ipus_(meta.num_ipus),
-      option_flags_(ParseOptionFlags(meta)) {}
-
-int64_t IpuConfig::NumIpus() const { return num_ipus_; }
-int64_t IpuConfig::ReplicationCount() const { return replication_count_; }
-
-poplar::OptionFlags IpuConfig::OptionFlags() const { return option_flags_; }
-
-TensorManager::TensorManager(const Metadata& meta) : config_(meta) {
+TensorManager::TensorManager(const Metadata& meta) {
   for (auto input : meta.inputs) {
     inputs_.emplace_back(input);
   }
@@ -396,7 +402,19 @@ TensorManager::TensorManager(const Metadata& meta) : config_(meta) {
     outfeeds_.emplace_back(outfeed);
   }
   feeds_order_ = meta.feeds_order;
+  seeds_.resize(meta.replication_count);
+  std::mt19937_64 seed_generator;
+  for (auto& seed : seeds_) {
+    seed = seed_generator();
+  }
+  option_flags_ = ParseOptionFlags(meta);
+  num_ipus_ = meta.num_ipus;
+  replication_count_ = meta.replication_count;
 }
+
+int64_t TensorManager::NumIpus() const { return num_ipus_; }
+
+poplar::OptionFlags TensorManager::OptionFlags() const { return option_flags_; }
 
 void TensorManager::LoadCheckpointMetadataFromJson(
     const std::string& filename) {
@@ -542,9 +560,11 @@ void TensorManager::SaveOutputsToJson(TensorType type,
         return;
       }
       auto& occurrences = duplicates[out.Info().Name()];
-      std::string filename = out.Info().Filename();
+
+      std::string filename =
+          absl::StrCat(SanitizeName(out.Info().Name()), ".json");
       if (occurrences > 0) {
-        filename = Infeed::StreamFilename(filename, occurrences);
+        filename = InsertNumberBeforeExtension(filename, occurrences);
       }
       out.SaveDataToJsonFile(absl::StrCat(folder, "/", filename));
       occurrences++;
@@ -562,11 +582,9 @@ std::list<Tensor*> TensorManager::InputDataTensors() {
   return out;
 }
 
-const IpuConfig& TensorManager::Config() const { return config_; }
-
 bool TensorManager::ContainsCheckpoint() const { return !infeeds_.empty(); }
 
-void TensorManager::SaveCheckpoint(BinaryWriter& writer) {
+void TensorManager::SaveVerifiedCheckpoint(BinaryWriter& writer) {
   ERROR_ON(!ContainsCheckpoint());
   absl::c_for_each(outputs_, [&writer](const Tensor& out) {
     if (out.Info().Name() == Metadata::CheckpointName() ||
@@ -619,8 +637,7 @@ void TensorManager::ConnectStreams(IExecutable& executable) {
   }
 
   for (auto& output : outputs_) {
-    for (int replica_id = 0; replica_id < config_.ReplicationCount();
-         replica_id++) {
+    for (int replica_id = 0; replica_id < replication_count_; ++replica_id) {
       auto callback = [&output, replica_id](void* ptr) {
         if (replica_id == 0) {
           std::memcpy(output.Data(), ptr,
@@ -636,8 +653,7 @@ void TensorManager::ConnectStreams(IExecutable& executable) {
 
   for (auto& infeed : infeeds_) {
     for (auto& infeed_stream : infeed.MutableStreams()) {
-      for (int replica_id = 0; replica_id < config_.ReplicationCount();
-           replica_id++) {
+      for (int replica_id = 0; replica_id < replication_count_; ++replica_id) {
         auto callback = absl::make_unique<InfeedCallback>(infeed_stream);
         PRINT_INFO("Connecting " << infeed_stream.Info().Name() << " to handle "
                                  << infeed_stream.Info().Handle());
@@ -648,38 +664,25 @@ void TensorManager::ConnectStreams(IExecutable& executable) {
   }
   for (auto& outfeed : outfeeds_) {
     for (auto& outfeed_stream : outfeed.Streams()) {
-      for (int replica_id = 0; replica_id < config_.ReplicationCount();
-           replica_id++) {
+      for (int replica_id = 0; replica_id < replication_count_; ++replica_id) {
         PRINT_INFO("Connecting " << outfeed_stream.Info().Name()
                                  << " to handle "
                                  << outfeed_stream.Info().Handle());
         engine.connectStreamToCallback(
             outfeed_stream.Info().Handle(), replica_id,
             [&outfeed_stream, this](void* src) {
-              outfeed_stream.WriteTensor(src, this->config_.ReplicationCount());
+              outfeed_stream.WriteTensor(src, this->replication_count_);
             });
       }
     }
   }
-}
-
-SeedManager::SeedManager(const IpuConfig& config) {
-  int replication_count = config.ReplicationCount();
-  seeds_.resize(replication_count);
-  std::mt19937_64 seed_generator;
-  for (auto& seed : seeds_) {
-    seed = seed_generator();
-  }
-}
-
-void SeedManager::ConnectStreams(IExecutable& executable) {
-  for (int replica_id = 0; replica_id < seeds_.size(); replica_id++) {
+  for (int replica_id = 0; replica_id < replication_count_; ++replica_id) {
     auto callback = [this, replica_id](void* ptr) mutable {
       reinterpret_cast<uint64_t*>(ptr)[0] = this->seeds_[replica_id];
     };
 
-    executable.Engine().connectStreamToCallback(GetRandomNumberSeedStream(),
-                                                replica_id, callback);
+    engine.connectStreamToCallback(GetRandomNumberSeedStream(), replica_id,
+                                   callback);
   }
 }
 
@@ -703,15 +706,6 @@ void Infeed::InitializeDataSources(const BinaryLoader& loader) {
   ERROR_ON(!absl::c_all_of(streams_, [this](const InfeedStream& stream) {
     return stream.NumTensors() == this->streams_[0].NumTensors();
   }));
-}
-
-/* static */ std::string Infeed::StreamFilename(const std::string& filename,
-                                                int64_t stream_idx) {
-  size_t dot_pos = filename.rfind(".");
-  ERROR_ON_MSG(dot_pos == std::string::npos, "Invalid filename: no extension");
-  std::string basename = filename.substr(0, dot_pos);
-  std::string extension = filename.substr(dot_pos);
-  return absl::StrCat(basename, ".", stream_idx, extension);
 }
 
 std::unique_ptr<TensorManager> BinaryLoader::CreateTensorManager(
