@@ -111,6 +111,11 @@ StatusOr<poplar::Tensor> AddPlainTensor(poplar::Graph& graph,
                                         CompilerResources& resources,
                                         bool offset = true);
 
+// Add a tensor with layout optimised for host exchange.
+StatusOr<poplar::Tensor> AddHostCopyTensor(poplar::Graph& graph,
+                                           const std::string& debug_name,
+                                           const xla::Shape& shape);
+
 StatusOr<poplar::Tensor> CreateIndicesTensor(
     poplar::Graph& graph, const popops::SlicePlan& plan,
     const xla::Shape& xla_indices_shape, const std::string& name);

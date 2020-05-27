@@ -23,6 +23,7 @@ limitations under the License.
 #include <poplar/Engine.hpp>
 #include <poplar/OptionFlags.hpp>
 #include <poplar/TensorCloneMethod.hpp>
+#include <popops/HostSliceTensor.hpp>
 #include <poputil/TileMapping.hpp>
 #include <poputil/Util.hpp>
 #include <string>
@@ -265,6 +266,25 @@ StatusOr<poplar::Tensor> CreateIndicesTensor(
   return popops::createIndicesTensor(graph, {0}, num_indices, plan, {}, name)
       .reshape(indices_shape)
       .reinterpret(indices_type);
+}
+
+StatusOr<poplar::Tensor> AddHostCopyTensor(poplar::Graph& graph,
+                                           const std::string& debug_name,
+                                           const xla::Shape& shape) {
+  TF_ASSIGN_OR_RETURN(poplar::Type poplar_type, PoplarDataType(shape));
+
+  // popops::createHostSliceableTensor requires a 2D tensor where the first
+  // dimension is the sliceable one (which we do not need), so ask for a
+  // 2D tensor where the first dimension is 1 and reshape the result.
+  const std::size_t num_elements = ShapeUtil::ElementsIn(shape);
+  const std::vector<std::size_t> poplar_shape_2d = {1, num_elements};
+
+  // Passing isRead=false gives better tile balance.
+  const auto tensor_and_indices = popops::createHostSliceableTensor(
+      graph, poplar_type, poplar_shape_2d, /*isRead=*/false, debug_name);
+
+  const auto poplar_shape = PoplarShapeFromXlaShape(shape);
+  return tensor_and_indices.tensor.reshape(poplar_shape);
 }
 
 poplar::Tensor ConvertFromDeviceLayout(const Shape& shape,

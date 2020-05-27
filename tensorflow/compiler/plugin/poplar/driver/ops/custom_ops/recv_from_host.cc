@@ -53,11 +53,11 @@ StatusOr<TensorVector> GetOutputTensors(
       result[i] = nested[i][0];
     }
   } else {
-    // Otherwise, allocate new tensors matching layout desired by consumer.
+    // Otherwise, allocate new tensors with layout optimised for host copies.
     for (int64 i = 0; i < num_outputs; ++i) {
       TF_ASSIGN_OR_RETURN(
-          result[i], AddTensor(graph, TensorLocation{inst, i}, output_shapes[i],
-                               res, tensor_map));
+          result[i],
+          AddHostCopyTensor(graph, GetDebugName(inst), output_shapes[i]));
     }
   }
 
@@ -72,7 +72,7 @@ class RecvFromHostOp : public PoplarOpDef {
                                              TensorMap& tensor_map) override {
     if (res.use_verified_transfers) {
       return FailedPrecondition(
-          "Verified transfers cannot be used with Host embeddings");
+          "Verified transfers cannot be used with RecvFromHost operations");
     }
     poplar::program::Sequence seq;
 
@@ -117,6 +117,16 @@ class RecvFromHostOp : public PoplarOpDef {
     }
 
     return seq;
+  }
+
+  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
+                                     CompilerResources& res,
+                                     const std::string& name,
+                                     const TensorTarget& tensor_target,
+                                     const TensorMap& tensor_map) override {
+    const int64 input_index = tensor_target.input_index;
+    const Shape& input_shape = tensor_target.tgt->operand(input_index)->shape();
+    return AddHostCopyTensor(graph, name, input_shape);
   }
 };
 

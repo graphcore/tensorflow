@@ -207,9 +207,9 @@ class OutsideCompilationScopeTest(  # pylint: disable=abstract-method
       num_copies_with_outside_scope = count_stream_copies(
           compiled_with_outside_scope)
 
-      # There should be one additional SendToHost and one RecvFromHost stream copy.
-      self.assertEqual(num_copies_with_outside_scope,
-                       num_copies_without_outside_scope + 2)
+      # There should be at most two new SendToHost/RecvFromHost stream copies.
+      self.assertLessEqual(num_copies_with_outside_scope,
+                           num_copies_without_outside_scope + 2)
 
   def testSentTensorIsUsedAfterReceive(self):
     with self.session() as sess:
