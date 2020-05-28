@@ -18,10 +18,10 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "ipu/poplar_executable_data.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_data.h"
 
 #include <poplar/Tensor.hpp>
 #include <popops/ElementWise.hpp>
