@@ -35,3 +35,22 @@ tf_cc_binary(
         "//tensorflow/core/common_runtime/data:standalone",
     ],
 )
+
+py_binary(
+    name = "tensorflow_weights_extractor",
+    srcs = ["tensorflow_weights_extractor.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)
+
+py_library(
+    name = "tensorflow_weights_extractor_lib",
+    srcs = ["tensorflow_weights_extractor.py"],
+    srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+    ],
+)

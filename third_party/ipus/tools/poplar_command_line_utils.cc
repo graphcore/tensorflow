@@ -108,11 +108,11 @@ std::string CheckpointFile::Unparse() const {
 }
 
 bool BinaryFiles::Parse(absl::string_view text, std::string* error) {
-  std::vector<std::string> filenames;
-  if (!absl::ParseFlag(text, &filenames, error)) {
+  std::vector<std::string> names;
+  if (!absl::ParseFlag(text, &names, error)) {
     return false;
   }
-  for (auto name : filenames) {
+  for (auto name : names) {
     if (IsDir(name)) {
       std::vector<std::string> files = ListFiles(name, error);
       if (!error->empty()) {

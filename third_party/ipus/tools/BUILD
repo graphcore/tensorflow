@@ -169,22 +169,3 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
     ],
 )
-
-py_binary(
-    name = "tensorflow_weights_extractor",
-    srcs = ["scripts/tensorflow_weights_extractor.py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-    ],
-)
-
-py_library(
-    name = "tensorflow_weights_extractor_lib",
-    srcs = ["scripts/tensorflow_weights_extractor.py"],
-    srcs_version = "PY2AND3",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//tensorflow:tensorflow_py",
-    ],
-)
