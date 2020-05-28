@@ -34,7 +34,7 @@ from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
 # ...
 # ipu.utils.export_variables_from_live_session(...)
 # ```
-from third_party.ipus.tools.scripts.tensorflow_weights_extractor import (
+from tensorflow.compiler.plugin.poplar.tools.tensorflow_weights_extractor import (
     export_variables_from_live_session, export_variables_from_live_model,
     import_data_in_live_session, import_data_in_live_model)
 # pylint: enable=unused-import

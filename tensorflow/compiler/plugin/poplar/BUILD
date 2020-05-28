@@ -2855,8 +2855,8 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/poplar_executable_runner_test.py"],
     data = [
+        "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor",
         "//third_party/ipus/tools:PoplarExecutableRunner",
-        "//third_party/ipus/tools:tensorflow_weights_extractor",
     ],
     enabled_backends = ["poplar"],
     deps = [

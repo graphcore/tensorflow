@@ -193,7 +193,7 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
                                                   "ipu_bin")
 
       self.runPythonCommand(
-          (("./third_party/ipus/tools/scripts/"
+          (("./tensorflow/compiler/plugin/poplar/tools/"
             "tensorflow_weights_extractor.py -o %s -s %s -m %s") %
            (weights_file, model_path, metadata_file)).split())
 
@@ -239,11 +239,11 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         saved_model.save(model, model_path_keras)
         Saver().save(sess, model_path_session)
 
-      self.runPythonCommand((("./third_party/ipus/tools/scripts/"
+      self.runPythonCommand((("./tensorflow/compiler/plugin/poplar/tools/"
                               "tensorflow_weights_extractor.py -o %s -s %s") %
                              (weights_keras, model_path_keras)).split())
 
-      self.runPythonCommand((("./third_party/ipus/tools/scripts/"
+      self.runPythonCommand((("./tensorflow/compiler/plugin/poplar/tools/"
                               "tensorflow_weights_extractor.py -o %s -s %s") %
                              (weights_session, model_path_session)).split())
 

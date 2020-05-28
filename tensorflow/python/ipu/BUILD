@@ -154,11 +154,11 @@ py_library(
         "//tensorflow/compiler/plugin/poplar:backend_protos_py",
         "//tensorflow/compiler/plugin/poplar:pop_datastream_ops_py",
         "//tensorflow/compiler/plugin/poplar:sendrecv_ops_py",
+        "//tensorflow/compiler/plugin/poplar/tools:tensorflow_weights_extractor_lib",
         "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/distribute:values",
         "//tensorflow/python/estimator:estimator_py",
-        "//third_party/ipus/tools:tensorflow_weights_extractor_lib",
     ],
 )
 
