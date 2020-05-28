@@ -58,6 +58,17 @@ std::unique_ptr<HloInstruction> CreateSigmoid(HloInstruction* const operand) {
   return absl::make_unique<HloSigmoidInstruction>(operand);
 }
 
+// Softmax
+std::unique_ptr<HloInstruction> HloSoftmaxInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext*) const {
+  return absl::make_unique<HloSoftmaxInstruction>(new_operands[0]);
+}
+
+std::unique_ptr<HloInstruction> CreateSoftmax(HloInstruction* const operand) {
+  return absl::make_unique<HloSoftmaxInstruction>(operand);
+}
+
 // ReluGrad
 std::unique_ptr<HloInstruction>
 HloReluGradInstruction::CloneWithNewOperandsImpl(
@@ -139,6 +150,14 @@ StatusOr<std::unique_ptr<HloInstruction>> HloSigmoidInstructionFactoryFunc(
 
 static HloPoplarInstructionFactory sigmoid_factory(
     PoplarOp::Sigmoid, HloSigmoidInstructionFactoryFunc);
+
+StatusOr<std::unique_ptr<HloInstruction>> HloSoftmaxInstructionFactoryFunc(
+    HloCustomCallInstruction* call) {
+  return CreateSoftmax(call->mutable_operand(0));
+}
+
+static HloPoplarInstructionFactory softmax_factory(
+    PoplarOp::Softmax, HloSoftmaxInstructionFactoryFunc);
 
 StatusOr<std::unique_ptr<HloInstruction>> HloReluGradInstructionFactoryFunc(
     HloCustomCallInstruction* call) {

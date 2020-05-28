@@ -67,6 +67,8 @@ class NonLinearityOp : public PoplarOpDef {
 REGISTER_POPLAR_OP(Relu, NonLinearityOp<popnn::NonLinearityType::RELU>);
 REGISTER_POPLAR_OP(Gelu, NonLinearityOp<popnn::NonLinearityType::GELU>);
 REGISTER_POPLAR_OP(Sigmoid, NonLinearityOp<popnn::NonLinearityType::SIGMOID>);
+REGISTER_POPLAR_OP(Softmax,
+                   NonLinearityOp<popnn::NonLinearityType::SOFTMAX_STABLE>);
 
 template <popnn::NonLinearityType NLType>
 class NonLinearityGradOp : public PoplarOpDef {
