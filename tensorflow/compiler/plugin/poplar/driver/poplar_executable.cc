@@ -269,11 +269,15 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   }
   std::unique_ptr<poplar::Engine> engine;
   try {
+    VLOG(1) << "Trying to deserialize cached file: "
+            << poplar_executable_filename;
     std::ifstream file(poplar_executable_filename, std::ios::binary);
     auto poplar_executable = poplar::Executable::deserialize(file);
     engine.reset(new poplar::Engine(std::move(poplar_executable), opts));
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Deserialize] ", e);
+    const std::string origin =
+        "[Deserialize][File: " + poplar_executable_filename + "] ";
+    return PoplarExceptionToTensorflowStatus(origin, e);
   }
 
   auto iomap = InputOutputAliasingMap(hlo_module.get());

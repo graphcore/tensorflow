@@ -738,6 +738,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         TF_RETURN_IF_ERROR(
             poplar_executor->CreateSerializedExecutableDirIfMissing());
         try {
+          VLOG(1) << "Trying to deserialize cached file: "
+                  << filenames.CachedExecutableFilename();
           std::ifstream file(filenames.CachedExecutableFilename(),
                              std::ios::binary);
           auto poplar_binary = poplar::Executable::deserialize(file);
@@ -747,7 +749,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
               poplar_executor->GetReportExecutionFlags(),
               poplar_executor->GetOrCreatePoplarTarget()));
         } catch (const std::exception& e) {
-          return PoplarExceptionToTensorflowStatus("[Deserialize] ", e);
+          const std::string origin =
+              "[Deserialize][File: " + filenames.CachedExecutableFilename() +
+              "] ";
+          return PoplarExceptionToTensorflowStatus(origin, e);
         }
       }
       std::unique_ptr<Executable> executable;
