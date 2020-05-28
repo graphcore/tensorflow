@@ -89,6 +89,7 @@ def print_tensor(input, name=""):
     executed ops by specifying with tf.control_dependencies([print_op]).
 
   Examples:
+
     1. Returning the print operation as part of the XLA function:
 
     .. code-block:: python
@@ -121,7 +122,7 @@ def print_tensor(input, name=""):
 
        with ops.ipu_scope("/device:IPU:0"):
          pa = tf.placeholder(np.float32, [2, 2], name="a")
-         print_op = internal.print_tensor(pa)
+         print_op = internal_ops.print_tensor(pa)
          x = pa + 1
 
        with tf.Session() as session:
@@ -142,7 +143,7 @@ def print_tensor(input, name=""):
 
        with ops.ipu_scope("/device:IPU:0"):
          pa = tf.placeholder(np.float32, [2, 2], name="a")
-         print_op = internal.print_tensor(pa)
+         print_op = internal_ops.print_tensor(pa)
          with tf.control_dependencies([print_op]):
            x = pa + 1
 
