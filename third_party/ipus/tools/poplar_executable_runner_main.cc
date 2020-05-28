@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_runner.h"
+#include "ipu/poplar_executable_runner.h"
 
 #include <iostream>
 #include <map>
@@ -27,8 +27,7 @@ limitations under the License.
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
-
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_command_line_utils.h"
+#include "ipu/poplar_command_line_utils.h"
 
 ABSL_FLAG(ipu::BinaryFiles, binaries, ipu::BinaryFiles(),
           "List of binary files containing metadata, binaries, weights,"

@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_data.h"
+#include "ipu/poplar_executable_data.h"
 
 #include <algorithm>
 #include <fstream>

@@ -21,6 +21,7 @@ limitations under the License.
 #include <fstream>
 #include <utility>
 
+#include "ipu/poplar_executable_data.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.pb.h"
@@ -28,7 +29,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_runner.h"
 
 namespace xla {
 namespace poplarplugin {

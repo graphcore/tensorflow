@@ -32,7 +32,7 @@ limitations under the License.
 
 #include "include/json/json.h"
 
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_data.h"
+#include "ipu/poplar_executable_data.h"
 
 namespace ipu {
 

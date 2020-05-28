@@ -193,19 +193,18 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
                                                   "ipu_bin")
 
       self.runPythonCommand(
-          (("./tensorflow/compiler/plugin/poplar/tools/"
+          (("./third_party/ipus/tools/scripts/"
             "tensorflow_weights_extractor.py -o %s -s %s -m %s") %
            (weights_file, model_path, metadata_file)).split())
 
-      self.runCommand(
-          (("./tensorflow/compiler/plugin/poplar/tools/PoplarExecutableRunner"
-            " --binaries %s,%s,%s "
-            "--output_folder=%s --strict") % (
-                executable_file,
-                weights_file,
-                input_file,
-                output_path,
-            )).split())
+      self.runCommand((("./third_party/ipus/tools/PoplarExecutableRunner"
+                        " --binaries %s,%s,%s "
+                        "--output_folder=%s --strict") % (
+                            executable_file,
+                            weights_file,
+                            input_file,
+                            output_path,
+                        )).split())
 
       output_file = self.getSingleFileWithExt(output_path, "data")
       with open(output_file, 'r') as f:
@@ -240,11 +239,11 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
         saved_model.save(model, model_path_keras)
         Saver().save(sess, model_path_session)
 
-      self.runPythonCommand((("./tensorflow/compiler/plugin/poplar/tools/"
+      self.runPythonCommand((("./third_party/ipus/tools/scripts/"
                               "tensorflow_weights_extractor.py -o %s -s %s") %
                              (weights_keras, model_path_keras)).split())
 
-      self.runPythonCommand((("./tensorflow/compiler/plugin/poplar/tools/"
+      self.runPythonCommand((("./third_party/ipus/tools/scripts/"
                               "tensorflow_weights_extractor.py -o %s -s %s") %
                              (weights_session, model_path_session)).split())
 
