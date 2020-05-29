@@ -16,9 +16,9 @@ limitations under the License.
 #include <fstream>
 #include <string>
 
+#include "ipu/poplar_executable_data.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_allocator.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/infeed_iterator.h"
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_data.h"
 
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"

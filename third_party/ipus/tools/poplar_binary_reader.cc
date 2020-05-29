@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_runner.h"
+#include "ipu/poplar_executable_runner.h"
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -31,95 +31,9 @@ limitations under the License.
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "ipu/poplar_command_line_utils.h"
 
-bool FileExists(const std::string& filename) {
-  return std::ifstream(filename).is_open();
-}
-
-bool IsDir(const std::string& path) {
-  DIR* dirp = opendir(path.c_str());
-  if (dirp) {
-    closedir(dirp);
-  }
-  return dirp != NULL;
-}
-
-bool CreateDirIfNeeded(const std::string& dir) {
-  DIR* dp = opendir(dir.c_str());
-  if (dp == NULL) {
-    if (mkdir(dir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0) {
-      return false;
-    }
-  } else {
-    closedir(dp);
-  }
-  return true;
-}
-
-std::string FileExtension(const std::string& filename,
-                          bool no_extension_allowed = false) {
-  size_t dot_pos = filename.rfind(".");
-  if (dot_pos == std::string::npos) {
-    ERROR_ON_MSG(!no_extension_allowed,
-                 "Invalid filename '" << filename << "': no extension");
-    return "";
-  }
-  return filename.substr(dot_pos + 1);
-}
-
-std::vector<std::string> ListFiles(const std::string& folder,
-                                   std::string* error) {
-  std::vector<std::string> files;
-  DIR* dirp = opendir(folder.c_str());
-  if (dirp == NULL) {
-    *error = absl::StrCat("Can't open folder '", folder, "'");
-    return {};
-  }
-  struct dirent* dp;
-  while ((dp = readdir(dirp)) != NULL) {
-    files.push_back(dp->d_name);
-  }
-  closedir(dirp);
-  return files;
-}
-
-struct BinaryFiles {
-  std::vector<std::string> filenames;
-};
-
-std::string AbslUnparseFlag(BinaryFiles f) {
-  return absl::UnparseFlag(f.filenames);
-}
-
-bool AbslParseFlag(absl::string_view text, BinaryFiles* f, std::string* error) {
-  std::vector<std::string> filenames;
-  if (!absl::ParseFlag(text, &filenames, error)) {
-    return false;
-  }
-  for (auto name : filenames) {
-    if (IsDir(name)) {
-      std::vector<std::string> files = ListFiles(name, error);
-      if (!error->empty()) {
-        return false;
-      }
-      for (auto file : files) {
-        if (FileExtension(file, true) == "bin" ||
-            FileExtension(file, true) == "ipu_bin") {
-          f->filenames.push_back(absl::StrCat(name, "/", file));
-        }
-      }
-    } else {
-      if (!FileExists(name)) {
-        *error = absl::StrCat("Could not open file '", name, "'.");
-        return false;
-      }
-      f->filenames.push_back(name);
-    }
-  }
-  return true;
-}
-
-ABSL_FLAG(BinaryFiles, binaries, BinaryFiles(),
+ABSL_FLAG(ipu::BinaryFiles, binaries, ipu::BinaryFiles(),
           "List of binary files containing metadata, binaries, weights,"
           " inputs, feeds, etc.");
 ABSL_FLAG(bool, print_output, false,
@@ -149,7 +63,7 @@ int main(int argc, char** argv) {
 
   absl::ParseCommandLine(argc, argv);
 
-  const BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
+  const ipu::BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
   const bool print_output = absl::GetFlag(FLAGS_print_output);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
   const bool list_handles = absl::GetFlag(FLAGS_list_handles);
@@ -161,7 +75,7 @@ int main(int argc, char** argv) {
 
   ipu::LogContext::EnableInfo(verbose);
 
-  ERROR_ON_MSG(!output_folder.empty() && !CreateDirIfNeeded(output_folder),
+  ERROR_ON_MSG(!output_folder.empty() && !ipu::CreateDirIfNeeded(output_folder),
                "Failed to create output folder '" << output_folder << "'");
 
   ERROR_ON_MSG(binaries.filenames.empty(),

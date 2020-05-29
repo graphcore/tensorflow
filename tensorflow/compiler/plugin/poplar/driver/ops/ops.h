@@ -236,41 +236,6 @@ StatusOr<poplar::program::Program> CreateDynamicSliceOp(
     CompilerResources& res, const HloInstruction* inst,
     const xla::Shape& output_shape, TensorMap& tensor_map);
 
-StatusOr<poplar::program::Program> CreateGeluOp(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output_shape,
-                                                TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateGeluGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateReluOp(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output_shape,
-                                                TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateReluGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateSigmoidOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateSigmoidGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateTanhOp(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output_shape,
-                                                TensorMap& tensor_map);
-
-StatusOr<poplar::program::Program> CreateTanhGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map);
-
 StatusOr<poplar::program::Program> CreateIota(CompilerResources& res,
                                               const HloInstruction* inst,
                                               const xla::Shape& output_shape,

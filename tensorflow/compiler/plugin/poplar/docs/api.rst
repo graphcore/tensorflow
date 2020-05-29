@@ -14,9 +14,11 @@ Python API
 
 .. automodule:: tensorflow.python.ipu.ipu_infeed_queue
   :members:
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.ipu_outfeed_queue
   :members:
+  :special-members: __init__
 
 .. automodule:: tensorflow.python.ipu.ipu_estimator
 .. autoclass:: IPUEstimator
