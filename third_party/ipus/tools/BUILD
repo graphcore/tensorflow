@@ -90,7 +90,7 @@ cc_binary(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/strings",
         "@jsoncpp_git//:jsoncpp",
-        "@local_config_poplar//poplar:poplar_libs",
+        "@local_config_poplar//poplar:poplar_lib",
     ],
 )
 
@@ -111,7 +111,7 @@ cc_library(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/strings",
         "@jsoncpp_git//:jsoncpp",
-        "@local_config_poplar//poplar:poplar_libs",
+        "@local_config_poplar//poplar:poplar_lib",
     ],
 )
 
