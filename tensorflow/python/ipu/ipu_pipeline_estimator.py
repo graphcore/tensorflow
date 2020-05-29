@@ -338,15 +338,6 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
                      `tf.estimator.WarmStartSettings`, then all variables are
                      warm started, and it is assumed that vocabularies
                      and `tf.Tensor` names are unchanged.
-    train_batch_size: If not None, an int representing the global training
-      batch size. This global batch size is transformed to a local batch size
-      passed as `params['batch_size']` to the `input_fn` and `model_fn` during
-      training. Must be divisible by the number of replicas multiplied by the
-      number of distributed workers.
-    eval_batch_size: If not None, an int representing the global evaluation
-      batch size. Same behaviour as train_batch_size, only during evaluation.
-    predict_batch_size: If not None, an int representing the global prediction
-      batch size. Same behaviour as train_batch_size, only during prediction.
   """
   def __init__(self,
                model_fn,
