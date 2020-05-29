@@ -313,7 +313,7 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
   Refer to the :mod:`~tensorflow.python.ipu.ops.pipelining_ops`
   documentation for more details about pipelining.
 
-  Note: because the `model_fn` is compiled run on the IPU, you must use the
+  Note: because the `model_fn` is compiled to run on the IPU, you must use the
   `warm_start_from` parameter for a warm start and not the
   `tf.train.init_from_checkpoint` method.
 
