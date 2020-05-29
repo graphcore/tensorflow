@@ -17,7 +17,6 @@ Infeed queue
 ~~~~~~~~~~~~
 """
 
-
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
 from tensorflow.python.eager import context
 from tensorflow.python.data.ops import dataset_ops
@@ -97,27 +96,30 @@ class IPUInfeedQueue:
     """Creates an IPUInfeedQueue object.
 
     Args:
-       dataset: a tf.data.Dataset object, all transformations e.g. `shuffle`,
+       dataset: a `tf.data.Dataset` object, all transformations e.g. `shuffle`,
          `repeat`, `batch` must be applied prior to passing in to this function.
          This dataset can no longer be used after creating this queue.
        feed_name: the name of the infeed queue.  This must be unique between
          all IPUInfeedQueues and IPUOutfeedQueues.
-       device_ordinal: ordinal of the device on which this queue will be used.
+       device_ordinal: ordinal of the IPU device on which this queue will be
+         used. By default the queue will be used on "/device/IPU:0".
        replication_factor: the number of replicated graphs this infeed will be
          used in.
-       data_to_prefetch: The amount of data to prefetch. Defaults to 1, no prefetch.
-        If set to non-1 (and non-0) each time we sync with the CPU we will return
-        this number of dataset values rather than 1. This must not go over the size
-        of the dataset if it is not repeating, and will increment the infeed by this
-        amount each time so using the infeed in multiple programs or loops should take
-        into account that if data_to_prefetch is not a factor of the previous iterations
-        then the next loop/program will not be starting at the iteration it otherwise
-        would be.
-
-        This will obviously increase the memory usage from having more batches live at a
-        given point but should give a speed up by having to make fewer round trips to host
-        memory. It may be that larger number of batches should be prefetched at once in
-        order to see any benefit as the lookup itself has some overhead from internal copies.
+       data_to_prefetch: the amount of data to prefetch.
+         Defaults to 1, no prefetch.
+         If set to non-1 (and non-0) each time we sync with the CPU we will
+         return this number of dataset values rather than 1. This must not go
+         over the size of the dataset if it is not repeating, and will increment
+         the infeed by this amount each time so using the infeed in multiple
+         programs or loops should take into account that if `data_to_prefetch`
+         is not a factor of the previous iterations
+         then the next loop/program will not be starting at the iteration it
+         otherwise would be.
+         This will obviously increase the memory usage from having more batches
+         live at a given point but should give a speed up by having to make
+         fewer round trips to host memory. It may be that larger number of
+         batches should be prefetched at once in order to see any benefit as the
+         lookup itself has some overhead from internal copies.
 
     Raises:
       ValueError: if all dimensions of shapes of dataset.output_shapes are not

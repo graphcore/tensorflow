@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/recompute_instructions.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/relu.h"
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"

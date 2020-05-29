@@ -16,7 +16,6 @@ limitations under the License.
 #include <poplar/Engine.hpp>
 #include <poplar/Graph.hpp>
 #include <poplin/MatMul.hpp>
-#include <popnn/NonLinearity.hpp>
 #include <popops/Cast.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/ScaledAdd.hpp>
@@ -459,121 +458,5 @@ StatusOr<poplar::program::Program> CreateCastOp(CompilerResources& res,
 
   return seq;
 }
-
-StatusOr<poplar::program::Program> CreateNonLinearityOp(
-    CompilerResources& res, const HloInstruction* inst,
-    popnn::NonLinearityType non_linearity_type, const xla::Shape& output_shape,
-    TensorMap& tensor_map) {
-  poplar::Graph& graph = GetGraph(res, inst);
-
-  poplar::program::Sequence seq;
-  poplar::Tensor t;
-  const bool is_inplace =
-      AreInplaceOutputTensorsWritable(tensor_map, res, inst);
-
-  if (is_inplace) {
-    TF_ASSIGN_OR_RETURN(TensorVectors inputs,
-                        FindInplaceOutputTensors(tensor_map, res, inst, seq));
-    CHECK_EQ(inputs.size(), 1);
-    CHECK_EQ(inputs[0].size(), 1);
-    t = inputs[0][0];
-    popnn::nonLinearityInPlace(graph, non_linearity_type, t, seq,
-                               GetDebugName(inst));
-  } else {
-    TF_ASSIGN_OR_RETURN(
-        t, FindInstructionInput(tensor_map, res, inst, 0, seq, false));
-
-    t = popnn::nonLinearity(graph, non_linearity_type, t, seq,
-                            GetDebugName(inst));
-  }
-
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, t));
-
-  return seq;
-}
-
-StatusOr<poplar::program::Program> CreateNonLinearityGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    popnn::NonLinearityType non_linearity_type, const xla::Shape& output_shape,
-    TensorMap& tensor_map) {
-  poplar::Graph& graph = GetGraph(res, inst);
-
-  poplar::program::Sequence seq;
-
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor out,
-      FindInstructionInput(tensor_map, res, inst, 0, seq, false));
-
-  TF_ASSIGN_OR_RETURN(
-      poplar::Tensor outgrad,
-      FindInstructionInput(tensor_map, res, inst, 1, seq, false));
-
-  poplar::Tensor t = popnn::nonLinearityInputGradient(
-      graph, non_linearity_type, out, outgrad, seq, GetDebugName(inst));
-
-  TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, t));
-
-  return seq;
-}
-
-StatusOr<poplar::program::Program> CreateGeluOp(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output_shape,
-                                                TensorMap& tensor_map) {
-  return CreateNonLinearityOp(res, inst, popnn::NonLinearityType::GELU,
-                              output_shape, tensor_map);
-}
-
-StatusOr<poplar::program::Program> CreateGeluGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map) {
-  return CreateNonLinearityGradOp(res, inst, popnn::NonLinearityType::GELU,
-                                  output_shape, tensor_map);
-}
-
-StatusOr<poplar::program::Program> CreateReluOp(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output_shape,
-                                                TensorMap& tensor_map) {
-  return CreateNonLinearityOp(res, inst, popnn::NonLinearityType::RELU,
-                              output_shape, tensor_map);
-}
-
-StatusOr<poplar::program::Program> CreateReluGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map) {
-  return CreateNonLinearityGradOp(res, inst, popnn::NonLinearityType::RELU,
-                                  output_shape, tensor_map);
-}
-
-StatusOr<poplar::program::Program> CreateSigmoidOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map) {
-  return CreateNonLinearityOp(res, inst, popnn::NonLinearityType::SIGMOID,
-                              output_shape, tensor_map);
-}
-
-StatusOr<poplar::program::Program> CreateSigmoidGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map) {
-  return CreateNonLinearityGradOp(res, inst, popnn::NonLinearityType::SIGMOID,
-                                  output_shape, tensor_map);
-}
-
-StatusOr<poplar::program::Program> CreateTanhOp(CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                const xla::Shape& output_shape,
-                                                TensorMap& tensor_map) {
-  return CreateNonLinearityOp(res, inst, popnn::NonLinearityType::TANH,
-                              output_shape, tensor_map);
-}
-
-StatusOr<poplar::program::Program> CreateTanhGradOp(
-    CompilerResources& res, const HloInstruction* inst,
-    const xla::Shape& output_shape, TensorMap& tensor_map) {
-  return CreateNonLinearityGradOp(res, inst, popnn::NonLinearityType::TANH,
-                                  output_shape, tensor_map);
-}
-
 }  // namespace poplarplugin
 }  // namespace xla

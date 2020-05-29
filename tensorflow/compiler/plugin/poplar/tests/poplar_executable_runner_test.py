@@ -197,15 +197,14 @@ class PoplarExecutableRunnerTest(xla_test.XLATestCase):
             "tensorflow_weights_extractor.py -o %s -s %s -m %s") %
            (weights_file, model_path, metadata_file)).split())
 
-      self.runCommand(
-          (("./tensorflow/compiler/plugin/poplar/tools/PoplarExecutableRunner"
-            " --binaries %s,%s,%s "
-            "--output_folder=%s --strict") % (
-                executable_file,
-                weights_file,
-                input_file,
-                output_path,
-            )).split())
+      self.runCommand((("./third_party/ipus/tools/PoplarExecutableRunner"
+                        " --binaries %s,%s,%s "
+                        "--output_folder=%s --strict") % (
+                            executable_file,
+                            weights_file,
+                            input_file,
+                            output_path,
+                        )).split())
 
       output_file = self.getSingleFileWithExt(output_path, "data")
       with open(output_file, 'r') as f:

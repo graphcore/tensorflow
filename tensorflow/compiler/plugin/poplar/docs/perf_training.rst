@@ -99,6 +99,18 @@ array and will contain `x1 - x2` for each iteration in the loop.
 
 See entries in the :ref:`api-section` for more details.
 
+Accessing outfeed queue results during execution
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An ``IPUOutfeedQueue`` supports the results being fetched continuously during
+the execution of a model. This feature can be used to monitor the performance of
+the network, for example to check that the loss is decreasing, or to stream
+predictions for an inference model to achieve minimal latency for each sample.
+
+.. literalinclude:: outfeed_example.py
+  :language: python
+  :linenos:
+
 .. _replicated_graphs:
 
 Replicated graphs

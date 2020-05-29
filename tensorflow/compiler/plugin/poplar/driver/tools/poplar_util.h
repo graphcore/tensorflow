@@ -24,11 +24,11 @@ limitations under the License.
 
 #include "absl/container/inlined_vector.h"
 #include "absl/types/optional.h"
+#include "ipu/poplar_executable_data.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/tensor_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/verified_streams_indices.h"
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_data.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/statusor.h"

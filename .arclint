@@ -5,7 +5,8 @@
             "bin": ["./.linters/clang-format"],
             "include": [
                  "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
-                 "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
+                 "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
+                 "(^third_party/ipus/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
             ]
         },
         "cpplint": {
@@ -14,7 +15,8 @@
             "flags": ["--root=tensorflow"],
             "include": [
                  "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
-                 "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
+                 "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)",
+                 "(^third_party/ipus/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp)$)"
             ],
             "severity": {
               "runtime/references": "disabled",
@@ -29,7 +31,8 @@
                 "(^tensorflow/compiler/plugin/poplar/.*\\.py$)",
                 "(^tensorflow/python/ipu/.*\\.py$)",
                 "(^tensorflow/contrib/ipu/.*\\.py$)",
-                "(^tensorflow/python/ops/poplar/.*\\.py$)"
+                "(^tensorflow/python/ops/poplar/.*\\.py$)",
+                "(^third_party/ipus/.*\\.py$)"
             ]
         },
         "pylint": {
@@ -41,7 +44,8 @@
                 "(^tensorflow/compiler/plugin/poplar/.*\\.py$)",
                 "(^tensorflow/python/ipu/.*\\.py$)",
                 "(^tensorflow/contrib/ipu/.*\\.py$)",
-                "(^tensorflow/python/ops/poplar/.*\\.py$)"
+                "(^tensorflow/python/ops/poplar/.*\\.py$)",
+                "(^third_party/ipus/.*\\.py$)"
             ]
         },
         "buildifier": {
@@ -49,7 +53,9 @@
           "include": [
                "(^tensorflow/compiler/plugin/poplar/.*BUILD$)",
                "(^tensorflow/python/ipu/.*BUILD$)",
-               "(^third_party/ipus/.*)"
+               "(^third_party/ipus/.*.tpl$)",
+               "(^third_party/ipus/.*.bzl$)",
+               "(^third_party/ipus/.*BUILD$)"
           ],
           "exclude": [
             "(^third_party/ipus/poplar_lib/LICENSE)"

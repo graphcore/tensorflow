@@ -21,6 +21,7 @@ limitations under the License.
 #include <fstream>
 #include <utility>
 
+#include "ipu/poplar_executable_data.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.pb.h"
@@ -28,7 +29,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
-#include "tensorflow/compiler/plugin/poplar/tools/poplar_executable_runner.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -269,11 +269,15 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   }
   std::unique_ptr<poplar::Engine> engine;
   try {
+    VLOG(1) << "Trying to deserialize cached file: "
+            << poplar_executable_filename;
     std::ifstream file(poplar_executable_filename, std::ios::binary);
     auto poplar_executable = poplar::Executable::deserialize(file);
     engine.reset(new poplar::Engine(std::move(poplar_executable), opts));
   } catch (const std::exception& e) {
-    return PoplarExceptionToTensorflowStatus("[Deserialize] ", e);
+    const std::string origin =
+        "[Deserialize][File: " + poplar_executable_filename + "] ";
+    return PoplarExceptionToTensorflowStatus(origin, e);
   }
 
   auto iomap = InputOutputAliasingMap(hlo_module.get());
