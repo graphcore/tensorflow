@@ -84,18 +84,6 @@ class HloSigmoidInstruction : public HloNonLinearityBase<PoplarOp::Sigmoid> {
 };
 std::unique_ptr<HloInstruction> CreateSigmoid(HloInstruction* const operand);
 
-// Softmax
-class HloSoftmaxInstruction : public HloNonLinearityBase<PoplarOp::Softmax> {
- public:
-  using HloNonLinearityBase::HloNonLinearityBase;
-
- private:
-  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
-      const Shape& shape, absl::Span<HloInstruction* const>,
-      HloCloneContext*) const override;
-};
-std::unique_ptr<HloInstruction> CreateSoftmax(HloInstruction* const operand);
-
 template <PoplarOp Op>
 class HloNonLinearityGradBase : public HloPoplarInstruction {
  public:
