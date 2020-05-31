@@ -66,7 +66,6 @@ class NonLinearity : public XlaOpKernel, IpuOpKernel {
 
 REGISTER_IPU_OP("Relu", NonLinearity<PoplarOp::Relu>);
 REGISTER_IPU_OP("Sigmoid", NonLinearity<PoplarOp::Sigmoid>);
-REGISTER_IPU_OP("Softmax", NonLinearity<PoplarOp::Softmax>);
 REGISTER_IPU_OP("IpuGelu", NonLinearity<PoplarOp::Gelu>);
 
 template <PoplarOp Op, bool SwapInputs>
