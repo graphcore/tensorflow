@@ -393,7 +393,7 @@ void AllocationFinder::FindConsumers(
 StatusOr<bool> AllocationFinder::Run(HloModule* module) {
   FindAllocatingInstructions finder;
 
-  for (const auto& comp : module->computations()) {
+  for (const auto& comp : module->MakeComputationPostOrder()) {
     if (!IsPopOpsFusion(comp)) {
       TF_RETURN_IF_ERROR(comp->Accept(&finder));
     }
