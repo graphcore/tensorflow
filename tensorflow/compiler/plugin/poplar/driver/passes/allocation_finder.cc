@@ -72,6 +72,11 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
     return Status::OK();
   }
 
+  Status HandleReduce(HloInstruction* inst) override {
+    allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
+    return Status::OK();
+  }
+
   Status HandleRng(HloInstruction* inst) override {
     allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
     return Status::OK();
@@ -122,7 +127,8 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
   }
 
   Status HandleFusion(HloInstruction* inst) override {
-    if (IsPopOpsFusion(inst, "wide_const")) {
+    if (IsPopOpsFusion(inst, "wide_const") ||
+        IsPopOpsFusion(inst, "reduction_fp16_input")) {
       allocation_locations.push_back({TensorLocation{inst, 0}, inst->shape()});
     }
     return Status::OK();
