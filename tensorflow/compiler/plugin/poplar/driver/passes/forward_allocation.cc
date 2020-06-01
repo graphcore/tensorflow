@@ -396,26 +396,44 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
   }
 
   for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
-    // Check if instruction is read write user op
-    const bool is_rw_user_op =
-        IsPoplarInstruction(PoplarOp::UserOp)(inst)
-            ? Cast<HloUserOpInstruction>(inst)->IsReadWrite()
-            : false;
+    bool is_input = false;
+    switch (inst->opcode()) {
+      case HloOpcode::kConstant:
+      case HloOpcode::kInfeed:
+      case HloOpcode::kReduce: {
+        is_input = true;
+        break;
+      }
+      case HloOpcode::kFusion: {
+        is_input = IsPopOpsFusion(inst, "reduction_fp16_input");
+        break;
+      }
+      case HloOpcode::kCustomCall: {
+        const bool is_remap_deduce =
+            IsPoplarInstruction(PoplarOp::RemapDeduce)(inst);
+        const bool is_host_embedding_lookup =
+            IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst);
+        const bool is_remote_buffer_load =
+            IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst);
+        const bool is_rw_user_op =
+            IsPoplarInstruction(PoplarOp::UserOp)(inst)
+                ? Cast<HloUserOpInstruction>(inst)->IsReadWrite()
+                : false;
+        const bool is_recv_from_host =
+            IsPoplarInstruction(PoplarOp::RecvFromHost)(inst);
 
-    // Check if it is either a custom call or has already been replaced.
-    if (inst->opcode() == HloOpcode::kConstant ||
-        inst->opcode() == HloOpcode::kInfeed ||
-        IsPoplarInstruction(PoplarOp::RemapDeduce)(inst) ||
-        IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(inst) ||
-        is_rw_user_op ||
-        IsPoplarInstruction(PoplarOp::HostEmbeddingLookup)(inst) ||
-        IsPoplarInstruction(PoplarOp::RecvFromHost)(inst) ||
-        IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst)) {
+        is_input = is_remap_deduce || is_host_embedding_lookup ||
+                   is_remote_buffer_load || is_rw_user_op || is_recv_from_host;
+        break;
+      }
+      default: { break; }
+    }
+    if (is_input) {
       FlattenInputs(inst, deferred_inputs);
     }
   }
   return deferred_inputs;
-}
+}  // namespace
 
 bool ForwardAllocation::CreateForwardAllocationTarget(
     HloReachabilityMap* reachability_map, HloInstruction* source,

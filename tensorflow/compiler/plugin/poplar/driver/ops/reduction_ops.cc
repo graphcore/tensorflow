@@ -355,21 +355,28 @@ StatusOr<poplar::program::Program> CreateSimpleReduction(
       reduction_dims.push_back(d);
     }
 
-    TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(inst->shape()));
-    const auto shape = PoplarShapeFromXlaShape(inst->shape());
-    out = graph.addVariable(type, shape, GetDebugName(inst) + "/out");
+    // Check if there is an allocation for the reduction output.
+    if (HasTensorAllocationTarget(TensorLocation{inst, 0}, res)) {
+      TF_ASSIGN_OR_RETURN(out, AddTensor(graph, TensorLocation{inst, 0},
+                                         output_shape, res, tensor_map));
+    } else {
+      TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(inst->shape()));
+      const auto shape = PoplarShapeFromXlaShape(inst->shape());
+      out = graph.addVariable(type, shape, GetDebugName(inst) + "/out");
 
-    const auto to_reduce_mapping = graph.getTileMapping(to_reduce);
-    std::vector<unsigned> tiles;
-    for (auto i = 0ul; i < to_reduce_mapping.size(); ++i) {
-      if (!to_reduce_mapping[i].empty()) {
-        tiles.push_back(i);
+      const auto to_reduce_mapping = graph.getTileMapping(to_reduce);
+      std::vector<unsigned> tiles;
+      for (auto i = 0ul; i < to_reduce_mapping.size(); ++i) {
+        if (!to_reduce_mapping[i].empty()) {
+          tiles.push_back(i);
+        }
       }
+      // Map the reduce output to the same number of tiles
+      poputil::mapTensorLinearly(
+          graph, out, 0,
+          std::max<unsigned>(1, out.numElements() / tiles.size()));
     }
 
-    // Map the reduce output to the same number of tiles
-    poputil::mapTensorLinearly(
-        graph, out, 0, std::max<unsigned>(1, out.numElements() / tiles.size()));
     popops::reduceWithOutput(graph, to_reduce, out, reduction_dims, op, seq,
                              GetDebugName(inst));
 
