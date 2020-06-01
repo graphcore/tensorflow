@@ -287,9 +287,10 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
 class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=protected-access
   """Estimator for pipelining on IPUs.
 
-  IPUPipelineEstimator, like IPUEstimator, handles many of the details of
+  `IPUPipelineEstimator`, like :class:`~tensorflow.python.ipu.ipu_estimator.IPUEstimator`,
+  handles many of the details of
   running on IPUs, such as placement of operations and tensors, graph
-  compilation and usage of data feeds. Additionaly, it adds support for
+  compilation and usage of data feeds. Additionally, it adds support for
   pipelined execution over multiple IPUs.
 
   The major API difference from the IPUEstimator is that the provided
@@ -311,6 +312,32 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
 
   Refer to the :mod:`~tensorflow.python.ipu.ops.pipelining_ops`
   documentation for more details about pipelining.
+
+  Note: because the `model_fn` is compiled to run on the IPU, you must use the
+  `warm_start_from` parameter for a warm start and not the
+  `tf.train.init_from_checkpoint` method.
+
+
+  Args:
+    model_fn: The model function. Refer to
+      https://github.com/tensorflow/docs/blob/master/site/en/r1/guide/custom_estimators.md#write-a-model-function
+      for details on how to write this function.
+    model_dir: Directory to save model parameters, graph and etc. This can
+      also be used to load checkpoints from the directory into an estimator to
+      continue training a previously saved model. If `PathLike` object, the
+      path will be resolved. If `None`, the model_dir in `config` will be used
+      if set. If both are set, they must be same. If both are `None`, a
+      temporary directory will be used.
+    config: A :class:`~tensorflow.python.ipu.ipu_run_config.RunConfig` object.
+    params: `dict` of hyper parameters that will be passed into `model_fn`.
+            Keys are names of parameters, values are basic python types.
+    warm_start_from: Optional string filepath to a checkpoint or SavedModel to
+                     warm start from, or a `tf.estimator.WarmStartSettings`
+                     object to fully configure warm-starting.  If the string
+                     filepath is provided instead of a
+                     `tf.estimator.WarmStartSettings`, then all variables are
+                     warm started, and it is assumed that vocabularies
+                     and `tf.Tensor` names are unchanged.
   """
   def __init__(self,
                model_fn,
