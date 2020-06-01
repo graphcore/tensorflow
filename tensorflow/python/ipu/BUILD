@@ -810,6 +810,24 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "pipelining_recomputation_conv_classify_test",
+    size = "large",
+    srcs = ["tests/pipelining_recomputation_conv_classify_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/contrib/compiler:xla",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 2,
+)
+
+tf_py_test(
     name = "dataset_ops_test",
     size = "medium",
     srcs = ["tests/dataset_ops_test.py"],
@@ -917,6 +935,7 @@ test_suite(
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",
         "pipelining_grouped_test",
+        "pipelining_recomputation_conv_classify_test",
         "pipelining_recomputation_test",
         "pipelining_sequential_recomputation_test",
         "pipelining_sequential_test",
