@@ -22,6 +22,7 @@ limitations under the License.
 #include <popops/Pad.hpp>
 #include <popops/Reduce.hpp>
 #include <popops/ScaledAdd.hpp>
+#include <poputil/TileMapping.hpp>
 
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
@@ -254,9 +255,11 @@ class MatMulBiasAddOp : public PoplarOpDef {
     poplar::Tensor acts = outputs[layout_output_idx];
     TF_ASSIGN_OR_RETURN(acts, ReversePathTransform(graph, acts, forward_path));
 
-    // Get a slice representing the last dimension.
-    const std::vector<size_t> index(acts.rank() - 1);
-    return graph.clone(acts.index(index), StrCat(name, "/biases"));
+    // Flatten activations into 2D.
+    acts = acts.flatten(0, acts.rank() - 1);
+    return poputil::createBroadcastOperand(
+        graph, acts, acts.elementType(), acts.rank() - 1,
+        /*ditherMapping*/ false, absl::StrCat(name, "/biases"));
   }
 };
 
