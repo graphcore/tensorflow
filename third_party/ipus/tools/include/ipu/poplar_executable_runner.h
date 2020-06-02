@@ -44,7 +44,7 @@ class IExecutable {
  public:
   IExecutable(StreamReader& stream, int64_t length);
   poplar::Engine& Engine();
-  std::string StreamsList(bool summmary = false) const;
+  std::string StreamsList(bool summary = false) const;
   virtual ~IExecutable() = default;
 
  protected:
@@ -115,7 +115,7 @@ class Infeed {
  */
 class TensorManager {
  public:
-  explicit TensorManager(const Metadata& metadata);
+  explicit TensorManager(const Metadata& meta);
   const std::vector<Tensor>& Inputs() const;
   const std::vector<Tensor>& Outputs() const;
   const std::vector<Infeed>& Infeeds() const;
@@ -176,11 +176,11 @@ class TensorManager {
 class BinaryLoader : public BinaryReader {
  public:
   std::unique_ptr<TensorManager> CreateTensorManager(
-      const std::string metadata_name = "") const;
+      const std::string& metadata_name = "") const;
   std::unique_ptr<Executable> CreateExecutable(
-      const std::string executable_name = "") const;
+      const std::string& executable_name = "") const;
   std::unique_ptr<VerifiedExecutable> CreateVerifiedExecutable(
-      const std::string executable_name = "") const;
+      const std::string& executable_name = "") const;
 };
 }  // namespace ipu
 
