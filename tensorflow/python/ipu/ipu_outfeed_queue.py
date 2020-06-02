@@ -363,11 +363,12 @@ class IPUOutfeedQueue:
     with ops.device('cpu'):
       outfeed_dequeue = \
         gen_pop_datastream_ops.pop_datastream_outfeed_dequeue(
-          output_types=self._structure.flat_types,
-          output_shapes=self._structure.flat_shapes,
-          outfeed_mode=self._outfeed_mode.value,
-          feed_id=self._feed_name,
-          replication_factor=self._replication_factor)
+            output_types=self._structure.flat_types,
+            output_shapes=self._structure.flat_shapes,
+            outfeed_mode=self._outfeed_mode.value,
+            feed_id=self._feed_name,
+            device_ordinal=self._device_ordinal,
+            replication_factor=self._replication_factor)
 
     return self._structure.from_tensor_list(outfeed_dequeue)
 
