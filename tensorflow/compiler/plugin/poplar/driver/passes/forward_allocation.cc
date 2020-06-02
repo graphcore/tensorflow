@@ -157,6 +157,7 @@ static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
              output_and_all_operands_same_type(inst);
     }
     switch (inst->opcode()) {
+      case HloOpcode::kCopy:
       case HloOpcode::kConcatenate:
       case HloOpcode::kReshape:
       case HloOpcode::kTranspose:
@@ -198,6 +199,7 @@ static absl::optional<int64> IsSuffixPathOk(
       case HloOpcode::kGetTupleElement:
         // We only allow GTEs at the end of the path
         return path_idx == (path_size - 1);
+      case HloOpcode::kCopy:
       case HloOpcode::kReshape:
       case HloOpcode::kTranspose:
         return output_and_all_operands_same_type(inst);
@@ -717,7 +719,7 @@ StatusOr<bool> ForwardAllocation::Run(HloModule* module) {
     ops_with_layout.insert(ta.second.tgt);
   }
 
-  for (const auto& computation : module->computations()) {
+  for (const auto& computation : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(computation)) {
       continue;
     }

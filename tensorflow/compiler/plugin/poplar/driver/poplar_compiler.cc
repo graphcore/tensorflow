@@ -949,6 +949,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<InplaceFinder>();
     pipeline.AddPass<ExpressionOutliner>();
     pipeline.AddPass<PipelineCopyInserter>();
+    pipeline.AddPass<ModuleFlatten>(resources.annotations);
+    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     pipeline.AddPass<PipelineRecomputation>(
         poplar_executor->RecomputationEnabled());
     if (poplar_executor->RecomputationEnabled()) {
@@ -963,11 +965,9 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     //   pipeline.AddPass<ConstantNaN>();
     // }
 
-    pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<PipelineVerifier>(poplar_executor->RecomputationEnabled());
     pipeline.AddPass<GradientAccumulationVerifier>(
         resources.replication_factor);
-    pipeline.AddPass<ConvolutionClassifier>(resources.annotations);
     if (resources.information.max_all_reduce_buffer_size > 0 ||
         resources.information.max_inter_ipu_copies_buffer_size > 0 ||
         resources.information.max_send_recv_cluster_size > 0) {
@@ -986,6 +986,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     pipeline.AddPass<ResourceUpdateScheduleOptimizer>();
     pipeline.AddPass<IpuScheduler>(SizeFunction, scheduler);
+    pipeline.AddPass<ModuleFlatten>(resources.annotations);
     pipeline.AddPass<LowerFrontendAttributes>();
 
     TF_RETURN_IF_ERROR(pipeline.Run(module.get()).status());
