@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
@@ -4239,6 +4240,78 @@ ENTRY c1 {
       EXPECT_EQ(t1.input_index, 0ll);
     }
   }
+}
+
+TEST_F(AllocationFinderTest, LookThrough) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY top {
+ p0 = f32[1,4,4,8] parameter(0)
+ p1 = f32[1,1,8,8] parameter(1)
+ conv = f32[1,4,4,8] convolution(p0, p1), window={size=1x1}, dim_labels=b01f_01io->b01f
+ p2 = f32[1,4,4,8] parameter(2)
+ p3 = f32[4,8] parameter(3)
+ bcast_p3 = f32[1,4,4,8] broadcast(p3), dimensions={2, 3}
+ add = f32[1,4,4,8] add(p2, bcast_p3)
+ ROOT add2 = f32[1,4,4,8] add(add, conv)
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  ElementwiseBroadcastConverter ebc;
+  EXPECT_TRUE(ebc.Run(module0).ValueOrDie());
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* add2 = root;
+  const auto* conv = add2->operand(1);
+  const auto* p0 = conv->operand(0);
+  const auto* p1 = conv->operand(1);
+  const auto* add = add2->operand(0);
+  const auto* p2 = add->operand(0);
+  const auto* p3 = add->operand(1);
+  CompilerAnnotations annotations(module0);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  // Will have both of the convolution parameters
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{p0, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p1, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1);
+
+  ForwardAllocation fwd_finder(annotations);
+  EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p2, 0});
+  EXPECT_EQ(t.tgt, add2);
+  EXPECT_EQ(t.input_index, 0);
+  EXPECT_EQ(t.layout, conv);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], add);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p3, 0});
+  EXPECT_EQ(t.tgt, add);
+  EXPECT_EQ(t.input_index, 1);
+  EXPECT_EQ(t.layout, p2);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 0);
 }
 
 // // TODO:

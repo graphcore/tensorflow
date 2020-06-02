@@ -61,42 +61,13 @@ static absl::optional<HloInstruction*> reduce_to_one(
              : absl::nullopt;
 }
 
-template <typename T>
-static bool is_independent(const HloInstruction* inst,
-                           const T& possible_dependencies,
-                           const HloReachabilityMap* reachability_map) {
-  for (auto dep : possible_dependencies) {
-    if (dep != inst && reachability_map->IsReachable(dep, inst)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// Returns a vector of independent instructions which we want to use as a
-// target. Note that the order of the targets is in decreasing priority order,
-// where we want to target bias adds first, then layer norms and then
-// elementwise ops.
+// Returns a vector of instructions which we want to use as a target. Note that
+// the order of the targets is in decreasing priority order, where we want to
+// target bias adds first, then layer norms and then elementwise ops.
 template <typename Predicate>
-static absl::optional<std::vector<HloInstruction*>> find_all_targets(
-    const ForwardAllocationGraph::MetaGraphSet& values,
-    const HloReachabilityMap* reachability_map, Predicate pred) {
+static std::vector<HloInstruction*> find_all_targets(
+    const ForwardAllocationGraph::MetaGraphSet& values, Predicate pred) {
   auto insts = reduce(values, pred);
-  ForwardAllocationGraph::MetaGraphSet has_dependency;
-  // Check whether this_inst depends on any other instruction from reduction.
-  for (auto this_inst : insts) {
-    if (!is_independent(this_inst, insts, reachability_map)) {
-      has_dependency.insert(this_inst);
-    }
-  }
-  // Get the insts instructions which have no dependencies.
-  for (auto dep : has_dependency) {
-    insts.erase(dep);
-  }
-  // There are no valid targets.
-  if (insts.size() == 0) {
-    return absl::nullopt;
-  }
 
   auto biases =
       reduce(insts, [](HloInstruction* inst) { return IsPopOpsBiasAdd(inst); });
@@ -234,6 +205,12 @@ static bool IsLayoutDependentTarget(const HloInstruction* target) {
   if (IsPopOpsElementwiseBinary(target)) {
     return true;
   }
+
+  if (IsPopOpsFusion(target, "implicit_binary") &&
+      target->operand_count() == 2) {
+    return true;
+  }
+
   switch (target->opcode()) {
     case HloOpcode::kBatchNormInference:
     case HloOpcode::kBatchNormTraining:
@@ -273,6 +250,19 @@ static absl::optional<std::pair<int64, int64>> GetLayoutDependentOperandIndices(
   // two operands.
   if (IsPopOpsElementwiseBinary(target) && op_idx < 2) {
     return std::make_pair(op_idx, (op_idx + 1) % 2);
+  }
+
+  // For implicit broadcast instruction, we only consider allocation for the
+  // operand which is being broadcasted (and the other operand is not).
+  if (IsPopOpsFusion(target, "implicit_binary") && target->shape().rank() > 1) {
+    const int64 other_op_idx = (op_idx + 1) % 2;
+    const HloInstruction* other_operand = target->operand(other_op_idx);
+    if (operand->shape().dimensions() != target->shape().dimensions() &&
+        other_operand->shape().dimensions() == target->shape().dimensions()) {
+      return std::make_pair(op_idx, other_op_idx);
+    } else {
+      return absl::nullopt;
+    }
   }
 
   switch (target->opcode()) {
@@ -439,34 +429,50 @@ bool ForwardAllocation::CreateForwardAllocationTarget(
   if (reachability_map->IsReachable(source, layout_producer)) {
     return false;
   }
-  layout_producer->AddControlDependencyTo(source);
+  TF_CHECK_OK(layout_producer->AddControlDependencyTo(source));
   reachability_map->UpdateReachabilityThroughInstruction(source);
 
   // Make sure that the target can be executed before all the other
   // independent targets with the new control dependency.
-  // Keep track of any dependencies we add in case we have to undo
-  // them.
+  // Keep track of any dependencies we add in case we have to undo them.
   std::vector<HloInstruction*> added_dependants;
+  absl::flat_hash_set<HloInstruction*> backward_path_insts = {
+      backward_path.begin(), backward_path.end()};
   bool dependencies_ok = true;
   for (auto new_dependent : other_targets) {
     if (new_dependent == target) {
       continue;
     }
-    if (!reachability_map->IsReachable(target, new_dependent)) {
-      target->AddControlDependencyTo(new_dependent);
-      reachability_map->UpdateReachabilityThroughInstruction(new_dependent);
-      added_dependants.push_back(target);
-    } else {
+
+    // If the other target is in the backward path then we don't need to worry
+    // about it because the backward/prefix path has been validated.
+    if (backward_path_insts.contains(new_dependent)) {
+      continue;
+    }
+
+    if (reachability_map->IsReachable(new_dependent, target)) {
       dependencies_ok = false;
       break;
     }
+
+    if (!reachability_map->IsReachable(target, new_dependent)) {
+      // Try to add a control dependecy, if it fails we can't proceed.
+      if (target->AddControlDependencyTo(new_dependent).ok()) {
+        reachability_map->UpdateReachabilityThroughInstruction(new_dependent);
+        added_dependants.push_back(new_dependent);
+      } else {
+        dependencies_ok = false;
+        break;
+      }
+    }
   }
+
   if (!dependencies_ok) {
     // Remove all the added dependencies
-    layout_producer->RemoveControlDependencyTo(source);
+    TF_CHECK_OK(layout_producer->RemoveControlDependencyTo(source));
     reachability_map->UpdateReachabilityThroughInstruction(source);
     for (auto inst : added_dependants) {
-      target->RemoveControlDependencyTo(inst);
+      TF_CHECK_OK(target->RemoveControlDependencyTo(inst));
       reachability_map->UpdateReachabilityThroughInstruction(inst);
     }
     return false;
@@ -552,12 +558,9 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
       const auto is_valid_target = [&](HloInstruction* a) {
         return alloc_dependencies.contains(a) && IsLayoutSensitiveTarget(a);
       };
-      const auto optional_targets = find_all_targets(
-          edges.second, reachability_map.get(), is_valid_target);
-      if (!optional_targets) {
-        continue;
-      }
-      std::vector<HloInstruction*> targets = *optional_targets;
+      std::vector<HloInstruction*> targets =
+          find_all_targets(edges.second, is_valid_target);
+
       for (HloInstruction* target : targets) {
         // Find layout producers for the target.
         // layout_producer is the op which produces the tensor whose layout is
@@ -661,12 +664,9 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
       const auto is_valid_target = [&](HloInstruction* a) {
         return IsLayoutDependentTarget(a);
       };
-      const auto optional_targets = find_all_targets(
-          edges.second, reachability_map.get(), is_valid_target);
-      if (!optional_targets) {
-        continue;
-      }
-      std::vector<HloInstruction*> targets = *optional_targets;
+      std::vector<HloInstruction*> targets =
+          find_all_targets(edges.second, is_valid_target);
+
       for (auto target : targets) {
         // Try and find the shortest paths to target.
         auto optional_prefix = g.ShortestPath(source, target);
