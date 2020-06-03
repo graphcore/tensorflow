@@ -101,51 +101,59 @@ static bool output_and_all_operands_same_type(const HloInstruction* inst) {
 // TODO - fix this.  it needs to take into account the indices of the path
 // from one op to the next. and probably do something to do with in-place ops
 static bool IsPrefixPathOk(const std::vector<HloInstruction*>& path,
-                           const HloInstruction* source) {
-  const auto is_node_ok_on_path = [path, source](HloInstruction* inst,
-                                                 const unsigned path_idx,
-                                                 const unsigned path_size) {
-    const HloInstruction* op_source =
-        (path_idx == 0) ? source : path[path_idx - 1];
-    // Element-wise ops are ok.
-    if (IsPopOpsElementwise(inst)) {
-      if (inst->opcode() == HloOpcode::kConvert) {
-        return true;
-      } else {
-        return output_and_all_operands_same_type(inst);
-      }
-    }
-    if (IsPopOpsFusion(inst, "zero_pad")) {
-      return output_and_all_operands_same_type(inst);
-    }
-    if (IsPopOpsFusion(inst, "implicit")) {
-      return output_and_all_operands_same_type(inst) &&
-             op_source->shape() == inst->shape();
-    }
-    if (IsAnySliceApply(inst)) {
-      // Only handle operand 0
-      return inst->operand_index(op_source) == 0 &&
-             output_and_all_operands_same_type(inst);
-    }
-    switch (inst->opcode()) {
-      case HloOpcode::kCopy:
-      case HloOpcode::kConcatenate:
-      case HloOpcode::kReshape:
-      case HloOpcode::kTranspose:
-        return output_and_all_operands_same_type(inst);
-      case HloOpcode::kPad: {
-        // Only handle operand 0
-        return inst->operand_index(op_source) == 0 &&
-               output_and_all_operands_same_type(inst);
-      }
-      case HloOpcode::kSlice: {
-        return IsUniformSingleDimSlice(inst);
-      }
-      default:
-        break;
-    }
-    return false;
-  };
+                           const HloInstruction* source,
+                           const HloInstruction* target) {
+  const auto is_node_ok_on_path =
+      [path, source, target](HloInstruction* inst, const unsigned path_idx,
+                             const unsigned path_size) {
+        const HloInstruction* op_source =
+            (path_idx == 0) ? source : path[path_idx - 1];
+        // Elementwise ops are ok.
+        if (IsPopOpsElementwise(inst)) {
+          // Unless both inst and the target are a binary elementwise operation
+          // - this will force a shorter path as inst is also a valid target.
+          if (IsPopOpsElementwiseBinary(inst) &&
+              IsPopOpsElementwiseBinary(target)) {
+            return false;
+          }
+          if (inst->opcode() == HloOpcode::kConvert) {
+            return true;
+          }
+          // Make sure the shapes match up.
+          return output_and_all_operands_same_type(inst) &&
+                 op_source->shape() == inst->shape();
+        }
+        if (IsPopOpsFusion(inst, "zero_pad")) {
+          return output_and_all_operands_same_type(inst);
+        }
+        if (IsPopOpsFusion(inst, "implicit")) {
+          return output_and_all_operands_same_type(inst) &&
+                 op_source->shape() == inst->shape();
+        }
+        if (IsAnySliceApply(inst)) {
+          // Only handle operand 0
+          return inst->operand_index(op_source) == 0 &&
+                 output_and_all_operands_same_type(inst);
+        }
+        switch (inst->opcode()) {
+          case HloOpcode::kCopy:
+          case HloOpcode::kConcatenate:
+          case HloOpcode::kReshape:
+          case HloOpcode::kTranspose:
+            return output_and_all_operands_same_type(inst);
+          case HloOpcode::kPad: {
+            // Only handle operand 0
+            return inst->operand_index(op_source) == 0 &&
+                   output_and_all_operands_same_type(inst);
+          }
+          case HloOpcode::kSlice: {
+            return IsUniformSingleDimSlice(inst);
+          }
+          default:
+            break;
+        }
+        return false;
+      };
   return ForwardAllocationGraph::IsPathOk(path, is_node_ok_on_path);
 }
 
@@ -618,7 +626,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutSensativeTargets(
           prefix.pop_back();
           suffix.erase(suffix.begin());
           suffix.pop_back();
-          const auto prefix_path_ok = IsPrefixPathOk(prefix, source);
+          const auto prefix_path_ok = IsPrefixPathOk(prefix, source, target);
           const auto suffix_path_ok = IsSuffixPathOk(suffix);
           if (prefix_path_ok && suffix_path_ok) {
             if (source_consumers[source].count(layout_producer) == 0) {
@@ -705,7 +713,7 @@ StatusOr<bool> ForwardAllocation::FindLayoutDependentTargets(
         prefix.pop_back();
         auto layout_producer = target->mutable_operand(layout_operand_idx);
         // Check that the prefix path is one that we can traverse.
-        const auto prefix_path_ok = IsPrefixPathOk(prefix, source);
+        const auto prefix_path_ok = IsPrefixPathOk(prefix, source, target);
         if (!prefix_path_ok) {
           continue;
         }
