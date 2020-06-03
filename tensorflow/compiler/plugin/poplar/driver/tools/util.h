@@ -132,7 +132,7 @@ bool IsRepeatLoop(const HloInstruction*);
 bool IsPipelineStage(const HloInstruction*);
 bool IsPipelineStageBackward(const HloInstruction*);
 bool IsPipelineStageRecomputation(const HloInstruction*);
-bool IsPipelineResourceUpdate(const HloInstruction*);
+bool IsResourceUpdate(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
 int64 GetPipelineRepeatCount(const HloInstruction*);
 bool GetPipelineOffloadWUVariables(const HloInstruction*);

@@ -367,9 +367,9 @@ bool IsPipelineStageRecomputation(const HloInstruction* inst) {
       inst, PoplarBackendConfig::CallConfig::PipelineStageRecomputation);
 }
 
-bool IsPipelineResourceUpdate(const HloInstruction* inst) {
-  return CallConfigHasType(
-      inst, PoplarBackendConfig::CallConfig::PipelineResourceUpdate);
+bool IsResourceUpdate(const HloInstruction* inst) {
+  return CallConfigHasType(inst,
+                           PoplarBackendConfig::CallConfig::ResourceUpdate);
 }
 
 bool IsPipelineOp(const HloInstruction* inst) {

@@ -75,7 +75,7 @@ bool IsAnyPipelineStageOp(const HloInstruction* inst) {
 }
 
 bool IsAnyPipelineStageOpOrResourceUpdate(const HloInstruction* inst) {
-  return IsAnyPipelineStageOp(inst) || IsPipelineResourceUpdate(inst);
+  return IsAnyPipelineStageOp(inst) || IsResourceUpdate(inst);
 }
 
 bool IsProducerOp(const HloInstruction* inst) {
@@ -127,7 +127,7 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
       pipeline_stages.backward.push_back(inst);
     } else if (IsPipelineStageRecomputation(inst)) {
       pipeline_stages.recomputation[GetPipelineStageID(inst)] = inst;
-    } else if (IsPipelineResourceUpdate(inst)) {
+    } else if (IsResourceUpdate(inst)) {
       pipeline_stages.resource_update = inst;
     }
   }
@@ -628,8 +628,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
 
   auto replace_external_use =
       [&replace_resource_update_uses](const HloInstruction* inst) -> bool {
-    return replace_resource_update_uses ? true
-                                        : !IsPipelineResourceUpdate(inst);
+    return replace_resource_update_uses ? true : !IsResourceUpdate(inst);
   };
 
   // Keep track of instructions which are being lowered and have users outside
@@ -1398,13 +1397,13 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
         return false;
       } else if (allow_feeds_ && gte_input->opcode() == HloOpcode::kInfeed) {
         return false;
-      } else if (IsPipelineResourceUpdate(gte_input)) {
+      } else if (IsResourceUpdate(gte_input)) {
         for (const HloInstruction* gte_user : inst->users()) {
           // Expect that all users of the resource update are the root
           // instruction.
           if (gte_user->parent()->root_instruction() != gte_user) {
             return InternalErrorStrCat(
-                "Expected the PipelineResourceUpdate outputs to be used by the "
+                "Expected the ResourceUpdate outputs to be used by the "
                 "root instruction only.");
           }
         }
@@ -1428,7 +1427,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
               inst->ToString());
         }
 
-        if (!IsPipelineResourceUpdate(inst->users()[0])) {
+        if (!IsResourceUpdate(inst->users()[0])) {
           return FailedPrecondition(
               "Expected the gradient accumulator to only be used by the "
               "pipeline resource update, but is used by %s instead.",
