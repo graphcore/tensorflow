@@ -236,7 +236,7 @@ Status PipelineVerifier::VerifyPipeline(HloInstruction* pipeline_op,
               HasCompatiblePipelineSharding(expected_sharding, inst));
         }
       }
-    } else if (IsPipelineResourceUpdate(inst)) {
+    } else if (IsResourceUpdate(inst)) {
       // Issue a warning if there are any gradient accumulation operations in
       // the resource update.
       TF_ASSIGN_OR_RETURN(absl::flat_hash_set<HloComputation*> called_in_stage,

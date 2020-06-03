@@ -355,11 +355,11 @@ StatusOr<bool> PipelineFixer::LowerPipelineStagesOutputs() {
       // Do not track usage if it is:
       // * the current stage - this has already been lowered,
       // * the root instruction,
-      // * the PipelineResourceUpdate.
+      // * the ResourceUpdate.
       // * a gradient accumulation sink - it will be an input to the
-      //   PipelineResourceUpdate.
+      //   ResourceUpdate.
       if (!(gte_user == stage || gte_user == pipeline_root ||
-            IsPipelineResourceUpdate(gte_user) ||
+            IsResourceUpdate(gte_user) ||
             IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(gte_user))) {
         output_users[tuple_index].insert(gte);
       }
@@ -678,8 +678,7 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
     if (!lower) {
       continue;
     }
-    VLOG(3) << "Lowering the operand " << op_idx
-            << " for the PipelineResourceUpdate.";
+    VLOG(3) << "Lowering the operand " << op_idx << " for the ResourceUpdate.";
     // We currently only expect constant gradients to be stageless
     // (because they do not depend on any input, we cannot associate them
     // with a backward stage).
@@ -719,7 +718,7 @@ StatusOr<bool> PipelineFixer::LowerResourceUpdateInputs() {
     value_set.AssignUnionOf(value_sets);
     if (value_set.values().size()) {
       return FailedPrecondition(
-          "Detected input to the PipelineResourceUpdate which should have been "
+          "Detected input to the ResourceUpdate which should have been "
           "lowered into a Pipeline(Backward)Stage.");
     }
 

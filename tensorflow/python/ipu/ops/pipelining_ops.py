@@ -594,7 +594,7 @@ def pipeline(computational_stages,
 
       # Create the pipeline resource update stage and lower the function into XLA.
       with ops.control_dependencies(list(func_graph.control_captures)):
-        outputs = gen_functional_ops.pipeline_resource_update(
+        outputs = gen_functional_ops.resource_update(
             captured_args,
             to_apply=util.create_new_tf_function(func_graph),
             Tout=func_graph.output_types,

@@ -71,7 +71,7 @@ message PoplarBackendConfig {
       PipelineStageBackward = 3;
       Pipeline = 4;
       PipelineStageRecomputation = 5;
-      PipelineResourceUpdate = 6;
+      ResourceUpdate = 6;
       Function = 7;
     };
 

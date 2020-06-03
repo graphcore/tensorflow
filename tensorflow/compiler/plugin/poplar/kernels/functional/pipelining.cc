@@ -139,16 +139,15 @@ class PipelineStageBackwardOp : public PipelineStageOp {
 };
 REGISTER_IPU_OP("PipelineStageBackward", PipelineStageBackwardOp);
 
-class PipelineResourceUpdateOp : public XlaOpKernel {
+class ResourceUpdateOp : public XlaOpKernel {
  public:
-  explicit PipelineResourceUpdateOp(OpKernelConstruction* ctx)
-      : XlaOpKernel(ctx) {
+  explicit ResourceUpdateOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
     DataTypeVector output_types;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types));
     OP_REQUIRES(ctx, output_types.size() == 0,
-                errors::InvalidArgument("Expected PipelineResourceUpdate "
+                errors::InvalidArgument("Expected ResourceUpdate "
                                         "to have no explicit outputs."));
   }
 
@@ -161,12 +160,12 @@ class PipelineResourceUpdateOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, arguments_or.status());
     std::vector<XlaCompiler::Argument> arguments = arguments_or.ValueOrDie();
 
-    VLOG(2) << "Building PipelineResourceUpdate (" << ctx->op_kernel().name()
+    VLOG(2) << "Building ResourceUpdate (" << ctx->op_kernel().name()
             << ") function with " << input_types_.size() << " inputs including "
             << num_resource_args << " resources.";
 
-    // Rewrite the PipelineResourceUpdate function such that arguments to
-    // PipelineResourceUpdate ops are rearranged and resource variables
+    // Rewrite the ResourceUpdate function such that arguments to
+    // ResourceUpdate ops are rearranged and resource variables
     // moved to the back.
     NameAttrList new_to_apply;
     OP_REQUIRES_OK(
@@ -194,11 +193,11 @@ class PipelineResourceUpdateOp : public XlaOpKernel {
 
     auto outputs = xla::Call(builder, *result.computation, inputs);
     // Set the config type of the call.
-    OP_REQUIRES_OK(
-        ctx, builder->SetInstructionFrontendAttribute(
-                 outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
-                 PoplarBackendConfig_CallConfig_Type_Name(
-                     PoplarBackendConfig::CallConfig::PipelineResourceUpdate)));
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
+                       PoplarBackendConfig_CallConfig_Type_Name(
+                           PoplarBackendConfig::CallConfig::ResourceUpdate)));
 
     // We expect the resource update stage to only have resource outputs. This
     // code assumes that the outputs are all of the resource variables in the
@@ -225,9 +224,9 @@ class PipelineResourceUpdateOp : public XlaOpKernel {
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
 
-  TF_DISALLOW_COPY_AND_ASSIGN(PipelineResourceUpdateOp);
+  TF_DISALLOW_COPY_AND_ASSIGN(ResourceUpdateOp);
 };
-REGISTER_IPU_OP("PipelineResourceUpdate", PipelineResourceUpdateOp);
+REGISTER_IPU_OP("ResourceUpdate", ResourceUpdateOp);
 
 class PipelineOp : public XlaOpKernel {
  public:

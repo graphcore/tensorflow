@@ -43,7 +43,7 @@ bool IsPipelineStageOrBackwardOp(const HloInstruction* inst);
 bool IsAnyPipelineStageOp(const HloInstruction* inst);
 
 // Returns whether the instruction is a PipelineStage op of any kind or the
-// PipelineResourceUpdate.
+// ResourceUpdate.
 bool IsAnyPipelineStageOpOrResourceUpdate(const HloInstruction* inst);
 
 // Helper function for the PipelineDataflowAnalysis. Is used to identify whether
