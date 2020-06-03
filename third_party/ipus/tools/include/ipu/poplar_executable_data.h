@@ -450,7 +450,7 @@ class BinaryWriter {
  public:
   explicit BinaryWriter(const std::string& filename);
   FeedWriter CreateFeed(const std::string& name, const TensorInfo& info,
-                        int64_t num_elements);
+                        int64_t num_tensors);
   ExecutableWriter CreateExecutable(const std::string& name,
                                     bool is_verified = false);
   void WriteMetadata(const std::string& name, const Metadata& metadata);
@@ -494,11 +494,11 @@ class BinaryReader {
  public:
   void LoadFile(const std::string& filename);
   std::unique_ptr<Metadata> ReadMetadata(
-      const std::string metadata_name = "") const;
+      const std::string& metadata_name = "") const;
   std::unique_ptr<StreamReader> CreateExecutableReader(
-      const std::string executable_name = "") const;
+      const std::string& executable_name = "") const;
   std::unique_ptr<StreamReader> CreateInfeedStreamReader(
-      const std::string infeed_name) const;
+      const std::string& infeed_name) const;
   std::unique_ptr<StreamReader> GetTensorStream(const std::string& name) const;
   std::set<std::string> GetObjectNames(ObjectType type) const;
   bool ContainsObject(ObjectType type, const std::string& name) const;

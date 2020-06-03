@@ -15,6 +15,7 @@ limitations under the License.
 #include <poplar/Graph.hpp>
 #include <popops/Cast.hpp>
 #include <popops/ElementWise.hpp>
+#include <poputil/TileMapping.hpp>
 
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/popops/expression_helpers.h"
@@ -120,9 +121,6 @@ class BinaryElementwiseOp : public PoplarOpDef {
     return seq;
   }
 };
-
-REGISTER_POPLAR_OP(Implicit_binary_inplace, BinaryElementwiseOp);
-REGISTER_POPLAR_OP(Implicit_binary, BinaryElementwiseOp);
 REGISTER_HLO_OP(kAdd, BinaryElementwiseOp);
 REGISTER_HLO_OP(kAtan2, BinaryElementwiseOp);
 REGISTER_HLO_OP(kCompare, BinaryElementwiseOp);
@@ -140,6 +138,74 @@ REGISTER_HLO_OP(kXor, BinaryElementwiseOp);
 REGISTER_HLO_OP(kShiftLeft, BinaryElementwiseOp);
 REGISTER_HLO_OP(kShiftRightArithmetic, BinaryElementwiseOp);
 REGISTER_HLO_OP(kShiftRightLogical, BinaryElementwiseOp);
+
+class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
+  StatusOr<poplar::Tensor> Allocator(poplar::Graph& graph,
+                                     CompilerResources& res,
+                                     const std::string& name,
+                                     const TensorTarget& tensor_target,
+                                     const TensorMap& tensor_map) override {
+    const HloInstruction* inst = tensor_target.tgt;
+    CHECK_EQ(inst->operand_count(), 2);
+    const int64 input_index = tensor_target.input_index;
+
+    const HloInstruction* layout = *tensor_target.layout;
+    const auto layout_output_idx = *tensor_target.layout_output_idx;
+
+    const Shape allocation_shape = inst->operand(input_index)->shape();
+    const Shape layout_shape = layout->shape();
+
+    TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(allocation_shape));
+
+    // Get the tensor.
+    TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+    if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
+      return xla::FailedPrecondition("Binary %s input not found for %s",
+                                     layout->name(), name);
+    }
+    poplar::Tensor other_side = outputs[layout_output_idx];
+
+    // Get the broadcast instruction.
+    const HloInstruction* broadcast =
+        inst->fused_expression_root()->operand(input_index);
+    CHECK_EQ(broadcast->opcode(), HloOpcode::kBroadcast);
+
+    const std::vector<int64> non_broadcast_dimensions = broadcast->dimensions();
+    absl::flat_hash_set<int64> non_broadcast_dimensions_set{
+        non_broadcast_dimensions.begin(), non_broadcast_dimensions.end()};
+
+    // Create a permutation of the other side tensor, which collapses all
+    // non-broadcastable dimensions into dimension 0.
+    std::vector<uint32> permutation(layout_shape.rank());
+    {
+      absl::c_copy(non_broadcast_dimensions, permutation.begin());
+      int64 next_non_broadcast_dim = non_broadcast_dimensions.size();
+      for (int64 i = 0; i != layout_shape.rank(); ++i) {
+        if (!non_broadcast_dimensions_set.contains(i)) {
+          permutation[next_non_broadcast_dim++] = i;
+        }
+      }
+      CHECK_EQ(next_non_broadcast_dim, layout_shape.rank());
+    }
+
+    // Apply the permutation.
+    other_side = other_side.dimShuffle(permutation);
+    // Collapse all the non-broadcastable dimensions.
+    other_side = other_side.flatten(0, non_broadcast_dimensions.size());
+
+    // Allocate the tensor.
+    poplar::Tensor output =
+        poputil::createBroadcastOperand(graph, other_side, type, 0,
+                                        /*ditherMapping*/ false, name);
+
+    // Reshape back for all the non-broadcasted dimensions.
+    output = output.reshape(PoplarShapeFromXlaShape(allocation_shape));
+    return output;
+  };
+};
+
+REGISTER_POPLAR_OP(Implicit_binary_inplace, ImplicitBinaryElementwiseOp);
+REGISTER_POPLAR_OP(Implicit_binary, ImplicitBinaryElementwiseOp);
 
 class TernaryElementwiseOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
