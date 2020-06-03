@@ -501,6 +501,7 @@ class BinaryReader {
       const std::string& infeed_name) const;
   std::unique_ptr<StreamReader> GetTensorStream(const std::string& name) const;
   std::set<std::string> GetObjectNames(ObjectType type) const;
+  std::set<std::string> GetObjectSummaries(ObjectType type) const;
   bool ContainsObject(ObjectType type, const std::string& name) const;
 
  private:

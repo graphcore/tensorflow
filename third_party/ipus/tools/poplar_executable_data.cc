@@ -536,11 +536,18 @@ bool TensorShape::operator==(const TensorShape& other) const {
 
 std::string Tensor::ToString() const {
   std::stringstream ss;
-  SaveDataToJsonStream(&ss);
+  if (info_.Shape().HasMetadata()) {
+    ss << "<not available>";
+  } else {
+    SaveDataToJsonStream(&ss);
+  }
   return absl::StrCat(info_.ToString(), " data = ", ss.str());
 }
 
 void Tensor::SaveDataToJsonFile(const std::string& filename) const {
+  LogContext ctx(
+      absl::StrCat("Saving content of ", info_.Name(), " in ", filename));
+  ERROR_ON_MSG(info_.Shape().HasMetadata(), "Cannot access verified data");
   std::ofstream out(filename);
   SaveDataToJsonStream(&out);
   out.close();
@@ -1125,6 +1132,33 @@ std::set<std::string> BinaryReader::GetObjectNames(ObjectType type) const {
     }
   }
   return names;
+}
+
+std::set<std::string> BinaryReader::GetObjectSummaries(ObjectType type) const {
+  ERROR_ON_MSG(type != ObjectType::Feed && type != ObjectType::Tensor,
+               "Summaries only supported for feeds and tensors");
+  std::set<std::string> summaries;
+  auto objects_it = objects_.find(type);
+  if (objects_it != objects_.end()) {
+    Json::FastWriter writer;
+    for (auto obj : objects_it->second) {
+      switch (type) {
+        case ObjectType::Tensor: {
+          Tensor tmp{*GetTensorStream(obj.first)};
+          summaries.insert(writer.write(tmp.Info().ToJson()));
+          break;
+        }
+        case ObjectType::Feed: {
+          InfeedStream tmp{CreateInfeedStreamReader(obj.first)};
+          Json::Value json = tmp.Info().ToJson();
+          json["num_tensors"] = Json::Value::Int64(tmp.NumTensors());
+          summaries.insert(writer.write(json));
+          break;
+        }
+      }
+    }
+  }
+  return summaries;
 }
 
 InfeedStream::InfeedStream(const TensorInfo& info) : info_(info) {}
