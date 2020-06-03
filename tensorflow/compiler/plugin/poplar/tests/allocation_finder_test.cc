@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -4309,6 +4310,85 @@ ENTRY top {
   EXPECT_EQ(t.tgt, add);
   EXPECT_EQ(t.input_index, 1);
   EXPECT_EQ(t.layout, p2);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 0);
+}
+
+TEST_F(AllocationFinderTest, LookThroughScalar) {
+  // A test which makes sure p3 doesn't get a layout.
+  std::string hlo = R"(
+HloModule top
+
+ENTRY top {
+ p0 = f32[1,4,4,8] parameter(0)
+ p1 = f32[1,1,8,8] parameter(1)
+ conv = f32[1,4,4,8] convolution(p0, p1), window={size=1x1}, dim_labels=b01f_01io->b01f
+ p2 = f32[1,4,4,8] parameter(2)
+ p3 = f32[] parameter(3)
+ p4 = f32[1,4,4,8] parameter(4)
+ bcast_p3 = f32[1,4,4,8] broadcast(p3), dimensions={}
+ mul = f32[1,4,4,8] multiply(p2, bcast_p3)
+ add = f32[1,4,4,8] add(conv, mul)
+ add2 = f32[1,4,4,8] add(conv, mul)
+ ROOT div = f32[1,4,4,8] divide(add, p4)
+}
+
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+  CompilerAnnotations annotations(module0);
+
+  FuseOpsLate fol(annotations);
+  EXPECT_TRUE(fol.Run(module0).ValueOrDie());
+
+  ElementwiseBroadcastConverter ebc;
+  EXPECT_TRUE(ebc.Run(module0).ValueOrDie());
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* div = root;
+  const auto* add = div->operand(0);
+  const auto* conv = add->operand(0);
+  const auto* p0 = conv->operand(0);
+  const auto* p1 = conv->operand(1);
+  const auto* p2 = add->operand(1);
+  const auto* p3 = add->operand(2);
+  const auto* p4 = div->operand(1);
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  // Will have both of the convolution parameters
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 2);
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{p0, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 0);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p1, 0});
+  EXPECT_EQ(t.tgt, conv);
+  EXPECT_EQ(t.input_index, 1);
+
+  ForwardAllocation fwd_finder(annotations);
+  EXPECT_TRUE(fwd_finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 4);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p2, 0});
+  EXPECT_EQ(t.tgt, add);
+  EXPECT_EQ(t.input_index, 1);
+  EXPECT_EQ(t.layout, conv);
+  EXPECT_EQ(t.layout_output_idx, 0);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 0);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p4, 0});
+  EXPECT_EQ(t.tgt, div);
+  EXPECT_EQ(t.input_index, 1);
+  EXPECT_EQ(t.layout, add);
   EXPECT_EQ(t.layout_output_idx, 0);
   EXPECT_EQ(t.forward_path.size(), 0);
   EXPECT_EQ(t.backward_path.size(), 0);
