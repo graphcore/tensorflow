@@ -251,7 +251,7 @@ std::string IExecutable::StreamsList(bool summary) const {
       ss << "  " << pair.first << "0.0+ --> " << pair.first << num_indices
          << ".0+\n";
     }
-    for (auto stream : other_inputs) {
+    for (const auto& stream : other_inputs) {
       ss << "  " << stream << std::endl;
     }
     ss << "\nOutput streams:\n";
@@ -262,12 +262,12 @@ std::string IExecutable::StreamsList(bool summary) const {
       ss << "  " << pair.first << "0.0- --> " << pair.first << num_indices
          << ".0-\n";
     }
-    for (auto stream : other_outputs) {
+    for (const auto& stream : other_outputs) {
       ss << "  " << stream << std::endl;
     }
   } else {
     int idx = 0;
-    for (auto stream : engine_->listStreams()) {
+    for (const auto& stream : engine_->listStreams()) {
       ss << "[" << idx++ << "] " << stream << std::endl;
     }
   }
@@ -360,7 +360,7 @@ poplar::Device DeviceManager::GetDevice(int64_t num_ipus,
   auto device_list =
       manager_.getDevices(poplar::TargetType::IPU, num_ipus, opts);
   ERROR_ON_MSG(
-      device_list.size() == 0,
+      device_list.empty(),
       "Failed to find any IPU device that match the requested config: num_ipus="
           << num_ipus << " OptionFlags="
           << absl::StrJoin(opts, ", ", absl::PairFormatter("=")));
@@ -437,6 +437,8 @@ void TensorManager::LoadCheckpointMetadataFromJson(
 void TensorManager::CreateCheckpointMetadataJson(
     const std::string& filename) const {
   std::ofstream out(filename);
+  ERROR_ON_MSG(!out.is_open(), "Failed to open file '" << filename << "'");
+  out.exceptions(std::ofstream::failbit | std::ofstream::badbit);
   Json::Value root;
   Json::Value infeeds;
   absl::c_for_each(infeeds_, [&infeeds](const Infeed& infeed) {
@@ -709,14 +711,14 @@ void Infeed::InitializeDataSources(const BinaryLoader& loader) {
 }
 
 std::unique_ptr<TensorManager> BinaryLoader::CreateTensorManager(
-    const std::string metadata_name) const {
+    const std::string& metadata_name) const {
   LogContext ctx{"BinaryLoader::CreateTensorManager " + metadata_name};
   auto metadata = ReadMetadata(metadata_name);
   return absl::make_unique<TensorManager>(*metadata);
 }
 
 std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
-    const std::string executable_name) const {
+    const std::string& executable_name) const {
   LogContext ctx{"BinaryLoader::CreateExecutable " + executable_name};
   auto in = CreateExecutableReader(executable_name);
   bool is_verified = static_cast<bool>(in->ReadInt64());
@@ -725,7 +727,7 @@ std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
 }
 
 std::unique_ptr<VerifiedExecutable> BinaryLoader::CreateVerifiedExecutable(
-    const std::string executable_name) const {
+    const std::string& executable_name) const {
   LogContext ctx{"BinaryLoader::CreateVerifiedExecutable " + executable_name};
   auto in = CreateExecutableReader(executable_name);
   bool is_verified = static_cast<bool>(in->ReadInt64());

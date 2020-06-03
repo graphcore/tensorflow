@@ -72,6 +72,7 @@ const std::vector<TensorTypeInfo::TypeInfo> TensorTypeInfo::info_ =
 /* static */ std::vector<TensorTypeInfo::TypeInfo>
 TensorTypeInfo::CreateInfo() {
   std::vector<TensorTypeInfo::TypeInfo> m;
+  m.emplace_back(TensorTypeInfo::TypeInfo{TensorType::NotSet, "not_set"});
   m.emplace_back(TensorTypeInfo::TypeInfo{TensorType::Parameter, "parameter"});
   m.emplace_back(TensorTypeInfo::TypeInfo{TensorType::InputData, "input_data"});
   m.emplace_back(
@@ -190,7 +191,7 @@ class DataIterator {
             << ")");
     current_ += element_size_;
   }
-  DataIterator& operator++(int) {
+  DataIterator& operator++() {
     Increment();
     return *this;
   }
@@ -265,7 +266,7 @@ class NDArrayParser {
 void NDArrayParser::operator()(const Json::Value& array,
                                const TensorShape& expected_shape,
                                ByteVector& out) {
-  ERROR_ON(out.size() != 0);
+  ERROR_ON(!out.empty());
   PRINT_INFO("Expected shape " << expected_shape.ToString() << " NumElements "
                                << expected_shape.NumElements()
                                << " SizeInBytes "
@@ -276,7 +277,7 @@ void NDArrayParser::operator()(const Json::Value& array,
   // Special case if it's a scalar.
   if (expected_shape.NumDimensions() == 0) {
     SetIteratorToJsonValue(array, expected_shape.Type(), it);
-    it++;
+    ++it;
   } else {
     ProcessDimension(0, array, expected_shape, it);
   }
@@ -293,11 +294,11 @@ void NDArrayParser::ProcessDimension(int64_t dim, const Json::Value& array,
   if (dim == expected_shape.NumDimensions() - 1) {
     for (auto& value : array) {
       SetIteratorToJsonValue(value, expected_shape.Type(), out);
-      out++;
+      ++out;
     }
   } else {
     // Recursively process other dimensions.
-    for (auto subarray : array) {
+    for (const auto& subarray : array) {
       ProcessDimension(dim + 1, subarray, expected_shape, out);
     }
   }
@@ -314,16 +315,15 @@ Json::Value DimensionToJson(int dimension, const TensorShape& shape,
   if (dimension == shape.NumDimensions() - 1) {
     for (int64_t i = 0; i < num_elements; i++) {
       values.append(IteratorToJsonValue(shape.Type(), current));
-      current++;
-    }
-    return values;
-  } else {
-    // Recursively process other dimensions.
-    for (int64_t i = 0; i < num_elements; i++) {
-      values.append(DimensionToJson(dimension + 1, shape, current));
+      ++current;
     }
     return values;
   }
+  // Recursively process other dimensions.
+  for (int64_t i = 0; i < num_elements; i++) {
+    values.append(DimensionToJson(dimension + 1, shape, current));
+  }
+  return values;
 }
 
 void WriteJsonToStream(const Json::Value& root, std::ostream* sout) {
@@ -359,9 +359,9 @@ void BinaryVersion::ErrorIfNotCompatible(StreamReader& in) {
 
 class DeferredSizeWriter {
  public:
-  explicit DeferredSizeWriter(std::shared_ptr<StreamWriter> writer)
+  explicit DeferredSizeWriter(const std::shared_ptr<StreamWriter>& writer)
       : writer_(writer), start_(writer->CurrentPosition()) {
-    writer->WriteInt64(0);
+    writer_->WriteInt64(0);
   }
   void WriteSize() {
     if (writer_) {
@@ -381,7 +381,7 @@ class DeferredSizeWriter {
 };
 
 DeferredSizeWriter CreateObject(ObjectType type, const std::string& name,
-                                std::shared_ptr<StreamWriter> writer) {
+                                const std::shared_ptr<StreamWriter>& writer) {
   writer->WriteInt64(static_cast<int64_t>(type));
   writer->WriteString(name);
   return DeferredSizeWriter{writer};
@@ -423,7 +423,7 @@ std::string TensorTypeToString(TensorType type) {
 
 Exception::Exception(const std::string& msg) : std::runtime_error(msg) {}
 
-LogContext::LogContext() : saved_context_(), cleared_(true) {}
+LogContext::LogContext() : cleared_(true) {}
 
 LogContext::LogContext(const std::string& context) : saved_context_(context_) {
   UpdateContext(context);
@@ -497,7 +497,7 @@ TensorShape::TensorShape(const Json::Value& shape) {
   Json::Value array = shape["shape"];
   ERROR_ON(!array.isArray());
   shape_.reserve(array.size());
-  for (auto dim : array) {
+  for (const auto& dim : array) {
     shape_.push_back(dim.asInt64());
   }
 }
@@ -681,7 +681,7 @@ void Tensor::LoadDataFromJsonFile(const std::string& data_filename) {
 }
 
 void* Tensor::Data() {
-  ERROR_ON(data_.size() == 0);
+  ERROR_ON(data_.empty());
   ERROR_ON_MSG(data_.size() != info_.Shape().DataSizeInBytes(),
                "Buffer is of size " << data_.size() << " but the shape "
                                     << info_.Shape().ToString() << " requires "
@@ -733,7 +733,7 @@ void StreamWriter::WriteInt64(int64_t value) {
 
 void StreamWriter::WriteInt64Array(const std::vector<int64_t>& values) {
   WriteInt64(values.size());
-  if (values.size() > 0) {
+  if (!values.empty()) {
     WriteData(values.data(), sizeof(int64_t) * values.size());
   }
 }
@@ -745,7 +745,7 @@ void StreamWriter::WriteData(const void* data, size_t size) {
 
 void StreamWriter::WriteString(const std::string& value) {
   WriteInt64(value.size());
-  if (value.size() > 0) {
+  if (!value.empty()) {
     WriteData(value.c_str(), value.size());
   }
 }
@@ -853,7 +853,7 @@ std::streampos StreamReader::CurrentPosition() { return fd_.tellg(); }
 
 std::ifstream& StreamReader::Stream() { return fd_; }
 
-OutfeedStream::OutfeedStream(const TensorInfo& info) : info_(info), writer_() {}
+OutfeedStream::OutfeedStream(const TensorInfo& info) : info_(info) {}
 
 void OutfeedStream::UpdateNumTensorsAndClose() {
   auto end = writer_->CurrentPosition();
@@ -1020,7 +1020,8 @@ ExecutableWriter::~ExecutableWriter() { WriteComplete(); }
 
 ExecutableWriter::ExecutableWriter(std::shared_ptr<StreamWriter> writer,
                                    std::function<void()> on_write_complete)
-    : writer_(writer), on_write_complete_(on_write_complete) {}
+    : writer_(std::move(writer)),
+      on_write_complete_(std::move(on_write_complete)) {}
 
 void BinaryReader::LoadFile(const std::string& filename) {
   LogContext ctx{"Loading binary file '" + filename + "'"};
@@ -1059,14 +1060,14 @@ std::unique_ptr<StreamReader> BinaryReader::GetObjectReader(
 }
 
 std::unique_ptr<Metadata> BinaryReader::ReadMetadata(
-    const std::string metadata_name) const {
+    const std::string& metadata_name) const {
   LogContext ctx{"BinaryReader::CreateMetadataReader" + metadata_name};
   auto reader = GetObjectReader(ObjectType::PoplarMetadata, metadata_name);
   return absl::make_unique<Metadata>(LoadJsonFromString(reader->ReadString()));
 }
 
 std::unique_ptr<StreamReader> BinaryReader::CreateExecutableReader(
-    const std::string executable_name) const {
+    const std::string& executable_name) const {
   LogContext ctx{"BinaryReader::CreateExecutableReader " + executable_name};
   return GetObjectReader(ObjectType::PoplarExecutable, executable_name);
 }
@@ -1085,18 +1086,17 @@ const BinaryReader::Object BinaryReader::GetObject(
                    << absl::StrJoin(GetMapKeys(objects), ", ") << "]");
   if (name.empty()) {
     return objects.begin()->second;
-  } else {
-    auto object_it = objects.find(name);
-    ERROR_ON_MSG(object_it == objects.end(),
-                 "Could not find "
-                     << ObjectTypeToString(type) << " named '" << name << "': ["
-                     << absl::StrJoin(GetMapKeys(objects), ", ") << "]");
-    return object_it->second;
   }
+  auto object_it = objects.find(name);
+  ERROR_ON_MSG(object_it == objects.end(),
+               "Could not find "
+                   << ObjectTypeToString(type) << " named '" << name << "': ["
+                   << absl::StrJoin(GetMapKeys(objects), ", ") << "]");
+  return object_it->second;
 }
 
 std::unique_ptr<StreamReader> BinaryReader::CreateInfeedStreamReader(
-    const std::string infeed_name) const {
+    const std::string& infeed_name) const {
   LogContext ctx{"BinaryReader::CreateInfeedStreamReader" + infeed_name};
   return GetObjectReader(ObjectType::Feed, infeed_name);
 }
@@ -1150,11 +1150,11 @@ std::string InfeedStream::ToString() {
 }
 
 InfeedStream::InfeedStream(std::shared_ptr<StreamReader> in) {
-  InitializeDataSource(in);
+  InitializeDataSource(std::move(in));
 }
 
 void InfeedStream::InitializeDataSource(std::shared_ptr<StreamReader> in) {
-  reader_ = in;
+  reader_ = std::move(in);
   TensorInfo info{*reader_};
   // If there is no metadata then keep these ones.
   if (info_.Type() == TensorType::NotSet) {
@@ -1251,8 +1251,8 @@ int64_t InfeedStream::TensorIndex() const { return tensor_idx_; }
 }
 
 FeedInfo::FeedInfo(const Json::Value& info) : name(info["name"].asString()) {
-  for (auto stream : info["streams"]) {
-    streams.push_back(TensorInfo{stream});
+  for (const auto& stream : info["streams"]) {
+    streams.emplace_back(TensorInfo{stream});
   }
   ERROR_ON(streams.empty());
 }
@@ -1262,7 +1262,7 @@ Json::Value FeedInfo::ToJson() const {
   Json::Value feed;
   Json::Value json_streams;
   feed["name"] = name;
-  for (auto stream : streams) {
+  for (const auto& stream : streams) {
     json_streams.append(stream.ToJson());
   }
   feed["streams"] = json_streams;
@@ -1271,22 +1271,22 @@ Json::Value FeedInfo::ToJson() const {
 
 std::string Metadata::ToJson() const {
   Json::Value json_inputs;
-  for (auto input : inputs) {
+  for (const auto& input : inputs) {
     json_inputs.append(input.ToJson());
   }
 
   Json::Value json_outputs;
-  for (auto output : outputs) {
+  for (const auto& output : outputs) {
     json_outputs.append(output.ToJson());
   }
 
   Json::Value json_infeeds;
-  for (auto infeed : infeeds) {
+  for (const auto& infeed : infeeds) {
     json_infeeds.append(infeed.ToJson());
   }
 
   Json::Value json_outfeeds;
-  for (auto outfeed : outfeeds) {
+  for (const auto& outfeed : outfeeds) {
     json_outfeeds.append(outfeed.ToJson());
   }
 
@@ -1304,7 +1304,7 @@ std::string Metadata::ToJson() const {
   Json::Value checkpoint;
   if (!feeds_order.empty()) {
     Json::Value streams;
-    for (auto feed : feeds_order) {
+    for (const auto& feed : feeds_order) {
       streams.append(feed);
     }
     checkpoint["feeds"] = streams;
@@ -1344,35 +1344,35 @@ std::string Metadata::ToJson() const {
 }
 
 Metadata::Metadata(const Json::Value& root) {
-  for (auto input : root["inputs"]) {
-    inputs.push_back(TensorInfo{input});
+  for (const auto& input : root["inputs"]) {
+    inputs.emplace_back(TensorInfo{input});
   }
-  for (auto output : root["outputs"]) {
-    outputs.push_back(TensorInfo{output});
+  for (const auto& output : root["outputs"]) {
+    outputs.emplace_back(TensorInfo{output});
   }
-  for (auto infeed : root["infeeds"]) {
-    infeeds.push_back(FeedInfo{infeed});
+  for (const auto& infeed : root["infeeds"]) {
+    infeeds.emplace_back(FeedInfo{infeed});
   }
-  for (auto outfeed : root["outfeeds"]) {
-    outfeeds.push_back(FeedInfo{outfeed});
+  for (const auto& outfeed : root["outfeeds"]) {
+    outfeeds.emplace_back(FeedInfo{outfeed});
   }
   Json::Value config = root["config"];
   replication_count = config["replication_count"].asInt64();
   num_ipus = config["num_ipus"].asInt64();
   Json::Value json_options = config["options"];
   if (!json_options.isNull()) {
-    for (auto key : json_options.getMemberNames()) {
+    for (const auto& key : json_options.getMemberNames()) {
       options[key] = json_options[key].asString();
     }
   }
   Json::Value checkpoint = root["checkpoint"];
-  for (auto feed : checkpoint["feeds"]) {
+  for (const auto& feed : checkpoint["feeds"]) {
     feeds_order.push_back(feed.asString());
   }
 
   Json::Value verification = root["verification_info"];
   if (!verification.isNull()) {
-    for (auto handle : verification.getMemberNames()) {
+    for (const auto& handle : verification.getMemberNames()) {
       verification_info[handle] = VerificationInfo(verification[handle]);
     }
   }
@@ -1429,11 +1429,12 @@ void MetadataBuilder::AddInput(const TensorInfo& tensor,
 void MetadataBuilder::AddInputParameter(const TensorInfo& tensor,
                                         const VerificationInfo& info) {
   AddVerificationInfo(tensor.Handle(), info);
-  ERROR_ON_MSG(!input_parameters_.emplace(tensor.Handle(), tensor).second,
-               "Already contains an input parameter with handle '"
-                   << tensor.Handle() << "'");
   meta_.inputs.push_back(tensor);
   meta_.inputs.back().SetType(TensorType::Parameter);
+  ERROR_ON_MSG(
+      !input_parameters_.emplace(tensor.Handle(), meta_.inputs.back()).second,
+      "Already contains an input parameter with handle '" << tensor.Handle()
+                                                          << "'");
 }
 
 void MetadataBuilder::AddOutput(const TensorInfo& tensor,
@@ -1453,13 +1454,18 @@ void MetadataBuilder::AddOutputParameter(const TensorInfo& tensor,
 void MetadataBuilder::AddOutputModifiedParameter(
     const std::string& input_handle, const TensorInfo& tensor,
     const VerificationInfo& info) {
+  TensorInfo to_add = tensor;
+  to_add.SetType(TensorType::ParameterOut);
   ERROR_ON_MSG(input_parameters_.find(input_handle) == input_parameters_.end(),
                "Input parameter " << input_handle << " not found");
   auto input = input_parameters_.at(input_handle);
-  ERROR_ON_MSG(!input.TypeAndShapeMatch(tensor), "Input/output shape mismatch");
-  ERROR_ON_MSG(input.Name() != tensor.Name(),
+  ERROR_ON_MSG(!input.TypeAndShapeMatch(to_add),
+               "Type and Shape from tensor: "
+                   << to_add.ToString()
+                   << " don't match those from input: " << input.ToString());
+  ERROR_ON_MSG(input.Name() != to_add.Name(),
                "Output parameters name "
-                   << tensor.Name() << " doesn't match the name of the input "
+                   << to_add.Name() << " doesn't match the name of the input "
                    << input.Name());
   if (info.Initialised()) {
     ERROR_ON_MSG(meta_.verification_info.at(input_handle).Id() != info.Id(),
@@ -1469,8 +1475,8 @@ void MetadataBuilder::AddOutputModifiedParameter(
                      meta_.verification_info.end(),
                  "Input has some VerificationInfo but the output doesn't");
   }
-  AddVerificationInfo(tensor.Handle(), info);
-  meta_.outputs.push_back(tensor);
+  AddVerificationInfo(to_add.Handle(), info);
+  meta_.outputs.push_back(to_add);
   meta_.outputs.back().SetType(TensorType::ParameterOut);
 }
 
