@@ -158,9 +158,8 @@ PoplarXlaFlags::PoplarXlaFlags() {
     LOG(INFO)
         << "The TensorFlow Poplar flag \"save_oom_profiler\" is "
            "deprecated, has no effect and it will be removed in the future. "
-           "Out of memory report will be saved in report directory if "
-           "profiler is enabled. Name of the report file is: "
-           "GC_TensorFlow_ + xla module name.";
+           "Out of memory report will be saved in the report directory if "
+           "`profiling` is enabled and `report_directory` is set.";
   }
 
   // Hash all the flags which affect the graph generation and compilation only.

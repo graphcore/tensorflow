@@ -37,7 +37,6 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "include/json/json.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executable.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
@@ -49,7 +48,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/send_recv_runtime_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
-
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 #include "tensorflow/compiler/xla/service/hlo_evaluator.h"
@@ -57,7 +55,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/service/transfer_manager.h"
 #include "tensorflow/compiler/xla/status_macros.h"
-
 #include "tensorflow/core/common_runtime/dma_helper.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/types.pb.h"
@@ -1647,6 +1644,65 @@ void PoplarExecutor::AddCompileEndEventRecord(
   compile_end->set_instruction_info(std::move(instruction_info));
 
   reports_.push_back(evt);
+}
+
+void PoplarExecutor::DumpPoplarOutOfMemoryAllocationException(
+    const std::string& module_name,
+    const poplar::graph_memory_allocation_error& p_e) {
+  if (p_e.graphProfile.type() == poplar::ProfileValue::Type::MAP &&
+      p_e.graphProfile.size() != 0) {
+    std::string report_dir = ReportDirectory();
+    if (report_dir.empty()) {
+      LOG(INFO) << "Report directory not specified. Saving the profiling "
+                   "information to the current working directory.";
+      report_dir = ".";
+    }
+
+    report_dir = tensorflow::io::JoinPath(ReportDirectory(), module_name);
+    CreateDirIfMissing(report_dir);
+    auto opts = GetReportGraphFlags();
+    SetFlagIfNotPresent(opts, "showVarStorage", "true");
+
+    std::unique_ptr<tensorflow::WritableFile> file;
+
+    // Always produce a text report.
+    {
+      std::stringstream text_report_stream;
+      poplar::printGraphSummary(text_report_stream, p_e.graphProfile, opts);
+      std::string filename = tensorflow::io::JoinPath(report_dir, "graph.txt");
+      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
+      TF_CHECK_OK(file->Append(text_report_stream.str()));
+      TF_CHECK_OK(file->Close());
+      LOG(INFO) << "The ouf of memory summary text report saved to "
+                << filename;
+    }
+
+    if (!CompilerReportingTextFormat()) {
+      const std::string report_file_extension = ReportFileExtension();
+      const std::string filename = tensorflow::io::JoinPath(
+          report_dir, "graph." + report_file_extension);
+      // Produce other formats if requested by the user too.
+      if (CompilerReportingCborFormat()) {
+        std::stringstream cbor_report_stream;
+        poplar::serializeToCBOR(cbor_report_stream, p_e.graphProfile);
+        TF_CHECK_OK(
+            tensorflow::Env::Default()->NewWritableFile(filename, &file));
+        TF_CHECK_OK(file->Append(cbor_report_stream.str()));
+        TF_CHECK_OK(file->Close());
+        LOG(INFO) << "The ouf of memory summary CBOR report saved to "
+                  << filename;
+      } else {
+        std::stringstream json_report_stream;
+        poplar::serializeToJSON(json_report_stream, p_e.graphProfile);
+        TF_CHECK_OK(
+            tensorflow::Env::Default()->NewWritableFile(filename, &file));
+        TF_CHECK_OK(file->Append(json_report_stream.str()));
+        TF_CHECK_OK(file->Close());
+        LOG(INFO) << "The ouf of memory summary JSON report saved to "
+                  << filename;
+      }
+    }
+  }
 }
 
 void PoplarExecutor::AddHostToDeviceEventRecord(const std::string& json) {
