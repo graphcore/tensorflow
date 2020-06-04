@@ -167,6 +167,7 @@ class TensorManager {
   std::vector<uint64_t> seeds_;
   int64_t num_ipus_;
   int64_t replication_count_;
+  std::string random_number_seed_handle_;
   poplar::OptionFlags option_flags_;
 };
 

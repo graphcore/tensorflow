@@ -555,6 +555,7 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
       builder.AddOption(opt.first, opt.second);
     }
     builder.SetConfig(replication_count, target.getNumIPUs());
+    builder.SetRandomNumberSeedHandle(GetRandomNumberSeedStream());
     if (target.getTargetType() != poplar::TargetType::IPU) {
       return xla::FailedPrecondition(
           "The target's type must be poplar::TargetType::IPU");
