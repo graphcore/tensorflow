@@ -26,8 +26,15 @@ limitations under the License.
 #include <list>
 #include <memory>
 #include <mutex>
+#include <poplar/Device.hpp>
+#include <poplar/DeviceManager.hpp>
+#include <poplar/Engine.hpp>
+#include <poplar/OptionFlags.hpp>
+#include <poplar/Tensor.hpp>
+#include <poplar/exceptions.hpp>
 #include <vector>
 
+#include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
@@ -40,12 +47,15 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_outfeed_queue.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/spsc_queue.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
-
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/statusor.h"
-
-#include "tensorflow/compiler/xla/statusor.h"
+#include "tensorflow/core/common_runtime/process_function_library_runtime.h"
+#include "tensorflow/core/framework/dataset.h"
+#include "tensorflow/core/framework/rendezvous.h"
+#include "tensorflow/core/framework/types.pb.h"
+#include "tensorflow/core/lib/gtl/array_slice.h"
+#include "tensorflow/core/lib/io/path.h"
 #include "tensorflow/stream_executor/blas.h"
 #include "tensorflow/stream_executor/device_description.h"
 #include "tensorflow/stream_executor/device_memory_allocator.h"
@@ -56,22 +66,6 @@ limitations under the License.
 #include "tensorflow/stream_executor/rng.h"
 #include "tensorflow/stream_executor/stream_executor.h"
 #include "tensorflow/stream_executor/stream_executor_internal.h"
-
-#include "tensorflow/core/common_runtime/process_function_library_runtime.h"
-
-#include "tensorflow/core/framework/dataset.h"
-#include "tensorflow/core/framework/rendezvous.h"
-#include "tensorflow/core/framework/types.pb.h"
-#include "tensorflow/core/lib/gtl/array_slice.h"
-#include "tensorflow/core/lib/io/path.h"
-
-#include "absl/types/optional.h"
-
-#include <poplar/Device.hpp>
-#include <poplar/DeviceManager.hpp>
-#include <poplar/Engine.hpp>
-#include <poplar/OptionFlags.hpp>
-#include <poplar/Tensor.hpp>
 
 namespace se = stream_executor;
 
@@ -460,6 +454,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                                 const std::string& tensor_map_json,
                                 const std::string& instruction_info,
                                 int64 duration);
+
+  void DumpPoplarOutOfMemoryAllocationException(
+      const std::string& module_name,
+      const poplar::graph_memory_allocation_error& p_e);
 
   void AddHostToDeviceEventRecord(const std::string& transfer_json);
 
