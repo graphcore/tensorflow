@@ -483,6 +483,21 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "outfeed_ordinal_test",
+    size = "medium",
+    srcs = ["tests/outfeed_ordinal_test.py"],
+    additional_deps = [
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python/ipu:ipu_lib",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+)
+
+tf_py_test(
     name = "dataset_benchmark_test",
     size = "medium",
     srcs = ["tests/dataset_benchmark_test.py"],
@@ -1010,6 +1025,7 @@ test_suite(
         "keras_rnn_test",
         "map_gradient_optimizer_test",
         "math_ops_test",
+        "outfeed_ordinal_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",
         "pipelining_grouped_test",

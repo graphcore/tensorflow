@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RESOURCE_UPDATE_FIXER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RESOURCE_UPDATE_FIXER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_FIXER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_FIXER_H_
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 
@@ -32,7 +32,7 @@ namespace poplarplugin {
  * This pass fixes the resource update stage so that it is ready to be lowered
  * into Poplar.
  */
-class PipelineResourceUpdateFixer : public HloModulePass {
+class ResourceUpdateFixer : public HloModulePass {
  public:
   absl::string_view name() const override {
     return "pipeline-resource-update-fixer";
@@ -48,4 +48,4 @@ class PipelineResourceUpdateFixer : public HloModulePass {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RESOURCE_UPDATE_FIXER_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_FIXER_H_

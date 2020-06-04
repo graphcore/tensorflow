@@ -174,7 +174,7 @@ cc_library(
         "driver/passes/pipeline_gradient_accumulation_optimizer.cc",
         "driver/passes/pipeline_optimizer.cc",
         "driver/passes/pipeline_recomputation.cc",
-        "driver/passes/pipeline_resource_update_fixer.cc",
+        "driver/passes/resource_update_fixer.cc",
         "driver/passes/pipeline_resource_variables_offload.cc",
         "driver/passes/pipeline_verifier.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
@@ -311,7 +311,6 @@ cc_library(
         "driver/passes/pipeline_gradient_accumulation_optimizer.h",
         "driver/passes/pipeline_optimizer.h",
         "driver/passes/pipeline_recomputation.h",
-        "driver/passes/pipeline_resource_update_fixer.h",
         "driver/passes/pipeline_resource_variables_offload.h",
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
@@ -320,6 +319,7 @@ cc_library(
         "driver/passes/remove_blocked_recompute_suggestions.h",
         "driver/passes/remove_recompute_suggestions.h",
         "driver/passes/replication_factor_to_constant.h",
+        "driver/passes/resource_update_fixer.h",
         "driver/passes/resource_update_schedule_optimizer.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
@@ -2379,9 +2379,9 @@ xla_test(
 )
 
 xla_test(
-    name = "pipeline_resource_update_fixer_test",
+    name = "resource_update_fixer_test",
     size = "small",
-    srcs = ["tests/pipeline_resource_update_fixer_test.cc"],
+    srcs = ["tests/resource_update_fixer_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -4198,7 +4198,6 @@ test_suite(
         "pipeline_grouped_visitor_test",
         "pipeline_optimizer_test",
         "pipeline_recomputation_test",
-        "pipeline_resource_update_fixer_test",
         "pipeline_resource_variables_offload_test",
         "pipeline_sequential_visitor_test",
         "pipeline_util_test",
@@ -4212,6 +4211,7 @@ test_suite(
         "remapping_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
+        "resource_update_fixer_test",
         "resource_update_schedule_optimizer_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",

@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_update_fixer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
 
 #include <algorithm>
 
@@ -31,9 +31,9 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-using PipelineResourceUpdateFixerTest = HloTestBase;
+using ResourceUpdateFixerTest = HloTestBase;
 
-TEST_F(PipelineResourceUpdateFixerTest, TestNotRoot) {
+TEST_F(ResourceUpdateFixerTest, TestNotRoot) {
   std::string hlo = R"(
 HloModule cluster
 
@@ -358,7 +358,7 @@ pipeline {
   get-tuple-element.10 = f32[2]{0} get-tuple-element(call.12), index=2, sharding={maximal device=1}
   get-tuple-element = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.13), index=1, sharding={maximal device=2}
   get-tuple-element.1 = f32[2]{0} get-tuple-element(call.13), index=2, sharding={maximal device=2}
-  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,1,2,2] get-tuple-element(call_ru), index=0
   gte1 = f32[2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,1,2,2] get-tuple-element(call_ru), index=2
@@ -392,12 +392,12 @@ ENTRY cluster {
   config.set_debug_options(GetDebugOptionsForTest());
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
-  PipelineResourceUpdateFixer fixer;
+  ResourceUpdateFixer fixer;
   TF_ASSERT_OK_AND_ASSIGN(bool changed, fixer.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineResourceUpdateFixerTest, TestTrainingInsertFIFOs) {
+TEST_F(ResourceUpdateFixerTest, TestTrainingInsertFIFOs) {
   std::string hlo = R"(
 HloModule cluster
 
@@ -722,7 +722,7 @@ pipeline {
   get-tuple-element.10 = f32[2]{0} get-tuple-element(call.12), index=2, sharding={maximal device=1}
   get-tuple-element = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.13), index=1, sharding={maximal device=2}
   get-tuple-element.1 = f32[2]{0} get-tuple-element(call.13), index=2, sharding={maximal device=2}
-  ROOT call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  ROOT call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   }
 
 ENTRY cluster {
@@ -749,7 +749,7 @@ ENTRY cluster {
   config.set_debug_options(GetDebugOptionsForTest());
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
-  PipelineResourceUpdateFixer fixer;
+  ResourceUpdateFixer fixer;
   HloComputation* pipeline_computation =
       FindComputation(module.get(), "pipeline");
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));

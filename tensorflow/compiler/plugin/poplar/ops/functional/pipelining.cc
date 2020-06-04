@@ -75,7 +75,7 @@ to_apply: A function which takes 'inputs' and computes the gradient pipeline
   stage on the IPU.
 )doc");
 
-REGISTER_OP("PipelineResourceUpdate")
+REGISTER_OP("ResourceUpdate")
     .Input("inputs: Tin")
     .Output("output: Tout")
     .Attr("to_apply: func")

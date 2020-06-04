@@ -89,14 +89,14 @@ int main(int argc, char** argv) {
   if (list_tensors || list_feeds || list_handles) {
     if (list_tensors) {
       std::cout << "List of tensors:\n"
-                << absl::StrJoin(loader.GetObjectNames(ipu::ObjectType::Tensor),
-                                 "\n")
+                << absl::StrJoin(
+                       loader.GetObjectSummaries(ipu::ObjectType::Tensor), "")
                 << std::endl;
     }
     if (list_feeds) {
       std::cout << "List of feeds:\n"
-                << absl::StrJoin(loader.GetObjectNames(ipu::ObjectType::Feed),
-                                 "\n")
+                << absl::StrJoin(
+                       loader.GetObjectSummaries(ipu::ObjectType::Feed), "")
                 << std::endl;
     }
     if (list_handles) {
