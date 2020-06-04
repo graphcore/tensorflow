@@ -50,8 +50,6 @@ std::string FirstLinesOf(const std::string& lines, int64_t num_lines) {
   return res;
 }
 
-std::string GetRandomNumberSeedStream() { return "__seed_stream"; }
-
 enum PoplarProgramType {
   HOST_TO_DEVICE,
   MAIN_SEQUENCE,
@@ -410,6 +408,7 @@ TensorManager::TensorManager(const Metadata& meta) {
   option_flags_ = ParseOptionFlags(meta);
   num_ipus_ = meta.num_ipus;
   replication_count_ = meta.replication_count;
+  random_number_seed_handle_ = meta.random_number_seed_handle;
 }
 
 int64_t TensorManager::NumIpus() const { return num_ipus_; }
@@ -494,7 +493,7 @@ void TensorManager::AssertAllTensorsProvided(const BinaryLoader& loader) {
   }
   for (auto& infeed : infeeds_) {
     for (int i = 0; i < infeed.Streams().size(); i++) {
-      const std::string name = absl::StrCat(infeed.Name(), ".", i);
+      const std::string name = infeed.Streams()[i].Info().Name();
       if (feeds_provided.find(name) == feeds_provided.end()) {
         missing_msg.push_back(
             absl::StrCat("No data provided for infeed's stream '", name, "'"));
@@ -683,7 +682,7 @@ void TensorManager::ConnectStreams(IExecutable& executable) {
       reinterpret_cast<uint64_t*>(ptr)[0] = this->seeds_[replica_id];
     };
 
-    engine.connectStreamToCallback(GetRandomNumberSeedStream(), replica_id,
+    engine.connectStreamToCallback(random_number_seed_handle_, replica_id,
                                    callback);
   }
 }
@@ -701,9 +700,10 @@ Infeed::Infeed(const FeedInfo& infeed) : name_(infeed.name) {
 
 void Infeed::InitializeDataSources(const BinaryLoader& loader) {
   for (int i = 0; i < streams_.size(); i++) {
-    LogContext ctx{absl::StrCat(Name(), ".", i)};
+    const std::string stream_name = streams_[i].Info().Name();
+    LogContext ctx{stream_name};
     streams_[i].InitializeDataSource(
-        loader.CreateInfeedStreamReader(absl::StrCat(Name(), ".", i)));
+        loader.CreateInfeedStreamReader(stream_name));
   }
   ERROR_ON(!absl::c_all_of(streams_, [this](const InfeedStream& stream) {
     return stream.NumTensors() == this->streams_[0].NumTensors();

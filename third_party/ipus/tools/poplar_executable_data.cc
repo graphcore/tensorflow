@@ -1104,7 +1104,7 @@ const BinaryReader::Object BinaryReader::GetObject(
 
 std::unique_ptr<StreamReader> BinaryReader::CreateInfeedStreamReader(
     const std::string& infeed_name) const {
-  LogContext ctx{"BinaryReader::CreateInfeedStreamReader" + infeed_name};
+  LogContext ctx{"BinaryReader::CreateInfeedStreamReader " + infeed_name};
   return GetObjectReader(ObjectType::Feed, infeed_name);
 }
 
@@ -1334,6 +1334,7 @@ std::string Metadata::ToJson() const {
   }
   config["replication_count"] = Json::Value::Int64(replication_count);
   config["num_ipus"] = Json::Value::Int64(num_ipus);
+  config["random_number_seed_handle"] = random_number_seed_handle;
 
   Json::Value checkpoint;
   if (!feeds_order.empty()) {
@@ -1393,6 +1394,8 @@ Metadata::Metadata(const Json::Value& root) {
   Json::Value config = root["config"];
   replication_count = config["replication_count"].asInt64();
   num_ipus = config["num_ipus"].asInt64();
+  random_number_seed_handle = config["random_number_seed_handle"].asString();
+
   Json::Value json_options = config["options"];
   if (!json_options.isNull()) {
     for (const auto& key : json_options.getMemberNames()) {
@@ -1557,6 +1560,10 @@ void MetadataBuilder::AddOption(const std::string& key,
 void MetadataBuilder::SetConfig(int64_t replication_count, int64_t num_ipus) {
   meta_.replication_count = replication_count;
   meta_.num_ipus = num_ipus;
+}
+
+void MetadataBuilder::SetRandomNumberSeedHandle(const std::string& handle) {
+  meta_.random_number_seed_handle = handle;
 }
 
 void MetadataBuilder::AddCheckpoint(const std::vector<std::string>& feeds_order,
