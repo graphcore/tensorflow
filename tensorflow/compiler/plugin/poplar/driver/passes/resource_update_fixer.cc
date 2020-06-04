@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_update_fixer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
 
 #include <algorithm>
 
@@ -63,8 +63,7 @@ StatusOr<bool> FixRoot(PipelineStages& stages) {
 }
 }  // namespace
 
-StatusOr<bool> PipelineResourceUpdateFixer::FixPipeline(
-    HloInstruction* pipeline_op) {
+StatusOr<bool> ResourceUpdateFixer::FixPipeline(HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
 
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
@@ -79,7 +78,7 @@ StatusOr<bool> PipelineResourceUpdateFixer::FixPipeline(
   return root_changed;
 }
 
-StatusOr<bool> PipelineResourceUpdateFixer::Run(HloModule* module) {
+StatusOr<bool> ResourceUpdateFixer::Run(HloModule* module) {
   TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
                       GetPipelines(module));
   if (pipeline_ops.empty()) {
@@ -87,13 +86,13 @@ StatusOr<bool> PipelineResourceUpdateFixer::Run(HloModule* module) {
     return false;
   }
   CHECK_EQ(pipeline_ops.size(), 1);
-  VLOG(2) << "Before PipelineResourceUpdateFixer:";
+  VLOG(2) << "Before ResourceUpdateFixer:";
   XLA_VLOG_LINES(2, module->ToString());
 
   TF_ASSIGN_OR_RETURN(bool changed, FixPipeline(pipeline_ops[0]));
 
   if (changed) {
-    VLOG(2) << "After PipelineResourceUpdateFixer:";
+    VLOG(2) << "After ResourceUpdateFixer:";
     XLA_VLOG_LINES(2, module->ToString());
   } else {
     VLOG(2) << "No changes were made to the Pipeline.";

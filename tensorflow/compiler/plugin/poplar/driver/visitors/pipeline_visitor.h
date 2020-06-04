@@ -159,7 +159,7 @@ class PipelineVisitor : public InplaceDeferredVisitor {
       const HloInstruction* inst);
 
   // Creator for ResourceUpdate.
-  StatusOr<poplar::program::Sequence> CreatePipelineResourceUpdateOp(
+  StatusOr<poplar::program::Sequence> CreateResourceUpdateOp(
       const HloInstruction* inst);
 };
 

@@ -380,7 +380,7 @@ pipeline_wrapper {
   get-tuple-element.12 = f32[2]{0} get-tuple-element(call.8), index=7
   get-tuple-element.1 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.12), index=5
   get-tuple-element = f32[2]{0} get-tuple-element(call.12), index=4
-  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.35, get-tuple-element.32, get-tuple-element.21, get-tuple-element.16, get-tuple-element.9, get-tuple-element.12, get-tuple-element.1, get-tuple-element), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.35, get-tuple-element.32, get-tuple-element.21, get-tuple-element.16, get-tuple-element.9, get-tuple-element.12, get-tuple-element.1, get-tuple-element), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,1,2,2] get-tuple-element(call_ru), index=0
   gte1 = f32[2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,1,2,2] get-tuple-element(call_ru), index=2
@@ -544,7 +544,7 @@ pipeline_wrapper {
   pipeline_lr_bcast2 = f32[1,4,4,2] broadcast(pipeline_stage_1_lr), dimensions={}
   pipeline_weights0_update = f32[1,4,4,2] multiply(pipeline_input_bwd, pipeline_lr_bcast2)
   pipeline_weights0_apply = f32[1,4,4,2] subtract(pipeline_weights0, pipeline_weights0_update)
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0_apply, pipeline_weights1_apply), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0_apply, pipeline_weights1_apply), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
@@ -892,7 +892,7 @@ pipeline_wrapper {
   add_grads = f32[2] add(add_grads_partial, bwd_stage_2.1)
   c = f32[2] constant({10, 2})
   normalized_grads = f32[2] multiply(add_grads, c)
-  ru = (f32[2]) call(normalized_grads), to_apply=resource_update, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  ru = (f32[2]) call(normalized_grads), to_apply=resource_update, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   ru.0 = f32[2] get-tuple-element(ru), index=0
 
   ROOT pipeline_tuple = (f32[2]) tuple(ru.0)
@@ -1007,7 +1007,7 @@ pipeline_wrapper {
   add_grads = f32[2] add(add_grads_partial, bwd_stage_2.1)
   c = f32[2] constant({10, 2})
   normalized_grads = f32[2] multiply(add_grads, c)
-  ru = (f32[2]) call(normalized_grads), to_apply=resource_update, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  ru = (f32[2]) call(normalized_grads), to_apply=resource_update, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   ru.0 = f32[2] get-tuple-element(ru), index=0
 
   ROOT pipeline_tuple = (f32[2]) tuple(ru.0)

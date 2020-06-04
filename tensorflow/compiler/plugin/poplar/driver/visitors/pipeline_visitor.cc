@@ -1034,8 +1034,7 @@ PipelineVisitor::PipelineVisitor(
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     const absl::flat_hash_set<int> stages_with_recomputation,
     int64 num_backward_stages, CompilerResources& res,
-    const DeferredArgVectors& inputs,
-    const std::string& name)
+    const DeferredArgVectors& inputs, const std::string& name)
     : InplaceDeferredVisitor(res, inputs, name, {}),
       schedule_(schedule),
       copy_sequences_(stage_count),
@@ -1064,8 +1063,8 @@ PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                       GetPipelineStageDeviceMapping(pipeline),
                       GetPipelineInstStageMapping(pipeline),
                       GetPipelineStagesWithStatelessRecomputation(pipeline),
-                      GetNumberOfBackwardPipelineStages(pipeline), res,
-                      inputs, name) {}
+                      GetNumberOfBackwardPipelineStages(pipeline), res, inputs,
+                      name) {}
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
@@ -1286,7 +1285,7 @@ StatusOr<poplar::program::Sequence*> PipelineVisitor::GetSequenceForInstruction(
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
   switch (hlo->opcode()) {
     case HloOpcode::kCall: {
-      if (IsPipelineResourceUpdate(hlo)) {
+      if (IsResourceUpdate(hlo)) {
         return &resource_update_;
       } else {
         return IsPipelineStageRecomputation(hlo)
@@ -1296,7 +1295,7 @@ StatusOr<poplar::program::Sequence*> PipelineVisitor::GetSequenceForInstruction(
     }
     case HloOpcode::kGetTupleElement: {
       const HloInstruction* gte_input = hlo->operand(0);
-      if (IsPipelineResourceUpdate(gte_input)) {
+      if (IsResourceUpdate(gte_input)) {
         return &resource_update_;
       } else {
         return IsPipelineStageRecomputation(gte_input)
@@ -1543,15 +1542,15 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
 }
 
 /**
- * Lowers a PipelineResourceUpdate into Poplar.
+ * Lowers a ResourceUpdate into Poplar.
  *
- * @param inst The PipelineResourceUpdate instruction which is being
+ * @param inst The ResourceUpdate instruction which is being
  * lowered.
  *
  * @returns The Poplar sequence with lowering of the stage.
  */
-StatusOr<poplar::program::Sequence>
-PipelineVisitor::CreatePipelineResourceUpdateOp(const HloInstruction* inst) {
+StatusOr<poplar::program::Sequence> PipelineVisitor::CreateResourceUpdateOp(
+    const HloInstruction* inst) {
   HloComputation* resource_update_comp = inst->to_apply();
   VLOG(1) << "Processing " << inst->name() << " : "
           << resource_update_comp->name() << " as a pipeline resource update.";
@@ -1585,8 +1584,8 @@ PipelineVisitor::CreatePipelineResourceUpdateOp(const HloInstruction* inst) {
 Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
   HloComputation* comp = hlo->to_apply();
 
-  if (IsPipelineResourceUpdate(hlo)) {
-    TF_ASSIGN_OR_RETURN(resource_update_, CreatePipelineResourceUpdateOp(hlo));
+  if (IsResourceUpdate(hlo)) {
+    TF_ASSIGN_OR_RETURN(resource_update_, CreateResourceUpdateOp(hlo));
   } else {
     TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
 

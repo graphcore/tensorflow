@@ -425,7 +425,7 @@ pipeline {
   get-tuple-element.10 = f32[2]{0} get-tuple-element(call.12), index=2, sharding={maximal device=1}
   get-tuple-element = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.13), index=1, sharding={maximal device=2}
   get-tuple-element.1 = f32[2]{0} get-tuple-element(call.13), index=2, sharding={maximal device=2}
-  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  call_ru = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(get-tuple-element.17, get-tuple-element.21, get-tuple-element.7, get-tuple-element.10, get-tuple-element, get-tuple-element.1), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,1,2,2] get-tuple-element(call_ru), index=0
   gte1 = f32[2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,1,2,2] get-tuple-element(call_ru), index=2

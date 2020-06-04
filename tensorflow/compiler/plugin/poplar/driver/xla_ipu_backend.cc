@@ -49,7 +49,7 @@ static bool OpFilter(KernelDef* kdef) {
   }
   if (kdef->op() == "Function" || kdef->op() == "Pipeline" ||
       kdef->op() == "PipelineStage" || kdef->op() == "PipelineStageBackward" ||
-      kdef->op() == "PipelineResourceUpdate") {
+      kdef->op() == "ResourceUpdate") {
     AddDtypeToKernelDefConstraint("Tin", DT_RESOURCE, kdef);
     AddDtypeToKernelDefConstraint("Tout", DT_RESOURCE, kdef);
   }

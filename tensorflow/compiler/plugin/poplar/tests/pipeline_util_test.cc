@@ -101,9 +101,9 @@ pipeline {
   pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   pipeline_stage_0_grad = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
   pipeline_stage_1_grad = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=0
-  pipeline_resource_update = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_grad, pipeline_weights0, pipeline_stage_1_grad, pipeline_weights1), to_apply=pipeline_ru, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
-  pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_resource_update), index=0
-  pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(pipeline_resource_update), index=1
+  resource_update = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_stage_0_grad, pipeline_weights0, pipeline_stage_1_grad, pipeline_weights1), to_apply=pipeline_ru, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(resource_update), index=0
+  pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(resource_update), index=1
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_new, pipeline_weights1_new)
 }
 
@@ -194,9 +194,9 @@ pipeline {
   pipeline_acts_0_bwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=0
   pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}"
   pipeline_input_bwd = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
-  pipeline_resource_update = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_input_bwd, pipeline_weights0, pipeline_acts_0_bwd, pipeline_weights1, pipeline_stage_1_lr), to_apply=pipeline_ru, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
-  pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_resource_update), index=0
-  pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(pipeline_resource_update), index=1
+  resource_update = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_input_bwd, pipeline_weights0, pipeline_acts_0_bwd, pipeline_weights1, pipeline_stage_1_lr), to_apply=pipeline_ru, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(resource_update), index=0
+  pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(resource_update), index=1
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(pipeline_weights0_new, pipeline_weights1_new)
 }
 
@@ -329,7 +329,7 @@ TEST_F(PipelineUtilTest, GetPipelineStagesFwdBwdTest) {
       ::testing::ElementsAre(FindInstruction(module0, "pipeline_stage_0_bwd"),
                              FindInstruction(module0, "pipeline_stage_1_bwd")));
   EXPECT_THAT(*stages.resource_update,
-              FindInstruction(module0, "pipeline_resource_update"));
+              FindInstruction(module0, "resource_update"));
 }
 
 TEST_F(PipelineUtilTest, GetPipelineStagesFwdBwdMismatchTest) {
@@ -942,7 +942,7 @@ pipeline {
   pipeline_weights1_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=1
   pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0_new, pipeline_weights1_new), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2]) call(pipeline_weights0_new, pipeline_weights1_new), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   ROOT pipeline_tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
@@ -1026,7 +1026,7 @@ pipeline {
   pipeline_weights0_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_1_bwd), index=1
   pipeline_stage_0_bwd = (f32[1,4,4,2]) call(pipeline_acts_0_bwd, pipeline_input, pipeline_weights0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   pipeline_weights0_new_new = f32[1,4,4,2] get-tuple-element(pipeline_stage_0_bwd), index=0
-  call_ru = (f32[1,4,4,2]) call(pipeline_weights0_new_new), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=PipelineResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"PipelineResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2]) call(pipeline_weights0_new_new), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   ROOT pipeline_tuple = (f32[1,4,4,2]) tuple(gte0)
 }
