@@ -42,7 +42,7 @@ class BinaryLoader;
  */
 class IExecutable {
  public:
-  IExecutable(StreamReader& stream, int64_t length);
+  IExecutable(StreamReader& stream, const Metadata& meta, int64_t length);
   poplar::Engine& Engine();
   std::string StreamsList(bool summary = false) const;
   virtual ~IExecutable() = default;
@@ -58,7 +58,8 @@ class IExecutable {
  */
 class VerifiedExecutable : public IExecutable {
  public:
-  VerifiedExecutable(StreamReader& stream, int64_t length, bool is_verified);
+  VerifiedExecutable(StreamReader& stream, const Metadata& meta, int64_t length,
+                     bool is_verified);
   void Prepare(poplar::Device& device);
   void Deploy();
   void Run();
@@ -77,7 +78,8 @@ class VerifiedExecutable : public IExecutable {
  */
 class Executable : public IExecutable {
  public:
-  explicit Executable(StreamReader& stream, int64_t length = 0);
+  explicit Executable(StreamReader& stream, const Metadata& meta,
+                      int64_t length = 0);
   void Load(const poplar::Device& device);
   void Run();
   void DeviceToHostCopy();
@@ -88,9 +90,8 @@ class Executable : public IExecutable {
 class DeviceManager {
  public:
   DeviceManager();
-  poplar::Device GetDevice(int64_t num_ipus, const poplar::OptionFlags& opts);
-  poplar::Device GetSpecificDevice(int64_t device_id,
-                                   const poplar::OptionFlags& opts);
+  poplar::Device GetDevice(int64_t num_ipus, const Metadata& meta);
+  poplar::Device GetSpecificDevice(int64_t device_id, const Metadata& meta);
 
  private:
   poplar::DeviceManager manager_;
@@ -156,7 +157,6 @@ class TensorManager {
   // whose position needs saving.
   bool ContainsCheckpoint() const;
   int64_t NumIpus() const;
-  poplar::OptionFlags OptionFlags() const;
 
  private:
   std::vector<Tensor> inputs_;
@@ -168,7 +168,6 @@ class TensorManager {
   int64_t num_ipus_;
   int64_t replication_count_;
   std::string random_number_seed_handle_;
-  poplar::OptionFlags option_flags_;
 };
 
 /* TensorManager / Executable / VerifiedExecutable factories from

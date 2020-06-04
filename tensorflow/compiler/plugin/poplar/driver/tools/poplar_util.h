@@ -162,7 +162,8 @@ std::string GetTensorMappingJson(const std::string& module_name,
 StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const InputOutputAliasingMap& io_map, const InfeedInfos& infeed_infos,
     const OutfeedInfos& outfeed_infos, uint32 replication_count,
-    const poplar::OptionFlags& opts, const poplar::Target& target,
+    const poplar::OptionFlags& device_opts,
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
     const VerifiedStreamsIndices::KeyIdMappings& indices,
     const std::vector<string>& checkpoint_feeds_order);
 

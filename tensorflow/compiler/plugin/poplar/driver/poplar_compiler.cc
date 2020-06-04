@@ -746,7 +746,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
           TF_RETURN_IF_ERROR(PoplarExecutable::Export(
               filenames, poplar_binary, *poplar_executable,
-              poplar_executor->GetReportExecutionFlags(),
+              {} /* device_opts */, poplar_executor->GetOptionsFlags(),
               poplar_executor->GetOrCreatePoplarTarget()));
         } catch (const std::exception& e) {
           const std::string origin =
@@ -1180,7 +1180,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
         TF_RETURN_IF_ERROR(PoplarExecutable::Export(
             filenames, exec, resources, replication_factor,
-            poplar_executor->GetReportExecutionFlags(),
+            {} /* device_opts */, opts,
             poplar_executor->GetOrCreatePoplarTarget()));
       }
 
