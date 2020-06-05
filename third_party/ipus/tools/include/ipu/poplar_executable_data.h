@@ -324,8 +324,11 @@ struct Metadata {
   std::vector<FeedInfo> outfeeds;
   int64_t replication_count;
   int64_t num_ipus;
+  std::string random_number_seed_handle;
   // PoplarOptions to pass to the poplar::Engine.
-  std::map<std::string, std::string> options;
+  std::map<std::string, std::string> engine_options;
+  // PoplarOptions to pass to the poplar::GetDevice.
+  std::map<std::string, std::string> device_options;
   // Verified mode only
   std::vector<std::string> feeds_order;
   std::map<std::string, VerificationInfo> verification_info;
@@ -352,8 +355,11 @@ class MetadataBuilder {
   void AddOutfeedStream(const std::string& outfeed_name,
                         const TensorInfo& tensor,
                         const VerificationInfo& info = {});
-  void AddOption(const std::string& key, const std::string& value);
+  void AddDeviceOption(const std::string& key, const std::string& value);
+  void AddEngineOption(const std::string& key, const std::string& value);
   void SetConfig(int64_t replication_count, int64_t num_ipus);
+
+  void SetRandomNumberSeedHandle(const std::string& handle);
   void AddCheckpoint(const std::vector<std::string>& feeds_order,
                      const VerificationInfo& checkpointInInfo,
                      const VerificationInfo& checkpointOutInfo);

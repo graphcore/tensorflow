@@ -295,17 +295,16 @@ StatusOr<ScopedShapedBuffer> PoplarExecutable::ExecuteAsyncOnStream(
   return executable;
 }
 namespace {
-Status ExportInternal(const ModuleFilenames& filenames,
-                      const poplar::Executable& executable,
-                      const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
-                      const SendRecvInfos& sends, const SendRecvInfos& recvs,
-                      const HostEmbeddingInfos& lookups,
-                      const HostEmbeddingInfos& updates,
-                      const InputOutputAliasingMap& io_map,
-                      uint32 replication_count, const poplar::OptionFlags& opts,
-                      const poplar::Target& target,
-                      const VerifiedStreamsIndices::KeyIdMappings& indices,
-                      const std::vector<string> checkpoint_feeds_order) {
+Status ExportInternal(
+    const ModuleFilenames& filenames, const poplar::Executable& executable,
+    const InfeedInfos& infeeds, const OutfeedInfos& outfeeds,
+    const SendRecvInfos& sends, const SendRecvInfos& recvs,
+    const HostEmbeddingInfos& lookups, const HostEmbeddingInfos& updates,
+    const InputOutputAliasingMap& io_map, uint32 replication_count,
+    const poplar::OptionFlags& device_opts,
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
+    const VerifiedStreamsIndices::KeyIdMappings& indices,
+    const std::vector<string> checkpoint_feeds_order) {
   if (!sends.empty()) {
     return tensorflow::errors::FailedPrecondition(
         "Failed to export the PoplarExecutable because it contains Sends "
@@ -329,10 +328,11 @@ Status ExportInternal(const ModuleFilenames& filenames,
 
   // Write poplar executable to a file
   try {
-    TF_ASSIGN_OR_RETURN(ipu::Metadata metadata,
-                        CreateExecutableMetadata(
-                            io_map, infeeds, outfeeds, replication_count, opts,
-                            target, indices, checkpoint_feeds_order));
+    TF_ASSIGN_OR_RETURN(
+        ipu::Metadata metadata,
+        CreateExecutableMetadata(io_map, infeeds, outfeeds, replication_count,
+                                 device_opts, engine_opts, target, indices,
+                                 checkpoint_feeds_order));
     std::string json_metadata = metadata.ToJson();
     VLOG(1) << "Module JSON Metadata: " << json_metadata;
     // For security reasons don't store the verification information inside the
@@ -359,27 +359,28 @@ Status ExportInternal(const ModuleFilenames& filenames,
 }
 
 }  // namespace
-/*static*/ Status PoplarExecutable::Export(const ModuleFilenames& filenames,
-                                           const poplar::Executable& executable,
-                                           const CompilerResources& resources,
-                                           uint32 replication_count,
-                                           const poplar::OptionFlags& opts,
-                                           const poplar::Target& target) {
+/*static*/ Status PoplarExecutable::Export(
+    const ModuleFilenames& filenames, const poplar::Executable& executable,
+    const CompilerResources& resources, uint32 replication_count,
+    const poplar::OptionFlags& device_opts,
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target) {
   return ExportInternal(
       filenames, executable, resources.annotations.infeed_infos,
       resources.annotations.outfeed_infos, resources.annotations.send_infos,
       resources.annotations.recv_infos,
       resources.annotations.host_embedding_lookup_infos,
       resources.annotations.host_embedding_update_infos,
-      resources.annotations.input_output_aliasing_map, replication_count, opts,
-      target, resources.streams_indices.GetAssignedIds(),
+      resources.annotations.input_output_aliasing_map, replication_count,
+      device_opts, engine_opts, target,
+      resources.streams_indices.GetAssignedIds(),
       resources.streams_indices.CheckpointFeedsOrder());
 }
 
 /*static*/ Status PoplarExecutable::Export(
     const ModuleFilenames& filenames, const poplar::Executable& executable,
-    const PoplarExecutable& poplar_executable, const poplar::OptionFlags& opts,
-    const poplar::Target& target) {
+    const PoplarExecutable& poplar_executable,
+    const poplar::OptionFlags& device_opts,
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target) {
   return ExportInternal(
       filenames, executable, poplar_executable.GetInfeedInfos(),
       poplar_executable.GetOutfeedInfos(), poplar_executable.GetSendInfos(),
@@ -387,8 +388,8 @@ Status ExportInternal(const ModuleFilenames& filenames,
       poplar_executable.GetHostEmbeddingLookupInfos(),
       poplar_executable.GetHostEmbeddingUpdateInfos(),
       poplar_executable.GetInputOutputAliasingMap(),
-      poplar_executable.GetReplicationFactor(), opts, target,
-      poplar_executable.KeyIdMappings(),
+      poplar_executable.GetReplicationFactor(), device_opts, engine_opts,
+      target, poplar_executable.KeyIdMappings(),
       poplar_executable.CheckpointFeedsOrder());
 }
 /*static*/ Status PoplarExecutable::Serialize(
