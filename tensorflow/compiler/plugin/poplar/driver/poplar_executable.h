@@ -155,13 +155,15 @@ class PoplarExecutable : public Executable {
                        const poplar::Executable& executable,
                        const CompilerResources& resources,
                        uint32 replication_count,
-                       const poplar::OptionFlags& opts,
+                       const poplar::OptionFlags& device_opts,
+                       const poplar::OptionFlags& engine_opts,
                        const poplar::Target& target);
 
   static Status Export(const ModuleFilenames& filenames,
                        const poplar::Executable& executable,
                        const PoplarExecutable& poplar_executable,
-                       const poplar::OptionFlags& opts,
+                       const poplar::OptionFlags& device_opts,
+                       const poplar::OptionFlags& engine_opts,
                        const poplar::Target& target);
 
  private:

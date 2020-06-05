@@ -432,7 +432,8 @@ Status SetIpuShape(ipu::TensorInfo& info, const xla::Shape& xla_shape) {
 StatusOr<ipu::Metadata> CreateExecutableMetadata(
     const InputOutputAliasingMap& io_map, const InfeedInfos& infeed_infos,
     const OutfeedInfos& outfeed_infos, uint32 replication_count,
-    const poplar::OptionFlags& opts, const poplar::Target& target,
+    const poplar::OptionFlags& device_opts,
+    const poplar::OptionFlags& engine_opts, const poplar::Target& target,
     const VerifiedStreamsIndices::KeyIdMappings& indices,
     const std::vector<string>& checkpoint_feeds_order) {
   try {
@@ -551,10 +552,14 @@ StatusOr<ipu::Metadata> CreateExecutableMetadata(
       }
     }
 
-    for (auto opt : opts) {
-      builder.AddOption(opt.first, opt.second);
+    for (auto opt : device_opts) {
+      builder.AddDeviceOption(opt.first, opt.second);
+    }
+    for (auto opt : engine_opts) {
+      builder.AddEngineOption(opt.first, opt.second);
     }
     builder.SetConfig(replication_count, target.getNumIPUs());
+    builder.SetRandomNumberSeedHandle(GetRandomNumberSeedStream());
     if (target.getTargetType() != poplar::TargetType::IPU) {
       return xla::FailedPrecondition(
           "The target's type must be poplar::TargetType::IPU");

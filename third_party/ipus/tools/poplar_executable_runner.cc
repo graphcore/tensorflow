@@ -50,8 +50,6 @@ std::string FirstLinesOf(const std::string& lines, int64_t num_lines) {
   return res;
 }
 
-std::string GetRandomNumberSeedStream() { return "__seed_stream"; }
-
 enum PoplarProgramType {
   HOST_TO_DEVICE,
   MAIN_SEQUENCE,
@@ -77,9 +75,10 @@ std::string ObjectTypeToString(ObjectType type) {
   }
 }
 
-poplar::OptionFlags ParseOptionFlags(const Metadata& meta) {
+poplar::OptionFlags ParseOptionFlags(
+    const std::map<std::string, std::string>& str_options) {
   poplar::OptionFlags opts;
-  for (auto option : meta.options) {
+  for (auto option : str_options) {
     opts.set(option.first, option.second);
   }
   return opts;
@@ -203,13 +202,15 @@ std::string InsertNumberBeforeExtension(const std::string& filename,
 
 }  // namespace
 
-IExecutable::IExecutable(StreamReader& stream, int64_t length) {
+IExecutable::IExecutable(StreamReader& stream, const Metadata& meta,
+                         int64_t length) {
   try {
     SubStream sub(stream, length > 0 ? length : stream.NumBytesLeft());
     std::istream sub_stream(&sub);
     poplar::Executable poplar_executable =
         poplar::Executable::deserialize(sub_stream);
-    engine_.reset(new poplar::Engine(std::move(poplar_executable)));
+    engine_.reset(new poplar::Engine(std::move(poplar_executable),
+                                     ParseOptionFlags(meta.engine_options)));
   } catch (const std::exception& e) {
     ERROR("Failed to deserialize " << stream.Filename() << " : " << e.what());
   }
@@ -274,8 +275,9 @@ std::string IExecutable::StreamsList(bool summary) const {
   return ss.str();
 }
 
-Executable::Executable(StreamReader& stream, int64_t length)
-    : IExecutable(stream, length) {}
+Executable::Executable(StreamReader& stream, const Metadata& meta,
+                       int64_t length)
+    : IExecutable(stream, meta, length) {}
 
 void Executable::Load(const poplar::Device& device) {
   LogContext ctx("Running HOST_TO_DEVICE");
@@ -309,9 +311,10 @@ void Executable::DeviceToHostCopy() {
   }
 }
 
-VerifiedExecutable::VerifiedExecutable(StreamReader& stream, int64_t length,
+VerifiedExecutable::VerifiedExecutable(StreamReader& stream,
+                                       const Metadata& meta, int64_t length,
                                        bool is_verified)
-    : IExecutable(stream, length), is_verified_(is_verified) {}
+    : IExecutable(stream, meta, length), is_verified_(is_verified) {}
 
 bool VerifiedExecutable::IsVerified() const { return is_verified_; }
 
@@ -341,11 +344,17 @@ DeviceManager::DeviceManager()
                "No physical IPU detected on this host");
 }
 
-poplar::Device DeviceManager::GetSpecificDevice(
-    int64_t device_id, const poplar::OptionFlags& opts) {
-  poplar::Device device = manager_.getDevice(device_id, opts);
+poplar::Device DeviceManager::GetSpecificDevice(int64_t device_id,
+                                                const Metadata& meta) {
+  LogContext ctx{"DeviceManager::GetSpecificDevice"};
+  poplar::Device device =
+      manager_.getDevice(device_id, ParseOptionFlags(meta.device_options));
 
-  ERROR_ON_MSG(!device.attach(), "Failed to attach to device " << device_id);
+  ERROR_ON_MSG(!device.attach(),
+               "Failed to attach to device "
+                   << device_id << " OptionFlags="
+                   << absl::StrJoin(meta.device_options, ", ",
+                                    absl::PairFormatter("=")));
   unsigned mj, mn, pt;
   device.getDriverVersion(mj, mn, pt);
   const auto& ids = device.getDriverIDs();
@@ -356,14 +365,16 @@ poplar::Device DeviceManager::GetSpecificDevice(
 }
 
 poplar::Device DeviceManager::GetDevice(int64_t num_ipus,
-                                        const poplar::OptionFlags& opts) {
-  auto device_list =
-      manager_.getDevices(poplar::TargetType::IPU, num_ipus, opts);
+                                        const Metadata& meta) {
+  LogContext ctx{"DeviceManager::GetDevice"};
+  auto device_list = manager_.getDevices(poplar::TargetType::IPU, num_ipus,
+                                         ParseOptionFlags(meta.device_options));
   ERROR_ON_MSG(
       device_list.empty(),
       "Failed to find any IPU device that match the requested config: num_ipus="
           << num_ipus << " OptionFlags="
-          << absl::StrJoin(opts, ", ", absl::PairFormatter("=")));
+          << absl::StrJoin(meta.device_options, ", ",
+                           absl::PairFormatter("=")));
 
   std::cout << "Found " << device_list.size()
             << " devices matching the requested configuration.\n";
@@ -407,14 +418,12 @@ TensorManager::TensorManager(const Metadata& meta) {
   for (auto& seed : seeds_) {
     seed = seed_generator();
   }
-  option_flags_ = ParseOptionFlags(meta);
   num_ipus_ = meta.num_ipus;
   replication_count_ = meta.replication_count;
+  random_number_seed_handle_ = meta.random_number_seed_handle;
 }
 
 int64_t TensorManager::NumIpus() const { return num_ipus_; }
-
-poplar::OptionFlags TensorManager::OptionFlags() const { return option_flags_; }
 
 void TensorManager::LoadCheckpointMetadataFromJson(
     const std::string& filename) {
@@ -494,7 +503,7 @@ void TensorManager::AssertAllTensorsProvided(const BinaryLoader& loader) {
   }
   for (auto& infeed : infeeds_) {
     for (int i = 0; i < infeed.Streams().size(); i++) {
-      const std::string name = absl::StrCat(infeed.Name(), ".", i);
+      const std::string name = infeed.Streams()[i].Info().Name();
       if (feeds_provided.find(name) == feeds_provided.end()) {
         missing_msg.push_back(
             absl::StrCat("No data provided for infeed's stream '", name, "'"));
@@ -683,7 +692,7 @@ void TensorManager::ConnectStreams(IExecutable& executable) {
       reinterpret_cast<uint64_t*>(ptr)[0] = this->seeds_[replica_id];
     };
 
-    engine.connectStreamToCallback(GetRandomNumberSeedStream(), replica_id,
+    engine.connectStreamToCallback(random_number_seed_handle_, replica_id,
                                    callback);
   }
 }
@@ -701,9 +710,10 @@ Infeed::Infeed(const FeedInfo& infeed) : name_(infeed.name) {
 
 void Infeed::InitializeDataSources(const BinaryLoader& loader) {
   for (int i = 0; i < streams_.size(); i++) {
-    LogContext ctx{absl::StrCat(Name(), ".", i)};
+    const std::string stream_name = streams_[i].Info().Name();
+    LogContext ctx{stream_name};
     streams_[i].InitializeDataSource(
-        loader.CreateInfeedStreamReader(absl::StrCat(Name(), ".", i)));
+        loader.CreateInfeedStreamReader(stream_name));
   }
   ERROR_ON(!absl::c_all_of(streams_, [this](const InfeedStream& stream) {
     return stream.NumTensors() == this->streams_[0].NumTensors();
@@ -721,18 +731,20 @@ std::unique_ptr<Executable> BinaryLoader::CreateExecutable(
     const std::string& executable_name) const {
   LogContext ctx{"BinaryLoader::CreateExecutable " + executable_name};
   auto in = CreateExecutableReader(executable_name);
+  auto metadata = ReadMetadata(executable_name);
   bool is_verified = static_cast<bool>(in->ReadInt64());
   ERROR_ON_MSG(is_verified, "Regular Executables cannot be verified");
-  return absl::make_unique<Executable>(*in, in->NumBytesLeft());
+  return absl::make_unique<Executable>(*in, *metadata, in->NumBytesLeft());
 }
 
 std::unique_ptr<VerifiedExecutable> BinaryLoader::CreateVerifiedExecutable(
     const std::string& executable_name) const {
   LogContext ctx{"BinaryLoader::CreateVerifiedExecutable " + executable_name};
   auto in = CreateExecutableReader(executable_name);
+  auto metadata = ReadMetadata(executable_name);
   bool is_verified = static_cast<bool>(in->ReadInt64());
-  return absl::make_unique<VerifiedExecutable>(*in, in->NumBytesLeft(),
-                                               is_verified);
+  return absl::make_unique<VerifiedExecutable>(*in, *metadata,
+                                               in->NumBytesLeft(), is_verified);
 }
 
 }  // namespace ipu

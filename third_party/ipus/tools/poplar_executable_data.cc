@@ -1104,7 +1104,7 @@ const BinaryReader::Object BinaryReader::GetObject(
 
 std::unique_ptr<StreamReader> BinaryReader::CreateInfeedStreamReader(
     const std::string& infeed_name) const {
-  LogContext ctx{"BinaryReader::CreateInfeedStreamReader" + infeed_name};
+  LogContext ctx{"BinaryReader::CreateInfeedStreamReader " + infeed_name};
   return GetObjectReader(ObjectType::Feed, infeed_name);
 }
 
@@ -1325,15 +1325,25 @@ std::string Metadata::ToJson() const {
   }
 
   Json::Value config;
-  Json::Value json_options;
-  for (auto opt : options) {
-    json_options[opt.first] = opt.second;
+  Json::Value json_device_options;
+  for (auto opt : device_options) {
+    json_device_options[opt.first] = opt.second;
   }
-  if (!json_options.empty()) {
-    config["options"] = json_options;
+  if (!json_device_options.empty()) {
+    config["device_options"] = json_device_options;
   }
+
+  Json::Value json_engine_options;
+  for (auto opt : engine_options) {
+    json_engine_options[opt.first] = opt.second;
+  }
+  if (!json_engine_options.empty()) {
+    config["engine_options"] = json_engine_options;
+  }
+
   config["replication_count"] = Json::Value::Int64(replication_count);
   config["num_ipus"] = Json::Value::Int64(num_ipus);
+  config["random_number_seed_handle"] = random_number_seed_handle;
 
   Json::Value checkpoint;
   if (!feeds_order.empty()) {
@@ -1393,12 +1403,22 @@ Metadata::Metadata(const Json::Value& root) {
   Json::Value config = root["config"];
   replication_count = config["replication_count"].asInt64();
   num_ipus = config["num_ipus"].asInt64();
-  Json::Value json_options = config["options"];
-  if (!json_options.isNull()) {
-    for (const auto& key : json_options.getMemberNames()) {
-      options[key] = json_options[key].asString();
+  random_number_seed_handle = config["random_number_seed_handle"].asString();
+
+  Json::Value json_device_options = config["device_options"];
+  if (!json_device_options.isNull()) {
+    for (const auto& key : json_device_options.getMemberNames()) {
+      device_options[key] = json_device_options[key].asString();
     }
   }
+
+  Json::Value json_engine_options = config["engine_options"];
+  if (!json_engine_options.isNull()) {
+    for (const auto& key : json_engine_options.getMemberNames()) {
+      engine_options[key] = json_engine_options[key].asString();
+    }
+  }
+
   Json::Value checkpoint = root["checkpoint"];
   for (const auto& feed : checkpoint["feeds"]) {
     feeds_order.push_back(feed.asString());
@@ -1548,15 +1568,25 @@ void MetadataBuilder::AddOutfeedStream(const std::string& outfeed_name,
   streams.back().SetType(TensorType::Outfeed);
 }
 
-void MetadataBuilder::AddOption(const std::string& key,
-                                const std::string& value) {
-  ERROR_ON_MSG(!meta_.options.emplace(key, value).second,
-               "Option " << key << " already added");
+void MetadataBuilder::AddDeviceOption(const std::string& key,
+                                      const std::string& value) {
+  ERROR_ON_MSG(!meta_.device_options.emplace(key, value).second,
+               "DeviceOption " << key << " already added");
+}
+
+void MetadataBuilder::AddEngineOption(const std::string& key,
+                                      const std::string& value) {
+  ERROR_ON_MSG(!meta_.engine_options.emplace(key, value).second,
+               "EngineOption " << key << " already added");
 }
 
 void MetadataBuilder::SetConfig(int64_t replication_count, int64_t num_ipus) {
   meta_.replication_count = replication_count;
   meta_.num_ipus = num_ipus;
+}
+
+void MetadataBuilder::SetRandomNumberSeedHandle(const std::string& handle) {
+  meta_.random_number_seed_handle = handle;
 }
 
 void MetadataBuilder::AddCheckpoint(const std::vector<std::string>& feeds_order,
