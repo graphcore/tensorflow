@@ -1,4 +1,4 @@
-/* Copyright 2017 Graphcore Ltd
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
  */
 
 /* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
