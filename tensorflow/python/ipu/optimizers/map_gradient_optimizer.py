@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-
 from tensorflow.python.training import optimizer
 
 
@@ -77,15 +76,8 @@ class MapGradientOptimizer(optimizer.Optimizer):
     self._gradient_mapping_function = gradient_mapping_function
 
   # Override method from tensorflow.python.training.optimizer.Optimizer
-  def compute_gradients(self,
-                        loss,
-                        var_list=None,
-                        gate_gradients=optimizer.Optimizer.GATE_OP,
-                        aggregation_method=None,
-                        colocate_gradients_with_ops=False,
-                        grad_loss=None):
-    grads_and_vars = self._wrapped_optimizer.compute_gradients(
-        loss, var_list, gate_gradients, aggregation_method, True, grad_loss)
+  def compute_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
+    grads_and_vars = self._wrapped_optimizer.compute_gradients(*args, **kwargs)
     grads_and_vars = [(self._gradient_mapping_function(x[0],
                                                        x[1].value()), x[1])
                       for x in grads_and_vars]
@@ -96,28 +88,19 @@ class MapGradientOptimizer(optimizer.Optimizer):
     return self._wrapped_optimizer.get_name()
 
   # Override method from tensorflow.python.training.optimizer.Optimizer
-  def minimize(self,
-               loss,
-               global_step=None,
-               var_list=None,
-               gate_gradients=optimizer.Optimizer.GATE_OP,
-               aggregation_method=None,
-               colocate_gradients_with_ops=False,
-               name=None,
-               grad_loss=None):
-    return self._wrapped_optimizer.minimize(loss, global_step, var_list,
-                                            gat_gradients, aggregation_method,
-                                            colocate_gradients_with_ops, name,
-                                            grad_loss)
+  def minimize(self, *args, **kwargs):  #pylint: disable=arguments-differ,unused-argument
+    raise RuntimeError(
+        "MapGradientOptimizer does not support minimize(), the "
+        "`compute_gradients` and `apply_gradients` need to be called "
+        "separately.")
 
   # Override method from tensorflow.python.training.optimizer.Optimizer
-  def apply_gradients(self, grads_and_vars, global_step=None, name=None):
-    return self._wrapped_optimizer.apply_gradients(grads_and_vars, global_step,
-                                                   name)
+  def apply_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
+    return self._wrapped_optimizer.apply_gradients(*args, **kwargs)
 
   # Override method from tensorflow.python.training.optimizer.Optimizer
   def get_slot(self, var, name):
-    return self._wrapped_optmizer.get_slot(var, name)
+    return self._wrapped_optimizer.get_slot(var, name)
 
   # Override method from tensorflow.python.training.optimizer.Optimizer
   def get_slot_names(self):
