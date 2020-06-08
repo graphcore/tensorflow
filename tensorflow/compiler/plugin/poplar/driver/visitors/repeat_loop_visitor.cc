@@ -35,7 +35,35 @@ RepeatLoopVisitor::RepeatLoopVisitor(CompilerResources& res,
                                      const DeferredArgVectors& inputs,
                                      bool reallocate_inputs,
                                      const std::string& name)
-    : InplaceDeferredVisitor(res, inputs, name, {}, reallocate_inputs) {}
+    : InplaceDeferredVisitor(res, inputs, name, {}, reallocate_inputs) {
+  // Push a new vector for the zeroing sequences onto the stack.
+  res.gradient_accumulation_zeroing_sequences.push({});
+}
+
+Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
+  if (IsResourceUpdate(inst)) {
+    if (has_resource_update_) {
+      return FailedPrecondition(
+          "Detected multiple resource update instructions inside of a training "
+          "loop - only one resource update is allowed.");
+    }
+
+    has_resource_update_ = true;
+    num_mini_batches_to_accumulate_ =
+        GetResourceUpdateBatchesToAccumulate(inst);
+
+    TF_ASSIGN_OR_RETURN(DeferredArgVectors inputs,
+                        GetInputsForDeferredInplaceInstruction(
+                            inst, /*preserve_aliasing*/ true));
+
+    TF_ASSIGN_OR_RETURN(resource_update_sequence_,
+                        CreateResourceUpdateOp(resources_, inst, inputs,
+                                               inst->shape(), tensor_map));
+
+  } else {
+    return InplaceDeferredVisitor::HandleDeferredAllocationCall(inst);
+  }
+}
 
 Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   // Create the sequence which is only executed once before the loops is
@@ -49,6 +77,13 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
       resources_, execution_counters_, pre_loop_sequence_));
 
+  // Create a sequence for all the zeroing gradient accumulation buffers.
+  auto& zeroing_seqs = resources_.gradient_accumulation_zeroing_sequences.top();
+  for (poplar::program::Sequence& zeroing_seq : zeroing_seqs) {
+    tensors_zeroing_sequence_.add(zeroing_seq);
+  }
+  resources_.gradient_accumulation_zeroing_sequences.pop();
+
   // Add the aliasing copies for the loop so that the outputs of one iteration
   // are aliased to the inputs of the next one.
   poplar::Graph& graph = GetGraph(resources_, inst);
@@ -56,6 +91,26 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
                                        graph, inst->parent(), name_));
 
   return Status::OK();
+}
+
+StatusOr<poplar::program::Sequence*>
+RepeatLoopVisitor::GetSequenceForInstruction(const HloInstruction* inst) {
+  switch (inst->opcode()) {
+    case HloOpcode::kGetTupleElement: {
+      return IsResourceUpdate(inst->operand(0)) ? &resource_update_sequence_
+                                                : &sequence;
+    }
+    case HloOpcode::kTuple: {
+      return has_resource_update_ && inst->parent()->root_instruction() == inst
+                 ? &resource_update_sequence_
+                 : &sequence;
+    }
+    default: { return InplaceDeferredVisitor::GetSequenceForInstruction(inst); }
+  }
+}
+
+poplar::program::Sequence& RepeatLoopVisitor::GetSequenceForAliasingCopy() {
+  return has_resource_update_ ? resource_update_sequence_ : sequence;
 }
 
 poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
@@ -71,12 +126,32 @@ poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
     // Increase the local execution counters at the end of each iteration.
     repeat_seq.add(execution_counters_.IncrementLiveCounters());
   }
-  seq.add(poplar::program::Repeat(repeat_count, repeat_seq));
+
+  if (has_resource_update_) {
+    CHECK_GT(num_mini_batches_to_accumulate_, 0);
+    CHECK_EQ(repeat_count % num_mini_batches_to_accumulate_, 0);
+    // Create a double loop - the inner loop executes for
+    // `num_mini_batches_to_accumulate_` iterations and then performs the
+    // resource update.
+    poplar::program::Sequence inner_seq;
+    // Zero the gradient accumulation buffers.
+    inner_seq.add(tensors_zeroing_sequence_);
+    inner_seq.add(
+        poplar::program::Repeat(num_mini_batches_to_accumulate_, repeat_seq));
+    inner_seq.add(resource_update_sequence_);
+
+    // Repeat the inner loop.
+    seq.add(poplar::program::Repeat(
+        repeat_count / num_mini_batches_to_accumulate_, inner_seq));
+  } else {
+    seq.add(poplar::program::Repeat(repeat_count, repeat_seq));
+  }
   return seq;
 }
 
 const TensorVector& RepeatLoopVisitor::GetLoopState() const {
   return loop_state_;
 }
+
 }  // namespace poplarplugin
 }  // namespace xla

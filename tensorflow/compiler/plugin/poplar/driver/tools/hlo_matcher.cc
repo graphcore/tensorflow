@@ -925,9 +925,7 @@ StatusOr<bool> HloMatcher::Run(HloModule* module) {
     matched = MatchPatternStart(comp);
   } else {
     // Copy list of computations as we will be introducing new ones
-    std::vector<HloComputation*> comps(module->computations().begin(),
-                                       module->computations().end());
-
+    std::vector<HloComputation*> comps = module->MakeComputationPostOrder();
     for (auto* comp : comps) {
       if (!comp->IsFusionComputation() && !IsPopOpsFusion(comp)) {
         matched |= MatchPatternStart(comp);

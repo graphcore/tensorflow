@@ -203,6 +203,12 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
                                                   const xla::Shape& output,
                                                   TensorMap& tensor_map);
 
+// A ResourceUpdate op which allows inputs to not have a layout.
+StatusOr<poplar::program::Program> CreateResourceUpdateOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgVectors& inputs, const xla::Shape& output,
+    TensorMap& tensor_map);
+
 StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
                                                     const HloInstruction* inst,
                                                     const xla::Shape& output,

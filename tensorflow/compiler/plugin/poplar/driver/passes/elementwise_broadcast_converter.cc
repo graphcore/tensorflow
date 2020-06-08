@@ -186,7 +186,8 @@ StatusOr<bool> ElementwiseBroadcastConverter::Run(HloModule* module) {
     }
     for (auto inst : comp->MakeInstructionPostOrder()) {
       if (inst->IsElementwise() &&
-          inst->opcode() != HloOpcode::kDynamicUpdateSlice) {
+          inst->opcode() != HloOpcode::kDynamicUpdateSlice &&
+          inst->opcode() != HloOpcode::kFusion) {
         switch (inst->operand_count()) {
           case 2:
           case 3:

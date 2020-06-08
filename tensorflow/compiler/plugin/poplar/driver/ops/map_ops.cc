@@ -604,5 +604,34 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
   return seq;
 }
 
+StatusOr<poplar::program::Program> CreateResourceUpdateOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgVectors& inputs, const xla::Shape& output,
+    TensorMap& tensor_map) {
+  HloComputation* resource_update_comp = inst->to_apply();
+  VLOG(1) << "Processing " << inst->name() << " : "
+          << resource_update_comp->name() << " as a resource update.";
+  poplar::program::Sequence seq;
+  // Create a visitor for the resource update.
+  InplaceDeferredVisitor visitor(res, inputs, GetDebugName(inst));
+  auto order = resource_update_comp->parent()
+                   ->schedule()
+                   .sequence(resource_update_comp)
+                   .instructions();
+  TF_RETURN_IF_ERROR(resource_update_comp->AcceptOrdered(&visitor, order));
+  // Make sure any deferred inputs to the instruction are pushed up.
+  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
+  // Add to the sequence.
+  seq.add(visitor.GetSequence());
+  seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());
+  // Set up the outputs.
+  const TensorVector& outputs = visitor.outputs();
+  for (size_t i = 0; i < outputs.size(); i++) {
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
+  }
+
+  return seq;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla
