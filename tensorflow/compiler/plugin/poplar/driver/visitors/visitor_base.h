@@ -168,6 +168,8 @@ class BaseVisitor : public DfsHloVisitor {
   bool has_infeed_ = false;
   bool stochastic_rounding_enabled_;
 
+  const std::string name_;
+
   // Scope execution counters.
   ExecutionCounters execution_counters_;
 };
