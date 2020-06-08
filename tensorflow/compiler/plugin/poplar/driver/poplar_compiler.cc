@@ -1,6 +1,3 @@
-/* Copyright 2017 Graphcore Ltd
- */
-
 /* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -1194,8 +1191,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         const poplar::graph_memory_allocation_error* p_e_ptr =
             dynamic_cast<const poplar::graph_memory_allocation_error*>(&e);
         if (p_e_ptr) {
-          DumpIfPoplarOutOfMemoryAllocationException(poplar_executor,
-                                                     module->name(), *p_e_ptr);
+          poplar_executor->DumpPoplarOutOfMemoryAllocationException(
+              module->name(), *p_e_ptr);
         }
       }
       return PoplarExceptionToTensorflowStatus("[Compile engine] ", e);
