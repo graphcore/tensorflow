@@ -920,6 +920,24 @@ tf_py_test(
     shard_count = 4,
 )
 
+tf_py_test(
+    name = "gradient_accumulation_test",
+    size = "large",
+    srcs = ["tests/gradient_accumulation_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        ":pipelining_test_util",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 10,
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -934,6 +952,7 @@ test_suite(
         "frontend_attributes_test",
         "functional_ops_test",
         "gcl_test",
+        "gradient_accumulation_test",
         "host_embedding_lookup_test",
         "infeed_outfeed_test",
         "ipu_compiler_test",

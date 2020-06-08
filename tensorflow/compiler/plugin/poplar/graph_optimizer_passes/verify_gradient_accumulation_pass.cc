@@ -20,7 +20,6 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/graph_optimizer_passes/util.h"
-
 #include "tensorflow/compiler/tf2xla/tf2xla_util.h"
 #include "tensorflow/core/common_runtime/function.h"
 #include "tensorflow/core/framework/function.h"
@@ -66,7 +65,8 @@ StatusOr<bool> VerifyGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
             "`GradientAccumulationOptimizer` is used with another optimizer "
             "which is not supported. Please note that "
             "`GradientAccumulationOptimizer` is currently only supported with "
-            "`GradientDescentOptimizer` and `MomentumOptimizer` optimizers.");
+            "`GradientDescentOptimizer` and `MomentumOptimizer` optimizers. "
+            "For any other optimizers use `GradientAccumulationOptimizerV2`.");
         return errors::FailedPrecondition(error_msg);
       }
 
@@ -88,9 +88,7 @@ StatusOr<bool> VerifyGraph(Graph* graph, FunctionLibraryDefinition* flib_def) {
               "The ", node->name(), " op (", node->def().op(),
               " optype) has user op ", user->name(), " (", user->def().op(),
               " optype) which is not supported.\n"
-              "This check can be disabled with the `verify_usage` argument to "
-              "the `GradientAccumulationOptimizer`, however correctness cannot "
-              "be guaranteed.");
+              "Please use `GradientAccumulationOptimizerV2`.");
           return errors::FailedPrecondition(error_msg);
         } else {
           VLOG(1) << "Detected unsafe usage of "

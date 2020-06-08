@@ -27,8 +27,12 @@ enum FrontendAttributeId {
   PIPELINE_SCHEDULE = 6;
   // Used to configure the pipeline lowering to Poplar.
   PIPELINE_POPLAR_CONFIG = 7;
-  // Used to indicate whether to offload variables for pipelining.
-  PIPELINE_OFFLOAD_WU_VARIABLES = 8;
+  // Used to indicate whether to offload variables when gradient
+  // accumulation/pipelining is performed.
+  OFFLOAD_VARIABLES = 8;
+  // Used to indicate how many batches need to be accumulated during gradient
+  // accumulation.
+  NUM_BATCHES_TO_ACCUMULATE = 9;
 };
 
 enum StochasticRounding {
@@ -93,13 +97,17 @@ message PoplarBackendConfig {
       int64 pipeline_depth = 1;
       int64 repeat_count = 2;
       Schedule schedule = 3;
-      bool offload_wu_variables = 4;
     }
 
     message CallConfig {
     }
 
     message FunctionConfig {
+    }
+
+    message ResourceUpdateConfig {
+      int64 num_batches_to_accumulate = 1;
+      bool offload_variables = 2;
     }
 
     Type type = 1;
@@ -110,6 +118,7 @@ message PoplarBackendConfig {
       PipelineStageConfig pipeline_stage_config = 4;
       PipelineConfig pipeline_config = 5;
       FunctionConfig function_config = 6;
+      ResourceUpdateConfig resource_update_config = 7;
     }
   }
 

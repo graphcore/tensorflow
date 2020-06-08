@@ -1541,51 +1541,17 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
   return seq;
 }
 
-/**
- * Lowers a ResourceUpdate into Poplar.
- *
- * @param inst The ResourceUpdate instruction which is being
- * lowered.
- *
- * @returns The Poplar sequence with lowering of the stage.
- */
-StatusOr<poplar::program::Sequence> PipelineVisitor::CreateResourceUpdateOp(
-    const HloInstruction* inst) {
-  HloComputation* resource_update_comp = inst->to_apply();
-  VLOG(1) << "Processing " << inst->name() << " : "
-          << resource_update_comp->name() << " as a pipeline resource update.";
-
-  TF_ASSIGN_OR_RETURN(
-      DeferredArgVectors inputs,
-      GetInputsForDeferredInplaceInstruction(inst, /*preserve_aliasing*/ true));
-
-  poplar::program::Sequence seq;
-  // Create a visitor for the resource update.
-  InplaceDeferredVisitor visitor(resources_, inputs, GetDebugName(inst));
-  auto order = resource_update_comp->parent()
-                   ->schedule()
-                   .sequence(resource_update_comp)
-                   .instructions();
-  TF_RETURN_IF_ERROR(resource_update_comp->AcceptOrdered(&visitor, order));
-  // Make sure any deferred inputs to the instruction are pushed up.
-  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
-  // Add to the sequence.
-  seq.add(visitor.GetSequence());
-  seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());
-  // Set up the outputs.
-  const TensorVector& outputs = visitor.outputs();
-  for (size_t i = 0; i < outputs.size(); i++) {
-    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
-  }
-
-  return seq;
-}
-
 Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
   HloComputation* comp = hlo->to_apply();
 
   if (IsResourceUpdate(hlo)) {
-    TF_ASSIGN_OR_RETURN(resource_update_, CreateResourceUpdateOp(hlo));
+    TF_ASSIGN_OR_RETURN(DeferredArgVectors inputs,
+                        GetInputsForDeferredInplaceInstruction(
+                            hlo, /*preserve_aliasing*/ true));
+
+    TF_ASSIGN_OR_RETURN(resource_update_,
+                        CreateResourceUpdateOp(resources_, hlo, inputs,
+                                               hlo->shape(), tensor_map));
   } else {
     TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
 

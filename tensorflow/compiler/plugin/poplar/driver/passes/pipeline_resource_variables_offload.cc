@@ -23,13 +23,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_value.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -58,7 +56,8 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
   TF_RETURN_IF_ERROR(FixRootInstructions(stages));
   // Do not optimize if there is no resource update or pipeline wu variable
   // offloading is turned off.
-  if (!stages.resource_update || !GetPipelineOffloadWUVariables(pipeline_op)) {
+  if (!stages.resource_update ||
+      !GetResourceUpdateOffloadVariables(*stages.resource_update)) {
     return changed;
   }
 

@@ -86,7 +86,7 @@ pipeline {
   stage_1_bwd_2 = f32[1,4,4,2] get-tuple-element(stage_1_bwd), index=1
   stage_0_bwd = (f32[1,4,4,2], f32[1,4,4,2]) call(stage_1_bwd_1, stage_0_0), to_apply=stage_0_bwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStageBackward\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":true}}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
@@ -96,7 +96,7 @@ pipeline {
 ENTRY e {
   e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offload_wu_variables\":true}}}"
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
   auto config = GetModuleConfigForTest();
@@ -174,7 +174,7 @@ pipeline {
   stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
   in3 = f32[1,4,4,2] parameter(2)
   in4 = f32[1,4,4,2] parameter(3)
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":true}}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
@@ -187,7 +187,7 @@ ENTRY e {
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
   e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
   e.in3 = f32[1,4,4,2] parameter(3), parameter_replication={false}
-  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offload_wu_variables\":true}}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(e.call), index=2
@@ -278,7 +278,7 @@ pipeline {
 ENTRY e {
   e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
-  e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offload_wu_variables\":true}}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
   ROOT t =  (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
@@ -353,7 +353,7 @@ pipeline {
   stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
   in3 = f32[1,4,4,2] parameter(2)
   in4 = f32[1,4,4,2] parameter(3)
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":true}}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
@@ -366,7 +366,7 @@ ENTRY e {
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
   e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
   e.in3 = f32[1,4,4,2] parameter(3), parameter_replication={false}
-  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offload_wu_variables\":true}}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(e.call), index=2
@@ -443,7 +443,7 @@ pipeline {
   stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
   in3 = f32[1,4,4,2] parameter(2)
   in4 = f32[1,4,4,2] parameter(3)
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":false}}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
@@ -456,7 +456,7 @@ ENTRY e {
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
   e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
   e.in3 = f32[1,4,4,2] parameter(3), parameter_replication={false}
-  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offload_wu_variables\":false}}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(e.call), index=2
@@ -533,7 +533,7 @@ pipeline {
   stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
   in3 = f32[1,4,4,2] parameter(2)
   in4 = f32[1,4,4,2] parameter(3)
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":false}}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
@@ -546,7 +546,7 @@ ENTRY e {
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
   e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
   e.in3 = f32[1,4,4,2] parameter(3), parameter_replication={false}
-  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offload_wu_variables\":false}}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(e.call), index=2
@@ -622,7 +622,7 @@ pipeline {
   stage_0_bwd_0 = f32[1,4,4,2] get-tuple-element(stage_0_bwd), index=0
   in3 = f32[1,4,4,2] parameter(2)
   in4 = f32[1,4,4,2] parameter(3)
-  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":false}}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
@@ -635,7 +635,7 @@ ENTRY e {
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
   e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
   e.in3 = f32[1,4,4,2] parameter(3), parameter_replication={false}
-  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\", \"pipelineConfig\":{\"offload_wu_variables\":false}}}"
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(e.call), index=2

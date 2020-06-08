@@ -19,7 +19,6 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/graph_optimizer_passes/util.h"
-
 #include "tensorflow/compiler/tf2xla/tf2xla_util.h"
 #include "tensorflow/core/graph/node_builder.h"
 
@@ -79,7 +78,8 @@ StatusOr<bool> ProcessMomentumOp(Graph* graph, Node* node) {
         "usually occurs when the `GradientAccumulationOptimizer` is used with "
         "another optimizer which is not supported. Please note that "
         "`GradientAccumulationOptimizer` is currently only supported with "
-        "`GradientDescentOptimizer` and `MomentumOptimizer` optimizers.",
+        "`GradientDescentOptimizer` and `MomentumOptimizer` optimizers. For "
+        "any other optimizers use `GradientAccumulationOptimizerV2`.",
         kIpuStatefulGradientAccumulate);
   }
 

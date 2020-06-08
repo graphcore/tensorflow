@@ -248,19 +248,90 @@ By default the pipeline operation will map the pipeline stages onto IPUs in
 order to minimise the inter-IPU communication lengths.  If you need to
 override this order, then you can use the ``device_mapping`` parameter.
 
-Variable offloading
-___________________
+Gradient accumulation
+~~~~~~~~~~~~~~~~~~~~~
 
-Depending on the optimizer used, some model parameters/``tf.Variable``s might
-only be used by the weight update, for example the accumulator variables when
-using the `tf.MomentumOptimizer`. To minimize the maximum memory liveness
-pipelining will try to utilise this knowledge and store these parameters in
-remote memory. During the weight update these variables will be streamed onto
-the device and then streamed back to the remote memory after they have been
-updated.
+Gradient accumulation is a technique for increasing the effective batch size
+by processing multiple batches of training examples before updating the model.
+The gradients from each batch are accumulated and these accumulated gradients
+are used to compute the weight update.
+When gradient accumulation is used, the effective batch size of the model is the
+'number of mini-batches' for which the gradients are accumulated multiplied by
+the mini-batch size.
 
-This feature is enabled by default, but it can be disabled by setting the
-``offload_weight_update_variables`` argument of ``pipelining_ops.pipeline`` to
+Gradient accumulation is a useful optimisation technique for replicated graphs
+as it reduces the number of times the gradients are exchanged between replicas
+by a factor of 'number of mini-batches'. This is because the gradients only need
+to be exchanged between replicas when the weight update is computed.
+When gradient accumulation is used with replication, the effective batch size of
+the model is the 'number of mini-batches' for which the gradients are
+accumulated multiplied by the mini-batch size multiplied by the replication
+factor.
+
+There are multiple convenient ways to use gradient accumulation in your model
+with minimal modifications to your model.
+
+Optimizers
+__________
+
+Gradient accumulation optimizers provide an easy way to add gradient
+accumulation to your model:
+
+* ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`` is an
+general purpose optimizer which can be used to wrap any other TensorFlow
+optimizer. It supports optimizer state offloading (see the Optimizer state
+offloading section).
+
+* ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizer`` is an
+optimizer which has been optimized and it can be used with
+`tf.train.GradientDescentOptimizer` and `tf.train.MomentumOptimizer` only. Note
+that this optimizer does not support optimizer state offloading.
+
+A replicated version of these optimizers can also be used with replicated
+graphs, see
+``ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2``
+and
+``ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer``.
+
+**Note:** These optimizers need to be used inside of a training loop generated
+by ``ipu.loops.repeat``, :ref:`api-section` for more detail.
+
+Pipelining
+__________
+
+All pipelined training graphs automatically apply gradient accumulation to the
+model such that the weight update is only computed once all the mini-batches,
+where the number of mini-batches is the ``pipeline_depth``, have gone through
+the whole model pipeline.
+
+**Note:** Since the pipelined models always implement gradient accumulation, no
+gradient accumulation optimizer should also be used in combination with
+pipelining.
+
+
+Optimizer state offloading
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some optimizers have an optimizer state which is only accessed and modified
+during the weight update. For example the ``tf.MomentumOptimizer`` optimizer has
+accumulator variables which are only accessed and modified during the weight
+update.
+This means that when gradient accumulation is used, whether through the use of
+pipelining or the
+``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2``
+optimizer, the optimizer state variables do not need to be stored in the device
+memory during the forward and backward propagation of the model. These variables
+are only required during the weight update and so they are streamed onto the
+device during the weight updated and then streamed back to remote memory after
+they have been updated.
+
+This feature is enabled by default for both pipelining and
+when ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`` is
+used.
+
+It can be disabled by setting the ``offload_weight_update_variables`` argument
+of ``pipelining_ops.pipeline`` or
+``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`` to
 ``False``.
 
 This feature requires the machine to be configured with support for
@@ -269,7 +340,6 @@ This feature requires the machine to be configured with support for
 Offloading variables into remote memory can reduce maximum memory liveness, but
 it can also increase the computation time of the weight update as more time is
 spent communicating with the host.
-Note that this option has no effect for inference only pipelines.
 
 Dataset benchmarking
 ~~~~~~~~~~~~~~~~~~~~

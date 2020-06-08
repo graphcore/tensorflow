@@ -429,9 +429,12 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
                 : false;
         const bool is_recv_from_host =
             IsPoplarInstruction(PoplarOp::RecvFromHost)(inst);
+        const bool is_gradient_accumulator_create =
+            IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
 
         is_input = is_remap_deduce || is_host_embedding_lookup ||
-                   is_remote_buffer_load || is_rw_user_op || is_recv_from_host;
+                   is_remote_buffer_load || is_rw_user_op ||
+                   is_recv_from_host || is_gradient_accumulator_create;
         break;
       }
       default: { break; }
