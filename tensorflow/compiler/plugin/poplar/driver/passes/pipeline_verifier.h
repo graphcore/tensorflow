@@ -48,9 +48,6 @@ class PipelineVerifier : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
-  // Verify PipelineStatefulGradientAccumulate usage.
-  Status VerifyGradientAccumulation(HloModule* module, CallGraph* call_graph);
-
   // Verify a pipeline can be lowered.
   Status VerifyPipeline(HloInstruction* pipeline_op, CallGraph* call_graph);
 

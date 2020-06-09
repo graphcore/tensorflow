@@ -352,6 +352,11 @@ bool IsRepeatLoop(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::RepeatLoop);
 }
 
+int64 GetRepeatLoopCount(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().repeat_config().repeat_count();
+}
+
 bool IsPipelineStage(const HloInstruction* inst) {
   return CallConfigHasType(inst,
                            PoplarBackendConfig::CallConfig::PipelineStage);
@@ -376,19 +381,19 @@ bool IsPipelineOp(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
 }
 
-int64 GetPipelineRepeatCount(const HloInstruction* inst) {
-  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
-  return cfg.call_config().pipeline_config().pipeline_depth();
-}
-
-bool GetPipelineOffloadWUVariables(const HloInstruction* inst) {
-  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
-  return cfg.call_config().pipeline_config().offload_wu_variables();
-}
-
 int64 GetPipelineStageID(const HloInstruction* inst) {
   PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
   return cfg.call_config().pipeline_stage_config().stage_id();
+}
+
+int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().resource_update_config().num_batches_to_accumulate();
+}
+
+bool GetResourceUpdateOffloadVariables(const HloInstruction* inst) {
+  PoplarBackendConfig cfg = ParsePoplarBackendConfig(inst);
+  return cfg.call_config().resource_update_config().offload_variables();
 }
 
 const HloInstruction* GetOperandLookThroughInterIpuCopy(

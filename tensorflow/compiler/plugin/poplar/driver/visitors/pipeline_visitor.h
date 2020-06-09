@@ -157,10 +157,6 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   // Creator for PipelineStageRecomputation.
   StatusOr<poplar::program::Sequence> CreatePipelineStageRecomputationOp(
       const HloInstruction* inst);
-
-  // Creator for ResourceUpdate.
-  StatusOr<poplar::program::Sequence> CreateResourceUpdateOp(
-      const HloInstruction* inst);
 };
 
 #undef HLO_PIPELINE_VISITOR_NOT_IMPLEMENTED

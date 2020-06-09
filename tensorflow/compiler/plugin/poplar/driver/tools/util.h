@@ -129,14 +129,15 @@ bool IsPopOpsFusion(const HloInstruction*, const std::string& postfix = "");
 bool IsArithmeticExpressionFusion(const HloComputation*);
 bool IsArithmeticExpressionFusion(const HloInstruction*);
 bool IsRepeatLoop(const HloInstruction*);
+int64 GetRepeatLoopCount(const HloInstruction*);
 bool IsPipelineStage(const HloInstruction*);
 bool IsPipelineStageBackward(const HloInstruction*);
 bool IsPipelineStageRecomputation(const HloInstruction*);
 bool IsResourceUpdate(const HloInstruction*);
 bool IsPipelineOp(const HloInstruction*);
-int64 GetPipelineRepeatCount(const HloInstruction*);
-bool GetPipelineOffloadWUVariables(const HloInstruction*);
 int64 GetPipelineStageID(const HloInstruction*);
+int64 GetResourceUpdateBatchesToAccumulate(const HloInstruction*);
+bool GetResourceUpdateOffloadVariables(const HloInstruction*);
 
 bool IsSupportedSharding(const HloSharding&);
 

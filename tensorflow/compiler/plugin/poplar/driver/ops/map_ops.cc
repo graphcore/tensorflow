@@ -30,6 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/deferred_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/pipeline_visitor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/visitors/repeat_loop_visitor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_arithmetic_expr.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
@@ -363,18 +364,13 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   CHECK_EQ(inputs.size(), 1);
   const bool reallocate_inputs = CanRealloteInputs(inst);
 
-  poplar::Graph& graph = GetGraph(res, inst);
-
-  TF_ASSIGN_OR_RETURN(PoplarBackendConfig cfg,
-                      inst->backend_config<PoplarBackendConfig>());
-  int64 repeat_count = cfg.call_config().repeat_config().repeat_count();
   const HloComputation* loop_body = inst->to_apply();
   auto order =
       loop_body->parent()->schedule().sequence(loop_body).instructions();
 
   // Create the visitor.
-  InplaceDeferredVisitor visitor(res, inputs, GetDebugName(inst), {},
-                                 reallocate_inputs);
+  RepeatLoopVisitor visitor(res, inputs, reallocate_inputs, GetDebugName(inst));
+
   // Evaluate the loop body in a order.
   TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
 
@@ -383,47 +379,19 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
 
   const uint64 param_count = inputs[0].size();
 
-  const TensorVector& body_inputs = visitor.inputs()[0];
-  const TensorVector& body_outputs = visitor.outputs();
+  const TensorVector& loop_state = visitor.GetLoopState();
 
-  if (body_inputs.size() != param_count) {
-    return xla::FailedPrecondition("Invalid number of body inputs.");
+  if (loop_state.size() != param_count) {
+    return xla::FailedPrecondition("Invalid number of loop inputs/outputs.");
   }
 
-  if (body_outputs.size() != param_count) {
-    return xla::FailedPrecondition("Invalid number of body outputs.");
-  }
-
-  ExecutionCounters& execution_counters = visitor.GetExecutionCounters();
-
-  poplar::program::Sequence main_seq;
-  TF_ASSIGN_OR_RETURN(poplar::program::Sequence copy_seq,
-                      visitor.GetPreambleCopies());
-  main_seq.add(copy_seq);
-  // Only add the copies for the execution counters in the body visitor once
-  // before the execution of the loop so that they are not reset at the
-  // beginning of each iteration.
-  TF_RETURN_IF_ERROR(
-      CopyExecutionCountersFromScope(res, execution_counters, main_seq));
-
-  // Add the aliasing copies for the loop so that the outputs of one iteration
-  // are aliased to the inputs of the next one.
-  TF_ASSIGN_OR_RETURN(const TensorVector loop_state,
-                      visitor.AddLoopInputOutputAliasingCopies(
-                          graph, loop_body, GetDebugName(inst)));
-  poplar::program::Sequence repeat_seq;
-  {
-    repeat_seq.add(visitor.GetSequence(/*copy_execution_counters*/ false));
-    // Increase the local execution counters at the end of each iteration.
-    repeat_seq.add(execution_counters.IncrementLiveCounters());
-  }
-  main_seq.add(poplar::program::Repeat(repeat_count, repeat_seq));
+  poplar::program::Sequence seq = visitor.GetRepeatLoopSequence(inst);
 
   for (uint64 i = 0; i < param_count; i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
   }
 
-  return main_seq;
+  return seq;
 }
 
 StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
@@ -631,6 +599,35 @@ StatusOr<poplar::program::Program> CreateConditionalOp(
       cases.push_back(std::make_pair(c, seqs[c]));
     }
     seq.add(poplar::program::Switch(pred, cases, seqs.back()));
+  }
+
+  return seq;
+}
+
+StatusOr<poplar::program::Program> CreateResourceUpdateOp(
+    CompilerResources& res, const HloInstruction* inst,
+    DeferredArgVectors& inputs, const xla::Shape& output,
+    TensorMap& tensor_map) {
+  HloComputation* resource_update_comp = inst->to_apply();
+  VLOG(1) << "Processing " << inst->name() << " : "
+          << resource_update_comp->name() << " as a resource update.";
+  poplar::program::Sequence seq;
+  // Create a visitor for the resource update.
+  InplaceDeferredVisitor visitor(res, inputs, GetDebugName(inst));
+  auto order = resource_update_comp->parent()
+                   ->schedule()
+                   .sequence(resource_update_comp)
+                   .instructions();
+  TF_RETURN_IF_ERROR(resource_update_comp->AcceptOrdered(&visitor, order));
+  // Make sure any deferred inputs to the instruction are pushed up.
+  TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
+  // Add to the sequence.
+  seq.add(visitor.GetSequence());
+  seq.add(visitor.GetExecutionCounters().IncrementLiveCounters());
+  // Set up the outputs.
+  const TensorVector& outputs = visitor.outputs();
+  for (size_t i = 0; i < outputs.size(); i++) {
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, outputs[i]));
   }
 
   return seq;
