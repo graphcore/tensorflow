@@ -87,7 +87,7 @@ Status BaseVisitor::Preprocess(HloInstruction* inst) {
 }
 
 BaseVisitor::BaseVisitor(CompilerResources& resources, const std::string& name)
-    : resources_(resources), execution_counters_(resources, name) {
+    : resources_(resources), name_(name), execution_counters_(resources, name) {
   stochastic_rounding_enabled_ =
       resources_.global_floating_point_behaviour.esr();
 

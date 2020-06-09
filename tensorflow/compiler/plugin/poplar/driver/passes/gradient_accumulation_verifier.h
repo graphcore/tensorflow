@@ -40,6 +40,11 @@ class GradientAccumulationVerifier : public HloModulePass {
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
+  Status VerifyStatefulGradientAccumulation(HloInstruction* const inst,
+                                            CallGraph* call_graph);
+  Status VerifyGenericGradientAccumulation(HloInstruction* const inst,
+                                           CallGraph* call_graph);
+
   const uint32 replication_factor_;
 };
 

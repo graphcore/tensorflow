@@ -149,6 +149,10 @@ class ResourceUpdateOp : public XlaOpKernel {
     OP_REQUIRES(ctx, output_types.size() == 0,
                 errors::InvalidArgument("Expected ResourceUpdate "
                                         "to have no explicit outputs."));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weight_update_variables",
+                                     &offload_weight_update_variables_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("num_batches_to_accumulate",
+                                     &num_batches_to_accumulate_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -198,6 +202,16 @@ class ResourceUpdateOp : public XlaOpKernel {
                        outputs, FrontendAttributeId_Name(CALL_CONFIG_TYPE),
                        PoplarBackendConfig_CallConfig_Type_Name(
                            PoplarBackendConfig::CallConfig::ResourceUpdate)));
+    // Set the offload_weight_update_variables flag.
+    OP_REQUIRES_OK(ctx,
+                   builder->SetInstructionFrontendAttribute(
+                       outputs, FrontendAttributeId_Name(OFFLOAD_VARIABLES),
+                       std::to_string(offload_weight_update_variables_)));
+    // Set the num_batches_to_accumulate flag.
+    OP_REQUIRES_OK(
+        ctx, builder->SetInstructionFrontendAttribute(
+                 outputs, FrontendAttributeId_Name(NUM_BATCHES_TO_ACCUMULATE),
+                 std::to_string(num_batches_to_accumulate_)));
 
     // We expect the resource update stage to only have resource outputs. This
     // code assumes that the outputs are all of the resource variables in the
@@ -223,6 +237,8 @@ class ResourceUpdateOp : public XlaOpKernel {
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
+  bool offload_weight_update_variables_;
+  int64 num_batches_to_accumulate_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(ResourceUpdateOp);
 };
@@ -241,8 +257,6 @@ class PipelineOp : public XlaOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("pipeline_depth", &pipeline_depth_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("repeat_count", &repeat_count_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("schedule", &schedule_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("offload_weight_update_variables",
-                                     &offload_weight_update_variables_));
     OP_REQUIRES_OK(
         ctx, ctx->GetAttr("pipeline_poplar_config", &pipeline_poplar_config_));
   }
@@ -350,12 +364,6 @@ class PipelineOp : public XlaOpKernel {
         ctx, builder->SetInstructionFrontendAttribute(
                  outputs, FrontendAttributeId_Name(PIPELINE_POPLAR_CONFIG),
                  pipeline_poplar_config_));
-    // Set the offload_weight_update_variables flag.
-    OP_REQUIRES_OK(
-        ctx,
-        builder->SetInstructionFrontendAttribute(
-            outputs, FrontendAttributeId_Name(PIPELINE_OFFLOAD_WU_VARIABLES),
-            std::to_string(offload_weight_update_variables_)));
 
     // A pipeline has no explicit outputs, only updates of resource variables.
     // We can use the input index to index into the outputs because we have
@@ -386,7 +394,6 @@ class PipelineOp : public XlaOpKernel {
   int64 repeat_count_;
   int64 schedule_;
   std::string pipeline_poplar_config_;
-  bool offload_weight_update_variables_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(PipelineOp);
 };

@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/parse_poplar_backend_config.h"
 
+#include <string>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -78,13 +80,6 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
                   PoplarBackendConfig::CallConfig::PipelineConfig::Schedule>(
                   std::stoi(schedule_str));
               pipeline_config->set_schedule({schedule});
-
-              // Get the offload variables flag.
-              TF_ASSIGN_OR_RETURN(
-                  std::string offload_wu_variables_str,
-                  GetAttribute(attributes, PIPELINE_OFFLOAD_WU_VARIABLES));
-              auto offload_wu_variables = std::stoi(offload_wu_variables_str);
-              pipeline_config->set_offload_wu_variables({offload_wu_variables});
               break;
             }
             case PoplarBackendConfig::CallConfig::PipelineStage:
@@ -97,6 +92,23 @@ StatusOr<bool> ParsePoplarBackendConfig::Run(HloModule* module) {
               int64 stage_id = std::stoll(stage_id_str);
               pipeline_stage_config->set_stage_id(stage_id);
               break;
+            }
+            case PoplarBackendConfig::CallConfig::ResourceUpdate: {
+              auto* resource_update_config =
+                  call_config->mutable_resource_update_config();
+              // Get the offload variables flag.
+              TF_ASSIGN_OR_RETURN(std::string offload_variables_str,
+                                  GetAttribute(attributes, OFFLOAD_VARIABLES));
+              auto offload_variables = std::stoi(offload_variables_str);
+              resource_update_config->set_offload_variables(offload_variables);
+              // Get the num batches to accumulate flag.
+              TF_ASSIGN_OR_RETURN(
+                  std::string num_batches_to_accumulate_str,
+                  GetAttribute(attributes, NUM_BATCHES_TO_ACCUMULATE));
+              auto num_batches_to_accumulate =
+                  std::stoi(num_batches_to_accumulate_str);
+              resource_update_config->set_num_batches_to_accumulate(
+                  num_batches_to_accumulate);
             }
             default: { break; }
           }

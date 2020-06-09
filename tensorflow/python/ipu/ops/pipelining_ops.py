@@ -598,7 +598,9 @@ def pipeline(computational_stages,
             captured_args,
             to_apply=util.create_new_tf_function(func_graph),
             Tout=func_graph.output_types,
-            output_shapes=func_graph.output_shapes)
+            output_shapes=func_graph.output_shapes,
+            offload_weight_update_variables=offload_weight_update_variables,
+            num_batches_to_accumulate=pipeline_depth)
 
     if not isinstance(outputs, ops.Operation):
       if not outfeed_queue:
@@ -636,7 +638,6 @@ def pipeline(computational_stages,
           pipeline_depth=pipeline_depth,
           repeat_count=repeat_count,
           schedule=int(pipeline_schedule),
-          offload_weight_update_variables=offload_weight_update_variables,
           pipeline_poplar_config=json_format.MessageToJson(
               pipeline_poplar_config))
     if not isinstance(output, ops.Operation):

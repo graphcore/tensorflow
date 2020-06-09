@@ -777,9 +777,9 @@ Status DeferredVisitor::FinishScopedVisit(HloInstruction* inst) {
     TF_RETURN_IF_ERROR(deferred_allocation->AllocateRemainingLocations());
   }
 
+  outputs_ = FindInstructionOutputs(tensor_map, resources_, inst);
   // Delegate.
   TF_RETURN_IF_ERROR(FinishDeferedAllocationVisit(inst));
-  outputs_ = FindInstructionOutputs(tensor_map, resources_, inst);
   resources_.tensor_maps.AddTensorMapForComputation(inst->parent()->name(),
                                                     std::move(tensor_map));
   resources_.deferred_allocation_scopes.pop();
@@ -1196,6 +1196,7 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
         break;
     }
   }
+
   return loop_state;
 }
 
