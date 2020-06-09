@@ -878,8 +878,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<GradientAccumulationFuser>(resources.annotations);
     pipeline.AddPass<HloComputationNameUniquify>();
     pipeline.AddPass<CholeskyExpander>();
-    pipeline.AddPass<TriangularSolveExpander>(
-        resources.triangular_solve_expander_block_size);
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<NotSupportedGatherExpander>();
     pipeline.AddPass<NotSupportedScatterExpander>();

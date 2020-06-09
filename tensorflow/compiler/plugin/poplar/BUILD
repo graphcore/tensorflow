@@ -516,6 +516,7 @@ cc_library(
         "driver/ops/custom_ops/host_embedding.cc",
         "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
         "driver/ops/custom_ops/popfloat/gfloat_ops_utils.cc",
+        "driver/ops/custom_ops/poplin/triangular_solve.cc",
         "driver/ops/custom_ops/poplin/weights_transpose_chans_flip_xy.cc",
         "driver/ops/custom_ops/popnn/arg_min_max.cc",
         "driver/ops/custom_ops/popnn/gru.cc",
