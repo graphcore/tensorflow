@@ -29,7 +29,7 @@ def codelet_expression_op(vertex_expression, *args):
   code does not understand the internal structure of the fused codelet.
 
   Args:
-    vertex_expression: A python function that defines the codelet expression.
+    vertex_expression: A Python function that defines the codelet expression.
     args: Tensor inputs to the expression.
 
   Returns:
@@ -61,17 +61,19 @@ def precompiled_user_op(inputs,
                         op_name="Build",
                         separate_gradients=False,
                         inputs_with_gradients=None):
-  """Call the poplar function located in the shared library at 'library_path'
-  as part of the normal tensorflow execution with the given 'inputs'.
+  """Call the poplar function located in the shared library at `library_path`
+  as part of the normal TensorFlow execution with the given `inputs`.
 
-  The shape and type of the output should be specified by 'outs'. If it is None
-  it will default to no output. 'outs' should be a dictionary with two
-  elements like so:
+  The shape and type of the output should be specified by `outs`. If it is
+  `None` it will default to no output. `outs` should be a dictionary with two
+  elements like this:
 
-  outs = {
-    "output_types": [my_types_as_a_list],
-    "output_shapes": [my_shapes_as_a_list],
-  }
+  .. code-block:: python
+
+    outs = {
+      "output_types": [my_types_as_a_list],
+      "output_shapes": [my_shapes_as_a_list],
+    }
 
   Args:
     inputs: The tensor inputs to the operation.
@@ -122,14 +124,17 @@ def cpu_user_operation(inputs,
                        op_name="Callback",
                        separate_gradients=False,
                        inputs_with_gradients=None):
-  """Call the CPU function located in the shared library at 'library_path'
-    as part of the normal tensorflow execution with the given 'inputs'
-    copied from the IPU to the CPU, and the outputs are copied back to the
-    IPU afterwards,
+  """
+  Call the CPU function located in the shared library at `library_path`
+  as part of the normal TensorFlow execution with the given `inputs`
+  copied from the IPU to the CPU, and the outputs are copied back to the
+  IPU afterwards.
 
-    The shape and type of the outputs should be specified by 'outs'. If it is
-    None it will default to no output.  'outs' should be a dictionary with
-    two elements like so:
+  The shape and type of the outputs should be specified by `outs`. If it is
+  `None` it will default to no output.  `outs` should be a dictionary with
+  two elements like so:
+
+  .. code-block:: python
 
     outs = {
       "output_types": [my_types_as_a_list],
@@ -144,8 +149,8 @@ def cpu_user_operation(inputs,
     name: The name of the operation.
     op_name: The prefix of the functions inside the shard object file. This
       defaults to 'Callback'.
-    separate_gradients:  When set to true, multiple gradient ops will be
-      generated, one for each input.  When false, a single gradient op will be
+    separate_gradients:  When set to `True`, multiple gradient ops will be
+      generated, one for each input.  When `False`, a single gradient op will be
       generated, which should produce the partial derivatives for all inputs.
     inputs_with_gradients: When set, produce derivatives only for specified
       inputs. List of input indices expected.

@@ -12,7 +12,7 @@ Several mechanisms are available to retrieve trace information about the
 Poplar IPU compilation and execution. Firstly, there are environment variables
 provided by Poplar itself to dump the compilation and execution reports into a
 file. See the "Profiling" chapter in the
-`Poplar and Poplibs User Guide <https://documents.graphcore.ai/documents/UG1/latest>`_
+`Poplar and PopLibs User Guide <https://documents.graphcore.ai/documents/UG1/latest>`_
 for more information.
 
 Within TensorFlow, the basic steps for this are:
@@ -593,15 +593,15 @@ file to a specified location.
 
 .. code-block:: bash
 
-    POPLAR_ENGINE_OPTIONS='{"target.saveArchive":"binaries.a", "debug.allowOutOfMemory": "true"}' python basic_graph.py
+    POPLAR_ENGINE_OPTIONS='{"target.saveArchive":"archive.a", "debug.allowOutOfMemory": "true"}' python basic_graph.py
 
 
-The file ``binaries.a`` is created, which is an archive file of the compiled graph.
+The file ``archive.a`` is created, which is an archive file of the compiled graph.
 To extract the memory size information from it, run the following command:
 
 .. code-block:: console
 
-    $ size -A binaries.a > tiles_elf.txt
+    $ size -A archive.a > tiles_elf.txt
 
 This pipes a tile-by-tile rendition of the memory consumed in bytes to the file
 ``tiles_elf.txt``. All of the memory allocated is part of the text section.
@@ -610,7 +610,7 @@ is the size of the text section corresponding to a tile:
 
 .. code-block:: console
 
-    $ size -A binaries.a | grep -e ".text" | awk '{print $2}' > memory_usage_per_tile.txt
+    $ size -A archive.a | grep -e ".text" | awk '{print $2}' > memory_usage_per_tile.txt
 
 The file ``memory_usage_per_tile.txt`` will contain this memory
 allocation information. Further details of the deployed graph can be extracted with this
@@ -637,7 +637,7 @@ exchanging and syncing on each instruction cycle.
 
 :ref:`env-var-section` describes how to set the environment flags.
 
-.. xla_file_naming:
+.. _xla_file_naming:
 
 XLA graph file naming
 ~~~~~~~~~~~~~~~~~~~~~

@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Python wrappers for Datasets."""
+"""
+Dataset wrappers
+~~~~~~~~~~~~~~~~
+"""
 
 from tensorflow.compiler.plugin.poplar.ops import gen_dataset_ops
 from tensorflow.python.data.ops import dataset_ops
@@ -22,7 +25,7 @@ from tensorflow.python.framework import ops
 
 class BufferDataset(dataset_ops.UnaryUnchangedStructureDataset):
   """A `Dataset` which makes sure there is a multiple of `buffer_size` number of
-    elements available."""
+  elements available."""
   def __init__(self, input_dataset, buffer_size):
     """A `Dataset` which makes sure there is a multiple of `buffer_size` number of
       elements available.

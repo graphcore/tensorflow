@@ -61,7 +61,7 @@ class IPUPipelineEstimatorSpec(
     * For `mode == ModeKeys.TRAIN`: the `optimizer_function` is required.
     * For `mode == ModeKeys.EVAL`: the `eval_metrics_fn` is required.
 
-    Refer to the :mod:`~tensorflow.python.ipu.ops.pipelining_ops`
+    Refer to the :mod:`~tensorflow.python.ipu.pipelining_ops`
     documentation for more details about pipelining.
 
     Args:
@@ -77,13 +77,13 @@ class IPUPipelineEstimatorSpec(
         "loss". This function will be called on the host.
       optimizer_function: a Python function which takes the output of the
         last computational stage as parameters and returns an instance of
-        :class:`~tensorflow.python.ipu.ops.pipelining_ops.OptimizerFunctionOutput`
+        :class:`~tensorflow.python.ipu.pipelining_ops.OptimizerFunctionOutput`
         in order to generate the back-propagation and weight-update parts of the
         model suitable for training.
       device_mapping: optional stage to IPU mapping override.
       pipeline_schedule: the scheduling algorithm to use for pipeline lowering.
         Must be of type
-        :class:`~tensorflow.python.ipu.ops.pipelining_ops.PipelineSchedule`.
+        :class:`~tensorflow.python.ipu.pipelining_ops.PipelineSchedule`.
       offload_weight_update_variables: If True, any `tf.Variable` which is
         only used by the weight update of the pipeline (for example the
         accumulator variable when using the `tf.MomentumOptimizer`), will be
@@ -302,7 +302,7 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
   and accumulate the gradients, giving an effective batch size of
   `num_replicas * pipeline_depth * batch_size`. The optimizer in the `model_fn`
   should be wrapped in an
-  :class:`~tensorflow.python.ipu.optimizers.cross_replica_optimizer.CrossReplicaOptimizer`
+  :class:`~tensorflow.python.ipu.cross_replica_optimizer.CrossReplicaOptimizer`
   in order to average the gradients across the replicas.
 
   This can further be combined with distributed multi-worker training using the
@@ -310,7 +310,7 @@ class IPUPipelineEstimator(ipu_estimator._IPUEstimatorBase):  # pylint: disable=
   giving a total effective batch size of
   `num_workers * num_replicas * pipeline_depth * batch_size`.
 
-  Refer to the :mod:`~tensorflow.python.ipu.ops.pipelining_ops`
+  Refer to the :mod:`~tensorflow.python.ipu.pipelining_ops`
   documentation for more details about pipelining.
 
   Note: because the `model_fn` is compiled to run on the IPU, you must use the

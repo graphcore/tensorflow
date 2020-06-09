@@ -96,7 +96,7 @@ def print_tensor(input, name=""):
 
        import tensorflow as tf
 
-       from tensorflow.python.ipu.ops import internal_ops
+       from tensorflow.python.ipu import internal_ops
        from tensorflow.python.ipu import scopes
 
        def my_net(v):
@@ -104,7 +104,7 @@ def print_tensor(input, name=""):
          v = v + 1
          return v, print_op
 
-       with scope.ipu_scope("/device:IPU:0"):
+       with scopes.ipu_scope("/device:IPU:0"):
          res = ipu_compiler.compile(my_net, inputs=[v])
 
        ...
@@ -117,10 +117,10 @@ def print_tensor(input, name=""):
        import numpy as np
        import tensorflow as tf
 
-       from tensorflow.python.ipu.ops import internal_ops
+       from tensorflow.python.ipu import internal_ops
        from tensorflow.python.ipu import scopes
 
-       with ops.ipu_scope("/device:IPU:0"):
+       with scopes.ipu_scope("/device:IPU:0"):
          pa = tf.placeholder(np.float32, [2, 2], name="a")
          print_op = internal_ops.print_tensor(pa)
          x = pa + 1
@@ -138,10 +138,10 @@ def print_tensor(input, name=""):
        import numpy as np
        import tensorflow as tf
 
-       from tensorflow.python.ipu.ops import internal_ops
+       from tensorflow.python.ipu import internal_ops
        from tensorflow.python.ipu import scopes
 
-       with ops.ipu_scope("/device:IPU:0"):
+       with scopes.ipu_scope("/device:IPU:0"):
          pa = tf.placeholder(np.float32, [2, 2], name="a")
          print_op = internal_ops.print_tensor(pa)
          with tf.control_dependencies([print_op]):

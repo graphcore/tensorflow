@@ -22,12 +22,12 @@ a Poplar source code or binary file containing one or more "codelets"
 (code that runs on the IPU).
 
 For more information about writing codelets, please refer to the
-`Poplar and Poplibs User Guide
+`Poplar and PopLibs User Guide
 <https://documents.graphcore.ai/documents/UG1/latest>`_.
 
-These operations are added with ``ipu.user_ops.precompiled_user_op``. More
-information about this can be found in :ref:`api-section`.  An example of
-this is shown below.
+These operations are added with ``ipu.custom_ops.precompiled_user_op``.
+See :py:func:`tensorflow.python.ipu.custom_ops.precompiled_user_op` for details.
+An example of this is shown below.
 
 The shared object file must contain an undecorated symbol, that should be
 declared as below.  It should add vertices to the graph that perform the
@@ -51,7 +51,7 @@ The arguments are:
 * ``outputs``: a vector into which to store the outputs of the operation. The
   vector will contain zero entries when the ``Build`` function is called.
 
-* ``debug_prefix: the debug name that has been given to the operation in
+* ``debug_prefix``: the debug name that has been given to the operation in
   the TensorFlow graph.
 
 If the operation can have its gradient taken, then the shared object can
@@ -165,7 +165,7 @@ constraints on the input tensor.
 
 If this condition occurs, then by default the backend will create the Poplar
 tensor with linear mapping.  See the section on tile mapping in the
-`Poplar and Poplibs API Reference
+`Poplar and PopLibs API Reference
 <https://documents.graphcore.ai/documents/UG2/latest>`_.
 
 To override this behaviour and allocate a tensor using a specific layout
@@ -214,8 +214,8 @@ ____________________
 
 If an operation's outputs depend only on the value of their inputs, and not any
 internally stored state, then the operation is said to be stateless. Marking an
-operation as stateless in the metadata function will allow the Tensorflow backend
-to perform optimizations which would otherwise be disallowed, such as common
+operation as stateless in the metadata function will allow the TensorFlow backend
+to perform optimisations which would otherwise be disallowed, such as common
 code removal.
 
 Example
@@ -264,9 +264,10 @@ The arguments are:
 Custom elementwise expressions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Python class ``ipu.custom_ops.codelet_expression_op`` provides an interface
+The Python function ``ipu.custom_ops.codelet_expression_op`` provides an interface
 for giving a custom fused expression to the compiler.  This will be encoded
-into a single compute set.
+into a single compute set. See
+:py:func:`tensorflow.python.ipu.custom_ops.codelet_expression_op` for details.
 
 The arguments to the Python function are a callable Python function which
 encodes the arithmetic expression, and the tensor arguments to the operation.
@@ -296,10 +297,10 @@ API Level Versioning
   :start-at: // Export the API level symbol
   :end-at: }
 
-You must include the code above in your source code. Custom op loader checks
-API level of custom op and refuses to load if it does not match current api
-level. Different API level normally means that it's binary incompatible with
-previous version.
+You must include the code above in your source code. The custom op loader checks
+the API level of the custom op and refuses to load if it does not match the
+current API level. A different API level normally means that it is binary
+incompatible with the previous version.
 
 Changes in API Level
 ____________________

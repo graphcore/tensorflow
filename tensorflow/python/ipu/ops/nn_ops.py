@@ -13,16 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 """
-Popnn operators
-~~~~~~~~~~~~~~~
+Popnn primitive neural network operators
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 
 
 def gelu(x, name=None):
-  """This targets the poplibs popnn gelu operation, optimized for execution
+  """This targets the PopLibs Popnn gelu operation, optimised for execution
   on the IPU.
 
   Args:

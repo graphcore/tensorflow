@@ -13,8 +13,8 @@
 # limitations under the License.
 # =============================================================================
 """
-Scoping contexts for IPUs
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Scoping contexts
+~~~~~~~~~~~~~~~~
 """
 import numpy as np
 
@@ -197,7 +197,9 @@ def frontend_attribute(attribute_name, attribute_value, restore_to=None):
 def stochastic_rounding(override):
   """Control stochastic rounding for a set of operations.
 
-  Manually sets the stochastic rounding method to use.
+  Args:
+    override: if True then stochastic rounding will be used, otherwise it will
+      be disabled for this set of operations.
 
   Returns:
      A context

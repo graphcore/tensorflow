@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+"""
+Optimizer wrapper that modifies gradients before application
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
 
 from tensorflow.python.training import optimizer
 
@@ -24,8 +28,8 @@ class MapGradientOptimizer(optimizer.Optimizer):
   MapGradientOptimizer needs a map function that will modify the gradients,
   and an optimizer to which the modified gradients are passed.
 
-  The map function has two arguments: gradient and variable. The map function
-  must return the modified gradient.
+  The map function has two arguments: `gradient` and `variable`. The map
+  function must return the modified gradient.
 
 
   Example
@@ -58,18 +62,18 @@ class MapGradientOptimizer(optimizer.Optimizer):
        # grads are 5.01, 4.02 and 3.03. If we did not use MapGradientOptimizer
        # they would be 5, 4 and 3.
 
-  Args:
-    wrapped_optimizer: tensorflow (derived) optimizer.
-    gradient_mapping_function: is applied on grads and variables which are
-      provided by wrapped_optimizer.compute_gradients().
-
-  Returns:
-    compute_gradients() returns a list of (gradient, variable) pairs.
   """
   def __init__(self,
                wrapped_optimizer,
                gradient_mapping_function,
                name="MapGradientOptimizer"):
+    """ Construct a MapGradientOptimizer.
+
+    Args:
+      wrapped_optimizer: TensorFlow (derived) optimizer.
+      gradient_mapping_function: The function to be applied on the gradients and
+        variables which are provided by `wrapped_optimizer.compute_gradients()`.
+    """
 
     super(MapGradientOptimizer, self).__init__(False, name)
     self._wrapped_optimizer = wrapped_optimizer
@@ -77,6 +81,21 @@ class MapGradientOptimizer(optimizer.Optimizer):
 
   # Override method from tensorflow.python.training.optimizer.Optimizer
   def compute_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
+    """ Compute gradients of "loss" for the variables in "var_list".
+
+    The gradients computed by the wrapped optimizer are modified using the
+    `gradient_mapping_function` that was passed to the constructor.
+
+    Args:
+      loss: A Tensor containing the value to minimize.
+      var_list: Optional list or tuple of `tf.Variable` to update to minimize
+        `loss`.  Defaults to the list of variables collected in the graph
+        under the key `GraphKey.TRAINABLE_VARIABLES`.
+      **kwargs: Keyword arguments for compute_gradients().
+
+    Returns:
+      A list of (gradient, variable) pairs.
+    """
     grads_and_vars = self._wrapped_optimizer.compute_gradients(*args, **kwargs)
     grads_and_vars = [(self._gradient_mapping_function(x[0],
                                                        x[1].value()), x[1])

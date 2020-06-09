@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Popfloat Generic-Float operators."""
+"""
+Popfloat generic-float operators
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
 
 from tensorflow.python.framework import ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popfloat_ops
@@ -32,13 +35,14 @@ class GenericFloat:
 
   Below is a typical workflow:
 
-  ```python
-  with tf.Graph().as_default():
-    gfloat       = GenericFloat(man, exp, ...)
-    castOutput   = gfloat.cast_native_to_gfloat(input, round_mode='RN',...)
-    ...
-    unpackOutput = gfloat.cast_gfloat_to_native(castOutput)
-  ```
+  .. code-block:: python
+
+    with tf.Graph().as_default():
+      gfloat       = GenericFloat(man, exp, ...)
+      castOutput   = gfloat.cast_native_to_gfloat(input, round_mode='RN',...)
+      ...
+      unpackOutput = gfloat.cast_gfloat_to_native(castOutput)
+
   """
 
   # pylint:enable=line-too-long
@@ -63,7 +67,6 @@ class GenericFloat:
       name: VariableScope for the created subgraph; defaults to class name.
         This only serves the default scope if later no scope is specified when
         invoking __call__().
-        :param calc_type:
     """
     self._gfloat_calc_spec_dtype = calc_type
     self._man = man
@@ -268,7 +271,7 @@ class GenericFloat:
       sr_norm_max: Max value of noise to be added
       sr_prob: Probability of rounding down for Bernoulli - SR
     Returns:
-      output: a tensor of the same shape as the input
+      a tensor of the same shape as the input
     """
 
     if en_nanoo and not self._en_inf:
@@ -498,7 +501,7 @@ def cast_native_to_gfloat(inputs,
     calc_type: Native IPU type used for calculation
     out_type: Output storage type
   Returns:
-    output: a tensor of the same shape as the input
+    a tensor of the same shape as the input
   Raises:
   """
 
@@ -524,13 +527,14 @@ def cast_gfloat_to_native(inputs,
                           calc_type=dtypes.float32,
                           out_type=dtypes.float32):
   """Unpack a gfloat tensor to FP32 or FP16
-
-  :param inputs: a tensor with arbitrary shape.
-  :param params: cast op parameter tensor.
-  :param gfloat_format: gfloat format type
-  :param calc_type: Native IPU floating point format used for calculation
-  :param out_type: Cast output dtype
-  :return: a tensor of the same shape as the input
+  Args:
+    inputs: a tensor with arbitrary shape.
+    params: cast op parameter tensor.
+    gfloat_format: gfloat format type
+    calc_type: Native IPU floating point format used for calculation
+    out_type: Cast output dtype
+  Returns:
+    a tensor of the same shape as the input
   """
 
   outputs = gen_popfloat_ops.cast_gfloat_to_native(input=inputs,

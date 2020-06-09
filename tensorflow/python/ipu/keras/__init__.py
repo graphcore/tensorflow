@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Keras API."""
+"""
+Keras API
+~~~~~~~~~
+"""
 
 from tensorflow.python.ipu.keras import layers
 from tensorflow.python.ipu.keras.pipeline import Model

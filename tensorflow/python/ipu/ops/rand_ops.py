@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """
-Popnn random operators
-~~~~~~~~~~~~~~~~~~~~~~
+Poprand operators
+~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
@@ -24,7 +24,7 @@ from tensorflow.python.ops import array_ops
 
 
 def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
-  """This targets the poplibs popnn dropout operation, optimized for execution
+  """This targets the PopLibs Poprand dropout operation, optimized for execution
   on the IPU.
 
   Args:

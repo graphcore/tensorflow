@@ -61,7 +61,7 @@ def model_fn(mode, params):
 
   def optimizer_function(loss):
     optimizer = tf.train.GradientDescentOptimizer(params["learning_rate"])
-    return ipu.ops.pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
+    return ipu.pipelining_ops.OptimizerFunctionOutput(optimizer, loss)
 
   def eval_metrics_fn(loss, predictions, labels):
     # This is executed on the host.

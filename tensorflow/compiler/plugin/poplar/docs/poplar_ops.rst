@@ -2,20 +2,30 @@ Using IPU optimised operations
 ------------------------------
 
 Several custom versions of operators are provided to target functions
-available in Poplibs.  See the :ref:`api-section` for more details.
+available in PopLibs. See the :ref:`api-section` for more details.
+
+For recurrent neural networks, the custom LSTM and GRU ops need to be used
+because the underlying PopLibs functions will use significantly less memory
+on the IPU.
+They are also available as :ref:`keras-layers-api`.
+
+GRU
+~~~
+
+See :py:class:`tensorflow.python.ipu.rnn_ops.PopnnGRU`.
 
 LSTM
 ~~~~
 
-See :py:class:`tensorflow.python.ipu.ops.rnn_ops.PopnnLSTM`.
+See :py:class:`tensorflow.python.ipu.rnn_ops.PopnnLSTM`.
 
 Dropout
 ~~~~~~~
 
-The Poplibs version of dropout does not need to store the dropout mask
+The PopLibs version of dropout does not need to store the dropout mask
 between the forward and backward parts of the graph, saving memory.
 
-See :py:func:`tensorflow.python.ipu.ops.rand_ops.dropout`.
+See :py:func:`tensorflow.python.ipu.rand_ops.dropout`.
 
 Embedding lookup
 ~~~~~~~~~~~~~~~~

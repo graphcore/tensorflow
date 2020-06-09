@@ -158,14 +158,19 @@ class HostEmbeddingOptimizerSpec:
       Despite the embedding living on the host, we want to compute the gradients
       on the device. Additionally, the communication channel between the device
       and host is opaque to TensorFlow. For these reasons we need to describe
-      the optimiser parameters seperatenly.
+      the optimizer parameters separately.
 
       Currently only supports SGD.
 
-      Args:
-        learning_rate: The SGD learning rate.
   """
   def __init__(self, learning_rate):
+    """
+    Create a HostEmbeddingOptimizerSpec.
+
+    Args:
+        learning_rate: The SGD learning rate.
+
+    """
     self._learning_rate = learning_rate
 
   def get_learning_rate(self):
@@ -184,13 +189,17 @@ class HostEmbedding:
       outtermost dimension zero is the token dimension, and the innermost
       dimension is the encoding dimension.
 
-      Args:
+  """
+  def __init__(self, name, embedding_tensor, optimizer_spec=None):
+    """
+    Create a HostEmbedding.
+
+    Args:
         name: The name which uniquely identifies the embedding.
         embedding_tensor: The tensor which holds the embedding.
         optimizer_spec: A description of how the embedding will be optimized.
-                        When None, the embedding is assumed to not be trainable.
-  """
-  def __init__(self, name, embedding_tensor, optimizer_spec=None):
+          When `None`, the embedding is assumed to not be trainable.
+    """
     if not tensor_util.is_tensor(embedding_tensor):
       raise ValueError(
           "HostEmbedding embedding_tensor is not a tensorflow tensor")
@@ -286,6 +295,18 @@ def create_host_embedding(name,
                           dtype,
                           optimizer_spec=None,
                           initializer=None):
+  """ Create a HostEmbedding.
+
+      Args:
+        name: The name which uniquely identifies the embedding.
+        shape: The shape for the tensor which will hold the embedding.
+        dtype: The dtype for the tensor which will hold the embedding.
+        optimizer_spec: A description of how the embedding will be optimized.
+          When `None`, the embedding is assumed to not be trainable.
+        initializer: The initializer to use when creating the embedding tensor.
+      Returns:
+        A `HostEmbedding` that wraps the created embedding tensor.
+  """
   if initializer is None:
     initializer = array_ops.zeros(shape, dtype)
   with ops.device('cpu'):

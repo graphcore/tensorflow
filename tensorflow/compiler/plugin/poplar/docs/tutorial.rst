@@ -4,7 +4,7 @@ Tutorial
 TensorFlow is a powerful graph-modelling framework that can be used for the
 development, training and deployment of deep learning models. In the Graphcore
 software stack, TensorFlow sits at the highest level of abstraction. Poplar
-and Poplibs provide a software interface to operations running on the IPU.
+and PopLibs provide a software interface to operations running on the IPU.
 
 .. figure:: figures/Tensorflow_Poplar.png
     :width: 100%

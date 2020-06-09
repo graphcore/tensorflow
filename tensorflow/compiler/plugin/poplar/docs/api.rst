@@ -3,8 +3,32 @@
 Python API
 ----------
 
-.. automodule:: tensorflow.python.ipu.autoshard
+Remember to import the IPU API using:
+
+.. code-block:: python
+
+  from tensorflow.python import ipu
+
+You cannot access the IPU API via the top-level `tensorflow` namespace.
+For example, this will not work:
+
+.. code-block:: python
+
+  import tensorflow as tf
+  cfg = tf.python.ipu.create_ipu_config(...)
+
+.. Note automodule:: tensorflow.python.ipu only imports ipu.function
+
+.. automodule:: tensorflow.python.ipu
   :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.ipu_strategy
+  :members: IPUStrategy
+
+.. Note: the headings of the following modules will be included
+         as subsection headings. They need to be added before
+         introducing subsection headings to group modules together.
 
 .. automodule:: tensorflow.python.ipu.ipu_compiler
   :members:
@@ -20,15 +44,52 @@ Python API
   :members:
   :special-members: __init__
 
+.. General utiltities
+
+.. automodule:: tensorflow.python.ipu.utils
+  :members:
+
+.. Looping utilities
+
+.. automodule:: tensorflow.python.ipu.loops
+  :members:
+
+.. The documentation for this module is incomplete;
+   it is also imported from an experimental namespace
+
+.. .. automodule:: tensorflow.python.ipu.popfloat_cast_to_gfloat
+..   :members:
+..   :imported-members:
+
+.. Distributed training
+
+.. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
+  :members: IPUMultiWorkerStrategy
+
+.. _datasets-api:
+
+Datasets
+^^^^^^^^
+
+.. automodule:: tensorflow.python.ipu.dataset_benchmark
+  :members:
+
+.. automodule:: tensorflow.python.ipu.data.ops.dataset_ops
+  :members:
+  :special-members: __init__
+  :imported-members:
+
+.. _estimators-api:
+
+Estimators
+^^^^^^^^^^
+
 .. automodule:: tensorflow.python.ipu.ipu_estimator
 .. autoclass:: IPUEstimator
   :members:
   :inherited-members:
 .. autoclass:: IPUEstimatorSpec
   :members: __new__
-
-.. automodule:: tensorflow.python.ipu.ipu_multi_worker_strategy
-  :members: IPUMultiWorkerStrategy
 
 .. automodule:: tensorflow.python.ipu.ipu_pipeline_estimator
 .. autoclass:: IPUPipelineEstimator
@@ -37,95 +98,165 @@ Python API
 .. autoclass:: IPUPipelineEstimatorSpec
   :members: __new__
 
+.. Run configs
+
 .. automodule:: tensorflow.python.ipu.ipu_run_config
   :members:
   :special-members: __init__
+
+.. Session run hooks
 
 .. automodule:: tensorflow.python.ipu.ipu_session_run_hooks
   :members:
   :special-members: __init__
 
-.. automodule:: tensorflow.python.ipu.ipu_strategy
-  :members: IPUStrategy
+Keras
+^^^^^
 
-.. automodule:: tensorflow.python.ipu.keras.layers.dropout
-  :members:
+.. automodule:: tensorflow.python.ipu.keras
+  :members: Model, PipelinedModel
+  :imported-members: Model, PipelinedModel
 
-.. automodule:: tensorflow.python.ipu.keras.layers.embedding_lookup
-  :members:
+.. _keras-layers-api:
 
-.. automodule:: tensorflow.python.ipu.keras.layers.normalization
-  :members:
+Keras layers
+^^^^^^^^^^^^
 
-.. automodule:: tensorflow.python.ipu.keras.layers.rnn
-  :members:
+.. note::
 
-.. automodule:: tensorflow.python.ipu.loops
-  :members:
+  `tensorflow.python.ipu.keras.layers.GRU` is an alias of
+  :py:class:`tensorflow.python.ipu.keras.layers.PopnnGRU`
 
-.. automodule:: tensorflow.python.ipu.sharded_optimizer
-  :members:
+  `tensorflow.python.ipu.keras.layers.LSTM` is an alias of
+  :py:class:`tensorflow.python.ipu.keras.layers.PopnnLSTM`
 
-.. automodule:: tensorflow.python.ipu.sharding
-  :members:
 
-.. automodule:: tensorflow.python.ipu.utils
-  :members:
+.. automodule:: tensorflow.python.ipu.keras.layers
+  :members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM
+  :imported-members: Dropout, Embedding, GroupNorm, InstanceNorm, LayerNorm, PopnnGRU, PopnnLSTM
 
-.. automodule:: tensorflow.python.ipu.ops.internal_ops
-  :members: print_tensor
+.. _operators-api:
 
-.. automodule:: tensorflow.python.ipu.ops.all_to_all_op
-  :members:
+Operators
+^^^^^^^^^
 
-.. automodule:: tensorflow.python.ipu.ops.embedding_ops
-  :members:
+It is also possible to access the operators via the
+`tensorflow.python.ipu.ops` namespace, for example:
+`tensorflow.python.ipu.ops.normalization_ops.group_norm()`.
 
-.. automodule:: tensorflow.python.ipu.ops.maths_ops
-  :members:
-
-.. automodule:: tensorflow.python.ipu.ops.nn_ops
-  :members:
-
-.. automodule:: tensorflow.python.ipu.ops.normalization_ops
-  :members:
-
-.. automodule:: tensorflow.python.ipu.ops.pipelining_ops
-  :members:
-  :special-members: __init__
-
-.. automodule:: tensorflow.python.ipu.ops.functional_ops
-  :members:
-
-.. automodule:: tensorflow.python.ipu.ops.reduce_scatter_op
-  :members:
-
-.. automodule:: tensorflow.python.ipu.ops.rnn_ops
-  :members:
-
-.. automodule:: tensorflow.python.ipu.ops.rand_ops
-  :members:
-
-.. automodule:: tensorflow.python.ipu.ops.cross_replica_ops
-  :members:
-
-.. automodule:: tensorflow.python.ipu.ops.summary_ops
-  :members:
+.. Order alphabetically based on the headings in the source files
+.. Put the non-PopLibs ops first
 
 .. automodule:: tensorflow.python.ipu.custom_ops
   :members:
+  :imported-members:
 
-.. automodule:: tensorflow.python.ipu.optimizers.cross_replica_optimizer
+.. automodule:: tensorflow.python.ipu.functional_ops
+  :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.internal_ops
+  :members: print_tensor
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.math_ops
+  :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.pipelining_ops
+  :members:
+  :special-members: __init__
+  :imported-members:
+
+.. The following are all PopLibs ops
+
+.. Popnn
+
+.. tensorflow.python.ipu.nn_ops just contains Gelu
+
+.. automodule:: tensorflow.python.ipu.nn_ops
+  :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.normalization_ops
+  :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.rnn_ops
+  :members:
+  :imported-members:
+
+.. Popops
+
+.. automodule:: tensorflow.python.ipu.all_to_all_op
+  :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.cross_replica_ops
+  :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.embedding_ops
+  :members:
+  :special-members: __init__
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.reduce_scatter_op
+  :members:
+  :imported-members:
+
+.. Poprand
+
+.. automodule:: tensorflow.python.ipu.rand_ops
+  :members:
+  :imported-members:
+
+.. Further ops that come after Pop** alphabetically
+
+.. automodule:: tensorflow.python.ipu.replication_ops
+  :members:
+  :imported-members:
+
+.. automodule:: tensorflow.python.ipu.summary_ops
+  :members:
+  :imported-members:
+
+.. _optimisers-api:
+
+Optimisers
+^^^^^^^^^^
+
+It is also possible to access the optimisers via the
+`tensorflow.python.ipu.optimizers` namespace, for example:
+`tensorflow.python.ipu.optimizers.cross_replica_optimizer.CrossReplicaOptimizer`.
+
+.. automodule:: tensorflow.python.ipu.cross_replica_optimizer
+  :members:
+  :imported-members:
+  :special-members: __init__
+
+.. automodule:: tensorflow.python.ipu.gradient_accumulation_optimizer
+  :members:
+  :imported-members:
+  :special-members: __init__
+
+.. automodule:: tensorflow.python.ipu.map_gradient_optimizer
+  :members:
+  :imported-members:
+  :special-members: __init__
+
+.. automodule:: tensorflow.python.ipu.sharded_optimizer
+  :members:
+  :imported-members:
+  :special-members: __init__
+
+.. _sharding-api:
+
+Sharding
+^^^^^^^^
+
+.. automodule:: tensorflow.python.ipu.autoshard
   :members:
 
-.. automodule:: tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer
-  :members:
-
-.. automodule:: tensorflow.python.ipu.optimizers.map_gradient_optimizer
-  :members:
-
-.. automodule:: tensorflow.python.ipu.optimizers.sharded_optimizer
-  :members:
-
-.. automodule:: tensorflow.python.ipu.dataset_benchmark
+.. automodule:: tensorflow.python.ipu.sharding
   :members:
