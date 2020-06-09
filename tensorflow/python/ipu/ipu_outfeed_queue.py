@@ -20,6 +20,7 @@ Outfeed queue
 from enum import Enum
 
 from tensorflow.compiler.plugin.poplar.ops import gen_pop_datastream_ops
+from tensorflow.python.framework import func_graph
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.platform import tf_logging as logging
@@ -215,8 +216,19 @@ class IPUOutfeedQueue:
 
   @property
   def enqueued(self):
-    g = ops.get_default_graph()
-    return any(o.graph == g for o in self._operations)
+    enqueued_graphs = set()
+
+    def add_graphs(g):
+      enqueued_graphs.add(g)
+      if isinstance(g, func_graph.FuncGraph):
+        # Consider all outer graphs enqueued as well.
+        add_graphs(g.outer_graph)
+
+    for o in self._operations:
+      add_graphs(o.graph)
+
+    current_graph = ops.get_default_graph()
+    return current_graph in enqueued_graphs
 
   def dequeue(self):
     """Generate host side operation to dequeue the outfeed values. The
