@@ -37,10 +37,8 @@ This can be done using
 Debugging numerical issues
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The values held in a tensor can be printed by calling ``ipu.ops.internal_ops.print_tensor``.
+The values held in a tensor can be printed by calling ``ipu.internal_ops.print_tensor``.
 This function takes a tensor and will print it to standard error as a side
 effect.
 
-.. TODO: not documented yet?
-
-See :py:func:`tensorflow.python.ipu.ops.internal_ops.print_tensor`.
+See :py:func:`tensorflow.python.ipu.internal_ops.print_tensor`.

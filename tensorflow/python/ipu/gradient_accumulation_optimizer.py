@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
+"""
+Optimizer wrappers which perform local gradient accumulation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+
 from tensorflow.python.ipu.optimizers.gradient_accumulation_optimizer import *  # pylint: disable=wildcard-import,unused-wildcard-import,enable=unused-import
 from tensorflow.python.platform import tf_logging
 

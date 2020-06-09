@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
-"""Operations and utilies related to the Graphcore IPU
+"""
+Operations and utilities related to the Graphcore IPU
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 # pylint: disable=wildcard-import,unused-import
@@ -65,6 +67,7 @@ from tensorflow.python.ipu.keras import layers
 from tensorflow.python.ipu.ops.experimental import popfloat_cast_to_gfloat
 
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
+from tensorflow.python.ipu.optimizers import map_gradient_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
 

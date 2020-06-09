@@ -13,8 +13,8 @@
 # limitations under the License.
 # =============================================================================
 """
-General utility functions
-~~~~~~~~~~~~~~~~~~~~~~~~~
+General utilities
+~~~~~~~~~~~~~~~~~
 """
 
 import collections
@@ -495,15 +495,17 @@ class KeyId:
 class VerificationOptions:
   """Store pairs of key / id to use for each type of data used in the graph.
   Does nothing unless verified transfers have been enabled by calling
-  `set_transfer_options(opts, use_verified_transfers=True).`
-  And an instance of this class has been set by calling
+  `set_transfer_options(opts, use_verified_transfers=True)`
+  and an instance of this class has been set by calling
   `set_verification_options`:
 
   .. code-block:: python
+
     o = VerificationOptions()
     o.inputs.key = 1
     o.infeeds["infeed"].key = 3
     set_verification_options(opts, o)
+
   """
   def __init__(self):
     self.inputs = KeyId()
@@ -532,6 +534,7 @@ def set_verification_options(opts, verification_options):
       ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
+
   Args:
     opts: An IpuOptions session control protobuf.
     verification_options: a VerificationOptions object that contains
@@ -965,99 +968,99 @@ def select_ipus(opts, indices):
 
       -+- Id:  [0], type:      [PCIe], PCI Domain: [0000:1a:00.0]
       -+- Id:  [1], type:      [PCIe], PCI Domain: [0000:1b:00.0]
-      -+- Id:  [2], type:      [PCIe], PCI Domain: [0000:1c:00.0]
-      -+- Id:  [3], type:      [PCIe], PCI Domain: [0000:1d:00.0]
-      -+- Id:  [4], type:      [PCIe], PCI Domain: [0000:60:00.0]
-      -+- Id:  [5], type:      [PCIe], PCI Domain: [0000:61:00.0]
-      -+- Id:  [6], type:      [PCIe], PCI Domain: [0000:62:00.0]
-      -+- Id:  [7], type:      [PCIe], PCI Domain: [0000:63:00.0]
-      -+- Id:  [8], type:      [PCIe], PCI Domain: [0000:b1:00.0]
-      -+- Id:  [9], type:      [PCIe], PCI Domain: [0000:b2:00.0]
-      -+- Id: [10], type:      [PCIe], PCI Domain: [0000:b3:00.0]
-      -+- Id: [11], type:      [PCIe], PCI Domain: [0000:b4:00.0]
-      -+- Id: [12], type:      [PCIe], PCI Domain: [0000:da:00.0]
-      -+- Id: [13], type:      [PCIe], PCI Domain: [0000:db:00.0]
-      -+- Id: [14], type:      [PCIe], PCI Domain: [0000:dc:00.0]
-      -+- Id: [15], type:      [PCIe], PCI Domain: [0000:dd:00.0]
-      -+- Id: [32], type: [Multi IPU]
-       |--- PCIe Id:  [7], DNC Id: [0], PCI Domain: [0000:63:00.0]
-       |--- PCIe Id:  [6], DNC Id: [1], PCI Domain: [0000:62:00.0]
-       |--- PCIe Id:  [5], DNC Id: [2], PCI Domain: [0000:61:00.0]
-       |--- PCIe Id:  [4], DNC Id: [3], PCI Domain: [0000:60:00.0]
-       |--- PCIe Id:  [3], DNC Id: [4], PCI Domain: [0000:1d:00.0]
-       |--- PCIe Id:  [2], DNC Id: [5], PCI Domain: [0000:1c:00.0]
-       |--- PCIe Id:  [1], DNC Id: [6], PCI Domain: [0000:1b:00.0]
-       |--- PCIe Id:  [0], DNC Id: [7], PCI Domain: [0000:1a:00.0]
-       |--- PCIe Id: [11], DNC Id: [8], PCI Domain: [0000:b4:00.0]
-       |--- PCIe Id: [10], DNC Id: [9], PCI Domain: [0000:b3:00.0]
-       |--- PCIe Id:  [9], DNC Id: [10], PCI Domain: [0000:b2:00.0]
-       |--- PCIe Id:  [8], DNC Id: [11], PCI Domain: [0000:b1:00.0]
-       |--- PCIe Id: [15], DNC Id: [12], PCI Domain: [0000:dd:00.0]
-       |--- PCIe Id: [14], DNC Id: [13], PCI Domain: [0000:dc:00.0]
-       |--- PCIe Id: [13], DNC Id: [14], PCI Domain: [0000:db:00.0]
-       |--- PCIe Id: [12], DNC Id: [15], PCI Domain: [0000:da:00.0]
-      -+- Id: [33], type: [Multi IPU]
-       |--- PCIe Id:  [7], DNC Id: [0], PCI Domain: [0000:63:00.0]
-       |--- PCIe Id:  [6], DNC Id: [1], PCI Domain: [0000:62:00.0]
-       |--- PCIe Id:  [5], DNC Id: [2], PCI Domain: [0000:61:00.0]
-       |--- PCIe Id:  [4], DNC Id: [3], PCI Domain: [0000:60:00.0]
-       |--- PCIe Id:  [3], DNC Id: [4], PCI Domain: [0000:1d:00.0]
-       |--- PCIe Id:  [2], DNC Id: [5], PCI Domain: [0000:1c:00.0]
-       |--- PCIe Id:  [1], DNC Id: [6], PCI Domain: [0000:1b:00.0]
-       |--- PCIe Id:  [0], DNC Id: [7], PCI Domain: [0000:1a:00.0]
-      -+- Id: [34], type: [Multi IPU]
-       |--- PCIe Id: [11], DNC Id: [0], PCI Domain: [0000:b4:00.0]
-       |--- PCIe Id: [10], DNC Id: [1], PCI Domain: [0000:b3:00.0]
-       |--- PCIe Id:  [9], DNC Id: [2], PCI Domain: [0000:b2:00.0]
-       |--- PCIe Id:  [8], DNC Id: [3], PCI Domain: [0000:b1:00.0]
-       |--- PCIe Id: [15], DNC Id: [4], PCI Domain: [0000:dd:00.0]
-       |--- PCIe Id: [14], DNC Id: [5], PCI Domain: [0000:dc:00.0]
-       |--- PCIe Id: [13], DNC Id: [6], PCI Domain: [0000:db:00.0]
-       |--- PCIe Id: [12], DNC Id: [7], PCI Domain: [0000:da:00.0]
-      -+- Id: [35], type: [Multi IPU]
-       |--- PCIe Id:  [7], DNC Id: [0], PCI Domain: [0000:63:00.0]
-       |--- PCIe Id:  [6], DNC Id: [1], PCI Domain: [0000:62:00.0]
-       |--- PCIe Id:  [5], DNC Id: [2], PCI Domain: [0000:61:00.0]
-       |--- PCIe Id:  [4], DNC Id: [3], PCI Domain: [0000:60:00.0]
-      -+- Id: [36], type: [Multi IPU]
-       |--- PCIe Id:  [3], DNC Id: [0], PCI Domain: [0000:1d:00.0]
-       |--- PCIe Id:  [2], DNC Id: [1], PCI Domain: [0000:1c:00.0]
-       |--- PCIe Id:  [1], DNC Id: [2], PCI Domain: [0000:1b:00.0]
-       |--- PCIe Id:  [0], DNC Id: [3], PCI Domain: [0000:1a:00.0]
-      -+- Id: [37], type: [Multi IPU]
-       |--- PCIe Id: [11], DNC Id: [0], PCI Domain: [0000:b4:00.0]
-       |--- PCIe Id: [10], DNC Id: [1], PCI Domain: [0000:b3:00.0]
-       |--- PCIe Id:  [9], DNC Id: [2], PCI Domain: [0000:b2:00.0]
-       |--- PCIe Id:  [8], DNC Id: [3], PCI Domain: [0000:b1:00.0]
-      -+- Id: [38], type: [Multi IPU]
-       |--- PCIe Id: [15], DNC Id: [0], PCI Domain: [0000:dd:00.0]
-       |--- PCIe Id: [14], DNC Id: [1], PCI Domain: [0000:dc:00.0]
-       |--- PCIe Id: [13], DNC Id: [2], PCI Domain: [0000:db:00.0]
-       |--- PCIe Id: [12], DNC Id: [3], PCI Domain: [0000:da:00.0]
-      -+- Id: [39], type: [Multi IPU]
-       |--- PCIe Id:  [7], DNC Id: [0], PCI Domain: [0000:63:00.0]
-       |--- PCIe Id:  [6], DNC Id: [1], PCI Domain: [0000:62:00.0]
-      -+- Id: [40], type: [Multi IPU]
-       |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:61:00.0]
-       |--- PCIe Id:  [4], DNC Id: [1], PCI Domain: [0000:60:00.0]
-      -+- Id: [41], type: [Multi IPU]
-       |--- PCIe Id:  [3], DNC Id: [0], PCI Domain: [0000:1d:00.0]
-       |--- PCIe Id:  [2], DNC Id: [1], PCI Domain: [0000:1c:00.0]
-      -+- Id: [42], type: [Multi IPU]
-       |--- PCIe Id:  [1], DNC Id: [0], PCI Domain: [0000:1b:00.0]
-       |--- PCIe Id:  [0], DNC Id: [1], PCI Domain: [0000:1a:00.0]
-      -+- Id: [43], type: [Multi IPU]
-       |--- PCIe Id: [11], DNC Id: [0], PCI Domain: [0000:b4:00.0]
-       |--- PCIe Id: [10], DNC Id: [1], PCI Domain: [0000:b3:00.0]
-      -+- Id: [44], type: [Multi IPU]
-       |--- PCIe Id:  [9], DNC Id: [0], PCI Domain: [0000:b2:00.0]
-       |--- PCIe Id:  [8], DNC Id: [1], PCI Domain: [0000:b1:00.0]
-      -+- Id: [45], type: [Multi IPU]
-       |--- PCIe Id: [15], DNC Id: [0], PCI Domain: [0000:dd:00.0]
-       |--- PCIe Id: [14], DNC Id: [1], PCI Domain: [0000:dc:00.0]
-      -+- Id: [46], type: [Multi IPU]
-       |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:db:00.0]
-       |--- PCIe Id: [12], DNC Id: [1], PCI Domain: [0000:da:00.0]
+      -+- Id:  [2], type:      [PCIe], PCI Domain: [0000:23:00.0]
+      -+- Id:  [3], type:      [PCIe], PCI Domain: [0000:24:00.0]
+      -+- Id:  [4], type:      [PCIe], PCI Domain: [0000:3d:00.0]
+      -+- Id:  [5], type:      [PCIe], PCI Domain: [0000:3e:00.0]
+      -+- Id:  [6], type:      [PCIe], PCI Domain: [0000:43:00.0]
+      -+- Id:  [7], type:      [PCIe], PCI Domain: [0000:44:00.0]
+      -+- Id:  [8], type:      [PCIe], PCI Domain: [0000:8b:00.0]
+      -+- Id:  [9], type:      [PCIe], PCI Domain: [0000:8c:00.0]
+      -+- Id: [10], type:      [PCIe], PCI Domain: [0000:8e:00.0]
+      -+- Id: [11], type:      [PCIe], PCI Domain: [0000:8f:00.0]
+      -+- Id: [12], type:      [PCIe], PCI Domain: [0000:b8:00.0]
+      -+- Id: [13], type:      [PCIe], PCI Domain: [0000:b9:00.0]
+      -+- Id: [14], type:      [PCIe], PCI Domain: [0000:ba:00.0]
+      -+- Id: [15], type:      [PCIe], PCI Domain: [0000:bb:00.0]
+      -+- Id: [16], type: [Multi IPU]
+      |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+      |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+      -+- Id: [17], type: [Multi IPU]
+      |--- PCIe Id:  [4], DNC Id: [0], PCI Domain: [0000:3d:00.0]
+      |--- PCIe Id:  [6], DNC Id: [1], PCI Domain: [0000:43:00.0]
+      -+- Id: [18], type: [Multi IPU]
+      |--- PCIe Id:  [3], DNC Id: [0], PCI Domain: [0000:24:00.0]
+      |--- PCIe Id:  [1], DNC Id: [1], PCI Domain: [0000:1b:00.0]
+      -+- Id: [19], type: [Multi IPU]
+      |--- PCIe Id:  [2], DNC Id: [0], PCI Domain: [0000:23:00.0]
+      |--- PCIe Id:  [0], DNC Id: [1], PCI Domain: [0000:1a:00.0]
+      -+- Id: [20], type: [Multi IPU]
+      |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+      |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+      -+- Id: [21], type: [Multi IPU]
+      |--- PCIe Id: [12], DNC Id: [0], PCI Domain: [0000:b8:00.0]
+      |--- PCIe Id: [14], DNC Id: [1], PCI Domain: [0000:ba:00.0]
+      -+- Id: [22], type: [Multi IPU]
+      |--- PCIe Id:  [9], DNC Id: [0], PCI Domain: [0000:8c:00.0]
+      |--- PCIe Id: [11], DNC Id: [1], PCI Domain: [0000:8f:00.0]
+      -+- Id: [23], type: [Multi IPU]
+      |--- PCIe Id: [10], DNC Id: [0], PCI Domain: [0000:8e:00.0]
+      |--- PCIe Id:  [8], DNC Id: [1], PCI Domain: [0000:8b:00.0]
+      -+- Id: [24], type: [Multi IPU]
+      |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+      |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+      |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+      |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+      -+- Id: [25], type: [Multi IPU]
+      |--- PCIe Id:  [3], DNC Id: [0], PCI Domain: [0000:24:00.0]
+      |--- PCIe Id:  [1], DNC Id: [1], PCI Domain: [0000:1b:00.0]
+      |--- PCIe Id:  [2], DNC Id: [2], PCI Domain: [0000:23:00.0]
+      |--- PCIe Id:  [0], DNC Id: [3], PCI Domain: [0000:1a:00.0]
+      -+- Id: [26], type: [Multi IPU]
+      |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+      |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+      |--- PCIe Id: [12], DNC Id: [2], PCI Domain: [0000:b8:00.0]
+      |--- PCIe Id: [14], DNC Id: [3], PCI Domain: [0000:ba:00.0]
+      -+- Id: [27], type: [Multi IPU]
+      |--- PCIe Id:  [9], DNC Id: [0], PCI Domain: [0000:8c:00.0]
+      |--- PCIe Id: [11], DNC Id: [1], PCI Domain: [0000:8f:00.0]
+      |--- PCIe Id: [10], DNC Id: [2], PCI Domain: [0000:8e:00.0]
+      |--- PCIe Id:  [8], DNC Id: [3], PCI Domain: [0000:8b:00.0]
+      -+- Id: [28], type: [Multi IPU]
+      |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+      |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+      |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+      |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+      |--- PCIe Id:  [3], DNC Id: [4], PCI Domain: [0000:24:00.0]
+      |--- PCIe Id:  [1], DNC Id: [5], PCI Domain: [0000:1b:00.0]
+      |--- PCIe Id:  [2], DNC Id: [6], PCI Domain: [0000:23:00.0]
+      |--- PCIe Id:  [0], DNC Id: [7], PCI Domain: [0000:1a:00.0]
+      -+- Id: [29], type: [Multi IPU]
+      |--- PCIe Id: [13], DNC Id: [0], PCI Domain: [0000:b9:00.0]
+      |--- PCIe Id: [15], DNC Id: [1], PCI Domain: [0000:bb:00.0]
+      |--- PCIe Id: [12], DNC Id: [2], PCI Domain: [0000:b8:00.0]
+      |--- PCIe Id: [14], DNC Id: [3], PCI Domain: [0000:ba:00.0]
+      |--- PCIe Id:  [9], DNC Id: [4], PCI Domain: [0000:8c:00.0]
+      |--- PCIe Id: [11], DNC Id: [5], PCI Domain: [0000:8f:00.0]
+      |--- PCIe Id: [10], DNC Id: [6], PCI Domain: [0000:8e:00.0]
+      |--- PCIe Id:  [8], DNC Id: [7], PCI Domain: [0000:8b:00.0]
+      -+- Id: [30], type: [Multi IPU]
+      |--- PCIe Id:  [5], DNC Id: [0], PCI Domain: [0000:3e:00.0]
+      |--- PCIe Id:  [7], DNC Id: [1], PCI Domain: [0000:44:00.0]
+      |--- PCIe Id:  [4], DNC Id: [2], PCI Domain: [0000:3d:00.0]
+      |--- PCIe Id:  [6], DNC Id: [3], PCI Domain: [0000:43:00.0]
+      |--- PCIe Id:  [3], DNC Id: [4], PCI Domain: [0000:24:00.0]
+      |--- PCIe Id:  [1], DNC Id: [5], PCI Domain: [0000:1b:00.0]
+      |--- PCIe Id:  [2], DNC Id: [6], PCI Domain: [0000:23:00.0]
+      |--- PCIe Id:  [0], DNC Id: [7], PCI Domain: [0000:1a:00.0]
+      |--- PCIe Id: [13], DNC Id: [8], PCI Domain: [0000:b9:00.0]
+      |--- PCIe Id: [15], DNC Id: [9], PCI Domain: [0000:bb:00.0]
+      |--- PCIe Id: [12], DNC Id: [10], PCI Domain: [0000:b8:00.0]
+      |--- PCIe Id: [14], DNC Id: [11], PCI Domain: [0000:ba:00.0]
+      |--- PCIe Id:  [9], DNC Id: [12], PCI Domain: [0000:8c:00.0]
+      |--- PCIe Id: [11], DNC Id: [13], PCI Domain: [0000:8f:00.0]
+      |--- PCIe Id: [10], DNC Id: [14], PCI Domain: [0000:8e:00.0]
+      |--- PCIe Id:  [8], DNC Id: [15], PCI Domain: [0000:8b:00.0]
 
   Examples based on the listing above:
 
@@ -1073,7 +1076,7 @@ def select_ipus(opts, indices):
 
   .. code-block:: python
 
-      # Create a single device with 1 IPU at PCI address 0000:b1:00.0 by using
+      # Create a single device with 1 IPU at PCI address 0000:8b:00.0 by using
       # IPU configuration index 8
       opts = create_ipu_config()
       opts = select_ipus(opts, indices=[8])
@@ -1083,7 +1086,7 @@ def select_ipus(opts, indices):
 
   .. code-block:: python
 
-      # Create two Tensorflow devices, with one IPU each, being devices at
+      # Create two TensorFlow devices, with one IPU each, being devices at
       # indices 0 and 1
       opts = create_ipu_config()
       opts = select_ipus(opts, indices=[0, 1])
@@ -1093,20 +1096,20 @@ def select_ipus(opts, indices):
 
   .. code-block:: python
 
-      # Create two Tensorflow devices, with four IPUs each. The device
-      # configurations at indices 37 (0000:b4:00.0, 0000:b3:00.0, 0000:b2:00.0,
-      # 000:b1:00.0) and 38 (0000:dd:00.0, 0000:dc:00.0, 0000:db:00.0,
-      # 00:da:00.0)
+      # Create two TensorFlow devices, with four IPUs each. The device
+      # configurations at indices 24 (0000:3e:00.0, 0000:44:00.0, 0000:3d:00.0,
+      # 000:43:00.0) and 25 (0000:24:00.0, 0000:1b:00.0, 0000:23:00.0,
+      # 00:1a:00.0)
       opts = create_ipu_config()
-      opts = select_ipus(opts, indices=[37, 38])
+      opts = select_ipus(opts, indices=[24, 25])
       ipu.utils.configure_ipu_system(opts)
       with tf.Session() as s:
         ...
 
   .. code-block:: python
 
-      # Create four Tensorflow devices each with one IPU, at addresses
-      # 0000:1a:00.0, 0000:1b:00.0, 0000:1c:00.0, 0000:1d:00.0.
+      # Create four TensorFlow devices each with one IPU, at addresses
+      # 0000:1a:00.0, 0000:1b:00.0, 0000:23:00.0, 0000:24:00.0.
       opts = create_ipu_config()
       opts = select_ipus(opts, indices=[0, 1, 2, 3])
       ipu.utils.configure_ipu_system(opts)
@@ -1401,20 +1404,27 @@ def export_dataset_to_file(dataset_or_infeed,
 
   If the infeed elements are tuples then one file per tuple element will be
   created.
-  For example if `dataset` looks like
-  [{ "a": A_0, "b": B_0}, { "a": A_1, "b": B_1}, ...]
-  Then `export_dataset_to_file(dataset, "my_dataset.bin", 100)` will generate:
+  For example, if `dataset` looks like
+
+  .. code-block:: python
+
+    [{ "a": A_0, "b": B_0}, { "a": A_1, "b": B_1}, ...]
+
+  then `export_dataset_to_file(dataset, "my_dataset.bin", 100)` will generate:
+
+  .. code-block:: python
+
     my_dataset.0.bin   # Contains tensors [ A_0, A_1, ..., A_99]
     my_dataset.1.bin   # Contains tensors [ B_0, B_1, ..., B_99]
 
   Args:
     dataset_or_infeed: An unary dataset with the same input and output
-    structure or an `IPUInfeedQueue`.
+      structure or an `IPUInfeedQueue`.
     output_filename: Where to export the tensors to.
     num_elements: Number of elements to export from the dataset.
     feed_name: Specify the feed name.
     apply_options: Whether to apply optimization options which can improve the
-            dataset performance.
+      dataset performance.
   """
   assert isinstance(dataset_or_infeed,
                     (dataset_ops.Dataset, ipu_infeed_queue.IPUInfeedQueue))

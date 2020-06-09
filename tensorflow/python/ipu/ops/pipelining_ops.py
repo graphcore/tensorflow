@@ -14,7 +14,7 @@
 # ==============================================================================
 """
 Pipelining operators
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 """
 # Function captures are based on /tensorflow/python/ops/cond_v2.py
 
@@ -124,7 +124,7 @@ class PipelineStageOptions:
         all the convolution operations in the stage.
       matmul_options: If provided, a dictionary of Poplar option flags for
         all the matmul operations in the stage.
-       loss: The loss which is passed to the optimizer.
+      loss: The loss which is passed to the optimizer.
     """
 
     convolution_options = convolution_options if convolution_options else {}
@@ -187,8 +187,8 @@ def pipeline(computational_stages,
   (for example hyperparameters such as learning rate), it needs to be passed
   as part of `inputs`. Alternatively, if these values change during execution
   (for example the model processes different batches of data) the input should
-  be passed through the `infeed_queue` (see
-  `ipu.ipu_infeed_queue.IPUInfeedQueue`).
+  be passed through the `infeed_queue`
+  (see :class:`~tensorflow.python.ipu.ipu_infeed_queue.IPUInfeedQueue`).
 
   When training a model, an optional `optimizer_function` function can be
   provided. This function takes all the outputs from the last computational
@@ -205,9 +205,9 @@ def pipeline(computational_stages,
   pipeline, unless `continuous_weight_updates` is enabled.
 
   If the last computational stage has any outputs, then an `outfeed_queue`
-  (see `ipu.ipu_outfeed_queue.IPUOutfeedQueue`) is required and all the
-  outputs from the last computational stage are enqueued to the
-  `outfeed_queue`.
+  (see :class:`~tensorflow.python.ipu.ipu_outfeed_queue.IPUOutfeedQueue`)
+  is required and all the outputs from the last computational stage are enqueued
+  to the `outfeed_queue`.
 
   Note that pipelining also supports recomputation, to enable it, use the
   `tensorflow.ipu.utils.set_recomputation_options()` function when configuring

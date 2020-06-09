@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===================================================================
+"""
+Session run hooks
+~~~~~~~~~~~~~~~~~
+"""
 import numpy as np
 
 from tensorflow.python import ops
@@ -27,7 +31,7 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
   """Prints the given tensors every N local steps, every N seconds, or at end.
 
   This is a version of `tf.estimator.LoggingTensorHook` that supports logging
-  from inside an function compiled for IPU. The implementation uses an IPU
+  from inside a function compiled for the IPU. The implementation uses an IPU
   outfeed in order to send the tensors from the compiled function to the host.
 
   The tensors will be printed to the log, with `INFO` severity.
@@ -84,8 +88,8 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
     """Logs the given `tensors`.
 
     Args:
-      tensors: either a dict from strings to `tf.Tensor`s, a list/tuple of
-        `tf.Tensor`s, or a `tf.Tensor`.
+      tensors: either a dict from string to `tf.Tensor`, a list/tuple of
+        `tf.Tensor` objects, or a `tf.Tensor`.
 
     Returns:
       The logging operation. It might be necessary to add a control dependency

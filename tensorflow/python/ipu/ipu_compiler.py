@@ -17,7 +17,6 @@ Compiler interface
 ~~~~~~~~~~~~~~~~~~
 """
 
-
 import collections
 import inspect
 
@@ -31,7 +30,7 @@ from tensorflow.python.ipu import ipu_estimator
 
 def compile(computation, inputs=None):
   """Builds an operator that compiles and runs `computation` with the Graphcore
-     IPU XLA backend.
+  IPU XLA backend.
 
   Args:
     computation: A Python function that builds a computation to apply to the
@@ -43,7 +42,7 @@ def compile(computation, inputs=None):
       `compile` is a list of tensors corresponding to the tensors from the
       output of `computation`.
 
-      All `Operation`s returned from `computation` will be executed when
+      All operations returned from `computation` will be executed when
       evaluating any of the returned output tensors.
     inputs: A list of inputs or `None` (equivalent to an empty list). Each input
       can be a nested structure containing values that are convertible to
@@ -53,7 +52,7 @@ def compile(computation, inputs=None):
       tensors with `tf.convert_to_tensor`.
 
   Returns:
-    Same data structure as if computation(inputs) is called directly with some
+    Same data structure as if `computation(inputs)` is called directly with some
     exceptions for correctness.
 
     1. None output. a NoOp would be returned which control-depends on
@@ -89,7 +88,7 @@ def compile(computation, inputs=None):
       raise Exception("""\
   A computation has been compiled, however it was not placed on an IPU device. \
   This computation will not be executed on an IPU.
-  To execute it on an IPU use the `ipu_scope` from `tensorflow.python.ipu.ops`, \
+  To execute it on an IPU use the `ipu_scope` from `tensorflow.python.ipu.scopes`, \
   for example:
 
     with ipu_scope('/device:IPU:0'):

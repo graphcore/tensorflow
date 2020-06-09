@@ -47,6 +47,7 @@ def serialized_matmul(a,
   Given the tensor `a` with shape `[..., m, k]` and tensor `b` with
   shape [..., k, n] *after* the transpositions, the matrix multiplication can be
   serialized as follows:
+
   * Along the columns dimension of `a` (the `m`-dimension), by setting
     `serialization_dimension` to `a_columns`.
   * Along the rows dimension of `a` and the columns dimension of `b`

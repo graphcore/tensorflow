@@ -361,7 +361,7 @@ def _validate_replicated_training_graph():
     raise ValueError(
         ("This is not a valid replicated training graph because no {} " +
          "operations were found. Did you remember to use the " +
-         "`tensorflow.python.ipu.optimizers.`" +
+         "`tensorflow.python.ipu.`" +
          "`cross_replica_optimizer.CrossReplicaOptimizer`?"
          ).format(_CROSS_REPLICA_SUM_OP))
 
@@ -1178,8 +1178,8 @@ class IPUEstimator(_IPUEstimatorBase):
   dataset returned by the `input_fn` (of size `batch_size`) is sent to each
   replica, giving an effective batch size of `num_replicas * batch_size`.
   The only change needed to the `model_fn` is that the optimizer should be
-  wrapped in an
-  :class:`~tensorflow.python.ipu.optimizers.cross_replica_optimizer.CrossReplicaOptimizer`
+  wrapped in a
+  :class:`~tensorflow.python.ipu.cross_replica_optimizer.CrossReplicaOptimizer`
   in order to average the gradients across the replicas.
 
   This can also be combined with distributed multi-worker training using the

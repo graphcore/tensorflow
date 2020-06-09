@@ -13,10 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 """
-Popnn recurrent operators
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Popnn recurrent neural network operators
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-
 
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.framework import dtypes

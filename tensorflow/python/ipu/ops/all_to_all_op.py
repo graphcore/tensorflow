@@ -25,8 +25,8 @@ def all_to_all(x,
                concat_dimension,
                replication_factor,
                name=None):
-  """ Perform an XLA all to all operation across all replicas
-    (https://www.tensorflow.org/xla/operation_semantics#alltoall)
+  """ Perform an XLA all to all operation across all replicas.
+    (See https://www.tensorflow.org/xla/operation_semantics#alltoall)
 
     Args:
       split_dimension: A value in the interval [0,n) that names the dimension
@@ -48,7 +48,7 @@ def all_to_all(x,
 
 def all_gather(x, replication_factor, name):
   """ Gather the data on all replicas to all other replicas. Each replica will
-      have the exact same output.
+    have the exact same output.
 
     Args:
       x: The tensor to gather
