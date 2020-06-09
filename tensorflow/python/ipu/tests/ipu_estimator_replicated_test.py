@@ -19,14 +19,15 @@ import numpy as np
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
 from tensorflow.keras import layers
 from tensorflow.python import ipu
+from tensorflow.python import ops
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import test_util
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import ipu_run_config
+from tensorflow.python.ipu import ipu_session_run_hooks
 from tensorflow.python.ipu import utils as ipu_utils
 from tensorflow.python.ipu.ops import replication_ops
-
 from tensorflow.python.ipu.optimizers import cross_replica_optimizer
 from tensorflow.python.ipu.optimizers import sharded_optimizer
 from tensorflow.python.ops import array_ops
@@ -359,10 +360,17 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
       return dataset_ops.Dataset.from_tensor_slices(features).batch(
           batch_size=2, drop_remainder=True)
 
+    hook = ipu_session_run_hooks.IPULoggingTensorHook(every_n_iter=1,
+                                                      replication_factor=4)
+
     def my_model_fn(features, mode):
+      logging_op = hook.log({"features": features})
+      with ops.control_dependencies([logging_op]):
+        predictions = math_ops.reduce_max(features)
+
       return model_fn_lib.EstimatorSpec(
           mode,
-          predictions=math_ops.reduce_max(features),
+          predictions=predictions,
       )
 
     ipu_options = ipu_utils.create_ipu_config()
@@ -378,7 +386,8 @@ class IPUEstimatorReplicatedTest(test_util.TensorFlowTestCase):
     self.assertEqual(5.0, next(outputs))
 
     outputs = estimator.predict(input_fn=my_input_fn,
-                                yield_single_examples=False)
+                                yield_single_examples=False,
+                                hooks=[hook])
     np.testing.assert_array_equal([3.0, 5.0, 7.0, 9.0], next(outputs))
 
   @test_util.deprecated_graph_mode_only
