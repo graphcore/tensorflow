@@ -197,10 +197,8 @@ class IPUOutfeedQueue:
        ...
 
       """
-    g = ops.get_default_graph()
-    for o in self._operations:
-      if o.graph == g:
-        raise ValueError("An outfeed can only be enqueued once.")
+    if self.enqueued:
+      raise ValueError("An outfeed can only be enqueued once.")
 
     self._structure = _OutfeedStructure(tensors, self._replication_factor)
     with ops.device(self._device_str):
@@ -217,7 +215,8 @@ class IPUOutfeedQueue:
 
   @property
   def enqueued(self):
-    return len(self._operations) > 0
+    g = ops.get_default_graph()
+    return any(o.graph == g for o in self._operations)
 
   def dequeue(self):
     """Generate host side operation to dequeue the outfeed values. The

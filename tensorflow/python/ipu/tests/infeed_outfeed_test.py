@@ -454,15 +454,24 @@ class InfeedOutfeedTest(test_util.TensorFlowTestCase):
       with ops.device('cpu'):
         v = array_ops.placeholder(np.float32, [4, 4])
 
+      self.assertFalse(outfeed_queue.enqueued)
+
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         ipu.ipu_compiler.compile(my_net, inputs=[v])
+
+      self.assertTrue(outfeed_queue.enqueued)
 
     with ops.Graph().as_default():
       with ops.device('cpu'):
         v = array_ops.placeholder(np.float32, [4, 4])
 
+      # Not enqueued in the current graph.
+      self.assertFalse(outfeed_queue.enqueued)
+
       with ipu.scopes.ipu_scope("/device:IPU:0"):
         ipu.ipu_compiler.compile(my_net, inputs=[v])
+
+      self.assertTrue(outfeed_queue.enqueued)
 
   @test_util.deprecated_graph_mode_only
   def testSingleOutfeedRepeatNonTuple(self):
