@@ -45,7 +45,8 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
                at_end=False,
                formatter=None,
                logging_mode=LoggingMode.LAST,
-               feed_name="logging_hook"):
+               feed_name="logging_hook",
+               replication_factor=1):
     """Initializes the hook.
 
     Args:
@@ -61,6 +62,8 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
         behaviour when enqueuing multiple tensor values between dequeues
         (e.g. print all of them or only the last one).
       feed_name: `string`. The name of the outfeed queue. Must be unique.
+      replication_factor: `int`, the number of replicas from which logging
+        is performed.
     """
     if (every_n_iter is not None) and (every_n_secs is not None):
       raise ValueError("Cannot provide both every_n_iter and every_n_secs")
@@ -78,7 +81,9 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
     self._formatter = formatter
 
     self._outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=feed_name, outfeed_mode=logging_mode)
+        feed_name=feed_name,
+        outfeed_mode=logging_mode,
+        replication_factor=replication_factor)
 
     self._dequeue_op = None
     self._deleter_op = None
