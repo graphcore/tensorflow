@@ -25,7 +25,7 @@ system, and be compiled together into a single Poplar executable.
 Supported types
 ~~~~~~~~~~~~~~~
 
-Poplar and the Poplibs libraries support the following data types:
+Poplar and the PopLibs libraries support the following data types:
 
 *  ``tf.float32``
 *  ``tf.float16``
@@ -100,7 +100,7 @@ functions exist for configuring the hardware and compiler.
 * ``set_compilation_options`` sets general options to be passed to the Poplar
   compiler.
 * ``set_convolution_options``, ``set_matmul_options`` and
-  ``set_pooling_options`` pass specific options directly to the Poplibs
+  ``set_pooling_options`` pass specific options directly to the PopLibs
   convolution and pooling operations.
 * ``set_report_options`` passes options directly to the Poplar
   summary report generator.
@@ -113,7 +113,7 @@ functions exist for configuring the hardware and compiler.
   trade offs.
 
 More options are available on the ``create_ipu_config`` function itself. These
-mostly control specific features of the Poplar and Poplibs operations.
+mostly control specific features of the Poplar and PopLibs operations.
 Some of the main ones are described below:
 
 * ``max_scheduler_lookahead_depth`` controls how far the scheduler can look

@@ -466,7 +466,7 @@ class PopnnLSTM(_PopnnRNN):
       batch_size: an int
 
     Returns:
-      a tuple of python arrays.
+      a tuple of Python arrays.
     """
     return ([batch_size, self.num_units], [batch_size, self.num_units])
 
@@ -716,7 +716,7 @@ class PopnnGRU(_PopnnRNN):
       batch_size: an int
 
     Returns:
-      A python array.
+      A Python array.
     """
     return [batch_size, self.num_units]
 

@@ -13,8 +13,8 @@
 # limitations under the License.
 # =============================================================================
 """
-Optimizer wrapper which performs local gradient accumulation.
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Optimizer wrappers which perform local gradient accumulation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
@@ -39,14 +39,15 @@ class GradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylint: disable=a
   Unlike 'GradientAccumulationOptimizer', this optimizer can be used to wrap any
   other TensorFlow optimizer.
 
-  See the 'Gradient Accumulation' section in the documention for more details.
+  See the :ref:`gradient-accumulation` section in the documention for more
+  details.
   """
   def __init__(self,
                opt,
                num_mini_batches,
                offload_weight_update_variables=True,
                name="GradientAccumulationOptimizerV2"):
-    """Construct a Gradient Accumulation Optimizer.
+    """Construct a Gradient Accumulation Optimizer V2.
 
     Args:
       opt: An existing `Optimizer` to encapsulate.
@@ -195,17 +196,18 @@ class CrossReplicaGradientAccumulationOptimizerV2(optimizer.Optimizer):  # pylin
   example if we have a model of batch size 16 and we accumulate the gradients
   of 4 batches, this simulates an input batch of size 64.
 
-  This optimizer is similar GradientAccumulationOptimizerV2, however using this
-  optimizer guarantees that the accumulated gradients will only be exchanged
-  between IPUs when the gradients are applied to the weights, and hence reducing
-  the number of cross-IPU gradient exchanges by a factor of 'num_mini_batches'.
+  This optimizer is similar to GradientAccumulationOptimizerV2, however using
+  this optimizer guarantees that the accumulated gradients will only be
+  exchanged between IPUs when the gradients are applied to the weights, and
+  hence reduces the number of cross-IPU gradient exchanges by a factor of
+  'num_mini_batches'.
   """
   def __init__(self,
                opt,
                num_mini_batches,
                offload_weight_update_variables=True,
                name="CrossReplicaGradientAccumulationOptimizerV2"):
-    """Construct a Cross Replica Gradient Accumulation Optimizer.
+    """Construct a Cross Replica Gradient Accumulation Optimizer V2.
 
     Args:
       opt: An existing `Optimizer` to encapsulate.
@@ -442,7 +444,7 @@ class CrossReplicaGradientAccumulationOptimizer(optimizer.Optimizer):
   example if we have a model of batch size 16 and we accumulate the gradients
   of 4 batches, this simulates an input batch of size 64.
 
-  This optimizer is similar GradientAccumulationOptimizer, however using this
+  This optimizer is similar to GradientAccumulationOptimizer, however using this
   optimizer guarantees that the accumulated gradients will only be exchanged
   between IPUs when the accumulated gradients are back-propagated through the
   network.
