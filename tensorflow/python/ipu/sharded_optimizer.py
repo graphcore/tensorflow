@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
+"""
+Optimizer wrapper for sharded graphs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+
 from tensorflow.python.ipu.optimizers.sharded_optimizer import *  # pylint: disable=wildcard-import,unused-wildcard-import,enable=unused-import
 from tensorflow.python.platform import tf_logging
 

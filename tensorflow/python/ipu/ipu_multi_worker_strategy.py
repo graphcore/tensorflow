@@ -13,8 +13,8 @@
 # limitations under the License.
 # ===================================================================
 """
-Distributed training with IPUs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Distributed training
+~~~~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.core.framework import attr_value_pb2

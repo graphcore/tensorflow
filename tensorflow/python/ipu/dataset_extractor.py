@@ -14,7 +14,7 @@
 # =============================================================================
 """
 Dataset extractor
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 """
 
 from tensorflow.compiler.plugin.poplar.ops import gen_dataset_exporters
@@ -104,7 +104,7 @@ def import_variables(variables,
                      is_input=True,
                      strict=True,
                      print_stats=True):
-  """Allows the user to import from some data files the content of the variables
+  """Allows the user to import from some data files the content of the variables.
 
     Args:
       variables: List of variables to import from file.

@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===================================================================
+"""
+Session run hooks
+~~~~~~~~~~~~~~~~~
+"""
 import numpy as np
 
 from tensorflow.python import ops
@@ -27,7 +31,7 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
   """Prints the given tensors every N local steps, every N seconds, or at end.
 
   This is a version of `tf.estimator.LoggingTensorHook` that supports logging
-  from inside an function compiled for IPU. The implementation uses an IPU
+  from inside a function compiled for the IPU. The implementation uses an IPU
   outfeed in order to send the tensors from the compiled function to the host.
 
   The tensors will be printed to the log, with `INFO` severity.
@@ -41,7 +45,8 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
                at_end=False,
                formatter=None,
                logging_mode=LoggingMode.LAST,
-               feed_name="logging_hook"):
+               feed_name="logging_hook",
+               replication_factor=1):
     """Initializes the hook.
 
     Args:
@@ -57,6 +62,8 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
         behaviour when enqueuing multiple tensor values between dequeues
         (e.g. print all of them or only the last one).
       feed_name: `string`. The name of the outfeed queue. Must be unique.
+      replication_factor: `int`, the number of replicas from which logging
+        is performed.
     """
     if (every_n_iter is not None) and (every_n_secs is not None):
       raise ValueError("Cannot provide both every_n_iter and every_n_secs")
@@ -74,7 +81,9 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
     self._formatter = formatter
 
     self._outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
-        feed_name=feed_name, outfeed_mode=logging_mode)
+        feed_name=feed_name,
+        outfeed_mode=logging_mode,
+        replication_factor=replication_factor)
 
     self._dequeue_op = None
     self._deleter_op = None
@@ -84,8 +93,8 @@ class IPULoggingTensorHook(session_run_hook.SessionRunHook):
     """Logs the given `tensors`.
 
     Args:
-      tensors: either a dict from strings to `tf.Tensor`s, a list/tuple of
-        `tf.Tensor`s, or a `tf.Tensor`.
+      tensors: either a dict from string to `tf.Tensor`, a list/tuple of
+        `tf.Tensor` objects, or a `tf.Tensor`.
 
     Returns:
       The logging operation. It might be necessary to add a control dependency

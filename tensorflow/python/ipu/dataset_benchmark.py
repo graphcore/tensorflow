@@ -48,8 +48,8 @@ def dataset_benchmark(dataset,
         * `elements_per_second` - number of elements processed per second.
         * `bandwidth` - the bandwidth achieved, measured in GB/s.
 
-      The JSON string returned can be parsed into a native python JSON library (
-        see https://docs.python.org/3/library/json.html).
+    The JSON string returned can be parsed into a native Python JSON library
+    (see https://docs.python.org/3/library/json.html).
 
     Raises:
       TypeError: if `dataset` is not an instance of `tf.data.Dataset`.
@@ -83,7 +83,7 @@ def infeed_benchmark(infeed_queue,
                      number_of_epochs,
                      elements_per_epochs,
                      print_stats=True):
-  """Allows the user to benchmark performance of a
+  """Allows the user to benchmark performance of an
     `ipu.ipu_infeed_queue.IPUInfeedQueue`.
 
     Args:
@@ -104,8 +104,8 @@ def infeed_benchmark(infeed_queue,
         * `elements_per_second` - number of elements processed per second.
         * `bandwidth` - the bandwidth achieved, measured in GB/s.
 
-      The JSON string returned can be parsed into a native python JSON library (
-        see https://docs.python.org/3/library/json.html).
+    The JSON string returned can be parsed into a native Python JSON library
+    (see https://docs.python.org/3/library/json.html).
 
     Raises:
       TypeError: if `infeed_queue` is not an instance of
@@ -114,7 +114,7 @@ def infeed_benchmark(infeed_queue,
     """
   if not isinstance(infeed_queue, ipu_infeed_queue.IPUInfeedQueue):
     return TypeError("Expected `infeed_queue` argument to be of type "
-                     "`ipu_infeed_queue.IPUInfeedQueue`, but got %s "
+                     "`ipu.ipu_infeed_queue.IPUInfeedQueue`, but got %s "
                      "instead." % (str(infeed_queue)))
   # Don't need to apply options because the infeed queue already applies them.
   apply_options = False

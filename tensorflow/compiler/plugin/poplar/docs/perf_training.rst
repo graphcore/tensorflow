@@ -118,11 +118,11 @@ Replicated graphs
 
 To improve performance, multiple IPUs can be configured to run in a data
 parallel mode.  The graph is said to be replicated across multiple IPUs.
-See the `Poplar and Poplibs User Guide
+See the `Poplar and PopLibs User Guide
 <https://documents.graphcore.ai/documents/UG1/latest>`_ for more background
 about replicated graphs.
 
-**Note:** replicated graphs are not supported when running on an IPU Model.
+.. note:: Replicated graphs are not supported when running on an IPU Model.
 
 Selecting the number of replicas
 ________________________________
@@ -156,9 +156,8 @@ important to ensure that the graph parameters are updated so that they are
 in sync across replicas.
 
 A wrapper for standard TensorFlow optimisers is used to add extra operations to
-the parameter update nodes in the graph to average updates across replicas. It
-is called ``CrossReplicaOptimizer``.  See the :ref:`api-section` for more
-details.
+the parameter update nodes in the graph to average updates across replicas.
+See :py:class:`tensorflow.python.ipu.cross_replica_optimizer.CrossReplicaOptimizer`.
 
 Pipelined training
 ~~~~~~~~~~~~~~~~~~
@@ -175,27 +174,31 @@ Each of the stages is a set of operations, and is described using a Python
 function, in much the same way as the ``ipu.compile`` takes a function that
 describes the graph to compile onto the IPU.
 
-See the :ref:`api-section` for more specific details of the ``ipu.pipeline``
-operator.
+See :py:func:`tensorflow.python.ipu.pipelining_ops.pipeline` for details of the
+pipeline operator.
 
 The pipeline API requires data inputs to be provided by a ``tf.DataSet``
 source connected via an infeed operation.  If you would like per-sample
 output, for instance the loss, then this will have to be provided by an outfeed
 operation.
 
-The computational stages can be interleaved on the devices in two different
+The computational stages can be interleaved on the devices in three different
 ways as described by the ``pipeline_schedule`` parameter.  By default the API
 will use the ``PipelineSchedule.Grouped`` mode, where the forward passes are
-grouped together, and the backward passes are grouped together.  The
-alternative is the ``PipelineSchedule.Interleaved``, where the forward and
+grouped together, and the backward passes are grouped together.  The main
+alternative is the ``PipelineSchedule.Interleaved`` mode, where the forward and
 backward passes are interleaved, so that fewer activations need to be stored.
+Additionaly, the ``PipelineSchedule.Sequential`` mode,
+where the pipeline is scheduled in the same way as if it were a sharded model,
+may be useful when debugging your model.
 
-Sharded scheduling
-__________________
+
+Sequential scheduling
+_____________________
 
 .. figure:: figures/sharded_pipeline.png
     :width: 95%
-    :alt: Sharded pipeline schedule illustration
+    :alt: Sequential pipeline schedule illustration
     :align: center
 
 Interleaved scheduling
@@ -248,6 +251,8 @@ By default the pipeline operation will map the pipeline stages onto IPUs in
 order to minimise the inter-IPU communication lengths.  If you need to
 override this order, then you can use the ``device_mapping`` parameter.
 
+.. _gradient-accumulation:
+
 Gradient accumulation
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -277,24 +282,24 @@ __________
 Gradient accumulation optimizers provide an easy way to add gradient
 accumulation to your model:
 
-* ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2`` is an
-general purpose optimizer which can be used to wrap any other TensorFlow
-optimizer. It supports optimizer state offloading (see the Optimizer state
-offloading section).
+* ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizerV2``
+  is a general purpose optimizer which can be used to wrap any other TensorFlow
+  optimizer. It supports optimizer state offloading (see the
+  :ref:`optimiser-state-unloading` section).
 
-* ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizer`` is an
-optimizer which has been optimized and it can be used with
-`tf.train.GradientDescentOptimizer` and `tf.train.MomentumOptimizer` only. Note
-that this optimizer does not support optimizer state offloading.
+* ``ipu.gradient_accumulation_optimizer.GradientAccumulationOptimizer``
+  is an optimizer which can be used to wrap `tf.train.GradientDescentOptimizer`
+  and `tf.train.MomentumOptimizer` only. Note that this optimizer does **not**
+  support optimizer state offloading.
 
-A replicated version of these optimizers can also be used with replicated
+The cross-replica versions of these optimizers can be used with replicated
 graphs, see
 ``ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizerV2``
 and
 ``ipu.gradient_accumulation_optimizer.CrossReplicaGradientAccumulationOptimizer``.
 
-**Note:** These optimizers need to be used inside of a training loop generated
-by ``ipu.loops.repeat``, :ref:`api-section` for more detail.
+.. note:: These optimizers need to be used inside of a training loop generated
+  by ``ipu.loops.repeat``, see the :ref:`api-section` for more details.
 
 Pipelining
 __________
@@ -304,10 +309,11 @@ model such that the weight update is only computed once all the mini-batches,
 where the number of mini-batches is the ``pipeline_depth``, have gone through
 the whole model pipeline.
 
-**Note:** Since the pipelined models always implement gradient accumulation, no
-gradient accumulation optimizer should also be used in combination with
-pipelining.
+.. Note:: Since the pipelined models always implement gradient accumulation, no
+  gradient accumulation optimizer should also be used in combination with
+  pipelining.
 
+.. _optimiser-state-unloading:
 
 Optimizer state offloading
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -348,11 +354,12 @@ by the ``IPUInfeedQueue`` needs to be optimised so that the IPU is not constantl
 waiting for more data to become available.
 
 To benchmark your ``tf.data.Dataset``, you can make use of the
-``ipu.dataset_benchmark`` tool, see the :ref:`api-section` for more specific
-details of the ``ipu.dataset_benchmark`` functions which allow you to obtain the
-maximum throughput of your ``tf.data.Dataset``.
+``ipu.dataset_benchmark`` tool.
+See :py:mod:`tensorflow.python.ipu.dataset_benchmark` for details of the
+functions that you can use to obtain the maximum throughput of your
+``tf.data.Dataset``.
 
-If the throughput of your ``tf.data.Dataset`` is the bottleneck, you can try and
+If the throughput of your ``tf.data.Dataset`` is the bottleneck, you can try to
 optimise it using the information on the TensorFlow website:
 
 * https://www.tensorflow.org/guide/data
@@ -361,7 +368,7 @@ optimise it using the information on the TensorFlow website:
 Accessing the JSON data
 _______________________
 
-The functions in ``ipu.dataset_benchmark`` return the JSON as a string which can
+The functions in ``ipu.dataset_benchmark`` return a JSON string which can
 be loaded into a JSON object using the native JSON library, for example:
 
 .. code-block:: python
