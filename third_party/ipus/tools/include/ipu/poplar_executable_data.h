@@ -239,6 +239,9 @@ class Tensor {
 bool IsJsonFile(const std::string& filename);
 Json::Value LoadJsonFromFile(const std::string& filename);
 Json::Value LoadJsonFromString(const std::string& json_content);
+// Turn the given string into a valid filename
+// (Replace '/' with '_')
+std::string SanitizeName(const std::string& filename);
 
 /* Individual stream of an Outfeed
  */

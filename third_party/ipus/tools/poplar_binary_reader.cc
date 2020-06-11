@@ -37,7 +37,9 @@ ABSL_FLAG(ipu::BinaryFiles, binaries, ipu::BinaryFiles(),
           "List of binary files containing metadata, binaries, weights,"
           " inputs, feeds, etc.");
 ABSL_FLAG(bool, print_output, false,
-          "Print the content of the tensors to stdout");
+          "Print the content of the tensors to stdout (Info + data)");
+ABSL_FLAG(bool, print_data, false,
+          "Print the content of the tensors to stdout (Data only)");
 ABSL_FLAG(bool, verbose, false, "Enable verbose mode");
 ABSL_FLAG(bool, list_handles, false,
           "List the names of the handles present in --binaries");
@@ -45,6 +47,7 @@ ABSL_FLAG(bool, list_tensors, false,
           "List the names of the tensors present in --binaries");
 ABSL_FLAG(bool, list_feeds, false,
           "List the names of the feeds present in --binaries");
+ABSL_FLAG(bool, list, false, "List all the objects present in --binaries");
 ABSL_FLAG(std::string, output_folder, "",
           "Where to export the content of the tensors");
 ABSL_FLAG(std::string, tensor, "", "Name of the tensor to export");
@@ -65,10 +68,12 @@ int main(int argc, char** argv) {
 
   const ipu::BinaryFiles binaries = absl::GetFlag(FLAGS_binaries);
   const bool print_output = absl::GetFlag(FLAGS_print_output);
+  const bool print_data = absl::GetFlag(FLAGS_print_data);
   const bool verbose = absl::GetFlag(FLAGS_verbose);
   const bool list_handles = absl::GetFlag(FLAGS_list_handles);
   const bool list_tensors = absl::GetFlag(FLAGS_list_tensors);
   const bool list_feeds = absl::GetFlag(FLAGS_list_feeds);
+  const bool list_all = absl::GetFlag(FLAGS_list);
   const std::string output_folder = absl::GetFlag(FLAGS_output_folder);
   const std::string tensor_name = absl::GetFlag(FLAGS_tensor);
   const std::string feed_name = absl::GetFlag(FLAGS_feed);
@@ -86,20 +91,20 @@ int main(int argc, char** argv) {
   for (auto file : binaries.filenames) {
     loader.LoadFile(file);
   }
-  if (list_tensors || list_feeds || list_handles) {
-    if (list_tensors) {
+  if (list_all || list_tensors || list_feeds || list_handles) {
+    if (list_all || list_tensors) {
       std::cout << "List of tensors:\n"
                 << absl::StrJoin(
                        loader.GetObjectSummaries(ipu::ObjectType::Tensor), "")
                 << std::endl;
     }
-    if (list_feeds) {
+    if (list_all || list_feeds) {
       std::cout << "List of feeds:\n"
                 << absl::StrJoin(
                        loader.GetObjectSummaries(ipu::ObjectType::Feed), "")
                 << std::endl;
     }
-    if (list_handles) {
+    if (list_all || list_handles) {
       for (auto name :
            loader.GetObjectNames(ipu::ObjectType::PoplarExecutable)) {
         std::cout << "List of handles in executable " << name << ":\n";
@@ -118,13 +123,17 @@ int main(int argc, char** argv) {
     std::unique_ptr<ipu::StreamReader> reader =
         loader.GetTensorStream(tensor_name);
     ipu::Tensor out{*reader};
-    if (print_output) {
+    if (print_data) {
+      std::cout << tensor_name << " = ";
+      out.SaveDataToJsonStream(&std::cout);
+      std::cout << std::endl;
+    } else if (print_output) {
       std::cout << "Value of " << tensor_name << ":\n";
       std::cout << out.ToString() << std::endl;
     }
     if (!output_folder.empty()) {
-      out.SaveDataToJsonFile(
-          absl::StrCat(output_folder, "/", tensor_name, ".json"));
+      out.SaveDataToJsonFile(absl::StrCat(
+          output_folder, "/", ipu::SanitizeName(tensor_name), ".json"));
     }
   }
   if (!feed_name.empty()) {
@@ -135,13 +144,17 @@ int main(int argc, char** argv) {
 
     for (int64_t i = 0; i < feed.NumTensors(); i++) {
       feed.LoadTensor(tensor.Data());
-      if (print_output) {
+      if (print_data) {
+        std::cout << feed_name << "[" << i << "] = ";
+        tensor.SaveDataToJsonStream(&std::cout);
+        std::cout << std::endl;
+      } else if (print_output) {
         std::cout << "Value of " << feed_name << " tensor=" << i << ":\n";
         std::cout << tensor.ToString() << std::endl;
       }
       if (!output_folder.empty()) {
-        tensor.SaveDataToJsonFile(
-            absl::StrCat(output_folder, "/", feed_name, ".", i, ".json"));
+        tensor.SaveDataToJsonFile(absl::StrCat(
+            output_folder, "/", ipu::SanitizeName(feed_name), ".", i, ".json"));
       }
       feed.MoveToNextTensor();
     }
