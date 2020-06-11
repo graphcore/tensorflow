@@ -184,11 +184,6 @@ void WriteJsonToStream(const Json::Value& root, std::ostream* sout) {
   writer->write(root, sout);
 }
 
-std::string SanitizeName(std::string name) {
-  std::replace(name.begin(), name.end(), '/', '_');
-  return name;
-}
-
 /* InsertNumberBeforeExtension("MyFile.txt", 1) -> "MyFile.1.txt"
  */
 std::string InsertNumberBeforeExtension(const std::string& filename,
@@ -687,13 +682,15 @@ void TensorManager::ConnectStreams(IExecutable& executable) {
       }
     }
   }
-  for (int replica_id = 0; replica_id < replication_count_; ++replica_id) {
-    auto callback = [this, replica_id](void* ptr) mutable {
-      reinterpret_cast<uint64_t*>(ptr)[0] = this->seeds_[replica_id];
-    };
+  if (!random_number_seed_handle_.empty()) {
+    for (int replica_id = 0; replica_id < replication_count_; ++replica_id) {
+      auto callback = [this, replica_id](void* ptr) mutable {
+        reinterpret_cast<uint64_t*>(ptr)[0] = this->seeds_[replica_id];
+      };
 
-    engine.connectStreamToCallback(random_number_seed_handle_, replica_id,
-                                   callback);
+      engine.connectStreamToCallback(random_number_seed_handle_, replica_id,
+                                     callback);
+    }
   }
 }
 

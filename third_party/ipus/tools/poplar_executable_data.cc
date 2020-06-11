@@ -549,6 +549,8 @@ void Tensor::SaveDataToJsonFile(const std::string& filename) const {
       absl::StrCat("Saving content of ", info_.Name(), " in ", filename));
   ERROR_ON_MSG(info_.Shape().HasMetadata(), "Cannot access verified data");
   std::ofstream out(filename);
+  ERROR_ON_MSG(!out.is_open(), "Failed to open file " << filename);
+  out.exceptions(std::ofstream::failbit | std::ofstream::badbit);
   SaveDataToJsonStream(&out);
   out.close();
   PRINT_INFO("Saved content of " << info_.Name() << " to " << filename);
@@ -694,6 +696,12 @@ void* Tensor::Data() {
                                     << info_.Shape().ToString() << " requires "
                                     << info_.Shape().DataSizeInBytes());
   return data_.data();
+}
+
+std::string SanitizeName(const std::string& filename) {
+  std::string out = filename;
+  absl::c_replace(out, '/', '_');
+  return out;
 }
 
 bool IsJsonFile(const std::string& filename) {
@@ -877,7 +885,7 @@ void OutfeedStream::UpdateNumTensorsAndClose() {
 
 void OutfeedStream::SetOutputFolder(const std::string& output_folder) {
   const std::string filename =
-      absl::StrCat(output_folder, "/", info_.Name(), ".bin");
+      absl::StrCat(output_folder, "/", SanitizeName(info_.Name()), ".bin");
   if (writer_) {
     UpdateNumTensorsAndClose();
   }
