@@ -202,7 +202,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
       report.parse_log(assert_len=4)
 
       ok = [
-          '__seed*', 'host-exchange-local-copy-', ' Max/reduce*/Reduce',
+          '__seed*', 'host-exchange-local-copy-', 'Max/reduce*/Reduce',
           'Cast/convert*/Cast'
       ]
       report.assert_all_compute_sets_and_list(ok)
