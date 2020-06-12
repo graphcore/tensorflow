@@ -348,6 +348,76 @@ ENTRY c1 {
   EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
 }
 
+TEST_F(AllocationFinderTest, FindAllocationTargetWithPriority4) {
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  p0 = f16[2, 64] parameter(0)
+  p1 = f16[64, 1024] parameter(1)
+  p2 = s32[2] parameter(2)
+  p1_t = f16[1024, 64] transpose(p1), dimensions={1, 0}
+  mu = f16[1024, 64] custom-call(p1_t, p2, p0), custom_call_target="MultiUpdate", backend_config="{\"index_vector_dim\":1,\"update_dim\":1}\n"
+  dot = f16[2, 1024] dot(p0, p1), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+  ROOT t = (f16[2, 64], f16[2, 1024]) tuple(mu, dot)
+}
+)";
+
+  auto config = GetModuleConfigForTest();
+  config.set_argument_count(3);
+  config.set_resource_input_count(2);
+  config.set_input_mapping({0, 1, 2});
+  config.set_resource_update_to_input_index({0});
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  CompilerAnnotations annotations(module0);
+  CustomOpReplacer custom_op_replacer;
+  EXPECT_TRUE(custom_op_replacer.Run(module0).ValueOrDie());
+
+  const auto* root = module0->entry_computation()->root_instruction();
+  const auto* mu = root->operand(0);
+  const auto* transpose = mu->operand(0);
+  const auto* p1 = transpose->operand(0);
+  const auto* p2 = mu->operand(1);
+  const auto* dot = root->operand(1);
+  const auto* p0 = dot->operand(0);
+  EXPECT_EQ(p1, dot->operand(1));
+
+  AllocationFinder finder(annotations);
+  EXPECT_TRUE(finder.Run(module0).ValueOrDie());
+
+  EXPECT_EQ(annotations.tensor_allocation_map.size(), 3);
+
+  auto t = annotations.tensor_allocation_map.at(TensorLocation{p0, 0});
+  EXPECT_EQ(t.tgt, mu);
+  EXPECT_EQ(t.input_index, 2ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], p0);
+  EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0, 1));
+  EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p1, 0});
+  EXPECT_EQ(t.tgt, dot);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], p1);
+  EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0, 1));
+  EXPECT_EQ((*t.sliceable_dimension), 1);
+
+  t = annotations.tensor_allocation_map.at(TensorLocation{p2, 0});
+  EXPECT_EQ(t.tgt, mu);
+  EXPECT_EQ(t.input_index, 1ll);
+  EXPECT_EQ(t.forward_path.size(), 0);
+  EXPECT_EQ(t.backward_path.size(), 1);
+  EXPECT_EQ(t.backward_path[0], p2);
+  EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0));
+  EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
+}
+
 // Check it goes through call sites
 TEST_F(AllocationFinderTest, FindSubCompTensorAllocations) {
   Shape input_shape = ShapeUtil::MakeShape(F32, {1, 10, 10, 2});
