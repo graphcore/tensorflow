@@ -485,6 +485,24 @@ bool IsSingleElement(const HloInstruction* inst) {
   return ShapeUtil::ElementsIn(inst->shape()) == 1;
 }
 
+bool IsReduceAddOrMultiply(const HloInstruction* inst) {
+  if (inst->opcode() == HloOpcode::kReduce) {
+    HloInstruction* root(inst->to_apply()->root_instruction());
+    if (!hlo_query::AllOperandsAreParameters(*root)) {
+      return false;
+    }
+
+    switch (root->opcode()) {
+      case HloOpcode::kAdd:
+      case HloOpcode::kMultiply:
+        return true;
+      default:
+        return false;
+    }
+  }
+  return false;
+}
+
 std::function<bool(const HloInstruction*)> IsPoplarInstruction(PoplarOp op) {
   return [op](const HloInstruction* inst) -> bool {
     return IsPoplibsHloCustomOp(inst) &&
