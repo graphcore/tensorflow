@@ -21,10 +21,11 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/ml_type_helper.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 
 #include "tensorflow/core/lib/core/errors.h"
@@ -157,6 +158,12 @@ bool IsArg1Gradient(const HloInstruction* inst, const HloInstruction* arg0) {
       return (IsPopOpsFusion(inst, "depthwise_filter") ||
               IsPopOpsFusion(inst, "conv_scaled_inplace"));
     }
+    case HloOpcode::kCustomCall: {
+      if (IsPoplarInstruction(PoplarOp::MultiConv)(inst)) {
+        return Cast<HloMultiConvInstruction>(inst)->IsWeightUpdate();
+      }
+      return false;
+    }
     default:
       return false;
   }
@@ -199,6 +206,13 @@ StatusOr<bool> ConvolutionClassifier::Run(HloModule* module) {
           } else if (IsPopOpsFusion(inst, "conv_scaled_inplace")) {
             classifications[inst] = MLType::INFERENCE_FWD;
             operands[inst] = std::make_pair(1, 2);
+          }
+          break;
+        }
+        case HloOpcode::kCustomCall: {
+          if (IsPoplarInstruction(PoplarOp::MultiConv)(inst)) {
+            classifications[inst] = MLType::INFERENCE_FWD;
+            operands[inst] = std::make_pair(0, inst->operand_count() / 2);
           }
           break;
         }

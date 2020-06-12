@@ -1117,6 +1117,7 @@ HloInstruction* HloMatcher::OutlineExpressionFromComputation(
   if (sharding_device) {
     fusion->set_sharding(HloSharding::AssignDevice(*sharding_device));
   }
+  fusion->set_frontend_attributes(old->frontend_attributes());
 
   // Replace the uses with the new outputs.
   if (pattern.GetOutputs().size() > 1) {

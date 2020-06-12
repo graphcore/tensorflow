@@ -33,6 +33,8 @@ enum FrontendAttributeId {
   // Used to indicate how many batches need to be accumulated during gradient
   // accumulation.
   NUM_BATCHES_TO_ACCUMULATE = 9;
+  // The "Machine Learning" type of the instruction
+  ML_TYPE = 10;
 };
 
 enum StochasticRounding {
@@ -48,6 +50,14 @@ enum MLType {
   TRAINING_FWD = 2;
   TRAINING_BWD = 3;
   TRAINING_WU = 4;
+};
+
+// An enum used for representing a convolution type in a multi-convolution.
+enum ConvType {
+  Conv = 0;
+  ConvWithReverse = 1;
+  DepthwiseConv = 2;
+  DepthwiseFilter = 3;
 };
 
 // Backend specific HloInstruction config
@@ -77,6 +87,7 @@ message PoplarBackendConfig {
       PipelineStageRecomputation = 5;
       ResourceUpdate = 6;
       Function = 7;
+      MultiConv = 8;
     };
 
     message RepeatConfig {

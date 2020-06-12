@@ -178,6 +178,7 @@ cc_library(
         "driver/passes/lower_frontend_attributes.cc",
         "driver/passes/matmul_combiner.cc",
         "driver/passes/module_flatten.cc",
+        "driver/passes/multi_conv_fixer.cc",
         "driver/passes/multi_slice_combiner.cc",
         "driver/passes/multi_update_apply.cc",
         "driver/passes/multi_update_canonicalize.cc",
@@ -234,9 +235,10 @@ cc_library(
         "driver/tools/custom_ops/host_embedding.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
         "driver/tools/custom_ops/lstm.cc",
-        "driver/tools/custom_ops/onehot.cc",
+        "driver/tools/custom_ops/multi_conv.cc",
         "driver/tools/custom_ops/multi_slice.cc",
         "driver/tools/custom_ops/non_linearity.cc",
+        "driver/tools/custom_ops/onehot.cc",
         "driver/tools/custom_ops/norm.cc",
         "driver/tools/custom_ops/pooling.cc",
         "driver/tools/custom_ops/print_tensor.cc",
@@ -315,6 +317,7 @@ cc_library(
         "driver/passes/lower_frontend_attributes.h",
         "driver/passes/matmul_combiner.h",
         "driver/passes/module_flatten.h",
+        "driver/passes/multi_conv_fixer.h",
         "driver/passes/multi_slice_combiner.h",
         "driver/passes/multi_update_apply.h",
         "driver/passes/multi_update_canonicalize.h",
@@ -369,6 +372,7 @@ cc_library(
         "driver/tools/custom_ops/host_embedding.h",
         "driver/tools/custom_ops/ipu_inter_copy.h",
         "driver/tools/custom_ops/lstm.h",
+        "driver/tools/custom_ops/multi_conv.h",
         "driver/tools/custom_ops/multi_slice.h",
         "driver/tools/custom_ops/non_linearity.h",
         "driver/tools/custom_ops/norm.h",
@@ -2659,6 +2663,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "multi_conv_fixer_test",
+    size = "small",
+    srcs = ["tests/multi_conv_fixer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4175,6 +4194,7 @@ test_suite(
         "ml_type_classify_test",
         "module_flatten_test",
         "monitored_session_test",
+        "multi_conv_fixer_test",
         "multi_ipu_test",
         "multi_run_test",
         "multi_slice_combiner_test",

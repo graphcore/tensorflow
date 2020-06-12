@@ -60,6 +60,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/matmul_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_conv_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_slice_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_apply.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
@@ -849,6 +850,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<DynamicIndexSplitter>();
     pipeline.AddPass<HloPassFix<ConstantSliceFolding>>();
     pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
+    pipeline.AddPass<MultiConvFixer>();
     pipeline.AddPass<HloCSE>(false);
     pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
     {
