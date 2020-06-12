@@ -3955,6 +3955,23 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "auto_report_directory_test",
+    size = "medium",
+    srcs = ["tests/auto_report_directory_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
 cc_binary(
     name = "libcustom_rotate_op.so",
     srcs = ["docs/custom_rotate_op.cc"],
@@ -4095,6 +4112,7 @@ test_suite(
         "apply_recompute_suggestion_test",
         "arg_min_max_test",
         "arithmetic_expr_test",
+        "auto_report_directory_test",
         "batch_norm_test",
         "bias_apply_graph_caching_test",
         "case_test",
