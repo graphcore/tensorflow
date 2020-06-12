@@ -107,13 +107,6 @@ class MapGradientOptimizer(optimizer.Optimizer):
     return self._wrapped_optimizer.get_name()
 
   # Override method from tensorflow.python.training.optimizer.Optimizer
-  def minimize(self, *args, **kwargs):  #pylint: disable=arguments-differ,unused-argument
-    raise RuntimeError(
-        "MapGradientOptimizer does not support minimize(), the "
-        "`compute_gradients` and `apply_gradients` need to be called "
-        "separately.")
-
-  # Override method from tensorflow.python.training.optimizer.Optimizer
   def apply_gradients(self, *args, **kwargs):  #pylint: disable=arguments-differ
     return self._wrapped_optimizer.apply_gradients(*args, **kwargs)
 
