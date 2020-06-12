@@ -64,7 +64,7 @@ enum PoplarOp {
   StatefulGradientAccumulateWithMomentumAndAllReduceWithNorm = 60;
   Gelu = 61;
   GeluGrad = 62;
-  // retired = 63;
+  MultiConv = 63;
   SendRecvBarrier = 64;
   RemoteParameterLoad = 65;
   RemoteParameterStore = 66;

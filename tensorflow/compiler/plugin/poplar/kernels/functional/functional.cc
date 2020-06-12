@@ -31,10 +31,9 @@ namespace pp = xla::poplarplugin;
 
 namespace tensorflow {
 
-class FunctionOp : public XlaOpKernel {
+class FunctionBaseOp : public XlaOpKernel {
  public:
-  explicit FunctionOp(OpKernelConstruction* ctx, bool is_forward = true)
-      : XlaOpKernel(ctx) {
+  explicit FunctionBaseOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("to_apply", &to_apply_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tin", &input_types_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tout", &output_types_));
@@ -81,11 +80,7 @@ class FunctionOp : public XlaOpKernel {
 
     auto outputs = xla::Call(builder, *result.computation, inputs);
     // Set the config type of the call.
-    OP_REQUIRES_OK(
-        ctx, builder->SetInstructionFrontendAttribute(
-                 outputs, pp::FrontendAttributeId_Name(pp::CALL_CONFIG_TYPE),
-                 pp::PoplarBackendConfig_CallConfig_Type_Name(
-                     pp::PoplarBackendConfig::CallConfig::Function)));
+    OP_REQUIRES_OK(ctx, SetConfig(builder, outputs));
 
     // Set non resource variable outputs and make sure to set constant outputs
     // as constant.
@@ -121,13 +116,49 @@ class FunctionOp : public XlaOpKernel {
     }
   }
 
+ protected:
+  virtual Status SetConfig(xla::XlaBuilder* builder, xla::XlaOp& operation) = 0;
+
  private:
   const NameAttrList* to_apply_;
   DataTypeVector input_types_;
   DataTypeVector output_types_;
+};
 
+class FunctionOp : public FunctionBaseOp {
+ public:
+  using FunctionBaseOp::FunctionBaseOp;
+
+ protected:
+  Status SetConfig(xla::XlaBuilder* builder, xla::XlaOp& operation) override {
+    TF_RETURN_IF_ERROR(builder->SetInstructionFrontendAttribute(
+        operation, pp::FrontendAttributeId_Name(pp::CALL_CONFIG_TYPE),
+        pp::PoplarBackendConfig_CallConfig_Type_Name(
+            pp::PoplarBackendConfig::CallConfig::Function)));
+    return Status::OK();
+  }
+
+ private:
   TF_DISALLOW_COPY_AND_ASSIGN(FunctionOp);
 };
 REGISTER_IPU_OP("Function", FunctionOp);
+
+class MultiConvOp : public FunctionBaseOp {
+ public:
+  using FunctionBaseOp::FunctionBaseOp;
+
+ protected:
+  Status SetConfig(xla::XlaBuilder* builder, xla::XlaOp& operation) override {
+    TF_RETURN_IF_ERROR(builder->SetInstructionFrontendAttribute(
+        operation, pp::FrontendAttributeId_Name(pp::CALL_CONFIG_TYPE),
+        pp::PoplarBackendConfig_CallConfig_Type_Name(
+            pp::PoplarBackendConfig::CallConfig::MultiConv)));
+    return Status::OK();
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(MultiConvOp);
+};
+REGISTER_IPU_OP("MultiConv", MultiConvOp);
 
 }  // namespace tensorflow

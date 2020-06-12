@@ -1012,6 +1012,23 @@ tf_py_test(
     shard_count = 10,
 )
 
+tf_py_test(
+    name = "multi_conv_test",
+    size = "large",
+    srcs = ["tests/multi_conv_test.py"],
+    additional_deps = [
+        ":ipu_lib",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:state_ops",
+        "//tensorflow/python:variables",
+    ],
+    shard_count = 5,
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -1044,6 +1061,7 @@ test_suite(
         "keras_rnn_test",
         "map_gradient_optimizer_test",
         "math_ops_test",
+        "multi_conv_test",
         "outfeed_ordinal_test",
         "pipelining_conv_classify_test",
         "pipelining_grouped_recomputation_test",
