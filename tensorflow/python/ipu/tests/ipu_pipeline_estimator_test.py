@@ -146,6 +146,34 @@ class IPUPipelineEstimatorTest(test_util.TensorFlowTestCase,
         "`IPURunConfig.num_shards` was set to 2"):
       estimator.train(input_fn=my_input_fn, steps=1)
 
+  def testNumUniqueDevicesBelowNumShardsRange(self):
+    def model_fn_with_zero_stages(mode):
+      def optimizer_function():
+        pass
+
+      return IPUPipelineEstimatorSpec(mode,
+                                      computational_stages=[],
+                                      pipeline_depth=1,
+                                      device_mapping=[0, 1, 0],
+                                      optimizer_function=optimizer_function)
+
+    def my_input_fn():
+      return dataset_ops.Dataset.from_tensor_slices(([0], [0]))
+
+    ipu_options = ipu_utils.create_ipu_config()
+    ipu_options = ipu_utils.auto_select_ipus(ipu_options, num_ipus=4)
+    config = ipu_run_config.RunConfig(
+        ipu_run_config=ipu_run_config.IPURunConfig(
+            num_shards=4, iterations_per_loop=1, ipu_options=ipu_options))
+
+    estimator = IPUPipelineEstimator(model_fn=model_fn_with_zero_stages,
+                                     config=config)
+
+    with self.assertRaisesRegex(
+        ValueError, r"This pipeline requires 2 devices, but "
+        "`IPURunConfig.num_shards` was set to 4"):
+      estimator.train(input_fn=my_input_fn, steps=1)
+
   def testMustContainOptimizerFunctionWhenTraining(self):
     def model_fn_without_optimizer_function(mode):
       def stage1(features, labels):

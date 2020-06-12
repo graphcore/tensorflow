@@ -139,8 +139,6 @@ int main(int argc, char** argv) {
                      "Failed to create output folder '" << iteration_folder);
       }
       if (create_ckpt) {
-        tensors->CreateCheckpointMetadataJson(
-            absl::StrCat(iteration_folder, "/ckpt.json"));
         tensors->SetOutfeedsFolder(iteration_folder);
       } else {
         tensors->IgnoreOutfeeds();
@@ -157,6 +155,8 @@ int main(int argc, char** argv) {
           }
         }
         if (create_ckpt) {
+          tensors->CreateCheckpointMetadataJson(
+              absl::StrCat(iteration_folder, "/ckpt.json"));
           ipu::BinaryWriter parameters_writer(
               absl::StrCat(iteration_folder, "/parameters.bin"));
           tensors->SaveOutputs(ipu::TensorType::ParameterOut,
