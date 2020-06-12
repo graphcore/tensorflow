@@ -275,11 +275,12 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
       num_devices_required = len(estimator_spec.computational_stages)
 
     num_shards = self._config.ipu_run_config.num_shards
-    if num_shards != num_devices_required:
+    if num_devices_required not in range(
+        int(num_shards / 2) + 1, num_shards + 1):
       raise ValueError(
           ("This pipeline requires {} devices, but `IPURunConfig.num_shards` "
-           "was set to {} (they must be equal).").format(
-               num_devices_required, num_shards))
+           "was set to {} (num_shards/2 < pipeline_devices <= num_shards"
+           ").").format(num_devices_required, num_shards))
 
     return estimator_spec
 
