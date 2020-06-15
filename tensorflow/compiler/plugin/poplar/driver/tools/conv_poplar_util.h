@@ -18,10 +18,12 @@ limitations under the License.
 #include <vector>
 
 #include <poplin/Convolution.hpp>
+
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
 namespace xla {
 namespace poplarplugin {
+class HloMultiConvInstruction;
 
 StatusOr<poplin::ConvParams> GetConvolutionParameters(
     const HloInstruction* operand_op, int64 input_index, int64 kernel_index);
@@ -29,6 +31,9 @@ StatusOr<poplin::ConvParams> GetConvolutionParameters(
 StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
     const HloInstruction* inst, const std::vector<size_t>& conv_input_shape,
     const std::vector<size_t>& conv_output_shape);
+
+StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
+    const HloMultiConvInstruction* inst);
 
 poplar::Tensor ShuffleConvolutionInputToPoplar(const HloInstruction* inst,
                                                const poplar::Tensor& tensor);

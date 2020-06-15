@@ -72,6 +72,7 @@ bool IsMultiSliceGather(const HloInstruction*);
 bool IsAnySliceApply(const HloInstruction*);
 bool IsUniformSingleDimSlice(const HloInstruction*);
 bool IsSingleElement(const HloInstruction*);
+bool IsReduceAddOrMultiply(const HloInstruction*);
 /**
  * Construct a unary predicate which checks if a given HloInstruction is a
  * custom Poplibs instruction of a specified type.

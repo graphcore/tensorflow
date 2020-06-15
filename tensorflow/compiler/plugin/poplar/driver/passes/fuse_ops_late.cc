@@ -346,7 +346,8 @@ static const std::vector<HloMatcherPattern> patterns = {
     PatternInputs({2, 3}),
     PatternOutputs({0}),
     Pattern({
-      {HloOpcode::kReduce, NodeOperands({1, 3}), IsF32},
+      // NOLINTNEXTLINE
+      {HloOpcode::kReduce, NodeOperands({1, 3}), {IsF32, IsReduceAddOrMultiply}},
       {HloOpcode::kConvert, NodeOperands({2}), IsF16ToF32Convert},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF16},
       {HloMatcherOpcode::kAnyOpcode, NodeOperands({}), IsF32}

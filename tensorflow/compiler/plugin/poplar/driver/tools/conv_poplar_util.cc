@@ -13,8 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_poplar_util.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -138,6 +140,34 @@ StatusOr<poplin::ConvParams> GetConvolutionParametersForWeightsTranspose(
   return GetConvolutionParametersCore(inst, conv_input_shape, kernel_shape,
                                       conv_output_shape, n_g, dims, window,
                                       dtype);
+}
+
+StatusOr<std::vector<poplin::ConvParams>> GetConvolutionParametersForMultiConv(
+    const HloMultiConvInstruction* inst) {
+  const auto& convolution_specs = inst->GetConvolutionSpecs();
+
+  std::vector<poplin::ConvParams> params(convolution_specs.size());
+  for (int64 i = 0; i != convolution_specs.size(); ++i) {
+    const Shape& input = inst->operand(i)->shape();
+    const Shape& kernel = inst->operand(i + convolution_specs.size())->shape();
+    const Shape& output = ShapeUtil::GetTupleElementShape(inst->shape(), i);
+
+    TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(input));
+
+    std::vector<size_t> input_dims = PoplarShapeFromXlaShape(input);
+    std::vector<size_t> kernel_dims = PoplarShapeFromXlaShape(kernel);
+    std::vector<size_t> output_dims = PoplarShapeFromXlaShape(output);
+
+    const auto& convolution_spec = convolution_specs[i];
+    const Window& window = convolution_spec.window;
+    unsigned int n_g = convolution_spec.feature_group_count;
+    const auto& dims = convolution_spec.dims;
+
+    TF_ASSIGN_OR_RETURN(params[i], GetConvolutionParametersCore(
+                                       inst, input_dims, kernel_dims,
+                                       output_dims, n_g, dims, window, dtype));
+  }
+  return params;
 }
 
 poplar::Tensor ShuffleConvolutionInputToPoplar(

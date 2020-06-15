@@ -35,4 +35,19 @@ inputs: A list of input tensors.
 output: A list of tensors returned by computing to_apply on a device.
 to_apply: A function which takes 'inputs' and computes on the IPU.
 )doc");
+
+REGISTER_OP("MultiConv")
+    .Input("inputs: Tin")
+    .Output("output: Tout")
+    .Attr("to_apply: func")
+    .Attr("Tin: list(type) >= 0")
+    .Attr("Tout: list(type) >= 0")
+    .Attr("output_shapes: list(shape) >= 0")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
+    .Doc(R"doc(
+inputs: A list of input tensors.
+output: A list of tensors returned by computing to_apply on a device.
+to_apply: A function which takes 'inputs' and computes on the IPU.
+)doc");
 }  // namespace tensorflow

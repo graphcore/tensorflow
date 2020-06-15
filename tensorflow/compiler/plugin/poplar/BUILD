@@ -178,6 +178,7 @@ cc_library(
         "driver/passes/lower_frontend_attributes.cc",
         "driver/passes/matmul_combiner.cc",
         "driver/passes/module_flatten.cc",
+        "driver/passes/multi_conv_fixer.cc",
         "driver/passes/multi_slice_combiner.cc",
         "driver/passes/multi_update_apply.cc",
         "driver/passes/multi_update_canonicalize.cc",
@@ -234,9 +235,10 @@ cc_library(
         "driver/tools/custom_ops/host_embedding.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
         "driver/tools/custom_ops/lstm.cc",
-        "driver/tools/custom_ops/onehot.cc",
+        "driver/tools/custom_ops/multi_conv.cc",
         "driver/tools/custom_ops/multi_slice.cc",
         "driver/tools/custom_ops/non_linearity.cc",
+        "driver/tools/custom_ops/onehot.cc",
         "driver/tools/custom_ops/norm.cc",
         "driver/tools/custom_ops/pooling.cc",
         "driver/tools/custom_ops/print_tensor.cc",
@@ -315,6 +317,7 @@ cc_library(
         "driver/passes/lower_frontend_attributes.h",
         "driver/passes/matmul_combiner.h",
         "driver/passes/module_flatten.h",
+        "driver/passes/multi_conv_fixer.h",
         "driver/passes/multi_slice_combiner.h",
         "driver/passes/multi_update_apply.h",
         "driver/passes/multi_update_canonicalize.h",
@@ -369,6 +372,7 @@ cc_library(
         "driver/tools/custom_ops/host_embedding.h",
         "driver/tools/custom_ops/ipu_inter_copy.h",
         "driver/tools/custom_ops/lstm.h",
+        "driver/tools/custom_ops/multi_conv.h",
         "driver/tools/custom_ops/multi_slice.h",
         "driver/tools/custom_ops/non_linearity.h",
         "driver/tools/custom_ops/norm.h",
@@ -2659,6 +2663,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "multi_conv_fixer_test",
+    size = "small",
+    srcs = ["tests/multi_conv_fixer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -3955,6 +3974,23 @@ tf_xla_py_test(
     ],
 )
 
+tf_xla_py_test(
+    name = "auto_report_directory_test",
+    size = "medium",
+    srcs = ["tests/auto_report_directory_test.py"],
+    enabled_backends = ["poplar"],
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
 cc_binary(
     name = "libcustom_rotate_op.so",
     srcs = ["docs/custom_rotate_op.cc"],
@@ -4095,6 +4131,7 @@ test_suite(
         "apply_recompute_suggestion_test",
         "arg_min_max_test",
         "arithmetic_expr_test",
+        "auto_report_directory_test",
         "batch_norm_test",
         "bias_apply_graph_caching_test",
         "case_test",
@@ -4157,6 +4194,7 @@ test_suite(
         "ml_type_classify_test",
         "module_flatten_test",
         "monitored_session_test",
+        "multi_conv_fixer_test",
         "multi_ipu_test",
         "multi_run_test",
         "multi_slice_combiner_test",

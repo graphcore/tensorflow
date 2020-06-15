@@ -14,9 +14,12 @@
 # ==============================================================================
 """Gradients for Popnn operators."""
 
-
-from tensorflow.python.framework import ops
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
+from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
+from tensorflow.python.framework import func_graph as func_graph_module
+from tensorflow.python.framework import ops
+from tensorflow.python.ipu import functional_ops_grad
+from tensorflow.python.ops import control_flow_util_v2 as util
 
 
 @ops.RegisterGradient("IpuGelu")
@@ -24,3 +27,18 @@ def _ipu_gelu_grad(op, grad):
   """Gradients for the IpuGelu op."""
   x = op.inputs[0]
   return [gen_popnn_ops.ipu_gelu_grad(grad, x)]
+
+
+@ops.RegisterGradient("MultiConv")
+def _multi_conv_grad(op, *grads):
+  """The gradient of a MultiConv op."""
+  func_grad_graph, func_grad_inputs = \
+    functional_ops_grad._get_gradients_for_function(op, *grads) # pylint: disable=protected-access
+  outputs = gen_functional_ops.multi_conv(
+      func_grad_inputs,
+      to_apply=util.create_new_tf_function(func_grad_graph),
+      Tout=func_grad_graph.output_types,
+      output_shapes=func_grad_graph.output_shapes)
+
+  return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
+                                            outputs)

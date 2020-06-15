@@ -377,6 +377,10 @@ bool IsResourceUpdate(const HloInstruction* inst) {
                            PoplarBackendConfig::CallConfig::ResourceUpdate);
 }
 
+bool IsMultiConv(const HloInstruction* inst) {
+  return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::MultiConv);
+}
+
 bool IsPipelineOp(const HloInstruction* inst) {
   return CallConfigHasType(inst, PoplarBackendConfig::CallConfig::Pipeline);
 }
