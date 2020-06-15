@@ -20,6 +20,7 @@ limitations under the License.
 #include <limits>
 #include <mutex>
 #include <random>
+#include <string>
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
@@ -59,6 +60,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/lower_frontend_attributes.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/matmul_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/multi_conv_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_slice_combiner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_apply.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_update_canonicalize.h"
@@ -722,6 +724,14 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         CreateHloProfilePrinterData(*profile_index_map, cost_analysis, name);
   }
 
+  poplar::OptionFlags opt_flags = poplar_executor->GetOptionsFlags();
+
+  char* env_flags = std::getenv("POPLAR_ENGINE_OPTIONS");
+  if (env_flags == nullptr ||
+      !absl::StrContains(std::string(env_flags), "autoReport.directory")) {
+    opt_flags.set("autoReport.directory", module->name());
+  }
+
   const ModuleFilenames filenames =
       poplar_executor->GetModuleFilenames(*module);
   if (poplar_executor->HaveExecutableCache()) {
@@ -743,7 +753,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
           TF_RETURN_IF_ERROR(PoplarExecutable::Export(
               filenames, poplar_binary, *poplar_executable,
-              {} /* device_opts */, poplar_executor->GetOptionsFlags(),
+              {} /* device_opts */, opt_flags,
               poplar_executor->GetOrCreatePoplarTarget()));
         } catch (const std::exception& e) {
           const std::string origin =
@@ -837,6 +847,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<DynamicIndexSplitter>();
     pipeline.AddPass<HloPassFix<ConstantSliceFolding>>();
     pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
+    pipeline.AddPass<MultiConvFixer>();
     pipeline.AddPass<HloCSE>(false);
     pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
     {
@@ -1147,7 +1158,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       map_json = GetTensorMappingJson(module->name(), main_graph,
                                       resources.tensor_maps);
 
-      auto& opts = poplar_executor->GetOptionsFlags();
       auto progress_logging = [](int progress, int total) {
         float progress_percent = std::floor(
             100.0f * static_cast<float>(progress) / static_cast<float>(total));
@@ -1155,7 +1165,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       };
 
       poplar::Executable exec =
-          poplar::compileGraph(main_graph, progs, opts, progress_logging);
+          poplar::compileGraph(main_graph, progs, opt_flags, progress_logging);
 
       if (poplar_executor->HaveExecutableCache()) {
         if (!poplar_executor->HaveCachedExecutable(filenames)) {
@@ -1174,11 +1184,11 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
         TF_RETURN_IF_ERROR(PoplarExecutable::Export(
             filenames, exec, resources, replication_factor,
-            {} /* device_opts */, opts,
+            {} /* device_opts */, opt_flags,
             poplar_executor->GetOrCreatePoplarTarget()));
       }
 
-      engine.reset(new poplar::Engine(std::move(exec), opts));
+      engine.reset(new poplar::Engine(std::move(exec), opt_flags));
       VLOG(1) << "End compiling Poplar engine.";
 
     } catch (const std::exception& e) {

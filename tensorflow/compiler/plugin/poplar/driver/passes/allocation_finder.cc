@@ -144,6 +144,12 @@ class FindAllocatingInstructions : public DfsHloVisitorWithDefault {
 
 int64 AllocationFinder::GetAllocationPriority(
     const TensorTarget& target) const {
+  // Allocation priority (highest to lowest):
+  // * Used by Send/Recv,
+  // * Used as a slice which is updating a bigger tensor,
+  // * Used as input to matmul/convolution,
+  // * Everything else.
+
   const bool is_host_copy =
       IsPoplarInstruction(PoplarOp::SendToHost)(target.tgt) ||
       IsPoplarInstruction(PoplarOp::RecvFromHost)(target.tgt);
@@ -151,10 +157,19 @@ int64 AllocationFinder::GetAllocationPriority(
     // The memory cost of doing on-device stream copy rearrangment is large
     // enough that it is usually beneficial to prioritise the allocation layout
     // desired by the host exchange to avoid this rearrangement.
-    return 2;
+    return 3;
+  }
+  const bool is_multi_update =
+      IsPoplarInstruction(PoplarOp::MultiUpdate)(target.tgt) ||
+      IsPoplarInstruction(PoplarOp::MultiUpdateAdd)(target.tgt);
+  if (is_multi_update) {
+    return target.input_index == 2 ? 2 : 0;
   }
 
   switch (target.tgt->opcode()) {
+    case HloOpcode::kDynamicUpdateSlice: {
+      return target.input_index == 1 ? 2 : 0;
+    }
     case HloOpcode::kConvolution:
     case HloOpcode::kDot: {
       return 1;
@@ -164,7 +179,7 @@ int64 AllocationFinder::GetAllocationPriority(
     }
     default: { return 0; }
   }
-}
+}  // namespace poplarplugin
 
 bool AllocationFinder::ReplaceTarget(const TensorTarget& new_target,
                                      const TensorTarget& existing_target) {
