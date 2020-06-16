@@ -21,7 +21,7 @@ Targeting the IPU from TensorFlow
     examples_tf2
     ipu_estimator_example
     ipu_pipeline_estimator_example
-    distributed_training_example
+    distributed_training
     custom_codelet
     references
     api
