@@ -4936,6 +4936,118 @@ TEST_F(PoplarAlgebraicSimplifierTest, ElideStatefulGradientAccumulate) {
               GmockMatch(m::Add(m::Parameter(0), m::Parameter(1))));
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, ElideDotReduceBatchDim) {
+  const char* kModuleStr = R"(
+    HloModule m
+
+    sum (x: f32[], y: f32[]) -> f32[] {
+      y = f32[] parameter(1), backend_config="{}"
+      x = f32[] parameter(0), control-predecessors={y}, backend_config="{}"
+      ROOT add = f32[] add(x, y), backend_config="{\"isInplace\":true}"
+    }
+
+    test {
+      p0 = f32[2, 3, 4] parameter(0)
+      p1 = f32[2, 3, 5] parameter(1)
+      d = f32[2,4,5] dot(p0, p1), lhs_batch_dims={0}, lhs_contracting_dims={1}, rhs_batch_dims={0}, rhs_contracting_dims={1}
+      z = f32[] constant(0)
+      ROOT r = f32[4,5] reduce(d, z), to_apply=sum, dimensions={0}
+    }
+  )";
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    EXPECT_THAT(m->entry_computation()->root_instruction(),
+                GmockMatch(m::Dot()));
+  }
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  Literal param0 = LiteralUtil::CreateR3<float>({
+      {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}},
+      {{-1, -2, -3, -4}, {-5, -6, -7, -8}, {-9, -10, -11, -12}},
+  });
+  Literal param1 = LiteralUtil::CreateR3<float>({
+      {{1, 2, 3, 4, 5}, {6, 7, 8, 9, 10}, {11, 12, 13, 14, 15}},
+      {{-1, -2, -3, -4, -5}, {-6, -7, -8, -9, -10}, {-11, -12, -13, -14, -15}},
+  });
+
+  std::vector<Literal*> inputs = {&param0, &param1};
+  EXPECT_TRUE(RunAndCompare(std::move(m), inputs, ErrorSpec{1e-3, 1e-3}));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, ElideDotReduceMultipleBatchDims) {
+  const char* kModuleStr = R"(
+    HloModule m
+
+    sum (x: f32[], y: f32[]) -> f32[] {
+      y = f32[] parameter(1), backend_config="{}"
+      x = f32[] parameter(0), control-predecessors={y}, backend_config="{}"
+      ROOT add = f32[] add(x, y), backend_config="{\"isInplace\":true}"
+    }
+
+    test {
+      p0 = f32[2, 2, 3, 4] parameter(0)
+      p1 = f32[2, 2, 3, 5] parameter(1)
+      d = f32[2, 2, 4, 5] dot(p0, p1), lhs_batch_dims={0, 1}, lhs_contracting_dims={2}, rhs_batch_dims={0, 1}, rhs_contracting_dims={2}
+      z = f32[] constant(0)
+      ROOT r = f32[4, 5] reduce(d, z), to_apply=sum, dimensions={0, 1}
+    }
+  )";
+
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+    ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+    EXPECT_THAT(m->entry_computation()->root_instruction(),
+                GmockMatch(m::Dot()));
+  }
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  Literal param0 = LiteralUtil::CreateR4<float>(
+      {{
+           {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}},
+           {{-1, -2, -3, -4}, {-5, -6, -7, -8}, {-9, -10, -11, -12}},
+       },
+       {
+           {{-1, -2, -3, -4}, {-5, -6, -7, -8}, {-9, -10, -11, -12}},
+           {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}},
+       }});
+
+  Literal param1 = LiteralUtil::CreateR4<float>(
+      {{
+           {{-1, -2, -3, -4, 1}, {-5, -6, -7, -8, 1}, {-9, -10, -11, -12, 1}},
+           {{1, 2, 3, 4, 1}, {5, 6, 7, 8, 1}, {9, 10, 11, 12, 1}},
+       },
+       {
+           {{1, 2, 3, 4, 1}, {5, 6, 7, 8, 1}, {9, 10, 11, 12, 1}},
+           {{-1, -2, -3, -4, 1}, {-5, -6, -7, -8, 1}, {-9, -10, -11, -12, 1}},
+       }});
+
+  std::vector<Literal*> inputs = {&param0, &param1};
+  EXPECT_TRUE(RunAndCompare(std::move(m), inputs, ErrorSpec{1e-3, 1e-3}));
+}
+
+TEST_F(PoplarAlgebraicSimplifierTest, ElideDotReduceDontOptimiseNonBatchDims) {
+  const char* kModuleStr = R"(
+    HloModule m
+
+    sum (x: f32[], y: f32[]) -> f32[] {
+      y = f32[] parameter(1), backend_config="{}"
+      x = f32[] parameter(0), control-predecessors={y}, backend_config="{}"
+      ROOT add = f32[] add(x, y), backend_config="{\"isInplace\":true}"
+    }
+
+    test {
+      p0 = f32[2, 3, 4] parameter(0)
+      p1 = f32[2, 3, 5] parameter(1)
+      d = f32[2,4,5] dot(p0, p1), lhs_batch_dims={0}, lhs_contracting_dims={1}, rhs_batch_dims={0}, rhs_contracting_dims={1}
+      z = f32[] constant(0)
+      ROOT r = f32[2, 4] reduce(d, z), to_apply=sum, dimensions={2}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

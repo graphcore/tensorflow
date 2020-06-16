@@ -3368,6 +3368,65 @@ Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
       old_reduce = new_reduce;
     }
     return ReplaceInstruction(reduce, old_reduce);
+  } else if (arg->opcode() == HloOpcode::kDot &&
+             (Match(function->root_instruction(),
+                    m::Add(m::Parameter(0), m::Parameter(1))) ||
+              Match(function->root_instruction(),
+                    m::Add(m::Parameter(1), m::Parameter(0))))) {
+    bool valid = true;
+    for (auto value : reduce->init_values()) {
+      if (!pp::IsConstantZero(value)) {
+        valid = false;
+        break;
+      }
+    }
+
+    auto* dot = Cast<HloDotInstruction>(arg);
+    if (dot->user_count() != 1) {
+      valid = false;
+    }
+
+    if (valid) {
+      VLOG(10) << "found candidate for reduce(dot) reduction "
+               << reduce->ToString();
+      auto dims = arg->dot_dimension_numbers();
+      auto& lhs_batch_dimensions = *dims.mutable_lhs_batch_dimensions();
+      auto& rhs_batch_dimensions = *dims.mutable_rhs_batch_dimensions();
+      auto& lhs_contracting_dimensions =
+          *dims.mutable_lhs_contracting_dimensions();
+      auto& rhs_contracting_dimensions =
+          *dims.mutable_rhs_contracting_dimensions();
+
+      for (auto dim : dimensions) {
+        VLOG(10) << "trying to reduce dimension " << dim;
+        if (absl::c_count(lhs_batch_dimensions, dim) == 1 &&
+            absl::c_count(rhs_batch_dimensions, dim) == 1) {
+          // if reduce dimension is in both batch dimensions,
+          // put it on contracting dimension list
+          lhs_batch_dimensions.erase(
+              std::remove(lhs_batch_dimensions.begin(),
+                          lhs_batch_dimensions.end(), dim),
+              lhs_batch_dimensions.end());
+          rhs_batch_dimensions.erase(
+              std::remove(rhs_batch_dimensions.begin(),
+                          rhs_batch_dimensions.end(), dim),
+              rhs_batch_dimensions.end());
+          lhs_contracting_dimensions.Add(dim);
+          rhs_contracting_dimensions.Add(dim);
+        } else {
+          VLOG(10) << "dimension " << dim << " is not on batch dimension list";
+          valid = false;
+        }
+      }
+      if (valid) {
+        VLOG(10) << "replace reduce/dot combination";
+        auto new_dot = HloInstruction::CreateDot(
+            reduce->shape(), dot->mutable_operand(0), dot->mutable_operand(1),
+            dims, dot->precision_config());
+        PreserveFrontendAttributesIfNeeded(new_dot.get(), dot);
+        return ReplaceWithNewInstruction(reduce, std::move(new_dot));
+      }
+    }
   }
   return Status::OK();
 }

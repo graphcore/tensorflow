@@ -142,6 +142,20 @@ If a tensor is not marked as `in place` then the operation must not modify
 it.  If it is modified then other operations which consume it may see an
 incorrect value on their input.
 
+When trying to update tensors in-place you need to ensure that TensorFlow
+sees an assignment of the tensor, otherwise the modified input tensor update
+will not "stick". This means that the inplace inputs need to always be
+returned as outputs of the custom operation and if a ``tf.Variable`` was
+modified inplace it has to be assigned back to itself with ``tf.assign``.
+This might look something like the following:
+
+.. literalinclude:: custom_add_inplace.py
+
+And the associated custom op:
+
+.. literalinclude:: custom_add_inplace.cc
+
+
 Elementwise operations
 ______________________
 
