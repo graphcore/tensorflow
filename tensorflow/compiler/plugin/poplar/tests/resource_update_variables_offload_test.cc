@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_variables_offload.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_variables_offload.h"
 
 #include <algorithm>
 
@@ -21,7 +21,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -32,9 +31,9 @@ namespace m = match;
 namespace poplarplugin {
 namespace {
 
-using PipelineResourceVariablesOffloadTest = HloTestBase;
+using ResourceUpdateVariablesOffloadTest = HloTestBase;
 
-TEST_F(PipelineResourceVariablesOffloadTest, ReplaceRoot) {
+TEST_F(ResourceUpdateVariablesOffloadTest, ReplaceRoot) {
   std::string hlo = R"(
 HloModule top
 
@@ -107,7 +106,7 @@ ENTRY e {
   auto pipeline = root;
 
   CompilerAnnotations annotations(module.get());
-  PipelineResourceVariablesOffload prvo(annotations, true);
+  ResourceUpdateVariablesOffload prvo(annotations, true);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
   EXPECT_TRUE(changed);
   root = module->entry_computation()->root_instruction();
@@ -118,7 +117,7 @@ ENTRY e {
   }
 }
 
-TEST_F(PipelineResourceVariablesOffloadTest, OutlineVariable) {
+TEST_F(ResourceUpdateVariablesOffloadTest, OffloadVariable) {
   std::string hlo = R"(
 HloModule top
 
@@ -203,7 +202,7 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
 
   CompilerAnnotations annotations(module.get());
-  PipelineResourceVariablesOffload prvo(annotations, true);
+  ResourceUpdateVariablesOffload prvo(annotations, true);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
   EXPECT_TRUE(changed);
   auto root = module->entry_computation()->root_instruction();
@@ -244,7 +243,101 @@ ENTRY e {
   }
 }
 
-TEST_F(PipelineResourceVariablesOffloadTest, Inference) {
+TEST_F(ResourceUpdateVariablesOffloadTest, OffloadVariableRepeat) {
+  std::string hlo = R"(
+HloModule top
+
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,2] parameter(1)
+  arg2 = f32[1,4,4,2] parameter(2)
+  arg3 = f32[1,4,4,2] parameter(3)
+  arg2_new = f32[1,4,4,2] add(arg2, arg0)
+  arg3_new = f32[1,4,4,2] add(arg3, arg1)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2_new, arg3_new)
+}
+
+loop {
+  after-all = token[] after-all()
+  infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576"
+  in0 = f32[1,4,4,2] get-tuple-element(infeed), index=0
+  in1 = f32[1,4,4,2] parameter(0)
+  add1 = f32[1,4,4,2] add(in0, in1)
+  in2 = f32[1,4,4,2] parameter(1)
+  add2 = f32[1,4,4,2] add(in0, in2)
+  in3 = f32[1,4,4,2] parameter(2)
+  in4 = f32[1,4,4,2] parameter(3)
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(add1, add2, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":true}}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
+  gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
+  gte3 = f32[1,4,4,2] get-tuple-element(call_ru), index=3
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, gte3)
+}
+
+ENTRY e {
+  e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
+  e.in3 = f32[1,4,4,2] parameter(3), parameter_replication={false}
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
+  gte2 = f32[1,4,4,2] get-tuple-element(e.call), index=2
+  gte3 = f32[1,4,4,2] get-tuple-element(e.call), index=3
+  ROOT t =  (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, gte3)
+}
+)";
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(4);
+  config.set_input_mapping({0, 1, 2, 3});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  CompilerAnnotations annotations(module.get());
+  ResourceUpdateVariablesOffload prvo(annotations, true);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
+  EXPECT_TRUE(changed);
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(
+      root->operand(2)));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(
+      root->operand(3)));
+  HloComputation* repeat_computation = root->operand(0)->operand(0)->to_apply();
+  HloInstruction* repeat_root = repeat_computation->root_instruction();
+  HloComputation* resource_update =
+      repeat_root->mutable_operand(0)->mutable_operand(0)->to_apply();
+  EXPECT_EQ(resource_update->num_parameters(), 2);
+  EXPECT_EQ(ShapeUtil::TupleElementCount(
+                resource_update->root_instruction()->shape()),
+            2);
+
+  // Check load and stores.
+  for (int64 i : {0, 1}) {
+    HloInstruction* param = resource_update->parameter_instruction(i);
+    EXPECT_EQ(param->user_count(), 2);
+    HloInstruction* add = nullptr;
+    for (auto* user : param->users()) {
+      if (user->opcode() == HloOpcode::kAdd) {
+        add = user;
+        break;
+      }
+    }
+    EXPECT_TRUE(add);
+    const HloInstruction* load = add->operand(0);
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(load));
+    const auto* load_inst = Cast<HloRemoteParameterLoad>(load);
+    EXPECT_EQ(load_inst->GetParameterNumber(), i + 2);
+    EXPECT_EQ(add->user_count(), 1);
+    const HloInstruction* store = add->users()[0];
+    EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterStore)(store));
+    const auto* store_inst = Cast<HloRemoteParameterStore>(store);
+    EXPECT_EQ(store_inst->GetOutputIndex(), i + 2);
+  }
+}
+
+TEST_F(ResourceUpdateVariablesOffloadTest, Inference) {
   std::string hlo = R"(
 HloModule top
 
@@ -292,12 +385,12 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
 
   CompilerAnnotations annotations(module.get());
-  PipelineResourceVariablesOffload prvo(annotations, true);
+  ResourceUpdateVariablesOffload prvo(annotations, true);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineResourceVariablesOffloadTest, DisabledByDevice) {
+TEST_F(ResourceUpdateVariablesOffloadTest, DisabledByDevice) {
   std::string hlo = R"(
 HloModule top
 
@@ -382,12 +475,12 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
 
   CompilerAnnotations annotations(module.get());
-  PipelineResourceVariablesOffload prvo(annotations, false);
+  ResourceUpdateVariablesOffload prvo(annotations, false);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineResourceVariablesOffloadTest, DisabledByUser) {
+TEST_F(ResourceUpdateVariablesOffloadTest, DisabledByUser) {
   std::string hlo = R"(
 HloModule top
 
@@ -472,12 +565,12 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
 
   CompilerAnnotations annotations(module.get());
-  PipelineResourceVariablesOffload prvo(annotations, true);
+  ResourceUpdateVariablesOffload prvo(annotations, true);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineResourceVariablesOffloadTest, NonResourceVariables) {
+TEST_F(ResourceUpdateVariablesOffloadTest, NonResourceVariables) {
   std::string hlo = R"(
 HloModule top
 
@@ -561,12 +654,12 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
 
   CompilerAnnotations annotations(module.get());
-  PipelineResourceVariablesOffload prvo(annotations, true);
+  ResourceUpdateVariablesOffload prvo(annotations, true);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
   EXPECT_FALSE(changed);
 }
 
-TEST_F(PipelineResourceVariablesOffloadTest, PipelineInputOutputDoesntAlign) {
+TEST_F(ResourceUpdateVariablesOffloadTest, PipelineInputOutputDoesntAlign) {
   std::string hlo = R"(
 HloModule top
 
@@ -651,7 +744,7 @@ ENTRY e {
                           ParseAndReturnVerifiedModule(hlo, config));
 
   CompilerAnnotations annotations(module.get());
-  PipelineResourceVariablesOffload prvo(annotations, true);
+  ResourceUpdateVariablesOffload prvo(annotations, true);
   TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
   EXPECT_FALSE(changed);
 }

@@ -78,7 +78,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_gradient_accumulation_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_variables_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/post_serialize_gradient_accumulation.h"
@@ -88,6 +87,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/replication_factor_to_constant.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_fixer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_schedule_optimizer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_variables_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/serialize_gradient_accumulation.h"
@@ -919,7 +919,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         poplar_executor->RecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<ResourceUpdateFixer>();
-    pipeline.AddPass<PipelineResourceVariablesOffload>(
+    pipeline.AddPass<ResourceUpdateVariablesOffload>(
         resources.annotations, resources.remote_memory_supported);
     // Passes below this point need to respect control dependencies.
     if (poplar_executor->RecomputationEnabled()) {

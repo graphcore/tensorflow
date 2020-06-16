@@ -178,7 +178,7 @@ cc_library(
         "driver/passes/pipeline_optimizer.cc",
         "driver/passes/pipeline_recomputation.cc",
         "driver/passes/resource_update_fixer.cc",
-        "driver/passes/pipeline_resource_variables_offload.cc",
+        "driver/passes/resource_update_variables_offload.cc",
         "driver/passes/pipeline_verifier.cc",
         "driver/passes/poplar_algebraic_simplifier.cc",
         "driver/passes/post_serialize_gradient_accumulation.cc",
@@ -317,7 +317,6 @@ cc_library(
         "driver/passes/pipeline_gradient_accumulation_optimizer.h",
         "driver/passes/pipeline_optimizer.h",
         "driver/passes/pipeline_recomputation.h",
-        "driver/passes/pipeline_resource_variables_offload.h",
         "driver/passes/pipeline_verifier.h",
         "driver/passes/poplar_algebraic_simplifier.h",
         "driver/passes/post_serialize_gradient_accumulation.h",
@@ -327,6 +326,7 @@ cc_library(
         "driver/passes/replication_factor_to_constant.h",
         "driver/passes/resource_update_fixer.h",
         "driver/passes/resource_update_schedule_optimizer.h",
+        "driver/passes/resource_update_variables_offload.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
         "driver/passes/serialize_gradient_accumulation.h",
@@ -2478,9 +2478,9 @@ xla_test(
 )
 
 xla_test(
-    name = "pipeline_resource_variables_offload_test",
+    name = "resource_update_variables_offload_test",
     size = "small",
-    srcs = ["tests/pipeline_resource_variables_offload_test.cc"],
+    srcs = ["tests/resource_update_variables_offload_test.cc"],
     backends = ["poplar"],
     copts = ["-fexceptions"],
     deps = [
@@ -4288,7 +4288,6 @@ test_suite(
         "pipeline_grouped_visitor_test",
         "pipeline_optimizer_test",
         "pipeline_recomputation_test",
-        "pipeline_resource_variables_offload_test",
         "pipeline_sequential_visitor_test",
         "pipeline_util_test",
         "pipeline_visitor_test",
@@ -4303,6 +4302,7 @@ test_suite(
         "reorder_gradient_accumulation_pass_test",
         "resource_update_fixer_test",
         "resource_update_schedule_optimizer_test",
+        "resource_update_variables_offload_test",
         "root_token_replacer_test",
         "scalar_elementwise_graph_test",
         "scatter_simplifier_test",
