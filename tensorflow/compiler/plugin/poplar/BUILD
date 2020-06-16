@@ -156,6 +156,7 @@ cc_library(
         "driver/passes/constant_nan.cc",
         "driver/passes/constant_slice_folding.cc",
         "driver/passes/convolution_classifier.cc",
+        "driver/passes/copy_inserter.cc",
         "driver/passes/custom_op_replacer.cc",
         "driver/passes/dependency_replacer.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
@@ -295,6 +296,7 @@ cc_library(
         "driver/passes/constant_nan.h",
         "driver/passes/constant_slice_folding.h",
         "driver/passes/convolution_classifier.h",
+        "driver/passes/copy_inserter.h",
         "driver/passes/custom_op_replacer.h",
         "driver/passes/dependency_replacer.h",
         "driver/passes/elementwise_broadcast_converter.h",
@@ -2678,6 +2680,19 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "copy_inserter_test",
+    size = "small",
+    srcs = ["tests/copy_inserter_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4170,6 +4185,7 @@ test_suite(
         "conv_test",
         "conversions_test",
         "convolution_classifier_test",
+        "copy_inserter_test",
         "data_initializer_test",
         "deferred_visitor_test",
         "dependency_replacer_test",
