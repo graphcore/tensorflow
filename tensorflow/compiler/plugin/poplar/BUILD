@@ -4035,6 +4035,28 @@ tf_xla_py_test(
     ],
 )
 
+cc_binary(
+    name = "libcustom_add_inplace.so",
+    srcs = ["docs/custom_add_inplace.cc"],
+    copts = ["-fexceptions"],
+    linkshared = True,
+    deps = ["@local_config_poplar//poplar:poplar_libs"],
+)
+
+tf_xla_py_test(
+    name = "custom_add_inplace",
+    size = "small",
+    srcs = ["docs/custom_add_inplace.py"],
+    data = [
+        ":libcustom_add_inplace.so",
+    ],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 tf_xla_py_test(
     name = "gru_test",
     size = "medium",
@@ -4313,6 +4335,7 @@ test_suite(
 test_suite(
     name = "doc_examples",
     tests = [
+        "custom_add_inplace",
         "distributed_training_example",
         "example_tf2_custom_training",
         "example_tf2_fit",
