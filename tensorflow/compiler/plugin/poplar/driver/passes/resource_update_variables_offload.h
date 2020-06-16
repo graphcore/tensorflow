@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RESOURCE_VARIABLES_OFFLOAD_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RESOURCE_VARIABLES_OFFLOAD_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_
 
 #include <vector>
 
@@ -109,19 +109,20 @@ struct CompilerAnnotations;
  *   ROOT t = tuple(gte0, gte1, dummy, ...)
  * }
  */
-class PipelineResourceVariablesOffload : public HloModulePass {
+class ResourceUpdateVariablesOffload : public HloModulePass {
  public:
-  explicit PipelineResourceVariablesOffload(CompilerAnnotations& annotations,
-                                            bool remote_memory_supported);
+  explicit ResourceUpdateVariablesOffload(CompilerAnnotations& annotations,
+                                          bool remote_memory_supported);
   absl::string_view name() const override {
-    return "pipeline-resource-variables-offload";
+    return "resource-update-variables-offload";
   }
 
   StatusOr<bool> Run(HloModule* module) override;
 
  private:
-  // Optimize a pipeline.
-  StatusOr<bool> OptimizePipeline(HloInstruction* pipeline_op);
+  // Optimize an instruction which contains a resource update.
+  StatusOr<bool> Optimize(HloInstruction* call_op,
+                          HloInstruction* resource_update);
 
   CompilerAnnotations& annotations_;
   const bool remote_memory_supported_;
@@ -130,4 +131,4 @@ class PipelineResourceVariablesOffload : public HloModulePass {
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_RESOURCE_VARIABLES_OFFLOAD_H_
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_RESOURCE_UPDATE_VARIABLES_OFFLOAD_H_

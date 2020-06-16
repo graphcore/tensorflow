@@ -13,10 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_resource_variables_offload.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_variables_offload.h"
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
@@ -35,46 +36,41 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-PipelineResourceVariablesOffload::PipelineResourceVariablesOffload(
+ResourceUpdateVariablesOffload::ResourceUpdateVariablesOffload(
     CompilerAnnotations& annotations, bool remote_memory_supported)
     : annotations_(annotations),
       remote_memory_supported_(remote_memory_supported) {}
 
-StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
-    HloInstruction* pipeline_op) {
+StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
+    HloInstruction* call_op, HloInstruction* resource_update) {
   bool changed = false;
 
-  // Do not optimize if this is not a pipeline inside an entry computation.
-  if (pipeline_op->parent() != pipeline_op->GetModule()->entry_computation()) {
+  // Do not optimize if this is not a op inside an entry computation.
+  if (call_op->parent() != call_op->GetModule()->entry_computation()) {
     return changed;
   }
-  HloComputation* entry_comp = pipeline_op->GetModule()->entry_computation();
-  HloComputation* pipeline_comp = pipeline_op->to_apply();
+  HloComputation* entry_comp = call_op->GetModule()->entry_computation();
+  HloComputation* call_comp = call_op->to_apply();
+  HloComputation* resource_update_comp = resource_update->to_apply();
 
-  TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // Make sure that the root of each stage is a tuple.
-  TF_RETURN_IF_ERROR(FixRootInstructions(stages));
+  // Make sure that the root of resource update and the call op is a tuple
+  // instruction.
+  {
+    TF_ASSIGN_OR_RETURN(bool changed_ru,
+                        FixRootInstruction(resource_update->to_apply()));
+    TF_ASSIGN_OR_RETURN(bool changed_call, FixRootInstruction(call_comp));
+    changed |= changed_ru || changed_call;
+  }
+
   // Do not optimize if there is no resource update or pipeline wu variable
   // offloading is turned off.
-  if (!stages.resource_update ||
-      !GetResourceUpdateOffloadVariables(*stages.resource_update)) {
+  if (!GetResourceUpdateOffloadVariables(resource_update)) {
     return changed;
   }
 
-  if (pipeline_op == entry_comp->root_instruction()) {
-    // Convert the entry root to create GTEs for each output shape and then
-    // create a root tuple instruction so that we can mark outputs as remote
-    // buffers.
-    const int64 num_outputs =
-        ShapeUtil::TupleElementCount(pipeline_op->shape());
-    std::vector<HloInstruction*> gtes(num_outputs);
-    for (int64 tuple_index = 0; tuple_index != num_outputs; ++tuple_index) {
-      TF_ASSIGN_OR_RETURN(gtes[tuple_index],
-                          MakeGetTupleElementHlo(pipeline_op, tuple_index));
-    }
-    HloInstruction* new_root =
-        entry_comp->AddInstruction(HloInstruction::CreateTuple(gtes));
-    entry_comp->set_root_instruction(new_root);
+  if (call_op == entry_comp->root_instruction()) {
+    // Make sure this is not the root instruction.
+    TF_RETURN_IF_ERROR(FixRootInstruction(entry_comp).status());
     changed = true;
   }
 
@@ -84,18 +80,15 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
   }
 
   // We cannot optimize if the output tuple has users - this implies that the
-  // parameter has users other than the pipeline.
+  // parameter has users other than the call.
   if (entry_comp->root_instruction()->user_count()) {
     return changed;
   }
 
-  HloInstruction* resource_update = *stages.resource_update;
-  HloComputation* resource_update_comp = resource_update->to_apply();
-
   // Find any parameter instructions which can be offloaded.
   // Helper struct for storing the information.
   struct OffloadHelper {
-    // Instructions inside the pipeline computation.
+    // Instructions inside the call computation.
     HloInstruction* input_to_resource_update;
     HloInstruction* output_from_resource_update;
 
@@ -104,13 +97,13 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
     HloInstruction* output_in_resource_update;
 
     // Instructions in entry computation.
-    HloInstruction* input_to_pipeline;
-    HloInstruction* output_from_pipeline;
+    HloInstruction* input_to_call;
+    HloInstruction* output_from_call;
 
     // Entry computation indicies for the tensors.
     int64 entry_param_number;
     int64 entry_output_idx;
-    int64 pipeline_operand_idx;
+    int64 call_operand_idx;
   };
 
   std::vector<OffloadHelper> offload_infos;
@@ -119,7 +112,7 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
       continue;
     }
 
-    // Has to be a parameter instruction inside the pipeline computation to be
+    // Has to be a parameter instruction inside the call computation to be
     // considered.
     if (operand->opcode() != HloOpcode::kParameter) {
       continue;
@@ -132,29 +125,28 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
       continue;
     }
 
-    // Check whether the input to the pipeline operations at this index is also
+    // Check whether the input to the call operations at this index is also
     // a parameter - i.e. this is a parameter in the entry computation.
-    const int64 pipeline_param_number = operand->parameter_number();
-    HloInstruction* pipeline_input =
-        pipeline_op->mutable_operand(pipeline_param_number);
-    if (pipeline_input->opcode() != HloOpcode::kParameter) {
+    const int64 call_param_number = operand->parameter_number();
+    HloInstruction* call_input = call_op->mutable_operand(call_param_number);
+    if (call_input->opcode() != HloOpcode::kParameter) {
       continue;
     }
 
-    // Also expect the pipeline input to be unique.
-    if (pipeline_input->user_count() != 1 ||
-        pipeline_op->OperandIndices(pipeline_input).size() != 1) {
+    // Also expect the call input to be unique.
+    if (call_input->user_count() != 1 ||
+        call_op->OperandIndices(call_input).size() != 1) {
       continue;
     }
 
-    // Check that the output tuple of the pipeline operation at index
-    // `pipeline_param_number` is an output from a resource update via a
+    // Check that the output tuple of the call operation at index
+    // `call_param_number` is an output from a resource update via a
     // GTE (i.e. the value was updated inside the resource update).
-    HloInstruction* pipeline_root = pipeline_comp->root_instruction();
-    CHECK_EQ(pipeline_root->opcode(), HloOpcode::kTuple);
+    HloInstruction* call_root = call_comp->root_instruction();
+    CHECK_EQ(call_root->opcode(), HloOpcode::kTuple);
 
     HloInstruction* resource_update_output =
-        pipeline_root->mutable_operand(pipeline_param_number);
+        call_root->mutable_operand(call_param_number);
     if (resource_update_output->opcode() != HloOpcode::kGetTupleElement) {
       continue;
     }
@@ -163,9 +155,9 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
     }
 
     // TODO(T17040) - extend this for read only resource variables.
-    // Check the aliasing map and only proceed if the pipeline input is a
+    // Check the aliasing map and only proceed if the call input is a
     // resource variable which is also an output of the computation.
-    const int64 entry_param_number = pipeline_input->parameter_number();
+    const int64 entry_param_number = call_input->parameter_number();
     const auto& input_info =
         annotations_.input_output_aliasing_map.GetEntryInputInfos().at(
             entry_param_number);
@@ -173,32 +165,32 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
       continue;
     }
 
-    // Check that the pipeline output is only used by the root instruction.
-    std::vector<HloInstruction*> pipeline_outputs;
+    // Check that the call output is only used by the root instruction.
+    std::vector<HloInstruction*> call_outputs;
     bool all_users_gtes = true;
-    // First we need to make sure that all users of the pipeline op are GTEs and
+    // First we need to make sure that all users of the call op are GTEs and
     // that there is only one GTE for the current parameter.
-    for (HloInstruction* output : pipeline_op->users()) {
+    for (HloInstruction* output : call_op->users()) {
       if (output->opcode() != HloOpcode::kGetTupleElement) {
         all_users_gtes = false;
         break;
       }
-      if (output->tuple_index() == pipeline_param_number) {
-        pipeline_outputs.push_back(output);
+      if (output->tuple_index() == call_param_number) {
+        call_outputs.push_back(output);
       }
     }
-    if (!all_users_gtes || pipeline_outputs.size() != 1) {
+    if (!all_users_gtes || call_outputs.size() != 1) {
       continue;
     }
     // Check that it's only used by the root instruction.
-    HloInstruction* output_from_pipeline = pipeline_outputs[0];
-    if (output_from_pipeline->user_count() != 1 ||
-        output_from_pipeline->users()[0] != entry_comp->root_instruction()) {
+    HloInstruction* output_from_call = call_outputs[0];
+    if (output_from_call->user_count() != 1 ||
+        output_from_call->users()[0] != entry_comp->root_instruction()) {
       continue;
     }
     // It is only used once.
     auto output_indices =
-        entry_comp->root_instruction()->OperandIndices(output_from_pipeline);
+        entry_comp->root_instruction()->OperandIndices(output_from_call);
     if (output_indices.size() != 1) {
       continue;
     }
@@ -227,11 +219,11 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
     offload_info.output_from_resource_update = resource_update_output;
     offload_info.input_in_resource_update = input_in_resource_update;
     offload_info.output_in_resource_update = output_in_resource_update;
-    offload_info.input_to_pipeline = pipeline_input;
-    offload_info.output_from_pipeline = output_from_pipeline;
+    offload_info.input_to_call = call_input;
+    offload_info.output_from_call = output_from_call;
     offload_info.entry_param_number = entry_param_number;
     offload_info.entry_output_idx = entry_output_idx;
-    offload_info.pipeline_operand_idx = pipeline_param_number;
+    offload_info.call_operand_idx = call_param_number;
     offload_infos.emplace_back(offload_info);
   }
 
@@ -240,21 +232,23 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
   }
 
   if (!remote_memory_supported_) {
-    LOG(INFO)
-        << "Current configuration of the IPU devices does not support remote "
-           "buffers and therefore weight update only variables cannot be "
-           "offloaded to remote memory. Set the "
-           "`offload_weight_update_variables` argument of "
-           "`pipelining_ops.pipeline` to `False` to stop seeing this message.";
+    LOG(INFO) << absl::StrCat(
+        "Current configuration of the IPU devices does not support remote "
+        "buffers and therefore weight update only variables cannot be "
+        "offloaded to remote memory. Set the `offload_weight_update_variables` "
+        "argument of ",
+        IsPipelineOp(call_op) ? "`pipelining_ops.pipeline`"
+                              : "`GradientAccumulationOptimizerV2`",
+        "to `False` to stop seeing this message.");
     return changed;
   }
 
-  std::set<int64> pipeline_params_to_remove;
+  std::set<int64> call_params_to_remove;
   // For each parameter in offload_info, insert a load and store op and a dummy
   // output op.
   for (auto& offload_info : offload_infos) {
     VLOG(1) << "Offloading variable " << offload_info.entry_param_number << ": "
-            << offload_info.input_to_pipeline->ToString();
+            << offload_info.input_to_call->ToString();
 
     // Create a load instruction inside the resource update and use that instead
     // of the parameter.
@@ -279,24 +273,22 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
     // that as the output in the root instruction which we already checked is a
     // tuple.
     TF_RETURN_IF_ERROR(entry_comp->ReplaceWithNewInstruction(
-        offload_info.output_from_pipeline,
+        offload_info.output_from_call,
         CreateHloRemoteParameterDummyOutput(
-            offload_info.output_from_pipeline->shape(),
+            offload_info.output_from_call->shape(),
             offload_info.entry_output_idx)));
 
     // Mark the parameter for removal.
-    pipeline_params_to_remove.insert(offload_info.pipeline_operand_idx);
+    call_params_to_remove.insert(offload_info.call_operand_idx);
 
     // Mark this input as being stored in a remote buffer.
     annotations_.remote_parameter_infos.insert(
         RemoteParameterInfo{offload_info.entry_param_number});
   }
 
-  // Remove the outputs for offloaded parameters from the pipeline.
-  TF_RETURN_IF_ERROR(
-      RemoveOutputsFromCall(pipeline_op, pipeline_params_to_remove));
-  TF_RETURN_IF_ERROR(
-      HloDCE::RunOnComputation(pipeline_op->to_apply()).status());
+  // Remove the outputs for offloaded parameters from the call.
+  TF_RETURN_IF_ERROR(RemoveOutputsFromCall(call_op, call_params_to_remove));
+  TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call_op->to_apply()).status());
 
   // Now remove unused inputs/outputs in the resource update.
   bool removed_insts = false;
@@ -304,33 +296,52 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
                       PipelineOptimizer::OptimizeCallInstruction(
                           resource_update, &removed_insts));
   CHECK(removed_insts);
-  // Remove the inputs for offloaded parameters to the pipeline.
-  TF_ASSIGN_OR_RETURN(pipeline_op, RemoveParametersFromCall(
-                                       pipeline_op, pipeline_params_to_remove));
-  TF_RETURN_IF_ERROR(
-      HloDCE::RunOnComputation(pipeline_op->to_apply()).status());
+  // Remove the inputs for offloaded parameters to the call.
+  TF_ASSIGN_OR_RETURN(call_op,
+                      RemoveParametersFromCall(call_op, call_params_to_remove));
+  TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call_op->to_apply()).status());
 
   return true;
 }
 
-StatusOr<bool> PipelineResourceVariablesOffload::Run(HloModule* module) {
-  TF_ASSIGN_OR_RETURN(std::vector<HloInstruction*> pipeline_ops,
-                      GetPipelines(module));
-  if (pipeline_ops.empty()) {
-    // No pipeline ops found - nothing to offload.
-    return false;
-  }
-  CHECK_EQ(pipeline_ops.size(), 1);
-  VLOG(2) << "Before PipelineResourceVariablesOffload:";
+StatusOr<bool> ResourceUpdateVariablesOffload::Run(HloModule* module) {
+  VLOG(2) << "Before ResourceUpdateVariablesOffload:";
   XLA_VLOG_LINES(2, module->ToString());
+  bool changed = false;
+  std::vector<std::pair<HloInstruction*, HloInstruction*>> to_optimize;
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+    if (IsPopOpsFusion(comp)) {
+      continue;
+    }
 
-  TF_ASSIGN_OR_RETURN(bool changed, OptimizePipeline(pipeline_ops[0]));
+    for (HloInstruction* inst : comp->MakeInstructionPostOrder()) {
+      if (IsRepeatLoop(inst) || IsPipelineOp(inst)) {
+        std::vector<HloInstruction*> resource_updates;
+        absl::c_copy_if(inst->to_apply()->MakeInstructionPostOrder(),
+                        std::back_inserter(resource_updates),
+                        [](HloInstruction* i) { return IsResourceUpdate(i); });
+        if (resource_updates.empty()) {
+          continue;
+        } else if (resource_updates.size() > 1) {
+          return FailedPrecondition(
+              "Detected multiple resource update instructions.");
+        } else {
+          to_optimize.push_back({inst, resource_updates[0]});
+        }
+      }
+    }
+  }
+
+  for (auto pair : to_optimize) {
+    TF_ASSIGN_OR_RETURN(bool changed_pair, Optimize(pair.first, pair.second));
+    changed |= changed_pair;
+  }
 
   if (changed) {
-    VLOG(2) << "After PipelineResourceVariablesOffload:";
+    VLOG(2) << "After ResourceUpdateVariablesOffload:";
     XLA_VLOG_LINES(2, module->ToString());
   } else {
-    VLOG(2) << "No changes were made to the Pipeline.";
+    VLOG(2) << "No changes were made.";
   }
   return changed;
 }
