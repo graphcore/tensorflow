@@ -1,0 +1,106 @@
+"""
+Horovod support.
+
+We build Horovod as a shared library that depends on MPI, and ship this library
+as a part of the TensorFlow wheel file. This Horovod library conforms to the
+TensorFlow plugin library conventions, and registers its Horovod ops and kernels
+at load-time. It also includes some C functions for basic functionality
+(init/shutdown/rank/size etc.) that are called from Python using ctypes.
+
+We lazily load the shared library when the horovod Python module is imported,
+such that MPI is not loaded/required before this. We do not want MPI as a
+required dependency for all our users, only for those that actually use Horovod.
+"""
+
+package(default_visibility = ["//tensorflow:internal"])
+
+load("//tensorflow:tensorflow.bzl", "tf_cc_shared_object", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
+
+cc_library(
+    name = "mpi_libs",
+    srcs = [
+        "@local_config_ipu_horovod//:mpi_libs",
+    ],
+)
+
+cc_library(
+    name = "mpi_headers",
+    hdrs = [
+        "@local_config_ipu_horovod//:mpi_headers",
+    ],
+)
+
+cc_library(
+    name = "lbfgspp_headers",
+    hdrs = [
+        "@lbfgspp_repo//:lbfgspp_headers",
+    ],
+)
+
+cc_library(
+    name = "horovod_ops",
+    srcs = [
+        "@horovod_repo//:horovod_common_headers",
+        "@horovod_repo//:horovod_common_sources",
+        "@horovod_repo//:horovod_tensorflow_sources",
+    ],
+    copts = [
+        "-DHAVE_MPI=1",
+        "-Iexternal/local_config_ipu_horovod/mpi/include",
+        "-Iexternal/lbfgspp_repo/include",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lbfgspp_headers",
+        ":mpi_headers",
+        "//tensorflow/core:framework",
+        "@flatbuffers",
+    ],
+    alwayslink = True,
+)
+
+tf_gen_op_wrapper_py(
+    name = "horovod_ops_wrapper_py",
+    out = "gen_horovod_ops.py",
+    visibility = ["//tensorflow:internal"],
+    deps = [":horovod_ops"],
+)
+
+tf_custom_op_py_library(
+    name = "horovod_ops_py",
+    kernels = [":horovod_ops"],
+    srcs_version = "PY2AND3",
+    deps = [":horovod_ops_wrapper_py"],
+)
+
+tf_cc_shared_object(
+    name = "horovod_plugin.so",
+    deps = [
+        ":horovod_ops",
+        ":mpi_libs",
+    ],
+)
+
+py_library(
+    name = "horovod_lib",
+    srcs = [
+        "__init__.py",
+        "basics.py",
+        "ipu_horovod_strategy.py",
+    ],
+    data = [
+        ":horovod_plugin.so",
+    ],
+    deps = [
+        ":horovod_ops_py",
+    ],
+)
+
+py_test(
+    name = "horovod_test",
+    size = "medium",
+    srcs = ["horovod_test.py"],
+    deps = [
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)

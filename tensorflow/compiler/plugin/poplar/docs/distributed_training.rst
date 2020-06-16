@@ -1,5 +1,5 @@
-Distributed training example
-----------------------------
+Distributed training
+--------------------
 
 This example shows how to use the ``IPUEstimator`` with the
 ``IPUMultiWorkerStrategy`` to perform distributed training of
@@ -86,3 +86,46 @@ Complete example
 ################
 
 .. literalinclude:: distributed_training_example.py
+
+Distributed training with Horovod
+#################################
+
+Distributed training can also be performed using
+`Horovod <https://github.com/horovod/horovod/>`_ which is included in the
+TensorFlow wheel provided by Graphcore.
+
+The class
+:class:`~tensorflow.python.ipu.horovod.ipu_horovod_strategy.IPUHorovodStrategy`
+can be used in the same manner as the
+:class:`~tensorflow.python.ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy`.
+
+While the ``IPUMultiWorkerStrategy`` uses collective operations over gRPC, the
+``IPUHorovodStrategy`` uses the collective operations provided by Horovod, based on
+MPI. Horovod also has built-in cluster discovery, so there is no cluster resolver
+argument that must be provided like there is for the ``IPUMultiWorkerStrategy``,
+and there is no need for starting a ``tf.distribute.Server``.
+
+Apart from these differences, the API and semantics should be the same for the
+``IPUHorovodStrategy`` and ``IPUMultiWorkerStrategy``. In other words, they
+both provide data parallel distributed training that keeps the variables in sync
+on the different workers. During variable initialisation the values are broadcast
+from the root rank to the other ranks, and during training the gradients are
+all-reduced as a part of the ``Optimizer.apply_gradients`` call.
+
+Launching Horovod training
+##########################
+
+The ``mpirun`` tool can be used to run the distributed training across a cluster.
+For instance, running distributed training across two processes on the same machine
+can be done with the following command:
+
+.. code-block:: bash
+
+    $ mpirun -np 2 -H localhost:2 python distributed_training_horovod_example.py
+
+Complete Horovod example
+########################
+
+Below is a complete example using Horovod, adapted from the example above.
+
+.. literalinclude:: distributed_training_horovod_example.py

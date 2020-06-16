@@ -8,6 +8,7 @@ package(
 )
 
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod")
 
 py_library(
     name = "ipu_ops_lib",
@@ -157,7 +158,7 @@ py_library(
         "//tensorflow/python/compiler/xla:compiler_py",
         "//tensorflow/python/distribute:values",
         "//tensorflow/python/estimator:estimator_py",
-    ],
+    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_lib"]),
 )
 
 tf_py_test(
@@ -1016,5 +1017,5 @@ test_suite(
     tests = [
         "//tensorflow/compiler/plugin/poplar:poplar_ci_test_suite",
         "//tensorflow/python/ipu:all_tests",
-    ],
+    ] + if_horovod(["//tensorflow/python/ipu/horovod:horovod_test"]),
 )
