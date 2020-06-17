@@ -145,9 +145,8 @@ bool IsInplaceReadWrite(HloInstruction* inst,
   // Go through all the inplace operands.
   for (auto op_idx : inplace_desc.GetInplaceOperandIndexes()) {
     HloInstruction* op = inst->mutable_operand(op_idx);
-    // Apart from tuples, we expect all the inplace operands to be only used
-    // once as an operand.
-    if (inst->opcode() != HloOpcode::kTuple && !IsUniqueOperand(inst, op)) {
+    // We expect all the inplace operands to be only used once as an operand.
+    if (!IsUniqueOperand(inst, op)) {
       is_inplace = false;
       break;
     }
@@ -429,7 +428,7 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kSort:
     case HloOpcode::kTuple: {
       OperandIndexes indexes(inst->operand_count());
-      std::iota(indexes.begin(), indexes.end(), 0);
+      absl::c_iota(indexes, 0);
       type_ = HloInstructionType::kInplaceReadWrite;
       inplace_operands_ = indexes;
       break;
@@ -450,7 +449,7 @@ HloInstructionDescription::HloInstructionDescription(
       } else {
         // A non poplibs fusion is inplace on all operands.
         OperandIndexes indexes(inst->operand_count());
-        std::iota(indexes.begin(), indexes.end(), 0);
+        absl::c_iota(indexes, 0);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = indexes;
       }
@@ -459,15 +458,16 @@ HloInstructionDescription::HloInstructionDescription(
 
     case HloOpcode::kCall: {
       if (IsRepeatLoop(inst)) {
-        // Inplace on it's input tuple.
-        CHECK_EQ(inst->operand_count(), 1);
+        // Inplace on all its inputs.
+        OperandIndexes indexes(inst->operand_count());
+        absl::c_iota(indexes, 0);
         type_ = HloInstructionType::kInplaceReadWrite;
-        inplace_operands_ = {0};
+        inplace_operands_ = indexes;
       } else if (IsPipelineOp(inst) || IsResourceUpdate(inst)) {
         // Pipeline and ResourceUpdate operations are inplace on all
         // their inputs.
         OperandIndexes indexes(inst->operand_count());
-        std::iota(indexes.begin(), indexes.end(), 0);
+        absl::c_iota(indexes, 0);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = indexes;
       } else if (IsPipelineStageBackward(inst)) {
@@ -515,7 +515,7 @@ HloInstructionDescription::HloInstructionDescription(
 
         if (num_inplace_operands) {
           OperandIndexes indexes(num_inplace_operands);
-          std::iota(indexes.begin(), indexes.end(), 0);
+          absl::c_iota(indexes, 0);
           type_ = HloInstructionType::kInplaceReadWrite;
           inplace_operands_ = indexes;
         } else {
@@ -523,7 +523,7 @@ HloInstructionDescription::HloInstructionDescription(
         }
       } else {
         OperandIndexes indexes(inst->operand_count());
-        std::iota(indexes.begin(), indexes.end(), 0);
+        absl::c_iota(indexes, 0);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = indexes;
       }
@@ -566,7 +566,7 @@ HloInstructionDescription::HloInstructionDescription(
     // Inplace on all operands.
     case HloOpcode::kConcatenate: {
       OperandIndexes indexes(inst->operand_count());
-      std::iota(indexes.begin(), indexes.end(), 0);
+      absl::c_iota(indexes, 0);
       type_ = HloInstructionType::kInplaceReadOnly;
       inplace_operands_ = indexes;
       break;
