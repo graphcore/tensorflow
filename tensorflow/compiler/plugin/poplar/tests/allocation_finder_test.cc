@@ -1136,14 +1136,13 @@ TEST_F(AllocationFinderTest, FindRepeatTensorAllocations) {
   // Get the dot and tuple instruction from the new repeat body.
   const HloComputation* repeat_body =
       hlo_module->entry_computation()->root_instruction()->to_apply();
-  const HloInstruction* body_param = repeat_body->parameter_instruction(0);
   const HloInstruction* dot_inst = repeat_body->root_instruction()->operand(1);
 
   auto t = annotations.tensor_allocation_map.at(TensorLocation{in, 0});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
-  EXPECT_EQ(t.backward_path.size(), 4);
+  EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0));
   EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
 
@@ -1151,23 +1150,25 @@ TEST_F(AllocationFinderTest, FindRepeatTensorAllocations) {
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
-  EXPECT_EQ(t.backward_path.size(), 4);
+  EXPECT_EQ(t.backward_path.size(), 2);
   EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0, 1));
   EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
 
-  t = annotations.tensor_allocation_map.at(TensorLocation{body_param, 1});
+  t = annotations.tensor_allocation_map.at(
+      TensorLocation{repeat_body->parameter_instruction(1), 0});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 0ll);
   EXPECT_EQ(t.forward_path.size(), 0);
-  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0));
   EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
 
-  t = annotations.tensor_allocation_map.at(TensorLocation{body_param, 2});
+  t = annotations.tensor_allocation_map.at(
+      TensorLocation{repeat_body->parameter_instruction(2), 0});
   EXPECT_EQ(t.tgt, dot_inst);
   EXPECT_EQ(t.input_index, 1ll);
   EXPECT_EQ(t.forward_path.size(), 0);
-  EXPECT_EQ(t.backward_path.size(), 2);
+  EXPECT_EQ(t.backward_path.size(), 1);
   EXPECT_THAT((*t.permutation), ::testing::ElementsAre(0, 1));
   EXPECT_EQ(t.sliceable_dimension, absl::nullopt);
 }

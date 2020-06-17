@@ -361,8 +361,8 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
                                                   const xla::Shape& output,
                                                   TensorMap& tensor_map) {
   VLOG(1) << "Processing " << inst->name();
-  CHECK_EQ(inputs.size(), 1);
-  const bool reallocate_inputs = CanRealloteInputs(inst);
+  CHECK_EQ(inputs.size(), inst->operand_count());
+  const bool reallocate_inputs = !IsLoweredInplace(inst);
 
   const HloComputation* loop_body = inst->to_apply();
   auto order =
@@ -377,17 +377,10 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   // Make sure any deferred inputs to the instruction are pushed up.
   TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
 
-  const uint64 param_count = inputs[0].size();
-
-  const TensorVector& loop_state = visitor.GetLoopState();
-
-  if (loop_state.size() != param_count) {
-    return xla::FailedPrecondition("Invalid number of loop inputs/outputs.");
-  }
-
   poplar::program::Sequence seq = visitor.GetRepeatLoopSequence(inst);
 
-  for (uint64 i = 0; i < param_count; i++) {
+  const TensorVector& loop_state = visitor.GetLoopState();
+  for (uint64 i = 0; i != loop_state.size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
   }
 

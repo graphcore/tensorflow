@@ -38,6 +38,9 @@ bool ShouldAddCopiesForDuplicateOperands(const HloInstruction* inst) {
         return true;
       }
     }
+    case HloOpcode::kCall: {
+      return IsRepeatLoop(inst) || IsPipelineOp(inst);
+    }
     default: { return false; }
   }
 }

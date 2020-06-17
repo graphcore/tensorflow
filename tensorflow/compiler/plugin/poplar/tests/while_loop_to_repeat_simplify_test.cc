@@ -14,20 +14,22 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
+
+#include <stdlib.h>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_matchers.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_fix.h"
+#include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 
-#include <stdlib.h>
-
 namespace xla {
+namespace m = match;
 namespace poplarplugin {
 namespace {
 
@@ -366,8 +368,7 @@ ENTRY entry {
   // Check the constant got hoisted out to input tuple.
   HloInstruction* repeat_inst = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsRepeatLoop(repeat_inst));
-  const HloInstruction* repeat_init = repeat_inst->operand(0);
-  const HloInstruction* counter = repeat_init->operand(0);
+  const HloInstruction* counter = repeat_inst->operand(0);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
   int64 loop_counter =
       LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
@@ -412,21 +413,9 @@ ENTRY entry {
 
   // Get the trip count
   auto* root = module.get()->entry_computation()->root_instruction();
-  TF_ASSERT_OK_AND_ASSIGN(PoplarBackendConfig cfg,
-                          root->backend_config<PoplarBackendConfig>());
-  ASSERT_EQ(cfg.call_config().type(),
-            PoplarBackendConfig::CallConfig::RepeatLoop);
-  ASSERT_EQ(cfg.call_config().repeat_config().repeat_count(), 0);
-
-  // Check the constant got hoisted out.
-  HloInstruction* repeat_inst = module->entry_computation()->root_instruction();
-  EXPECT_TRUE(IsRepeatLoop(repeat_inst));
-  const HloInstruction* repeat_init = repeat_inst->operand(0);
-  const HloInstruction* counter = repeat_init->operand(0);
-  EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
-  int64 loop_counter =
-      LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
-  EXPECT_EQ(loop_counter, 10);
+  // Check the while loop is removed as no iterations are performed.
+  EXPECT_TRUE(
+      Match(root, m::Tuple(m::ConstantScalar(10), m::ConstantScalar(10))));
 }
 
 TEST_F(WhileLoopToRepeatSimplifyTest,
@@ -476,8 +465,7 @@ ENTRY entry {
   // Check the constant got hoisted out.
   HloInstruction* repeat_inst = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsRepeatLoop(repeat_inst));
-  const HloInstruction* repeat_init = repeat_inst->operand(0);
-  const HloInstruction* counter = repeat_init->operand(0);
+  const HloInstruction* counter = repeat_inst->operand(0);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
   int64 loop_counter =
       LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
@@ -533,9 +521,8 @@ ENTRY entry {
   // Check the constant got hoisted out.
   HloInstruction* repeat_inst = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsRepeatLoop(repeat_inst));
-  const HloInstruction* repeat_init = repeat_inst->operand(0);
-  const HloInstruction* counter = repeat_init->operand(0);
-  const HloInstruction* unused_counter = repeat_init->operand(2);
+  const HloInstruction* counter = repeat_inst->operand(0);
+  const HloInstruction* unused_counter = repeat_inst->operand(2);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
   EXPECT_EQ(unused_counter->opcode(), HloOpcode::kConstant);
   int64 loop_counter =
@@ -598,9 +585,8 @@ ENTRY entry {
   // Check the constant got hoisted out.
   HloInstruction* repeat_inst = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsRepeatLoop(repeat_inst));
-  const HloInstruction* repeat_init = repeat_inst->operand(0);
-  const HloInstruction* counter = repeat_init->operand(0);
-  const HloInstruction* unused_counter = repeat_init->operand(2);
+  const HloInstruction* counter = repeat_inst->operand(0);
+  const HloInstruction* unused_counter = repeat_inst->operand(2);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
   EXPECT_EQ(unused_counter->opcode(), HloOpcode::kConstant);
   int64 loop_counter =
@@ -785,8 +771,7 @@ ENTRY entry {
   // Check the constant got hoisted out.
   HloInstruction* repeat_inst = module->entry_computation()->root_instruction();
   EXPECT_TRUE(IsRepeatLoop(repeat_inst));
-  const HloInstruction* repeat_init = repeat_inst->operand(0);
-  const HloInstruction* counter = repeat_init->operand(0);
+  const HloInstruction* counter = repeat_inst->operand(0);
   EXPECT_EQ(counter->opcode(), HloOpcode::kConstant);
   int64 loop_start =
       LiteralScalarToNativeType<int64>(counter->literal()).ValueOrDie();
