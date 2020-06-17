@@ -366,7 +366,7 @@ pipeline {
   gte3 = f32[2]{0} get-tuple-element(call_ru), index=3, sharding={maximal device=1}
   gte4 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call_ru), index=4, sharding={maximal device=2}
   gte5 = f32[2]{0} get-tuple-element(call_ru), index=5, sharding={maximal device=2}
-  ROOT tuple.266 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(gte0, gte1, gte2, gte3, gte4, gte5)
+  ROOT tuple.266 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) tuple(arg0.125, arg1.126, gte0, gte1, gte2, gte3, gte4, gte5)
 }
 
 ENTRY cluster {
@@ -378,13 +378,13 @@ ENTRY cluster {
   arg6.7 = f32[2]{0} parameter(6), parameter_replication={false}
   arg5.6 = f32[1,1,2,2]{3,2,1,0} parameter(5), parameter_replication={false}
   arg3.4 = f32[2]{0} parameter(3), parameter_replication={false}
-  call.267 = (f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
-  get-tuple-element.269 = f32[2]{0} get-tuple-element(call.267), index=1
-  get-tuple-element.273 = f32[2]{0} get-tuple-element(call.267), index=5
-  get-tuple-element.268 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=0
-  get-tuple-element.272 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=4
-  get-tuple-element.271 = f32[2]{0} get-tuple-element(call.267), index=3
-  get-tuple-element.270 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=2
+  call.267 = (f32[1,4,4,2]{3,2,1,0}, f32[], f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}) call(arg0.1, arg1.2, arg4.5, arg2.3, arg7.8, arg6.7, arg5.6, arg3.4), to_apply=pipeline, frontend_attributes={CALL_CONFIG_TYPE=Pipeline}, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  get-tuple-element.269 = f32[2]{0} get-tuple-element(call.267), index=3
+  get-tuple-element.273 = f32[2]{0} get-tuple-element(call.267), index=7
+  get-tuple-element.268 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=2
+  get-tuple-element.272 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=6
+  get-tuple-element.271 = f32[2]{0} get-tuple-element(call.267), index=5
+  get-tuple-element.270 = f32[1,1,2,2]{3,2,1,0} get-tuple-element(call.267), index=4
   ROOT tuple.286 = (f32[2]{0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}, f32[1,1,2,2]{3,2,1,0}, f32[2]{0}, f32[1,1,2,2]{3,2,1,0}) tuple(get-tuple-element.269, get-tuple-element.273, get-tuple-element.268, get-tuple-element.272, get-tuple-element.271, get-tuple-element.270)
 }
 )";
@@ -920,14 +920,13 @@ pipeline {
   call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
-  gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
 }
 
 ENTRY e {
   e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
   auto config = GetModuleConfigForTest();

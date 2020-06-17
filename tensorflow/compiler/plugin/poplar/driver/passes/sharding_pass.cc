@@ -14,13 +14,14 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
+
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/find_all_users.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -113,10 +114,8 @@ void SetSharding(HloInstruction* inst, const HloSharding& sharding) {
   }
 }
 
-// Pass in a vector of shardings (tuple or otherwise) and this creates a tuple
-// of those inputs, and applies to the instruction.
-void SetTupleShardingFromVector(HloInstruction* inst,
-                                const std::vector<HloSharding>& shardings) {
+HloSharding ConvertToTupleSharding(const Shape& shape,
+                                   const std::vector<HloSharding>& shardings) {
   std::vector<HloSharding> all_leaves;
   for (auto& s : shardings) {
     std::vector<HloSharding> leaves;
@@ -128,7 +127,19 @@ void SetTupleShardingFromVector(HloInstruction* inst,
     absl::c_copy(leaves, std::back_inserter(all_leaves));
   }
 
-  SetSharding(inst, HloSharding::Tuple(inst->shape(), all_leaves));
+  if (all_leaves.empty()) {
+    // Tuple sharding always requires at least one element.
+    all_leaves.push_back(HloSharding::AssignDevice(0));
+  }
+
+  return HloSharding::Tuple(shape, all_leaves);
+}
+
+// Pass in a vector of shardings (tuple or otherwise) and this creates a tuple
+// of those inputs, and applies to the instruction.
+void SetTupleShardingFromVector(HloInstruction* inst,
+                                const std::vector<HloSharding>& shardings) {
+  SetSharding(inst, ConvertToTupleSharding(inst->shape(), shardings));
 }
 
 bool CopyShardingFromUsers(HloInstruction* inst) {
@@ -673,21 +684,28 @@ StatusOr<bool> ShardingPass::Run(HloModule* module) {
           }
         }
 
-        // Ensure that the root sharding of a while/repeat body matches the
-        // input
+        // Ensure that the root sharding of a while/repeat/pipeline body matches
+        // the input.
         for (auto cs : call_graph_node.caller_callsites()) {
           auto* caller = cs.instruction();
           HloComputation* body = nullptr;
           if (caller->opcode() == HloOpcode::kWhile) {
             body = caller->while_body();
           }
-          if (IsRepeatLoop(caller)) {
+
+          if (IsRepeatLoop(caller) || IsPipelineOp(caller)) {
             body = caller->to_apply();
           }
 
           if (body == call_graph_node.computation()) {
+            std::vector<HloSharding> shardings;
+            absl::c_transform(
+                body->parameter_instructions(), std::back_inserter(shardings),
+                [](HloInstruction* o) { return GetShardingOfOutputTensor(o); });
+
             SetSharding(body->root_instruction(),
-                        body->parameter_instruction(0)->sharding());
+                        ConvertToTupleSharding(
+                            body->root_instruction()->shape(), shardings));
           }
         }
 

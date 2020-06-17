@@ -1095,22 +1095,21 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
   // computation (PARTIAL_ALIAS).
   // 5. be the exact same tensor as input `o` (IDENTICAL_ALIAS).
 
-  int64 num_tensors = outputs_.size();
+  const int64 num_tensors = outputs_.size();
   std::vector<AliasType> alias_type(num_tensors, AliasType::NO_ALIAS_USED);
 
   // Create a flat version of the loop inputs.
-  TensorVector loop_inputs(num_tensors);
-  auto input_itr = loop_inputs.begin();
-  for (size_t input_idx = 0; input_idx != computation_inputs_.size();
-       ++input_idx) {
-    absl::c_copy(computation_inputs_[input_idx], input_itr);
-    input_itr = std::next(input_itr, computation_inputs_[input_idx].size());
+  TensorVector loop_inputs;
+  loop_inputs.reserve(num_tensors);
+  for (TensorVector& inputs : computation_inputs_) {
+    loop_inputs.insert(loop_inputs.end(), inputs.begin(), inputs.end());
   }
+
   // Outputs are already flat.
   TensorVector loop_outputs = outputs_;
 
   // Find all the alias information index by output tensor.
-  for (unsigned int o = 0; o < num_tensors; o++) {
+  for (int64 o = 0; o < num_tensors; o++) {
     int64 param_number, param_index;
     std::tie(param_number, param_index) = GetParameterNumberAndFlatIndex(o);
     const bool input_used = InputIsAllocated(param_number, param_index);
@@ -1119,7 +1118,7 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
         alias_type[o] = AliasType::IDENTICAL_ALIAS;
       }
       // Check whether a temporary copy is required.
-      for (unsigned int i = 0; i < num_tensors; i++) {
+      for (int64 i = 0; i < num_tensors; i++) {
         int64 input_param_number, input_param_index;
         std::tie(input_param_number, input_param_index) =
             GetParameterNumberAndFlatIndex(i);
@@ -1136,7 +1135,7 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
       // alias any of the inputs which might have changed during
       // computation.
       alias_type[o] = AliasType::NO_ALIAS_NOT_USED;
-      for (unsigned int i = 0; i < num_tensors; i++) {
+      for (int64 i = 0; i < num_tensors; i++) {
         int64 input_param_number, input_param_index;
         std::tie(input_param_number, input_param_index) =
             GetParameterNumberAndFlatIndex(i);
@@ -1210,7 +1209,7 @@ std::pair<int64, int64> InplaceDeferredVisitor::GetParameterNumberAndFlatIndex(
     int64 output_flat_index) {
   int64 parameter_number = 0;
   int64 flat_index = output_flat_index;
-  while (flat_index >
+  while (flat_index >=
          static_cast<int64>(computation_inputs_[parameter_number].size())) {
     flat_index -= computation_inputs_[parameter_number].size();
     parameter_number++;
