@@ -39,6 +39,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/computation_flattener.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/constant_nan.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/constant_slice_folding.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
@@ -953,6 +954,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     }
     pipeline.AddPass<InterIpuCopyInserter>();
     pipeline.AddPass<PostSerializeGradientAccumulation>();
+    pipeline.AddPass<CopyInserter>();
     // Passes below this point need to respect the inplace information.
     pipeline.AddPass<InplaceFinder>();
     pipeline.AddPass<ExpressionOutliner>();

@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -169,6 +168,30 @@ class MapGradientOptimizerTest(test_util.TensorFlowTestCase):
         self.assertAllCloseAccordingToType(expect_grads[index],
                                            self.evaluate(grad))
         index += 1
+
+  @test_util.deprecated_graph_mode_only
+  def testMinimize(self):
+    with self.cached_session():
+      values = [1, 2, 3]
+      vars_ = [variables.Variable([v], dtype=dtypes.float32) for v in values]
+
+      optimizer = gd.GradientDescentOptimizer(1.0)
+      map_optimizer = map_gradient_optimizer.MapGradientOptimizer(
+          optimizer, map_fn_quadratic)
+      loss = math_ops.reduce_prod(vars_)
+      train_op = map_optimizer.minimize(loss, var_list=vars_)
+      variables.global_variables_initializer().run()
+      train_op.run()
+
+      # Loss is a*b*c
+      # so dL/dV = [v1*v2,v0*v2,v0*v1] = 6, 3, 2
+      # Which is then squared with the MapOptimizer = 36, 9, 4
+      # Grads then applied to the weights via GD w/ learning rate of 1.
+      # = -35, -7, -1
+      expect_weights = ([-35.0], [-7.0], [-1.0])
+      for expected_weight, actual_weight_tensor in zip(expect_weights, vars_):
+        self.assertAllCloseAccordingToType(expected_weight,
+                                           self.evaluate(actual_weight_tensor))
 
 
 if __name__ == "__main__":

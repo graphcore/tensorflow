@@ -1,4 +1,4 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_COPY_INSERTER_H_
-#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_PIPELINE_COPY_INSERTER_H_
+#ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_COPY_INSERTER_H_
+#define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_COPY_INSERTER_H_
 
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 
@@ -25,20 +25,16 @@ class HloModule;
 namespace poplarplugin {
 
 /**
- * Pass which inserts Copy operations for parameters which are used inplace.
+ * Insert copies for operands which could prevent other ops from being inplace.
  */
-class PipelineCopyInserter : public HloModulePass {
+class CopyInserter : public HloModulePass {
  public:
-  absl::string_view name() const override { return "pipeline-copy-inserter"; }
+  absl::string_view name() const override { return "copy-inserter"; }
 
   StatusOr<bool> Run(HloModule* module) override;
-
- private:
-  // Insert Copys for a particular pipeline.
-  StatusOr<bool> InsertInPipeline(HloInstruction* pipeline_op);
 };
 
 }  // namespace poplarplugin
 }  // namespace xla
 
-#endif
+#endif  // TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_PASSES_COPY_INSERTER_H_

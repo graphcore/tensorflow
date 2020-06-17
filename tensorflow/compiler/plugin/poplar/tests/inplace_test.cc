@@ -914,13 +914,11 @@ ENTRY c1 {
 
   l = f32[] add(p0, p0)
 
-  aa = token[] after-all()
-  outfeed1 = token[] outfeed(l, aa), outfeed_config="1"
+  l2 = f32[] add(l, l)
 
-  ROOT t = (f32[20], f32[10,2]) tuple(l, l)
+  ROOT t = (f32[]) tuple(l)
 
-  bb = token[] after-all()
-  outfeed2 = token[] outfeed(l, bb), outfeed_config="2"
+  l3 = f32[] add(l, l)
 }
 
 )";
