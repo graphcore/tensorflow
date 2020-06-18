@@ -161,6 +161,9 @@ Status PoplarPlatform::GetIpuOptions(std::vector<IpuOptions>& out) {
                         ExecutorForDevice(ordinal));
 
     auto* e = static_cast<PoplarExecutor*>(executor->implementation());
+    if (!e->IpuOptionsConfigured()) {
+      break;
+    }
     out.push_back(e->GetIpuOptions());
   }
 
