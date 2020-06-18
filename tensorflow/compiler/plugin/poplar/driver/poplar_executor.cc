@@ -1551,7 +1551,7 @@ bool PoplarExecutor::SupportsRemoteBuffers() const {
     return false;
   }
 
-  return ipu_.Device().supportsGraphStreaming();
+  return ipu_.Device().supportsRemoteBuffers();
 }
 
 tensorflow::IpuTraceEvent PoplarExecutor::NewTraceEvent() {

@@ -1,14 +1,14 @@
 import argparse
 import numpy as np
-
-import tensorflow.compat.v1 as tf
-
+import tensorflow as tf
 from tensorflow.python import ipu
+from tensorflow.python.ipu import horovod as hvd
+from tensorflow.python.ipu.horovod import ipu_horovod_strategy
 
 BATCH_SIZE = 64
 
 
-def input_fn(mode, input_context=None):  # pylint: disable=unused-argument
+def input_fn(mode):  # pylint: disable=unused-argument
   train_data, _ = tf.keras.datasets.mnist.load_data()
 
   def normalise(image, label):
@@ -25,11 +25,7 @@ def input_fn(mode, input_context=None):  # pylint: disable=unused-argument
   types = (x_train.dtype, y_train.dtype)
   shapes = (x_train.shape[1:], y_train.shape[1:])
   mnist_dataset = tf.data.Dataset.from_generator(generator, types, shapes)
-
-  if input_context:
-    mnist_dataset = mnist_dataset.shard(input_context.num_input_pipelines,
-                                        input_context.input_pipeline_id)
-
+  mnist_dataset = mnist_dataset.shard(hvd.size(), hvd.rank())
   mnist_dataset = mnist_dataset.shuffle(len(y_train)) \
       .cache().batch(BATCH_SIZE, drop_remainder=True).repeat()
   return mnist_dataset
@@ -54,15 +50,6 @@ def model_fn(features, labels, mode):
       from_logits=True, reduction=tf.compat.v1.losses.Reduction.NONE)(labels,
                                                                       logits)
   loss = tf.reduce_sum(loss) * (1. / BATCH_SIZE)
-  if mode == tf.estimator.ModeKeys.EVAL:
-    predictions = tf.argmax(input=logits, axis=-1)
-    eval_metric_ops = {
-        "accuracy":
-        tf.compat.v1.metrics.accuracy(labels=labels, predictions=predictions),
-    }
-    return tf.estimator.EstimatorSpec(mode,
-                                      loss=loss,
-                                      eval_metric_ops=eval_metric_ops)
 
   variables = model.trainable_variables
 
@@ -81,11 +68,11 @@ def model_fn(features, labels, mode):
                                             host_call=host_call)
 
 
-# Get the cluster configuration from the TF_CONFIG environment variable.
-cluster = tf.distribute.cluster_resolver.TFConfigClusterResolver()
-# Create strategy that places variables (including momentums) on the host.
-strategy = ipu.ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
-    cluster, variables_on_host=True)
+# Initialise the Horovod runtime.
+hvd.init()
+
+# Create a Horovod strategy that places variables on the host.
+strategy = ipu_horovod_strategy.IPUHorovodStrategy(variables_on_host=True)
 
 ipu_options = ipu.utils.create_ipu_config()
 ipu.utils.auto_select_ipus(ipu_options, num_ipus=1)
@@ -110,9 +97,4 @@ classifier = ipu.ipu_estimator.IPUEstimator(
 
 # Training progress is logged as INFO, so enable that logging level.
 tf.logging.set_verbosity(tf.logging.INFO)
-
-tf.estimator.train_and_evaluate(
-    classifier,
-    train_spec=tf.estimator.TrainSpec(input_fn=input_fn,
-                                      max_steps=args.num_steps),
-    eval_spec=tf.estimator.EvalSpec(input_fn=input_fn))
+classifier.train(input_fn=input_fn, max_steps=args.num_steps)

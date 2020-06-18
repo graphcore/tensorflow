@@ -199,6 +199,9 @@ build:v1 --action_env=TF2_BEHAVIOR=0
 build --config=v2
 test --config=v2
 
+# IPU specific options.
+build:ipu_horovod --action_env TF_NEED_IPU_HOROVOD=1
+
 # Default options should come above this line
 
 # Options from ./configure

@@ -241,8 +241,8 @@ StatusOr<bool> PipelineResourceVariablesOffload::OptimizePipeline(
 
   if (!remote_memory_supported_) {
     LOG(INFO)
-        << "Current configuration of the IPU devices does not support graph "
-           "streaming and therefore weight update only variables cannot be "
+        << "Current configuration of the IPU devices does not support remote "
+           "buffers and therefore weight update only variables cannot be "
            "offloaded to remote memory. Set the "
            "`offload_weight_update_variables` argument of "
            "`pipelining_ops.pipeline` to `False` to stop seeing this message.";

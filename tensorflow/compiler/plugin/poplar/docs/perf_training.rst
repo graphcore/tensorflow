@@ -341,7 +341,7 @@ of ``pipelining_ops.pipeline`` or
 ``False``.
 
 This feature requires the machine to be configured with support for
-`Poplar graph streaming` and if the machine does not support it, it is disabled.
+`Poplar remote buffers` and if the machine does not support it, it is disabled.
 
 Offloading variables into remote memory can reduce maximum memory liveness, but
 it can also increase the computation time of the weight update as more time is
