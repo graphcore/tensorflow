@@ -36,7 +36,7 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
     # Generate a simple IPU config.
     cfg = ipu.utils.create_ipu_config(profiling=True)
     cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=True)
-    cfg = ipu.utils.auto_select_ipus(cfg, [1, 2, 4])
+    cfg = ipu.utils.auto_select_ipus(cfg, [2, 4])
 
     # Configure IPU.
     ipu.utils.configure_ipu_system(cfg)
@@ -48,16 +48,16 @@ class ContribIpuGetConfigOpTest(test_util.TensorFlowTestCase,
 
     # Each element in the tensor is a serialised IpuOption belonging to
     # a different device/executor.
-    self.assertEqual(len(result), 3)
+    self.assertEqual(len(result), 2)
 
     for opt in result:
       # Verify that compile_ipu_code is True.
       self.assertTrue(opt.ipu_model_config.compile_ipu_code)
 
-      # Verify that the device has three IPU's attached.
-      self.assertEqual(len(opt.device_config), 3)
+      # Verify that the device has two IPU's attached.
+      self.assertEqual(len(opt.device_config), 2)
       for i, dev in enumerate(opt.device_config):
-        self.assertEqual(dev.auto_count, 2**i)
+        self.assertEqual(dev.auto_count, 2**(i + 1))
 
       # Verify that this IpuOption was user created.
       self.assertTrue(opt.creator_id == 1)
