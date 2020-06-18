@@ -143,3 +143,19 @@ http_archive(
         "https://storage.googleapis.com/download.tensorflow.org/models/speech_commands_v0.01.zip",
     ],
 )
+
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
+
+new_git_repository(
+    name = "horovod_repo",
+    remote = "https://github.com/horovod/horovod.git",
+    commit = "ed54730812f8a2a42532ed091dd21e148b1f5b31",
+    build_file = "//third_party/ipus/horovod:horovod.BUILD",
+)
+
+new_git_repository(
+    name = "lbfgspp_repo",
+    remote = "https://github.com/yixuan/LBFGSpp.git",
+    commit = "f047ef4586869855f00e72312e7b4d78d11694b1",
+    build_file = "//third_party/ipus/horovod:lbfgspp.BUILD",
+)

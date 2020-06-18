@@ -340,6 +340,9 @@ build:tensorflow_testing_rbe_win --config=tensorflow_testing_rbe
 build:tensorflow_testing_rbe_win --config=rbe_win
 # END TF REMOTE BUILD EXECUTION OPTIONS
 
+# IPU specific options.
+build:ipu_horovod --action_env TF_NEED_IPU_HOROVOD=1
+
 # Default options should come above this line
 
 # Options from ./configure

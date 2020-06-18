@@ -389,11 +389,11 @@ class MultiConvOp : public PoplarOpDef {
       case ConvType::DepthwiseConv: {
         if (is_conv_input) {
           out = poplin::multiconv::createInput(graph, create_args, conv_index,
-                                               &res.convolution_cache);
+                                               {}, &res.convolution_cache);
           out = ShuffleConvolutionInputToTensorflow(convolution_spec.dims, out);
         } else {
           out = poplin::multiconv::createWeights(graph, create_args, conv_index,
-                                                 &res.convolution_cache);
+                                                 {}, &res.convolution_cache);
           out = RemoveGroupsDimensionFromWeights(create_args[conv_index].params,
                                                  out);
           out =
@@ -499,7 +499,7 @@ class MultiConvOp : public PoplarOpDef {
 
       std::vector<poplar::Tensor> outputs = poplin::multiconv::convolution(
           graph, conv_args, all_transpose_and_flip_weights, prog, debug_name,
-          &res.convolution_cache);
+          {}, &res.convolution_cache);
 
       for (int64 i = 0; i != convolution_specs.size(); ++i) {
         poplar::Tensor output = outputs[i];

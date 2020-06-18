@@ -293,8 +293,8 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     # Note how there is only one multiconv instruction, which has two
     # convolutions.
     compute_sets = [
-        '/custom-call/MultiConv_1x1,_1x1/0',
-        '/custom-call/MultiConv_1x1,_1x1/1',
+        '/custom-call/MultiConv_*/0',
+        '/custom-call/MultiConv_*/1',
         'ipu/Mean*/reduce*/Reduce',
         'ipu/add',
         '__seed/set/setMasterSeed',
