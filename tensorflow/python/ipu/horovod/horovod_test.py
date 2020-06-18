@@ -226,7 +226,10 @@ if __name__ == "__main__":
     # Already in MPI context, run the tests.
     test.main()
   else:
-    # Run this file in MPI context.
-    mpirun = ["mpirun", "--tag-output", "-np", str(NUM_WORKERS)]
+    # Run this file in MPI context (buildbot runs as root).
+    mpirun = [
+        "mpirun", "--allow-run-as-root", "--tag-output", "-np",
+        str(NUM_WORKERS)
+    ]
     cmd = ["python", __file__]
     subprocess.check_output(mpirun + cmd)
