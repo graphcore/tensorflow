@@ -1139,6 +1139,10 @@ bool PoplarExecutor::HasPoplarTarget() const {
   return PoplarXlaFlags::Get().use_ipu_model || ipu_.TargetConfigured();
 }
 
+const IpuOptions& PoplarExecutor::GetIpuOptions() const {
+  return current_config_;
+}
+
 bool PoplarExecutor::PoplarDeviceIsAttached() const { return device_attached_; }
 
 Status PoplarExecutor::AttachToPoplarDevice() {

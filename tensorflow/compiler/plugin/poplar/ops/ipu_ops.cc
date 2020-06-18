@@ -39,4 +39,8 @@ REGISTER_OP("IpuModelUsed")
     .Doc(
         "Return true if running on the model or false if real hardware is"
         " used.");
+
+REGISTER_OP("IpuGetConfiguration")
+    .Output("out: string")
+    .Doc("Return serialized IpuOptions structs.");
 }  // namespace tensorflow
