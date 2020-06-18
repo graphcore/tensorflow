@@ -71,6 +71,12 @@ Build instructions
 
         export TF_POPLAR_BASE=/path/to/poplar_sdk/poplar-ubuntu_18_04-x.x.x
 
+    (Optional) To build against a custom built PopLibs version which is not the one shipped with the SDK, set an environment variable to point to the base of a built PopLibs installation
+
+    .. code-block:: console
+
+        export TF_POPLIBS_BASE=/path/to/poplibs/
+
     To set up the Python build environment and configure TensorFlow
 
     .. code-block:: console
