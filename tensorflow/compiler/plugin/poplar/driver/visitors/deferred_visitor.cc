@@ -970,14 +970,35 @@ poplar::program::Sequence DeferredVisitor::GetSequence(
   return seq;
 }
 
+namespace {
+ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgVectors& inputs,
+                                             bool reallocate) {
+  ReallocateInputsInfo output;
+  output.reserve(inputs.size());
+  for (const auto& input : inputs) {
+    output.emplace_back(input.size(), reallocate);
+  }
+  return output;
+}
+}  // namespace
+
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgVectors& inputs,
     const std::string& name,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     bool reallocate_inputs)
+    : InplaceDeferredVisitor(
+          res, inputs, name, dependent_subcomputations,
+          GetReallocateInputsInfo(inputs, reallocate_inputs)) {}
+
+InplaceDeferredVisitor::InplaceDeferredVisitor(
+    CompilerResources& res, const DeferredArgVectors& inputs,
+    const std::string& name,
+    const std::vector<const DeferredVisitor*>& dependent_subcomputations,
+    const ReallocateInputsInfo& reallocate_inputs_info)
     : DeferredVisitor(res, inputs, name, false, true,
                       dependent_subcomputations),
-      reallocate_inputs_(reallocate_inputs) {}
+      reallocate_inputs_info_(reallocate_inputs_info) {}
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst) {
@@ -987,13 +1008,17 @@ Status InplaceDeferredVisitor::PropagateDeferredAllocations(
 
 StatusOr<poplar::program::Sequence>
 InplaceDeferredVisitor::GetPreambleCopies() {
+  CHECK_EQ(callsite_inputs_.size(), computation_inputs_.size());
+  CHECK_EQ(callsite_inputs_.size(), reallocate_inputs_info_.size());
   poplar::program::Sequence seq;
   for (uint64 i = 0; i != callsite_inputs_.size(); ++i) {
+    CHECK_EQ(callsite_inputs_[i].size(), computation_inputs_[i].size());
+    CHECK_EQ(callsite_inputs_[i].size(), reallocate_inputs_info_[i].size());
     for (uint64 j = 0; j != callsite_inputs_[i].size(); ++j) {
       if (callsite_inputs_[i][j] &&
           *callsite_inputs_[i][j] != computation_inputs_[i][j]) {
         // For inplace vistors, they should only differ if we allow relocation.
-        if (!reallocate_inputs_) {
+        if (!reallocate_inputs_info_[i][j]) {
           return FailedPrecondition("Input should have not been reallocated.");
         }
         VLOG(1) << "Adding a copy for input (" << i << ", " << j << ").";
@@ -1041,8 +1066,11 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
 
   poplar::Tensor output;
   bool add_output_tensor = true;
+  const bool reallocate_input =
+      reallocate_inputs_info_[param_num]
+                             [input_location.flattened_output_tuple_index];
 
-  if (callsite_tensor && !reallocate_inputs_) {
+  if (callsite_tensor && !reallocate_input) {
     // If a tensor is passed as an input and we are not reallocating inputs then
     // use it and post process it immediately.
     output = *callsite_tensor;
