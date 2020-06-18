@@ -23,6 +23,7 @@ import os
 import time
 import numpy as np
 
+from tensorflow.compiler.plugin.poplar.driver.config_pb2 import IpuOptions
 from tensorflow.compiler.plugin.poplar.driver.trace_pb2 import IpuTraceEvent
 from tensorflow.compiler.plugin.poplar.driver import config_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_ipu_ops
@@ -38,6 +39,7 @@ from tensorflow.compiler.plugin.poplar.tools.tensorflow_weights_extractor import
     export_variables_from_live_session, export_variables_from_live_model,
     import_data_in_live_session, import_data_in_live_model)
 # pylint: enable=unused-import
+from tensorflow.compat.v1 import executing_eagerly
 from tensorflow.core.framework import attr_value_pb2
 from tensorflow.python.client import session as session_lib
 from tensorflow.python.distribute import values
@@ -201,6 +203,43 @@ def configure_ipu_system(config, device="cpu"):
 
   with session_lib.Session(graph=g) as sess:
     sess.run(cfg_op)
+
+
+def get_ipu_config(session=None):
+  """Get the configuration of an IPU system. 
+
+  Args:
+    session: An optional session on which to execute.
+
+  Returns:
+    A list of IpuOption instances, one for each PoplarExecutor.
+  """
+  configurations = None
+
+  # Get the serialized output.
+  if executing_eagerly():
+    assert not session, "No session is required for eager execution."
+    configurations = gen_ipu_ops.ipu_get_configuration().numpy()
+  else:
+    s = session if session else session_lib.Session()
+    configurations = s.run(gen_ipu_ops.ipu_get_configuration())
+
+  # Deserialize and determine if a valid config exists,
+  # i.e. user has succesfully called ipu_configure_hardware.
+  deserialized = []
+  valid = False
+  for conf in configurations:
+    # Deserialize.
+    opt = IpuOptions()
+    opt.ParseFromString(conf)
+    deserialized.append(opt)
+
+    valid |= len(opt.device_config) > 0
+
+  if not valid:
+    raise RuntimeError("No IPU devices configured.")
+
+  return deserialized
 
 
 def running_on_ipu_model():

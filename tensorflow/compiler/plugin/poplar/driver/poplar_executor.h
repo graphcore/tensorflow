@@ -276,6 +276,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   bool PoplarDeviceIsAttached() const;
   bool HasPoplarTarget() const;
 
+  const IpuOptions& GetIpuOptions() const;
+
   const poplar::Target& GetOrCreatePoplarTarget();
 
   const poplar::OptionFlags& GetOptionsFlags() const { return option_flags_; }
