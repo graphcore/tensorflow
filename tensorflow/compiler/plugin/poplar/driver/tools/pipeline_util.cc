@@ -280,6 +280,35 @@ Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages) {
   return Status::OK();
 }
 
+StatusOr<bool> FixRootInstruction(HloComputation* comp) {
+  HloInstruction* root = comp->root_instruction();
+  if (root->opcode() == HloOpcode::kTuple) {
+    return false;
+  }
+  if (!root->shape().IsTuple()) {
+    return FailedPrecondition(
+        "Expected the root instruction to have a tuple output shape.");
+  }
+  // Create a GTE from each subshape.
+  const int64 num_elements = ShapeUtil::TupleElementCount(root->shape());
+  std::vector<HloInstruction*> gtes(num_elements);
+  for (int64 tuple_index = 0; tuple_index != num_elements; ++tuple_index) {
+    TF_ASSIGN_OR_RETURN(gtes[tuple_index],
+                        MakeGetTupleElementHlo(root, tuple_index));
+    if (root->has_sharding()) {
+      // If there is any sharding, then forward it.
+      gtes[tuple_index]->set_sharding(root->sharding().GetSubSharding(
+          root->shape(), ShapeIndex{tuple_index}));
+    }
+  }
+  // Create the root tuple.
+  HloInstruction* new_root =
+      comp->AddInstruction(HloInstruction::CreateTuple(gtes));
+  root->SetupDerivedInstruction(new_root);
+  comp->set_root_instruction(new_root);
+  return true;
+}
+
 Status FixRootInstructions(const PipelineStages& pipeline_stages) {
   const uint64 num_stages = pipeline_stages.forward.size() +
                             pipeline_stages.backward.size() +
@@ -292,33 +321,7 @@ Status FixRootInstructions(const PipelineStages& pipeline_stages) {
     stages.back() = *pipeline_stages.resource_update;
   }
   for (const HloInstruction* stage : stages) {
-    HloComputation* comp = stage->to_apply();
-    HloInstruction* root = comp->root_instruction();
-    if (root->opcode() == HloOpcode::kTuple) {
-      continue;
-    }
-    if (!root->shape().IsTuple()) {
-      return UnimplementedStrCat("Expected the PipelineStage(Backward) ",
-                                 stage->ToString(),
-                                 " to have a tuple output shape.");
-    }
-    // Create a GTE from each subshape.
-    const int64 num_elements = ShapeUtil::TupleElementCount(root->shape());
-    std::vector<HloInstruction*> gtes(num_elements);
-    for (int64 tuple_index = 0; tuple_index != num_elements; ++tuple_index) {
-      TF_ASSIGN_OR_RETURN(gtes[tuple_index],
-                          MakeGetTupleElementHlo(root, tuple_index));
-      if (root->has_sharding()) {
-        // If there is any sharding, then forward it.
-        gtes[tuple_index]->set_sharding(root->sharding().GetSubSharding(
-            root->shape(), ShapeIndex{tuple_index}));
-      }
-    }
-    // Create the root tuple.
-    HloInstruction* new_root =
-        comp->AddInstruction(HloInstruction::CreateTuple(gtes));
-    root->SetupDerivedInstruction(new_root);
-    comp->set_root_instruction(new_root);
+    TF_RETURN_IF_ERROR(FixRootInstruction(stage->to_apply()).status());
   }
   return Status::OK();
 }

@@ -73,6 +73,10 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
     HloInstruction* pipeline_stage, CallGraph* call_graph);
 
+// Make sure that the root instruction of the computation is a Tuple
+// instruction.
+StatusOr<bool> FixRootInstruction(HloComputation* comp);
+
 // Makes sure that the root instruction of each stage is a Tuple instruction
 // (not just tuple shaped).
 Status FixRootInstructions(const PipelineStages& pipeline_stages);

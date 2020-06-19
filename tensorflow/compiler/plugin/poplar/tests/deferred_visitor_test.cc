@@ -25,6 +25,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/convolution_classifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/copy_inserter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/module_flatten.h"
@@ -75,6 +76,7 @@ std::unique_ptr<CompilerResources> GetMockResources(HloModule* module,
 HloPassPipeline GetMockPipeline(CompilerResources& resources) {
   HloPassPipeline pipeline("mock_pipeline");
   pipeline.AddPass<ModuleFlatten>(resources.annotations);
+  pipeline.AddPass<CopyInserter>();
   pipeline.AddPass<InplaceFinder>();
   pipeline.AddPass<ShardingPass>();
   pipeline.AddPass<HloDCE>();
@@ -418,7 +420,7 @@ _functionalize_body_1__.17 (arg_tuple.18: (s32[], s32[], f32[], s32[], f32[2], f
   constant.26 = s32[] constant(1)
   add.27 = s32[] add(get-tuple-element.19, constant.26)
   get-tuple-element.20 = s32[] get-tuple-element(arg_tuple.18), index=1
-  constant.30 = s32[] constant(1)
+  constant.30 = s32[] constant(2)
   add.31 = s32[] add(get-tuple-element.20, constant.30)
   get-tuple-element.24 = f32[1,4,4,2] get-tuple-element(arg_tuple.18), index=5
   get-tuple-element.25 = f32[1,1,2,2] get-tuple-element(arg_tuple.18), index=6
@@ -482,18 +484,13 @@ cond_wrapper.77 (inputs.78: (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f
 }
 
 ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32[2], arg2.3: f32[1,1,2,2]) -> (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) {
-  constant.4 = s32[] constant(0)
-  constant.5 = s32[] constant(0)
-  constant.6 = f32[] constant(0)
-  constant.7 = s32[] constant(10)
-  constant.8 = s32[] constant(0)
-  constant.9 = s32[] constant(0)
-  constant.10 = f32[] constant(0)
-  constant.11 = s32[] constant(10)
+  constant1 = s32[] constant(0)
+  constant2 = f32[] constant(10)
+  constant3 = s32[] constant(10)
   arg1.2 = f32[2] parameter(1)
   arg0.1 = f32[1,4,4,2] parameter(0)
   arg2.3 = f32[1,1,2,2] parameter(2)
-  tuple.12 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) tuple(constant.8, constant.9, constant.10, constant.11, arg1.2, arg0.1, arg2.3)
+  tuple.12 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) tuple(constant1, constant1, constant2, constant3, arg1.2, arg0.1, arg2.3)
   ROOT while.81 = (s32[], s32[], f32[], s32[], f32[2], f32[1,4,4,2], f32[1,1,2,2]) while(tuple.12), condition=cond_wrapper.77, body=_functionalize_body_1__.17
 }
 )";
@@ -512,9 +509,9 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   // that rather than creating a new layout and copying.
   auto entry_tensor_map = resources->tensor_maps.GetTensorMapForComputation(
       entry_computation->name());
-  auto entry_input0 = entry_computation->parameter_instruction(0);
-  auto entry_input2 = entry_computation->parameter_instruction(2);
   auto entry_root_instruction = entry_computation->root_instruction();
+  auto entry_loop_input_tensors = FindInstructionOutputs(
+      entry_tensor_map, *resources.get(), entry_root_instruction->operand(0));
   auto entry_loop_tensors = FindInstructionOutputs(
       entry_tensor_map, *resources.get(), entry_root_instruction);
 
@@ -529,11 +526,19 @@ ENTRY cluster_4790582643659166751_f15n_0__.98 (arg0.1: f32[1,4,4,2], arg1.2: f32
   // Check the tensors.
   auto num_inputs = CountShapes(loop_tuple->shape());
   EXPECT_EQ(entry_loop_tensors.size(), num_inputs);
+
+  EXPECT_EQ(entry_loop_input_tensors.size(), loop_tuple_tensors.size());
+  EXPECT_EQ(entry_loop_input_tensors[0], loop_tuple_tensors[0]);
+  // Duplicate operand gets reallocated.
+  EXPECT_NE(entry_loop_input_tensors[1], loop_tuple_tensors[1]);
+  EXPECT_EQ(entry_loop_input_tensors[2], loop_tuple_tensors[2]);
+  EXPECT_EQ(entry_loop_input_tensors[3], loop_tuple_tensors[3]);
+  EXPECT_EQ(entry_loop_input_tensors[4], loop_tuple_tensors[4]);
+  EXPECT_EQ(entry_loop_input_tensors[5], loop_tuple_tensors[5]);
+  EXPECT_EQ(entry_loop_input_tensors[6], loop_tuple_tensors[6]);
+
   EXPECT_EQ(entry_loop_tensors.size(), loop_tuple_tensors.size());
-  EXPECT_EQ(entry_loop_tensors[num_inputs - 1],
-            loop_tuple_tensors[num_inputs - 1]);
-  EXPECT_EQ(entry_loop_tensors[num_inputs - 2],
-            loop_tuple_tensors[num_inputs - 2]);
+  EXPECT_EQ(entry_loop_tensors, loop_tuple_tensors);
 }
 
 TEST_F(DeferredVisitorTest, TestDeferredAllocationInsideLoops) {

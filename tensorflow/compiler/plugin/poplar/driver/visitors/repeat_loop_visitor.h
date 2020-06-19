@@ -28,7 +28,8 @@ struct CompilerResources;
 class RepeatLoopVisitor : public InplaceDeferredVisitor {
  public:
   RepeatLoopVisitor(CompilerResources& res, const DeferredArgVectors& inputs,
-                    bool reallocate_inputs, const std::string& name);
+                    const ReallocateInputsInfo& reallocate_inputs_info,
+                    const std::string& name);
 
   Status HandleDeferredAllocationCall(HloInstruction* inst) override;
 

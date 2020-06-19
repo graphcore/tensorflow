@@ -381,6 +381,8 @@ class DeferredVisitor : public FullVisitor {
   poplar::program::Sequence merged_infeed_sequence;
 };
 
+using ReallocateInputsInfo = std::vector<std::vector<bool>>;
+
 // Similar to DeferredVisitor, but the inputs are used inplace.
 class InplaceDeferredVisitor : public DeferredVisitor {
  public:
@@ -389,6 +391,12 @@ class InplaceDeferredVisitor : public DeferredVisitor {
       const std::string& name,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations = {},
       bool reallocate_inputs = false);
+
+  InplaceDeferredVisitor(
+      CompilerResources& res, const DeferredArgVectors& inputs,
+      const std::string& name,
+      const std::vector<const DeferredVisitor*>& dependent_subcomputations,
+      const ReallocateInputsInfo& reallocate_inputs_info);
 
   // Function called for each tensor in a parameter HloInstruction.
   // Input location is the location at which the tensor is an input to the
@@ -422,7 +430,7 @@ class InplaceDeferredVisitor : public DeferredVisitor {
       int64 output_flat_index);
 
  private:
-  const bool reallocate_inputs_;
+  const ReallocateInputsInfo reallocate_inputs_info_;
 };
 
 }  // namespace poplarplugin

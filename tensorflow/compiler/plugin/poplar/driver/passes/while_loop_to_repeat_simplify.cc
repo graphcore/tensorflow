@@ -15,19 +15,19 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 
+#include <map>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_annotations.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/flags.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/while_loop_util.h"
-
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/service/tuple_simplifier.h"
 #include "tensorflow/compiler/xla/service/while_loop_analysis.h"
-
-#include <stdlib.h>
-#include <map>
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 
@@ -201,10 +201,15 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
   HloComputation* repeat_body =
       module->AddEmbeddedComputation(while_inst->while_body()->Clone());
   HloInstruction* repeat_body_root = repeat_body->root_instruction();
+  HloInstruction* input_tuple = while_inst->mutable_operand(0);
+
+  // If the number of iterations is 0, don't create a loop.
+  if (number_of_iterations == 0) {
+    return input_tuple;
+  }
 
   // Note that we can also clone the input tuple iff it's a kTuple and then we
   // can hoist out constants to that input tuple.
-  HloInstruction* input_tuple = while_inst->mutable_operand(0);
   bool can_hoist_input_tuple = input_tuple->opcode() == HloOpcode::kTuple;
   input_tuple = can_hoist_input_tuple
                     ? parent_computation->AddInstruction(input_tuple->Clone())
@@ -342,9 +347,49 @@ HloInstruction* ConvertToRepeat(HloInstruction* while_inst,
     }
   }
 
-  HloInstruction* repeat_call =
-      parent_computation->AddInstruction(HloInstruction::CreateCall(
-          input_tuple->shape(), {input_tuple}, repeat_body));
+  HloInstruction* repeat_call;
+  // Unpack the tuple parameters if possible.
+  if (input_tuple->opcode() == HloOpcode::kTuple) {
+    // Create a new computation which handles the parameters separately.
+    HloComputation::Builder builder(repeat_body->name() + "_repeat");
+    auto new_operands = input_tuple->operands();
+    absl::flat_hash_map<HloInstruction*, HloInstruction*> clone_map;
+
+    std::vector<HloInstruction*> new_parameters(new_operands.size());
+    for (int64 param_idx = 0; param_idx != new_operands.size(); ++param_idx) {
+      new_parameters[param_idx] =
+          builder.AddInstruction(HloInstruction::CreateParameter(
+              param_idx, new_operands[param_idx]->shape(),
+              absl::StrCat("arg_", param_idx)));
+    }
+    for (HloInstruction* inst : repeat_body->MakeInstructionPostOrder()) {
+      if (inst->opcode() == HloOpcode::kParameter) {
+        // Use the new parameters for the tuple instruction.
+        CHECK_EQ(inst->parameter_number(), 0);
+        clone_map[inst] =
+            builder.AddInstruction(input_tuple->CloneWithNewOperands(
+                input_tuple->shape(), new_parameters));
+      } else {
+        std::vector<HloInstruction*> clone_operands(inst->operand_count());
+        absl::c_transform(inst->operands(), clone_operands.begin(),
+                          [&clone_map](HloInstruction* old_operand) {
+                            return clone_map.at(old_operand);
+                          });
+        // Clone new instruction.
+        clone_map[inst] = builder.AddInstruction(
+            inst->CloneWithNewOperands(inst->shape(), clone_operands));
+      }
+    }
+    HloComputation* new_repeat_body = module->AddEmbeddedComputation(
+        builder.Build(clone_map.at(repeat_body_root)));
+
+    repeat_call = parent_computation->AddInstruction(HloInstruction::CreateCall(
+        while_inst->shape(), new_operands, new_repeat_body));
+  } else {
+    repeat_call = parent_computation->AddInstruction(HloInstruction::CreateCall(
+        while_inst->shape(), {input_tuple}, repeat_body));
+  }
+
   auto backend_config =
       while_inst->backend_config<PoplarBackendConfig>().ValueOrDie();
   auto* call_config = backend_config.mutable_call_config();
@@ -430,6 +475,7 @@ StatusOr<bool> WhileLoopToRepeatSimplify::Run(HloModule* module) {
 
           while_inst->parent()->RemoveInstructionAndUnusedOperands(while_inst);
           PruneComputations(module);
+          TF_RETURN_IF_ERROR(TupleSimplifier(true).Run(module).status());
           return true;
         }
       }

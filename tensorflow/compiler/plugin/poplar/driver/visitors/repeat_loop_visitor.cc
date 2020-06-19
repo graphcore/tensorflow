@@ -31,11 +31,10 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-RepeatLoopVisitor::RepeatLoopVisitor(CompilerResources& res,
-                                     const DeferredArgVectors& inputs,
-                                     bool reallocate_inputs,
-                                     const std::string& name)
-    : InplaceDeferredVisitor(res, inputs, name, {}, reallocate_inputs) {
+RepeatLoopVisitor::RepeatLoopVisitor(
+    CompilerResources& res, const DeferredArgVectors& inputs,
+    const ReallocateInputsInfo& reallocate_inputs_info, const std::string& name)
+    : InplaceDeferredVisitor(res, inputs, name, {}, reallocate_inputs_info) {
   // Push a new vector for the zeroing sequences onto the stack.
   res.gradient_accumulation_zeroing_sequences.push({});
 }

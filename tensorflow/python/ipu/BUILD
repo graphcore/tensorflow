@@ -792,6 +792,19 @@ tf_py_test(
     ],
 )
 
+tf_py_test(
+    name = "utils_get_config_test",
+    size = "medium",
+    srcs = ["tests/utils_get_config_test.py"],
+    additional_deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/compiler/plugin/poplar:test_utils_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+    shard_count = 2,
+)
+
 py_library(
     name = "pipelining_test_util",
     srcs = ["tests/pipelining_test_util.py"],
@@ -1078,6 +1091,7 @@ test_suite(
         "random_constant_matmul_test",
         "recompute_suggestion_test",
         "user_ops_test",
+        "utils_get_config_test",
         "utils_test",
     ],
 )

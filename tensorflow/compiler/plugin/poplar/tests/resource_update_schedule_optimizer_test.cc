@@ -79,8 +79,9 @@ pipeline {
   in0 = f32[1,4,4,2] get-tuple-element(infeed), index=0
   in1 = f32[1,4,4,2] parameter(0)
   in2 = f32[1,4,4,2] parameter(1)
-  in3 = f32[] parameter(2)
-  stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(in1, in0, in3), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
+  in3 = f32[1,4,4,2] parameter(2)
+  in4 = f32[] parameter(3)
+  stage_0 = (f32[1,4,4,2], f32[1,4,4,2], f32[]) call(in1, in0, in4), to_apply=stage_0_fwd, backend_config="{\"callConfig\":{\"type\":\"PipelineStage\",\"pipelineStageConfig\":{\"stageId\":\"0\"}}}", sharding={maximal device=0}
   stage_0_0 = f32[1,4,4,2] get-tuple-element(stage_0), index=0
   stage_0_1 = f32[1,4,4,2] get-tuple-element(stage_0), index=1
   stage_0_2 = f32[] get-tuple-element(stage_0), index=2
@@ -97,14 +98,15 @@ pipeline {
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
   gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, in3)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, in4)
 }
 
 ENTRY e {
   e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
-  e.in2 = f32[] parameter(2), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[]) call(e.in0, e.in1, e.in2), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
+  e.in3 = f32[] parameter(3), parameter_replication={false}
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[]) call(e.in0, e.in1, e.in2, e.in3), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
   auto config = GetModuleConfigForTest();

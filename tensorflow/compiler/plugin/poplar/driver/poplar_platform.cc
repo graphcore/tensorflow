@@ -149,6 +149,28 @@ Status PoplarPlatform::ConfigurePoplarDevices(const IpuOptions& opts) {
   return Status::OK();
 }
 
+Status PoplarPlatform::GetIpuOptions(std::vector<IpuOptions>& out) {
+  CHECK(out.empty());
+
+  const auto num_devices = VisibleDeviceCount();
+  if (num_devices <= 0) {
+    return Status::OK();
+  }
+
+  for (int ordinal = 0; ordinal < num_devices; ordinal++) {
+    TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
+                        ExecutorForDevice(ordinal));
+
+    auto* e = static_cast<PoplarExecutor*>(executor->implementation());
+    if (!e->IpuOptionsConfigured()) {
+      break;
+    }
+    out.push_back(e->GetIpuOptions());
+  }
+
+  return Status::OK();
+}
+
 Status PoplarPlatform::ResetSeed(int ordinal, int seed) {
   if (ordinal < VisibleDeviceCount()) {
     TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,

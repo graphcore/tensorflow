@@ -970,14 +970,35 @@ poplar::program::Sequence DeferredVisitor::GetSequence(
   return seq;
 }
 
+namespace {
+ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgVectors& inputs,
+                                             bool reallocate) {
+  ReallocateInputsInfo output;
+  output.reserve(inputs.size());
+  for (const auto& input : inputs) {
+    output.emplace_back(input.size(), reallocate);
+  }
+  return output;
+}
+}  // namespace
+
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgVectors& inputs,
     const std::string& name,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     bool reallocate_inputs)
+    : InplaceDeferredVisitor(
+          res, inputs, name, dependent_subcomputations,
+          GetReallocateInputsInfo(inputs, reallocate_inputs)) {}
+
+InplaceDeferredVisitor::InplaceDeferredVisitor(
+    CompilerResources& res, const DeferredArgVectors& inputs,
+    const std::string& name,
+    const std::vector<const DeferredVisitor*>& dependent_subcomputations,
+    const ReallocateInputsInfo& reallocate_inputs_info)
     : DeferredVisitor(res, inputs, name, false, true,
                       dependent_subcomputations),
-      reallocate_inputs_(reallocate_inputs) {}
+      reallocate_inputs_info_(reallocate_inputs_info) {}
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst) {
@@ -987,13 +1008,17 @@ Status InplaceDeferredVisitor::PropagateDeferredAllocations(
 
 StatusOr<poplar::program::Sequence>
 InplaceDeferredVisitor::GetPreambleCopies() {
+  CHECK_EQ(callsite_inputs_.size(), computation_inputs_.size());
+  CHECK_EQ(callsite_inputs_.size(), reallocate_inputs_info_.size());
   poplar::program::Sequence seq;
   for (uint64 i = 0; i != callsite_inputs_.size(); ++i) {
+    CHECK_EQ(callsite_inputs_[i].size(), computation_inputs_[i].size());
+    CHECK_EQ(callsite_inputs_[i].size(), reallocate_inputs_info_[i].size());
     for (uint64 j = 0; j != callsite_inputs_[i].size(); ++j) {
       if (callsite_inputs_[i][j] &&
           *callsite_inputs_[i][j] != computation_inputs_[i][j]) {
         // For inplace vistors, they should only differ if we allow relocation.
-        if (!reallocate_inputs_) {
+        if (!reallocate_inputs_info_[i][j]) {
           return FailedPrecondition("Input should have not been reallocated.");
         }
         VLOG(1) << "Adding a copy for input (" << i << ", " << j << ").";
@@ -1041,8 +1066,11 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
 
   poplar::Tensor output;
   bool add_output_tensor = true;
+  const bool reallocate_input =
+      reallocate_inputs_info_[param_num]
+                             [input_location.flattened_output_tuple_index];
 
-  if (callsite_tensor && !reallocate_inputs_) {
+  if (callsite_tensor && !reallocate_input) {
     // If a tensor is passed as an input and we are not reallocating inputs then
     // use it and post process it immediately.
     output = *callsite_tensor;
@@ -1095,22 +1123,21 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
   // computation (PARTIAL_ALIAS).
   // 5. be the exact same tensor as input `o` (IDENTICAL_ALIAS).
 
-  int64 num_tensors = outputs_.size();
+  const int64 num_tensors = outputs_.size();
   std::vector<AliasType> alias_type(num_tensors, AliasType::NO_ALIAS_USED);
 
   // Create a flat version of the loop inputs.
-  TensorVector loop_inputs(num_tensors);
-  auto input_itr = loop_inputs.begin();
-  for (size_t input_idx = 0; input_idx != computation_inputs_.size();
-       ++input_idx) {
-    absl::c_copy(computation_inputs_[input_idx], input_itr);
-    input_itr = std::next(input_itr, computation_inputs_[input_idx].size());
+  TensorVector loop_inputs;
+  loop_inputs.reserve(num_tensors);
+  for (TensorVector& inputs : computation_inputs_) {
+    loop_inputs.insert(loop_inputs.end(), inputs.begin(), inputs.end());
   }
+
   // Outputs are already flat.
   TensorVector loop_outputs = outputs_;
 
   // Find all the alias information index by output tensor.
-  for (unsigned int o = 0; o < num_tensors; o++) {
+  for (int64 o = 0; o < num_tensors; o++) {
     int64 param_number, param_index;
     std::tie(param_number, param_index) = GetParameterNumberAndFlatIndex(o);
     const bool input_used = InputIsAllocated(param_number, param_index);
@@ -1119,7 +1146,7 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
         alias_type[o] = AliasType::IDENTICAL_ALIAS;
       }
       // Check whether a temporary copy is required.
-      for (unsigned int i = 0; i < num_tensors; i++) {
+      for (int64 i = 0; i < num_tensors; i++) {
         int64 input_param_number, input_param_index;
         std::tie(input_param_number, input_param_index) =
             GetParameterNumberAndFlatIndex(i);
@@ -1136,7 +1163,7 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
       // alias any of the inputs which might have changed during
       // computation.
       alias_type[o] = AliasType::NO_ALIAS_NOT_USED;
-      for (unsigned int i = 0; i < num_tensors; i++) {
+      for (int64 i = 0; i < num_tensors; i++) {
         int64 input_param_number, input_param_index;
         std::tie(input_param_number, input_param_index) =
             GetParameterNumberAndFlatIndex(i);
@@ -1210,7 +1237,7 @@ std::pair<int64, int64> InplaceDeferredVisitor::GetParameterNumberAndFlatIndex(
     int64 output_flat_index) {
   int64 parameter_number = 0;
   int64 flat_index = output_flat_index;
-  while (flat_index >
+  while (flat_index >=
          static_cast<int64>(computation_inputs_[parameter_number].size())) {
     flat_index -= computation_inputs_[parameter_number].size();
     parameter_number++;

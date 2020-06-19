@@ -276,6 +276,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   bool PoplarDeviceIsAttached() const;
   bool HasPoplarTarget() const;
 
+  const IpuOptions& GetIpuOptions() const;
+  const bool IpuOptionsConfigured() const;
+
   const poplar::Target& GetOrCreatePoplarTarget();
 
   const poplar::OptionFlags& GetOptionsFlags() const { return option_flags_; }
@@ -811,6 +814,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   ArgsHandleMap args_map_;
   OutputsHandleMap outputs_map_;
 
+  bool configured_;
   IpuOptions current_config_;
 
   std::list<tensorflow::IpuTraceEvent> reports_;
