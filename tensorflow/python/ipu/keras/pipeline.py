@@ -1083,4 +1083,4 @@ class Model(_IpuModelBase):
            signatures=None,
            options=None):
     raise NotImplementedError(
-        "IPU models do not support the `save` interface.")
+        "IPU keras models do not support the `save` interface.")
