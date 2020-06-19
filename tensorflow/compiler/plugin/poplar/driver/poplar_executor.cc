@@ -317,6 +317,7 @@ PoplarExecutor::PoplarExecutor()
       current_engine_(nullptr),
       device_attached_(false),
       poplar_device_hash_(0),
+      configured_(false),
       has_cycle_counter_(false),
       rendezvous_(tensorflow::NewLocalRendezvous()) {
   // TODO should this use the time/ms?
@@ -1139,6 +1140,12 @@ bool PoplarExecutor::HasPoplarTarget() const {
   return PoplarXlaFlags::Get().use_ipu_model || ipu_.TargetConfigured();
 }
 
+const IpuOptions& PoplarExecutor::GetIpuOptions() const {
+  return current_config_;
+}
+
+const bool PoplarExecutor::IpuOptionsConfigured() const { return configured_; }
+
 bool PoplarExecutor::PoplarDeviceIsAttached() const { return device_attached_; }
 
 Status PoplarExecutor::AttachToPoplarDevice() {
@@ -1340,6 +1347,7 @@ Status PoplarExecutor::ConfigurePoplarDevice(const IpuOptions& cfg) {
     }
   }
   current_config_ = cfg;
+  configured_ = true;
 
   if (!device_attached_) {
     TF_RETURN_IF_ERROR(CreatePoplarTarget());

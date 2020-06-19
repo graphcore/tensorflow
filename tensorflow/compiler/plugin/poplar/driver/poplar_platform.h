@@ -19,6 +19,7 @@ limitations under the License.
 #include <list>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/synchronization/mutex.h"
 
@@ -79,12 +80,16 @@ class PoplarPlatform : public se::Platform {
 
   void UnregisterTraceListener(se::TraceListener* listener) override;
 
-  StatusOr<std::unique_ptr<se::DeviceDescription>>
-  DescriptionForDevice(int ordinal) const override;
+  StatusOr<std::unique_ptr<se::DeviceDescription>> DescriptionForDevice(
+      int ordinal) const override;
 
   // Poplar specific interface
 
   Status ConfigurePoplarDevices(const IpuOptions& opts);
+
+  // Cannot be const qualified as a call to
+  // PoplarPlatform::ExecuteForDevice is made.
+  Status GetIpuOptions(std::vector<IpuOptions>& out);
 
   Status ResetSeed(int ordinal, int seed);
 

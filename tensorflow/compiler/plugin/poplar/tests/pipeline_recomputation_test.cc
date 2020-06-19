@@ -921,14 +921,13 @@ pipeline {
   call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
-  gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
 }
 
 ENTRY e {
   e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
   auto config = GetModuleConfigForTest();
@@ -1023,14 +1022,13 @@ pipeline {
   call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(stage_0_bwd_0, stage_1_bwd_1, stage_1_bwd_2), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\"}}"
   gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
   gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
-  gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
-  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2)
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1)
 }
 
 ENTRY e {
   e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
   e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
-  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
+  ROOT e.call = (f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1), to_apply=pipeline, backend_config="{\"callConfig\":{\"type\":\"Pipeline\"}}"
 }
 )";
   auto config = GetModuleConfigForTest();

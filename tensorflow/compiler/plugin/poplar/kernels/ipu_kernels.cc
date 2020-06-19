@@ -147,4 +147,40 @@ class IpuModelUsedOp : public OpKernel {
 
 REGISTER_KERNEL_BUILDER(Name("IpuModelUsed").Device(DEVICE_CPU),
                         IpuModelUsedOp);
+
+class IpuGetConfigurationOp : public OpKernel {
+ public:
+  explicit IpuGetConfigurationOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
+  ~IpuGetConfigurationOp() override {}
+
+  void Compute(OpKernelContext* ctx) override {
+    auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
+    OP_REQUIRES(ctx, platform.ok(), platform.status());
+
+    auto* p = static_cast<xp::PoplarPlatform*>(platform.ValueOrDie());
+
+    // Get IpuOptions from poplar executors.
+    std::vector<xp::IpuOptions> out_opts;
+    OP_REQUIRES_OK(ctx, p->GetIpuOptions(out_opts));
+
+    // Serialize and write out.
+    Tensor* output_tensor = nullptr;
+    OP_REQUIRES_OK(ctx,
+                   ctx->allocate_output("out", TensorShape({out_opts.size()}),
+                                        &output_tensor));
+    auto output_flat = output_tensor->flat<string>();
+
+    for (size_t i = 0; i < out_opts.size(); i++) {
+      std::string opt_str;
+      out_opts[i].SerializeToString(&opt_str);
+      output_flat(i) = opt_str;
+    }
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(IpuGetConfigurationOp);
+};
+
+REGISTER_KERNEL_BUILDER(Name("IpuGetConfiguration").Device(DEVICE_CPU),
+                        IpuGetConfigurationOp);
 }  // namespace tensorflow

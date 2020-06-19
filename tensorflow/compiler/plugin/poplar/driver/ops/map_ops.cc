@@ -206,17 +206,6 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   return seq;
 }
 
-namespace {
-bool CanRealloteInputs(const HloInstruction* inst) {
-  CHECK_EQ(inst->operand_count(), 1);
-  // Allow loops to reallocate their inputs if either the loop or the tuple
-  // input to the loop are not inplace. If these are not inplace then a copy has
-  // to be inserted to prevent aliasing issues and Poplar will elide duplicate
-  // copies.
-  return !(IsLoweredInplace(inst) && IsLoweredInplace(inst->operand(0)));
-}
-}  // namespace
-
 StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                                                  const HloInstruction* inst,
                                                  DeferredArgVectors& inputs,
@@ -224,7 +213,26 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                                                  TensorMap& tensor_map) {
   VLOG(1) << "Processing " << inst->name();
   CHECK_EQ(inputs.size(), 1);
-  const bool reallocate_inputs = CanRealloteInputs(inst);
+  const HloInstruction* input_inst = inst->operand(0);
+
+  const bool reallocate_all_inputs =
+      !(IsLoweredInplace(inst) && IsLoweredInplace(input_inst));
+  ReallocateInputsInfo reallocate_input_info(1);
+  reallocate_input_info[0] =
+      std::vector<bool>(inputs[0].size(), reallocate_all_inputs);
+
+  // Reallocate any inputs which are copies.
+  if (input_inst->opcode() == HloOpcode::kTuple) {
+    for (int64 i = 0, flat_index = 0; i != input_inst->operand_count(); ++i) {
+      const HloInstruction* operand = input_inst->operand(i);
+      const int64 num_tensors = CountShapes(operand->shape());
+      if (operand->opcode() == HloOpcode::kCopy) {
+        std::fill_n(reallocate_input_info[0].begin() + flat_index, num_tensors,
+                    true);
+      }
+      flat_index += num_tensors;
+    }
+  }
 
   poplar::Graph& graph = GetGraph(res, inst);
 
@@ -248,7 +256,8 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
 
   // Create an inplace visitor for the loop body.
   InplaceDeferredVisitor body_visitor(res, inputs, GetDebugName(inst) + "/Body",
-                                      {&condition_visitor}, reallocate_inputs);
+                                      {&condition_visitor},
+                                      reallocate_input_info);
   const HloComputation* body_comp = inst->while_body();
   {
     auto order =
@@ -361,15 +370,26 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
                                                   const xla::Shape& output,
                                                   TensorMap& tensor_map) {
   VLOG(1) << "Processing " << inst->name();
-  CHECK_EQ(inputs.size(), 1);
-  const bool reallocate_inputs = CanRealloteInputs(inst);
+  CHECK_EQ(inputs.size(), inst->operand_count());
+
+  const bool reallocate_all_inputs = !IsLoweredInplace(inst);
+  ReallocateInputsInfo reallocate_input_info(inst->operand_count());
+
+  // Reallocate any inputs which are copies.
+  for (int64 i = 0; i != inst->operand_count(); ++i) {
+    const bool reallocate_input =
+        reallocate_all_inputs || inst->operand(i)->opcode() == HloOpcode::kCopy;
+    reallocate_input_info[i] =
+        std::vector<bool>(inputs[i].size(), reallocate_input);
+  }
 
   const HloComputation* loop_body = inst->to_apply();
   auto order =
       loop_body->parent()->schedule().sequence(loop_body).instructions();
 
   // Create the visitor.
-  RepeatLoopVisitor visitor(res, inputs, reallocate_inputs, GetDebugName(inst));
+  RepeatLoopVisitor visitor(res, inputs, reallocate_input_info,
+                            GetDebugName(inst));
 
   // Evaluate the loop body in a order.
   TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
@@ -377,17 +397,10 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
   // Make sure any deferred inputs to the instruction are pushed up.
   TF_RETURN_IF_ERROR(visitor.PropagateDeferredAllocations(inst));
 
-  const uint64 param_count = inputs[0].size();
-
-  const TensorVector& loop_state = visitor.GetLoopState();
-
-  if (loop_state.size() != param_count) {
-    return xla::FailedPrecondition("Invalid number of loop inputs/outputs.");
-  }
-
   poplar::program::Sequence seq = visitor.GetRepeatLoopSequence(inst);
 
-  for (uint64 i = 0; i < param_count; i++) {
+  const TensorVector& loop_state = visitor.GetLoopState();
+  for (uint64 i = 0; i != loop_state.size(); i++) {
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, loop_state[i]));
   }
 
