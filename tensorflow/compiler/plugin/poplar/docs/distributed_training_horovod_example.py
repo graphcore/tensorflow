@@ -1,6 +1,6 @@
 import argparse
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.python import ipu
 from tensorflow.python.ipu import horovod as hvd
 from tensorflow.python.ipu.horovod import ipu_horovod_strategy

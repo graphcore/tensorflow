@@ -14,6 +14,7 @@
 # =============================================================================
 
 import subprocess
+import sys
 import os
 import numpy as np
 from tensorflow.python import keras
@@ -59,6 +60,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
       root_value = root_tensor.eval()
       np.testing.assert_equal(local_value, root_value, name)
 
+  @test_util.deprecated_graph_mode_only
   def test_basics(self):
     self.assertTrue(hvd.mpi_built())
     self.assertTrue(hvd.mpi_enabled())
@@ -78,6 +80,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
     self.assertEqual(hvd.local_size(), NUM_WORKERS)
     self.assertTrue(hvd.is_homogeneous())
 
+  @test_util.deprecated_graph_mode_only
   def test_collectives(self):
     rank = constant_op.constant(hvd.rank(), dtype=np.float32)
     allreduced = hvd.allreduce(rank, op=hvd.Sum)
@@ -97,6 +100,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(np.sum(np.arange(NUM_WORKERS)), sess.run(allreduced))
       self.assertAllEqual(0.0, sess.run(broadcast))
 
+  @test_util.deprecated_graph_mode_only
   def test_ipu_horovod_strategy(self):
     hvd_size = hvd.size()
     hvd_rank = hvd.rank()
@@ -127,6 +131,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
         self.assertEqual(1.0 * hvd_size, strategy_sum.eval())
         self.assertEqual(1.0, strategy_mean.eval())
 
+  @test_util.deprecated_graph_mode_only
   def test_pipelining(self):
     pipeline_depth = 4
     local_batch_size = 2
@@ -231,5 +236,5 @@ if __name__ == "__main__":
         "mpirun", "--allow-run-as-root", "--tag-output", "-np",
         str(NUM_WORKERS)
     ]
-    cmd = ["python", __file__]
+    cmd = [sys.executable, __file__]
     subprocess.check_output(mpirun + cmd)
