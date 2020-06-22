@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_DROPOUT_H
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_DROPOUT_H
 
+#include <memory>
+#include <vector>
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
 namespace xla {
@@ -25,7 +27,8 @@ class HloDropoutInstruction : public HloPoplarInstruction {
  public:
   explicit HloDropoutInstruction(HloInstruction* operand, HloInstruction* seed,
                                  float rate, float scale, int32_t seed_modifier,
-                                 bool should_use_user_seed);
+                                 bool should_use_user_seed,
+                                 const std::vector<int64>& noise_shape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -45,6 +48,12 @@ class HloDropoutInstruction : public HloPoplarInstruction {
   // Track whether or not we should use the user provided seed.
   bool IsUserSeed() const { return is_user_seed; }
 
+  // For shaped dropout.
+  const std::vector<int64>& NoiseShape() const { return noise_shape; }
+
+  // If noise_shape is not provided then the default ia an empty list.
+  bool HasNoiseShape() const { return !noise_shape.empty(); }
+
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
       const HloPrintOptions& options) const override;
@@ -58,13 +67,13 @@ class HloDropoutInstruction : public HloPoplarInstruction {
   float rate;
   int32_t seed_modifier;
   bool is_user_seed;
+  std::vector<int64> noise_shape;
 };
 
-std::unique_ptr<HloInstruction> CreateDropout(HloInstruction* operand,
-                                              HloInstruction* seed, float rate,
-                                              float scale,
-                                              uint32_t seed_modifier,
-                                              bool should_use_user_seed);
+std::unique_ptr<HloInstruction> CreateDropout(
+    HloInstruction* operand, HloInstruction* seed, float rate, float scale,
+    uint32_t seed_modifier, bool should_use_user_seed,
+    const std::vector<int64>& noise_shape);
 
 }  // namespace poplarplugin
 }  // namespace xla
