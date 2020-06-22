@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/multi_conv_fixer.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -50,6 +51,12 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
 
+  auto root = module->entry_computation()->root_instruction();
+  auto attributes = root->frontend_attributes();
+  auto* map = attributes.mutable_map();
+  (*map)[FrontendAttributeId_Name(OPTION_FLAGS)] = "{}";
+  root->set_frontend_attributes(attributes);
+
   TF_ASSERT_OK_AND_ASSIGN(bool changed, MultiConvFixer().Run(module.get()));
   EXPECT_TRUE(changed);
   EXPECT_EQ(module->entry_computation()->instruction_count(), 4);
@@ -84,10 +91,16 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           ParseAndReturnVerifiedModule(hlo, config));
 
+  auto root = module->entry_computation()->root_instruction();
+  auto attributes = root->frontend_attributes();
+  auto* map = attributes.mutable_map();
+  (*map)[FrontendAttributeId_Name(OPTION_FLAGS)] = "{}";
+  root->set_frontend_attributes(attributes);
+
   TF_ASSERT_OK_AND_ASSIGN(bool changed, MultiConvFixer().Run(module.get()));
   EXPECT_TRUE(changed);
   EXPECT_EQ(module->entry_computation()->instruction_count(), 9);
-  auto root = module->entry_computation()->root_instruction();
+  root = module->entry_computation()->root_instruction();
   EXPECT_EQ(root->opcode(), HloOpcode::kAdd);
   EXPECT_EQ(root->operand(0)->operand(0), root->operand(1)->operand(0));
   auto multi_conv = Cast<HloMultiConvInstruction>(root->operand(0)->operand(0));
