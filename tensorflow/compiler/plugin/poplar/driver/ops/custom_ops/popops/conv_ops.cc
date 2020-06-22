@@ -340,6 +340,14 @@ class ConvScaledInplaceOp : public PoplarOpDef {
 };
 REGISTER_POPLAR_OP(Conv_scaled_inplace, ConvScaledInplaceOp);
 
+poplar::OptionFlags GetMultiConvOptions(const HloMultiConvInstruction* inst) {
+  poplar::OptionFlags poplar_flags;
+  for (const auto& flag : inst->GetOptionFlags()) {
+    poplar_flags.set(flag.key, flag.value);
+  }
+  return poplar_flags;
+}
+
 StatusOr<std::vector<poplin::multiconv::CreateTensorArgs>>
 GetMultiConvCreateArgs(const HloMultiConvInstruction* inst,
                        CompilerResources& res, const std::string& name) {
@@ -383,17 +391,20 @@ class MultiConvOp : public PoplarOpDef {
         std::vector<poplin::multiconv::CreateTensorArgs> create_args,
         GetMultiConvCreateArgs(inst, res, name));
 
+    const poplar::OptionFlags multi_conv_options = GetMultiConvOptions(inst);
     poplar::Tensor out;
     switch (convolution_spec.type) {
       case ConvType::Conv:
       case ConvType::DepthwiseConv: {
         if (is_conv_input) {
           out = poplin::multiconv::createInput(graph, create_args, conv_index,
-                                               {}, &res.convolution_cache);
+                                               multi_conv_options,
+                                               &res.convolution_cache);
           out = ShuffleConvolutionInputToTensorflow(convolution_spec.dims, out);
         } else {
           out = poplin::multiconv::createWeights(graph, create_args, conv_index,
-                                                 {}, &res.convolution_cache);
+                                                 multi_conv_options,
+                                                 &res.convolution_cache);
           out = RemoveGroupsDimensionFromWeights(create_args[conv_index].params,
                                                  out);
           out =
@@ -425,10 +436,13 @@ class MultiConvOp : public PoplarOpDef {
         GetMultiConvCreateArgs(multi_conv_inst, res, debug_name));
 
     const auto& convolution_specs = multi_conv_inst->GetConvolutionSpecs();
+    const poplar::OptionFlags multi_conv_options =
+        GetMultiConvOptions(multi_conv_inst);
 
-    auto func = [&graph, &res, create_args, convolution_specs, debug_name](
-                    std::vector<poplar::Tensor>& args,
-                    poplar::program::Sequence& prog) -> void {
+    auto func = [&graph, &res, create_args, convolution_specs,
+                 multi_conv_options,
+                 debug_name](std::vector<poplar::Tensor>& args,
+                             poplar::program::Sequence& prog) -> void {
       // Check whether we can set transpose_and_flip_weights for all
       // convolutions, and if not, any `ConvWithReverse` needs to do it before
       // the multi conv individually.
@@ -499,7 +513,7 @@ class MultiConvOp : public PoplarOpDef {
 
       std::vector<poplar::Tensor> outputs = poplin::multiconv::convolution(
           graph, conv_args, all_transpose_and_flip_weights, prog, debug_name,
-          {}, &res.convolution_cache);
+          multi_conv_options, &res.convolution_cache);
 
       for (int64 i = 0; i != convolution_specs.size(); ++i) {
         poplar::Tensor output = outputs[i];

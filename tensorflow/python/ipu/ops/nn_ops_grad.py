@@ -38,7 +38,8 @@ def _multi_conv_grad(op, *grads):
       func_grad_inputs,
       to_apply=util.create_new_tf_function(func_grad_graph),
       Tout=func_grad_graph.output_types,
-      output_shapes=func_grad_graph.output_shapes)
+      output_shapes=func_grad_graph.output_shapes,
+      option_flags=op.get_attr("option_flags"))
 
   return func_graph_module.pack_sequence_as(func_grad_graph.structured_outputs,
                                             outputs)

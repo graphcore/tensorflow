@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/option_flag.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/conv_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/multi_conv.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
@@ -32,14 +33,15 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
+#include "tensorflow/core/platform/human_readable_json.h"
 
 namespace xla {
 namespace poplarplugin {
 namespace {
-Status ReplaceConvsWithMultiConv(HloComputation* comp,
-                                 std::vector<HloInstruction*>& convs,
-                                 CallInliner::InlinedInstructionMap& inline_map,
-                                 bool is_wu) {
+Status ReplaceConvsWithMultiConv(
+    HloComputation* comp, std::vector<HloInstruction*>& convs,
+    const std::vector<HloMultiConvInstruction::OptionFlag>& option_flags,
+    CallInliner::InlinedInstructionMap& inline_map, bool is_wu) {
   const int64 num_convs = convs.size();
   if (num_convs < 2) {
     return Status::OK();
@@ -79,7 +81,7 @@ Status ReplaceConvsWithMultiConv(HloComputation* comp,
 
   HloInstruction* multi_conv_inst = comp->AddInstruction(
       CreateMultiConv(ShapeUtil::MakeTupleShape(output_shapes), operands,
-                      convolution_specs, is_wu));
+                      convolution_specs, option_flags, is_wu));
 
   // Replace all the uses with the outputs from the multi conv.
   for (int64 i = 0; i != num_convs; ++i) {
@@ -134,15 +136,32 @@ Status MultiConvFixer::FixMultiConv(HloInstruction* multi_conv_op) {
       }
     }
   }
+  const auto attributes = multi_conv_op->frontend_attributes();
+  auto itr = attributes.map().find(FrontendAttributeId_Name(OPTION_FLAGS));
+  if (itr == attributes.map().end()) {
+    return FailedPrecondition(
+        "Could not find option flags in a multi conv operation.");
+  }
+  PoplarOptionFlags option_flags_proto;
+  TF_RETURN_IF_ERROR(
+      tensorflow::HumanReadableJsonToProto(itr->second, &option_flags_proto));
+
+  std::vector<HloMultiConvInstruction::OptionFlag> option_flags(
+      option_flags_proto.flags_size());
+
+  for (int64 i = 0; i != option_flags_proto.flags_size(); ++i) {
+    auto& flag = option_flags_proto.flags(i);
+    option_flags[i] = {flag.option(), flag.value()};
+  }
 
   // Inline the multi conv.
   TF_ASSIGN_OR_RETURN(CallInliner::InlinedInstructionMap map,
                       CallInliner::Inline(multi_conv_op));
 
-  TF_RETURN_IF_ERROR(ReplaceConvsWithMultiConv(parent_comp, wu_convolution_ops,
-                                               map, /*is_wu*/ true));
   TF_RETURN_IF_ERROR(ReplaceConvsWithMultiConv(
-      parent_comp, non_wu_convolution_ops, map, /*is_wu*/ false));
+      parent_comp, wu_convolution_ops, option_flags, map, /*is_wu*/ true));
+  TF_RETURN_IF_ERROR(ReplaceConvsWithMultiConv(
+      parent_comp, non_wu_convolution_ops, option_flags, map, /*is_wu*/ false));
   return Status::OK();
 }
 

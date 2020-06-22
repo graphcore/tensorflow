@@ -17,7 +17,10 @@ Popnn primitive neural network operators
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
+from google.protobuf import json_format
+
 from tensorflow.compiler.plugin.poplar.driver import backend_config_pb2
+from tensorflow.compiler.plugin.poplar.driver import option_flag_pb2
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.compiler.plugin.poplar.ops import gen_functional_ops
 from tensorflow.compiler.xla import xla_data_pb2
@@ -45,7 +48,7 @@ def gelu(x, name=None):
   return gen_popnn_ops.ipu_gelu(x, name=name)
 
 
-def multi_conv(func, name=None):
+def multi_conv(func=None, options=None):
   """A function decorator for generating multi-convolution operations.
   Multi-convolutions allow for a set of data-independent convolutions to be
   executed in parallel. Executing convolutions in parallel can lead to an
@@ -75,40 +78,79 @@ def multi_conv(func, name=None):
   operations, will be executed in the same way as if they were not inside of a
   ``multi_conv`` decorated function.
 
+  It is also possible to set PopLibs multi-convolution options using this
+  decorator.
+
+  For example:
+
+  .. code-block:: python
+
+    from tensorflow import keras
+    from tensorflow.python import ipu
+
+    @ipu.nn_ops.multi_conv(options={"perConvReservedTiles":"50"})
+    def convs(x, y, z):
+      x = keras.layers.DepthwiseConv2D(8, 2, depth_multiplier=2)(x)
+      y = keras.layers.DepthwiseConv2D(16, 4, depth_multiplier=2)(y)
+      z = keras.layers.Conv2D(8, 3)(z)
+      return x, y, z
+
+  See the PopLibs documention for the list of all available flags.
+  Note that these options will also be applied to the gradient operations
+  generated during backpropagation.
+
   Args:
     func: A python function which takes a list of positional arguments only. All
       the arguments must be `tf.Tensor`-like objects, or be convertible to them.
       The function provided must return at least one `tf.Tensor`-like object.
-    name: The name of the function.
+    options: A dictionary of Poplar option flags for multi-convolution. See the
+      multi-convolution PopLibs documentation for available flags.
   """
+  def decorated(inner_func):
+    def multi_conv_wrapper(*args):
+      inner_options = options if options else {}
 
-  name = name if name else "multi_conv"
+      if not isinstance(inner_options, dict):
+        raise TypeError(
+            "Expected the multi_conv `options` to be a `dict`, but got %s "
+            "instead." % (str(inner_options)))
 
-  def func_wrapper(*args):
-    with ops.get_default_graph().as_default() as g:
-      with g.gradient_override_map(_gradient_override_map):
-        return func(*args)
+      option_proto = option_flag_pb2.PoplarOptionFlags()
+      for key, value in inner_options.items():
+        flag = option_proto.flags.add()
+        flag.option = key
+        flag.value = value
 
-  def multi_conv_wrapper(*args):
-    args = functional_ops._convert_to_list(args)  # pylint: disable=protected-access
-    with ops.name_scope(name) as scope:
-      func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
-          func_wrapper,
-          args,
-          scope, [],
-          allow_external_captures=True)
+      def func_wrapper(*args):
+        with ops.get_default_graph().as_default() as g:
+          with g.gradient_override_map(_gradient_override_map):
+            return inner_func(*args)
 
-      with ops.control_dependencies(list(func_graph.control_captures)):
-        outputs = gen_functional_ops.multi_conv(
-            captured_args,
-            to_apply=util.create_new_tf_function(func_graph),
-            Tout=func_graph.output_types,
-            output_shapes=func_graph.output_shapes)
+      args = functional_ops._convert_to_list(args)  # pylint: disable=protected-access
+      with ops.name_scope("multi_conv") as scope:
+        func_graph, captured_args = functional_ops._compile_function(  # pylint: disable=protected-access
+            func_wrapper,
+            args,
+            scope, [],
+            allow_external_captures=True)
 
-    return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
-                                              outputs)
+        with ops.control_dependencies(list(func_graph.control_captures)):
+          outputs = gen_functional_ops.multi_conv(
+              captured_args,
+              to_apply=util.create_new_tf_function(func_graph),
+              Tout=func_graph.output_types,
+              output_shapes=func_graph.output_shapes,
+              option_flags=json_format.MessageToJson(option_proto))
 
-  return multi_conv_wrapper
+      return func_graph_module.pack_sequence_as(func_graph.structured_outputs,
+                                                outputs)
+
+    return multi_conv_wrapper
+
+  if func is not None:
+    return decorated(func)
+
+  return decorated
 
 
 def _SetMlType(op, ml_type):

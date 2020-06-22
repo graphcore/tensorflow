@@ -43,6 +43,7 @@ REGISTER_OP("MultiConv")
     .Attr("Tin: list(type) >= 0")
     .Attr("Tout: list(type) >= 0")
     .Attr("output_shapes: list(shape) >= 0")
+    .Attr("option_flags: string")
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
     .Doc(R"doc(

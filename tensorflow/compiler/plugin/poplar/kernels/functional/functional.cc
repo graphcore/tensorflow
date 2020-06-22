@@ -145,7 +145,9 @@ REGISTER_IPU_OP("Function", FunctionOp);
 
 class MultiConvOp : public FunctionBaseOp {
  public:
-  using FunctionBaseOp::FunctionBaseOp;
+  explicit MultiConvOp(OpKernelConstruction* ctx) : FunctionBaseOp(ctx) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("option_flags", &option_flags_));
+  }
 
  protected:
   Status SetConfig(xla::XlaBuilder* builder, xla::XlaOp& operation) override {
@@ -153,10 +155,14 @@ class MultiConvOp : public FunctionBaseOp {
         operation, pp::FrontendAttributeId_Name(pp::CALL_CONFIG_TYPE),
         pp::PoplarBackendConfig_CallConfig_Type_Name(
             pp::PoplarBackendConfig::CallConfig::MultiConv)));
+    TF_RETURN_IF_ERROR(builder->SetInstructionFrontendAttribute(
+        operation, pp::FrontendAttributeId_Name(pp::OPTION_FLAGS),
+        option_flags_));
     return Status::OK();
   }
 
  private:
+  std::string option_flags_;
   TF_DISALLOW_COPY_AND_ASSIGN(MultiConvOp);
 };
 REGISTER_IPU_OP("MultiConv", MultiConvOp);
