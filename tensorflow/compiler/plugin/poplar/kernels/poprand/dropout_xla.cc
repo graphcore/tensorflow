@@ -50,11 +50,17 @@ class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(ctx,
                    ctx->GetAttr("is_using_user_seed", &is_using_user_seed));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("seed_modifier", &seed_modifier));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("noise_shape", &noise_shape));
 
     attribute_map_.AddAttribute("rate", rate);
     attribute_map_.AddAttribute("scale", scale);
     attribute_map_.AddAttribute("is_using_user_seed", is_using_user_seed);
     attribute_map_.AddAttribute("seed_modifier", seed_modifier);
+
+    // noise_shape is optional and defaults to an empty list.
+    if (!noise_shape.empty()) {
+      attribute_map_.AddAttribute("noise_shape", noise_shape);
+    }
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -111,6 +117,9 @@ class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
   // Track if the user provided the seed value or whether we should use the
   // global seed we create.
   bool is_using_user_seed;
+
+  // For shaped dropout. See noise_shape in TF's dropout op.
+  std::vector<int64> noise_shape;
 };
 
 REGISTER_IPU_OP("IpuDropout", PoprandDropoutOp);
