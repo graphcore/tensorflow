@@ -30,10 +30,11 @@ namespace poplarplugin {
 HloMultiConvInstruction::HloMultiConvInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     const std::vector<ConvolutionSpec>& convolution_specs,
-    bool is_weight_update)
+    const std::vector<OptionFlag>& option_flags, bool is_weight_update)
     : HloPoplarInstruction(shape, operands, PoplarOp::MultiConv,
-                           convolution_specs, is_weight_update),
+                           convolution_specs, option_flags, is_weight_update),
       convolution_specs_(convolution_specs),
+      option_flags_(option_flags),
       is_weight_update_(is_weight_update) {
   // Find indices for which we can allocate.
   for (int64 i = 0; i != convolution_specs_.size(); ++i) {
@@ -73,11 +74,16 @@ HloMultiConvInstruction::GetConvolutionSpecs() const {
   return convolution_specs_;
 }
 
+const std::vector<HloMultiConvInstruction::OptionFlag>&
+HloMultiConvInstruction::GetOptionFlags() const {
+  return option_flags_;
+}
+
 std::unique_ptr<HloInstruction>
 HloMultiConvInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreateMultiConv(shape, operands, convolution_specs_,
+  return CreateMultiConv(shape, operands, convolution_specs_, option_flags_,
                          is_weight_update_);
 }
 
@@ -102,9 +108,10 @@ std::unique_ptr<HloInstruction> CreateMultiConv(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     const std::vector<HloMultiConvInstruction::ConvolutionSpec>&
         convolution_specs,
+    const std::vector<HloMultiConvInstruction::OptionFlag>& option_flags,
     bool is_weight_update) {
   return absl::make_unique<HloMultiConvInstruction>(
-      shape, operands, convolution_specs, is_weight_update);
+      shape, operands, convolution_specs, option_flags, is_weight_update);
 }
 
 }  // namespace poplarplugin
@@ -114,6 +121,7 @@ std::unique_ptr<HloInstruction> CreateMultiConv(
 namespace std {
 using ConvolutionSpec =
     xla::poplarplugin::HloMultiConvInstruction::ConvolutionSpec;
+using OptionFlag = xla::poplarplugin::HloMultiConvInstruction::OptionFlag;
 
 template <>
 struct hash<ConvolutionSpec> {
@@ -134,6 +142,26 @@ struct hash<std::vector<ConvolutionSpec>> {
     for (const ConvolutionSpec& convolution_spec : convolution_specs) {
       hash = tensorflow::Hash64Combine(
           hash, std::hash<ConvolutionSpec>()(convolution_spec));
+    }
+    return hash;
+  }
+};
+
+template <>
+struct hash<OptionFlag> {
+  size_t operator()(const OptionFlag& option_flag) const {
+    return xla::poplarplugin::hash_util::hash(option_flag.key,
+                                              option_flag.value);
+  }
+};
+
+template <>
+struct hash<std::vector<OptionFlag>> {
+  size_t operator()(const std::vector<OptionFlag>& option_flags) const {
+    std::size_t hash = 7;
+    for (const OptionFlag& option_flag : option_flags) {
+      hash =
+          tensorflow::Hash64Combine(hash, std::hash<OptionFlag>()(option_flag));
     }
     return hash;
   }

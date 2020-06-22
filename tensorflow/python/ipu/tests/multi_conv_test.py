@@ -18,7 +18,10 @@ from __future__ import print_function
 
 import numpy as np
 
+from google.protobuf import json_format
+
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
+from tensorflow.compiler.plugin.poplar.driver import option_flag_pb2
 from tensorflow.python import ipu
 from tensorflow.python.keras import layers
 from tensorflow.python.framework import errors
@@ -377,6 +380,54 @@ class MultiConvTest(test_util.TensorFlowTestCase):
         "independent of each other"):
       _compare_ipu_to_cpu(self, body, inputs_fn, init_values,
                           conv_classifications)
+
+  @test_util.deprecated_graph_mode_only
+  def testOptions(self):
+    with self.test_session() as session:
+      np.random.seed(1234)
+      h_w1 = np.random.random_sample([1, 1, 4, 2])
+      h_w2 = np.random.random_sample([1, 1, 1, 4])
+
+      @ipu.nn_ops.multi_conv(options={"invalidFlag": "yes"})
+      def convs(a, b, w1, w2):
+        a = nn.conv2d(a, w1, 1, padding='VALID')
+        b = nn.conv2d_transpose(b, w2, [2, 32, 32, 4], 1)
+        return a, b
+
+      def body(a, b):
+        w1 = variable_scope.get_variable(
+            "w1",
+            dtype=np.float32,
+            shape=[1, 1, 4, 2],
+            initializer=init_ops.constant_initializer(h_w1))
+        w2 = variable_scope.get_variable(
+            "w2",
+            dtype=np.float32,
+            shape=[1, 1, 4, 2],
+            initializer=init_ops.constant_initializer(h_w2))
+        a, b = convs(a, b, w1, w2)
+        option_flags = a.op.get_attr("option_flags")
+        option_flags_proto = json_format.Parse(
+            option_flags, option_flag_pb2.PoplarOptionFlags())
+        self.assertEqual(len(option_flags_proto.flags), 1)
+        self.assertEqual(option_flags_proto.flags[0].option, "invalidFlag")
+        self.assertEqual(option_flags_proto.flags[0].value, "yes")
+        return a, b
+
+      with ops.device('cpu'):
+        a = array_ops.placeholder(np.float32, [2, 32, 32, 4])
+        b = array_ops.placeholder(np.float32, [2, 32, 32, 2])
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        res = ipu.ipu_compiler.compile(body, inputs=[a, b])
+
+      tu.ReportJSON(self, session)
+      tu.move_variable_initialization_to_cpu()
+      session.run(variables.global_variables_initializer())
+      with self.assertRaisesRegex(
+          Exception,
+          r"\[Error\]\[Build graph\] Unrecognised option \'invalidFlag\'"):
+        session.run(res, {x: np.ones(x.shape) for x in [a, b]})
 
 
 if __name__ == "__main__":

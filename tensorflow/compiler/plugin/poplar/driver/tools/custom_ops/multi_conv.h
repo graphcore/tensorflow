@@ -34,10 +34,15 @@ class HloMultiConvInstruction : public HloPoplarInstruction {
     ConvolutionDimensionNumbers dims;
     int64 feature_group_count;
   };
+  struct OptionFlag {
+    std::string key;
+    std::string value;
+  };
 
   HloMultiConvInstruction(const Shape& shape,
                           absl::Span<HloInstruction* const> operands,
                           const std::vector<ConvolutionSpec>& convolution_specs,
+                          const std::vector<OptionFlag>& option_flags,
                           bool is_weight_update);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
@@ -49,6 +54,8 @@ class HloMultiConvInstruction : public HloPoplarInstruction {
   bool IsPopOpsElementwise() const override;
 
   const std::vector<ConvolutionSpec>& GetConvolutionSpecs() const;
+
+  const std::vector<OptionFlag>& GetOptionFlags() const;
 
   bool IsWeightUpdate() const;
 
@@ -63,6 +70,7 @@ class HloMultiConvInstruction : public HloPoplarInstruction {
 
   absl::flat_hash_set<int64> allocating_indices_;
   const std::vector<ConvolutionSpec> convolution_specs_;
+  const std::vector<OptionFlag> option_flags_;
   const bool is_weight_update_;
 };
 
@@ -70,6 +78,7 @@ std::unique_ptr<HloInstruction> CreateMultiConv(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     const std::vector<HloMultiConvInstruction::ConvolutionSpec>&
         convolution_specs,
+    const std::vector<HloMultiConvInstruction::OptionFlag>& option_flags,
     bool is_weight_update);
 
 }  // namespace poplarplugin
