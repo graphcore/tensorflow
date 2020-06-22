@@ -119,8 +119,9 @@ class DropoutOp : public PoplarOpDef {
       // Pull out noise_shape if it is set. At this point it is a std::vector,
       // but poprand::dropout expects a poplar::Tensor*
       // noise_shape becomes a constant tensor residing on tile 0.
-      const Shape ns_ref_shape = ShapeUtil::MakeShape(
-          output_shape.element_type(), dropout_instruction->NoiseShape());
+      const Shape ns_ref_shape =
+          ShapeUtil::MakeShape(inst->operand(0)->shape().element_type(),
+                               dropout_instruction->NoiseShape());
       TF_ASSIGN_OR_RETURN(poplar::Tensor reference,
                           AddPlainTensor(graph, debug_name + "/ShapedReference",
                                          ns_ref_shape, res, false));
