@@ -24,12 +24,12 @@ HloGroupNormGradInstruction::HloGroupNormGradInstruction(
     const Shape& shape, HloInstruction* const operand,
     HloInstruction* const scale, HloInstruction* const offset,
     HloInstruction* const mean, HloInstruction* const variance_or_inv_std_dev,
-    int32 num_groups, bool channel_strided_input, float epsilon,
+    int32 num_groups, bool strided_channel_grouping, float epsilon,
     int feature_index)
     : HloGroupNormBaseInstruction(
           shape, {operand, scale, offset, mean, variance_or_inv_std_dev},
-          PoplarOp::GroupNormGrad, num_groups, channel_strided_input, epsilon,
-          feature_index) {}
+          PoplarOp::GroupNormGrad, num_groups, strided_channel_grouping,
+          epsilon, feature_index) {}
 
 const HloInstruction* HloGroupNormGradInstruction::operand() const {
   return HloInstruction::operand(0);
@@ -74,8 +74,8 @@ HloGroupNormGradInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return CreateGroupNormGrad(shape, new_operands[0], new_operands[1],
                              new_operands[2], new_operands[3], new_operands[4],
-                             num_groups(), channel_strided_input(), epsilon(),
-                             feature_index());
+                             num_groups(), strided_channel_grouping(),
+                             epsilon(), feature_index());
 }
 
 std::unique_ptr<HloInstruction> CreateGroupNormGrad(
@@ -83,10 +83,10 @@ std::unique_ptr<HloInstruction> CreateGroupNormGrad(
     HloInstruction* const scale, HloInstruction* const mean,
     HloInstruction* const variance_or_inv_std_dev,
     HloInstruction* const grad_output, int32 num_groups,
-    bool channel_strided_input, float epsilon, int feature_index) {
+    bool strided_channel_grouping, float epsilon, int feature_index) {
   return absl::make_unique<HloGroupNormGradInstruction>(
       shape, operand, scale, mean, variance_or_inv_std_dev, grad_output,
-      num_groups, channel_strided_input, epsilon, feature_index);
+      num_groups, strided_channel_grouping, epsilon, feature_index);
 }
 
 namespace {
@@ -103,13 +103,14 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGroupNormGradFactoryFunc(
   TF_ASSIGN_OR_RETURN(int feature_index,
                       attribute_map.GetAttributeAsInt("feature_index"));
 
-  TF_ASSIGN_OR_RETURN(bool channel_strided_input,
-                      attribute_map.GetAttributeAsInt("channel_strided_input"));
+  TF_ASSIGN_OR_RETURN(
+      bool strided_channel_grouping,
+      attribute_map.GetAttributeAsInt("strided_channel_grouping"));
 
   auto args = call->operands();
 
   return CreateGroupNormGrad(call->shape(), args[0], args[1], args[2], args[3],
-                             args[4], num_groups, channel_strided_input,
+                             args[4], num_groups, strided_channel_grouping,
                              epsilon, feature_index);
 }
 

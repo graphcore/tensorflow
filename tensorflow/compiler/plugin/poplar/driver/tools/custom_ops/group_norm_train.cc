@@ -23,10 +23,10 @@ namespace poplarplugin {
 HloGroupNormTrainInstruction::HloGroupNormTrainInstruction(
     const Shape& shape, HloInstruction* const operand,
     HloInstruction* const scale, HloInstruction* const offset, int32 num_groups,
-    bool channel_strided_input, float epsilon, int feature_index)
+    bool strided_channel_grouping, float epsilon, int feature_index)
     : HloGroupNormBaseInstruction(
           shape, {operand, scale, offset}, PoplarOp::GroupNormTraining,
-          num_groups, channel_strided_input, epsilon, feature_index) {}
+          num_groups, strided_channel_grouping, epsilon, feature_index) {}
 
 const HloInstruction* HloGroupNormTrainInstruction::operand() const {
   return HloInstruction::operand(0);
@@ -62,16 +62,16 @@ HloGroupNormTrainInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return CreateGroupNormTrain(
       shape, new_operands[0], new_operands[1], new_operands[2], num_groups(),
-      channel_strided_input(), epsilon(), feature_index());
+      strided_channel_grouping(), epsilon(), feature_index());
 }
 
 std::unique_ptr<HloInstruction> CreateGroupNormTrain(
     const Shape& shape, HloInstruction* const operand,
     HloInstruction* const scale, HloInstruction* const offset, int32 num_groups,
-    bool channel_strided_input, float epsilon, int feature_index) {
+    bool strided_channel_grouping, float epsilon, int feature_index) {
   return absl::make_unique<HloGroupNormTrainInstruction>(
-      shape, operand, scale, offset, num_groups, channel_strided_input, epsilon,
-      feature_index);
+      shape, operand, scale, offset, num_groups, strided_channel_grouping,
+      epsilon, feature_index);
 }
 
 namespace {
@@ -88,13 +88,14 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGroupNormTrainFactoryFunc(
   TF_ASSIGN_OR_RETURN(int feature_index,
                       attribute_map.GetAttributeAsInt("feature_index"));
 
-  TF_ASSIGN_OR_RETURN(bool channel_strided_input,
-                      attribute_map.GetAttributeAsInt("channel_strided_input"));
+  TF_ASSIGN_OR_RETURN(
+      bool strided_channel_grouping,
+      attribute_map.GetAttributeAsInt("strided_channel_grouping"));
 
   auto args = call->operands();
 
   return CreateGroupNormTrain(call->shape(), args[0], args[1], args[2],
-                              num_groups, channel_strided_input, epsilon,
+                              num_groups, strided_channel_grouping, epsilon,
                               feature_index);
 }
 
