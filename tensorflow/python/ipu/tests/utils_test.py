@@ -518,6 +518,50 @@ class ContribIpuOpsTest(test_util.TensorFlowTestCase):
       self.assertEqual(len(e), 0)  # no begin/end, no load/execute
 
   @test_util.deprecated_graph_mode_only
+  def testInitializerThatUsesIPUResourceDeviceChange(self):
+    var_val = np.ones([1, 8, 8, 4])
+
+    def graph():
+      var = variables.Variable(var_val, dtype=np.float32)
+      # Initialize a variable with an initializer graph that contains a read of
+      # another variable resource.
+      var_copy = variables.Variable(var.initialized_value())
+
+      # Make an IPU op that also uses the variable resource
+      x = var * var_copy
+      return x
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      # Cluster the IPU ops together
+      compile_op = ipu.ipu_compiler.compile(graph)
+
+    events = gen_ipu_ops.ipu_event_trace()
+
+    # Any variable resources should not be pushed
+    # to CPU by move_variable_initialization_to_cpu otherwise colocation will be
+    # violated when an IPU op uses that resource too
+    ipu.utils.move_variable_initialization_to_cpu()
+
+    cfg = ipu.utils.create_ipu_config(profiling=True)
+    cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
+    ipu.utils.configure_ipu_system(cfg)
+
+    with sl.Session() as sess:
+      # Discard any pending events
+      sess.run(events)
+
+      # Run initializer (should be on CPU)
+      sess.run(variables.global_variables_initializer())
+
+      # Run the graph (should be on IPU)
+      sess.run(compile_op)
+
+      e = sess.run(events)
+      evts = ipu.utils.extract_all_events(e)
+      # Should only be 1 compile event - initialization should be on CPU
+      self.assertEqual(count_compile_end_events(evts), 1)
+
+  @test_util.deprecated_graph_mode_only
   def testVarsInitializedByStreamsAreLoggedAsOnDevice(self):
     # This verifies that when an initialization graph has no ops in it (it is
     # a pass through of streaming inputs to initialized resources) then the
