@@ -83,10 +83,10 @@ NAMED_GROUP_NORM_TESTCASES = (
 
 new_cases = tuple(NAMED_GROUP_NORM_TESTCASES)
 for case in NAMED_GROUP_NORM_TESTCASES:
-  # Add a channel_strided_input=True variant case.
+  # Add a strided_channel_grouping=False variant case.
   new_case = dict(case)
-  new_case["testcase_name"] = new_case["testcase_name"] + "_scg"
-  new_case["channel_strided_input"] = False
+  new_case["testcase_name"] = new_case["testcase_name"] + "_no_scg"
+  new_case["strided_channel_grouping"] = False
   new_cases += (new_case,)
 NAMED_GROUP_NORM_TESTCASES = new_cases
 del new_cases
@@ -106,7 +106,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                        inv_std_dev=None,
                        epsilon=0.0015,
                        data_format="NHWC",
-                       channel_strided_input=True):
+                       strided_channel_grouping=True):
     if data_format == "NHWC":
       feature_index = 3
     elif data_format == "NCHW":
@@ -121,7 +121,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
     # Implementation detail - in Poplibs group norm, the groups are not
     # contiguous, but strided - we replicate that here
     # Move the channels to the first dimension for inputs, gamma and beta
-    if not channel_strided_input:
+    if strided_channel_grouping:
       inputs = np.swapaxes(inputs, 0, feature_index)
 
       reshuffled_inputs = np.empty(inputs.shape, inputs.dtype)
@@ -174,7 +174,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
     output = input_whitened * gamma + beta
 
     # Undo the shuffle.
-    if not channel_strided_input:
+    if strided_channel_grouping:
       output = np.swapaxes(output, 0, feature_index)
 
       reshuffled_output = np.empty(output.shape, output.dtype)
@@ -186,7 +186,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
     mean_out = np.reshape(np.squeeze(mean), (mean.size))
     var_out = np.reshape(np.squeeze(inv_std_dev), (inv_std_dev.size))
 
-    if not channel_strided_input:
+    if strided_channel_grouping:
       return (np.swapaxes(reshuffled_output, 0,
                           feature_index), mean_out, var_out)
     return (output, mean_out, var_out)
@@ -196,7 +196,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                               groups,
                               epsilon=0.0015,
                               data_format="NHWC",
-                              channel_strided_input=True):
+                              strided_channel_grouping=True):
     if data_format == "NHWC":
       feature_index = 3
     elif data_format == "NCHW":
@@ -210,7 +210,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
     # Implementation detail - in Poplibs group norm, the groups are not
     # contiguous, but strided - we replicate that here
     # Move the channels to the first dimension for inputs, gamma and beta
-    if not channel_strided_input:
+    if strided_channel_grouping:
       inputs = np.swapaxes(inputs, 0, feature_index)
 
       reshuffled_inputs = np.empty(inputs.shape, inputs.dtype)
@@ -249,7 +249,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                         inv_std_dev,
                         epsilon=0.0015,
                         data_format="NHWC",
-                        channel_strided_input=True):
+                        strided_channel_grouping=True):
     if data_format not in ["NHWC", "NCHW"]:
       raise Exception("Unsupported data format " + data_format)
 
@@ -271,7 +271,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
             data_format=data_format,
             epsilon=epsilon,
             num_groups=groups,
-            channel_strided_input=channel_strided_input)
+            strided_channel_grouping=strided_channel_grouping)
 
       fd = {
           pinputs: inputs,
@@ -289,7 +289,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                              groups,
                              epsilon=0.0015,
                              data_format="NHWC",
-                             channel_strided_input=True):
+                             strided_channel_grouping=True):
     if data_format not in ["NHWC", "NCHW"]:
       raise Exception("Unsupported data format " + data_format)
 
@@ -305,7 +305,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
             data_format=data_format,
             epsilon=epsilon,
             num_groups=groups,
-            channel_strided_input=channel_strided_input)
+            strided_channel_grouping=strided_channel_grouping)
 
       fd = {
           pinputs: inputs,
@@ -319,7 +319,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                                groups,
                                epsilon=0.0015,
                                data_format="NHWC",
-                               channel_strided_input=True):
+                               strided_channel_grouping=True):
     if data_format not in ["NHWC", "NCHW"]:
       raise Exception("Unsupported data format " + data_format)
 
@@ -331,7 +331,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
             data_format=data_format,
             epsilon=epsilon,
             num_groups=groups,
-            channel_strided_input=channel_strided_input)
+            strided_channel_grouping=strided_channel_grouping)
 
       fd = {
           pinputs: inputs,
@@ -345,7 +345,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                              num_groups,
                              dims,
                              epsilon,
-                             channel_strided_input=True):
+                             strided_channel_grouping=True):
     np.random.seed(12)
     for data_format in ["NHWC", "NCHW"]:
       if data_format == "NHWC":
@@ -372,7 +372,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           inv_std_dev,
           epsilon=epsilon,
           data_format=data_format,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
 
       expected, _, _ = self._refGroupNormFwd(
           activations,
@@ -383,7 +383,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           inv_std_dev=inv_std_dev,
           epsilon=epsilon,
           data_format=data_format,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
 
       self.assertAllClose(expected, result)
 
@@ -394,7 +394,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                             num_groups,
                             dims,
                             epsilon,
-                            channel_strided_input=True):
+                            strided_channel_grouping=True):
     np.random.seed(48)
     for data_format in ["NHWC", "NCHW"]:
       if data_format == "NHWC":
@@ -416,7 +416,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           num_groups,
           epsilon=epsilon,
           data_format=data_format,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
 
       expected_norm, expected_mean, expected_inv_std_dev = self._refGroupNormFwd(
           activations,
@@ -425,7 +425,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           num_groups,
           epsilon=epsilon,
           data_format=data_format,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
       self.assertAllClose(expected_mean,
                           mean,
                           rtol=training_rel_tolerance,
@@ -446,7 +446,7 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                               num_groups,
                               dims,
                               epsilon,
-                              channel_strided_input=True):
+                              strided_channel_grouping=True):
     np.random.seed(48)
     for data_format in ["NHWC", "NCHW"]:
       if data_format == "NHWC":
@@ -463,14 +463,14 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
           num_groups,
           epsilon=epsilon,
           data_format=data_format,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
 
       expected_mean, expected_inv_std_dev = self._refGroupNormStatistics(
           activations,
           num_groups,
           epsilon=epsilon,
           data_format=data_format,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
       self.assertAllClose(expected_mean,
                           mean,
                           rtol=training_rel_tolerance,

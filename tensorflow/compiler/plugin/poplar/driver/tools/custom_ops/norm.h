@@ -46,13 +46,13 @@ class HloGroupNormBaseInstruction : public HloNormInstruction {
  public:
   explicit HloGroupNormBaseInstruction(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
-      PoplarOp op, int32 num_groups, bool channel_strided_input, float epsilon,
-      int feature_index);
+      PoplarOp op, int32 num_groups, bool strided_channel_grouping,
+      float epsilon, int feature_index);
 
-  bool channel_strided_input() const;
+  bool strided_channel_grouping() const;
 
  private:
-  bool channel_strided_input_;
+  bool strided_channel_grouping_;
 };
 
 class HloGroupNormInstruction : public HloGroupNormBaseInstruction {
@@ -61,7 +61,7 @@ class HloGroupNormInstruction : public HloGroupNormBaseInstruction {
       const Shape& shape, HloInstruction* const operand,
       HloInstruction* const scale, HloInstruction* const offset,
       HloInstruction* const mean, HloInstruction* const variance_or_inv_std_dev,
-      int32 num_groups, bool channel_strided_input, float epsilon,
+      int32 num_groups, bool strided_channel_grouping, float epsilon,
       int feature_index);
 
   const HloInstruction* operand() const;
@@ -85,7 +85,7 @@ std::unique_ptr<HloInstruction> CreateGroupNorm(
     const Shape& shape, HloInstruction* const operand,
     HloInstruction* const scale, HloInstruction* const offset,
     HloInstruction* const mean, HloInstruction* const variance_or_inv_std_dev,
-    int32 num_groups, bool channel_strided_input, float epsilon,
+    int32 num_groups, bool strided_channel_grouping, float epsilon,
     int feature_index);
 
 class HloGroupNormTrainInstruction : public HloGroupNormBaseInstruction {
@@ -95,7 +95,7 @@ class HloGroupNormTrainInstruction : public HloGroupNormBaseInstruction {
                                         HloInstruction* const scale,
                                         HloInstruction* const offset,
                                         int32 num_groups,
-                                        bool channel_strided_input,
+                                        bool strided_channel_grouping,
                                         float epsilon, int feature_index);
 
   const HloInstruction* operand() const;
@@ -116,7 +116,7 @@ class HloGroupNormTrainInstruction : public HloGroupNormBaseInstruction {
 std::unique_ptr<HloInstruction> CreateGroupNormTrain(
     const Shape& shape, HloInstruction* const operand,
     HloInstruction* const scale, HloInstruction* const offset, int32 num_groups,
-    bool channel_strided_input, float epsilon, int feature_index);
+    bool strided_channel_grouping, float epsilon, int feature_index);
 
 class HloGroupNormGradInstruction : public HloGroupNormBaseInstruction {
  public:
@@ -124,7 +124,7 @@ class HloGroupNormGradInstruction : public HloGroupNormBaseInstruction {
       const Shape& shape, HloInstruction* const operand,
       HloInstruction* const scale, HloInstruction* const offset,
       HloInstruction* const mean, HloInstruction* const variance_or_inv_std_dev,
-      int32 num_groups, bool channel_strided_input, float epsilon,
+      int32 num_groups, bool strided_channel_grouping, float epsilon,
       int feature_index);
 
   const HloInstruction* operand() const;
@@ -149,14 +149,14 @@ std::unique_ptr<HloInstruction> CreateGroupNormGrad(
     HloInstruction* const scale, HloInstruction* const mean,
     HloInstruction* const variance_or_inv_std_dev,
     HloInstruction* const grad_output, int32 num_groups,
-    bool channel_strided_input, float epsilon, int feature_index);
+    bool strided_channel_grouping, float epsilon, int feature_index);
 
 class HloGroupNormStatsInstruction : public HloGroupNormBaseInstruction {
  public:
   explicit HloGroupNormStatsInstruction(const Shape& shape,
                                         HloInstruction* const operand,
                                         int32 num_groups,
-                                        bool channel_strided_input,
+                                        bool strided_channel_grouping,
                                         float epsilon, int feature_index);
 
   const HloInstruction* operand() const;
@@ -174,7 +174,7 @@ class HloGroupNormStatsInstruction : public HloGroupNormBaseInstruction {
 
 std::unique_ptr<HloInstruction> CreateGroupNormStats(
     const Shape& shape, HloInstruction* const operand, int32 num_groups,
-    bool channel_strided_input, float epsilon, int feature_index);
+    bool strided_channel_grouping, float epsilon, int feature_index);
 
 }  // namespace poplarplugin
 }  // namespace xla

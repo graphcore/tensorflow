@@ -98,7 +98,7 @@ StatusOr<NormOptions> GetNormOptions(const HloInstruction* inst) {
       // grouping is to be used.
       poplar::OptionFlags flags;
       const auto* inst_gn = Cast<HloGroupNormBaseInstruction>(inst);
-      const auto scg = inst_gn->channel_strided_input() ? "false" : "true";
+      const auto scg = inst_gn->strided_channel_grouping() ? "true" : "false";
       flags.set("groupNormStridedChannelGrouping", scg);
 
       return NormOptions{NormType::GroupNorm, feature_index, num_groups,

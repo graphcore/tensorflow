@@ -57,7 +57,7 @@ def _group_norm_impl(inputs,
                      trainable=True,
                      scope=None,
                      norm_type="",
-                     channel_strided_input=True):
+                     strided_channel_grouping=True):
   """Internal implemenation of any group norm type operation."""
 
   inputs = ops.convert_to_tensor(inputs)
@@ -135,7 +135,7 @@ def _group_norm_impl(inputs,
           data_format=data_format,
           epsilon=epsilon,
           num_groups=groups,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
 
     else:
       # Calculate the moments.
@@ -144,7 +144,7 @@ def _group_norm_impl(inputs,
           data_format=data_format,
           epsilon=epsilon,
           num_groups=groups,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
 
       outputs = gen_popnn_ops.popnn_group_norm_inference(
           inputs=inputs,
@@ -155,7 +155,7 @@ def _group_norm_impl(inputs,
           data_format=data_format,
           epsilon=epsilon,
           num_groups=groups,
-          channel_strided_input=channel_strided_input)
+          strided_channel_grouping=strided_channel_grouping)
 
     return outputs
 
@@ -176,7 +176,7 @@ def group_norm(inputs,
                training=True,
                trainable=True,
                scope=None,
-               channel_strided_input=True):
+               strided_channel_grouping=True):
   """Functional interface for the group normalization layer.
 
   Reference: https://arxiv.org/abs/1803.08494.
@@ -208,10 +208,11 @@ def group_norm(inputs,
     trainable: If `True` also add variables to the graph collection
       `GraphKeys.TRAINABLE_VARIABLES` (see `tf.Variable`).
     scope: Optional scope for `variable_scope`.
-    channel_strided_input: Optional flag indicating if the input is strided by
-      channel. As such, poplibs expects groups to be strided by channel. The
-      default value here is True, which retains this behaviour. False indicates
-      that the input is not so; poplibs will handle the remapping internally.
+    strided_channel_grouping: Selects whether to group the channels dimension
+      for group normalisation with a stride between channels. Enabling this
+      makes the PopLibs implementation more efficient but is unconventional.
+      Among other things this will mean that using pre-trained weights would not
+      be possible if not produced with this unconventional implementation.
 
   Returns:
     A `Tensor` representing the output of the operation.
@@ -225,7 +226,7 @@ def group_norm(inputs,
   return _group_norm_impl(inputs, groups, channels_axis, center, scale,
                           epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
-                          "GroupNorm", channel_strided_input)
+                          "GroupNorm", strided_channel_grouping)
 
 
 @deprecation.deprecated_args(

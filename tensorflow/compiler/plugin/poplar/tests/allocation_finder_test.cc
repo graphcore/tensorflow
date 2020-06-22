@@ -2660,7 +2660,7 @@ ENTRY top {
   convolution = f32[1,4,4,2] convolution(arg0, arg1), window={size=1x1}, dim_labels=b01f_01io->b01f
   arg2 = f32[2] parameter(2)
   arg3 = f32[2] parameter(3)
-  ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(convolution, arg2, arg3), custom_call_target="GroupNormTraining", backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"
+  ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(convolution, arg2, arg3), custom_call_target="GroupNormTraining", backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3,\"strided_channel_grouping\":0}\n"
 }
 
 )";
@@ -3232,7 +3232,7 @@ ENTRY top {
       sharding={maximal device=0}
   ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(gte0, gte1, gte2),
        custom_call_target="GroupNormTraining",
-       backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"}
+       backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3,\"strided_channel_grouping\":0}\n"}
 )";
 
   auto config = GetModuleConfigForTest();
@@ -3297,7 +3297,7 @@ ENTRY top {
       sharding={maximal device=0}
   ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(gte0, gte1, gte2),
        custom_call_target="GroupNormTraining",
-       backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"
+       backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3,\"strided_channel_grouping\":0}\n"
 }
 
 )";
@@ -3364,7 +3364,7 @@ ENTRY top {
       sharding={maximal device=0}
   ROOT cc = (f32[1,4,4,2], f32[2], f32[2]) custom-call(gte0, gte1, gte2),
        custom_call_target="GroupNormTraining",
-       backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3}\n"
+       backend_config="{\"num_groups\":1,\"epsilon\":0.001,\"feature_index\":3,\"strided_channel_grouping\":0}\n"
 }
 
 )";

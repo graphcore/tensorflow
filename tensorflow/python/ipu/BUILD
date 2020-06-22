@@ -545,6 +545,7 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python/keras:layers",
     ],
+    shard_count = 6,
 )
 
 tf_py_test(
