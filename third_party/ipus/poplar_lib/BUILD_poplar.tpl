@@ -1,6 +1,8 @@
 """Template for the BUILD file for the generated poplar repository
 """
 
+load("@local_config_poplar//poplar:build_defs.bzl", "if_custom_poplibs")
+
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
@@ -20,19 +22,30 @@ cc_library(
 
 cc_library(
     name = "poplar_libs",
-    srcs = glob([
-        "lib*/**/libgcl_ct*",
-        "lib*/**/libpoplar*",
-        "lib*/**/libpoplin*",
-        "lib*/**/libpopnn*",
-        "lib*/**/libpopops*",
-        "lib*/**/libpoprand*",
-        "lib*/**/libpopfloat*",
-        "lib*/**/libpopsys*",
-        "lib*/**/libpoputil*",
-        "lib*/**/libtbb.*",
-        "lib*/**/libtbbmalloc.*",
-    ]),
+    srcs = glob(
+        [
+            "lib*/poplar/libgcl_ct*",
+            "lib*/poplar/libpoplar*",
+            "lib*/poplar/libtbb.*",
+            "lib*/poplar/libtbbmalloc.*",
+        ] + if_custom_poplibs([
+            "lib*/poplibs/libpoplin*",
+            "lib*/poplibs/libpopnn*",
+            "lib*/poplibs/libpopops*",
+            "lib*/poplibs/libpoprand*",
+            "lib*/poplibs/libpopfloat*",
+            "lib*/poplibs/libpopsys*",
+            "lib*/poplibs/libpoputil*",
+        ], [
+            "lib*/poplar/libpoplin*",
+            "lib*/poplar/libpopnn*",
+            "lib*/poplar/libpopops*",
+            "lib*/poplar/libpoprand*",
+            "lib*/poplar/libpopfloat*",
+            "lib*/poplar/libpopsys*",
+            "lib*/poplar/libpoputil*",
+        ]),
+    ),
     deps = [":poplar_headers"],
 )
 

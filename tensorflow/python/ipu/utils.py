@@ -206,7 +206,7 @@ def configure_ipu_system(config, device="cpu"):
 
 
 def get_ipu_config(session=None):
-  """Get the configuration of an IPU system. 
+  """Get the configuration of an IPU system.
 
   Args:
     session: An optional session on which to execute.
@@ -1407,13 +1407,20 @@ def move_variable_initialization_to_cpu(graph=None):
     if not isinstance(v, values.DistributedVariable):
       variables.append(v)
 
+  def _uses_resource(op):
+    """ Helper to determine if an op uses a resource """
+    return any(input_tensor.dtype == 'resource' for input_tensor in op.inputs)
+
   init_ops = []
   dep_ops = [v.initializer.inputs[1].op for v in variables]
   visited = set()
 
+  # Depth-first search up the graph starting from all variables in VARIABLES
+  # Place all touched ops on the CPU, but do not touch or search ops that use
+  # resource tensors, otherwise device colocation could be violated.
   while dep_ops:
     op = dep_ops.pop()
-    if not op in visited:
+    if op not in visited and not _uses_resource(op):
       visited.add(op)
       init_ops += [op]
       dep_ops += [x.op for x in op.inputs]

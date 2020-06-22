@@ -538,7 +538,7 @@ tf_py_test(
         "//tensorflow/python:variables",
     ],
     shard_count = 8,
-    tags = ["exclusive"],
+    tags = ["isolated_poplar_tests"],
 )
 
 tf_py_test(
@@ -574,7 +574,7 @@ tf_py_test(
         "//tensorflow/python:variables",
     ],
     shard_count = 8,
-    tags = ["exclusive"],
+    tags = ["isolated_poplar_tests"],
 )
 
 tf_py_test(
@@ -586,7 +586,7 @@ tf_py_test(
         "//tensorflow/python/ipu:ipu_lib",
     ],
     shard_count = 4,
-    tags = ["exclusive"],
+    tags = ["isolated_poplar_tests"],
 )
 
 tf_py_test(

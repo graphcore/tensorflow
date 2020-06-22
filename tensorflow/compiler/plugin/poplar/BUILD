@@ -3679,7 +3679,7 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/multi_ipu_test.py"],
     enabled_backends = ["poplar"],
-    tags = ["exclusive"],
+    tags = ["isolated_poplar_tests"],
     deps = [
         ":test_utils_py",
         "//tensorflow/compiler/tests:xla_test",

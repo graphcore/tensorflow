@@ -25,6 +25,7 @@ from tensorflow.python import feature_column
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute.cluster_resolver.cluster_resolver import SimpleClusterResolver
 from tensorflow.python.distribute.distribute_config import DistributeConfig
+from tensorflow.python.distribute.multi_worker_test_base import pick_unused_port
 from tensorflow.python.estimator import estimator as estimator_lib
 from tensorflow.python.estimator import model_fn as model_fn_lib
 from tensorflow.python.framework import combinations
@@ -271,7 +272,9 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
       estimator.train(input_fn=my_input_fn, steps=2)
 
   def testDistributedMultipleIterationsPerLoopNotImplemented(self):
-    cluster_spec = server_lib.ClusterSpec({"worker": ["localhost:2222"]})
+    port = pick_unused_port()
+    cluster_spec = server_lib.ClusterSpec(
+        {"worker": ["localhost:{}".format(port)]})
     strategy = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
         SimpleClusterResolver(cluster_spec, task_type="worker", task_id=0))
 
@@ -1500,13 +1503,16 @@ class IPUEstimatorTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     def mock_input_fn(params):
       raise ParamsReceived(str(params))
 
+    port = pick_unused_port()
+
     train_cluster = server_lib.ClusterSpec(
-        {"worker": ["worker0:2222", "worker1:2222"]})
+        {"worker": ["worker0:{}".format(port), "worker1:2222"]})
     train_distribute = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
         SimpleClusterResolver(train_cluster, task_type="worker", task_id=0))
 
-    eval_cluster = server_lib.ClusterSpec(
-        {"worker": ["worker0:2222", "worker1:2222", "worker2:2222"]})
+    eval_cluster = server_lib.ClusterSpec({
+        "worker": ["worker0:{}".format(port), "worker1:2222", "worker2:2222"]
+    })
     eval_distribute = ipu_multi_worker_strategy.IPUMultiWorkerStrategy(
         SimpleClusterResolver(eval_cluster, task_type="worker", task_id=0))
 
