@@ -90,7 +90,7 @@ class IPUPipelineEstimatorSpec(
         stored in the remote memory. During the weight update this variable will
         be streamed onto the device and then streamed back to the remote memory
         after it has been updated. Requires the machine to be configured with
-        support for `Poplar graph streaming`. Offloading variables into remote
+        support for `Poplar remote buffers`. Offloading variables into remote
         memory can reduce maximum memory liveness, but can also increase the
         computation time of the weight update. Note that this option has no
         effect for inference only pipelines.
