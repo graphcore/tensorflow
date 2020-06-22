@@ -290,11 +290,9 @@ class MultiConvTest(test_util.TensorFlowTestCase):
     init_values = [np.ones([2, 32, 32, 4]), np.ones([2, 32, 32, 4])]
 
     conv_classifications = [2, 0, 0, 0]
-    # Note how there is only one multiconv instruction, which has two
-    # convolutions.
+    # Note how there is only one multiconv instruction.
     compute_sets = [
-        '/custom-call/MultiConv_*/0',
-        '/custom-call/MultiConv_*/1',
+        '/custom-call/MultiConv_',
         'ipu/Mean*/reduce*/Reduce',
         'ipu/add',
         '__seed/set/setMasterSeed',
