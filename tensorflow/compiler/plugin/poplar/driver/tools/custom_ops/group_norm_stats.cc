@@ -22,9 +22,10 @@ namespace poplarplugin {
 
 HloGroupNormStatsInstruction::HloGroupNormStatsInstruction(
     const Shape& shape, HloInstruction* const operand, int32 num_groups,
-    float epsilon, int feature_index)
-    : HloNormInstruction(shape, {operand}, PoplarOp::GroupNormStatistics,
-                         num_groups, epsilon, feature_index) {}
+    bool channel_strided_input, float epsilon, int feature_index)
+    : HloGroupNormBaseInstruction(
+          shape, {operand}, PoplarOp::GroupNormStatistics, num_groups,
+          channel_strided_input, epsilon, feature_index) {}
 
 const HloInstruction* HloGroupNormStatsInstruction::operand() const {
   return HloInstruction::operand(0);
@@ -51,14 +52,15 @@ HloGroupNormStatsInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
   return CreateGroupNormStats(shape, new_operands[0], num_groups(), epsilon(),
-                              feature_index());
+                              feature_index(), channel_strided_input());
 }
 
 std::unique_ptr<HloInstruction> CreateGroupNormStats(
     const Shape& shape, HloInstruction* const operand, int32 num_groups,
-    float epsilon, int feature_index) {
+    bool channel_strided_input, float epsilon, int feature_index) {
   return absl::make_unique<HloGroupNormStatsInstruction>(
-      shape, operand, num_groups, epsilon, feature_index);
+      shape, operand, num_groups, channel_strided_input, epsilon,
+      feature_index);
 }
 
 namespace {
@@ -75,10 +77,14 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGroupNormStatsFactoryFunc(
   TF_ASSIGN_OR_RETURN(int feature_index,
                       attribute_map.GetAttributeAsInt("feature_index"));
 
+  TF_ASSIGN_OR_RETURN(
+      bool channel_strided_input,
+      attribute_map.GetAttributeAsBool("channel_strided_input"));
+
   auto args = call->operands();
 
-  return CreateGroupNormStats(call->shape(), args[0], num_groups, epsilon,
-                              feature_index);
+  return CreateGroupNormStats(call->shape(), args[0], num_groups,
+                              channel_strided_input, epsilon, feature_index);
 }
 
 static HloPoplarInstructionFactory group_norm_stats_factory(
