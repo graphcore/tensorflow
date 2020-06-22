@@ -44,7 +44,8 @@ namespace tensorflow {
 namespace {
 void GetAndSetNormOpts(OpKernelConstruction* ctx,
                        IPUCustomKernelsUtil::AttributeMap& attribute_map,
-                       int32& num_groups, TensorFormat& data_format) {
+                       int32& num_groups, TensorFormat& data_format,
+                       bool& channel_strided_input) {
   OP_REQUIRES_OK(ctx, ctx->GetAttr("num_groups", &num_groups));
   attribute_map.AddAttribute("num_groups", num_groups);
   float epsilon;
@@ -55,13 +56,17 @@ void GetAndSetNormOpts(OpKernelConstruction* ctx,
   OP_REQUIRES(
       ctx, FormatFromString(data_format_str, &data_format),
       errors::InvalidArgument("Invalid data format: ", data_format_str));
+
+  OP_REQUIRES_OK(ctx,
+                 ctx->GetAttr("channel_strided_input", &channel_strided_input));
 };
 }  // namespace
 
 class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnGroupNorm(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
-    GetAndSetNormOpts(ctx, attribute_map_, num_groups_, data_format_);
+    GetAndSetNormOpts(ctx, attribute_map_, num_groups_, data_format_,
+                      channel_strided_input_);
   }
 
  public:
@@ -82,6 +87,9 @@ class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
 
     const auto num_batches = input_shape.dim_size(batch_index);
     const auto num_channels = input_shape.dim_size(feature_index);
+
+    attribute_map_.AddAttribute("channel_strided_input",
+                                channel_strided_input_);
 
     xla::XlaBuilder& b = *ctx->builder();
 
@@ -150,6 +158,7 @@ class PopnnGroupNorm : public XlaOpKernel, IpuOpKernel {
  private:
   int32 num_groups_;
   TensorFormat data_format_;
+  bool channel_strided_input_;
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGroupNorm);
 };
 REGISTER_IPU_OP("PopnnGroupNormInference", PopnnGroupNorm);
@@ -158,7 +167,8 @@ REGISTER_IPU_OP("PopnnGroupNormTraining", PopnnGroupNorm);
 class PopnnGroupNormGrad : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnGroupNormGrad(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
-    GetAndSetNormOpts(ctx, attribute_map_, num_groups_, data_format_);
+    GetAndSetNormOpts(ctx, attribute_map_, num_groups_, data_format_,
+                      channel_strided_input_);
   }
 
  public:
@@ -178,6 +188,8 @@ class PopnnGroupNormGrad : public XlaOpKernel, IpuOpKernel {
     const int feature_index =
         GetTensorFeatureDimIndex(input_shape.dims(), data_format_);
     attribute_map_.AddAttribute("feature_index", feature_index);
+    attribute_map_.AddAttribute("channel_strided_input",
+                                channel_strided_input_);
 
     xla::XlaBuilder& b = *ctx->builder();
 
@@ -205,6 +217,7 @@ class PopnnGroupNormGrad : public XlaOpKernel, IpuOpKernel {
  private:
   int32 num_groups_;
   TensorFormat data_format_;
+  bool channel_strided_input_;
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGroupNormGrad);
 };
 REGISTER_IPU_OP("PopnnGroupNormGrad", PopnnGroupNormGrad);
@@ -213,7 +226,8 @@ class PopnnGroupNormStatistics : public XlaOpKernel, IpuOpKernel {
  public:
   explicit PopnnGroupNormStatistics(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx) {
-    GetAndSetNormOpts(ctx, attribute_map_, num_groups_, data_format_);
+    GetAndSetNormOpts(ctx, attribute_map_, num_groups_, data_format_,
+                      channel_strided_input_);
   }
 
  public:
@@ -231,6 +245,9 @@ class PopnnGroupNormStatistics : public XlaOpKernel, IpuOpKernel {
         GetTensorBatchDimIndex(input_shape.dims(), data_format_);
 
     const auto num_batches = input_shape.dim_size(batch_index);
+
+    attribute_map_.AddAttribute("channel_strided_input",
+                                channel_strided_input_);
 
     xla::XlaBuilder& b = *ctx->builder();
 
@@ -257,6 +274,7 @@ class PopnnGroupNormStatistics : public XlaOpKernel, IpuOpKernel {
 
  private:
   int32 num_groups_;
+  bool channel_strided_input_;
   TensorFormat data_format_;
   TF_DISALLOW_COPY_AND_ASSIGN(PopnnGroupNormStatistics);
 };
