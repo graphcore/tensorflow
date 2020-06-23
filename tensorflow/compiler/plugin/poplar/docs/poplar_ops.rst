@@ -30,9 +30,10 @@ See :py:func:`tensorflow.python.ipu.rand_ops.dropout`.
 Embedding lookup
 ~~~~~~~~~~~~~~~~
 
-This is a version of embedding lookup which will produce a smaller memory
-footprint for small lookups. Instead of using dynamic lookup into the main
-embedding dictionary, it uses a one hot operator and a multiply.
+This is a version of embedding lookup that has been optimised for the IPU.
+It allows the embedding lookup to be serialised into smaller lookups, which can
+reduce the maximum memory at the cost of extra computation when the embedding
+tensors are used by multiple operations.
 
 See :py:func:`tensorflow.python.ipu.embedding_ops.embedding_lookup`.
 
