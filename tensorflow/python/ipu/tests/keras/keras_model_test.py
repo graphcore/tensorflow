@@ -163,36 +163,36 @@ class BatchCallbackCounter(keras.callbacks.Callback):
 class IPUModelTest(test.TestCase):
   @test_util.run_v2_only
   def testEmptyModelCreation(self):
-    s = ipu.keras.Model([])
+    s = ipu.keras.Sequential([])
     self.assertEqual(s.layers, [])
 
   @test_util.run_v2_only
   def testModelCreation(self):
-    m = ipu.keras.Model(simple_model())
+    m = ipu.keras.Sequential(simple_model())
     self.assertEqual(len(m.layers), 2)
 
   @test_util.run_v2_only
   def testModelBadLayers(self):
     with self.assertRaisesRegex(ValueError,
                                 "may only contain lists of Keras Layers."):
-      ipu.keras.Model([[
+      ipu.keras.Sequential([[
           keras.layers.Dense(8),
           keras.layers.Dense(8),
       ]])
 
   @test_util.run_v2_only
   def testCannotCallEagerly(self):
-    p = ipu.keras.Model(simple_model())
+    p = ipu.keras.Sequential(simple_model())
 
     c = constant_op.constant(np.zeros([1, 12], dtype=np.float32))
 
     with self.assertRaisesRegex(ValueError,
-                                "Model can only be called through the"):
+                                "Sequential can only be called through the"):
       p(c)
 
   @test_util.run_v2_only
   def testCannotUseKerasV1Optimizers(self):
-    p = ipu.keras.Model(simple_model())
+    p = ipu.keras.Sequential(simple_model())
 
     with self.assertRaisesRegex(
         ValueError,
@@ -204,7 +204,7 @@ class IPUModelTest(test.TestCase):
   def testMustCallCompileFit(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(simple_model())
+      m = ipu.keras.Sequential(simple_model())
 
       with self.assertRaisesRegex(
           RuntimeError, "You must compile your model before training/testing"):
@@ -214,7 +214,7 @@ class IPUModelTest(test.TestCase):
   def testMustCallCompileEvaluate(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(simple_model())
+      m = ipu.keras.Sequential(simple_model())
 
       with self.assertRaisesRegex(
           RuntimeError, "You must compile your model before training/testing"):
@@ -224,50 +224,53 @@ class IPUModelTest(test.TestCase):
   def testNeedTupleDatasetFit(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(simple_model())
+      m = ipu.keras.Sequential(simple_model())
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, "Model.fit requires a dataset containing a tuple"):
+          ValueError, "Sequential.fit requires a dataset containing a tuple"):
         m.fit(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
   def testNeedTupleDatasetEvaluate(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(simple_model())
+      m = ipu.keras.Sequential(simple_model())
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, "Model.evaluate requires a dataset containing a tuple"):
+          ValueError,
+          "Sequential.evaluate requires a dataset containing a tuple"):
         m.evaluate(test_inference_dataset(length=48))
 
   @test_util.run_v2_only
   def testNeedNonTupleDatasetPredict(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(simple_model())
+      m = ipu.keras.Sequential(simple_model())
 
       with self.assertRaisesRegex(
-          ValueError, "Model.predict requires a dataset containing either"):
+          ValueError,
+          "Sequential.predict requires a dataset containing either"):
         m.predict(test_dataset(length=48))
 
   @test_util.run_v2_only
   def testMismatchDatasetLengthToModelDepth(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(simple_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(simple_model(), accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
-          ValueError, "Model requires the number of batches in the dataset"):
+          ValueError,
+          "Sequential requires the number of batches in the dataset"):
         m.fit(test_dataset(length=64), epochs=4)
 
   @test_util.run_v2_only
   def testUnlimitedDatasetHasNoStepsPerEpoch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(simple_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(simple_model(), accumulation_count=24)
       m.compile('sgd', loss='mse')
 
       with self.assertRaisesRegex(
@@ -278,7 +281,7 @@ class IPUModelTest(test.TestCase):
   def testStepsPerEpochTooLargeForDataset(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=12)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=12)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -298,7 +301,7 @@ class IPUModelTest(test.TestCase):
   def testResultsOneEpochWithTfOptimizerNoAccumulation_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model())
+      m = ipu.keras.Sequential(fixed_weight_model())
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -335,7 +338,7 @@ class IPUModelTest(test.TestCase):
   def testResultsOneEpochWithTfOptimizer_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -372,7 +375,7 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryWithKerasOptimizer(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -395,7 +398,7 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryTwoEpochs(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -419,7 +422,7 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryStepsPerRun(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -443,7 +446,7 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryStepsPerEpochOneEpoch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -468,7 +471,7 @@ class IPUModelTest(test.TestCase):
     with strategy.scope():
       ds = test_dataset()
 
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -525,7 +528,7 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryStepsPerEpochTwoEpochs(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -549,7 +552,7 @@ class IPUModelTest(test.TestCase):
   def testFitHistoryWithKerasOptimizerBatchSize2(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -576,7 +579,7 @@ class IPUModelTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -601,7 +604,7 @@ class IPUModelTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -627,7 +630,7 @@ class IPUModelTest(test.TestCase):
       # Clear old reports
       ipu.ops.summary_ops.get_ipu_reports()
 
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -650,7 +653,7 @@ class IPUModelTest(test.TestCase):
   def testFitWithMetrics(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=24)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=24)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -678,7 +681,7 @@ class IPUModelTest(test.TestCase):
   def testEval_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)
@@ -705,7 +708,7 @@ class IPUModelTest(test.TestCase):
   def testPredict_CpuMatch(self):
     strategy = ipu.ipu_strategy.IPUStrategy()
     with strategy.scope():
-      m = ipu.keras.Model(fixed_weight_model(), accumulation_count=8)
+      m = ipu.keras.Sequential(fixed_weight_model(), accumulation_count=8)
 
       cfg = ipu.utils.create_ipu_config(profiling=True)
       cfg = ipu.utils.auto_select_ipus(cfg, 1)

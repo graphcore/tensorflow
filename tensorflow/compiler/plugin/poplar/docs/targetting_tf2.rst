@@ -2,7 +2,7 @@ Targeting the IPU with TensorFlow 2
 -----------------------------------
 
 In TensorFlow version 2, the Eager mode is enabled by default, and Keras has
-become the main API for constructing models.  Distribution strategies are the
+become the main API for constructing models. Distribution strategies are the
 new way of targeting different pieces of hardware.
 
 As in TensorFlow version 1, there are a small number of things
@@ -16,12 +16,12 @@ IPUStrategy
 
 Distribution strategies are a more advanced and flexible version of device
 tagging. The ``IPUStrategy`` is a sub-class of distribution strategy which
-specifically targets a system with one or more IPUs attached.  A separate
+specifically targets a system with one or more IPUs attached. A separate
 class ``IPUMultiWorkerStrategy`` is for targeting a multiple system
 configuration.
 
 Use the ``strategy.scope()`` context to ensure that everything within that
-context will be compiled for the IPU device.  You should do this instead
+context will be compiled for the IPU device. You should do this instead
 of using the ``tf.device`` context.
 
 .. code-block:: python
@@ -46,16 +46,16 @@ Function annotation with @tf.function
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The function annotation ``@tf.function`` is well documented in the standard
-TensorFlow documentation.  It converts the body of the annotated function into
+TensorFlow documentation. It converts the body of the annotated function into
 a fused set of operations that are executed as a group, in the same way as a
-whole graph would have been in TensorFlow version 1.  In addition, a library
+whole graph would have been in TensorFlow version 1. In addition, a library
 called ``autograph`` will convert python flow control constructs into TensorFlow
 graph operations.
 
 Best practice is to ensure that anything which is intended to be executed on
-the IPU is placed into a function and annotated with ``@tf.function``.  This
+the IPU is placed into a function and annotated with ``@tf.function``. This
 does not apply to constructing a Keras model or using the Keras ``Model.fit()``
-API.  See below for details on Keras.
+API. See below for details on Keras.
 
 When calling a function that is marked with a ``@tf.function`` from within a
 distribution strategy like ``IPUStrategy``, you should not call them directly,
@@ -70,9 +70,9 @@ Keras
 ~~~~~
 
 The Keras API is used for constructing models using a set of high-level ``Layers``
-objects.  https://www.tensorflow.org/guide/keras.
+objects. https://www.tensorflow.org/guide/keras.
 
-Full support is available for Keras on the IPU.  It is important to ensure
+Full support is available for Keras on the IPU. It is important to ensure
 that the model is both instantiated and called from within an ``IPUStrategy``
 context.
 
@@ -91,7 +91,7 @@ Custom training loops
 _____________________
 
 If a more sophisticated training loop is required, then it can be described
-inside a function which is marked as a ``@tf.function``.  See the examples
+inside a function which is marked as a ``@tf.function``. See the examples
 section for a full example.
 
 The outer training function should be called using the ``experimental_run_v2``
@@ -101,27 +101,27 @@ strategy's configuration.
 Model class
 ___________
 
-An higher performance alternative to using the standard Keras Model is
-available.  It is called ``Model``, and found at
-``tensorflow.python.ipu.keras.Model``.  It supports the following features:
+An higher performance alternative to using the standard Keras Sequential is
+available. It is called ``Sequential``, and found at
+``tensorflow.python.ipu.keras.Sequential``. It supports the following features:
 
 * On device training loop for reduction of communication overhead.
 * Gradient accumulation for simulating larger batch sizes.
 
 It is a substitute for the Keras Sequentual class, when only a single IPU
-is used for training.  For a high performance multi-IPU solution use the
+is used for training. For a high performance multi-IPU solution use the
 ``PipelinedModel`` described below.
 
 Unlike the standard Keras model classes, it must be trained, evaluated and
-operatored with the ``fit``, ``evaluate`` and ``predict`` methods.  It
-cannot be called directly.  For a similar reason, you cannot get the list
+operatored with the ``fit``, ``evaluate`` and ``predict`` methods. It
+cannot be called directly. For a similar reason, you cannot get the list
 of trainable variables before you have executed it.
 
 PipelinedModel class
 ____________________
 
 ``PipelinedModel`` is a substitute for the Keras Sequential model class, with
-support for multi-device IPU pipelines.  Using pipelined execution allows the
+support for multi-device IPU pipelines. Using pipelined execution allows the
 IPU to achieve high compute efficiency while utilising multiple devices.
 
 The PipelinedModel has the same API as the standard Keras Model and
@@ -134,9 +134,9 @@ See the examples section to see how the API is used.
 
 In a machine learning model a step is often considered to be one pass through
 the model where the forward pass is done, then the gradients are calculated
-and then the parameters are updated.  Since a pipeline accumulates multiple
+and then the parameters are updated. Since a pipeline accumulates multiple
 gradients before applying them collectively to the parameter, we call a step
-one of those pipeline operations.  So the number of data samples processed per
+one of those pipeline operations. So the number of data samples processed per
 step is equal to the batch size multiplied by the pipeline depth.
 
 This will be reflected in the rate at which the progress bar advances, and the

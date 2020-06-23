@@ -120,8 +120,11 @@ Keras
 ^^^^^
 
 .. automodule:: tensorflow.python.ipu.keras
-  :members: Model, PipelinedModel
-  :imported-members: Model, PipelinedModel
+  :members: Sequential, PipelinedModel
+  :imported-members: Sequential, PipelinedModel
+
+.. automodule:: tensorflow.python.ipu.keras.model
+  :members: IPUSequential
 
 .. _keras-layers-api:
 
