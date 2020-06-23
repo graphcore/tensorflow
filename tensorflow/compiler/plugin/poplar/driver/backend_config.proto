@@ -35,6 +35,8 @@ enum FrontendAttributeId {
   NUM_BATCHES_TO_ACCUMULATE = 9;
   // The "Machine Learning" type of the instruction
   ML_TYPE = 10;
+  // Used to set Poplar OptionFlags of an instruction.
+  OPTION_FLAGS = 11;
 };
 
 enum StochasticRounding {

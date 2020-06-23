@@ -24,11 +24,11 @@ cc_library(
     name = "poplar_libs",
     srcs = glob(
         [
-            "lib*/poplar/libgcl_ct*",
             "lib*/poplar/libpoplar*",
+        ] + if_custom_poplibs([
+            "lib*/poplar/libgcl_ct*",
             "lib*/poplar/libtbb.*",
             "lib*/poplar/libtbbmalloc.*",
-        ] + if_custom_poplibs([
             "lib*/poplibs/libpoplin*",
             "lib*/poplibs/libpopnn*",
             "lib*/poplibs/libpopops*",
@@ -37,13 +37,16 @@ cc_library(
             "lib*/poplibs/libpopsys*",
             "lib*/poplibs/libpoputil*",
         ], [
-            "lib*/poplar/libpoplin*",
-            "lib*/poplar/libpopnn*",
-            "lib*/poplar/libpopops*",
-            "lib*/poplar/libpoprand*",
-            "lib*/poplar/libpopfloat*",
-            "lib*/poplar/libpopsys*",
-            "lib*/poplar/libpoputil*",
+            "lib*/**/libgcl_ct*",
+            "lib*/**/libtbb.*",
+            "lib*/**/libtbbmalloc.*",
+            "lib*/**/libpoplin*",
+            "lib*/**/libpopnn*",
+            "lib*/**/libpopops*",
+            "lib*/**/libpoprand*",
+            "lib*/**/libpopfloat*",
+            "lib*/**/libpopsys*",
+            "lib*/**/libpoputil*",
         ]),
     ),
     deps = [":poplar_headers"],

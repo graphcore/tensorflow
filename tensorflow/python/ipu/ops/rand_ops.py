@@ -16,15 +16,20 @@
 Poprand operators
 ~~~~~~~~~~~~~~~~~
 """
-
 from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 
 
-def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
-  """This targets the PopLibs Poprand dropout operation, optimized for execution
+def dropout(x,
+            seed=None,
+            rate=0.5,
+            scale=1,
+            seed_modifier=1,
+            noise_shape=None,
+            name=None):
+  """This targets the PopLibs Poprand operation, optimized for execution
   on the IPU.
 
   Args:
@@ -36,6 +41,8 @@ def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
     scale: An optional factor to apply to all other elements.
     seed_modifier: An optional parameter given to poplar which uses it to modify
                    the seed.
+    noise_shape: An optional parameter that determines the shape of the dropout. 
+                 Regular, unshaped dropout used if not specified.
     name: Optional op name.
 
   Returns:
@@ -59,6 +66,18 @@ def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
     raise ValueError("Expected the seed to have a shape [2], but got %s." %
                      (str(seed.shape)))
 
+  if noise_shape:
+    x_shape = x.get_shape().as_list()
+    if len(x_shape) != len(noise_shape):
+      raise ValueError("The length of noise_shape must equal the rank of x.")
+
+    for i, j in zip(x_shape, noise_shape):
+      if j == 1:
+        continue
+
+      if i != j:
+        raise ValueError("Dimension mismatch, %d != %d." % (i, j))
+
   # We transfrom rate to be the change an individual node will dropout as
   # ipu_dropout is using the old tensorflow method that rate is the probability
   # that value is kept rather than disgarded.
@@ -68,4 +87,5 @@ def dropout(x, seed=None, rate=0.5, scale=1, seed_modifier=1, name=None):
                                      scale=scale,
                                      name=name,
                                      is_using_user_seed=is_using_user_seed,
-                                     seed_modifier=seed_modifier)[0]
+                                     seed_modifier=seed_modifier,
+                                     noise_shape=noise_shape)[0]

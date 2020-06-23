@@ -51,6 +51,7 @@ struct NormOptions {
   uint32 feature_index;
   absl::optional<uint32> num_groups;
   float epsilon;
+  poplar::OptionFlags flags;
 };
 
 StatusOr<NormOptions> GetNormOptions(const HloInstruction* inst) {
@@ -92,8 +93,16 @@ StatusOr<NormOptions> GetNormOptions(const HloInstruction* inst) {
             "Norm - Num groups cannot be interpreted as an unsigned integer.");
       }
       const auto num_groups = *optional_num_groups;
+
+      // Build a poplar::OptionFlags instance and indicate if channel
+      // grouping is to be used.
+      poplar::OptionFlags flags;
+      const auto* inst_gn = Cast<HloGroupNormBaseInstruction>(inst);
+      const auto scg = inst_gn->strided_channel_grouping() ? "true" : "false";
+      flags.set("groupNormStridedChannelGrouping", scg);
+
       return NormOptions{NormType::GroupNorm, feature_index, num_groups,
-                         norm_inst->epsilon()};
+                         norm_inst->epsilon(), flags};
     }
   }
 }
@@ -278,10 +287,11 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
         case NormType::GroupNorm: {
           // For group norm variance_or_inv_std_dev is inv_std_dev, so we
           // don't need to convert it.
-          args[5] = popnn::gn::groupNormalise(graph, operand, scale, offset,
-                                              mean, variance_or_inv_std_dev,
-                                              prog, debug_prefix)
-                        .first;
+          args[5] =
+              popnn::gn::groupNormalise(graph, operand, scale, offset, mean,
+                                        variance_or_inv_std_dev, prog,
+                                        debug_prefix, norm_opts.flags)
+                  .first;
           break;
         }
       }
@@ -390,12 +400,12 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
           std::tie(args[4], args[5]) = popnn::gn::groupNormStatistics(
               graph, operand, norm_opts.epsilon, prog, *norm_opts.num_groups,
               /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, debug_prefix);
+              poplar::FLOAT, debug_prefix, norm_opts.flags);
 
-          args[3] =
-              popnn::gn::groupNormalise(graph, operand, scale, offset, args[4],
-                                        args[5], prog, debug_prefix)
-                  .first;
+          args[3] = popnn::gn::groupNormalise(graph, operand, scale, offset,
+                                              args[4], args[5], prog,
+                                              debug_prefix, norm_opts.flags)
+                        .first;
           break;
         }
       }
@@ -517,16 +527,17 @@ class NormGradOp : public PoplarOpDef {
           // don't need to convert it.
           poplar::Tensor operand_whitened = popnn::gn::groupNormWhiten(
               graph, operand, mean, variance_or_inv_std_dev, prog,
-              debug_prefix + "/WhitenedActs");
+              debug_prefix + "/WhitenedActs", norm_opts.flags);
 
           // Compute the grad for the operand.
           args[5] = popnn::gn::groupNormGradients(
               graph, operand_whitened, grad_output, variance_or_inv_std_dev,
-              scale, prog, poplar::FLOAT, debug_prefix + "/OperandGrad");
+              scale, prog, poplar::FLOAT, debug_prefix + "/OperandGrad",
+              norm_opts.flags);
           // Compute the grads for the scale and offset.
           std::tie(args[6], args[7]) = popnn::gn::groupNormParamGradients(
               graph, operand_whitened, grad_output, prog, poplar::FLOAT,
-              debug_prefix + "/ScaleOffsetGrads");
+              debug_prefix + "/ScaleOffsetGrads", norm_opts.flags);
           break;
         }
       }
@@ -621,7 +632,7 @@ class NormStatisticsOp : public PoplarOpDef {
           std::tie(args[1], args[2]) = popnn::gn::groupNormStatistics(
               graph, operand, norm_opts.epsilon, prog, *norm_opts.num_groups,
               /*unbiasedVarEstimate=*/false, use_stable_statistics,
-              poplar::FLOAT, debug_prefix);
+              poplar::FLOAT, debug_prefix, norm_opts.flags);
           break;
         }
       }

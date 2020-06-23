@@ -16,6 +16,10 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_IPU_CUSOM_KERNELS_UTIL_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_KERNELS_IPU_CUSOM_KERNELS_UTIL_H_
 
+#include <sstream>
+#include <string>
+#include <vector>
+
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 
@@ -25,9 +29,6 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/any.h"
-
-#include <sstream>
-#include <string>
 
 namespace xla {
 class HloInstruction;
@@ -62,6 +63,12 @@ class AttributeMap {
   StatusOr<bool> GetAttributeAsBool(const std::string& field_name) const;
   StatusOr<tensorflow::DataType> GetAttributeAsTFDataType(
       const std::string& field_name) const;
+
+  // This is included as absl::flat_hash_set<T> is unordered,
+  // whereas this allows a list to be passed whilst preserving ordering.
+  StatusOr<std::vector<int64>> GetAttributeInt64Vector(
+      const std::string& field_name) const;
+
   StatusOr<absl::flat_hash_set<int64>> GetAttributeFlatHashSet(
       const std::string& field_name) const;
   StatusOr<absl::flat_hash_map<int64, int64>> GetAttributeFlatHashMap(

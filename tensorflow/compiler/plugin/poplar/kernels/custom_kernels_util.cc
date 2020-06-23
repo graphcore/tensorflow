@@ -165,6 +165,14 @@ void AttributeMap::AddAttribute(const std::string& field_name,
     auto casted_val = absl::any_cast<std::string>(attr);
     attributes_[field_name] = GetAsJsonValue(casted_val);
 
+  } else if (tinfo == typeid(std::vector<int64>)) {
+    auto casted_vals = absl::any_cast<std::vector<int64>>(attr);
+    // Always create the field.
+    auto& values = attributes_[field_name];
+    values = Json::arrayValue;
+    for (auto val : casted_vals) {
+      values.append(GetAsJsonValue(val));
+    }
   } else if (tinfo == typeid(absl::flat_hash_set<int64>)) {
     auto casted_vals = absl::any_cast<absl::flat_hash_set<int64>>(attr);
     // Always create the field.
@@ -261,6 +269,20 @@ StatusOr<tensorflow::DataType> AttributeMap::GetAttributeAsTFDataType(
                                    dtype_string.c_str());
   }
   return data_type;
+}
+
+StatusOr<std::vector<int64>> AttributeMap::GetAttributeInt64Vector(
+    const std::string& field_name) const {
+  TF_RETURN_IF_ERROR(CheckHasAttribute(field_name));
+  if (!attributes_[field_name].isArray()) {
+    return xla::FailedPrecondition("Custom op field %s is not an array.",
+                                   field_name.c_str());
+  }
+  std::vector<int64> result;
+  for (auto val : attributes_[field_name]) {
+    result.push_back(val.asInt64());
+  }
+  return result;
 }
 
 StatusOr<absl::flat_hash_set<int64>> AttributeMap::GetAttributeFlatHashSet(

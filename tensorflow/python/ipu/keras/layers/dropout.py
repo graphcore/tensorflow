@@ -63,10 +63,7 @@ class Dropout(Layer):
     self.rate = rate
     self.scale = scale
     self.seed_modifier = seed_modifier
-
-    if noise_shape is not None:
-      raise ValueError(
-          "ipu.keras.Dropout does not support `noise_shape` parameter")
+    self.noise_shape = noise_shape
 
     if seed is None:
       # User did not provide a seed
@@ -94,6 +91,7 @@ class Dropout(Layer):
                                 rate=self.rate,
                                 scale=self.scale,
                                 seed_modifier=self.seed_modifier,
+                                noise_shape=self.noise_shape,
                                 name=self.name)
     else:
       output = array_ops.identity(x)

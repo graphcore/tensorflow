@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 
-
 import numpy as np
 
 from tensorflow.python.ipu import normalization_ops
@@ -200,6 +199,7 @@ class PopnnGroupNormTest(test_util.TensorFlowTestCase):
                                              scale=False,
                                              channels_axis=channels_axis,
                                              training=True)
+
     with self.cached_session() as sess:
       sess.run(variables.global_variables_initializer())
       outputs = sess.run(output_op)
