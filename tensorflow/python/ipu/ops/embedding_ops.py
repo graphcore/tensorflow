@@ -185,11 +185,15 @@ class HostEmbedding:
       embedding that resides on the host.
 
       It is assumed that the given embedding will be rank two where the
-      outtermost dimension zero is the token dimension, and the innermost
-      dimension is the encoding dimension.
+      outermost dimension (dimension zero) is the token dimension, and the
+      innermost dimension is the encoding dimension.
 
   """
-  def __init__(self, name, embedding_tensor, optimizer_spec=None):
+  def __init__(self,
+               name,
+               embedding_tensor,
+               partition_strategy="TOKEN",
+               optimizer_spec=None):
     """
     Create a HostEmbedding.
 
@@ -197,7 +201,7 @@ class HostEmbedding:
         name: The name which uniquely identifies the embedding.
         embedding_tensor: The tensor which holds the embedding.
         optimizer_spec: A description of how the embedding will be optimized.
-          When `None`, the embedding is assumed to not be trainable.
+            When `None`, the embedding is assumed to not be trainable.
     """
     if not tensor_util.is_tensor(embedding_tensor):
       raise ValueError(
@@ -209,13 +213,19 @@ class HostEmbedding:
           "HostEmbedding optimizer_spec is not a HostEmbeddingOptimizerSpec" +
           " or None")
 
+    if partition_strategy not in ["TOKEN", "ENCODING"]:
+      raise ValueError("Unknown partition strategy " + str(partition_strategy))
+
     self._name = name
     self._embedding_tensor = embedding_tensor
-    self._lookup_count = 0
-    self._update_count = 0
+    self._partition_strategy = partition_strategy
     self._optimizer_spec = optimizer_spec
+    self._has_lookup = False
 
-  def __call__(self, iteration_count, replication_factor=1, training=True):
+  @deprecation.deprecated_args(None, "This argument no longer has any effect.",
+                               "iteration_count", "replication_factor",
+                               "training")
+  def __call__(self, iteration_count=0, replication_factor=1, training=True):
     """ Register the host embedding with the session.
 
         Args:
@@ -228,17 +238,13 @@ class HostEmbedding:
         Returns:
           A TensorFlow op which will serve the embedding to the device.
     """
-    if iteration_count <= 0:
-      raise ValueError(
-          "HostEmbedding call iteration count must be positive, but it is {}".
-          format(iteration_count))
-    return gen_pop_datastream_ops.ipu_host_embedding(
-        self._embedding_tensor,
-        self._name,
-        lookup_count=iteration_count * self._lookup_count,
-        update_count=(iteration_count * self._update_count if training else 0),
-        replication_factor=replication_factor)
+    if self._has_lookup:
+      return gen_pop_datastream_ops.ipu_host_embedding(self._embedding_tensor,
+                                                       self._name)
+    return self._embedding_tensor
 
+  @deprecation.deprecated_args(None, "This argument no longer has any effect.",
+                               "count")
   def lookup(self, indices, count=1, clip_indices=True):
     """ Perform a host embedding lookup on an IPU.
 
@@ -246,7 +252,7 @@ class HostEmbedding:
           indices: The indices to lookup.
           count: The number of times, per iteration, that this op will be
                  executed.
-          clip_indices: Whether to enforce a the valid range on the lookup
+          clip_indices: Whether to enforce a valid range on the lookup
                         indices with clipping. When False, out-of-range values
                         have undefined behaviour.
         Returns:
@@ -254,17 +260,16 @@ class HostEmbedding:
     """
     indices_shape = indices.shape.as_list()
 
+    # Optionally clip the indices to a safe range
     if clip_indices:
       indices = clip_ops.clip_by_value(indices, 0,
                                        self._embedding_tensor.shape[0] - 1)
 
-    # Flatten all the indices.
+    # Flatten the indices.
     num_indices = reduce(mul, indices_shape, 1)
     indices_flat = array_ops.reshape(indices, [num_indices])
 
-    self._lookup_count += count
     if self._optimizer_spec is not None:
-      self._update_count += count
       with variable_scope.variable_scope(self._name,
                                          reuse=variable_scope.AUTO_REUSE):
         dummy = variable_scope.get_variable("__dummy",
@@ -277,13 +282,17 @@ class HostEmbedding:
           embedding_id=self._name,
           embedding_shape=self._embedding_tensor.shape,
           optimizer="SGD",
+          partition_strategy=self._partition_strategy,
           learning_rate=self._optimizer_spec.get_learning_rate())
     else:
       result = gen_pop_datastream_ops.ipu_device_embedding_lookup(
           indices_flat,
           embedding_id=self._name,
           embedding_shape=self._embedding_tensor.shape,
+          partition_strategy=self._partition_strategy,
           dtype=self._embedding_tensor.dtype)
+    self._has_lookup = True
+    # Reshape the result back to the caller's expected shape
     return array_ops.reshape(
         result,
         list(indices_shape) + [self._embedding_tensor.shape[1]])
@@ -292,6 +301,7 @@ class HostEmbedding:
 def create_host_embedding(name,
                           shape,
                           dtype,
+                          partition_strategy="TOKEN",
                           optimizer_spec=None,
                           initializer=None):
   """ Create a HostEmbedding.
@@ -300,11 +310,18 @@ def create_host_embedding(name,
         name: The name which uniquely identifies the embedding.
         shape: The shape for the tensor which will hold the embedding.
         dtype: The dtype for the tensor which will hold the embedding.
+        partition_strategy: When
+          `enable_experimental_remote_buffer_embedding` is `True` and using
+          replication, the embedding must be distributed across the replicas.
+          This option decides on which axis the embedding will be split. Options
+          are "TOKEN" or "ENCODING".
         optimizer_spec: A description of how the embedding will be optimized.
           When `None`, the embedding is assumed to not be trainable.
         initializer: The initializer to use when creating the embedding tensor.
+
       Returns:
-        A `HostEmbedding` that wraps the created embedding tensor.
+        A `HostEmbedding` object that wraps the created embedding tensor.
+
   """
   with ops.device('cpu'):
     embedding_tensor = variable_scope.get_variable(name,
@@ -312,4 +329,7 @@ def create_host_embedding(name,
                                                    dtype=dtype,
                                                    initializer=initializer,
                                                    use_resource=False)
-  return HostEmbedding(name, embedding_tensor, optimizer_spec=optimizer_spec)
+  return HostEmbedding(name,
+                       embedding_tensor,
+                       partition_strategy=partition_strategy,
+                       optimizer_spec=optimizer_spec)

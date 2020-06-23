@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 
-
 import numpy as np
 
 from tensorflow.compiler.plugin.poplar.tests import test_utils as tu
@@ -48,7 +47,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
 
       #update
       gen_pop_datastream_ops.ipu_device_embedding_update_add(
-          out, i, embedding_id="host_embedding", embedding_shape=shape)
+          out, out, i, embedding_id="host_embedding", embedding_shape=shape)
 
       self.assertEqual(out.shape, (lookup_count, shape[1]))
       return out
@@ -97,7 +96,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
 
       #update
       gen_pop_datastream_ops.ipu_device_embedding_update_add(
-          out, i, embedding_id="host_embedding", embedding_shape=shape)
+          out, out, i, embedding_id="host_embedding", embedding_shape=shape)
 
       self.assertEqual(out.shape, (lookup_count, shape[1]))
       return out
@@ -141,9 +140,6 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
         np.float32,
         optimizer_spec=embedding_ops.HostEmbeddingOptimizerSpec(0.5))
 
-    # Inject an update that would cause a hang
-    host_embedding._update_count = 1  # pylint: disable=W0212
-
     def my_net(i):
       out = host_embedding.lookup(i)
 
@@ -167,10 +163,9 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       report.reset()
 
       # training=False should ignore the number of expected updates.
-      result = sess.run(
-          [r, host_embedding(iteration_count=1, training=False)], {i: i_h})
+      result = sess.run([r, host_embedding()], {i: i_h})
 
-      # Check the lookup resolt, but we are really interested that it doesn't hang.
+      # Check the lookup result, but we are really interested that it doesn't hang.
       self.assertAllClose(result[0][0], np.take(result[1], i_h, axis=0))
 
   @test_util.deprecated_graph_mode_only
@@ -203,7 +198,7 @@ class HostEmbeddingLookupTest(test_util.TensorFlowTestCase):
       report = tu.ReportJSON(self, sess, configure_device=False)
       sess.run(variables.global_variables_initializer())
       report.reset()
-      result = sess.run([r, host_embedding(iteration_count=1)], {i: i_h})
+      result = sess.run([r, host_embedding()], {i: i_h})
 
       # Check the indices are correct, but the real test is no timeout.
       self.assertAllClose(result[0][0], i_h)

@@ -243,4 +243,7 @@ message IpuOptions {
 
   // Block size for triangular solve expander pass.
   int64 triangular_solve_expander_block_size = 32;
+
+  // Enable remote buffer embeddings
+  bool enable_experimental_remote_buffer_embedding = 33;
 };

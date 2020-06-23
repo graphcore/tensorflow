@@ -25,11 +25,14 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
+enum class HostEmbeddingSplittingStrategy { Encoding, Token };
+
 class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
  public:
-  explicit HloHostEmbeddingLookupInstruction(HloInstruction* indices,
-                                             const std::string& embedding_id,
-                                             const Shape shape);
+  explicit HloHostEmbeddingLookupInstruction(
+      HloInstruction* indices, const std::string& embedding_id,
+      const xla::Shape& embedding_shape,
+      HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -38,6 +41,10 @@ class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
   uint64 NumberOfInplaceOperands() const override;
 
   const std::string& EmbeddingId() const { return embedding_id_; }
+  const xla::Shape& EmbeddingShape() const { return embedding_shape_; }
+  HostEmbeddingSplittingStrategy SplittingStrategy() const {
+    return splitting_strategy_;
+  }
 
   bool IsPopOpsElementwise() const override;
 
@@ -51,18 +58,22 @@ class HloHostEmbeddingLookupInstruction : public HloPoplarInstruction {
       HloCloneContext*) const override;
 
   std::string embedding_id_;
+  xla::Shape embedding_shape_;
+  HostEmbeddingSplittingStrategy splitting_strategy_ =
+      HostEmbeddingSplittingStrategy::Token;
 };
 
 std::unique_ptr<HloInstruction> CreateHostEmbeddingLookup(
     HloInstruction* indices, const std::string& embedding_id,
-    const Shape shape);
+    const xla::Shape& embedding_shape,
+    HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
 class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
  public:
-  explicit HloHostEmbeddingUpdateInstruction(HloInstruction* grads,
-                                             HloInstruction* indices,
-                                             const std::string& embedding_id,
-                                             const Shape shape);
+  explicit HloHostEmbeddingUpdateInstruction(
+      HloInstruction* in, HloInstruction* grads, HloInstruction* indices,
+      const std::string& embedding_id, const xla::Shape& embedding_shape,
+      HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
@@ -71,6 +82,10 @@ class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
   uint64 NumberOfInplaceOperands() const override;
 
   const std::string& EmbeddingId() const { return embedding_id_; }
+  const xla::Shape& EmbeddingShape() const { return embedding_shape_; }
+  HostEmbeddingSplittingStrategy SplittingStrategy() const {
+    return splitting_strategy_;
+  }
 
   bool IsPopOpsElementwise() const override;
 
@@ -84,11 +99,15 @@ class HloHostEmbeddingUpdateInstruction : public HloPoplarInstruction {
       HloCloneContext*) const override;
 
   std::string embedding_id_;
+  xla::Shape embedding_shape_;
+  HostEmbeddingSplittingStrategy splitting_strategy_ =
+      HostEmbeddingSplittingStrategy::Token;
 };
 
 std::unique_ptr<HloInstruction> CreateHloHostEmbeddingUpdate(
     HloInstruction* grads, HloInstruction* indices,
-    const std::string& embedding_id, const Shape shape);
+    const std::string& embedding_id, const xla::Shape& embedding_shape,
+    HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape);
 
 }  // namespace poplarplugin
 }  // namespace xla

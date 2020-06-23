@@ -26,11 +26,9 @@ using shape_inference::ShapeHandle;
 REGISTER_OP("IpuHostEmbedding")
     .Input("ref: Ref(T)")
     .Output("output_ref: Ref(T)")
-    .Attr("replication_factor: int = 1")
-    .Attr("lookup_count: int = 1")
-    .Attr("update_count: int = 1")
     .Attr("device_ordinal: int = 0")
     .Attr("embedding_id: string")
+    .Attr("partition_strategy: {'ENCODING', 'TOKEN'} = 'ENCODING'")
     .Attr("T: numbertype")
     .SetIsStateful()
     .SetShapeFn([](InferenceContext* c) {
@@ -46,6 +44,7 @@ REGISTER_OP("IpuDeviceEmbeddingLookup")
     .Output("output: dtype")
     .Attr("embedding_id: string")
     .Attr("embedding_shape: shape")
+    .Attr("partition_strategy: {'ENCODING', 'TOKEN'} = 'ENCODING'")
     .Attr("dtype: type")
     .Attr("T: {int32}")
     .SetIsStateful()
@@ -77,6 +76,7 @@ REGISTER_OP("IpuDeviceEmbeddingLookupTrainable")
     .Output("output: dtype")
     .Attr("embedding_id: string")
     .Attr("embedding_shape: shape")
+    .Attr("partition_strategy: {'ENCODING', 'TOKEN'} = 'ENCODING'")
     .Attr("dtype: type")
     .Attr("T: {int32}")
     .Attr("optimizer: {'SGD'}")
@@ -105,33 +105,44 @@ REGISTER_OP("IpuDeviceEmbeddingLookupTrainable")
     });
 
 REGISTER_OP("IpuDeviceEmbeddingUpdateAdd")
+    .Input("ins: T")
     .Input("grads: T")
     .Input("indices: Tindices")
     .Attr("embedding_id: string")
     .Attr("embedding_shape: shape")
+    .Attr("partition_strategy: {'ENCODING', 'TOKEN'} = 'ENCODING'")
     .Attr("T: numbertype")
     .Attr("Tindices: {int32}")
     .SetIsStateful()
     .SetShapeFn([](InferenceContext* c) {
-      ShapeHandle grads = c->input(0);
+      ShapeHandle ins = c->input(0);
+      ShapeHandle grads = c->input(1);
       ShapeHandle out;
       // Require rank 2 grads
       TF_RETURN_IF_ERROR(c->WithRank(grads, 2, &out));
+      TF_RETURN_IF_ERROR(c->WithRank(ins, 2, &out));
 
       PartialTensorShape embedding_shape;
       TF_RETURN_IF_ERROR(c->GetAttr("embedding_shape", &embedding_shape));
 
       // Require rank 1 indices
-      ShapeHandle indices = c->input(1);
+      ShapeHandle indices = c->input(2);
       TF_RETURN_IF_ERROR(c->WithRank(indices, 1, &out));
 
       DimensionHandle indices_dim_0 = c->Dim(indices, 0);
       DimensionHandle grads_dim_0 = c->Dim(grads, 0);
       DimensionHandle grads_dim_1 = c->Dim(grads, 1);
+      DimensionHandle ins_dim_0 = c->Dim(ins, 0);
+      DimensionHandle ins_dim_1 = c->Dim(ins, 1);
 
       if (!c->ValueKnown(indices_dim_0)) {
         return errors::InvalidArgument(
             "Dimension 0 of the indices does not have a known value.");
+      }
+
+      if (!c->ValueKnown(ins_dim_0)) {
+        return errors::InvalidArgument(
+            "Dimension 0 of the ins does not have a known value.");
       }
 
       if (!c->ValueKnown(grads_dim_0)) {
@@ -150,6 +161,11 @@ REGISTER_OP("IpuDeviceEmbeddingUpdateAdd")
             c->Value(indices_dim_0), " != ", c->Value(grads_dim_0), ".");
       }
 
+      if (!c->ValueKnown(ins_dim_1)) {
+        return errors::InvalidArgument(
+            "Dimension 1 of the ins does not have a known value.");
+      }
+
       if (!c->ValueKnown(grads_dim_1)) {
         return errors::InvalidArgument(
             "Dimension 1 of the updates does not have a known value.");
@@ -159,6 +175,18 @@ REGISTER_OP("IpuDeviceEmbeddingUpdateAdd")
         return errors::InvalidArgument(
             "Dimension 1 of the updates and embedding_shape do not match ",
             c->Value(grads_dim_1), " != ", embedding_shape.dim_size(1), ".");
+      }
+
+      if (c->Value(ins_dim_0) != c->Value(grads_dim_0)) {
+        return errors::InvalidArgument(
+            "Dimension 0 of the ins and updates do not match ",
+            c->Value(ins_dim_0), " != ", c->Value(grads_dim_0), ".");
+      }
+
+      if (c->Value(ins_dim_1) != c->Value(grads_dim_1)) {
+        return errors::InvalidArgument(
+            "Dimension 1 of the ins and updates do not match ",
+            c->Value(ins_dim_1), " != ", c->Value(grads_dim_0), ".");
       }
 
       return shape_inference::NoOutputs(c);

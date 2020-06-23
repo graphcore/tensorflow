@@ -25,10 +25,15 @@ namespace xla {
 namespace poplarplugin {
 
 HloHostEmbeddingLookupInstruction::HloHostEmbeddingLookupInstruction(
-    HloInstruction* indices, const std::string& embedding_id, const Shape shape)
+    HloInstruction* indices, const std::string& embedding_id,
+    const xla::Shape& embedding_shape,
+    HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape)
     : HloPoplarInstruction(shape, {indices}, PoplarOp::HostEmbeddingLookup,
-                           embedding_id),
-      embedding_id_(embedding_id) {
+                           embedding_id, embedding_shape.ToString(),
+                           static_cast<int>(splitting_strategy)),
+      embedding_id_(embedding_id),
+      embedding_shape_(embedding_shape),
+      splitting_strategy_(splitting_strategy) {
   set_custom_call_has_side_effect(true);
 }
 
@@ -52,16 +57,18 @@ bool HloHostEmbeddingLookupInstruction::IsPopOpsElementwise() const {
 
 std::unique_ptr<HloInstruction> CreateHostEmbeddingLookup(
     HloInstruction* indices, const std::string& embedding_id,
-    const Shape shape) {
+    const xla::Shape& embedding_shape,
+    HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape) {
   return absl::make_unique<HloHostEmbeddingLookupInstruction>(
-      indices, embedding_id, shape);
+      indices, embedding_id, embedding_shape, splitting_strategy, shape);
 }
 
 std::unique_ptr<HloInstruction>
 HloHostEmbeddingLookupInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreateHostEmbeddingLookup(operands[0], embedding_id_, shape);
+  return CreateHostEmbeddingLookup(operands[0], embedding_id_, embedding_shape_,
+                                   splitting_strategy_, shape);
 }
 
 std::vector<std::string>
@@ -70,16 +77,23 @@ HloHostEmbeddingLookupInstruction::ExtraPoplarAttributesToStringImpl(
   std::vector<std::string> attributes;
 
   attributes.push_back(absl::StrCat("embedding_id=", embedding_id_));
+  attributes.push_back(
+      absl::StrCat("embedding_shape=", embedding_shape_.ToString()));
 
   return attributes;
 }
 
 HloHostEmbeddingUpdateInstruction::HloHostEmbeddingUpdateInstruction(
-    HloInstruction* grads, HloInstruction* indices,
-    const std::string& embedding_id, const Shape shape)
-    : HloPoplarInstruction(shape, {grads, indices},
-                           PoplarOp::HostEmbeddingUpdate, embedding_id),
-      embedding_id_(embedding_id) {
+    HloInstruction* in, HloInstruction* grads, HloInstruction* indices,
+    const std::string& embedding_id, const xla::Shape& embedding_shape,
+    HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape)
+    : HloPoplarInstruction(shape, {in, grads, indices},
+                           PoplarOp::HostEmbeddingUpdate, embedding_id,
+                           embedding_shape.ToString(),
+                           static_cast<int>(splitting_strategy)),
+      embedding_id_(embedding_id),
+      embedding_shape_(embedding_shape),
+      splitting_strategy_(splitting_strategy) {
   set_custom_call_has_side_effect(true);
 }
 
@@ -102,18 +116,21 @@ bool HloHostEmbeddingUpdateInstruction::IsPopOpsElementwise() const {
 }
 
 std::unique_ptr<HloInstruction> CreateHloHostEmbeddingUpdate(
-    HloInstruction* grads, HloInstruction* indices,
-    const std::string& embedding_id, const Shape shape) {
+    HloInstruction* in, HloInstruction* grads, HloInstruction* indices,
+    const std::string& embedding_id, const xla::Shape& embedding_shape,
+    HostEmbeddingSplittingStrategy splitting_strategy, const Shape shape) {
   return absl::make_unique<HloHostEmbeddingUpdateInstruction>(
-      grads, indices, embedding_id, shape);
+      in, grads, indices, embedding_id, embedding_shape, splitting_strategy,
+      shape);
 }
 
 std::unique_ptr<HloInstruction>
 HloHostEmbeddingUpdateInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> operands,
     HloCloneContext*) const {
-  return CreateHloHostEmbeddingUpdate(operands[0], operands[1], embedding_id_,
-                                      shape);
+  return CreateHloHostEmbeddingUpdate(operands[0], operands[1], operands[2],
+                                      embedding_id_, embedding_shape_,
+                                      splitting_strategy_, shape);
 }
 
 std::vector<std::string>
@@ -122,6 +139,8 @@ HloHostEmbeddingUpdateInstruction::ExtraPoplarAttributesToStringImpl(
   std::vector<std::string> attributes;
 
   attributes.push_back(absl::StrCat("embedding_id=", embedding_id_));
+  attributes.push_back(
+      absl::StrCat("embedding_shape=", embedding_shape_.ToString()));
 
   return attributes;
 }
@@ -136,8 +155,24 @@ static HloPoplarInstructionFactory host_embedding_lookup_factory(
 
       TF_ASSIGN_OR_RETURN(std::string embedding_id,
                           attribute_map.GetAttributeAsString("embedding_id"));
+      TF_ASSIGN_OR_RETURN(xla::Shape embedding_shape,
+                          attribute_map.GetAttributeAsShape("embedding_shape"));
+      TF_ASSIGN_OR_RETURN(
+          std::string partition_strategy,
+          attribute_map.GetAttributeAsString("partition_strategy"));
+
+      HostEmbeddingSplittingStrategy splitting_strategy;
+      if (partition_strategy == "ENCODING") {
+        splitting_strategy = HostEmbeddingSplittingStrategy::Encoding;
+      } else if (partition_strategy == "TOKEN") {
+        splitting_strategy = HostEmbeddingSplittingStrategy::Token;
+      } else {
+        return FailedPrecondition("Unknown embedding splitting strategy {}",
+                                  partition_strategy);
+      }
 
       return CreateHostEmbeddingLookup(call->mutable_operand(0), embedding_id,
+                                       embedding_shape, splitting_strategy,
                                        call->shape());
     });
 
@@ -149,10 +184,26 @@ static HloPoplarInstructionFactory host_embedding_update_factory(
 
       TF_ASSIGN_OR_RETURN(std::string embedding_id,
                           attribute_map.GetAttributeAsString("embedding_id"));
+      TF_ASSIGN_OR_RETURN(xla::Shape embedding_shape,
+                          attribute_map.GetAttributeAsShape("embedding_shape"));
+      TF_ASSIGN_OR_RETURN(
+          std::string partition_strategy,
+          attribute_map.GetAttributeAsString("partition_strategy"));
 
-      return CreateHloHostEmbeddingUpdate(call->mutable_operand(0),
-                                          call->mutable_operand(1),
-                                          embedding_id, call->shape());
+      HostEmbeddingSplittingStrategy splitting_strategy;
+      if (partition_strategy == "ENCODING") {
+        splitting_strategy = HostEmbeddingSplittingStrategy::Encoding;
+      } else if (partition_strategy == "TOKEN") {
+        splitting_strategy = HostEmbeddingSplittingStrategy::Token;
+      } else {
+        return FailedPrecondition("Unknown embedding splitting strategy {}",
+                                  partition_strategy);
+      }
+
+      return CreateHloHostEmbeddingUpdate(
+          call->mutable_operand(0), call->mutable_operand(1),
+          call->mutable_operand(2), embedding_id, embedding_shape,
+          splitting_strategy, call->shape());
     });
 
 }  // namespace

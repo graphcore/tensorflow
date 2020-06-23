@@ -446,8 +446,9 @@ uint64 DeviceIncarnation(int device_ordinal, int replica) {
 }
 }  // namespace
 
-Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
-    const HostEmbeddingInfo& lookup_info) {
+Status PoplarExecutor::ConnectHostEmbeddingLookup(
+    const HostEmbeddingInfo& lookup_info,
+    HostEmbeddingInterface_* embedding_interface) {
   if (UseSyntheticData()) {
     return Status::OK();
   }
@@ -457,27 +458,65 @@ Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
   TF_RETURN_IF_ERROR(tensorflow::XLAShapeToTensorShape(
       lookup_info.indices_shape, &indices_shape));
 
-  for (int replica = 0;
-       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
-    auto& embedding_interface = host_embeddings_[lookup_info.embedding_id];
+  if (EnableExperimentalRemoteBufferEmbedding()) {
+    TF_ASSIGN_OR_RETURN(int token_count, embedding_interface->GetTokenCount());
+    TF_ASSIGN_OR_RETURN(int encoding_width,
+                        embedding_interface->GetEncodingWidth());
 
-    {
-      std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
-      // Wait up to 5 seconds for the embedding interface to be initialized.
-      if (!host_embeddings_cv.wait_until(
-              lk, std::chrono::system_clock::now() + std::chrono::seconds(5),
-              [&] { return static_cast<bool>(embedding_interface); })) {
-        return xla::FailedPrecondition(
-            "Host embedding interface with id='%s' not registered. Did you run "
-            "the associated host_embedding op in the session?",
-            lookup_info.embedding_id);
+    // Copy the tokens into the approriate replica remote buffer.
+    if (lookup_info.strategy == HostEmbeddingSplittingStrategy::Token) {
+      for (int i = 0; i < token_count; i++) {
+        TF_ASSIGN_OR_RETURN(void* token, embedding_interface->GetRow(i));
+
+        current_engine_->copyToRemoteBuffer(token, lookup_info.embedding_id,
+                                            i / current_replication_factor_,
+                                            i % current_replication_factor_);
       }
+
+      return Status::OK();
     }
 
+    // Copy the token encoding slices into the approriate replica remote buffer.
+    if (lookup_info.strategy == HostEmbeddingSplittingStrategy::Encoding) {
+      TF_ASSIGN_OR_RETURN(int element_size,
+                          embedding_interface->GetElementSize());
+      int replica_encoding_width = encoding_width / current_replication_factor_;
+      int replica_encoding_width_padding =
+          (encoding_width + current_replication_factor_ - 1) /
+          current_replication_factor_;
+
+      // We need a temporary buffer to allow for padding.
+      auto tmp_buffer = absl::make_unique<unsigned char[]>(
+          replica_encoding_width_padding * element_size);
+
+      for (int i = 0; i < token_count; i++) {
+        TF_ASSIGN_OR_RETURN(void* token, embedding_interface->GetRow(i));
+
+        for (int r = 0; r < current_replication_factor_; ++r) {
+          char* src = static_cast<char*>(token) +
+                      r * replica_encoding_width * element_size;
+
+          std::memcpy(tmp_buffer.get(), src,
+                      replica_encoding_width * element_size);
+
+          current_engine_->copyToRemoteBuffer(tmp_buffer.get(),
+                                              lookup_info.embedding_id, i,
+                                              i % current_replication_factor_);
+        }
+      }
+
+      return Status::OK();
+    }
+
+    return xla::FailedPrecondition("Unknown host embedding splitting strategy");
+  }
+
+  for (int replica = 0;
+       replica < std::max<int64>(1, current_replication_factor_); ++replica) {
     // Connect the indices callback.
     current_engine_->connectStreamToCallback(
         lookup_info.stream_handle + lookup_info.embedding_id + "_indices",
-        replica, [replica, indices_shape, &embedding_interface](void* ptr) {
+        replica, [replica, indices_shape, embedding_interface](void* ptr) {
           embedding_interface->EnqueueLookupIndices(
               replica, static_cast<int*>(ptr), indices_shape.num_elements());
         });
@@ -485,12 +524,8 @@ Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
     // Connect the grads callback.
     current_engine_->connectStreamToCallback(
         lookup_info.stream_handle + lookup_info.embedding_id + "_activations",
-        replica, [replica, &embedding_interface](void* ptr) {
+        replica, [replica, embedding_interface](void* ptr) {
           embedding_interface->DequeueLookupActivations(replica, ptr);
-
-          if (embedding_interface->Done()) {
-            embedding_interface.reset();
-          }
         });
   }
 
@@ -498,8 +533,13 @@ Status PoplarExecutor::ConnectHostEmbeddingLookupToRendezvous(
 }
 
 Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
-    const HostEmbeddingInfo& update_info) {
+    const HostEmbeddingInfo& update_info,
+    HostEmbeddingInterface_* embedding_interface) {
   if (UseSyntheticData()) {
+    return Status::OK();
+  }
+
+  if (EnableExperimentalRemoteBufferEmbedding()) {
     return Status::OK();
   }
 
@@ -510,25 +550,10 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
 
   for (int replica = 0;
        replica < std::max<int64>(1, current_replication_factor_); ++replica) {
-    auto& embedding_interface = host_embeddings_[update_info.embedding_id];
-
-    {
-      std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
-      // Wait up to 5 seconds for the embedding interface to be initialized.
-      if (!host_embeddings_cv.wait_until(
-              lk, std::chrono::system_clock::now() + std::chrono::seconds(5),
-              [&] { return static_cast<bool>(embedding_interface); })) {
-        return xla::FailedPrecondition(
-            "Host embedding interface with id='%s' not registered. Did you run "
-            "the associated host_embedding op in the session?",
-            update_info.embedding_id);
-      }
-    }
-
     // Connect the indices callback.
     current_engine_->connectStreamToCallback(
         update_info.stream_handle + update_info.embedding_id + "_indices",
-        replica, [replica, indices_shape, &embedding_interface](void* ptr) {
+        replica, [replica, indices_shape, embedding_interface](void* ptr) {
           embedding_interface->EnqueueUpdateIndices(
               replica, static_cast<int*>(ptr), indices_shape.num_elements());
         });
@@ -536,15 +561,73 @@ Status PoplarExecutor::ConnectHostEmbeddingUpdateToRendezvous(
     // Connect the grads callback.
     current_engine_->connectStreamToCallback(
         update_info.stream_handle + update_info.embedding_id + "_grads",
-        replica, [replica, &embedding_interface](void* ptr) {
+        replica, [replica, embedding_interface](void* ptr) {
           embedding_interface->EnqueueUpdateGrads(replica, ptr);
-
-          if (embedding_interface->Done()) {
-            embedding_interface.reset();
-          }
         });
   }
 
+  return Status::OK();
+}
+
+Status PoplarExecutor::DisconnectHostEmbeddingLookup(
+    const HostEmbeddingInfo& lookup_info,
+    HostEmbeddingInterface_* embedding_interface) {
+  if (EnableExperimentalRemoteBufferEmbedding()) {
+    TF_ASSIGN_OR_RETURN(int token_count, embedding_interface->GetTokenCount());
+    TF_ASSIGN_OR_RETURN(int encoding_width,
+                        embedding_interface->GetEncodingWidth());
+
+    if (lookup_info.strategy == HostEmbeddingSplittingStrategy::Token) {
+      for (int i = 0; i < token_count; i++) {
+        TF_ASSIGN_OR_RETURN(void* token, embedding_interface->GetRow(i));
+
+        current_engine_->copyFromRemoteBuffer(lookup_info.embedding_id, token,
+                                              i / current_replication_factor_,
+                                              i % current_replication_factor_);
+      }
+
+      return Status::OK();
+    }
+
+    if (lookup_info.strategy == HostEmbeddingSplittingStrategy::Encoding) {
+      TF_ASSIGN_OR_RETURN(int element_size,
+                          embedding_interface->GetElementSize());
+      int replica_encoding_width = encoding_width / current_replication_factor_;
+      int replica_encoding_width_padding =
+          (encoding_width + current_replication_factor_ - 1) /
+          current_replication_factor_;
+
+      auto tmp_buffer = absl::make_unique<unsigned char[]>(
+          replica_encoding_width_padding * element_size);
+
+      for (int i = 0; i < token_count; i++) {
+        TF_ASSIGN_OR_RETURN(void* token, embedding_interface->GetRow(i));
+
+        for (int r = 0; r < current_replication_factor_; ++r) {
+          current_engine_->copyFromRemoteBuffer(
+              lookup_info.embedding_id, tmp_buffer.get(), i,
+              i % current_replication_factor_);
+
+          char* dst = static_cast<char*>(token) +
+                      r * replica_encoding_width * element_size;
+
+          std::memcpy(dst, tmp_buffer.get(),
+                      replica_encoding_width * element_size);
+        }
+      }
+
+      return Status::OK();
+    }
+
+    return xla::FailedPrecondition("Unknown host embedding splitting strategy");
+  }
+
+  return Status::OK();
+}
+
+Status PoplarExecutor::DisconnectHostEmbeddingUpdate(
+    const HostEmbeddingInfo& update_info,
+    HostEmbeddingInterface_* embedding_interface) {
   return Status::OK();
 }
 
@@ -686,8 +769,9 @@ void PoplarExecutor::ConnectOutfeedToStreamCallback(
         current_engine_->connectStreamToCallback(
             GetOutfeedCopyHandle(outfeed_info.stream_prefix, j), replica_id,
             [&queue, bytes_per_replica](void* src) {
-              // The outfeed callback gets the buffer at the back of the queue,
-              // writes to it, and then moves the write position of the queue.
+              // The outfeed callback gets the buffer at the back of the
+              // queue, writes to it, and then moves the write position of the
+              // queue.
               void* dest = queue->BlockBack();
               std::memcpy(dest, src, bytes_per_replica);
               queue->FinishedBack();
@@ -1192,7 +1276,8 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       if (!ipu_.DeviceConfigured()) {
         if (device_list.size()) {
           return xla::InternalError(
-              "Failed to attach to any of the device(s) with matching configs "
+              "Failed to attach to any of the device(s) with matching "
+              "configs "
               "for ordinal %d",
               ordinal_);
         } else {
@@ -1806,8 +1891,8 @@ void PoplarExecutor::UpdateArgsHandleMap(
   CHECK_EQ(inputs_info.size(), args.size());
   CHECK_EQ(shapes.size(), args.size());
 
-  // We require all the resource arguments which are modified to be not-aliasing
-  // with each other.
+  // We require all the resource arguments which are modified to be
+  // not-aliasing with each other.
   absl::flat_hash_set<const TensorControl*> modified_resources;
 
   for (unsigned int a = 0; a < inputs_info.size(); a++) {
@@ -2254,8 +2339,8 @@ Status PoplarExecutor::MoveHostToDevice() {
         buf = PreProcessBuffer(arg.second);
 
         if (arg.second.remote_parameter) {
-          // This is a remote parameter - copy it to the remote buffer for each
-          // replica.
+          // This is a remote parameter - copy it to the remote buffer for
+          // each replica.
           tc->in_remote_memory = true;
           for (int replica_id = 0; replica_id < current_replication_factor_;
                ++replica_id) {
@@ -2295,6 +2380,8 @@ Status PoplarExecutor::MoveHostToDevice() {
       tc->converted_data.clear();
     }
   } catch (const std::exception& e) {
+    // Release host embeddings
+    host_embeddings_.clear();
     return PoplarExceptionToTensorflowStatus("[Host to device] ", e);
   }
 
@@ -2487,6 +2574,19 @@ Status PoplarExecutor::RegisterHostEmbedding(
     std::unique_ptr<HostEmbeddingInterface_> embedding) {
   {
     std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
+
+    // Wait for 5 seconds to register the host embedding.
+    // This ensures the embeddings will eventually be cleaned up, even if
+    // compilation fails.
+    if (!host_embeddings_cv.wait_for(lk, std::chrono::seconds(5), [&] {
+          return host_embedding_registration_is_open_;
+        })) {
+      return xla::FailedPrecondition(
+          "Host embedding interface with id='%s' not registered. Did you run "
+          "the associated host_embedding op with the computation session?",
+          embedding_id);
+    }
+
     host_embeddings_[embedding_id] = std::move(embedding);
   }
 
@@ -2521,6 +2621,22 @@ void PoplarExecutor::ResetSeed(int seed) { seed_generator_.Seed(seed); }
 
 std::string PoplarExecutor::GetCycleCounterStream() {
   return "__cycle_count_stream";
+}
+
+void PoplarExecutor::ClearCompilationFailure() {
+  std::unique_lock<std::mutex> lock(host_embeddings_mutex_);
+
+  // Allow new host embedding registrations.
+  host_embedding_registration_is_open_ = true;
+  host_embeddings_cv.notify_all();
+}
+
+void PoplarExecutor::NotifyCompilationFailure() {
+  std::unique_lock<std::mutex> lock(host_embeddings_mutex_);
+
+  // Block new host embedding registrations.
+  host_embedding_registration_is_open_ = false;
+  host_embeddings_.clear();
 }
 
 void PoplarExecutor::ConnectCycleCounterCallback() {
@@ -2637,6 +2753,34 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 
   UpdateArgsHandleMap(args, allocator, executable);
 
+  absl::flat_hash_map<std::string, std::unique_ptr<HostEmbeddingInterface_>>
+      host_embeddings;
+  if (!executable.GetHostEmbeddingLookupInfos().empty()) {
+    std::unique_lock<std::mutex> lk(host_embeddings_mutex_);
+    host_embedding_registration_is_open_ = true;
+    host_embeddings_cv.notify_all();
+
+    // Go through and double check we have all the required host embeddings.
+    for (auto& host_embedding_lookup_info :
+         executable.GetHostEmbeddingLookupInfos()) {
+      // Wait up to 5 seconds for the embedding interface to be initialized.
+      if (!host_embeddings_cv.wait_for(lk, std::chrono::seconds(5), [&] {
+            return host_embeddings_.count(
+                       host_embedding_lookup_info.embedding_id) > 0;
+          })) {
+        host_embeddings_.clear();
+        return xla::FailedPrecondition(
+            "Host embedding interface with id='%s' not registered. Did you run "
+            "the associated host_embedding op in the session?",
+            host_embedding_lookup_info.embedding_id);
+      }
+    }
+
+    // Take the host embeddings into the local scope.
+    // This ensures they are cleaned up at the end of execution.
+    host_embeddings = std::move(host_embeddings_);
+  }
+
   if (engine == NULL) {
     // An empty engine is either a graph that just passes its inputs through
     // to its outputs, or a graph which returns a constant.
@@ -2730,8 +2874,8 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
     // Create any outfeed queues which do not already exist
     TF_RETURN_IF_ERROR(RegisterOutfeeds(executable.GetOutfeedInfos()));
 
-    // Create our own free list which we use to allocate all the memory used by
-    // all the tensors.
+    // Create our own free list which we use to allocate all the memory used
+    // by all the tensors.
     std::list<std::unique_ptr<char[]>> memory_buffer;
 
     // Allocate the parameters for each of the functors, sorted by the user
@@ -2748,8 +2892,8 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       const StreamInfos& stream_infos = executable.GetStreamInfos();
 
       // If this is a user op copy the buffers.
-      // We add one call back to the stream which allocates the buffers and once
-      // all buffers have been allocated finally calls down to the user
+      // We add one call back to the stream which allocates the buffers and
+      // once all buffers have been allocated finally calls down to the user
       // operation.
       for (auto& pair : executable.GetStreamMetaInfos()) {
         StreamCopyMetaInfo infos = pair.second;
@@ -2795,13 +2939,16 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
 
       for (auto& host_embedding_lookup_info :
            executable.GetHostEmbeddingLookupInfos()) {
-        TF_RETURN_IF_ERROR(
-            ConnectHostEmbeddingLookupToRendezvous(host_embedding_lookup_info));
+        TF_RETURN_IF_ERROR(ConnectHostEmbeddingLookup(
+            host_embedding_lookup_info,
+            host_embeddings.at(host_embedding_lookup_info.embedding_id).get()));
       }
 
       for (auto& host_embedding_update_info :
            executable.GetHostEmbeddingUpdateInfos()) {
-        ConnectHostEmbeddingUpdateToRendezvous(host_embedding_update_info);
+        TF_RETURN_IF_ERROR(ConnectHostEmbeddingUpdateToRendezvous(
+            host_embedding_update_info,
+            host_embeddings.at(host_embedding_update_info.embedding_id).get()));
       }
 
       const auto& outfeed_infos = executable.GetOutfeedInfos();
@@ -2820,9 +2967,9 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         for (const StreamCopyInfo& info : list) {
           StreamCopyInfo::FunctionTy functor = info.callback_to_register;
 
-          // If there is a functor then this is an input tensor, we will attach
-          // the callbacks to the stream otherwise just copy into the previously
-          // allocated pegged memory.
+          // If there is a functor then this is an input tensor, we will
+          // attach the callbacks to the stream otherwise just copy into the
+          // previously allocated pegged memory.
           if (functor != nullptr) {
             // Create a custom callback which we use to copy the inputs as
             // these callbacks are called in a random order we have to work
@@ -2854,8 +3001,8 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
               in_size[info.operand_number] = info.number_of_elements;
 
               // These callbacks are called in a random order by poplar so we
-              // need to only call the user provided callback once, after all of
-              // the data has been initialized.
+              // need to only call the user provided callback once, after all
+              // of the data has been initialized.
               if (number_of_inputs_initalized == in_buffer.size()) {
                 functor(in_buffer, in_size,
                         out_buffer[info.parent_instruction]);
@@ -2872,6 +3019,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
           }
         }
       }
+
       // Launch the IO threads when we are not using synthetic data.
       if (!UseSyntheticData()) {
         LaunchIOThreads(infeed_infos, outfeed_infos);
@@ -2888,6 +3036,20 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
       // Stop the IO threads when we are not using synthetic data.
       if (!UseSyntheticData()) {
         StopIOThreads();
+      }
+
+      for (auto& host_embedding_lookup_info :
+           executable.GetHostEmbeddingLookupInfos()) {
+        TF_RETURN_IF_ERROR(DisconnectHostEmbeddingLookup(
+            host_embedding_lookup_info,
+            host_embeddings.at(host_embedding_lookup_info.embedding_id).get()));
+      }
+
+      for (auto& host_embedding_update_info :
+           executable.GetHostEmbeddingUpdateInfos()) {
+        TF_RETURN_IF_ERROR(DisconnectHostEmbeddingUpdate(
+            host_embedding_update_info,
+            host_embeddings.at(host_embedding_update_info.embedding_id).get()));
       }
 
       // We need to call post process to make sure all the data is in the
@@ -2940,18 +3102,19 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
             current_engine_->resetExecutionProfile();
 
             if (report_stream.tellp() > MaxReportSize()) {
-              LOG(INFO)
-                  << "Dropping a Poplar compilation report of size "
-                  << report_stream.tellp()
-                  << " which is larger than the configured maximum report size "
-                  << std::to_string(MaxReportSize())
-                  << ". To change the maximum report size use the "
-                     "max_report_size"
-                  << " argument in ipu.utils.create_ipu_config.\n"
-                  << "Example:\n"
-                  << "cfg = "
-                     "ipu.utils.create_ipu_config(max_report_size=0x100000000) "
-                  << "Note that the max report size is in bytes.";
+              LOG(INFO) << "Dropping a Poplar compilation report of size "
+                        << report_stream.tellp()
+                        << " which is larger than the configured maximum "
+                           "report size "
+                        << std::to_string(MaxReportSize())
+                        << ". To change the maximum report size use the "
+                           "max_report_size"
+                        << " argument in ipu.utils.create_ipu_config.\n"
+                        << "Example:\n"
+                        << "cfg = "
+                           "ipu.utils.create_ipu_config(max_report_size="
+                           "0x100000000) "
+                        << "Note that the max report size is in bytes.";
               report_stream.str(std::string());
             }
             report = report_stream.str();

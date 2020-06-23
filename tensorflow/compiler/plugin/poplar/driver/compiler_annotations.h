@@ -23,6 +23,7 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_feed_config.pb.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/host_embedding.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/input_output_aliasing_map.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
@@ -63,17 +64,23 @@ struct SendRecvInfo {
 struct HostEmbeddingInfo {
   HostEmbeddingInfo(const std::string& stream_handle,
                     const std::string& embedding_id, const Shape& indices_shape,
-                    const Shape& activations_shape)
+                    const Shape& activations_shape,
+                    HostEmbeddingSplittingStrategy strategy =
+                        HostEmbeddingSplittingStrategy::Token)
       : stream_handle(stream_handle),
         embedding_id(embedding_id),
         indices_shape(indices_shape),
-        activations_shape(activations_shape) {}
+        activations_shape(activations_shape),
+        strategy(strategy) {}
   HostEmbeddingInfo() = delete;
 
   std::string stream_handle;
   std::string embedding_id;
   Shape indices_shape;
   Shape activations_shape;
+
+  // Only used with experimental remote buffer embedding
+  HostEmbeddingSplittingStrategy strategy;
 };
 
 struct RemoteParameterInfo {
