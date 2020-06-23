@@ -24,10 +24,12 @@ HloGroupNormInstruction::HloGroupNormInstruction(
     const Shape& shape, HloInstruction* const operand,
     HloInstruction* const scale, HloInstruction* const offset,
     HloInstruction* const mean, HloInstruction* const variance_or_inv_std_dev,
-    int32 num_groups, float epsilon, int feature_index)
-    : HloNormInstruction(
+    int32 num_groups, bool strided_channel_grouping, float epsilon,
+    int feature_index)
+    : HloGroupNormBaseInstruction(
           shape, {operand, scale, offset, mean, variance_or_inv_std_dev},
-          PoplarOp::GroupNormInference, num_groups, epsilon, feature_index) {}
+          PoplarOp::GroupNormInference, num_groups, strided_channel_grouping,
+          epsilon, feature_index) {}
 
 const HloInstruction* HloGroupNormInstruction::operand() const {
   return HloInstruction::operand(0);
@@ -68,17 +70,19 @@ HloGroupNormInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return CreateGroupNorm(shape, new_operands[0], new_operands[1],
                          new_operands[2], new_operands[3], new_operands[4],
-                         num_groups(), epsilon(), feature_index());
+                         num_groups(), epsilon(), strided_channel_grouping(),
+                         feature_index());
 }
 
 std::unique_ptr<HloInstruction> CreateGroupNorm(
     const Shape& shape, HloInstruction* const operand,
     HloInstruction* const scale, HloInstruction* const offset,
     HloInstruction* const mean, HloInstruction* const variance_or_inv_std_dev,
-    int32 num_groups, float epsilon, int feature_index) {
+    int32 num_groups, bool strided_channel_grouping, float epsilon,
+    int feature_index) {
   return absl::make_unique<HloGroupNormInstruction>(
       shape, operand, scale, offset, mean, variance_or_inv_std_dev, num_groups,
-      epsilon, feature_index);
+      strided_channel_grouping, epsilon, feature_index);
 }
 
 namespace {
@@ -95,10 +99,15 @@ StatusOr<std::unique_ptr<HloInstruction>> HloGroupNormFactoryFunc(
   TF_ASSIGN_OR_RETURN(int feature_index,
                       attribute_map.GetAttributeAsInt("feature_index"));
 
+  TF_ASSIGN_OR_RETURN(
+      bool strided_channel_grouping,
+      attribute_map.GetAttributeAsInt("strided_channel_grouping"));
+
   auto args = call->operands();
 
   return CreateGroupNorm(call->shape(), args[0], args[1], args[2], args[3],
-                         args[4], num_groups, epsilon, feature_index);
+                         args[4], num_groups, strided_channel_grouping, epsilon,
+                         feature_index);
 }
 
 static HloPoplarInstructionFactory group_norm_infer_factory(

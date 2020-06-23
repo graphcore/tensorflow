@@ -60,7 +60,7 @@ class DropoutOp : public PoplarOpDef {
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
-                                             const xla::Shape& output_shape,
+                                             const Shape& output_shape,
                                              TensorMap& tensor_map) override {
     const std::string debug_name = GetDebugName(inst);
     poplar::program::Sequence seq;
@@ -114,16 +114,33 @@ class DropoutOp : public PoplarOpDef {
     seed = HashCombine(graph, seq, seed, replica_constant,
                        debug_name + "/ReplicationCounter");
 
-    // Create an empty tensor for the dropout. This is internal to the poprand
-    // implementation but is exposed anyway so we need to provide it.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor reference,
-                        AddPlainTensor(graph, debug_name + "/Reference",
-                                       inst->operand(0)->shape(), res, false));
+    poplar::Tensor final_output;
+    if (dropout_instruction->HasNoiseShape()) {
+      // Pull out noise_shape if it is set. At this point it is a std::vector,
+      // but poprand::dropout expects a poplar::Tensor*
+      // noise_shape becomes a constant tensor residing on tile 0.
+      const Shape ns_ref_shape =
+          ShapeUtil::MakeShape(inst->operand(0)->shape().element_type(),
+                               dropout_instruction->NoiseShape());
+      TF_ASSIGN_OR_RETURN(poplar::Tensor reference,
+                          AddPlainTensor(graph, debug_name + "/ShapedReference",
+                                         ns_ref_shape, res, false));
 
-    // Perform the actual dropout by calling into the poprand function.
-    poplar::Tensor final_output =
-        poprand::dropout(graph, &seed, seed_modifier, input, reference, rate,
-                         scale, seq, debug_name);
+      final_output =
+          poprand::shapedDropout(graph, &seed, seed_modifier, input, reference,
+                                 rate, scale, seq, debug_name);
+    } else {
+      // Create an empty tensor for the dropout. This is internal to the poprand
+      // implementation but is exposed anyway so we need to provide it.
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor reference,
+          AddPlainTensor(graph, debug_name + "/Reference",
+                         inst->operand(0)->shape(), res, false));
+
+      // Perform the actual dropout by calling into the poprand function.
+      final_output = poprand::dropout(graph, &seed, seed_modifier, input,
+                                      reference, rate, scale, seq, debug_name);
+    }
 
     seed = seed.reinterpret(poplar::INT);
     // Mark that tensor as our output.

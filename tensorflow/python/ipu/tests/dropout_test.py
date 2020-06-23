@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================
-
+import itertools
 
 import numpy as np
+from absl.testing import parameterized
 
 from tensorflow.python.client import session as sl
 from tensorflow.python.framework import ops
@@ -25,121 +26,173 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 
+# Error threshold for forward pass test.
+THRESHOLD = 0.03
 
-class PopnnRandomDropoutTest(test_util.TensorFlowTestCase):
-  @test_util.deprecated_graph_mode_only
-  def testDropout(self):
-    def testDropoutImpl(rate):
-      def ipu_dropout(w):
-        output = ipu.ops.rand_ops.dropout(w, rate=rate)
-        return [output]
+# Dimensions of the random data tensor.
+DIMS = (1024, 1024, 4)
 
-      with ops.device('cpu'):
-        input_data = array_ops.placeholder(np.float32, [1024, 1024, 4])
+# Initialise with a random seed.
+SEED = np.random.randint(np.iinfo(np.int32).max, size=[2], dtype=np.int32)
 
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        r = ipu.ipu_compiler.compile(ipu_dropout, inputs=[input_data])
+# Number of times to verify output for a given seed.
+SEED_TEST_REPETITIONS = 6
+
+
+def build_test_cases(exhaustive=False):
+  # Dropout rate(s) to test.
+  rate = [0.1, 0.5, 0.9] if exhaustive else [0.5]
+
+  # User specified and non-specified cases.
+  seed = [SEED, None]
+
+  # Shape of the dropout.
+  # Note that shaping the dropout such that a very large portion of
+  # the input weights are dropped will fail the test criteria, as expected.
+  noise_shape = [[], [DIMS[0], DIMS[1], 1]]
+  if exhaustive:
+    noise_shape.append([DIMS[0], 1, DIMS[2]])
+    noise_shape.append([1, DIMS[1], DIMS[2]])
+
+  # Get the cartesian product (can get very large).
+  prod = itertools.product(rate, seed, noise_shape)
+
+  test_cases = []
+  for n, perm in enumerate(prod):
+    test = {
+        'testcase_name': ' Case: %3d' % n,
+        'rate': perm[0],
+        'seed': perm[1],
+        'noise_shape': perm[2]
+    }
+
+    test_cases.append(test)
+
+  return test_cases
+
+
+# Default is not to test every combination.
+TEST_CASES = build_test_cases()
+
+
+class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
+                             parameterized.TestCase):
+  @staticmethod
+  def _ipu_dropout(w, rate, seed, noise_shape):
+    output = ipu.ops.rand_ops.dropout(w,
+                                      rate=rate,
+                                      seed=seed,
+                                      noise_shape=noise_shape)
+    return [output]
+
+  @staticmethod
+  def _setup_test(f):
+    with ops.device('cpu'):
+      input_data = array_ops.placeholder(np.float32, DIMS)
+
+    with ipu.scopes.ipu_scope("/device:IPU:0"):
+      r = ipu.ipu_compiler.compile(f, inputs=[input_data])
 
       cfg = ipu.utils.create_ipu_config()
       cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
       ipu.utils.configure_ipu_system(cfg)
-      with sl.Session() as sess:
-        in_data = np.random.rand(1024, 1024, 4)
 
+      return r, input_data
+
+  @test_util.deprecated_graph_mode_only
+  def testInvalidNoiseShape(self):
+    in_data = np.random.rand(16, 8, 16)
+    print(in_data.shape)
+    seed = np.array([12, 34], dtype=np.int32)
+
+    with sl.Session() as sess:
+      with self.assertRaisesRegex(ValueError, "must equal the rank of x."):
+
+        def _wrong_length(w):
+          return self._ipu_dropout(w, 0.5, seed, [1])
+
+        r, input_data = self._setup_test(_wrong_length)
+        _ = sess.run(r, {input_data: in_data})
+
+      with self.assertRaisesRegex(ValueError, "Dimension mismatch"):
+
+        def _wrong_dims(w):
+          return self._ipu_dropout(w, 0.5, seed, [8, 1, 16])
+
+        r, input_data = self._setup_test(_wrong_dims)
+        _ = sess.run(r, {input_data: in_data})
+
+  @parameterized.named_parameters(*TEST_CASES)
+  @test_util.deprecated_graph_mode_only
+  def testDropout(self, rate, seed, noise_shape):
+    def _run_dropout(w):
+      return self._ipu_dropout(w, rate, seed, noise_shape)
+
+    r, input_data = self._setup_test(_run_dropout)
+
+    with sl.Session() as sess:
+      in_data = np.random.rand(*DIMS)
+      result = sess.run(r, {input_data: in_data})
+      percent_kept = np.count_nonzero(result) / np.count_nonzero(in_data)
+
+      # There's a considerable amount for randomness so we have a reasonably
+      # large dimensionality of test data to make sure the error is smaller.
+      is_roughly_close = abs(percent_kept - (1.0 - rate))
+
+      # The observed error is actually a lot less than this (>1%) but we don't
+      # want to cause random regressions and 3% is probably still acceptable
+      # for any outlier randoms.
+      self.assertTrue(is_roughly_close < THRESHOLD)
+
+  @parameterized.named_parameters(*TEST_CASES)
+  @test_util.deprecated_graph_mode_only
+  def testUserSeed(self, rate, seed, noise_shape):
+    def _run_dropout(w):
+      return self._ipu_dropout(w, rate, seed, noise_shape)
+
+    r, input_data = self._setup_test(_run_dropout)
+
+    with sl.Session() as sess:
+      in_data = np.random.rand(*DIMS)
+
+      # For a given output, verify that each subsequent output is equal to it.
+      first_result = None
+      for _ in range(SEED_TEST_REPETITIONS):
         result = sess.run(r, {input_data: in_data})
 
-        percent_kept = np.count_nonzero(result) / np.count_nonzero(in_data)
+        if first_result is None:
+          first_result = result
+          continue
 
-        # There's a considerable amount for randomness so we have a reasonably large
-        # dimensionality of test data to make sure the error is smaller.
-        is_roughly_close = abs(percent_kept - (1.0 - rate))
+        self.assertAllEqual(first_result, result)
 
-        # The observed error is actually a lot less than this (>1%) but we don't want to cause
-        # random regressions and 3% is probably still acceptable for any outlier randoms.
-        self.assertTrue(is_roughly_close < 0.03)
-
-    # We want to test the internal seed is working.
-    for _ in range(0, 6):
-      testDropoutImpl(np.random.uniform())
-
-  # Check user provided seed works
+  @parameterized.named_parameters(*TEST_CASES)
   @test_util.deprecated_graph_mode_only
-  def testDropoutUserSeed(self):
-    def testDropoutImpl(rate, seed, in_data):
-      def ipu_dropout(w):
-        output = ipu.ops.rand_ops.dropout(w, rate=rate, seed=seed)
-        return [output]
+  def testDropoutBackwardPass(self, rate, seed, noise_shape):
+    def _run_dropout(w):
+      output = self._ipu_dropout(w, rate, seed, noise_shape)
 
-      with ops.device('cpu'):
-        input_data = array_ops.placeholder(np.float32, [32, 4])
+      largest = output
+      cost = math_ops.square(largest)
 
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        r = ipu.ipu_compiler.compile(ipu_dropout, inputs=[input_data])
+      opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
+      gradients = opt.compute_gradients(cost, w)
 
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
+      return [output, gradients]
 
-      with sl.Session() as sess:
-        return sess.run(r, {input_data: in_data})
+    r, input_data = self._setup_test(_run_dropout)
 
-    # Randomize the parameters but keep them the same for all runs
-    int32_limits = np.iinfo(np.int32)
-    seed = np.random.randint(int32_limits.max, size=[2], dtype=np.int32)
-    seed_tensor = array_ops.constant(seed)
-    rate = np.random.uniform()
-    in_data = np.random.rand(32, 4)
+    with sl.Session() as sess:
+      in_data = np.random.rand(*DIMS)
+      result = sess.run(r, {input_data: in_data})
 
-    outs = []
-    # Run with the same seed multiple times then check they are the same.
-    for i in range(0, 6):
-      outs.append(testDropoutImpl(rate, seed_tensor, in_data))
+      dropout_out = result[0]
+      gradients = result[1][0][0]
 
-    for i in range(1, 6):
-      self.assertAllEqual(outs[0], outs[i])
+      # Check we have the same number of zeros.
+      self.assertAllEqual(np.count_nonzero(dropout_out),
+                          np.count_nonzero(gradients))
 
-
-# Check user provided seed works
-
-  @test_util.deprecated_graph_mode_only
-  def testDropoutBackwardPass(self):
-    def testDropoutImpl():
-      def ipu_dropout_back(w):
-        output = ipu.ops.rand_ops.dropout(w, rate=0.4)
-
-        largest = output
-        cost = math_ops.square(largest)
-
-        opt = gradient_descent.GradientDescentOptimizer(learning_rate=0.1)
-
-        gradients = opt.compute_gradients(cost, w)
-
-        return [output, gradients]
-
-      with ops.device('cpu'):
-        input_data = array_ops.placeholder(np.float32, [32])
-
-      with ipu.scopes.ipu_scope("/device:IPU:0"):
-        r = ipu.ipu_compiler.compile(ipu_dropout_back, inputs=[input_data])
-
-      cfg = ipu.utils.create_ipu_config()
-      cfg = ipu.utils.set_ipu_model_options(cfg, compile_ipu_code=False)
-      ipu.utils.configure_ipu_system(cfg)
-
-      with sl.Session() as sess:
-        in_data = np.random.rand(32)
-        out = sess.run(r, {input_data: in_data})
-
-        dropout_out = out[0]
-        gradients = out[1][0][0]
-
-        # Check we have the same number of zeros.
-        self.assertAllEqual(np.count_nonzero(dropout_out),
-                            np.count_nonzero(gradients))
-
-    # Run with the same seed multiple times then check they are the same.
-    for _ in range(0, 6):
-      testDropoutImpl()
 
 if __name__ == "__main__":
   googletest.main()

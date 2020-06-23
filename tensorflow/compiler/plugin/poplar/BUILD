@@ -3331,7 +3331,7 @@ tf_xla_py_test(
     size = "large",
     srcs = ["tests/group_norm_test.py"],
     enabled_backends = ["poplar"],
-    shard_count = 5,
+    shard_count = 6,
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",

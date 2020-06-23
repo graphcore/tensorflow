@@ -43,5 +43,17 @@ std::vector<std::string> HloNormInstruction::ExtraPoplarAttributesToStringImpl(
   return attributes;
 }
 
+HloGroupNormBaseInstruction::HloGroupNormBaseInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands, PoplarOp op,
+    int32 num_groups, bool strided_channel_grouping, float epsilon,
+    int feature_index)
+    : HloNormInstruction(shape, operands, op, num_groups, epsilon,
+                         feature_index),
+      strided_channel_grouping_(strided_channel_grouping) {}
+
+bool HloGroupNormBaseInstruction::strided_channel_grouping() const {
+  return strided_channel_grouping_;
+}
+
 }  // namespace poplarplugin
 }  // namespace xla

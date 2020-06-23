@@ -47,6 +47,11 @@ class GroupNorm(Layer):
     epsilon: Small float added to variance to avoid dividing by zero.
     beta_initializer: Initializer for the beta weight.
     gamma_initializer: Initializer for the gamma weight.
+    strided_channel_grouping: Selects whether to group the channels dimension
+      for group normalisation with a stride between channels. This makes the
+      PopLibs implementation more efficient but is unconventional. Among other
+      things this will mean that using pre-trained weights would not be possible
+      if not produced with this unconventional implementation.
     name: Optional name for the layer.
   """
   def __init__(self,
@@ -58,6 +63,7 @@ class GroupNorm(Layer):
                epsilon=1e-6,
                beta_initializer=None,
                gamma_initializer=None,
+               strided_channel_grouping=True,
                name=None):
     super(GroupNorm, self).__init__(dtype=dtype, name=name)
 
@@ -69,6 +75,8 @@ class GroupNorm(Layer):
 
     self.beta_initializer = beta_initializer
     self.gamma_initializer = gamma_initializer
+
+    self.strided_channel_grouping = strided_channel_grouping
 
     self.data_format = ""
     self.channels = 1
@@ -140,7 +148,8 @@ class GroupNorm(Layer):
           beta=self.beta,
           data_format=self.data_format,
           epsilon=self.epsilon,
-          num_groups=self.groups)
+          num_groups=self.groups,
+          strided_channel_grouping=self.strided_channel_grouping)
 
     else:
       # Calculate the moments.
@@ -148,7 +157,8 @@ class GroupNorm(Layer):
           inputs=inputs,
           data_format=self.data_format,
           epsilon=self.epsilon,
-          num_groups=self.groups)
+          num_groups=self.groups,
+          strided_channel_grouping=self.strided_channel_grouping)
 
       outputs = gen_popnn_ops.popnn_group_norm_inference(
           inputs=inputs,
@@ -158,7 +168,8 @@ class GroupNorm(Layer):
           inv_std_dev=inv_std_dev,
           data_format=self.data_format,
           epsilon=self.epsilon,
-          num_groups=self.groups)
+          num_groups=self.groups,
+          strided_channel_grouping=self.strided_channel_grouping)
     return outputs
 
 

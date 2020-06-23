@@ -17,7 +17,6 @@ Popnn normalization operators
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 
-
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -57,7 +56,8 @@ def _group_norm_impl(inputs,
                      training=True,
                      trainable=True,
                      scope=None,
-                     norm_type=""):
+                     norm_type="",
+                     strided_channel_grouping=True):
   """Internal implemenation of any group norm type operation."""
 
   inputs = ops.convert_to_tensor(inputs)
@@ -134,7 +134,8 @@ def _group_norm_impl(inputs,
           beta=beta,
           data_format=data_format,
           epsilon=epsilon,
-          num_groups=groups)
+          num_groups=groups,
+          strided_channel_grouping=strided_channel_grouping)
 
     else:
       # Calculate the moments.
@@ -142,7 +143,8 @@ def _group_norm_impl(inputs,
           inputs=inputs,
           data_format=data_format,
           epsilon=epsilon,
-          num_groups=groups)
+          num_groups=groups,
+          strided_channel_grouping=strided_channel_grouping)
 
       outputs = gen_popnn_ops.popnn_group_norm_inference(
           inputs=inputs,
@@ -152,7 +154,8 @@ def _group_norm_impl(inputs,
           inv_std_dev=inv_std_dev,
           data_format=data_format,
           epsilon=epsilon,
-          num_groups=groups)
+          num_groups=groups,
+          strided_channel_grouping=strided_channel_grouping)
 
     return outputs
 
@@ -172,7 +175,8 @@ def group_norm(inputs,
                variables_collections=None,
                training=True,
                trainable=True,
-               scope=None):
+               scope=None,
+               strided_channel_grouping=True):
   """Functional interface for the group normalization layer.
 
   Reference: https://arxiv.org/abs/1803.08494.
@@ -204,7 +208,11 @@ def group_norm(inputs,
     trainable: If `True` also add variables to the graph collection
       `GraphKeys.TRAINABLE_VARIABLES` (see `tf.Variable`).
     scope: Optional scope for `variable_scope`.
-
+    strided_channel_grouping: Selects whether to group the channels dimension
+      for group normalisation with a stride between channels. Enabling this
+      makes the PopLibs implementation more efficient but is unconventional.
+      Among other things this will mean that using pre-trained weights would not
+      be possible if not produced with this unconventional implementation.
 
   Returns:
     A `Tensor` representing the output of the operation.
@@ -218,7 +226,7 @@ def group_norm(inputs,
   return _group_norm_impl(inputs, groups, channels_axis, center, scale,
                           epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
-                          "GroupNorm")
+                          "GroupNorm", strided_channel_grouping)
 
 
 @deprecation.deprecated_args(
@@ -295,7 +303,7 @@ def layer_norm(inputs,
   return _group_norm_impl(inputs, groups, channels_axis, center, scale,
                           epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
-                          "LayerNorm")
+                          "LayerNorm", False)
 
 
 @deprecation.deprecated_args(
@@ -368,4 +376,4 @@ def instance_norm(inputs,
   return _group_norm_impl(inputs, groups, channels_axis, center, scale,
                           epsilon, param_initializers, reuse,
                           variables_collections, training, trainable, scope,
-                          "InstanceNorm")
+                          "InstanceNorm", False)

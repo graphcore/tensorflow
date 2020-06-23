@@ -56,6 +56,7 @@ REGISTER_OP("PopnnGroupNormInference")
     .Attr("data_format: string")
     .Attr("epsilon: float")
     .Attr("num_groups: int")
+    .Attr("strided_channel_grouping: bool = true")
     .Attr("dtype: {float16, float32}")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
@@ -76,6 +77,7 @@ REGISTER_OP("PopnnGroupNormTraining")
     .Attr("data_format: string")
     .Attr("epsilon: float")
     .Attr("num_groups: int")
+    .Attr("strided_channel_grouping: bool = true")
     .Attr("dtype: {float16, float32}")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
@@ -106,6 +108,7 @@ REGISTER_OP("PopnnGroupNormGrad")
     .Attr("data_format: string")
     .Attr("epsilon: float")
     .Attr("num_groups: int")
+    .Attr("strided_channel_grouping: bool = true")
     .Attr("dtype: {float16, float32}")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
@@ -126,6 +129,7 @@ REGISTER_OP("PopnnGroupNormStatistics")
     .Attr("data_format: string")
     .Attr("epsilon: float")
     .Attr("num_groups: int")
+    .Attr("strided_channel_grouping: bool = true")
     .Attr("dtype: {float16, float32}")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       shape_inference::DimensionHandle num_groups_time_batch;

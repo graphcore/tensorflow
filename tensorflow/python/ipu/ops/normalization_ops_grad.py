@@ -30,4 +30,5 @@ def _popnn_group_norm_backward(op, *grads):
       output_backprop=grads[0],
       data_format=op.get_attr("data_format"),
       epsilon=op.get_attr("epsilon"),
-      num_groups=op.get_attr("num_groups"))
+      num_groups=op.get_attr("num_groups"),
+      strided_channel_grouping=op.get_attr("strided_channel_grouping"))
