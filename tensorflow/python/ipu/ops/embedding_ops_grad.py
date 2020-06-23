@@ -36,9 +36,11 @@ def _ipu_multi_update(op, grads):
 def _ipu_host_embedding_lookup_grad(op, grads):
   """Gradients for the IpuDeviceEmbeddingLookupTrainable op."""
   update_op = gen_pop_datastream_ops.ipu_device_embedding_update_add(
+      op.outputs[0],
       -grads * op.get_attr("learning_rate"),
       indices=op.inputs[1],
       embedding_id=op.get_attr("embedding_id"),
-      embedding_shape=op.get_attr("embedding_shape"))
+      embedding_shape=op.get_attr("embedding_shape"),
+      partition_strategy=op.get_attr("partition_strategy"))
   with ops.control_dependencies([update_op]):
     return [array_ops.zeros_like(op.inputs[0]), None]

@@ -23,6 +23,7 @@ Targeting the IPU from TensorFlow
     ipu_pipeline_estimator_example
     distributed_training
     custom_codelet
+    host_embedding
     references
     api
     supported_ops

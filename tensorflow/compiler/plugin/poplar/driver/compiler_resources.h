@@ -135,6 +135,8 @@ struct CompilerResources {
 
   VerifiedStreamsIndices streams_indices;
 
+  bool enable_experimental_remote_buffer_embedding;
+
   CompilerResources(
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,
@@ -151,7 +153,8 @@ struct CompilerResources {
       const std::string& scheduler_selection, bool recomputation_enabled,
       bool use_stable_norm_statistics, bool remote_memory_supported,
       const poplar::OptionFlags& gcl_options,
-      int64 triangular_solve_expander_block_size)
+      int64 triangular_solve_expander_block_size,
+      bool enable_experimental_remote_buffer_embedding)
       : annotations(module),
         information(max_all_reduce_buffer_size, max_reduce_scatter_buffer_size,
                     max_inter_ipu_copies_buffer_size,
@@ -174,7 +177,9 @@ struct CompilerResources {
         remote_memory_supported(remote_memory_supported),
         gcl_options(gcl_options),
         triangular_solve_expander_block_size(
-            triangular_solve_expander_block_size) {}
+            triangular_solve_expander_block_size),
+        enable_experimental_remote_buffer_embedding(
+            enable_experimental_remote_buffer_embedding) {}
 };
 
 }  // namespace poplarplugin
