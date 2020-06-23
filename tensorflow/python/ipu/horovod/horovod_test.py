@@ -13,8 +13,6 @@
 # limitations under the License.
 # =============================================================================
 
-import subprocess
-import sys
 import os
 import numpy as np
 from tensorflow.python import keras
@@ -39,8 +37,6 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
 from tensorflow.python.training.gradient_descent import GradientDescentOptimizer
-
-NUM_WORKERS = 2
 
 
 class HorovodTest(test_util.TensorFlowTestCase):
@@ -76,8 +72,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
     self.assertEqual(hvd.local_rank(),
                      int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"]))
 
-    self.assertEqual(hvd.size(), NUM_WORKERS)
-    self.assertEqual(hvd.local_size(), NUM_WORKERS)
+    self.assertEqual(hvd.size(), hvd.local_size())
     self.assertTrue(hvd.is_homogeneous())
 
   @test_util.deprecated_graph_mode_only
@@ -96,8 +91,8 @@ class HorovodTest(test_util.TensorFlowTestCase):
     ipu_utils.configure_ipu_system(cfg)
 
     with session.Session() as sess:
-      self.assertAllEqual(np.arange(NUM_WORKERS), sess.run(allgathered))
-      self.assertAllEqual(np.sum(np.arange(NUM_WORKERS)), sess.run(allreduced))
+      self.assertAllEqual(np.arange(hvd.size()), sess.run(allgathered))
+      self.assertAllEqual(np.sum(np.arange(hvd.size())), sess.run(allreduced))
       self.assertAllEqual(0.0, sess.run(broadcast))
 
   @test_util.deprecated_graph_mode_only
@@ -227,14 +222,4 @@ class HorovodTest(test_util.TensorFlowTestCase):
 
 
 if __name__ == "__main__":
-  if "OMPI_COMM_WORLD_RANK" in os.environ:
-    # Already in MPI context, run the tests.
-    test.main()
-  else:
-    # Run this file in MPI context (buildbot runs as root).
-    mpirun = [
-        "mpirun", "--allow-run-as-root", "--tag-output", "-np",
-        str(NUM_WORKERS)
-    ]
-    cmd = [sys.executable, __file__]
-    subprocess.check_output(mpirun + cmd)
+  test.main()

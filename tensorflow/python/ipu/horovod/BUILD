@@ -15,6 +15,7 @@ required dependency for all our users, only for those that actually use Horovod.
 package(default_visibility = ["//tensorflow:internal"])
 
 load("//tensorflow:tensorflow.bzl", "tf_cc_shared_object", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test")
 
 cc_library(
     name = "mpi_libs",
@@ -105,10 +106,12 @@ py_library(
     ],
 )
 
-py_test(
+horovod_py_test(
     name = "horovod_test",
     size = "medium",
     srcs = ["horovod_test.py"],
+    main = "horovod_test.py",
+    num_processes = 2,
     deps = [
         "//tensorflow/python/ipu:ipu_lib",
     ],

@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 load("//tensorflow/compiler/xla/tests:build_defs.bzl", "xla_test")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
 load("@local_config_poplar//poplar:build_defs.bzl", "tf_poplar_build_tag")
-load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "if_horovod")
+load("@local_config_ipu_horovod//:build_defs_horovod.bzl", "horovod_py_test", "if_horovod")
 load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_cc_test", "tf_custom_op_py_library", "tf_gen_op_wrapper_py")
 load("//tensorflow/core/platform:default/build_config.bzl", "tf_proto_library")
 
@@ -3864,11 +3864,12 @@ py_test(
     ],
 )
 
-py_test(
+horovod_py_test(
     name = "distributed_training_horovod_example",
     size = "large",
     srcs = ["docs/distributed_training_horovod_example.py"],
     args = ["--num-steps=100"],
+    main = "docs/distributed_training_horovod_example.py",
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
