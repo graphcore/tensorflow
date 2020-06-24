@@ -18,17 +18,20 @@ Keras Model interfaces for IPU
 """
 
 from functools import partial
+import math
 import weakref
 
 from tensorflow.python.data.experimental.ops import cardinality
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.distribute import distribution_strategy_context
 from tensorflow.python.eager import def_function
+from tensorflow.python.framework import device as tf_device
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework.errors_impl import NotFoundError
 from tensorflow.python.ipu import ipu_infeed_queue
 from tensorflow.python.ipu import ipu_outfeed_queue
 from tensorflow.python.ipu import loops
+from tensorflow.python.ipu import utils
 from tensorflow.python.ipu.ops import functional_ops
 from tensorflow.python.ipu.ops import pipelining_ops
 from tensorflow.python.ipu.optimizers import gradient_accumulation_optimizer
@@ -142,7 +145,7 @@ class _KerasOptimizerWrapper(Optimizer):
 
 class _IpuModelBase(KerasModel):
   """Base class for IPU Keras models"""
-  def __init__(self, accumulation_count, **kwargs):
+  def __init__(self, accumulation_count, shard_count, **kwargs):
     name = kwargs.pop("name", None)
     super(_IpuModelBase, self).__init__(dtype=None, name=name)
 
@@ -156,6 +159,11 @@ class _IpuModelBase(KerasModel):
     self.last_ds = None
     self.last_mode = None
     self.internal_loop_fn = None
+
+    # Round the shard count to the next power of two
+    self.shard_count = 2**int(math.ceil(math.log(shard_count) / math.log(2)))
+    self.got_replication_factor = False
+    self.replication_factor = -1
 
   def build(self, input_shape):
     pass
@@ -359,8 +367,10 @@ class _IpuModelBase(KerasModel):
 
     # Create infeed and outfeed
     if not self.infeed or not self.outfeed:
-      self.infeed = ipu_infeed_queue.IPUInfeedQueue(ds, "infeed")
-      self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue("outfeed")
+      self.infeed = ipu_infeed_queue.IPUInfeedQueue(
+          ds, "infeed", replication_factor=self._get_replication_factor())
+      self.outfeed = ipu_outfeed_queue.IPUOutfeedQueue(
+          "outfeed", replication_factor=self._get_replication_factor())
 
     initial_epoch = self._maybe_load_initial_epoch_from_ckpt(
         initial_epoch, mode)
@@ -545,6 +555,22 @@ class _IpuModelBase(KerasModel):
     return self._do_internal(ModeKeys.PREDICT, x, 1, verbose, callbacks, 0,
                              steps, steps_per_run, **kwargs)
 
+  def _get_replication_factor(self):
+    if not self.got_replication_factor:
+      strategy = distribution_strategy_context.get_strategy()
+      device_string = strategy.extended.non_slot_devices(None)
+      current_device = tf_device.DeviceSpec.from_string(device_string)
+
+      if current_device.device_type != "IPU":
+        raise ValueError(self.__class__.__name__ +
+                         " can only be used on an IPU device.")
+
+      num_ipus = utils.get_num_of_ipus_in_device(device_string)
+      self.replication_factor = int(num_ipus / self.shard_count)
+      self.got_replication_factor = True
+
+    return self.replication_factor
+
 
 class IPUSequential(_IpuModelBase):
   """A Keras Sequential class specifically tergetting the IPU.  This class is
@@ -595,7 +621,7 @@ class IPUSequential(_IpuModelBase):
             while accumulating their gradients, before running a
             parameter/weight update step.
     """
-    super().__init__(accumulation_count)
+    super().__init__(accumulation_count=accumulation_count, shard_count=1)
 
     if not isinstance(layers, list):
       raise ValueError("An IPU Sequential must take a list of Layers.")

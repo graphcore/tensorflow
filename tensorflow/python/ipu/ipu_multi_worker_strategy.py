@@ -436,3 +436,7 @@ class IPUMultiWorkerExtended(
       return collective_ops.broadcast_recv(initial_value.shape,
                                            initial_value.dtype, group_size,
                                            group_key, collective_instance_key)
+
+  def non_slot_devices(self, var_list):
+    del var_list
+    return self._ipu_device

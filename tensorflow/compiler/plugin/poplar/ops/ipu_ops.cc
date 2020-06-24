@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/core/framework/common_shape_fns.h"
 #include "tensorflow/core/framework/op.h"
 
 namespace tensorflow {
@@ -43,4 +44,10 @@ REGISTER_OP("IpuModelUsed")
 REGISTER_OP("IpuGetConfiguration")
     .Output("out: string")
     .Doc("Return serialized IpuOptions structs.");
+
+REGISTER_OP("IpuGetNumDevices")
+    .Attr("device: string")
+    .Output("out: int64")
+    .SetShapeFn(shape_inference::ScalarShape)
+    .Doc("Return the number of IPUs for a specific device string.");
 }  // namespace tensorflow
