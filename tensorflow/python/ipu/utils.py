@@ -275,19 +275,20 @@ def create_ipu_config(profiling=False,
                       max_scheduler_lookahead_depth=5,
                       max_scheduler_search_space_size=64,
                       prefetch_data_streams=True,
-                      selection_order=None):
+                      selection_order=None,
+                      enable_experimental_remote_buffer_embedding=False):
   """Create an empty IPU session configuration structure.
 
   Args:
     profiling: Enable compilation reports, and IPU trace events.
     enable_ipu_events: Enable IPU trace events without poplar reports.
-    use_poplar_text_report: Enable the poplar textual report summary
-    use_poplar_cbor_report: Enable the poplar CBOR reports
+    use_poplar_text_report: Enable the Poplar textual report summary.
+    use_poplar_cbor_report: Enable the Poplar CBOR reports.
     profile_execution: Include Poplar execution profiles in the execution
-      events. Can only be enabled if `profling` is also enabled. If set, can be
+      events. Can only be enabled if `profiling` is also enabled. If set, can be
       `True`, 'False`, or a member of the `ExecutionProfileType` enumeration.
       A `True` value indicates `ExecutionProfileType.DEVICE_PROFILE`.
-    include_poplar_serialized_graph: Create the Poplar serialized graph and
+    enable_poplar_serialized_graph: Create the Poplar serialized graph and
       include in the IPU compilation trace events.
     report_every_nth_execution: Only produce an execution report on every Nth
       execution.  0 = One report only.
@@ -337,6 +338,8 @@ def create_ipu_config(profiling=False,
       IPU devices when using a multi-IPU devices (see `SelectionOrder`). When
       not specified, then automatic selection order is used, otherwise an
       instance of `SelectionOrder`.
+    enable_experimental_remote_buffer_embedding: When set to true,
+      `HostEmbedding` will make use of poplar remote buffers.
 
   Returns:
     An IpuOptions configuration protobuf, suitable for passing to
@@ -407,6 +410,9 @@ def create_ipu_config(profiling=False,
 
   opts.verified_transfers.enabled = False
   opts = set_verification_options(opts, VerificationOptions())
+
+  opts.enable_experimental_remote_buffer_embedding = \
+      enable_experimental_remote_buffer_embedding
 
   return opts
 

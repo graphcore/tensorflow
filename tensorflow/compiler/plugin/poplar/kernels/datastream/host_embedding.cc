@@ -46,10 +46,15 @@ limitations under the License.
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/shape_util.h"
+#include "tensorflow/compiler/xla/statusor.h"
 
 #include "absl/container/flat_hash_set.h"
 
 namespace tensorflow {
+
+namespace {
+constexpr int max_replication_factor = 16;
+}
 
 template <typename T>
 class IpuHostEmbeddingOp : public AsyncOpKernel {
@@ -58,20 +63,14 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
       : AsyncOpKernel(ctx), device_ordinal_(0) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("device_ordinal", &device_ordinal_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("embedding_id", &embedding_id_));
-    OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("replication_factor", &replication_factor_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("lookup_count", &lookup_count_init_));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("update_count", &update_count_init_));
   }
 
   void ComputeAsync(OpKernelContext* ctx,
                     AsyncOpKernel::DoneCallback done) override {
     ctx->forward_ref_input_to_ref_output(0, 0);
 
-    // If we are either using synthetica data or never performa a lookup/update,
-    // then immediately complete the async op.
-    if (xla::poplarplugin::UseSyntheticData() ||
-        (lookup_count_init_ + update_count_init_ == 0)) {
+    // If we are using synthetic data, immediately complete the async op.
+    if (xla::poplarplugin::UseSyntheticData()) {
       done();
     } else {
       auto platform = se::MultiPlatformManager::PlatformWithName("Poplar");
@@ -84,32 +83,25 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
 
       Tensor inp = ctx->mutable_input(0, true);
 
-      poplar_executor->RegisterHostEmbedding(
-          embedding_id_, absl::make_unique<HostEmbeddingImpl>(
-                             inp, replication_factor_, lookup_count_init_,
-                             update_count_init_, done));
+      Status status = poplar_executor->RegisterHostEmbedding(
+          embedding_id_, absl::make_unique<HostEmbeddingImpl>(inp, done));
+      OP_REQUIRES(ctx, status.ok(), status);
     }
   }
 
  private:
   int device_ordinal_;
-  int replication_factor_;
-  int lookup_count_init_;
-  int update_count_init_;
   std::string embedding_id_;
 
   class HostEmbeddingImpl
       : public xla::poplarplugin::PoplarExecutor::HostEmbeddingInterface<T> {
    public:
-    HostEmbeddingImpl(Tensor embedding, int replication_factor,
-                      int lookup_count, int update_count,
-                      AsyncOpKernel::DoneCallback done)
+    HostEmbeddingImpl(Tensor embedding, AsyncOpKernel::DoneCallback done)
         : encoding_width_(embedding.dim_size(1)),
-          access_count_(replication_factor * (lookup_count + update_count)),
           embedding_(std::move(embedding)),
           done_(std::move(done)),
-          lookup_indices_(replication_factor),
-          update_indices_(replication_factor) {
+          lookup_indices_(max_replication_factor),
+          update_indices_(max_replication_factor) {
       embedding_rows_.reserve(embedding_.dim_size(0));
 
       for (std::size_t i = 0; i < embedding_.dim_size(0); ++i) {
@@ -123,7 +115,7 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
     ~HostEmbeddingImpl() { done_(); }
 
     Status EnqueueLookupIndices(int replica, const int* indices,
-                                int index_count) {
+                                int index_count) override {
       lookup_indices_[replica].resize(index_count);
 
       std::memcpy(lookup_indices_[replica].data(), indices,
@@ -132,20 +124,18 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
       return Status::OK();
     }
 
-    Status DequeueLookupActivations(int replica, T* destination) {
+    Status DequeueLookupActivations(int replica, T* destination) override {
       for (std::size_t i = 0; i < lookup_indices_[replica].size(); ++i) {
         std::memcpy(destination + i * encoding_width_,
                     embedding_rows_[lookup_indices_[replica][i]],
                     encoding_width_ * sizeof(T));
       }
 
-      access_count_.fetch_sub(1);
-
       return Status::OK();
     }
 
     Status EnqueueUpdateIndices(int replica, const int* indices,
-                                int index_count) {
+                                int index_count) override {
       update_indices_[replica].resize(index_count);
 
       std::memcpy(update_indices_[replica].data(), indices,
@@ -154,7 +144,7 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
       return Status::OK();
     }
 
-    Status EnqueueUpdateGrads(int replica, const T* grads) {
+    Status EnqueueUpdateGrads(int replica, const T* grads) override {
       std::size_t index_count = update_indices_[replica].size();
 
       for (std::size_t i = 0; i < index_count; ++i) {
@@ -166,17 +156,25 @@ class IpuHostEmbeddingOp : public AsyncOpKernel {
                        std::plus<T>{});
       }
 
-      access_count_.fetch_sub(1);
-
       return Status::OK();
     }
 
-    bool Done() const { return access_count_ <= 0; }
+    xla::StatusOr<void*> GetRow(int index) const override {
+      return static_cast<void*>(embedding_rows_[index]);
+    }
+
+    xla::StatusOr<int> GetTokenCount() const override {
+      return embedding_rows_.size();
+    }
+
+    xla::StatusOr<int> GetEncodingWidth() const override {
+      return encoding_width_;
+    }
+
+    xla::StatusOr<int> GetElementSize() const override { return sizeof(T); }
 
    private:
     int encoding_width_;
-
-    std::atomic<int> access_count_;
 
     Tensor embedding_;
     std::vector<T*> embedding_rows_;
@@ -206,6 +204,8 @@ class IpuDeviceEmbeddingLookupOp : public XlaOpKernel, IpuOpKernel {
       : XlaOpKernel(ctx), IpuOpKernel() {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("embedding_id", &embedding_id_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("embedding_shape", &embedding_shape_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("partition_strategy", &partition_strategy_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -219,7 +219,13 @@ class IpuDeviceEmbeddingLookupOp : public XlaOpKernel, IpuOpKernel {
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, output_shape, &xla_shape));
 
+    xla::Shape embedding_shape;
+    OP_REQUIRES_OK(
+        ctx, TensorShapeToXLAShape(dtype, embedding_shape_, &embedding_shape));
+
     attribute_map_.AddAttribute("embedding_id", embedding_id_);
+    attribute_map_.AddAttribute("embedding_shape", embedding_shape);
+    attribute_map_.AddAttribute("partition_strategy", partition_strategy_);
 
     xla::XlaBuilder* b = ctx->builder();
     xla::XlaOp output =
@@ -232,6 +238,7 @@ class IpuDeviceEmbeddingLookupOp : public XlaOpKernel, IpuOpKernel {
  private:
   std::string embedding_id_;
   TensorShape embedding_shape_;
+  std::string partition_strategy_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(IpuDeviceEmbeddingLookupOp);
 };
@@ -249,25 +256,36 @@ class IpuDeviceEmbeddingUpdateAddOp : public XlaOpKernel, IpuOpKernel {
       : XlaOpKernel(ctx), IpuOpKernel() {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("embedding_id", &embedding_id_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("embedding_shape", &embedding_shape_));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("partition_strategy", &partition_strategy_));
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
-    const xla::XlaOp& grads = ctx->Input(0);
-    const xla::XlaOp& indices = ctx->Input(1);
+    const xla::XlaOp& in = ctx->Input(0);
+    const xla::XlaOp& grads = ctx->Input(1);
+    const xla::XlaOp& indices = ctx->Input(2);
+    const DataType dtype = input_type(0);
 
     xla::Shape xla_shape = xla::ShapeUtil::MakeTokenShape();
 
+    xla::Shape embedding_shape;
+    OP_REQUIRES_OK(
+        ctx, TensorShapeToXLAShape(dtype, embedding_shape_, &embedding_shape));
+
     attribute_map_.AddAttribute("embedding_id", embedding_id_);
+    attribute_map_.AddAttribute("embedding_shape", embedding_shape);
+    attribute_map_.AddAttribute("partition_strategy", partition_strategy_);
 
     xla::XlaBuilder* b = ctx->builder();
     xla::XlaOp output = xla::CustomCall(
-        b, PoplarOp_Name(PoplarOp::HostEmbeddingUpdate), {grads, indices},
+        b, PoplarOp_Name(PoplarOp::HostEmbeddingUpdate), {in, grads, indices},
         xla_shape, attribute_map_.Serialise());
   }
 
  private:
   std::string embedding_id_;
   TensorShape embedding_shape_;
+  std::string partition_strategy_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(IpuDeviceEmbeddingUpdateAddOp);
 };

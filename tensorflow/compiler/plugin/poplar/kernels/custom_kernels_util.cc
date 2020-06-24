@@ -205,6 +205,15 @@ void AttributeMap::AddAttribute(const std::string& field_name,
   } else if (tinfo == typeid(std::string)) {
     auto casted_val = absl::any_cast<std::string>(attr);
     attributes_[field_name] = GetAsJsonValue(casted_val);
+  } else if (tinfo == typeid(Shape)) {
+    auto casted_shape = absl::any_cast<Shape>(attr);
+    std::string shape_proto_str;
+    if (!tensorflow::ProtoToHumanReadableJson(casted_shape.ToProto(),
+                                              &shape_proto_str, true)
+             .ok()) {
+      LOG(FATAL) << "Could not parse the xla shape.";
+    }
+    attributes_[field_name] = GetAsJsonValue(shape_proto_str);
   } else {
     LOG(FATAL) << "Unsupported attribute value type " << tinfo.name();
   }
@@ -332,6 +341,19 @@ StatusOr<Window> AttributeMap::GetAttributeAsWindow(
   TF_RETURN_IF_ERROR(
       tensorflow::HumanReadableJsonToProto(window_proto_str, &window));
   return window;
+}
+
+StatusOr<Shape> AttributeMap::GetAttributeAsShape(
+    const std::string& field_name) const {
+  if (!HasAttribute(field_name)) {
+    return xla::FailedPrecondition(
+        "Could not obtain the field %s for the custom op.", field_name.c_str());
+  }
+  std::string shape_proto_str = attributes_[field_name].asString();
+  ShapeProto shape;
+  TF_RETURN_IF_ERROR(
+      tensorflow::HumanReadableJsonToProto(shape_proto_str, &shape));
+  return Shape(shape);
 }
 
 const std::string AttributeMap::Serialise() {

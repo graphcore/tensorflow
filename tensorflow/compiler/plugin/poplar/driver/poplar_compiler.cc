@@ -695,6 +695,36 @@ StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
   return std::move(module);
 }
 
+namespace {
+/**
+ * A class to conditionally guard the exit from a scope. Of the given function
+ * objects, the first is immediately invoked and the second is invoked upon
+ * destruction of this object when it has not been cleared.
+ */
+template <typename F1, typename F2>
+struct CustomExitGuard {
+  CustomExitGuard(const F1& f1, const F2& f2) : f2_(f2) { f1(); }
+  ~CustomExitGuard() {
+    if (!cleared_) {
+      f2_();
+    }
+  }
+
+  // Calling clear will stop the second function object being invoked.
+  void Clear() { cleared_ = true; }
+
+ private:
+  bool cleared_ = false;
+  F2 f2_;
+};
+
+// Class template argument deduction doesn't always work above.
+template <typename F1, typename F2>
+CustomExitGuard<F1, F2> CreateCustomExitGuard(const F1& f1, const F2& f2) {
+  return CustomExitGuard<F1, F2>(f1, f2);
+}
+}  // namespace
+
 StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     std::unique_ptr<HloModule> module,
     perftools::gputools::StreamExecutor* stream_exec,
@@ -714,6 +744,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
   PoplarExecutor* poplar_executor(
       static_cast<PoplarExecutor*>(stream_exec->implementation()));
+
+  auto exit_guard = CreateCustomExitGuard(
+      [poplar_executor]() { poplar_executor->ClearCompilationFailure(); },
+      [poplar_executor]() { poplar_executor->NotifyCompilationFailure(); });
 
   std::unique_ptr<HloProfileIndexMap> profile_index_map;
   std::unique_ptr<HloProfilePrinterData> profile_printer;
@@ -823,7 +857,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->RecomputationEnabled(),
       poplar_executor->UseStableNormStatistics(),
       poplar_executor->SupportsRemoteBuffers(), poplar_executor->GclOptions(),
-      poplar_executor->GetTriangularSolveExpanderBlockSize());
+      poplar_executor->GetTriangularSolveExpanderBlockSize(),
+      poplar_executor->EnableExperimentalRemoteBufferEmbedding());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -1242,6 +1277,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           inst_info, duration);
     }
   }
+
+  exit_guard.Clear();
 
   std::unique_ptr<Executable> executable;
   PoplarExecutable* poplar_executable = new PoplarExecutable(
