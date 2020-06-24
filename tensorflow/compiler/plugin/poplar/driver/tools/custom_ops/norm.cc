@@ -20,15 +20,6 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-HloNormInstruction::HloNormInstruction(
-    const Shape& shape, absl::Span<HloInstruction* const> operands, PoplarOp op,
-    int32 num_groups, float epsilon, int feature_index)
-    : HloPoplarInstruction(shape, operands, op, num_groups, epsilon,
-                           feature_index),
-      num_groups_(num_groups),
-      epsilon_(epsilon),
-      feature_index_(feature_index) {}
-
 int32 HloNormInstruction::num_groups() const { return num_groups_; }
 int32 HloNormInstruction::feature_index() const { return feature_index_; }
 float HloNormInstruction::epsilon() const { return epsilon_; }
@@ -48,7 +39,7 @@ HloGroupNormBaseInstruction::HloGroupNormBaseInstruction(
     int32 num_groups, bool strided_channel_grouping, float epsilon,
     int feature_index)
     : HloNormInstruction(shape, operands, op, num_groups, epsilon,
-                         feature_index),
+                         feature_index, strided_channel_grouping),
       strided_channel_grouping_(strided_channel_grouping) {}
 
 bool HloGroupNormBaseInstruction::strided_channel_grouping() const {

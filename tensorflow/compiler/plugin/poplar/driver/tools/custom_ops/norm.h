@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_NORM_H_
 #define TENSORFLOW_COMPILER_PLUGIN_POPLAR_DRIVER_TOOLS_CUSTOM_OPS_NORM_H_
 
+#include <utility>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 
 namespace xla {
@@ -23,10 +25,16 @@ namespace poplarplugin {
 
 class HloNormInstruction : public HloPoplarInstruction {
  public:
-  explicit HloNormInstruction(const Shape& shape,
-                              absl::Span<HloInstruction* const> operands,
-                              PoplarOp op, int32 num_groups, float epsilon,
-                              int feature_index);
+  template <typename... Args>
+  HloNormInstruction(const Shape& shape,
+                     absl::Span<HloInstruction* const> operands, PoplarOp op,
+                     int32 num_groups, float epsilon, int feature_index,
+                     Args&&... attributes)
+      : HloPoplarInstruction(shape, operands, op, num_groups, epsilon,
+                             feature_index, std::forward<Args>(attributes)...),
+        num_groups_(num_groups),
+        epsilon_(epsilon),
+        feature_index_(feature_index) {}
 
   int32 num_groups() const;
   float epsilon() const;

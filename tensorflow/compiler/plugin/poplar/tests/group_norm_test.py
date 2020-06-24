@@ -21,11 +21,12 @@ from __future__ import print_function
 from absl.testing import parameterized
 import numpy as np
 
-from tensorflow.compiler.tests import xla_test
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
-from tensorflow.python.platform import googletest
+from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import ops
+from tensorflow.python import ipu
 from tensorflow.python.ops import array_ops
+from tensorflow.python.platform import googletest
 
 # These tests are implemented based on the Layers implementation of the group
 # norm - tensorflow/contrib/layers/python/layers/normalization.py.
@@ -479,6 +480,47 @@ class GroupNormTest(xla_test.XLATestCase, parameterized.TestCase):
                           inv_std_dev,
                           rtol=training_rel_tolerance,
                           atol=training_abs_tolerance)
+
+  def testInferenceInLoop(self):
+    with self.session() as sess:
+      groups = 2
+      channels = 4
+      epsilon = 1e-6
+      inputs = array_ops.placeholder(shape=(1, 3, 3, channels),
+                                     dtype=np.float32)
+
+      def my_net(x):
+        y = ipu.ops.normalization_ops.group_norm(x,
+                                                 groups=groups,
+                                                 epsilon=epsilon,
+                                                 center=False,
+                                                 scale=False,
+                                                 training=False,
+                                                 trainable=False,
+                                                 channels_axis=-1)
+        return y
+
+      def my_loop(inputs):
+        return ipu.loops.repeat(2, my_net, inputs=inputs)
+
+      with ipu.scopes.ipu_scope("/device:IPU:0"):
+        [compiled_model] = ipu.ipu_compiler.compile(my_loop, inputs=[inputs])
+
+      np.random.seed(42)
+      data = np.random.rand(*inputs.shape).astype(np.float32)
+      actual = sess.run(compiled_model, {inputs: data})
+
+      gamma = np.ones([channels])
+      beta = np.zeros([channels])
+      expected = data
+      for _ in range(2):
+        expected, _, _ = self._refGroupNormFwd(expected,
+                                               gamma=gamma,
+                                               beta=beta,
+                                               groups=groups,
+                                               epsilon=epsilon)
+
+      self.assertAllClose(actual, expected)
 
 
 if __name__ == "__main__":
