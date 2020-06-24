@@ -5,7 +5,7 @@ inference and training, when the embedding would not otherwise fit in device
 memory. This is achieved in one of two ways:
 # Using a sequence of Poplar callbacks to exchange indices and values.
 # Storing the embedding in Poplar remote buffer (off-chip) memory, which may be
-   host memory or memory associated with the IPU system.
+host memory or memory associated with the IPU system.
 Applications access this functionality through the
 :py:class:`tensorflow.python.ipu.embedding_ops.HostEmbedding` class and the
 :py:func:`tensorflow.python.ipu.embedding_ops.create_host_embedding` helper
@@ -13,8 +13,9 @@ function. Optimisation of the host embedding is described in the
 :py:class:`tensorflow.python.ipu.embedding_ops.HostEmbeddingOptimizerSpec`
 class, which currently only supports SGD with a constant learning rate.
 
-Note that IPU host embeddings are not recommended for use in pipelines and will
-likely decrease the pipeline's parallel efficiency.
+.. note::
+  IPU host embeddings are not recommended for use in pipelines and will
+  likely decrease the pipeline's parallel efficiency.
 
 Usage
 ~~~~~
@@ -54,7 +55,7 @@ To overcome this constraint we offer two partitioning strategies. Each has
 tradeoffs which can be chosen depending on the application.
 
 Token Strategy
-^^^^^^^^^^^^^^
+--------------
 The token strategy unsurprisingly chooses to partition the embedding on the
 token axis. This means that there will be ``ceil(t/r)`` whole tokens on each
 replica, where ``t`` is the token count and ``r`` is the replica count.
@@ -66,7 +67,7 @@ must introduce cross-replica operations to allow lookups and updates on the
 whole table. Below is the psuedo-code, with explicit types and static shapes,
 for how this is implemented:
 
-.. code-block:: cpp
+.. code-block:: none
   // Psuedo-code assuming we have table size `t`, and replica count `r`.
   f16[14, 64] global_lookup(
     local_table : f16[ceil(t/r), 64]
@@ -100,7 +101,7 @@ for how this is implemented:
     return reshape(result), shape=[14, 64] : f16[14, 64]
 
 Encoding Strategy
-^^^^^^^^^^^^^^^^^
+-----------------
 The encoding strategy, in contrast to the token strategy, chooses to partition
 the embedding on the encoding axis. This means that there will be ``ceil(1/r)``
 of every tokens on each replica, where ``r`` is the replica count. This means
@@ -114,7 +115,7 @@ table is private, so we must introduce cross-replica operations to allow lookups
 and updates on the whole table. Below is the psuedo-code, with explicit types
 and static shapes, for how this is implemented:
 
-.. code-block:: cpp
+.. code-block:: none
   // Psuedo-code assuming we have table size `t`, replica count `r`, and
   // encoding size `e`.
   f16[14, e] global_lookup(
@@ -142,7 +143,7 @@ and static shapes, for how this is implemented:
     return slice(result), dim=1, begin=0, end=e : f16[14, e]
 
 Summary
-^^^^^^^
+-------
 Although it is application dependant, generally the token strategy is used when
 the encoding is much smaller than the token count. An example application for
 this would be language models where the vocabulary size is much larger than the
