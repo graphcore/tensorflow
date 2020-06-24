@@ -474,6 +474,60 @@ ENTRY c1 {
   EXPECT_EQ(call_sub->operand(1)->parameter_number(), 1);
 }
 
+TEST_F(HloMatcherTest, LookThroughAssociativeOpsLongChain) {
+  const unsigned int look_through_depth = 5;
+
+  std::string hlo = R"(
+HloModule top
+
+ENTRY c1 {
+  i1 = f32[] parameter(0)
+  i2 = f32[] parameter(1)
+  c1 = f32[] constant(10.0)
+  c2 = f32[] constant(20.0)
+  r.1 = f32[] add(i1, c1)
+  r.2 = f32[] add(r.1, i2)
+  r.3 = f32[] multiply(r.2, c2)
+  r.4 = f32[] add(r.3, i1)
+  r.5 = f32[] add(r.4, c2)
+  r.6 = f32[] add(r.5, i2)
+ }
+)";
+
+  auto config = GetModuleConfigForTest();
+  auto module = ParseAndReturnVerifiedModule(hlo, config);
+  EXPECT_TRUE(module.ok());
+  auto* hlo_module = module.ValueOrDie().get();
+
+  // clang-format off
+  std::vector<HloMatcherPattern> patterns = {
+    HloMatcherPattern(
+      PatternType("abc"),
+      PatternMetaTarget(0),
+      PatternInputs({2, 3}),
+      PatternOutputs({0}),
+      Pattern({
+        {HloOpcode::kAdd, NodeOperands({1, 2})},
+        {HloOpcode::kMultiply, NodeOperands({3, 4})},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+        {HloMatcherOpcode::kAnyOpcode, NodeOperands({})},
+      })
+    )
+  };
+  // clang-format on
+
+  CompilerAnnotations annotations(hlo_module);
+  TestMatcher matcher(patterns, annotations, false, true, look_through_depth);
+
+  ASSERT_TRUE(matcher.Run(hlo_module).ValueOrDie());
+  EXPECT_EQ(1, matcher.replace_count);
+  auto* comp = hlo_module->entry_computation();
+  auto* root = comp->root_instruction();
+  EXPECT_EQ(9, comp->instruction_count());
+  EXPECT_EQ(root->name(), "r.5");
+}
+
 TEST_F(HloMatcherTest, LookThroughAssociativeOpsParameter) {
   const unsigned int look_through_depth = 2;
 
@@ -592,12 +646,16 @@ ENTRY c1 {
 
   auto* comp = hlo_module->entry_computation();
   auto* root = comp->root_instruction();
-  // Expect that root is mul1 now
-  EXPECT_EQ(root->name(), "mul1");
+  EXPECT_EQ(root->opcode(), HloOpcode::kMultiply);
 
   // Expect that operand 1 of mul1 has changed to a call
-  EXPECT_EQ(root->operand(1)->opcode(), HloOpcode::kFusion);
-  auto* call_inst = comp->root_instruction()->operand(1);
+  auto* mul = root->operand(1);
+  while (mul != nullptr && mul->operand(1)->opcode() != HloOpcode::kFusion) {
+    mul = mul->operand(1);
+  }
+  EXPECT_NE(mul, nullptr);
+  EXPECT_EQ(mul->operand(1)->opcode(), HloOpcode::kFusion);
+  auto* call_inst = mul->operand(1);
   // Expect the name
   EXPECT_EQ("abc", call_inst->fused_instructions_computation()->name());
   // Expect the parameters
