@@ -939,14 +939,23 @@ StatusOr<bool> HloMatcher::Run(HloModule* module) {
 std::set<HloInstruction*> HloMatcher::ReorderGraph(
     const HloMatcherMatched& matched) {
   std::set<HloInstruction*> modified_instructions;
+
+  // This reordering relies on associativity:
+  // For instance, if we have "[root] add1 add2 … addN [target]",
+  // we relink root to have [target] as operand and make first
+  // parent of [root] a new root:
+  // "add1 add2 … addN [root] [target]".
+
   for (auto trace : matched.replacement_traces) {
     auto root = trace[0];
-    auto target_user = trace.rbegin()[1];  // second to last element
-    auto target = trace.back();
+    auto root_parent = trace[1];
+    auto target_user = trace[trace.size() - 2];
+    auto target = trace[trace.size() - 1];
 
-    root.inst->ReplaceAllUsesWith(target_user.inst);
-    target_user.inst->ReplaceOperandWith(target_user.op_idx, root.inst);
-    root.inst->ReplaceOperandWith(root.op_idx, target.inst);
+    TF_CHECK_OK(root.inst->ReplaceAllUsesWith(root_parent.inst));
+    TF_CHECK_OK(
+        target_user.inst->ReplaceOperandWith(target_user.op_idx, root.inst));
+    TF_CHECK_OK(root.inst->ReplaceOperandWith(root.op_idx, target.inst));
     absl::c_transform(
         trace,
         std::inserter(modified_instructions, modified_instructions.begin()),
