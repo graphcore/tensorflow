@@ -407,6 +407,10 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   poplar::OptionFlags GclOptions() const { return gcl_options_; }
 
+  bool EnableExperimentalRemoteBufferEmbedding() const {
+    return current_config_.enable_experimental_remote_buffer_embedding();
+  }
+
   int64 GetMaxAllReduceBufferSize() const {
     return current_config_.max_cross_replica_sum_buffer_size();
   }
@@ -520,7 +524,13 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                                         int index_count) = 0;
     virtual Status EnqueueUpdateGrads(int replica, const void* grads) = 0;
 
-    virtual bool Done() const = 0;
+    virtual StatusOr<void*> GetRow(int index) const = 0;
+
+    virtual StatusOr<int> GetTokenCount() const = 0;
+
+    virtual StatusOr<int> GetEncodingWidth() const = 0;
+
+    virtual xla::StatusOr<int> GetElementSize() const = 0;
   };
 
   template <typename T>
@@ -548,6 +558,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   void SetHasCycleCounter() { has_cycle_counter_ = true; }
   static std::string GetCycleCounterStream();
+
+  void ClearCompilationFailure();
+  void NotifyCompilationFailure();
 
  private:
   Status CreatePoplarTarget();
@@ -731,10 +744,19 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   Status ConnectSendCallbacksToRendezvous(const SendRecvInfos& send_infos);
   Status ConnectRecvCallbacksToRendezvous(const SendRecvInfos& recv_infos);
 
-  Status ConnectHostEmbeddingLookupToRendezvous(
-      const HostEmbeddingInfo& lookup_info);
+  Status ConnectHostEmbeddingLookup(
+      const HostEmbeddingInfo& lookup_info,
+      HostEmbeddingInterface_* embedding_interface);
   Status ConnectHostEmbeddingUpdateToRendezvous(
-      const HostEmbeddingInfo& update_info);
+      const HostEmbeddingInfo& update_info,
+      HostEmbeddingInterface_* embedding_interface);
+
+  Status DisconnectHostEmbeddingLookup(
+      const HostEmbeddingInfo& lookup_info,
+      HostEmbeddingInterface_* embedding_interface);
+  Status DisconnectHostEmbeddingUpdate(
+      const HostEmbeddingInfo& update_info,
+      HostEmbeddingInterface_* embedding_interface);
 
   // Connect buffers provided by infeed transfer manager to Poplar
   // HostToDevice FIFO
@@ -851,6 +873,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   std::mutex host_embeddings_mutex_;
   std::condition_variable host_embeddings_cv;
+  bool host_embedding_registration_is_open_ = true;
 
   SeedGenerator seed_generator_;
 

@@ -33,6 +33,7 @@ limitations under the License.
 namespace xla {
 class HloInstruction;
 class Window;
+class Shape;
 
 namespace poplarplugin {
 // Tries to convert the string target for the kCustomCall
@@ -74,6 +75,7 @@ class AttributeMap {
   StatusOr<absl::flat_hash_map<int64, int64>> GetAttributeFlatHashMap(
       const std::string& field_name) const;
   StatusOr<Window> GetAttributeAsWindow(const std::string& field_name) const;
+  StatusOr<Shape> GetAttributeAsShape(const std::string& field_name) const;
 
   const std::string Serialise();
 

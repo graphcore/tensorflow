@@ -117,6 +117,7 @@ py_library(
         "keras/layers/embedding_lookup.py",
         "keras/layers/normalization.py",
         "keras/layers/rnn.py",
+        "keras/model.py",
         "keras/pipeline.py",
         "loops.py",
         "ops/all_to_all_op.py",

@@ -38,6 +38,13 @@ cc_library(
 )
 
 cc_library(
+    name = "boost_headers",
+    hdrs = [
+        "@horovod_boost//:boost_headers",
+    ],
+)
+
+cc_library(
     name = "horovod_ops",
     srcs = [
         "@horovod_repo//:horovod_common_headers",
@@ -48,9 +55,11 @@ cc_library(
         "-DHAVE_MPI=1",
         "-Iexternal/local_config_ipu_horovod/mpi/include",
         "-Iexternal/lbfgspp_repo/include",
+        "-Iexternal/horovod_boost",
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":boost_headers",
         ":lbfgspp_headers",
         ":mpi_headers",
         "//tensorflow/core:framework",
