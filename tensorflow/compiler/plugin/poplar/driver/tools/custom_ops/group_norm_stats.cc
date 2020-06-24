@@ -51,8 +51,9 @@ std::unique_ptr<HloInstruction>
 HloGroupNormStatsInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  return CreateGroupNormStats(shape, new_operands[0], num_groups(), epsilon(),
-                              feature_index(), strided_channel_grouping());
+  return CreateGroupNormStats(shape, new_operands[0], num_groups(),
+                              strided_channel_grouping(), epsilon(),
+                              feature_index());
 }
 
 std::unique_ptr<HloInstruction> CreateGroupNormStats(

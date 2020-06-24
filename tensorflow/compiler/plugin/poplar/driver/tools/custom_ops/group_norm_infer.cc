@@ -70,7 +70,7 @@ HloGroupNormInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return CreateGroupNorm(shape, new_operands[0], new_operands[1],
                          new_operands[2], new_operands[3], new_operands[4],
-                         num_groups(), epsilon(), strided_channel_grouping(),
+                         num_groups(), strided_channel_grouping(), epsilon(),
                          feature_index());
 }
 
