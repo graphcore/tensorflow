@@ -333,7 +333,8 @@ class _IpuModelBase(KerasModel):
           "dataset (%d) to be a multiple of the accumulated batch size (%d)" %
           (mini_batches_per_epoch, self.accumulation_count))
 
-    steps_per_epoch = mini_batches_per_epoch / self.accumulation_count
+    steps_per_epoch = mini_batches_per_epoch / (self.accumulation_count *
+                                                self._get_replication_factor())
 
     if not steps_per_run:
       steps_per_run = steps_per_epoch
@@ -437,8 +438,17 @@ class _IpuModelBase(KerasModel):
         # Fetch the outfeed for the history
         results = self.outfeed.dequeue()
         results = map(lambda x: x.numpy(), results)
-        results = enumerate(zip(*results))
+        results = zip(*results)
+        if self._get_replication_factor() > 1:
+          # "Transpose" all the outfeed elements.
+          def gen(results):
+            for t in results:
+              for i in range(self._get_replication_factor()):
+                yield tuple(x[i] for x in t)
 
+          results = gen(results)
+
+        results = enumerate(results)
         # Get the final loss and metrics
         i, r = next(results)
         aggregator.create(r)
