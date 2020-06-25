@@ -3885,6 +3885,7 @@ horovod_py_test(
     srcs = ["docs/distributed_training_horovod_example.py"],
     args = ["--num-steps=100"],
     main = "docs/distributed_training_horovod_example.py",
+    num_processes = 2,
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/python/ipu:ipu_lib",
