@@ -22,9 +22,9 @@ limitations under the License.
 #include <vector>
 
 #include "absl/synchronization/mutex.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/config.pb.h"
-
+#include "tensorflow/compiler/xla/statusor.h"
+#include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/stream_executor/device_description.h"
 #include "tensorflow/stream_executor/executor_cache.h"
 #include "tensorflow/stream_executor/multi_platform_manager.h"
@@ -34,11 +34,9 @@ limitations under the License.
 #include "tensorflow/stream_executor/stream_executor_pimpl.h"
 #include "tensorflow/stream_executor/trace_listener.h"
 
-#include "tensorflow/core/platform/mutex.h"
-
-#include "tensorflow/compiler/xla/statusor.h"
-
 namespace se = stream_executor;
+
+using int64 = tensorflow::int64;
 
 namespace tensorflow {
 class IpuTraceEvent;
@@ -90,6 +88,8 @@ class PoplarPlatform : public se::Platform {
   // Cannot be const qualified as a call to
   // PoplarPlatform::ExecuteForDevice is made.
   Status GetIpuOptions(std::vector<IpuOptions>& out);
+
+  StatusOr<int64> GetNumIpusForDevice(int ordinal);
 
   Status ResetSeed(int ordinal, int seed);
 

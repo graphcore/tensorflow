@@ -98,8 +98,8 @@ The outer training function should be called using the ``experimental_run_v2``
 method on the ``IPUStrategy`` object, to ensure that it is executed using the
 strategy's configuration.
 
-Model class
-___________
+Sequential class
+________________
 
 An higher performance alternative to using the standard Keras Sequential is
 available. It is called ``Sequential``, and found at
@@ -107,6 +107,9 @@ available. It is called ``Sequential``, and found at
 
 * On device training loop for reduction of communication overhead.
 * Gradient accumulation for simulating larger batch sizes.
+* Automatic data-parallelism of the model when placed on a multi-IPU device,
+  which means that during training the gradients will be reduced across
+  replicas.
 
 It is a substitute for the Keras Sequentual class, when only a single IPU
 is used for training. For a high performance multi-IPU solution use the
@@ -141,3 +144,6 @@ step is equal to the batch size multiplied by the pipeline depth.
 
 This will be reflected in the rate at which the progress bar advances, and the
 entries in the Keras History.
+
+Note that similarly to the ``Sequentual`` class, ``PipelinedModel`` also
+supports automatic data-parallelism.

@@ -102,11 +102,19 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
     Other arguments are passed to the pipeline operator, for instance
     device_mapping or pipeline_schedule.
     """
-    super(PipelinedModel, self).__init__(pipeline_depth, **kwargs)
 
-    if not isinstance(stages, list):
-      raise ValueError("An IPU pipeline must take a list of stages, where "
-                       "each stage is a list of Keras Layers.")
+    if not pipeline_depth:
+      raise ValueError(
+          "The pipeline_depth parameter must be specified.  Choose a "
+          "pipeline_depth such that pipeline_depth * mini_batch_size is a "
+          "good total batch size.  One step of the model will run "
+          "pipeline_depth mini-batches through the model, accumulate the "
+          "gradients of the errors, and then apply the accumulated gradients "
+          "to the model weights once.")
+
+    if not isinstance(stages, list) or not stages:
+      raise ValueError("An IPU pipeline must take a non-empty list of stages, "
+                       "where each stage is a list of Keras Layers.")
 
     for s in stages:
       if not isinstance(s, list):
@@ -117,14 +125,8 @@ class PipelinedModel(ipu_model._IpuModelBase):  # pylint: disable=protected-acce
           raise ValueError("Each list in the `stages` list must contain "
                            "only Keras Layers.")
 
-    if not pipeline_depth:
-      raise ValueError(
-          "The pipeline_depth parameter must be specified.  Choose a "
-          "pipeline_depth such that pipeline_depth * mini_batch_size is a "
-          "good total batch size.  One step of the model will run "
-          "pipeline_depth mini-batches through the model, accumulate the "
-          "gradients of the errors, and then apply the accumulated gradients "
-          "to the model weights once.")
+    shard_count = max(kwargs.get("device_mapping", range(len(stages)))) + 1
+    super(PipelinedModel, self).__init__(pipeline_depth, shard_count, **kwargs)
 
     self.pipeline_depth = pipeline_depth
     self.stages = stages

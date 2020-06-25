@@ -13,26 +13,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "absl/memory/memory.h"
-#include "absl/strings/str_format.h"
-
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
-#include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
-
-#include "tensorflow/compiler/xla/status_macros.h"
-
-#include "tensorflow/stream_executor/lib/error.h"
-#include "tensorflow/stream_executor/lib/initialize.h"
-#include "tensorflow/stream_executor/lib/status.h"
-#include "tensorflow/stream_executor/lib/status_macros.h"
-
-#include "tensorflow/core/public/version.h"
 
 #include <poplar/Device.hpp>
 #include <poplar/DeviceManager.hpp>
 #include <poplar/Graph.hpp>
+
+#include "absl/memory/memory.h"
+#include "absl/strings/str_format.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_platform_id.h"
+#include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
+#include "tensorflow/compiler/xla/status_macros.h"
+#include "tensorflow/core/public/version.h"
+#include "tensorflow/stream_executor/lib/error.h"
+#include "tensorflow/stream_executor/lib/initialize.h"
+#include "tensorflow/stream_executor/lib/status.h"
+#include "tensorflow/stream_executor/lib/status_macros.h"
 
 // Pre-processor convert token to string
 #define QUOTE(str) #str
@@ -169,6 +166,14 @@ Status PoplarPlatform::GetIpuOptions(std::vector<IpuOptions>& out) {
   }
 
   return Status::OK();
+}
+
+StatusOr<int64> PoplarPlatform::GetNumIpusForDevice(int ordinal) {
+  TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
+                      ExecutorForDevice(ordinal));
+
+  auto* e = static_cast<PoplarExecutor*>(executor->implementation());
+  return e->GetOrCreatePoplarTarget().getNumIPUs();
 }
 
 Status PoplarPlatform::ResetSeed(int ordinal, int seed) {

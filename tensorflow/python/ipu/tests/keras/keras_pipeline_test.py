@@ -175,8 +175,10 @@ class BatchCallbackCounter(keras.callbacks.Callback):
 class IPUPipelineTest(test.TestCase):
   @test_util.run_v2_only
   def testEmptyPipelineCreation(self):
-    s = ipu.keras.PipelinedModel([], pipeline_depth=4)
-    self.assertEqual(s.layers, [])
+    with self.assertRaisesRegex(
+        ValueError, "An IPU pipeline must take a non-empty list of "
+        "stages"):
+      ipu.keras.PipelinedModel([], pipeline_depth=4)
 
   @test_util.run_v2_only
   def testNoPipelineDepth(self):
@@ -196,7 +198,8 @@ class IPUPipelineTest(test.TestCase):
       ipu.keras.PipelinedModel([
           keras.layers.Dense(8),
           keras.layers.Dense(8),
-      ])
+      ],
+                               pipeline_depth=4)
 
   @test_util.run_v2_only
   def testPipelineBadLayersInStage(self):
@@ -206,7 +209,8 @@ class IPUPipelineTest(test.TestCase):
       ], [
           keras.layers.Dense(8),
           [],
-      ]])
+      ]],
+                               pipeline_depth=4)
 
   @test_util.run_v2_only
   def testCannotCallEagerly(self):
