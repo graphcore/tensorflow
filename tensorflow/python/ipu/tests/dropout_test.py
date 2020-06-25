@@ -193,6 +193,23 @@ class PopnnRandomDropoutTest(test_util.TensorFlowTestCase,
       self.assertAllEqual(np.count_nonzero(dropout_out),
                           np.count_nonzero(gradients))
 
+  @parameterized.named_parameters(*TEST_CASES)
+  @test_util.deprecated_graph_mode_only
+  def testScaling(self, rate, seed, noise_shape):
+    def _run_dropout(w):
+      return self._ipu_dropout(w, rate, seed, noise_shape)
+
+    r, input_data = self._setup_test(_run_dropout)
+
+    with sl.Session() as sess:
+      in_data = np.ones(DIMS)
+      [result] = sess.run(r, {input_data: in_data})
+
+      kept_values = result[np.nonzero(result)]
+      expected_kept_values = 1 / (1 - rate) * np.ones(kept_values.shape)
+
+      self.assertAllClose(kept_values, expected_kept_values)
+
 
 if __name__ == "__main__":
   googletest.main()

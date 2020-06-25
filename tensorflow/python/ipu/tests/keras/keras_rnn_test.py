@@ -14,7 +14,6 @@
 # ==============================================================================
 """Tests for IPU LSTM layers."""
 
-
 import numpy as np
 
 from tensorflow.python.eager import def_function
@@ -247,21 +246,21 @@ class IpuLstmTest(test.TestCase):
   def test_lstm_dropout(self):
     x, h, c = self._get_random_inputs()
 
-    dropout_result = _new_kerasLSTM(self,
-                                    x,
-                                    h,
-                                    c,
-                                    return_state=False,
-                                    dropout=0.)
+    dropout_none_result = _new_kerasLSTM(self,
+                                         x,
+                                         h,
+                                         c,
+                                         return_state=False,
+                                         dropout=0.)
 
-    clear_result = _new_kerasLSTM(self,
-                                  x,
-                                  h,
-                                  c,
-                                  return_state=False,
-                                  dropout=1.)
+    dropout_most_result = _new_kerasLSTM(self,
+                                         x,
+                                         h,
+                                         c,
+                                         return_state=False,
+                                         dropout=0.9)
 
-    self.assertNotAllClose(clear_result, dropout_result)
+    self.assertNotAllClose(dropout_none_result, dropout_most_result)
 
   @test_util.run_v2_only
   def test_can_call_without_state_change(self):
@@ -356,20 +355,21 @@ class IpuGruTest(test.TestCase):
   def test_gru_dropout(self):
     x, init = self._get_random_inputs()
 
-    dropout_result = _new_kerasGRU(self,
-                                   x,
-                                   init,
-                                   dropout=1.,
-                                   return_state=False,
-                                   return_sequences=True)
-    clear_result = _new_kerasGRU(self,
-                                 x,
-                                 init,
-                                 dropout=0.,
-                                 return_state=False,
-                                 return_sequences=True)
+    dropout_none_result = _new_kerasGRU(self,
+                                        x,
+                                        init,
+                                        dropout=0.,
+                                        return_state=False,
+                                        return_sequences=True)
 
-    self.assertNotAllClose(clear_result, dropout_result)
+    dropout_most_result = _new_kerasGRU(self,
+                                        x,
+                                        init,
+                                        dropout=0.9,
+                                        return_state=False,
+                                        return_sequences=True)
+
+    self.assertNotAllClose(dropout_none_result, dropout_most_result)
 
 
 if __name__ == '__main__':
