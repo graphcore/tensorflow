@@ -18,7 +18,6 @@ Dropout Keras layer
 """
 
 from tensorflow.python.ipu import rand_ops
-from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
@@ -31,10 +30,16 @@ class Dropout(Layer):
                rate=0.5,
                noise_shape=None,
                seed=None,
-               scale=1,
                seed_modifier=1,
                **kwargs):
-    """Creates a Dropout model.
+    """Creates a Dropout layer.
+
+    The Dropout layer randomly sets input units to 0 with a frequency of `rate`
+    at each step during training time. Inputs not set to 0 are scaled up by
+    `1/(1 - rate)` such that the expected sum is unchanged.
+
+    Note that the Dropout layer only applies when `training` is set to True such
+    that no values are dropped during inference.
 
     Args:
       rate: Float between 0 and 1. Fraction of the input units to drop.
@@ -43,7 +48,6 @@ class Dropout(Layer):
         used to create the distribution for dropout.
       noise_shape: 1D integer tensor representing the shape of the binary
         dropout mask that will be multiplied with the input.
-      scale: An optional factor to apply to all retained elements.
       seed_modifier: An optional parameter given to poplar which uses it to
         modify the seed.
 
@@ -61,7 +65,6 @@ class Dropout(Layer):
     self.built = False
     self.seed = seed
     self.rate = rate
-    self.scale = scale
     self.seed_modifier = seed_modifier
     self.noise_shape = noise_shape
 
@@ -82,14 +85,13 @@ class Dropout(Layer):
     if not isinstance(training, bool):
       raise ValueError(
           "ipu.keras.Dropout does not support a dynamic training parameter.  "
-          "Pass a boolean True or False.  If you are using keras Sequential, "
-          "then use a different model class.")
+          "Pass a boolean True or False. If you are using keras Sequential, "
+          "pass the `training` parameter to its `__call__` function.")
 
     if training:
       output = rand_ops.dropout(x,
                                 seed=self.seed,
                                 rate=self.rate,
-                                scale=self.scale,
                                 seed_modifier=self.seed_modifier,
                                 noise_shape=self.noise_shape,
                                 name=self.name)

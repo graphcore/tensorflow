@@ -14,18 +14,19 @@
 # ==============================================================================
 """Test for IPU Dropout layer."""
 
-
 import numpy as np
 
-from tensorflow.python.framework import ops
-from tensorflow.python.platform import test
 from tensorflow.python import ipu
+from tensorflow.python.framework import ops
+from tensorflow.python.framework import test_util
+from tensorflow.python.ops import array_ops
+from tensorflow.python.platform import test
 
 dataType = np.float32
 
 
-def kerasIPUDropout(x, rate=0.5, scale=1.0, seed=None, training=True):
-  layer = ipu.layers.Dropout(dtype=dataType, rate=rate, scale=scale, seed=seed)
+def kerasIPUDropout(x, rate=0.5, seed=None, training=True):
+  layer = ipu.layers.Dropout(dtype=dataType, rate=rate, seed=seed)
   layer.build(input_shape=None)
 
   return layer(inputs=x, training=training)
@@ -39,7 +40,7 @@ class IPUDropoutTest(test.TestCase):
     x = np.random.rand((num_elements)).astype(dataType)
 
     # Test rates
-    rates = [0.0, 0.1, 0.3, 0.5, 0.7, 1.0]
+    rates = [0.0, 0.1, 0.3, 0.5, 0.7, 0.99]
     for r in rates:
       keras_result = kerasIPUDropout(x, r).numpy()
       num_non_zero = np.count_nonzero(keras_result)
@@ -55,14 +56,14 @@ class IPUDropoutTest(test.TestCase):
       keras_result_b = kerasIPUDropout(x, seed=[42, 42]).numpy()
       self.assertAllEqual(keras_result_b, keras_result_a)
 
-    num_elements = 50
-    x = np.random.rand((num_elements)).astype(dataType)
-    # Test scale
-    scales = [2, 0.5]
-    for s in scales:
-      original_scale = kerasIPUDropout(x, seed=[42, 42]).numpy()
-      keras_result = kerasIPUDropout(x, seed=[42, 42], scale=s).numpy()
-      self.assertAllClose(original_scale * s, keras_result)
+    # Test scaling of kept elements
+    num_elements = 1000
+    x = np.ones((num_elements)).astype(dataType)
+    for r in rates:
+      keras_result = kerasIPUDropout(x, seed=[42, 42], rate=r).numpy()
+      kept_values = keras_result[np.nonzero(keras_result)]
+      expected_kept_values = 1 / (1 - r) * np.ones(kept_values.shape)
+      self.assertAllClose(kept_values, expected_kept_values)
 
   def testInference(self):
     num_elements = 100
@@ -85,6 +86,11 @@ class IPUDropoutTest(test.TestCase):
 
     output = kerasIPUDropout(x, seed=[42, 42], training=True)
     self.assertTrue(isinstance(output, (ops.Tensor, ops.EagerTensor)))
+
+  def testIllegalRate(self):
+    with self.assertRaisesRegex(
+        ValueError, r"The rate must be in the range \[0, 1\), but was 1"):
+      kerasIPUDropout(np.ones(1), rate=1)
 
 
 if __name__ == '__main__':
