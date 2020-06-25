@@ -27,6 +27,7 @@ def dropout(x,
             rate=0.5,
             seed_modifier=1,
             noise_shape=None,
+            scale=None,
             name=None):
   """This targets the PopLibs Poprand operation, optimized for execution
   on the IPU.
@@ -44,12 +45,18 @@ def dropout(x,
                    the seed.
     noise_shape: An optional parameter that determines the shape of the dropout. 
                  Regular, unshaped dropout used if not specified.
+    scale: No longer valid.
     name: Optional op name.
 
   Returns:
     A `Tensor` which has some nodes set to zero, as randomly selected based on
     other parameters.
   """
+
+  if scale:
+    raise RuntimeError(
+        "Setting the `scale` parameter in dropout is not supported. Elements "
+        "are scaled up by `1.0 / (1 - rate)` automatically.")
 
   # Rate is a probability between 0 and 1. Specifically the rate that a variable
   # will be dropped out.
