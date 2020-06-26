@@ -25,12 +25,15 @@ from tensorflow.python.ops import array_ops
 def dropout(x,
             seed=None,
             rate=0.5,
-            scale=1,
             seed_modifier=1,
             noise_shape=None,
+            scale=None,
             name=None):
   """This targets the PopLibs Poprand operation, optimized for execution
   on the IPU.
+
+  With probability `rate`, drops elements of `x`. Inputs which are kept are
+  scaled up by `1 / (1 - rate)` such that the expected sum is unchanged.
 
   Args:
     x: The input tensor.
@@ -38,11 +41,11 @@ def dropout(x,
       or Python list/tuple), representing the random seed that will be used to
       create the distribution for dropout.
     rate: The probability that a given element will be zeroed out.
-    scale: An optional factor to apply to all other elements.
     seed_modifier: An optional parameter given to poplar which uses it to modify
                    the seed.
     noise_shape: An optional parameter that determines the shape of the dropout. 
                  Regular, unshaped dropout used if not specified.
+    scale: No longer valid.
     name: Optional op name.
 
   Returns:
@@ -50,10 +53,15 @@ def dropout(x,
     other parameters.
   """
 
+  if scale:
+    raise RuntimeError(
+        "Setting the `scale` parameter in dropout is not supported. Elements "
+        "are scaled up by `1.0 / (1 - rate)` automatically.")
+
   # Rate is a probability between 0 and 1. Specifically the rate that a variable
   # will be dropped out.
-  if rate > 1.0 or rate < 0.0:
-    raise ValueError("Rate must be between 0.0 and 1.0" % rate)
+  if rate >= 1.0 or rate < 0.0:
+    raise ValueError("The rate must be in the range [0, 1), but was %s" % rate)
 
   is_using_user_seed = True
   if seed is None:
@@ -78,12 +86,14 @@ def dropout(x,
       if i != j:
         raise ValueError("Dimension mismatch, %d != %d." % (i, j))
 
-  # We transfrom rate to be the change an individual node will dropout as
-  # ipu_dropout is using the old tensorflow method that rate is the probability
-  # that value is kept rather than disgarded.
+  # The ipu_dropout op uses the old tensorflow method where the rate is the
+  # probability of keeping rather than dropping.
+  keep_prob = 1 - rate
+  scale = 1 / keep_prob
+
   return gen_poprand_ops.ipu_dropout(x,
                                      seed=seed,
-                                     rate=(1 - rate),
+                                     rate=keep_prob,
                                      scale=scale,
                                      name=name,
                                      is_using_user_seed=is_using_user_seed,
