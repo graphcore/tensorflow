@@ -813,8 +813,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   if (!poplar_executor->HasPoplarTarget()) {
     return xla::FailedPrecondition(
         "No device target has been configured. Did you configure the IPU "
-        "devices by "
-        "running `tensorflow.python.ipu.configure_ipu_system(ipu_options)`?");
+        "devices by running "
+        "`tensorflow.python.ipu.utils.configure_ipu_system(ipu_options)`?");
   }
   std::lock_guard<std::mutex> g(static_mu_);
 

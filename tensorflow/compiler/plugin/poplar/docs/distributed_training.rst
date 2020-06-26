@@ -112,6 +112,14 @@ on the different workers. During variable initialisation the values are broadcas
 from the root rank to the other ranks, and during training the gradients are
 all-reduced as a part of the ``Optimizer.apply_gradients`` call.
 
+Horovod Open MPI dependency
+###########################
+
+Horovod depends on Open MPI being installed on the system. The Open MPI library is
+dynamically loaded when the module :module:`~tensorflow.python.ipu.horovod` is
+imported, and this will fail if Open MPI is not installed. It is recommended to
+install the Open MPI version that is provided by your operating system package manager.
+
 Launching Horovod training
 ##########################
 
