@@ -146,7 +146,7 @@ class IPUEstimatorSpec(
                             train_op=train_op,
                             host_call=host_call)
 
-  See full example: :any:`distributed_training_example`.
+  See full example: :any:`distributed_training`.
 
   The various hooks (`training_hooks, `evaluation_hooks`, `prediction_hooks`)
   support instances of `tf.estimator.SessionRunHook`. To log tensor values from
