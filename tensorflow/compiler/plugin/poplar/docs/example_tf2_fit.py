@@ -14,7 +14,7 @@ ipu.utils.configure_ipu_system(cfg)
 
 
 #
-# The input data and labels
+# Create the input data and labels
 #
 def create_dataset():
   mnist = tf.keras.datasets.mnist
@@ -23,7 +23,7 @@ def create_dataset():
   x_train = x_train / 255.0
 
   train_ds = tf.data.Dataset.from_tensor_slices(
-      (x_train, y_train)).shuffle(10000).batch(32)
+      (x_train, y_train)).shuffle(10000).batch(32, drop_remainder=True)
   train_ds = train_ds.map(lambda d, l:
                           (tf.cast(d, tf.float32), tf.cast(l, tf.float32)))
 
@@ -31,12 +31,10 @@ def create_dataset():
 
 
 #
-# The model.  Because this model does not have a specific shape for its inputs
-# it will be constructed when it is first called (in the `train` function). So
-# it does not need to be an IPU device targeted model.
+# Create the model using the IPU-specific Sequential class
 #
 def create_model():
-  m = keras.models.Sequential([
+  m = ipu.keras.Sequential([
       keras.layers.Flatten(),
       keras.layers.Dense(128, activation='relu'),
       keras.layers.Dense(10, activation='softmax')

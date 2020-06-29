@@ -101,7 +101,7 @@ strategy's configuration.
 Sequential class
 ________________
 
-An higher performance alternative to using the standard Keras Sequential is
+A higher performance alternative to using the standard Keras Sequential is
 available. It is called ``Sequential``, and found at
 ``tensorflow.python.ipu.keras.Sequential``. It supports the following features:
 
@@ -111,7 +111,7 @@ available. It is called ``Sequential``, and found at
   which means that during training the gradients will be reduced across
   replicas.
 
-It is a substitute for the Keras Sequentual class, when only a single IPU
+It is a substitute for the Keras Sequential class, when only a single IPU
 is used for training. For a high performance multi-IPU solution use the
 ``PipelinedModel`` described below.
 
