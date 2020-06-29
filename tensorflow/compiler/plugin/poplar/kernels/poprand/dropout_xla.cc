@@ -13,12 +13,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
-
+#include "tensorflow/compiler/tf2xla/shape_util.h"
+#include "tensorflow/compiler/tf2xla/type_util.h"
+#include "tensorflow/compiler/tf2xla/xla_helpers.h"
+#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
+#include "tensorflow/compiler/tf2xla/xla_op_registry.h"
+#include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -27,15 +33,6 @@ limitations under the License.
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/util/stream_executor_util.h"
-
-#include "tensorflow/compiler/tf2xla/shape_util.h"
-#include "tensorflow/compiler/tf2xla/type_util.h"
-#include "tensorflow/compiler/tf2xla/xla_helpers.h"
-#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
-#include "tensorflow/compiler/tf2xla/xla_op_registry.h"
-#include "tensorflow/compiler/xla/literal_util.h"
-
-#include "absl/container/flat_hash_set.h"
 
 using namespace xla::poplarplugin;
 
@@ -49,12 +46,14 @@ class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("scale", &scale));
     OP_REQUIRES_OK(ctx,
                    ctx->GetAttr("is_using_user_seed", &is_using_user_seed));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("modify_seed", &modify_seed));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("seed_modifier", &seed_modifier));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("noise_shape", &noise_shape));
 
     attribute_map_.AddAttribute("rate", rate);
     attribute_map_.AddAttribute("scale", scale);
     attribute_map_.AddAttribute("is_using_user_seed", is_using_user_seed);
+    attribute_map_.AddAttribute("modify_seed", modify_seed);
     attribute_map_.AddAttribute("seed_modifier", seed_modifier);
 
     // noise_shape is optional and defaults to an empty list.
@@ -117,6 +116,10 @@ class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
   // Track if the user provided the seed value or whether we should use the
   // global seed we create.
   bool is_using_user_seed;
+
+  // Track whether the seed has to be modified with the execution counter and
+  // the replication index.
+  bool modify_seed;
 
   // For shaped dropout. See noise_shape in TF's dropout op.
   std::vector<int64> noise_shape;

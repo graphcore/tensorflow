@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <popops/ElementWise.hpp>
 #include <poputil/TileMapping.hpp>
+#include <poputil/Util.hpp>
 #include <random>
 
 #include "absl/container/flat_hash_map.h"
@@ -37,23 +38,17 @@ namespace poplarplugin {
 namespace {
 namespace pe = popops::expr;
 
-int64 GlobalRandomValue() {
-  static auto* mu = new tensorflow::mutex();
-  static std::mt19937_64 rng{42};
-  tensorflow::mutex_lock l(*mu);
-  return rng();
-}
-
 // Popops version of boost::hash_combine.
-poplar::Tensor HashCombine(poplar::Graph& graph, poplar::program::Sequence& seq,
-                           const poplar::Tensor& hash,
-                           const poplar::Tensor& combine,
-                           const std::string& debug_name) {
-  return popops::map(
+void HashCombineInplace(poplar::Graph& graph, poplar::program::Sequence& seq,
+                        poplar::Tensor& hash, const poplar::Tensor& combine,
+                        const std::string& debug_name) {
+  popops::mapInPlace(
       graph,
       pe::_1 ^ (pe::_2 + pe::Const(0x9e3779b9U) + (pe::_1 << pe::Const(6U)) +
                 (pe::_1 >> pe::Const(2U))),
-      {hash, combine}, seq, debug_name + "/HashCombine");
+      {hash.reinterpret(poplar::UNSIGNED_INT),
+       combine.reinterpret(poplar::UNSIGNED_INT)},
+      seq, debug_name + "/HashCombine");
 }
 
 class DropoutOp : public PoplarOpDef {
@@ -83,36 +78,44 @@ class DropoutOp : public PoplarOpDef {
 
     // By default we will use any seed provided by the user.
     poplar::Tensor initial_seed = in_seed;
-
-    // If we aren't using a user provided seed we need to create one.
+    // If we aren't using a user provided seed we need to create one at the
+    // beginning of each engine execution - do this by adding the seed
+    // generation to the preamble sequence.
     if (!is_user_seed) {
-      initial_seed = graph.addVariable(poplar::INT, {2}, debug_name + "/Seed");
-      graph.setTileMapping(initial_seed, 0);
-      const int64 seed_value = GlobalRandomValue();
-      int32 seed_array[2];
-      std::memcpy(seed_array, &seed_value, sizeof(int64));
-      graph.setInitialValue<int32>(initial_seed, seed_array);
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor seed_ref,
+          AddPlainTensor(graph, debug_name + "/Seed",
+                         ShapeUtil::MakeShape(S32, {2}), res, false));
+
+      poplar::program::Sequence seq;
+      initial_seed = poprand::uniform(
+          graph, nullptr, 0, seed_ref, poplar::INT,
+          std::numeric_limits<int32>::min(), std::numeric_limits<int32>::max(),
+          res.preamble_sequence, debug_name + "/GenerateSeed");
+    }
+
+    poplar::Tensor seed =
+        poputil::duplicate(graph, initial_seed, seq, debug_name + "/Seed");
+
+    if (dropout_instruction->ModifySeed()) {
+      // To make sure the seed value changes, get the execution counter and hash
+      // the initial seed with the execution counter.
+      TF_ASSIGN_OR_RETURN(poplar::Tensor execution_counter,
+                          GetExecutionCounter(res, inst));
+      HashCombineInplace(graph, seq, seed, execution_counter,
+                         debug_name + "/ExecutionCounter");
+
+      // Also hash in the IPU number so each replica has a different seed.
+      poplar::Tensor replica_constant =
+          graph.addReplicationIndexConstant().reshape({1});
+      graph.setTileMapping(replica_constant, 0);
+      HashCombineInplace(graph, seq, seed, replica_constant,
+                         debug_name + "/ReplicationCounter");
     }
 
     // Dropout expects an unsigned int but tensorflow takes in int32 when
     // targeting IPU.
-    poplar::Tensor initial_seed_unsigned =
-        initial_seed.reinterpret(poplar::UNSIGNED_INT);
-
-    // To make sure the seed value changes, get the execution counter and hash
-    // the initial seed with the execution counter.
-    TF_ASSIGN_OR_RETURN(poplar::Tensor execution_counter,
-                        GetExecutionCounter(res, inst));
-    poplar::Tensor seed =
-        HashCombine(graph, seq, initial_seed_unsigned, execution_counter,
-                    debug_name + "/ExecutionCounter");
-
-    // Also hash in the IPU number so each replica has a different seed.
-    poplar::Tensor replica_constant =
-        graph.addReplicationIndexConstant().reshape({1});
-    graph.setTileMapping(replica_constant, 0);
-    seed = HashCombine(graph, seq, seed, replica_constant,
-                       debug_name + "/ReplicationCounter");
+    poplar::Tensor seed_unsigned = seed.reinterpret(poplar::UNSIGNED_INT);
 
     poplar::Tensor final_output;
     if (dropout_instruction->HasNoiseShape()) {
@@ -127,8 +130,8 @@ class DropoutOp : public PoplarOpDef {
                                          ns_ref_shape, res, false));
 
       final_output =
-          poprand::shapedDropout(graph, &seed, seed_modifier, input, reference,
-                                 rate, scale, seq, debug_name);
+          poprand::shapedDropout(graph, &seed_unsigned, seed_modifier, input,
+                                 reference, rate, scale, seq, debug_name);
     } else {
       // Create an empty tensor for the dropout. This is internal to the poprand
       // implementation but is exposed anyway so we need to provide it.
@@ -138,11 +141,11 @@ class DropoutOp : public PoplarOpDef {
                          inst->operand(0)->shape(), res, false));
 
       // Perform the actual dropout by calling into the poprand function.
-      final_output = poprand::dropout(graph, &seed, seed_modifier, input,
-                                      reference, rate, scale, seq, debug_name);
+      final_output =
+          poprand::dropout(graph, &seed_unsigned, seed_modifier, input,
+                           reference, rate, scale, seq, debug_name);
     }
 
-    seed = seed.reinterpret(poplar::INT);
     // Mark that tensor as our output.
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, final_output));
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, seed));
