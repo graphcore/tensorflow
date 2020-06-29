@@ -100,7 +100,7 @@ class IPUMultiWorkerStrategy(distribute_lib.StrategyV1):
   the `optimizer.apply_gradients()` call should also be placed on the
   host by using the
   :class:`~tensorflow.python.ipu.ipu_estimator.IPUEstimatorSpec`
-  `host_call` argument. See full example: :any:`distributed_training_example`.
+  `host_call` argument. See full example: :any:`distributed_training`.
 
   `IPUPipelineEstimator`: Pass the `IPUMultiWorkerStrategy` instance to
   the :class:`~tensorflow.python.ipu.ipu_run_config.RunConfig` as the

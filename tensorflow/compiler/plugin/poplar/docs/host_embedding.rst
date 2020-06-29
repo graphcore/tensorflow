@@ -1,5 +1,5 @@
 IPU Host Embeddings
--------------
+-------------------
 An IPU host embedding is a mechanism for using large embeddings in both
 inference and training, when the embedding would not otherwise fit in device
 memory. This is achieved in one of two ways:
@@ -36,7 +36,7 @@ execution. The potentially modified embedding value will be returned from the
 session.
 
 Enabling Remote Buffers
------------------------
+#######################
 In :py:func:`tensorflow.python.ipu.utils.create_ipu_config` there is an option
 ``enable_experimental_remote_buffer_embedding``. When this option is set to
 ``True`` (defaults to ``False``), the IPU host embedding implementation will be
@@ -46,7 +46,7 @@ Note This options is experimental, and may be changed or removed in future
 releases.
 
 Partitioning Strategies
------------------------
+#######################
 When using IPU host embeddings, the experimental remote buffer implementation,
 and replication, it becomes necessary to decide how to partition the embedding.
 This is because Poplar remote buffers are replica-unique, so there's no sharing.
@@ -55,7 +55,7 @@ To overcome this constraint we offer two partitioning strategies. Each has
 tradeoffs which can be chosen depending on the application.
 
 Token Strategy
---------------
+**************
 The token strategy unsurprisingly chooses to partition the embedding on the
 token axis. This means that there will be ``ceil(t/r)`` whole tokens on each
 replica, where ``t`` is the token count and ``r`` is the replica count.
@@ -68,6 +68,7 @@ whole table. Below is the psuedo-code, with explicit types and static shapes,
 for how this is implemented:
 
 .. code-block:: none
+
   // Psuedo-code assuming we have table size `t`, and replica count `r`.
   f16[14, 64] global_lookup(
     local_table : f16[ceil(t/r), 64]
@@ -101,7 +102,7 @@ for how this is implemented:
     return reshape(result), shape=[14, 64] : f16[14, 64]
 
 Encoding Strategy
------------------
+*****************
 The encoding strategy, in contrast to the token strategy, chooses to partition
 the embedding on the encoding axis. This means that there will be ``ceil(1/r)``
 of every tokens on each replica, where ``r`` is the replica count. This means
@@ -116,6 +117,7 @@ and updates on the whole table. Below is the psuedo-code, with explicit types
 and static shapes, for how this is implemented:
 
 .. code-block:: none
+
   // Psuedo-code assuming we have table size `t`, replica count `r`, and
   // encoding size `e`.
   f16[14, e] global_lookup(
@@ -143,7 +145,7 @@ and static shapes, for how this is implemented:
     return slice(result), dim=1, begin=0, end=e : f16[14, e]
 
 Summary
--------
+#######
 Although it is application dependant, generally the token strategy is used when
 the encoding is much smaller than the token count. An example application for
 this would be language models where the vocabulary size is much larger than the
