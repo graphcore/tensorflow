@@ -284,12 +284,8 @@ Status SetPartialsTypeIfPresent(const HloInstruction* inst,
   return SetPartialsTypeIfPresent(poplar_backend_config, option_flags);
 }
 
-poplar::program::Sequence ZeroTensors(CompilerResources& res) {
-  poplar::program::Sequence zero_seq;
-  for (auto t : res.zeroed_tensors) {
-    popops::zero(GetMasterGraph(res), t, zero_seq, "ZeroVar");
-  }
-  return zero_seq;
+void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t) {
+  popops::zero(GetMasterGraph(res), t, res.preamble_sequence, "ZeroVar");
 }
 
 bool IsRemoteParameter(int64 parameter_number,

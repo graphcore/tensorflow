@@ -35,6 +35,7 @@ def _poputil_dropout_layer_backward(op, grads, seed_grads):
                                   scale=scale,
                                   name=op.name + "_grad",
                                   is_using_user_seed=True,
+                                  modify_seed=False,
                                   seed_modifier=seed_modifier,
                                   noise_shape=noise_shape)[0],
       # The seed is an input so needs a gradient as well

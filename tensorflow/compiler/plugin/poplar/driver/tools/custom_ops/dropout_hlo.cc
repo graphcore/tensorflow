@@ -13,10 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/dropout_hlo.h"
+
 #include <string>
 #include <vector>
-
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/dropout_hlo.h"
 
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
@@ -27,16 +27,17 @@ namespace poplarplugin {
 
 HloDropoutInstruction::HloDropoutInstruction(
     HloInstruction* X, HloInstruction* seed, float rate_, float scale_,
-    int32_t seed_mod, bool should_use_user_seed,
+    int32_t seed_mod, bool should_use_user_seed, bool modify_seed,
     const std::vector<int64>& noise_shape)
     : HloPoplarInstruction(
           xla::ShapeUtil::MakeTupleShape({X->shape(), seed->shape()}),
           {X, seed}, PoplarOp::Dropout, rate_, scale_, seed_mod,
-          should_use_user_seed, noise_shape),
+          should_use_user_seed, modify_seed, noise_shape),
       scale(scale_),
       rate(rate_),
       seed_modifier(seed_mod),
       is_user_seed(should_use_user_seed),
+      modify_seed(modify_seed),
       noise_shape(noise_shape) {}
 
 absl::flat_hash_set<int64> HloDropoutInstruction::AllocatingIndices() const {
@@ -57,7 +58,7 @@ std::unique_ptr<HloInstruction> HloDropoutInstruction::CloneWithNewOperandsImpl(
     HloCloneContext*) const {
   return absl::make_unique<HloDropoutInstruction>(
       new_operands[0], new_operands[1], Rate(), Scale(), SeedModifier(),
-      IsUserSeed(), NoiseShape());
+      IsUserSeed(), ModifySeed(), NoiseShape());
 }
 
 std::vector<std::string>
@@ -68,6 +69,7 @@ HloDropoutInstruction::ExtraPoplarAttributesToStringImpl(
   attributes.push_back("rate=" + std::to_string(rate));
   attributes.push_back("seed_modifier=" + std::to_string(seed_modifier));
   attributes.push_back("is_user_seed=" + std::to_string(is_user_seed));
+  attributes.push_back("modify_seed=" + std::to_string(modify_seed));
 
   // Noise shape is an optional list attribute.
   if (HasNoiseShape()) {
@@ -78,11 +80,11 @@ HloDropoutInstruction::ExtraPoplarAttributesToStringImpl(
 
 std::unique_ptr<HloInstruction> CreateDropout(
     HloInstruction* operand, HloInstruction* seed, float rate, float scale,
-    uint32_t seed_modifier, bool should_use_user_seed,
+    uint32_t seed_modifier, bool should_use_user_seed, bool modify_seed,
     const std::vector<int64>& noise_shape) {
   return absl::make_unique<HloDropoutInstruction>(
       operand, seed, rate, scale, seed_modifier, should_use_user_seed,
-      noise_shape);
+      modify_seed, noise_shape);
 }
 
 namespace {
@@ -97,6 +99,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDropoutInstructionFactoryFunc(
                       attribute_map.GetAttributeAsInt("seed_modifier"));
   TF_ASSIGN_OR_RETURN(bool should_use_user_seed,
                       attribute_map.GetAttributeAsBool("is_using_user_seed"));
+  TF_ASSIGN_OR_RETURN(bool modify_seed,
+                      attribute_map.GetAttributeAsBool("modify_seed"));
 
   // If the noise_shape attribute is not present (defaults to empty list), we
   // want the corresponding std::vector to also be empty.
@@ -107,7 +111,8 @@ StatusOr<std::unique_ptr<HloInstruction>> HloDropoutInstructionFactoryFunc(
   }
 
   return CreateDropout(call->mutable_operand(0), call->mutable_operand(1), rate,
-                       scale, seed_modifier, should_use_user_seed, noise_shape);
+                       scale, seed_modifier, should_use_user_seed, modify_seed,
+                       noise_shape);
 }
 
 static HloPoplarInstructionFactory dropout_factory(
