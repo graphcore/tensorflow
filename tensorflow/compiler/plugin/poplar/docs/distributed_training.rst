@@ -116,7 +116,7 @@ Horovod Open MPI dependency
 ###########################
 
 Horovod depends on Open MPI being installed on the system. The Open MPI library is
-dynamically loaded when the module :module:`~tensorflow.python.ipu.horovod` is
+dynamically loaded when the module ``tensorflow.python.ipu.horovod`` is
 imported, and this will fail if Open MPI is not installed. It is recommended to
 install the Open MPI version that is provided by your operating system package manager.
 

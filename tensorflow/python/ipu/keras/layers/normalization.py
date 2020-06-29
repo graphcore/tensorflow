@@ -60,7 +60,7 @@ class GroupNorm(Layer):
                channels_axis=-1,
                center=True,
                scale=True,
-               epsilon=1e-6,
+               epsilon=1e-3,
                beta_initializer=None,
                gamma_initializer=None,
                strided_channel_grouping=True,
@@ -202,7 +202,7 @@ class InstanceNorm(GroupNorm):
                channels_axis=-1,
                center=True,
                scale=True,
-               epsilon=1e-6,
+               epsilon=1e-3,
                beta_initializer=None,
                gamma_initializer=None,
                name=None):
@@ -254,7 +254,7 @@ class LayerNorm(GroupNorm):
                channels_axis=-1,
                center=True,
                scale=True,
-               epsilon=1e-6,
+               epsilon=1e-3,
                beta_initializer=None,
                gamma_initializer=None,
                name=None):
