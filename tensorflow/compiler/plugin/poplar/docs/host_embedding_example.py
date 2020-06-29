@@ -68,7 +68,7 @@ def gru(partials):
 
 # The main model
 def model(sequence):
-  # Perform a lookup on the remote buffer embedding
+  # Perform a lookup on the embedding
   partial = embedding.lookup(sequence)
 
   partial = gru(partial)
@@ -109,9 +109,7 @@ with scopes.ipu_scope('/device:IPU:0'):
   run_loop = ipu_compiler.compile(my_net, inputs=[])
 
 # Configure the hardware
-# Enable the experimental remote buffer embedding
-config = utils.create_ipu_config(
-    enable_experimental_remote_buffer_embedding=True)
+config = utils.create_ipu_config()
 config = utils.auto_select_ipus(config, replication_factor)
 utils.configure_ipu_system(config)
 
