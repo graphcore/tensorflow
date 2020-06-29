@@ -73,11 +73,11 @@ class StatefulGradientAccumulateOp : public PoplarOpDef {
                                                GetDebugName(inst) + "/Counter");
     // Map counter to the next tile.
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
-    res.zeroed_tensors.push_back(counter);
+    AddZeroTensorToPreamble(res, counter);
 
     poplar::Tensor accumulator =
         graph.clone(input, GetDebugName(inst) + "/Accumulator");
-    res.zeroed_tensors.push_back(accumulator);
+    AddZeroTensorToPreamble(res, accumulator);
     // Accumulate the input into the buffer.
     popops::addInPlace(graph, accumulator, input, seq,
                        GetDebugName(inst) + "/Accumulate");
@@ -205,7 +205,7 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
                                                GetDebugName(inst) + "/Counter");
     // Map counter to the next tile.
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
-    res.zeroed_tensors.push_back(counter);
+    AddZeroTensorToPreamble(res, counter);
 
     // Apply momentum to the accumulator when counter == 0.
     {
