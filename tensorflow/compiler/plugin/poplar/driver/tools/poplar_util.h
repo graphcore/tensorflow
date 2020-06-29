@@ -112,7 +112,7 @@ StatusOr<poplar::OptionFlags> GetConvolutionOptionsForInst(
 StatusOr<poplar::OptionFlags> GetMatMulOptionsForInst(
     const HloInstruction* inst, CompilerResources& res);
 
-poplar::program::Sequence ZeroTensors(CompilerResources& res);
+void AddZeroTensorToPreamble(CompilerResources& res, const poplar::Tensor& t);
 
 bool IsRemoteParameter(int64 parameter_number,
                        const RemoteParameterInfos& remote_parameter_infos);

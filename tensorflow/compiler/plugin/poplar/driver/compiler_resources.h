@@ -105,7 +105,7 @@ struct CompilerResources {
 
   subcomputation_graph_caching::SubcomputationGraphCache subcomputation_cache;
 
-  std::vector<poplar::Tensor> zeroed_tensors;
+  poplar::program::Sequence preamble_sequence;
 
   std::stack<std::vector<poplar::program::Sequence>>
       gradient_accumulation_zeroing_sequences;
