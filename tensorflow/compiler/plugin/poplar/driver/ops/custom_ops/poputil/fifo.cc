@@ -148,7 +148,7 @@ class FifoOp : public PoplarOpDef {
     auto counter =
         graph.addVariable(poplar::UNSIGNED_INT, {}, debug_name + "/counter");
     graph.setTileMapping(counter, 0);
-    res.zeroed_tensors.push_back(counter);
+    AddZeroTensorToPreamble(res, counter);
 
     for (size_t tuple_idx = 0; tuple_idx < inputs.size(); ++tuple_idx) {
       poplar::Tensor input = inputs[tuple_idx];

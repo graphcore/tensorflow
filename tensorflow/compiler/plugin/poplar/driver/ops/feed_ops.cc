@@ -140,7 +140,7 @@ StatusOr<poplar::program::Program> CreateInfeed(CompilerResources& res,
         GetDebugName(inst) + "/InfeedCtr/" + std::to_string(tuple_index));
     // Map counter to the next tile.
     MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph, counter);
-    res.zeroed_tensors.push_back(counter);
+    AddZeroTensorToPreamble(res, counter);
 
     // The body for copying from host and zeroing the counter.
     poplar::program::Sequence true_body;
@@ -298,7 +298,7 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
       // Map counter to the next tile.
       MappingHelper::MapTensorLinearly(res.linear_mapping_state, graph,
                                        counter);
-      res.zeroed_tensors.push_back(counter);
+      AddZeroTensorToPreamble(res, counter);
 
       // Use dynamic slice update to put the slices into the buffer
       popops::dynamicUpdate(graph, batched, in.expand({0}),

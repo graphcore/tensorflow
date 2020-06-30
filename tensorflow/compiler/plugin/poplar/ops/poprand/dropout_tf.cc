@@ -28,6 +28,7 @@ REGISTER_OP("IpuDropout")
     .Attr("rate: float")
     .Attr("scale: float")
     .Attr("is_using_user_seed: bool")
+    .Attr("modify_seed: bool")
     .Attr("seed_modifier: int")
     .Attr("noise_shape: list(int) = []")
     .SetShapeFn([](shape_inference::InferenceContext* c) {

@@ -875,8 +875,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<GradientAccumulationFuser>(resources.annotations);
     pipeline.AddPass<HloComputationNameUniquify>();
     pipeline.AddPass<CholeskyExpander>();
-    pipeline.AddPass<TriangularSolveExpander>(
-        resources.triangular_solve_expander_block_size);
     pipeline.AddPass<FlattenCallGraph>();
     pipeline.AddPass<NotSupportedGatherExpander>();
     pipeline.AddPass<NotSupportedScatterExpander>();
@@ -1141,7 +1139,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
     poplar::program::Sequence main_program;
 
-    // Set up the random seed
+    // Set up the random seed.
     TF_ASSIGN_OR_RETURN(auto seed_setup,
                         InitializeSeed(main_graph, replication_factor));
     main_program.add(seed_setup);
@@ -1152,10 +1150,10 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       setFpBehaviour(main_graph, fp_control, main_program);
     }
 
-    // Add zeroing for registered variables
-    main_program.add(ZeroTensors(resources));
+    // Add the preamble sequence.
+    main_program.add(resources.preamble_sequence);
 
-    // Add the main program sequence
+    // Add the main program sequence.
     main_program.add(visitor.GetSequenceAndInitializeCounters());
 
     if (InitializeCycleCounter(main_graph, main_program)) {

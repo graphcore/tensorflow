@@ -91,11 +91,17 @@ def dropout(x,
   keep_prob = 1 - rate
   scale = 1 / keep_prob
 
+  # The fwd dropout increments the seed using the execution counter and the
+  # replica index and the bwd dropout instruction just needs to consume that
+  # seed without the need for reapplying these.
+  modify_seed = True
+
   return gen_poprand_ops.ipu_dropout(x,
                                      seed=seed,
                                      rate=keep_prob,
                                      scale=scale,
                                      name=name,
                                      is_using_user_seed=is_using_user_seed,
+                                     modify_seed=modify_seed,
                                      seed_modifier=seed_modifier,
                                      noise_shape=noise_shape)[0]
