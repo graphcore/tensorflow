@@ -229,7 +229,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4/*',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Transpose',
           'gradients/vs/conv1/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
-          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/fusion*/WeightTranspose',
+          'gradients/vs/conv3/Conv2D_grad/Conv2DBackpropInput/fusion*/*Transpose',
       ]
       # pylint: enable=line-too-long
       report.assert_all_compute_sets_and_list(ok)
@@ -285,7 +285,7 @@ class ConvGraphCachingTest(xla_test.XLATestCase):
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Conv_4x4',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/AddTo',
           'vs/conv*/Conv2D/convolution*/Conv_1x1',
-          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion*/WeightTranspose',
+          'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropInput/fusion*/*Transpose',
           'gradients/vs/conv*/Conv2D_grad/Conv2DBackpropFilter/fusion.*/Transpose',
       ]
       # pylint: enable=line-too-long

@@ -226,7 +226,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*', 'Copy_', 'Conv2DBackpropInput/fusion*/Conv_2x2',
-          'Conv2DBackpropInput/fusion*/WeightTranspose'
+          'Conv2DBackpropInput/fusion*/*Transpose'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -347,7 +347,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'Copy_',
-          'DepthwiseConv2dNativeBackpropInput/fusion*/WeightTranspose',
+          'DepthwiseConv2dNativeBackpropInput/fusion*/*Transpose',
           'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_3x3',
       ]
       report.assert_all_compute_sets_and_list(ok)
@@ -376,7 +376,7 @@ class IpuXlaConvTest(xla_test.XLATestCase):
       ok = [
           '__seed*',
           'Copy_',
-          'DepthwiseConv2dNativeBackpropInput/fusion*/WeightTranspose',
+          'DepthwiseConv2dNativeBackpropInput/fusion*/*Transpose',
           'DepthwiseConv2dNativeBackpropInput/fusion*/Conv_1x1',
       ]
 
