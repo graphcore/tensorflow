@@ -17,8 +17,6 @@ Targeting the IPU from TensorFlow
     poplar_ops
     perf_training
     functions
-    targetting_tf2
-    examples_tf2
     ipu_estimator_example
     ipu_pipeline_estimator_example
     distributed_training
