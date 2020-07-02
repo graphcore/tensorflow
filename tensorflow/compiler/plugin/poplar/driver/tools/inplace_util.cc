@@ -606,7 +606,6 @@ HloInstructionDescription::HloInstructionDescription(
     case HloOpcode::kRng:
     case HloOpcode::kRoundNearestAfz:
     case HloOpcode::kSelectAndScatter:
-    case HloOpcode::kTriangularSolve:
     case HloOpcode::kTupleSelect: {
       type_ = HloInstructionType::kNotInplace;
       break;
