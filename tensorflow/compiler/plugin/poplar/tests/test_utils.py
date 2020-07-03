@@ -67,7 +67,7 @@ def names_in_blacklist(names, blacklist):
 
 def missing_names_in_whitelist_entries(names, whitelist):
   fail_list = []
-  wl = [x + '*' for x in whitelist]
+  wl = ['*' + x + '*' for x in whitelist]
   for name in names:
     if name and not [x for x in wl if fnmatch.fnmatch(name, x)]:
       fail_list += [name]
@@ -76,7 +76,7 @@ def missing_names_in_whitelist_entries(names, whitelist):
 
 def missing_whitelist_entries_in_names(names, whitelist):
   fail_list = []
-  wl = [x + '*' for x in whitelist]
+  wl = ['*' + x + '*' for x in whitelist]
   for x in wl:
     if not [name for name in names if fnmatch.fnmatch(name, x)]:
       fail_list += [x]
