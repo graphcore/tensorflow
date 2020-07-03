@@ -62,7 +62,15 @@
           ],
           "script-and-regex.script": "sh -c '{ ./.linters/buildifier -lint warn -mode check $0 2>&1 ; ./.linters/buildifier -mode fix -lint fix $0;} || true'",
           "script-and-regex.regex": "/^(?P<file>[^ :]*)(( # )|(:(?P<line>[^:]+): ))(?P<name>[^:]+)(: (?P<message>.*))?$/m"
+        },
+        "gc-copyright": {
+            "type": "gc-copyright",
+            "gc-copyright.script_path": "../../../../tensorflow_packaging/check_copyright.py",
+            "include": [
+                 "(^tensorflow/compiler/plugin/poplar/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp|py)$)",
+                 "(^tensorflow/python/ipu/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp|py)$)",
+                 "(^third_party/ipus/.*\\.(c|cpp|C|cc|c\\+\\+|cxx|h|hpp|py)$)"
+            ]
         }
-
     }
 }
