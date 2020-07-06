@@ -4,5 +4,6 @@
     "../arcanist_linters/gc_copyright_linter",
     "../arcanist_linters/clang-format-linter",
     "../arcanist_linters/yapf-linter"
-  ]
+  ],
+  "arc.land.onto.default": "poplar/r1.15/release"
 }
