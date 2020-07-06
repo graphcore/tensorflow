@@ -842,7 +842,11 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
     initial_w1 = 2.0
     learning_rate = 0.5
     pipeline_depth = 4
-    num_iterations = 3
+    num_iterations = 4
+    repeat_count = 2
+
+    num_session_runs, remainder = divmod(num_iterations, repeat_count)
+    self.assertEqual(remainder, 0)
 
     with strategy.scope():
 
@@ -877,7 +881,7 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
         pipeline_op = pipelining_ops.pipeline(
             computational_stages=[stage1, stage2],
             pipeline_depth=pipeline_depth,
-            repeat_count=1,
+            repeat_count=repeat_count,
             inputs=[],
             infeed_queue=infeed_queue,
             outfeed_queue=outfeed_queue,
@@ -905,8 +909,8 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
 
         run_metadata = config_pb2.RunMetadata()
 
-        for i in range(num_iterations):
-          if i < num_iterations - 1:
+        for i in range(num_session_runs):
+          if i < num_session_runs - 1:
             sess.run(train_op)
           else:
             # Save execution trace for the last run.
@@ -914,22 +918,23 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
                 trace_level=config_pb2.RunOptions.FULL_TRACE)
             sess.run(train_op, options=options, run_metadata=run_metadata)
 
-          # L(x) = sum_i (w_0 * x_i + w_1 - y)^2
+          for _ in range(repeat_count):
+            # L(x) = sum_i (w_0 * x_i + w_1 - y)^2
 
-          # dL(x)/dw_0 = sum_i 2 (w_0 * x_i + w_1 - y) x_i
-          grad_w0 = sum(2 * (expected_w0 * x_i + expected_w1 - y) * x_i
-                        for x_i in per_worker_x)
-          accumulated_grad_w0 = pipeline_depth * grad_w0
+            # dL(x)/dw_0 = sum_i 2 (w_0 * x_i + w_1 - y) x_i
+            grad_w0 = sum(2 * (expected_w0 * x_i + expected_w1 - y) * x_i
+                          for x_i in per_worker_x)
+            accumulated_grad_w0 = pipeline_depth * grad_w0
 
-          # dL(x)/dw_1 = sum_i 2 (w_0 * x_i + w_1 - y)
-          grad_w1 = sum(2 * (expected_w0 * x_i + expected_w1 - y)
-                        for x_i in per_worker_x)
-          accumulated_grad_w1 = pipeline_depth * grad_w1
+            # dL(x)/dw_1 = sum_i 2 (w_0 * x_i + w_1 - y)
+            grad_w1 = sum(2 * (expected_w0 * x_i + expected_w1 - y)
+                          for x_i in per_worker_x)
+            accumulated_grad_w1 = pipeline_depth * grad_w1
 
-          expected_w0 -= learning_rate * accumulated_grad_w0
+            expected_w0 -= learning_rate * accumulated_grad_w0
+            expected_w1 -= learning_rate * accumulated_grad_w1
+
           self.assertEqual(expected_w0, sess.run(w0))
-
-          expected_w1 -= learning_rate * accumulated_grad_w1
           self.assertEqual(expected_w1, sess.run(w1))
 
       # Do some sanity checks on what actually executed the last iteration.
@@ -937,8 +942,10 @@ class IPUMultiWorkerStrategyMultiProcessTest(googletest.TestCase):
       cpu_nodes = nodes_by_device[cpu_device]
       ipu_nodes = nodes_by_device[ipu_device]
 
-      # There should be 2 reductions on the CPU (one for each gradient)
-      self.assertEqual(2, sum(1 for n in cpu_nodes if "CollectiveReduce" in n))
+      # There should be 2 reductions on the CPU per repeat loop iteration
+      # (one for each gradient).
+      self.assertEqual(2 * repeat_count,
+                       sum(1 for n in cpu_nodes if "CollectiveReduce" in n))
 
       # There should be 1 XLA run on the IPU
       self.assertEqual(1, sum(1 for n in ipu_nodes if "xla_run" in n))

@@ -172,6 +172,7 @@ class HorovodTest(test_util.TensorFlowTestCase):
             pipeline_depth=pipeline_depth,
             inputs=[lr],
             infeed_queue=infeed_queue,
+            repeat_count=2,
             outfeed_queue=outfeed_queue,
             optimizer_function=optimizer_function,
             name="Pipeline")
