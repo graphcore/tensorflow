@@ -26,9 +26,9 @@ namespace subcomputation_graph_caching {
 
 StatusOr<std::shared_ptr<DeferredVisitor>>
 SubcomputationGraphCache::GetOrCompileSubcomputation(
-    CompilerResources& res, TensorVectors& inputs,
+    CompilerResources& res, TensorOrRemoteBufferVectors& inputs,
     const HloComputation* computation) {
-  DeferredArgVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
+  DeferredArgRBVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
   auto itr = table_.find(computation);
   if (itr == table_.end()) {
     VLOG(2) << "Compiling sub-computation " << computation->name();

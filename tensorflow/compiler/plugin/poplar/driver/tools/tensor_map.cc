@@ -55,6 +55,21 @@ Status TensorMap::AddOutputTensor(const HloInstruction* inst,
   return Status::OK();
 }
 
+Status TensorMap::AddOutputRemoteBuffer(const HloInstruction* inst,
+                                        int64 output_index,
+                                        poplar::RemoteBuffer rbuffer) {
+  TensorLocation location(inst, output_index);
+  auto it = _map.find(location);
+  if (it != _map.end()) {
+    return tensorflow::errors::Unknown(
+        StrCat("[Poplar] Output Tensor ", location.flattened_output_tuple_index,
+               " for ", GetDebugName(inst), " already exists"));
+  }
+  _map[location].tensor = rbuffer;
+  _map[location].name = inst->metadata().op_name();
+  return Status::OK();
+}
+
 poplar::Tensor TensorMap::GetTensor(TensorLocation location) const {
   return _map.at(location).tensor;
 }
@@ -72,16 +87,37 @@ Status TensorMap::UpdateTensor(TensorLocation location, poplar::Tensor tensor) {
 
 void TensorMap::Clear() { _map.clear(); }
 
-TensorVector TensorMap::FindInstructionOutputs(
+TensorOrRemoteBufferVector TensorMap::FindInstructionOutputs(
     const HloInstruction* inst, absl::optional<int64> opt_tensors_start,
     absl::optional<int64> opt_tensors_end) const {
   NamedTensorLocationVector tensor_vector = FindInstructionNamedTensorLocations(
       inst, opt_tensors_start, opt_tensors_end);
-  TensorVector outputs;
+  TensorOrRemoteBufferVector outputs;
   absl::c_transform(
       tensor_vector, std::back_inserter(outputs),
       [](const NamedTensorLocation& value) { return value.tensor; });
   return outputs;
+}
+
+StatusOr<TensorVector> TensorMap::FindInstructionOutputTensors(
+    const HloInstruction* inst, absl::optional<int64> opt_tensors_start,
+    absl::optional<int64> opt_tensors_end) const {
+  TensorOrRemoteBufferVector outputs =
+      FindInstructionOutputs(inst, opt_tensors_start, opt_tensors_end);
+
+  TensorVector result;
+
+  for (int i = 0; i < outputs.size(); ++i) {
+    if (!outputs[i].IsTensor()) {
+      return tensorflow::errors::FailedPrecondition(
+          "Expected all outputs of " + inst->name() +
+          " to be poplar tensors, but output " + std::to_string(i) + " is not");
+    }
+
+    result.push_back(outputs[i]);
+  }
+
+  return result;
 }
 
 TensorMap::NamedTensorLocationVector
@@ -108,6 +144,24 @@ poplar::Tensor TensorMap::FindTensorByName(const std::string& name,
       return it.second.tensor;
     }
   }
+}
+
+TensorOrRemoteBufferVectors CastTensorVectors(
+    const TensorVectors& tensor_vectors) {
+  TensorOrRemoteBufferVectors result;
+  result.reserve(tensor_vectors.size());
+
+  for (auto& tensor_vector : tensor_vectors) {
+    TensorOrRemoteBufferVector trb_vector;
+    trb_vector.reserve(tensor_vector.size());
+
+    for (auto& tensor : tensor_vector) {
+      trb_vector.emplace_back(tensor);
+    }
+    result.push_back(trb_vector);
+  }
+
+  return result;
 }
 }  // namespace poplarplugin
 }  // namespace xla

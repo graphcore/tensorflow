@@ -92,8 +92,9 @@ class FifoOp : public PoplarOpDef {
     poplar::program::Sequence seq;
     const std::string debug_name = GetDebugName(inst);
 
-    TensorVector inputs =
-        FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
+    TF_ASSIGN_OR_RETURN(
+        TensorVector inputs,
+        FindInstructionInputTensors(tensor_map, res, inst, 0, seq, false));
 
     // A degenerate case where the fifo is just an identity op.
     if (fifo_inst->depth() < 1) {
