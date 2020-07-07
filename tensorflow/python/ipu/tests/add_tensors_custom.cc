@@ -14,17 +14,18 @@ limitations under the License.
 ==============================================================================*/
 
 #include <iostream>
-
 #include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 1;
+int32_t custom_op_api_level = 2;
 }
 
 extern "C" void Callback(const std::vector<void*>& data,
                          const std::vector<uint32_t>& number_of_elements,
-                         std::vector<void*>& outputs, const std::string& name) {
+                         std::vector<void*>& outputs,
+                         const std::string& attributes,
+                         const std::string& name) {
   float* input1 = static_cast<float*>(data[0]);
   float* input2 = static_cast<float*>(data[1]);
   float* output = static_cast<float*>(outputs[0]);
@@ -41,6 +42,7 @@ extern "C" void Callback(const std::vector<void*>& data,
 extern "C" void Callback_grad(const std::vector<void*>& data,
                               const std::vector<uint32_t>& number_of_elements,
                               std::vector<void*>& outputs,
+                              const std::string& attributes,
                               const std::string& name) {
   float* output = static_cast<float*>(outputs[0]);
 

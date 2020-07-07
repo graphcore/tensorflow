@@ -100,6 +100,7 @@ def _poputil_cpu_user_operation_layer_backward(op, *grads):
   library_path = op.get_attr("library_path").decode("utf-8")
   op_name = op.get_attr("op_name").decode("utf-8") + "_grad"
   name = op.name + "_grad"
+  gradient_attributes = op.get_attr("gradient_attributes")
 
   def add_op(layout, gradient_size, separate_gradients, op_input_index,
              inputs_with_gradients, output_types, output_shapes):
@@ -112,6 +113,7 @@ def _poputil_cpu_user_operation_layer_backward(op, *grads):
         gradient_size=gradient_size,
         partial_derivative_index=op_input_index,
         inputs_with_gradients=inputs_with_gradients,
+        attributes=gradient_attributes,
         output_types=output_types,
         output_shapes=output_shapes)
 
@@ -124,6 +126,7 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
   op_name = op.get_attr("op_name").decode("utf-8") + "_grad"
   gp_path = op.get_attr("gp_path").decode("utf-8")
   name = op.name + "_grad"
+  gradient_attributes = op.get_attr("gradient_attributes")
 
   def add_op(layout, gradient_size, separate_gradients, op_input_index,
              inputs_with_gradients, output_types, output_shapes):
@@ -137,6 +140,7 @@ def _poputil_precompiled_user_op_layer_backward(op, *grads):
         gradient_size=gradient_size,
         partial_derivative_index=op_input_index,
         inputs_with_gradients=inputs_with_gradients,
+        attributes=gradient_attributes,
         output_types=output_types,
         output_shapes=output_shapes)
 

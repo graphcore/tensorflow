@@ -13,29 +13,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <poputil/TileMapping.hpp>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/lib/core/errors.h"
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/strings/str_cat.h"
-
-#include <poputil/TileMapping.hpp>
-
 namespace xla {
 namespace poplarplugin {
 namespace {
 class UserOpImpl : public PoplarOpDef {
-  static absl::flat_hash_set<std::string> previously_added_codelets;
-
   StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
                                              CompilerResources& res,
                                              const HloInstruction* inst,
@@ -48,16 +44,16 @@ class UserOpImpl : public PoplarOpDef {
     const bool is_gradient = user_op_inst->IsGradient();
 
     // Add the codelet if needed.
-    if (gp_path.empty() == false &&
-        !previously_added_codelets.contains(gp_path)) {
+    if (!gp_path.empty() && !res.custom_codelets_in_graph.contains(gp_path)) {
       graph.addCodelets(gp_path);
-      previously_added_codelets.insert(gp_path);
+      res.custom_codelets_in_graph.insert(gp_path);
     }
 
     // Get the function pointer from the HLO.
     poplar::program::Program (*as_function_ptr)(
         poplar::Graph&, const std::vector<poplar::Tensor>&,
-        std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix);
+        std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+        const std::string& debugPrefix);
 
     // Get the function pointer from the HLO.
     poplar::program::Program (*as_function_ptr_gradient)(
@@ -65,7 +61,8 @@ class UserOpImpl : public PoplarOpDef {
         const std::vector<poplar::Tensor>& gradients_in,
         const std::vector<poplar::Tensor>& fwd_outputs,
         const std::vector<poplar::Tensor>& fwd_inputs,
-        std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix);
+        std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+        const std::string& debugPrefix);
 
     // We have a special function pointer type for when the intent is to execute
     // the operation on the host by reading the raw bytes, executing the on the
@@ -73,7 +70,8 @@ class UserOpImpl : public PoplarOpDef {
     void (*as_function_host_rw_ptr)(
         const std::vector<void*>& data,
         const std::vector<std::uint32_t>& number_of_elements,
-        std::vector<void*>& outputs, const std::string& name);
+        std::vector<void*>& outputs, const std::string& attributes,
+        const std::string& debugPrefix);
 
     // Convert the function pointer to each of the types of function we could
     // have.
@@ -100,6 +98,9 @@ class UserOpImpl : public PoplarOpDef {
     // derivative.
     const int pdi = user_op_inst->PartialDerivativeIndex();
 
+    // Pass in any attributes from the user.
+    const std::string attributes = user_op_inst->GetAttributes();
+
     // We use the instruction name to keep track of which buffers are allocated
     // to which user op.
     const std::string instruction_name = GetDebugName(inst);
@@ -117,7 +118,7 @@ class UserOpImpl : public PoplarOpDef {
       auto functor = [=](std::vector<void*>& data,
                          std::vector<std::uint32_t>& number_of_elements,
                          std::vector<void*>& outputs) {
-        as_function_host_rw_ptr(data, number_of_elements, outputs,
+        as_function_host_rw_ptr(data, number_of_elements, outputs, attributes,
                                 instruction_name);
       };
 
@@ -217,7 +218,8 @@ class UserOpImpl : public PoplarOpDef {
           inputs[i] = in;
         }
         // Call the user operation and add it to the sequence.
-        seq.add(as_function_ptr(graph, inputs, outputs, instruction_name));
+        seq.add(as_function_ptr(graph, inputs, outputs, attributes,
+                                instruction_name));
       } else {
         // There is a gradient for each output and if we are doing the backward
         // pass then the input will be packed like: | Gradients |
@@ -226,7 +228,7 @@ class UserOpImpl : public PoplarOpDef {
         const ssize_t outputs_index = size_of_gradient * 2;
 
         if (size_of_gradient <= 0) {
-          return xla::InternalErrorStrCat("Instruction ", GetDebugName(inst),
+          return xla::InternalErrorStrCat("Instruction ", instruction_name,
                                           " has wrong gradient size",
                                           size_of_gradient);
         }
@@ -262,15 +264,15 @@ class UserOpImpl : public PoplarOpDef {
 
         // Call the user operation and add it to the sequence.
         seq.add(as_function_ptr_gradient(graph, pdi, gradients, previous_inputs,
-                                         previous_outputs, outputs,
-                                         GetDebugName(inst)));
+                                         previous_outputs, outputs, attributes,
+                                         instruction_name));
       }
     }
 
     // Register each of the returned tuple elements (if any) as outputs.
     if (outputs.size() < number_of_outputs) {
       return xla::InternalErrorStrCat(
-          "Instruction ", GetDebugName(inst),
+          "Instruction ", instruction_name,
           " has mismatched outputs number, expected: ", number_of_outputs,
           ", returned: ", outputs.size());
     }
@@ -302,18 +304,18 @@ class UserOpImpl : public PoplarOpDef {
     TF_ASSIGN_OR_RETURN(auto poplar_type, PoplarDataType(shape));
 
     // Convert into a function pointer.
-    poplar::Tensor (*allocatorSig)(poplar::Graph&, std::int64_t,
-                                   const std::vector<std::size_t>&,
-                                   poplar::Type, const std::string&);
+    poplar::Tensor (*allocatorSig)(
+        poplar::Graph&, std::int64_t, const std::vector<std::size_t>&,
+        poplar::Type, const std::string&, const std::string&);
     allocatorSig = reinterpret_cast<decltype(allocatorSig)>(allocator_func);
+    const std::string attributes = user_op->GetAttributes();
 
     // Return the tensor via user specified function.
     return allocatorSig(graph, input_index, poplar_shape, poplar_type,
+                        attributes,
                         absl::StrCat(GetDebugName(inst), ":", input_index));
   }
 };
-
-absl::flat_hash_set<std::string> UserOpImpl::previously_added_codelets{};
 
 REGISTER_POPLAR_OP(UserOp, UserOpImpl);
 

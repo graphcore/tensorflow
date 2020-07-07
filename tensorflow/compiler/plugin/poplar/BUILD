@@ -4192,6 +4192,31 @@ tf_xla_py_test(
     ],
 )
 
+cc_binary(
+    name = "libtutorial_attributes_example.so",
+    srcs = ["docs/tutorial_attributes_example.cc"],
+    copts = ["-fexceptions"],
+    linkshared = True,
+    deps = [
+        "@jsoncpp_git//:jsoncpp",
+        "@local_config_poplar//poplar:poplar_libs",
+    ],
+)
+
+tf_xla_py_test(
+    name = "tutorial_attributes_example",
+    size = "small",
+    srcs = ["docs/tutorial_attributes_example.py"],
+    data = [
+        ":libtutorial_attributes_example.so",
+    ],
+    enabled_backends = ["poplar"],
+    deps = [
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 test_suite(
     name = "all_tests",
     tests = [
@@ -4380,6 +4405,7 @@ test_suite(
         "logging_example_1",
         "outfeed_example",
         "perf_training_example",
+        "tutorial_attributes_example",
         "tutorial_basic",
         "tutorial_custom_codelet",
         "tutorial_sharding",
