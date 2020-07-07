@@ -14,16 +14,14 @@ limitations under the License.
 ==============================================================================*/
 
 #include <algorithm>
-
 #include <poplar/Graph.hpp>
 #include <poplar/Tensor.hpp>
 #include <popops/ElementWise.hpp>
-
 #include <unordered_map>
 #include <unordered_set>
 
 extern "C" {
-int32_t custom_op_api_level = 1;
+int32_t custom_op_api_level = 2;
 }
 
 namespace pe = popops::expr;
@@ -31,7 +29,8 @@ namespace pe = popops::expr;
 // Custom poplar kernel.
 extern "C" poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
   return seq;
 }

@@ -30,7 +30,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
                                 const Shape& shape, const std::string& gp_path,
                                 void*, void*, void*, int64 gradient_size,
                                 int64 partial_derivative_index,
-                                bool is_user_read_write);
+                                bool is_user_read_write,
+                                const std::string& attributes);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
@@ -53,6 +54,8 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   int PartialDerivativeIndex() const { return partial_derivative_index_; }
 
   bool IsReadWrite() const { return is_user_read_write_; }
+
+  const std::string& GetAttributes() const { return attributes_; }
 
  protected:
   std::vector<string> ExtraPoplarAttributesToStringImpl(
@@ -101,12 +104,15 @@ class HloUserOpInstruction : public HloPoplarInstruction {
   // Is this a read/write user op. That is an operation which streams the
   // tensors to host, executes some processing, then streams the outputs back.
   bool is_user_read_write_;
+
+  std::string attributes_;
 };
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> operands, const Shape& shape,
     const std::string& gp_path, void*, void*, void*, int64 gradient_size,
-    int64 partial_derivative_index, bool is_user_read_write);
+    int64 partial_derivative_index, bool is_user_read_write,
+    const std::string& attributes);
 
 }  // namespace poplarplugin
 }  // namespace xla

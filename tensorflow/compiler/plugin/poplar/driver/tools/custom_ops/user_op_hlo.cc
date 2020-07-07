@@ -14,10 +14,10 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
-#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 #include "absl/strings/str_cat.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
+#include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -26,18 +26,20 @@ HloUserOpInstruction::HloUserOpInstruction(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& path, void* fn_ptr, void* metadata_fn_ptr,
     void* allocator_function_ptr, int64 gradient_size,
-    int64 partial_derivative_index, bool is_user_read_write)
+    int64 partial_derivative_index, bool is_user_read_write,
+    const std::string& attributes)
     : HloPoplarInstruction(shape, inputs, PoplarOp::UserOp, fn_ptr,
                            metadata_fn_ptr, allocator_function_ptr, path,
                            gradient_size, partial_derivative_index,
-                           is_user_read_write),
+                           is_user_read_write, attributes),
       function_ptr_(fn_ptr),
       metadata_function_ptr_(metadata_fn_ptr),
       allocator_function_ptr_(allocator_function_ptr),
       gp_path_(path),
       gradient_size_(gradient_size),
       partial_derivative_index_(partial_derivative_index),
-      is_user_read_write_(is_user_read_write) {
+      is_user_read_write_(is_user_read_write),
+      attributes_(attributes) {
   num_inputs_ = inputs.size();
 
   // If there is a metadata function, call it to populate the metadata_ struct.
@@ -109,6 +111,7 @@ std::vector<string> HloUserOpInstruction::ExtraPoplarAttributesToStringImpl(
       absl::StrCat("partial_derivative_index=", partial_derivative_index_));
   attributes.push_back(
       absl::StrCat("is_user_read_write=", is_user_read_write_));
+  attributes.push_back(absl::StrCat("attributes=", attributes_));
 
   return attributes;
 }
@@ -119,18 +122,19 @@ std::unique_ptr<HloInstruction> HloUserOpInstruction::CloneWithNewOperandsImpl(
   return CreateUserOp(new_operands, shape, GetPath(), function_ptr_,
                       metadata_function_ptr_, allocator_function_ptr_,
                       gradient_size_, partial_derivative_index_,
-                      is_user_read_write_);
+                      is_user_read_write_, attributes_);
 }
 
 std::unique_ptr<HloInstruction> CreateUserOp(
     absl::Span<HloInstruction* const> inputs, const Shape& shape,
     const std::string& gp_path, void* function_ptr, void* metadata_function_ptr,
     void* allocator_function_ptr, int64 gradient_size,
-    int64 partial_derivative_index, bool is_user_read_write) {
+    int64 partial_derivative_index, bool is_user_read_write,
+    const std::string& attributes) {
   return absl::make_unique<HloUserOpInstruction>(
       inputs, shape, gp_path, function_ptr, metadata_function_ptr,
       allocator_function_ptr, gradient_size, partial_derivative_index,
-      is_user_read_write);
+      is_user_read_write, attributes);
 }
 
 namespace {
@@ -170,10 +174,13 @@ static HloPoplarInstructionFactory user_op_factory(
           bool is_user_read_write,
           attribute_map.GetAttributeAsBool("is_user_read_write"));
 
-      return CreateUserOp(call->operands(), call->shape(), gp_path,
-                          operation_fn_ptr, metadata_function_ptr,
-                          allocator_function_ptr, gradient_size,
-                          partial_derivative_index, is_user_read_write);
+      TF_ASSIGN_OR_RETURN(std::string attributes,
+                          attribute_map.GetAttributeAsString("attributes"));
+
+      return CreateUserOp(
+          call->operands(), call->shape(), gp_path, operation_fn_ptr,
+          metadata_function_ptr, allocator_function_ptr, gradient_size,
+          partial_derivative_index, is_user_read_write, attributes);
     });
 }  // namespace
 
