@@ -51,17 +51,17 @@ ArithmeticExprVisitor::FindExpressionInput(const HloInstruction* inst) {
   // actual expressions
   if (inst->opcode() == HloOpcode::kParameter) {
     // Find the input tensor - tuples are not supported
-    poplar::Tensor* in0 = &inputs_[inst->parameter_number()][0];
+    poplar::Tensor& in0 = inputs_[inst->parameter_number()][0];
     // Check if an expression exists
-    if (tensors_map_.count(in0) == 0) {
+    if (tensors_map_.count(&in0) == 0) {
       // If the tensor has not been mapped yet
       // add it to tensor inputs
-      ts_.push_back(*in0);
+      ts_.push_back(in0);
       // and create an expression
-      tensors_map_[in0] = std::unique_ptr<popops::expr::PlaceHolder>(
+      tensors_map_[&in0] = std::unique_ptr<popops::expr::PlaceHolder>(
           new popops::expr::PlaceHolder(ts_.size()));
     }
-    return tensors_map_[in0]->clone();
+    return tensors_map_[&in0]->clone();
   } else {
     auto it = expressions_map_.find(inst);
     if (it == expressions_map_.end()) {
