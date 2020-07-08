@@ -211,16 +211,14 @@ Status BaseVisitor::HandleGetTupleElement(HloInstruction* inst) {
 }
 
 namespace {
-StatusOr<TensorVectors> GetFusionInputs(CompilerResources& res,
-                                        const HloInstruction* inst,
-                                        TensorMap& tensor_map,
-                                        poplar::program::Sequence& seq,
-                                        const bool expand_aliasing = true) {
+TensorVectors GetFusionInputs(CompilerResources& res,
+                              const HloInstruction* inst, TensorMap& tensor_map,
+                              poplar::program::Sequence& seq,
+                              const bool expand_aliasing = true) {
   TensorVectors args;
   for (int64 i = 0; i < inst->operand_count(); i++) {
-    TF_ASSIGN_OR_RETURN(TensorVector t,
-                        FindInstructionInputTensors(tensor_map, res, inst, i,
-                                                    seq, expand_aliasing));
+    TensorVector t =
+        FindInstructionInputs(tensor_map, res, inst, i, seq, expand_aliasing);
     args.push_back(t);
   }
   return args;
@@ -233,9 +231,8 @@ Status BaseVisitor::HandleFusion(HloInstruction* inst) {
   HloComputation* comp = inst->fused_instructions_computation();
 
   if (IsArithmeticExpressionFusion(inst)) {
-    TF_ASSIGN_OR_RETURN(
-        TensorVectors args,
-        GetFusionInputs(resources_, inst, tensor_map, sequence));
+    TensorVectors args =
+        GetFusionInputs(resources_, inst, tensor_map, sequence);
     ArithmeticExprVisitor arithmetic_visitor(resources_, args,
                                              GetDebugName(inst));
     TF_RETURN_IF_ERROR(comp->Accept(&arithmetic_visitor));

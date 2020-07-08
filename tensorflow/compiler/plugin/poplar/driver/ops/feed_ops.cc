@@ -230,9 +230,8 @@ StatusOr<poplar::program::Program> CreateOutfeed(CompilerResources& res,
   }
 
   const bool expand_aliasing = true;
-  TF_ASSIGN_OR_RETURN(TensorVector input_tensors,
-                      FindInstructionInputTensors(tensor_map, res, inst, 0, seq,
-                                                  expand_aliasing));
+  TensorVector input_tensors =
+      FindInstructionInputs(tensor_map, res, inst, 0, seq, expand_aliasing);
 
   for (unsigned i = 0; i < input_tensors.size(); ++i) {
     poplar::Tensor& in = input_tensors[i];

@@ -252,22 +252,54 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
 
     // Create a load instruction inside the resource update and use that instead
     // of the parameter.
-    HloInstruction* remote_load = resource_update_comp->AddInstruction(
-        CreateHloRemoteParameterLoad(offload_info.input_in_resource_update));
+    HloInstruction* remote_load =
+        resource_update_comp->AddInstruction(CreateHloRemoteParameterLoad(
+            offload_info.input_in_resource_update->shape(),
+            offload_info.entry_param_number));
     TF_RETURN_IF_ERROR(
         offload_info.input_in_resource_update->ReplaceAllUsesWith(remote_load));
 
+    // Special case for parameters just being passed through.
+    if (offload_info.input_in_resource_update ==
+        offload_info.output_in_resource_update) {
+      offload_info.output_in_resource_update = remote_load;
+    }
+
     // Add a remote store for the updated value inside the resource update.
-    HloInstruction* remote_store = resource_update_comp->AddInstruction(
-        CreateHloRemoteParameterStore(offload_info.input_in_resource_update,
-                                      offload_info.output_in_resource_update));
-    TF_RETURN_IF_ERROR(offload_info.output_in_resource_update->ReplaceUseWith(
-        resource_update_comp->root_instruction(), remote_store));
+    resource_update_comp->AddInstruction(CreateHloRemoteParameterStore(
+        offload_info.output_in_resource_update, offload_info.entry_output_idx));
+
+    // Create a dummy output of the variable in the entry computation and use
+    // that as the output in the root instruction which we already checked is a
+    // tuple.
+    TF_RETURN_IF_ERROR(entry_comp->ReplaceWithNewInstruction(
+        offload_info.output_from_call,
+        CreateHloRemoteParameterDummyOutput(
+            offload_info.output_from_call->shape(),
+            offload_info.entry_output_idx)));
+
+    // Mark the parameter for removal.
+    call_params_to_remove.insert(offload_info.call_operand_idx);
 
     // Mark this input as being stored in a remote buffer.
     annotations_.remote_parameter_infos.insert(
         RemoteParameterInfo{offload_info.entry_param_number});
   }
+
+  // Remove the outputs for offloaded parameters from the call.
+  TF_RETURN_IF_ERROR(RemoveOutputsFromCall(call_op, call_params_to_remove));
+  TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call_op->to_apply()).status());
+
+  // Now remove unused inputs/outputs in the resource update.
+  bool removed_insts = false;
+  TF_ASSIGN_OR_RETURN(resource_update,
+                      PipelineOptimizer::OptimizeCallInstruction(
+                          resource_update, &removed_insts));
+  CHECK(removed_insts);
+  // Remove the inputs for offloaded parameters to the call.
+  TF_ASSIGN_OR_RETURN(call_op,
+                      RemoveParametersFromCall(call_op, call_params_to_remove));
+  TF_RETURN_IF_ERROR(HloDCE::RunOnComputation(call_op->to_apply()).status());
 
   return true;
 }
