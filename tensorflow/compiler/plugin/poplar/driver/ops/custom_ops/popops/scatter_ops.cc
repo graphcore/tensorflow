@@ -124,7 +124,9 @@ class ScatterOp : public PoplarOpDef {
 
     auto tmp = graph.addVariable(operand.elementType(), {});
     graph.setTileMapping(tmp, 0);
-    TensorVectors args = {{tmp}, {graph.clone(tmp)}};
+    TensorOrRemoteBufferVectors args = {
+        TensorOrRemoteBufferVector{TensorOrRemoteBuffer{tmp}},
+        TensorOrRemoteBufferVector{TensorOrRemoteBuffer{graph.clone(tmp)}}};
 
     std::shared_ptr<DeferredVisitor> update_comp_visitor;
     // Fast path the gradient accumulation case
@@ -156,21 +158,21 @@ class ScatterOp : public PoplarOpDef {
 
           // Copy the inputs in if they were used.
           if (update_comp_visitor->InputIsUsed(0, 0)) {
-            p.add(poplar::program::Copy(a_elem,
-                                        update_comp_visitor->inputs()[0][0]));
+            p.add(poplar::program::Copy(
+                a_elem, update_comp_visitor->inputs()[0][0].AsTensor()));
           }
 
           if (update_comp_visitor->InputIsUsed(1, 0)) {
-            p.add(poplar::program::Copy(b_elem,
-                                        update_comp_visitor->inputs()[1][0]));
+            p.add(poplar::program::Copy(
+                b_elem, update_comp_visitor->inputs()[1][0].AsTensor()));
           }
 
           // Add the sequence.
           p.add(update_comp_visitor->GetSequence());
 
           // Copy the output out
-          p.add(
-              poplar::program::Copy(update_comp_visitor->outputs()[0], o_elem));
+          p.add(poplar::program::Copy(
+              update_comp_visitor->outputs()[0].AsTensor(), o_elem));
         }
 
         return result;

@@ -162,7 +162,8 @@ StatusOr<poplar::Tensor> AddNormScaleTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     uint32 feature_index, const TensorMap& tensor_map) {
-  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+  TF_ASSIGN_OR_RETURN(TensorVector outputs,
+                      FindInstructionOutputTensors(tensor_map, res, layout));
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
@@ -179,7 +180,8 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
     uint32 feature_index, const TensorMap& tensor_map) {
-  TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
+  TF_ASSIGN_OR_RETURN(TensorVector outputs,
+                      FindInstructionOutputTensors(tensor_map, res, layout));
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
     return xla::FailedPrecondition(
