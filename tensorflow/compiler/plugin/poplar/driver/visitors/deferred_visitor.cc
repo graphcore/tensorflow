@@ -259,8 +259,7 @@ Status DeferredVisitor::HandleParameter(HloInstruction* inst) {
 
   std::vector<Shape> shapes = FlattenedXlaShape(inst->shape());
 
-  // Check whether this is a remote parameter - if so do not allocate the tensor
-  // as the RemoteParameterLoad will allocate it and add the copy.
+  // Check whether this is a remote parameter - if so allocate it here.
   if (IsRemoteParameter(inst, resources_)) {
     CHECK(IsInstructionInEntryComputation(inst));
     CHECK_EQ(shapes.size(), 1);
@@ -311,7 +310,7 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
   const bool has_allocation_target =
       HasTensorAllocationTarget(input_location, resources_);
 
-  auto callsite_tensor =
+  auto& callsite_tensor =
       callsite_inputs_[param_num][input_location.flattened_output_tuple_index];
 
   // Function which is called when allocating this tensor.
@@ -347,7 +346,7 @@ Status DeferredVisitor::HandleParameterTensor(TensorLocation input_location,
     // for this location, then just forward the tensor.
 
     // Do not call the post process for tensors which are not allocated.
-    output = *callsite_tensor;
+    output = callsite_tensor->AsTensor();
   } else {
     // The tensor is used and/or it doesn't have a layout.
     if (has_allocation_target) {
