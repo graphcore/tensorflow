@@ -28,8 +28,7 @@ struct CompilerResources;
 
 class PipelineStageVisitor : public InplaceDeferredVisitor {
  public:
-  PipelineStageVisitor(CompilerResources& res,
-                       const DeferredArgRBVectors& inputs,
+  PipelineStageVisitor(CompilerResources& res, const DeferredArgVectors& inputs,
                        const std::string& name);
 
   bool TupleOutputsNeedToPreserveAliasing(const HloInstruction* inst) override;
@@ -50,7 +49,7 @@ class PipelineStageVisitor : public InplaceDeferredVisitor {
 class ReusablePipelineStageVisitor : public PipelineStageVisitor {
  public:
   ReusablePipelineStageVisitor(CompilerResources& res,
-                               const DeferredArgRBVectors& inputs,
+                               const DeferredArgVectors& inputs,
                                const std::string& name);
 
   // A function which propagates any tensors which were not allocated at call
@@ -60,21 +59,19 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
   // Get the sequence for the forward stage, adding any copies for inplace
   // inputs.
   poplar::program::Sequence GetForwardStageSequence(
-      const HloInstruction* callsite, const DeferredArgRBVectors& inputs,
+      const HloInstruction* callsite, const DeferredArgVectors& inputs,
       TensorMap& callsite_tensor_map);
 
   // Get the sequence for the recomputation stage.
   poplar::program::Sequence GetRecomputationStageSequence(
-      const HloInstruction* callsite,
-      const TensorOrRemoteBufferVectors& inputs);
+      const HloInstruction* callsite, const TensorVectors& inputs);
 
   // Returns whether the output needs a copy.
   ShapeTree<bool> GetOutputCopies(const HloInstruction* inst) const override;
 
  private:
-  poplar::program::Sequence GetCachedSequence(
-      const HloInstruction* callsite,
-      const TensorOrRemoteBufferVectors& inputs);
+  poplar::program::Sequence GetCachedSequence(const HloInstruction* callsite,
+                                              const TensorVectors& inputs);
 
   const HloInstruction* callsite_;
 };
