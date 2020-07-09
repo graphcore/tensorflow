@@ -208,12 +208,16 @@ ENTRY e {
   auto root = module->entry_computation()->root_instruction();
   HloComputation* pipeline_computation =
       root->operand(0)->operand(0)->to_apply();
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(
+      root->operand(2)));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(
+      root->operand(3)));
   TF_ASSERT_OK_AND_ASSIGN(auto stages, GetPipelineStages(pipeline_computation));
   HloComputation* resource_update = (*stages.resource_update)->to_apply();
-  EXPECT_EQ(resource_update->num_parameters(), 4);
+  EXPECT_EQ(resource_update->num_parameters(), 2);
   EXPECT_EQ(ShapeUtil::TupleElementCount(
                 resource_update->root_instruction()->shape()),
-            4);
+            2);
 
   // Check load and stores.
   for (int64 i : {0, 1}) {
@@ -230,10 +234,12 @@ ENTRY e {
     const HloInstruction* load = add->operand(0);
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(load));
     const auto* load_inst = Cast<HloRemoteParameterLoad>(load);
+    EXPECT_EQ(load_inst->GetParameterNumber(), i + 2);
     EXPECT_EQ(add->user_count(), 1);
     const HloInstruction* store = add->users()[0];
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterStore)(store));
     const auto* store_inst = Cast<HloRemoteParameterStore>(store);
+    EXPECT_EQ(store_inst->GetOutputIndex(), i + 2);
   }
 }
 
@@ -294,14 +300,18 @@ ENTRY e {
   TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
   EXPECT_TRUE(changed);
   auto root = module->entry_computation()->root_instruction();
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(
+      root->operand(2)));
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(
+      root->operand(3)));
   HloComputation* repeat_computation = root->operand(0)->operand(0)->to_apply();
   HloInstruction* repeat_root = repeat_computation->root_instruction();
   HloComputation* resource_update =
       repeat_root->mutable_operand(0)->mutable_operand(0)->to_apply();
-  EXPECT_EQ(resource_update->num_parameters(), 4);
+  EXPECT_EQ(resource_update->num_parameters(), 2);
   EXPECT_EQ(ShapeUtil::TupleElementCount(
                 resource_update->root_instruction()->shape()),
-            4);
+            2);
 
   // Check load and stores.
   for (int64 i : {0, 1}) {
@@ -318,10 +328,12 @@ ENTRY e {
     const HloInstruction* load = add->operand(0);
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterLoad)(load));
     const auto* load_inst = Cast<HloRemoteParameterLoad>(load);
+    EXPECT_EQ(load_inst->GetParameterNumber(), i + 2);
     EXPECT_EQ(add->user_count(), 1);
     const HloInstruction* store = add->users()[0];
     EXPECT_TRUE(IsPoplarInstruction(PoplarOp::RemoteParameterStore)(store));
     const auto* store_inst = Cast<HloRemoteParameterStore>(store);
+    EXPECT_EQ(store_inst->GetOutputIndex(), i + 2);
   }
 }
 

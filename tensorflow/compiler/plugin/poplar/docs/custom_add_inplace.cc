@@ -19,7 +19,7 @@ limitations under the License.
 #include <poputil/exceptions.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 1;
+int32_t custom_op_api_level = 2;
 }
 
 extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
@@ -33,6 +33,7 @@ extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
 extern "C" poplar::program::Program Build(poplar::Graph& graph,
                                           std::vector<poplar::Tensor>& inputs,
                                           std::vector<poplar::Tensor>& outputs,
+                                          const std::string& attributes,
                                           const std::string& debug_prefix) {
   if (inputs.size() != 2) {
     throw poputil::poplibs_error("add requires 2 inputs.");

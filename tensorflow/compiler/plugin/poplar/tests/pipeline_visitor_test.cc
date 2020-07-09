@@ -198,8 +198,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}}, "visitor");
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -332,8 +332,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}}, "visitor");
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -459,8 +459,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}}, "visitor");
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -589,8 +589,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}}, "visitor");
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -716,8 +716,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}}, "visitor");
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -894,8 +894,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}}, "visitor");
+      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources, {{placeholder}},
+      "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -1077,8 +1077,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}}, "visitor");
+      {0, 1, 2, 1, 0, 1}, stage_assignments, {}, 3, *resources, {{placeholder}},
+      "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -1246,8 +1246,8 @@ ENTRY pipeline {
 
   PipelineVisitor visitor(
       PoplarBackendConfig::CallConfig::PipelineConfig::Interleaved, stage_count,
-      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources,
-      DeferredArgRBVectors{{TensorOrRemoteBuffer{placeholder}}}, "visitor");
+      {0, 1, 1, 0}, stage_assignments, {}, 2, *resources, {{placeholder}},
+      "visitor");
   TF_EXPECT_OK(entry_computation->Accept(&visitor));
 
   // Get the pipeline program
@@ -1351,10 +1351,7 @@ ENTRY e {
   auto p1 = resources->main_graph->addConstant(poplar::FLOAT, {}, 2.f);
   resources->main_graph->setTileMapping(p1, 0);
 
-  PipelineVisitor visitor(pipeline, *resources,
-                          DeferredArgRBVectors{{TensorOrRemoteBuffer{p0}},
-                                               {TensorOrRemoteBuffer{p1}}},
-                          "visitor");
+  PipelineVisitor visitor(pipeline, *resources, {{p0}, {p1}}, "visitor");
   TF_EXPECT_OK(pipeline_comp->Accept(&visitor));
 
   // Get the pipeline program

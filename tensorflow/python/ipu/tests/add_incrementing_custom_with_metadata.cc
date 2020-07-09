@@ -21,7 +21,7 @@ limitations under the License.
 #include <popops/ElementWise.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 1;
+int32_t custom_op_api_level = 2;
 }
 
 namespace pe = popops::expr;
@@ -29,7 +29,8 @@ namespace pe = popops::expr;
 // Custom poplar kernel.
 extern "C" poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(inputs.size());
@@ -50,7 +51,8 @@ extern "C" poplar::program::Program Build_grad(
     const std::vector<poplar::Tensor>& gradients,
     const std::vector<poplar::Tensor>& fwd_inputs,
     const std::vector<poplar::Tensor>& fwd_outputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(gradients.size());
@@ -74,15 +76,18 @@ extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
 extern "C" poplar::Tensor Build_allocator(poplar::Graph& graph,
                                           std::uint32_t operand,
                                           const std::vector<size_t>& shape,
-                                          poplar::Type type) {
+                                          poplar::Type type,
+                                          const std::string& attributes,
+                                          const std::string& debugPrefix) {
   return poplar::Tensor{};
 }
 
 // An alternative name for the same operation
 extern "C" poplar::program::Program SepGrad(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
-  return Build(graph, inputs, outputs, debugPrefix);
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
+  return Build(graph, inputs, outputs, attributes, debugPrefix);
 }
 
 extern "C" poplar::program::Program SepGrad_grad(
@@ -90,7 +95,8 @@ extern "C" poplar::program::Program SepGrad_grad(
     const std::vector<poplar::Tensor>& gradients,
     const std::vector<poplar::Tensor>& fwd_outputs,
     const std::vector<poplar::Tensor>& fwd_inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(1);
@@ -105,7 +111,8 @@ extern "C" poplar::program::Program SepGrad_grad(
 // Custom poplar Add kernel with allocator
 extern "C" poplar::program::Program AllocTest(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(1);
@@ -127,6 +134,7 @@ extern "C" poplar::Tensor AllocTest_allocator(poplar::Graph& graph,
                                               std::uint32_t operand,
                                               const std::vector<size_t>& shape,
                                               poplar::Type type,
+                                              const std::string& attributes,
                                               const std::string& debugPrefix) {
   auto t = graph.addVariable(type, shape);
   graph.setTileMapping(t, 0);
@@ -137,7 +145,8 @@ extern "C" poplar::Tensor AllocTest_allocator(poplar::Graph& graph,
 
 extern "C" poplar::program::Program Stateful(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(1);
@@ -158,7 +167,8 @@ extern "C" void Stateful_metadata(std::vector<std::int64_t>& allocating_indices,
 
 extern "C" poplar::program::Program Stateless(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(1);

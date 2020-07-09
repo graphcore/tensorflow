@@ -22,7 +22,7 @@ limitations under the License.
 #include <poputil/Util.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 1;
+int32_t custom_op_api_level = 2;
 }
 
 namespace pe = popops::expr;
@@ -30,7 +30,8 @@ namespace pe = popops::expr;
 // Custom poplar kernel.
 extern "C" poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(inputs.size());
@@ -50,7 +51,8 @@ extern "C" poplar::program::Program Build_grad(
     const std::vector<poplar::Tensor>& gradients,
     const std::vector<poplar::Tensor>& fwd_inputs,
     const std::vector<poplar::Tensor>& fwd_outputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   poplar::program::Sequence seq;
 
   outputs.resize(gradients.size());

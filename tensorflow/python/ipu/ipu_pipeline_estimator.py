@@ -21,6 +21,7 @@ import collections
 
 from tensorflow.python import ops
 from tensorflow.python.estimator import model_fn as model_fn_lib
+from tensorflow.python.framework import dtypes
 from tensorflow.python.ipu import ipu_estimator
 from tensorflow.python.ipu import loops
 from tensorflow.python.ipu.ops import pipelining_ops
@@ -168,7 +169,7 @@ class _ModelFnPipelineWrapper(ipu_estimator._ModelFnWrapperBase):  # pylint: dis
         loss = self._outfeed_queue.dequeue()
 
       # Reduce loss over all dimensions (i.e. batch_size, pipeline_depth)
-      loss = math_ops.reduce_mean(loss)
+      loss = math_ops.reduce_mean(math_ops.cast(loss, dtypes.float32))
 
     train_op = compiled_training_loop
 

@@ -147,10 +147,8 @@ class StatefulGradientAccumulateWithMomentumOp : public PoplarOpDef {
           "for an index out of range (%d >= %d).",
           accumulator_index, num_grads);
     }
-    TF_ASSIGN_OR_RETURN(
-        TensorVector outputs,
-        FindInstructionOutputTensors(
-            tensor_map, res, inst->operand(num_grads + accumulator_index)));
+    TensorVector outputs = FindInstructionOutputs(
+        tensor_map, res, inst->operand(num_grads + accumulator_index));
 
     if (outputs.size() != 1) {
       return xla::FailedPrecondition("Could not find layout input for %s",
