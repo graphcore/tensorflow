@@ -21,7 +21,7 @@ limitations under the License.
 #include <poputil/exceptions.hpp>
 
 extern "C" {
-int32_t custom_op_api_level = 1;
+int32_t custom_op_api_level = 2;
 }
 
 // If an operation takes one or more tensors of the same shape,
@@ -37,7 +37,8 @@ extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
 // The Build function constructs the Poplar graph that computes the custom op.
 extern "C" poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   if (inputs.size() != 5) {
     throw poputil::poplibs_error("ScaledVectorAdd requires 5 inputs");
   }
@@ -133,7 +134,8 @@ extern "C" poplar::program::Program Build_grad(
     const std::vector<poplar::Tensor>& gradients,
     const std::vector<poplar::Tensor>& fwd_inputs,
     const std::vector<poplar::Tensor>& fwd_outputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debug_prefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debug_prefix) {
   std::cerr << outputs.size() << "\n";
   outputs.resize(2);
   poplar::program::Sequence seq;
@@ -145,7 +147,7 @@ extern "C" poplar::program::Program Build_grad(
                                        gradients[0], fwd_inputs[3],
                                        fwd_inputs[4]};
     std::vector<poplar::Tensor> outs = {outputs[0]};
-    seq.add(Build(graph, ins, outs, "gradX"));
+    seq.add(Build(graph, ins, outs, attributes, "gradX"));
   }
   // We don't expect scale gradient here
 
@@ -156,7 +158,7 @@ extern "C" poplar::program::Program Build_grad(
                                        gradients[0], fwd_inputs[3],
                                        fwd_inputs[4]};
     std::vector<poplar::Tensor> outs = {outputs[1]};
-    seq.add(Build(graph, ins, outs, "gradY"));
+    seq.add(Build(graph, ins, outs, attributes, "gradY"));
   }
 
   return seq;

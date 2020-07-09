@@ -32,6 +32,8 @@ REGISTER_OP("IpuUserOp")
     .Attr("gradient_size: int")
     .Attr("inputs_with_gradients: list(int) >= 0")
     .Attr("partial_derivative_index: int")
+    .Attr("attributes: string = ''")
+    .Attr("gradient_attributes: string = ''")
     // We don't know what the user is going to do.
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
@@ -53,6 +55,10 @@ REGISTER_OP("IpuUserOp")
             needs gradient.
         partial_derivative_index: the list of inputs for which the op should
             produce gradients w.r.t. the outputs.
+        attributes: The string of user defined attributes passed to the
+            operation.
+        gradient_attributes: The string of user defined attributes passed to the
+            gradient of the current operation.
     )doc");
 
 REGISTER_OP("IpuUserReadWriteOp")
@@ -67,6 +73,8 @@ REGISTER_OP("IpuUserReadWriteOp")
     .Attr("gradient_size: int")
     .Attr("inputs_with_gradients: list(int) >= 0")
     .Attr("partial_derivative_index: int")
+    .Attr("attributes: string = ''")
+    .Attr("gradient_attributes: string = ''")
     // We don't know what the user is going to do.
     .SetIsStateful()
     .SetShapeFn(shape_inference::poplarplugin::ShapeFromOutputShapeAttribute)
@@ -87,7 +95,10 @@ REGISTER_OP("IpuUserReadWriteOp")
             needs gradient.
         partial_derivative_index: the list of inputs for which the op should
             produce gradients w.r.t. the outputs.
-
+        attributes: The string of user defined attributes passed to the
+            operation.
+        gradient_attributes: The string of user defined attributes passed to the
+            gradient of the current operation.
     )doc");
 
 }  // namespace tensorflow

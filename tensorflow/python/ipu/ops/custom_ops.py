@@ -60,8 +60,10 @@ def precompiled_user_op(inputs,
                         name="UserOp",
                         op_name="Build",
                         separate_gradients=False,
-                        inputs_with_gradients=None):
-  """Call the poplar function located in the shared library at `library_path`
+                        inputs_with_gradients=None,
+                        attributes=None,
+                        gradient_attributes=None):
+  """Call the Poplar function located in the shared library at `library_path`
   as part of the normal TensorFlow execution with the given `inputs`.
 
   The shape and type of the output should be specified by `outs`. If it is
@@ -85,10 +87,17 @@ def precompiled_user_op(inputs,
     op_name: The prefix of the functions inside the shard object file. This
       defaults to 'Build'.
     separate_gradients:  When set to true, multiple gradient ops will be
-      generated, one for each input.  When false, a single gradient op will be
+      generated, one for each input. When false, a single gradient op will be
       generated, which should produce the partial derivatives for all inputs.
     inputs_with_gradients: When set, produce derivatives only for specified
       inputs. List of input indices expected.
+    attributes: An optional string object which is passed as an argument to the
+      Poplar function. Allows to specify function attributes which were not
+      known at the compile time of the C++ Poplar function. Can be used to pass
+      a JSON or ProtoBuf serialized string to the Poplar function for an ease of
+      use. See the documention for examples.
+    gradient_attributes: Same as `attribute`, however this is passed as the
+      `attribute` to the gradient operations (if training.)
 
   Returns:
     The array of tensor outputs.
@@ -104,6 +113,15 @@ def precompiled_user_op(inputs,
   inputs_with_gradients = _validate_inputs_with_gradients(
       inputs_with_gradients, inputs)
 
+  if attributes and not isinstance(attributes, str):
+    raise ValueError("Expected attributes to be a 'str' type, but was %s." %
+                     type(attributes))
+
+  if gradient_attributes and not isinstance(gradient_attributes, str):
+    raise ValueError(
+        "Expected gradient_attributes to be a 'str' type, but was %s." %
+        type(gradient_attributes))
+
   return gen_poputil_ops.ipu_user_op(
       inputs,
       library_path=library_path,
@@ -114,6 +132,8 @@ def precompiled_user_op(inputs,
       gradient_size=0,
       partial_derivative_index=0,
       inputs_with_gradients=inputs_with_gradients,
+      attributes=attributes,
+      gradient_attributes=gradient_attributes,
       **outs)
 
 
@@ -123,7 +143,9 @@ def cpu_user_operation(inputs,
                        name="UserOp",
                        op_name="Callback",
                        separate_gradients=False,
-                       inputs_with_gradients=None):
+                       inputs_with_gradients=None,
+                       attributes=None,
+                       gradient_attributes=None):
   """
   Call the CPU function located in the shared library at `library_path`
   as part of the normal TensorFlow execution with the given `inputs`
@@ -131,7 +153,7 @@ def cpu_user_operation(inputs,
   IPU afterwards.
 
   The shape and type of the outputs should be specified by `outs`. If it is
-  `None` it will default to no output.  `outs` should be a dictionary with
+  `None` it will default to no output. `outs` should be a dictionary with
   two elements like so:
 
   .. code-block:: python
@@ -150,10 +172,17 @@ def cpu_user_operation(inputs,
     op_name: The prefix of the functions inside the shard object file. This
       defaults to 'Callback'.
     separate_gradients:  When set to `True`, multiple gradient ops will be
-      generated, one for each input.  When `False`, a single gradient op will be
+      generated, one for each input. When `False`, a single gradient op will be
       generated, which should produce the partial derivatives for all inputs.
     inputs_with_gradients: When set, produce derivatives only for specified
       inputs. List of input indices expected.
+    attributes: An optional string object which is passed as an argument to the
+      Poplar function. Allows to specify function attributes which were not
+      known at the compile time of the C++ Poplar function. Can be used to pass
+      a JSON or ProtoBuf serialized string to the Poplar function for an ease of
+      use. See the documention for examples.
+    gradient_attributes: Same as `attribute`, however this is passed as the
+      `attribute` to the gradient operations (if training.)
 
   Returns:
     The array of tensor outputs.
@@ -168,6 +197,15 @@ def cpu_user_operation(inputs,
   inputs_with_gradients = _validate_inputs_with_gradients(
       inputs_with_gradients, inputs)
 
+  if attributes and not isinstance(attributes, str):
+    raise ValueError("Expected attributes to be a 'str' type, but was %s." %
+                     type(attributes))
+
+  if gradient_attributes and not isinstance(gradient_attributes, str):
+    raise ValueError(
+        "Expected gradient_attributes to be a 'str' type, but was %s." %
+        type(gradient_attributes))
+
   return gen_poputil_ops.ipu_user_read_write_op(
       inputs,
       library_path=library_path,
@@ -177,4 +215,6 @@ def cpu_user_operation(inputs,
       gradient_size=0,
       partial_derivative_index=0,
       inputs_with_gradients=inputs_with_gradients,
+      attributes=attributes,
+      gradient_attributes=gradient_attributes,
       **outs)

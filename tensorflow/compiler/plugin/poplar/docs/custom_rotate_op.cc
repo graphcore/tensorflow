@@ -23,7 +23,7 @@ limitations under the License.
 
 // Export the API level symbol
 extern "C" {
-int32_t custom_op_api_level = 1;
+int32_t custom_op_api_level = 2;
 }
 
 extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
@@ -36,7 +36,8 @@ extern "C" void Build_metadata(std::vector<std::int64_t>& allocating_indices,
 
 extern "C" poplar::program::Program Build(
     poplar::Graph& graph, const std::vector<poplar::Tensor>& inputs,
-    std::vector<poplar::Tensor>& outputs, const std::string& debugPrefix) {
+    std::vector<poplar::Tensor>& outputs, const std::string& attributes,
+    const std::string& debugPrefix) {
   if (inputs.size() != 3) {
     throw poputil::poplibs_error("Rotate requires 3 inputs");
   }

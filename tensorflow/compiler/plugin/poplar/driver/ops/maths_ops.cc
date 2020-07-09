@@ -231,12 +231,10 @@ StatusOr<poplar::program::Program> CreateTupleSelectOp(
       poplar::Tensor pred,
       FindInstructionInput(tensor_map, res, inst, 0, seq, false));
 
-  TF_ASSIGN_OR_RETURN(
-      TensorVector in0,
-      FindInstructionInputTensors(tensor_map, res, inst, 1, seq, false));
-  TF_ASSIGN_OR_RETURN(
-      TensorVector in1,
-      FindInstructionInputTensors(tensor_map, res, inst, 2, seq, false));
+  TensorVector in0 =
+      FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
+  TensorVector in1 =
+      FindInstructionInputs(tensor_map, res, inst, 2, seq, false);
 
   if (in0.size() != in1.size()) {
     return xla::FailedPrecondition("Mismatching tuple sizes on %s",

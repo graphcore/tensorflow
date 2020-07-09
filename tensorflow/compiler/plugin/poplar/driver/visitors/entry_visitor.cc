@@ -30,8 +30,8 @@ namespace xla {
 namespace poplarplugin {
 namespace {
 // Helper function which marks all the entry computation inputs as unallocated.
-DeferredArgRBVectors MakeArgRBVector(const HloComputation* comp) {
-  DeferredArgRBVectors output(comp->num_parameters());
+DeferredArgVectors MakeArgVector(const HloComputation* comp) {
+  DeferredArgVectors output(comp->num_parameters());
   for (int64 i = 0; i != comp->num_parameters(); ++i) {
     output[i].resize(
         FlattenedXlaShape(comp->parameter_instruction(i)->shape()).size());
@@ -85,7 +85,7 @@ Status AddDeviceToHostCopy(const poplar::Tensor src, poplar::DataStream& stream,
 
 EntryVisitor::EntryVisitor(CompilerResources& resources,
                            const HloComputation* comp)
-    : DeferredVisitor(resources, MakeArgRBVector(comp), "Entry", true) {}
+    : DeferredVisitor(resources, MakeArgVector(comp), "Entry", true) {}
 
 StatusOr<poplar::program::Sequence*> EntryVisitor::GetSequenceForInstruction(
     const HloInstruction* inst) {
@@ -230,11 +230,9 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
 
     // Get the all the tensors for the current output index - work out the
     // range.
-    TF_ASSIGN_OR_RETURN(
-        TensorVector out_tensors,
-        FindExpandedInstructionOutputsInRange(
-            tensor_map, resources_, root,
-            {flat_tuple_index_start, flat_tuple_index_end}, seq));
+    auto out_tensors = FindExpandedInstructionOutputsInRange(
+        tensor_map, resources_, root,
+        {flat_tuple_index_start, flat_tuple_index_end}, seq);
 
     // If the output is a modified resource, we want to keep it on the device at
     // the exact same location it was an input to the graph.
@@ -243,12 +241,10 @@ Status EntryVisitor::FinishDeferedAllocationVisit(HloInstruction* root) {
       // match, add a on device copy to make sure location of the resource
       // variable doesn't change between the runs (the alternative is to reload
       // the graph everytime).
-      TF_ASSIGN_OR_RETURN(
-          TensorVector in_tensors,
-          FindInstructionOutputTensorsInRange(
-              tensor_map, resources_,
-              comp->parameter_instruction(out_info.GetInputIndex()),
-              {0, layout_sub_shapes.size()}));
+      auto in_tensors = FindInstructionOutputsInRange(
+          tensor_map, resources_,
+          comp->parameter_instruction(out_info.GetInputIndex()),
+          {0, layout_sub_shapes.size()});
       for (uint64 tuple_index = 0; tuple_index != layout_sub_shapes.size();
            ++tuple_index) {
         if (in_tensors[tuple_index] != out_tensors[tuple_index]) {

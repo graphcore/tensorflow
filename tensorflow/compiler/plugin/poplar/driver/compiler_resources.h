@@ -137,6 +137,8 @@ struct CompilerResources {
 
   bool enable_experimental_remote_buffer_embedding;
 
+  absl::flat_hash_set<std::string> custom_codelets_in_graph;
+
   CompilerResources(
       const poplar::OptionFlags& conv_options,
       const poplar::OptionFlags& matmul_options,

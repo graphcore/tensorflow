@@ -13,12 +13,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <iostream>
+
+#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_platform.h"
 #include "tensorflow/compiler/plugin/poplar/driver/trace.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/xla_ipu_common.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ipu_kernels_common.h"
-
+#include "tensorflow/compiler/tf2xla/shape_util.h"
+#include "tensorflow/compiler/tf2xla/type_util.h"
+#include "tensorflow/compiler/tf2xla/xla_helpers.h"
+#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
+#include "tensorflow/compiler/tf2xla/xla_op_registry.h"
+#include "tensorflow/compiler/xla/shape_util.h"
+#include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
@@ -27,17 +36,6 @@ limitations under the License.
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/util/stream_executor_util.h"
-
-#include "tensorflow/compiler/tf2xla/shape_util.h"
-#include "tensorflow/compiler/tf2xla/type_util.h"
-#include "tensorflow/compiler/tf2xla/xla_helpers.h"
-#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
-#include "tensorflow/compiler/tf2xla/xla_op_registry.h"
-#include "tensorflow/compiler/xla/shape_util.h"
-#include "tensorflow/compiler/xla/statusor.h"
-
-#include <iostream>
-#include "absl/container/flat_hash_set.h"
 
 #define TF_ASSIGN_OR_DEFAULT(lhs, rexpr, default_value)                        \
   TF_ASSIGN_OR_DEFAULT_IMPL(                                                   \
@@ -54,7 +52,7 @@ namespace tensorflow {
 
 namespace {
 
-static constexpr int32 kApiLevel = 1;
+static constexpr int32 kApiLevel = 2;
 
 // From kernels/datatsteam/feeds.cc
 void XlaShapesFromAttr(OpKernelConstruction* ctx,
@@ -125,6 +123,8 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(context,
                    context->GetAttr("partial_derivative_index", &pd_index));
 
+    OP_REQUIRES_OK(context, context->GetAttr("attributes", &attributes));
+
     XlaShapesFromAttr(context, output_shape);
   }
 
@@ -162,6 +162,7 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
   void CreateCustomCall(XlaOpKernelContext* context) {
     GetAttrMap().AddAttribute("gradient_size", gradient_size);
     GetAttrMap().AddAttribute("partial_derivative_index", pd_index);
+    GetAttrMap().AddAttribute("attributes", attributes);
 
     const size_t num_inputs = context->num_inputs();
 
@@ -203,6 +204,8 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
   int64 gradient_size;
 
   int64 pd_index;
+
+  std::string attributes;
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(PoputilUserOpBase);
