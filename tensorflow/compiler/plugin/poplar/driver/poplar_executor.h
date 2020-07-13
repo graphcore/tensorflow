@@ -442,6 +442,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return block_size <= 0 ? 128 : block_size;
   }
 
+  bool EnableFastMath() const { return current_config_.enable_fast_math(); }
+
   IpuSelectionOrder GetSelectionOrder() const {
     return current_config_.selection_order();
   }

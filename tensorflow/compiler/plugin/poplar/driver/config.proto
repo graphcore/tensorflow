@@ -246,4 +246,7 @@ message IpuOptions {
 
   // Enable remote buffer embeddings
   bool enable_experimental_remote_buffer_embedding = 33;
+
+  // Enable math optimizations which might not adhere to IEEE. 
+  bool enable_fast_math = 34;
 };

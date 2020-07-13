@@ -468,7 +468,8 @@ def set_optimization_options(opts,
                              max_inter_ipu_copies_buffer_size=0,
                              max_send_recv_cluster_size=0,
                              gather_simplifier=False,
-                             triangular_solve_expander_block_size=0):
+                             triangular_solve_expander_block_size=0,
+                             enable_fast_math=False):
   """Set the IPU options related to performance / optimizations.
 
   .. code-block:: python
@@ -500,6 +501,12 @@ def set_optimization_options(opts,
       for embedding lookups.
     triangular_solve_expander_block_size: Defines size for triangular solver
       expander blocks. 0 - implementation defined default.
+    enable_fast_math: Enables optimizations which allow arbitrary reassociations
+      and transformations of mathemtical operations with no accuracy guarantees.
+      Enabling this option can result in incorrect output for programs that
+      depend on an exact implementation of IEEE for math functions. It may,
+      however, yield faster code for programs that do not require the guarantees
+      of these specifications.
 
   Returns:
     The IpuOptions configuration protobuf.
@@ -514,6 +521,7 @@ def set_optimization_options(opts,
   opts.enable_gather_simplifier = gather_simplifier
   opts.triangular_solve_expander_block_size = \
     triangular_solve_expander_block_size
+  opts.enable_fast_math = enable_fast_math
 
   return opts
 
