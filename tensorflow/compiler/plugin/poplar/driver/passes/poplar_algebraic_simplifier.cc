@@ -86,6 +86,17 @@ bool IsAll(const HloInstruction* op, int8 value) {
   }
 }
 
+bool IsAllFloat(const HloInstruction* op, float value) {
+  switch (op->opcode()) {
+    case HloOpcode::kBroadcast:
+      return IsAllFloat(op->operand(0), value);
+    case HloOpcode::kConstant:
+      return op->literal().IsAllFloat(value);
+    default:
+      return false;
+  }
+}
+
 // Checks whether `op` is a floating-point constant or broadcast of a constant
 // of the form +/- 2^k for some integer k positive, negative, or zero.  Such
 // values are interesting because multiplying by a power of 2 just moves the
@@ -2551,6 +2562,24 @@ Status AlgebraicSimplifierVisitor::HandlePower(HloInstruction* power) {
     return ReplaceWithNewInstruction(
         power, HloInstruction::CreateBinary(power->shape(),
                                             HloOpcode::kMultiply, lhs, lhs));
+  }
+
+  VLOG(10) << "trying transform [pow(A, -2) => 1 / (A*A)]: "
+           << power->ToString();
+  if (IsAll(rhs, -2)) {
+    auto* one = computation_->AddInstruction(
+        simplifier_->CreateConstantWithLayoutUpdated(
+            LiteralUtil::One(rhs->shape().element_type()).Clone()));
+
+    auto* broadcast_one = computation_->AddInstruction(
+        HloInstruction::CreateBroadcast(power->shape(), one, {}));
+
+    auto* sq = computation_->AddInstruction(HloInstruction::CreateBinary(
+        broadcast_one->shape(), HloOpcode::kMultiply, lhs, lhs));
+
+    return ReplaceWithNewInstruction(
+        power, HloInstruction::CreateBinary(sq->shape(), HloOpcode::kDivide,
+                                            broadcast_one, sq));
   }
 
   VLOG(10) << "trying transform [pow(A, -1) => 1/A]: " << power->ToString();
