@@ -2007,15 +2007,18 @@ Status AlgebraicSimplifierVisitor::HandleMultiply(HloInstruction* multiply) {
     return Status::OK();
   }
 
-  // 0*A => 0. Only applies for integral types for correct NaN-handling.
+  // 0*A => 0. Only applies for integral types for correct NaN-handling, unless
+  // fast math is enabled.
   if (IsAll(lhs, 0) &&
-      primitive_util::IsIntegralType(multiply->shape().element_type()) &&
+      (primitive_util::IsIntegralType(multiply->shape().element_type()) ||
+       enable_fast_math_) &&
       ReplaceInstructionIfSameShape(multiply, lhs)) {
     return Status::OK();
   }
   // A*0 => 0
   if (IsAll(rhs, 0) &&
-      primitive_util::IsIntegralType(multiply->shape().element_type()) &&
+      (primitive_util::IsIntegralType(multiply->shape().element_type()) ||
+       enable_fast_math_) &&
       ReplaceInstructionIfSameShape(multiply, rhs)) {
     return Status::OK();
   }

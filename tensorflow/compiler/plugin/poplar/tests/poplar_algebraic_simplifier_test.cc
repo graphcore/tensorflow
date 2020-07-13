@@ -18,11 +18,10 @@ limitations under the License.
 #include <memory>
 #include <utility>
 
-#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
-
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
@@ -293,6 +292,114 @@ TEST_F(PoplarAlgebraicSimplifierTest, MulZero) {
   PoplarAlgebraicSimplifier simplifier;
   ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
   EXPECT_EQ(computation->root_instruction(), zero);
+}
+
+// Test that A * 0 is simplified to 0 (where A is a float)
+TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatRHS) {
+  auto m = CreateNewVerifiedModule();
+  Shape r0f32 = ShapeUtil::MakeShape(F32, {});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r0f32, "param0"));
+  HloInstruction* zero = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(0.0f)));
+  builder.AddInstruction(
+      HloInstruction::CreateBinary(r0f32, HloOpcode::kMultiply, param0, zero));
+
+  auto computation = m->AddEntryComputation(builder.Build());
+  HloInstruction* root = computation->root_instruction();
+  EXPECT_EQ(root->opcode(), HloOpcode::kMultiply);
+  {
+    PoplarAlgebraicSimplifier simplifier;
+    ASSERT_FALSE(simplifier.Run(m.get()).ValueOrDie());
+  }
+  {
+    PoplarAlgebraicSimplifier simplifier(true);
+    ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+    EXPECT_EQ(computation->root_instruction(), zero);
+  }
+}
+
+// Test that 0 * A is simplified to 0
+TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatLHS) {
+  auto m = CreateNewVerifiedModule();
+  Shape r0f32 = ShapeUtil::MakeShape(F32, {});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r0f32, "param0"));
+  HloInstruction* zero = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(0.0f)));
+  builder.AddInstruction(
+      HloInstruction::CreateBinary(r0f32, HloOpcode::kMultiply, zero, param0));
+
+  auto computation = m->AddEntryComputation(builder.Build());
+  HloInstruction* root = computation->root_instruction();
+  EXPECT_EQ(root->opcode(), HloOpcode::kMultiply);
+  {
+    PoplarAlgebraicSimplifier simplifier;
+    ASSERT_FALSE(simplifier.Run(m.get()).ValueOrDie());
+  }
+  {
+    PoplarAlgebraicSimplifier simplifier(true);
+    ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+    EXPECT_EQ(computation->root_instruction(), zero);
+  }
+}
+
+// Test that A * Broadcast(0) is simplified to 0
+TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatArrayRHS) {
+  auto m = CreateNewVerifiedModule();
+  Shape r2f32 = ShapeUtil::MakeShape(F32, {3, 2});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r2f32, "param0"));
+  HloInstruction* zero = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(0.0f)));
+  HloInstruction* bcast =
+      builder.AddInstruction(HloInstruction::CreateBroadcast(r2f32, zero, {}));
+  builder.AddInstruction(
+      HloInstruction::CreateBinary(r2f32, HloOpcode::kMultiply, param0, bcast));
+
+  auto computation = m->AddEntryComputation(builder.Build());
+  HloInstruction* root = computation->root_instruction();
+  EXPECT_EQ(root->opcode(), HloOpcode::kMultiply);
+  {
+    PoplarAlgebraicSimplifier simplifier;
+    ASSERT_FALSE(simplifier.Run(m.get()).ValueOrDie());
+  }
+  {
+    PoplarAlgebraicSimplifier simplifier(true);
+    ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+    EXPECT_EQ(computation->root_instruction(), bcast);
+  }
+}
+
+// Test that Broadcast(0) * A is simplified to 0
+TEST_F(PoplarAlgebraicSimplifierTest, MulZeroFloatArrayLHS) {
+  auto m = CreateNewVerifiedModule();
+  Shape r2f32 = ShapeUtil::MakeShape(F32, {3, 2});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r2f32, "param0"));
+  HloInstruction* zero = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(0.0f)));
+  HloInstruction* bcast =
+      builder.AddInstruction(HloInstruction::CreateBroadcast(r2f32, zero, {}));
+  builder.AddInstruction(
+      HloInstruction::CreateBinary(r2f32, HloOpcode::kMultiply, bcast, param0));
+
+  auto computation = m->AddEntryComputation(builder.Build());
+  HloInstruction* root = computation->root_instruction();
+  EXPECT_EQ(root->opcode(), HloOpcode::kMultiply);
+  {
+    PoplarAlgebraicSimplifier simplifier;
+    ASSERT_FALSE(simplifier.Run(m.get()).ValueOrDie());
+  }
+  {
+    PoplarAlgebraicSimplifier simplifier(true);
+    ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+    EXPECT_EQ(computation->root_instruction(), bcast);
+  }
 }
 
 TEST_F(PoplarAlgebraicSimplifierTest, MultiplyReassociateMergeConstants) {
