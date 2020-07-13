@@ -13,20 +13,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/compiler/plugin/poplar/driver/poplar_compiler.h"
+
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <unistd.h>
+
 #include <fstream>
+#include <gcl/ct/TileAllocation.hpp>
 #include <limits>
 #include <mutex>
+#include <popfloat/experimental/codelets.hpp>
+#include <poplar/CSRFunctions.hpp>
+#include <poplar/CycleCount.hpp>
+#include <poplar/exceptions.hpp>
+#include <poplar/replication_factor.hpp>
+#include <poplin/codelets.hpp>
+#include <popnn/codelets.hpp>
+#include <popops/codelets.hpp>
+#include <poprand/RandomGen.hpp>
+#include <poprand/codelets.hpp>
+#include <poputil/exceptions.hpp>
 #include <random>
 #include <string>
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
-
-#include "tensorflow/compiler/plugin/poplar/driver/poplar_compiler.h"
-
 #include "tensorflow/compiler/plugin/poplar/driver/compiler_resources.h"
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/add_block_recompute.h"
@@ -114,7 +126,6 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matmul_preplanning.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/entry_visitor.h"
-
 #include "tensorflow/compiler/xla/service/call_graph.h"
 #include "tensorflow/compiler/xla/service/cholesky_expander.h"
 #include "tensorflow/compiler/xla/service/computation_placer.h"
@@ -136,27 +147,9 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/zero_sized_hlo_elimination.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
-
-#include "tensorflow/stream_executor/lib/initialize.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/random/random.h"
-
-#include <gcl/ct/TileAllocation.hpp>
-
-#include <poplar/exceptions.hpp>
-#include <poputil/exceptions.hpp>
-
-#include <popfloat/experimental/codelets.hpp>
-#include <poplin/codelets.hpp>
-#include <popnn/codelets.hpp>
-#include <popops/codelets.hpp>
-#include <poprand/codelets.hpp>
-
-#include <poplar/CSRFunctions.hpp>
-#include <poplar/CycleCount.hpp>
-#include <poplar/replication_factor.hpp>
-#include <poprand/RandomGen.hpp>
+#include "tensorflow/stream_executor/lib/initialize.h"
 
 namespace se = ::stream_executor;
 
@@ -858,7 +851,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       poplar_executor->UseStableNormStatistics(),
       poplar_executor->SupportsRemoteBuffers(), poplar_executor->GclOptions(),
       poplar_executor->GetTriangularSolveExpanderBlockSize(),
-      poplar_executor->EnableExperimentalRemoteBufferEmbedding());
+      poplar_executor->EnableExperimentalRemoteBufferEmbedding(),
+      poplar_executor->EnableFastMath());
 
   if (replication_factor > 1) {
     VLOG(1) << "Created " << replication_factor << " replica IPU graph.";
@@ -888,7 +882,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<FuseOpsEarly>>(resources.annotations);
     pipeline.AddPass<MultiConvFixer>();
     pipeline.AddPass<HloCSE>(false);
-    pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
+    pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+        resources.enable_fast_math);
     {
       auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
           "pipeline-gradient-accumulation-optimizer-wrapper");
@@ -900,7 +895,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<RootTokenReplacer>();
     pipeline.AddPass<ReshapeMover>();
     pipeline.AddPass<MapInliner>();
-    pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
+    pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+        resources.enable_fast_math);
     pipeline.AddPass<ZeroSizedHloElimination>();
     pipeline.AddPass<ComputationFlattener>();
     pipeline.AddPass<TupleSimplifier>(true);
@@ -917,7 +913,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<HloCSE>(true);
       pass.AddPass<HloDCE>();
       pass.AddPass<WhileLoopConstantSinking>();
-      pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
+      pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+          resources.enable_fast_math);
       pass.AddPass<ReshapeMover>();
       pass.AddPass<SortSimplifier>();
       pass.AddPass<HloDCE>();
@@ -941,7 +938,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
           "multi-update-optimizer");
       pass.AddPass<MultiUpdateScaleApply>(resources.annotations);
       pass.AddPass<MultiUpdateApply>(resources.annotations);
-      pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>();
+      pass.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
+          resources.enable_fast_math);
       pass.AddPass<HloCSE>(true);
       pass.AddPass<HloDCE>();
     }
