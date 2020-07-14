@@ -115,9 +115,8 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       ok = [
           '__seed*', 'Copy_', 'vs/conv2d/Conv2D/convolution.*/Conv_1x1',
           'vs/batch_normalization/FusedBatchNorm*/batch-norm-inference.*/',
-          'vs/Cast/convert.*/Cast',
-          'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
-          'vs/batch_normalization_1/FusedBatchNorm*/batch-norm-inference.*/'
+          'convert.*/Cast', 'vs/conv2d_1/Conv2D/convolution.*/Conv_1x1',
+          'vs/batch_normalization_1/FusedBatchNorm*/*'
       ]
       report.assert_all_compute_sets_and_list(ok)
 
@@ -482,19 +481,21 @@ class NormGraphCachingTest(xla_test.XLATestCase):
         scale = gen_array_ops.broadcast_to(z, shape=[65536])
         offset = scale
         b_mean, b_var = nn.moments(x, [0, 1, 2], name='moments')
+        b_mean_32 = math_ops.cast(b_mean, np.float32)
+        b_var_32 = math_ops.cast(b_var, np.float32)
         a = nn.fused_batch_norm(x,
                                 scale,
                                 offset,
-                                b_mean,
-                                b_var,
+                                b_mean_32,
+                                b_var_32,
                                 1e-3,
                                 is_training=False,
                                 name="a")
         b = nn.fused_batch_norm(y,
                                 scale,
                                 offset,
-                                b_mean,
-                                b_var,
+                                b_mean_32,
+                                b_var_32,
                                 1e-3,
                                 is_training=False,
                                 name="b")
@@ -504,7 +505,7 @@ class NormGraphCachingTest(xla_test.XLATestCase):
       with ops.device('cpu'):
         x = array_ops.placeholder(np.float16, [1, 1, 1, 65536], name="x")
         y = array_ops.placeholder(np.float16, [1, 1, 1, 65536], name="y")
-        z = array_ops.placeholder(np.float16, shape=[1])
+        z = array_ops.placeholder(np.float32, shape=[1])
 
       with ops.device("/device:IPU:0"):
         res = ipu_compiler.compile(model, inputs=[x, y, z])
@@ -521,16 +522,17 @@ class NormGraphCachingTest(xla_test.XLATestCase):
 
       report.parse_log()
 
-      report.assert_total_tile_memory(1634674)
-      report.assert_max_tile_memory(1551)
+      report.assert_total_tile_memory(2744684)
+      report.assert_max_tile_memory(2683)
 
       # Would fail if there were two batch norms in the graph
       ok = [
           '__seed*',
-          'host-exchange-local-copy',
           'Copy_',
-          'moments/SquaredDifference/multiply',
+          'Cast',
+          'moments',
           'a/batch-norm-inference',
+          'a/batch-norm-inference*/Multiply',
           'add/add*/Add',
       ]
       report.assert_all_compute_sets_and_list(ok)
