@@ -2636,6 +2636,24 @@ Status AlgebraicSimplifierVisitor::HandlePower(HloInstruction* power) {
                                             broadcast_one, lhs));
   }
 
+  if (enable_fast_math_) {
+    VLOG(10) << "trying transform [pow(A, 0.5) => sqrt(A)]: "
+             << power->ToString();
+    if (IsAllFloat(rhs, 0.5)) {
+      return ReplaceWithNewInstruction(
+          power,
+          HloInstruction::CreateUnary(lhs->shape(), HloOpcode::kSqrt, lhs));
+    }
+
+    VLOG(10) << "trying transform [pow(A, -0.5) => 1/sqrt(A)]: "
+             << power->ToString();
+    if (IsAllFloat(rhs, -0.5)) {
+      return ReplaceWithNewInstruction(
+          power,
+          HloInstruction::CreateUnary(lhs->shape(), HloOpcode::kRsqrt, lhs));
+    }
+  }
+
   VLOG(10) << "trying transform [pow(pow(A, X), Y) => pow(A, X*Y)]: "
            << power->ToString();
 
