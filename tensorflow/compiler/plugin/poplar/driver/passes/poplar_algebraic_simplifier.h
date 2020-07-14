@@ -1,4 +1,4 @@
-/* Copyright 2017-2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ namespace xla {
 // A pass which performs algebraic simplifications.
 class PoplarAlgebraicSimplifier : public HloModulePass {
  public:
-  PoplarAlgebraicSimplifier() = default;
+  explicit PoplarAlgebraicSimplifier(bool enable_fast_math = false);
   ~PoplarAlgebraicSimplifier() override = default;
   absl::string_view name() const override { return "poplar-algsimp"; }
 
@@ -42,6 +42,9 @@ class PoplarAlgebraicSimplifier : public HloModulePass {
     UpdateLayout(constant->mutable_shape());
     return constant;
   }
+
+ private:
+  const bool enable_fast_math_;
 };
 
 }  // namespace xla
