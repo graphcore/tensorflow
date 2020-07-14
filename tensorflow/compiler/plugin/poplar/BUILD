@@ -234,6 +234,7 @@ cc_library(
         "driver/tools/custom_ops/group_norm_grad.cc",
         "driver/tools/custom_ops/group_norm_stats.cc",
         "driver/tools/custom_ops/gru.cc",
+        "driver/tools/custom_ops/execution_counter.cc",
         "driver/tools/custom_ops/host_embedding.cc",
         "driver/tools/custom_ops/ipu_inter_copy.cc",
         "driver/tools/custom_ops/lstm.cc",
@@ -369,6 +370,7 @@ cc_library(
         "driver/tools/custom_ops/cast_to_gfloat_hlo.h",
         "driver/tools/custom_ops/codelet_expression_op.h",
         "driver/tools/custom_ops/dropout_hlo.h",
+        "driver/tools/custom_ops/execution_counter.h",
         "driver/tools/custom_ops/fifo.h",
         "driver/tools/custom_ops/gru.h",
         "driver/tools/custom_ops/hlo_poplar_instruction.h",
@@ -513,6 +515,7 @@ cc_library(
     srcs = [
         "driver/ops/cast_to_gfloat_ops.cc",
         "driver/ops/conv_graph_caching.cc",
+        "driver/ops/custom_ops/execution_counter.cc",
         "driver/ops/custom_ops/host_embedding.cc",
         "driver/ops/custom_ops/popfloat/cast_to_gfloat.cc",
         "driver/ops/custom_ops/popfloat/gfloat_ops_utils.cc",

@@ -79,6 +79,7 @@ enum PoplarOp {
   GradientAccumulatorAdd = 75;
   GradientAccumulatorSink = 76;
   WeightsTransposeChansFlipXY = 77;
+  ExecutionCounter = 78;
 
   // Supported Fusions.
   Conv_biasadd = 200;
