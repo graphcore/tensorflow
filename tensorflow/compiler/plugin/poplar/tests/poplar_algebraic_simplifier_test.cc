@@ -1599,6 +1599,54 @@ TEST_F(PoplarAlgebraicSimplifierTest, PowNegative1) {
             1);
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, PowNoughtPointFive) {
+  auto m = CreateNewVerifiedModule();
+  Shape r0f32 = ShapeUtil::MakeShape(F32, {});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r0f32, "param0"));
+  HloInstruction* exponent = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(0.5)));
+  builder.AddInstruction(
+      HloInstruction::CreateBinary(r0f32, HloOpcode::kPower, param0, exponent));
+
+  auto computation = m->AddEntryComputation(builder.Build());
+
+  EXPECT_THAT(computation->root_instruction(),
+              GmockMatch(m::Power(m::Parameter(0), m::Op().Is(exponent))));
+
+  PoplarAlgebraicSimplifier simplifier(true);
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  HloInstruction* root = computation->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Sqrt(m::Parameter(0))));
+}
+
+// Test that pow(A, -0.5) is simplified to 1/sqrt(A).
+TEST_F(PoplarAlgebraicSimplifierTest, PowNegativeNoughtPointFive) {
+  auto m = CreateNewVerifiedModule();
+  Shape r0f32 = ShapeUtil::MakeShape(F32, {});
+  HloComputation::Builder builder(TestName());
+  HloInstruction* param0 = builder.AddInstruction(
+      HloInstruction::CreateParameter(0, r0f32, "param0"));
+  HloInstruction* negative_half = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(-0.5)));
+  builder.AddInstruction(HloInstruction::CreateBinary(r0f32, HloOpcode::kPower,
+                                                      param0, negative_half));
+
+  auto computation = m->AddEntryComputation(builder.Build());
+
+  EXPECT_THAT(computation->root_instruction(),
+              GmockMatch(m::Power(m::Parameter(0), m::Op().Is(negative_half))));
+
+  PoplarAlgebraicSimplifier simplifier(true);
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  HloInstruction* root = computation->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Rsqrt()));
+  EXPECT_THAT(root->operand(0), param0);
+}
+
 TEST_F(PoplarAlgebraicSimplifierTest, ZeroSizedConvolution) {
   auto m = CreateNewVerifiedModule();
   auto builder = HloComputation::Builder(TestName());
