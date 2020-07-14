@@ -1,4 +1,4 @@
-/* Copyright 2017-2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,10 +25,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -37,6 +33,9 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/types/optional.h"
 #include "absl/types/span.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/stateful_gradient_accumulate.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/comparison_util.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/literal.h"
@@ -166,8 +165,9 @@ StatusOr<HloInstruction*> PreserveFrontendAttributesIfNeeded(
 // more general case a worklist based approach would be needed.
 class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
  public:
-  explicit AlgebraicSimplifierVisitor(PoplarAlgebraicSimplifier* simplifier)
-      : simplifier_(simplifier) {}
+  explicit AlgebraicSimplifierVisitor(PoplarAlgebraicSimplifier* simplifier,
+                                      bool enable_fast_math)
+      : simplifier_(simplifier), enable_fast_math_(enable_fast_math) {}
 
   Status HandleAdd(HloInstruction* add) override;
 
@@ -390,6 +390,8 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   HloComputation* scalar_add_computation_ = nullptr;
 
   PoplarAlgebraicSimplifier* simplifier_ = nullptr;
+
+  const bool enable_fast_math_;
 };
 
 }  // namespace
@@ -2005,15 +2007,18 @@ Status AlgebraicSimplifierVisitor::HandleMultiply(HloInstruction* multiply) {
     return Status::OK();
   }
 
-  // 0*A => 0. Only applies for integral types for correct NaN-handling.
+  // 0*A => 0. Only applies for integral types for correct NaN-handling, unless
+  // fast math is enabled.
   if (IsAll(lhs, 0) &&
-      primitive_util::IsIntegralType(multiply->shape().element_type()) &&
+      (primitive_util::IsIntegralType(multiply->shape().element_type()) ||
+       enable_fast_math_) &&
       ReplaceInstructionIfSameShape(multiply, lhs)) {
     return Status::OK();
   }
   // A*0 => 0
   if (IsAll(rhs, 0) &&
-      primitive_util::IsIntegralType(multiply->shape().element_type()) &&
+      (primitive_util::IsIntegralType(multiply->shape().element_type()) ||
+       enable_fast_math_) &&
       ReplaceInstructionIfSameShape(multiply, rhs)) {
     return Status::OK();
   }
@@ -4013,11 +4018,14 @@ Status AlgebraicSimplifierVisitor::HandleCustomCall(
   return Status::OK();
 }
 
+PoplarAlgebraicSimplifier::PoplarAlgebraicSimplifier(bool enable_fast_math)
+    : enable_fast_math_(enable_fast_math) {}
+
 StatusOr<bool> PoplarAlgebraicSimplifier::Run(HloModule* module) {
   XLA_VLOG_LINES(
       2, "PoplarAlgebraicSimplifier::Run(), before:\n" + module->ToString());
   bool changed = false;
-  AlgebraicSimplifierVisitor visitor(this);
+  AlgebraicSimplifierVisitor visitor(this, enable_fast_math_);
   for (auto comp : module->MakeComputationPostOrder()) {
     if (pp::IsPopOpsFusion(comp)) {
       continue;

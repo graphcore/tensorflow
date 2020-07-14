@@ -137,6 +137,8 @@ struct CompilerResources {
 
   bool enable_experimental_remote_buffer_embedding;
 
+  bool enable_fast_math;
+
   absl::flat_hash_set<std::string> custom_codelets_in_graph;
 
   CompilerResources(
@@ -156,7 +158,7 @@ struct CompilerResources {
       bool use_stable_norm_statistics, bool remote_memory_supported,
       const poplar::OptionFlags& gcl_options,
       int64 triangular_solve_expander_block_size,
-      bool enable_experimental_remote_buffer_embedding)
+      bool enable_experimental_remote_buffer_embedding, bool enable_fast_math)
       : annotations(module),
         information(max_all_reduce_buffer_size, max_reduce_scatter_buffer_size,
                     max_inter_ipu_copies_buffer_size,
@@ -181,7 +183,8 @@ struct CompilerResources {
         triangular_solve_expander_block_size(
             triangular_solve_expander_block_size),
         enable_experimental_remote_buffer_embedding(
-            enable_experimental_remote_buffer_embedding) {}
+            enable_experimental_remote_buffer_embedding),
+        enable_fast_math(enable_fast_math) {}
 };
 
 }  // namespace poplarplugin
