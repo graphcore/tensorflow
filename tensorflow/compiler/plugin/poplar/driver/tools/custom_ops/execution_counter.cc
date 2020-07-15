@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <absl/memory/memory.h>
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/execution_counter.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
@@ -37,7 +39,7 @@ std::unique_ptr<HloInstruction> HloExecutionCounter::CloneWithNewOperandsImpl(
 }
 
 std::unique_ptr<HloInstruction> CreateExecutionCounter() {
-  return std::make_unique<HloExecutionCounter>();
+  return absl::make_unique<HloExecutionCounter>();
 }
 
 }  // namespace poplarplugin
