@@ -1747,6 +1747,16 @@ Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
         dot, HloInstruction::CreateBroadcast(dot->shape(), zero, {}));
   }
 
+  // If either lhs or rhs is a zero tensor (all elements 0, rather than rank 0)
+  // then just substitute the computation with a zero tensor.
+  if (enable_fast_math_ && (IsAllFloat(lhs, 0) || IsAllFloat(rhs, 0))) {
+    auto zero = computation_->AddInstruction(
+        simplifier_->CreateConstantWithLayoutUpdated(
+            LiteralUtil::Zero(dot->shape().element_type())));
+    return ReplaceWithNewInstruction(
+        dot, HloInstruction::CreateBroadcast(dot->shape(), zero, {}));
+  }
+
   // Simplify dot(reshape(transpose(A)), Const) to:
   // dot(reshape(A), reshape(transpose(reshape(Const)))), so that the reshape
   // and transpose on the Const side can be constant folded.

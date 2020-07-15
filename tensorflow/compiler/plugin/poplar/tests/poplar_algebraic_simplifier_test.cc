@@ -3503,6 +3503,74 @@ TEST_F(PoplarAlgebraicSimplifierTest, IteratorInvalidation) {
   ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
 }
 
+// Verify that when the LHS of a dot operation is zero the operation is
+// skipped and the output is just 0 broadcast to the output shape.
+TEST_F(PoplarAlgebraicSimplifierTest, TestZeroLHSInDot) {
+  auto m = CreateNewVerifiedModule();
+  HloComputation::Builder builder(TestName() + ".DotZeroLHS");
+
+  auto r2f32 = ShapeUtil::MakeShape(F32, {2, 2});
+
+  auto zero = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(0.0f)));
+  auto lhs =
+      builder.AddInstruction(HloInstruction::CreateBroadcast(r2f32, zero, {}));
+
+  auto rhs =
+      builder.AddInstruction(HloInstruction::CreateParameter(0, r2f32, "rhs"));
+
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(0);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  auto dot_shape = ShapeUtil::MakeShape(F32, {2, 2});
+  builder.AddInstruction(HloInstruction::CreateDot(
+      dot_shape, lhs, rhs, dot_dnums, DefaultPrecisionConfig(2)));
+
+  const auto computation = m->AddEntryComputation(builder.Build());
+  EXPECT_THAT(computation->root_instruction(),
+              GmockMatch(m::Dot(m::Broadcast(), m::Parameter(0))));
+
+  PoplarAlgebraicSimplifier simplifier(true);
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  const auto root = computation->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Broadcast()));
+}
+
+// Verify that when the RHS of a dot operation is zero the operation is
+// skipped and the output is just 0 broadcast to the output shape.
+TEST_F(PoplarAlgebraicSimplifierTest, TestZeroRHSInDot) {
+  auto m = CreateNewVerifiedModule();
+  HloComputation::Builder builder(TestName() + ".DotZeroRHS");
+
+  auto r2f32 = ShapeUtil::MakeShape(F32, {2, 2});
+
+  auto lhs =
+      builder.AddInstruction(HloInstruction::CreateParameter(0, r2f32, "lhs"));
+
+  auto zero = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(0.0f)));
+  auto rhs =
+      builder.AddInstruction(HloInstruction::CreateBroadcast(r2f32, zero, {}));
+
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(0);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  auto dot_shape = ShapeUtil::MakeShape(F32, {2, 2});
+  builder.AddInstruction(HloInstruction::CreateDot(
+      dot_shape, lhs, rhs, dot_dnums, DefaultPrecisionConfig(2)));
+
+  const auto computation = m->AddEntryComputation(builder.Build());
+  EXPECT_THAT(computation->root_instruction(),
+              GmockMatch(m::Dot(m::Parameter(0), m::Broadcast())));
+
+  PoplarAlgebraicSimplifier simplifier(true);
+  ASSERT_TRUE(simplifier.Run(m.get()).ValueOrDie());
+
+  const auto root = computation->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Broadcast()));
+}
+
 // Test that a constant with tuple shape becomes a tuple of constants.
 TEST_F(PoplarAlgebraicSimplifierTest, ConstantTupleBecomesTupleOfConstants) {
   auto m = CreateNewVerifiedModule();
