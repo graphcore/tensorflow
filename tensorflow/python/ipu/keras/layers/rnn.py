@@ -26,6 +26,7 @@ from tensorflow.python.keras import backend as K
 from tensorflow.python.keras import initializers
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
+from tensorflow.python.ops import state_ops
 
 from tensorflow.python.ops import rnn_cell
 from tensorflow.compiler.plugin.poplar.ops import gen_popnn_ops
@@ -55,6 +56,7 @@ class _PopnnRNN(Layer):
                return_state=False,
                return_sequences=False,
                time_major=False,
+               stateful=False,
                **kwargs):
     super(_PopnnRNN, self).__init__(dtype=dtype, **kwargs)
 
@@ -73,6 +75,7 @@ class _PopnnRNN(Layer):
     self._return_state = return_state
     self._return_sequences = return_sequences
     self._time_major = time_major
+    self._stateful = stateful
     # Init input_size to None, which will be set after build().
     self._input_size = None
     self._saveable = None
@@ -169,6 +172,20 @@ class _PopnnRNN(Layer):
         shape=recurrent_kernel_shape)
 
     self.biases = self.get_bias()
+
+    self.states = []
+    if self._stateful:
+      batch_size = input_shape[1 if self._time_major else 0]
+      shapes = self.state_shape(batch_size)
+      if not isinstance(shapes, tuple):
+        shapes = (shapes,)
+
+      for i, shape in enumerate(shapes):
+        self.states.append(
+            self.add_weight(f"state_{i}",
+                            dtype=self._plain_dtype,
+                            initializer=init_ops.zeros_initializer(),
+                            shape=shape))
 
     self.built = True
 
@@ -384,10 +401,6 @@ class PopnnLSTM(_PopnnRNN):
       raise ValueError(
           "IPU custom LSTM layer does not support go_backwards = True.")
 
-    if stateful:
-      raise ValueError(
-          "IPU custom LSTM layer does not support stateful = True.")
-
     if unroll:
       raise ValueError("IPU custom LSTM layer does not support unroll = True.")
 
@@ -403,6 +416,7 @@ class PopnnLSTM(_PopnnRNN):
                          return_state=return_state,
                          return_sequences=return_sequences,
                          time_major=time_major,
+                         stateful=stateful,
                          **kwargs)
     self.unit_forget_bias = unit_forget_bias
 
@@ -479,7 +493,11 @@ class PopnnLSTM(_PopnnRNN):
           "pass a boolean True/False to the call method.  If you are using "
           "keras.Sequential, you should change to another model type.")
 
-    if initial_state is None:
+    if initial_state is not None:
+      pass
+    elif self._stateful:
+      initial_state = (self.states[0], self.states[1])
+    else:
       # Create a zero state.
       initial_state = self._zero_state(batch_size)
 
@@ -503,6 +521,12 @@ class PopnnLSTM(_PopnnRNN):
         is_training=training,
         partials_dtype=self._partials_dtype,
         name=self._name)
+
+    if self._stateful:
+      updates = []
+      for state_, state in zip(self.states, (output_h, output_c)):
+        updates.append(state_ops.assign(state_, state))
+      self.add_update(updates)
 
     if not self._time_major:
       # Convert output from Poplibs [S, B, N] to Keras [B, S, N]
@@ -719,9 +743,6 @@ class PopnnGRU(_PopnnRNN):
     if go_backwards:
       raise ValueError("IPU custom GRU layer does not support go_backwards.")
 
-    if stateful:
-      raise ValueError("IPU custom GRU layer does not support stateful.")
-
     if unroll:
       raise ValueError("IPU custom GRU layer does not support unroll.")
 
@@ -739,6 +760,7 @@ class PopnnGRU(_PopnnRNN):
                                    return_state=return_state,
                                    return_sequences=return_sequences,
                                    time_major=time_major,
+                                   stateful=stateful,
                                    **kwargs)
 
   def build(self, input_shape):
@@ -798,7 +820,11 @@ class PopnnGRU(_PopnnRNN):
           "a boolean True/False to the call method.  If you are using "
           "keras.Sequential, you should change to another model type.")
 
-    if initial_state is None:
+    if initial_state is not None:
+      pass
+    elif self._stateful:
+      initial_state = self.states[0]
+    else:
       # Create a zero state.
       initial_state = self._zero_state(batch_size)
 
@@ -818,6 +844,10 @@ class PopnnGRU(_PopnnRNN):
         is_training=training,
         partials_dtype=self._partials_dtype,
         name=self._name)
+
+    if self._stateful:
+      updates = [state_ops.assign(self.states[0], output_state)]
+      self.add_update(updates)
 
     if not self._time_major:
       # Convert output from Poplibs [S, B, N] to Keras [B, S, N]

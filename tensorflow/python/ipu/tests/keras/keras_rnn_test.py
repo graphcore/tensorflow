@@ -58,7 +58,7 @@ def _kerasLSTMImpl(instance,
 
     state = None if stateful else rnn_cell.LSTMStateTuple(c, h)
 
-    output = keras_layer(
+    layer = keras_layer(
         num_hidden,
         dtype=data_type,
         kernel_initializer=init_ops.constant_initializer(0.1, data_type),
@@ -70,13 +70,19 @@ def _kerasLSTMImpl(instance,
         return_sequences=return_sequences,
         return_state=return_state,
         unit_forget_bias=unit_forget_bias,
-        stateful=stateful)(inputs=x, initial_state=state, training=training)
+        stateful=stateful)
+    output = layer(inputs=x, initial_state=state, training=training)
 
   with instance.test_session() as sess:
     sess.run(variables.global_variables_initializer())
     outputs = []
+
+    # Run the op and any updates.
+    to_run = [output, [layer.updates]] if layer.updates else output
     for x_val in x_vals:
-      outputs.append(sess.run(output, {x: x_val, h: h_val, c: c_val}))
+      r = sess.run(to_run, {x: x_val, h: h_val, c: c_val})
+      r = r[0] if layer.updates else r
+      outputs.append(r)
     return outputs
 
 
@@ -201,6 +207,22 @@ class IpuLstmTest(test.TestCase):
     self.assertEqual(layer.kernel.shape, [num_input, num_hidden * 4])
     _ = impl(x, c, h)
 
+  @test_util.deprecated_graph_mode_only
+  def test_lstm_stateful(self):
+    x, h, c = self._get_random_inputs(num_samples=10)
+
+    cpu_result = _lstmCPU(self, x, h, c, stateful=True)
+    ipu_result = _lstmIPU(self, x, h, c, stateful=True)
+    self.assertAllClose(ipu_result, cpu_result)
+
+  @test_util.deprecated_graph_mode_only
+  def test_lstm_stateful_time_major(self):
+    x, h, c = self._get_random_inputs(time_major=True, num_samples=10)
+
+    cpu_result = _lstmCPU(self, x, h, c, stateful=True, time_major=True)
+    ipu_result = _lstmIPU(self, x, h, c, stateful=True, time_major=True)
+    self.assertAllClose(ipu_result, cpu_result)
+
 
 def _kerasGRUImpl(instance,
                   x_vals,
@@ -216,9 +238,11 @@ def _kerasGRUImpl(instance,
 
   with ops.device(device):
     x = array_ops.placeholder(x_vals[0].dtype, x_vals[0].shape)
-    init = array_ops.placeholder(init_val.dtype, init_val.shape)
+    init_ph = array_ops.placeholder(init_val.dtype, init_val.shape)
 
-    output = keras_layer(
+    init = None if stateful else init_ph
+
+    layer = keras_layer(
         num_hidden,
         dtype=data_type,
         kernel_initializer=init_ops.constant_initializer(0.1, data_type),
@@ -230,13 +254,19 @@ def _kerasGRUImpl(instance,
         return_sequences=return_sequences,
         return_state=return_state,
         reset_after=False,
-        stateful=stateful)(inputs=x, initial_state=init, training=training)
+        stateful=stateful)
+    output = layer(inputs=x, initial_state=init, training=training)
 
   with instance.test_session() as sess:
     sess.run(variables.global_variables_initializer())
     outputs = []
+
+    # Run the op and any updates.
+    to_run = [output, [layer.updates]] if layer.updates else output
     for x_val in x_vals:
-      outputs.append(sess.run(output, {x: x_val, init: init_val}))
+      r = sess.run(to_run, {x: x_val, init_ph: init_val})
+      r = r[0] if layer.updates else r
+      outputs.append(r)
     return outputs
 
 
@@ -327,6 +357,22 @@ class IpuGruTest(test.TestCase):
                                   return_sequences=True)
 
     self.assertNotAllClose(dropout_none_result, dropout_most_result)
+
+  @test_util.deprecated_graph_mode_only
+  def test_gru_stateful(self):
+    x, init = self._get_random_inputs(num_samples=10)
+
+    cpu_result = _gruCPU(self, x, init, stateful=True)
+    ipu_result = _gruIPU(self, x, init, stateful=True)
+    self.assertAllClose(ipu_result, cpu_result)
+
+  @test_util.deprecated_graph_mode_only
+  def test_gru_stateful_time_major(self):
+    x, init = self._get_random_inputs(time_major=True, num_samples=10)
+
+    cpu_result = _gruCPU(self, x, init, stateful=True, time_major=True)
+    ipu_result = _gruIPU(self, x, init, stateful=True, time_major=True)
+    self.assertAllClose(ipu_result, cpu_result)
 
 
 if __name__ == '__main__':
