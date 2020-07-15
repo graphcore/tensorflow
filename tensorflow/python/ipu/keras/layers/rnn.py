@@ -147,6 +147,10 @@ class _PopnnRNN(Layer):
     if self._bias_initializer is None:
       self._bias_initializer = init_ops.zeros_initializer()
 
+    self._kernel_initializer = initializers.get(self._kernel_initializer)
+    self._recurrent_initializer = initializers.get(self._recurrent_initializer)
+    self._bias_initializer = initializers.get(self._bias_initializer)
+
     # Initialize the input weight tensor.
     kernel_shape = self.canonical_weight_shape
     kernel_shape[0] -= self.num_units
