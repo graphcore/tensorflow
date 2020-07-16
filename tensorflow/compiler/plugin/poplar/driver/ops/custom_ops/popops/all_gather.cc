@@ -13,17 +13,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/all_gather.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
-#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
-
-#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
-#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/service/hlo_instruction.h"
-#include "tensorflow/core/lib/core/errors.h"
 
 #include <popops/Collectives.hpp>
 #include <popops/DynamicSlice.hpp>
+
+#include "tensorflow/compiler/plugin/poplar/driver/ops/custom_ops/poplar_ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/poplar_util.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/core/lib/core/errors.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -41,7 +41,8 @@ class AllGatherOp : public PoplarOpDef {
                         FindInstructionInput(tensor_map, res, inst, 0, seq));
     // Replicated sum the concatenated tensor
     poplar::Tensor output =
-        popops::replicatedAllGather(graph, input, seq, GetDebugName(inst));
+        popops::replicatedAllGather(graph, input, seq, GetDebugName(inst),
+                                    GetReplicatedCollectiveOptions(res));
 
     TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, output));
     return seq;
