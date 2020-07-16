@@ -100,9 +100,8 @@ StatusOr<poplar::Tensor> ExecutionCounters::GetCounter(int64 shard) {
   if (!live_counters_[shard]) {
     // Requesting a counter which was not live, create it.
     poplar::Graph& graph = GetGraphForShard(resources_, shard);
-    counters_[shard] =
-        graph.addVariable(poplar::UNSIGNED_INT, {},
-                          absl::StrCat(name_, "/ExecutionCounter/", shard));
+    counters_[shard] = graph.addVariable(
+        poplar::INT, {}, absl::StrCat(name_, "/ExecutionCounter/", shard));
     graph.setTileMapping(counters_[shard], 0);
     live_counters_[shard] = true;
   }
@@ -159,7 +158,7 @@ poplar::program::Program ExecutionCounters::IncrementLiveCounters() const {
     if (live_counters_[shard]) {
       poplar::Graph& graph = GetGraphForShard(resources_, shard);
       popops::addInPlace(
-          graph, counters_[shard], 1U, seq,
+          graph, counters_[shard], 1, seq,
           absl::StrCat(name_, "/IncrementExecutionCounter/", shard));
     }
   }
