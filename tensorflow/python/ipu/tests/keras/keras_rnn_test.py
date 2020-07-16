@@ -16,6 +16,7 @@
 
 import numpy as np
 
+from tensorflow.python.keras.layers import recurrent_v2
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
@@ -33,201 +34,122 @@ batch_size = 1
 num_input = 3
 timesteps = 4
 num_hidden = 5
-dataType = np.float32
+data_type = np.float32
 
 
-def _tfLSTM(instance,
-            x_val,
-            h_val,
-            c_val,
-            return_sequences=False,
-            time_major=False):
-  with ops.device('cpu'):
-    x = array_ops.placeholder(x_val.dtype, x_val.shape)
-    h = array_ops.placeholder(h_val.dtype, h_val.shape)
-    c = array_ops.placeholder(c_val.dtype, c_val.shape)
-    lstm_cell = rnn_cell.LSTMCell(
-        num_hidden,
-        name='basic_lstm_cell',
-        forget_bias=0.,
-        initializer=init_ops.ones_initializer(dtype=dataType))
-    state = rnn_cell.LSTMStateTuple(c, h)
-    output = rnn.dynamic_rnn(lstm_cell,
-                             x,
-                             dtype=dataType,
-                             initial_state=state,
-                             time_major=time_major)
-
-  with instance.test_session() as sess:
-    sess.run(variables.global_variables_initializer())
-    out, outs = sess.run(output, {x: x_val, h: h_val, c: c_val})
-
-    if not return_sequences:
-      out = out[-1, :, :] if time_major else out[:, -1, :]
-
-    return out, outs[1], outs[0]
-
-
-def _new_kerasLSTM(instance,
-                   x_val,
+def _kerasLSTMImpl(instance,
+                   x_vals,
                    h_val,
                    c_val,
+                   keras_layer=None,
+                   device="cpu",
                    training=True,
                    return_state=True,
                    return_sequences=False,
                    time_major=False,
-                   dropout=0.):
-  with ops.device('/device:IPU:0'):
-    x = array_ops.placeholder(x_val.dtype, x_val.shape)
+                   dropout=0.,
+                   unit_forget_bias=False,
+                   stateful=False):
+
+  with ops.device(device):
+    x = array_ops.placeholder(x_vals[0].dtype, x_vals[0].shape)
     h = array_ops.placeholder(h_val.dtype, h_val.shape)
     c = array_ops.placeholder(c_val.dtype, c_val.shape)
-    state = rnn_cell.LSTMStateTuple(c, h)
 
-    output = ipu.layers.PopnnLSTM(
+    state = None if stateful else rnn_cell.LSTMStateTuple(c, h)
+
+    layer = keras_layer(
         num_hidden,
-        dtype=dataType,
-        kernel_initializer=init_ops.ones_initializer(dtype=dataType),
-        recurrent_initializer=init_ops.ones_initializer(dtype=dataType),
-        bias_initializer=init_ops.ones_initializer(dtype=dataType),
+        dtype=data_type,
+        kernel_initializer=init_ops.constant_initializer(0.1, data_type),
+        recurrent_initializer=init_ops.constant_initializer(0.2, data_type),
+        bias_initializer=init_ops.constant_initializer(0.3, data_type),
+        recurrent_activation="sigmoid",
         dropout=dropout,
         time_major=time_major,
         return_sequences=return_sequences,
-        return_state=return_state)(inputs=x,
-                                   initial_state=state,
-                                   training=training)
+        return_state=return_state,
+        unit_forget_bias=unit_forget_bias,
+        stateful=stateful)
+    output = layer(inputs=x, initial_state=state, training=training)
 
   with instance.test_session() as sess:
     sess.run(variables.global_variables_initializer())
-    return sess.run(output, {x: x_val, h: h_val, c: c_val})
+    outputs = []
+
+    # Run the op and any updates.
+    to_run = [output, [layer.updates]] if layer.updates else output
+    for x_val in x_vals:
+      r = sess.run(to_run, {x: x_val, h: h_val, c: c_val})
+      r = r[0] if layer.updates else r
+      outputs.append(r)
+    return outputs
 
 
-def _tfGRU(instance,
-           x_val,
-           initial_state_val,
-           return_sequences=False,
-           time_major=False):
-  with ops.device('cpu'):
-    x = array_ops.placeholder(x_val.dtype, x_val.shape)
-    initial_state = array_ops.placeholder(initial_state_val.dtype,
-                                          initial_state_val.shape)
-    gru_cell = rnn_cell.GRUCell(
-        num_hidden,
-        name='gru_cell',
-        kernel_initializer=init_ops.ones_initializer(dtype=dataType),
-        bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType))
-    output = rnn.dynamic_rnn(gru_cell,
-                             x,
-                             dtype=dataType,
-                             initial_state=initial_state,
-                             time_major=time_major)
-  with instance.test_session() as sess:
-    sess.run(variables.global_variables_initializer())
-    out, outs = sess.run(output, {x: x_val, initial_state: initial_state_val})
-
-    if not return_sequences:
-      out = out[-1, :, :] if time_major else out[:, -1, :]
-
-    return out, outs
+def _lstmIPU(*args, **kwargs):
+  return _kerasLSTMImpl(*args,
+                        **kwargs,
+                        keras_layer=ipu.layers.PopnnLSTM,
+                        device='/device:IPU:0')
 
 
-def _new_kerasGRU(instance,
-                  x_val,
-                  initial_state_val,
-                  training=True,
-                  return_state=True,
-                  return_sequences=False,
-                  time_major=False,
-                  dropout=0.):
-  with ops.device('/device:IPU:0'):
-    x = array_ops.placeholder(x_val.dtype, x_val.shape)
-    initial_state = array_ops.placeholder(initial_state_val.dtype,
-                                          initial_state_val.shape)
-    output = ipu.layers.PopnnGRU(
-        num_hidden,
-        dtype=dataType,
-        kernel_initializer=init_ops.ones_initializer(dtype=dataType),
-        bias_initializer=init_ops.constant_initializer(2.0, dtype=dataType),
-        dropout=dropout,
-        time_major=time_major,
-        return_sequences=return_sequences,
-        return_state=return_state)(inputs=x,
-                                   initial_state=initial_state,
-                                   training=training)
-
-  with instance.test_session() as sess:
-    sess.run(variables.global_variables_initializer())
-    return sess.run(output, {x: x_val, initial_state: initial_state_val})
+def _lstmCPU(*args, **kwargs):
+  return _kerasLSTMImpl(*args, **kwargs, keras_layer=recurrent_v2.LSTM)
 
 
 class IpuLstmTest(test.TestCase):
-  def _get_random_inputs(self, time_major=False):
+  def _get_random_inputs(self, time_major=False, num_samples=1):
     np.random.seed(42)
-    h = np.random.rand(batch_size, num_hidden).astype(dataType)
-    c = np.random.rand(batch_size, num_hidden).astype(dataType)
-    if time_major:
-      x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
-    else:
-      x = np.random.rand(batch_size, timesteps, num_input).astype(dataType)
-    return x, h, c
+    h = np.random.rand(batch_size, num_hidden).astype(data_type)
+    c = np.random.rand(batch_size, num_hidden).astype(data_type)
+    xs = []
+    for _ in range(num_samples):
+      shape = [timesteps, batch_size, num_input] \
+              if time_major else [batch_size, timesteps, num_input]
+      xs.append(np.random.rand(*shape).astype(data_type))
+    return xs, h, c
 
   @test_util.deprecated_graph_mode_only
   def test_lstm(self):
     x, h, c = self._get_random_inputs()
 
-    keras_result = _new_kerasLSTM(self, x, h, c)
-    result_tf = _tfLSTM(self, x, h, c)
-
-    self.assertEqual(len(keras_result), 3)
-    self.assertEqual(len(result_tf), 3)
-
-    self.assertAllClose(keras_result[0], result_tf[0], rtol=0.01)
-    self.assertAllClose(keras_result[1], result_tf[1], rtol=0.2)
-    self.assertAllClose(keras_result[2], result_tf[2], rtol=0.2)
-
-    self.assertNotAllClose(keras_result[0], np.ones([batch_size, num_hidden]))
-    self.assertEqual(keras_result[0].shape, (batch_size, num_hidden))
+    cpu_result = _lstmCPU(self, x, h, c)
+    ipu_result = _lstmIPU(self, x, h, c)
+    self.assertAllClose(ipu_result, cpu_result)
 
   @test_util.deprecated_graph_mode_only
   def test_lstm_time_major(self):
     x, h, c = self._get_random_inputs(time_major=True)
 
-    keras_result = _new_kerasLSTM(self, x, h, c, time_major=True)
-    result_tf = _tfLSTM(self, x, h, c, time_major=True)
+    cpu_result = _lstmCPU(self, x, h, c, time_major=True)
+    ipu_result = _lstmIPU(self, x, h, c, time_major=True)
+    self.assertAllClose(ipu_result, cpu_result)
 
-    self.assertEqual(len(keras_result), 3)
-    self.assertEqual(len(result_tf), 3)
+  @test_util.deprecated_graph_mode_only
+  def test_lstm_unit_forget_bias(self):
+    x, h, c = self._get_random_inputs()
 
-    self.assertAllClose(keras_result[0], result_tf[0], rtol=0.01)
-    self.assertAllClose(keras_result[1], result_tf[1], rtol=0.2)
-    self.assertAllClose(keras_result[2], result_tf[2], rtol=0.2)
-
-    self.assertNotAllClose(keras_result[0], np.ones([batch_size, num_hidden]))
-    self.assertEqual(keras_result[0].shape, (batch_size, num_hidden))
+    cpu_result = _lstmCPU(self, x, h, c, unit_forget_bias=True)
+    ipu_result = _lstmIPU(self, x, h, c, unit_forget_bias=True)
+    self.assertAllClose(ipu_result, cpu_result)
 
   @test_util.deprecated_graph_mode_only
   def test_lstm_all_seq(self):
     x, h, c = self._get_random_inputs()
 
-    keras_result = _new_kerasLSTM(self, x, h, c, return_sequences=True)
-    result_tf = _tfLSTM(self, x, h, c, return_sequences=True)
+    ipu_result = _lstmIPU(self, x, h, c, return_sequences=True)
+    cpu_result = _lstmCPU(self, x, h, c, return_sequences=True)
+    self.assertAllClose(ipu_result, cpu_result)
 
-    self.assertEqual(len(keras_result), 3)
-    self.assertEqual(len(result_tf), 3)
-
-    self.assertAllClose(keras_result[0], result_tf[0], rtol=0.05)
-    self.assertAllClose(keras_result[1], result_tf[1], rtol=0.2)
-    self.assertAllClose(keras_result[2], result_tf[2], rtol=0.2)
-
-    self.assertNotAllClose(keras_result[0], np.ones([batch_size, num_hidden]))
-    self.assertEqual(keras_result[0].shape,
+    self.assertEqual(ipu_result[0][0].shape,
                      (batch_size, timesteps, num_hidden))
 
   @test_util.deprecated_graph_mode_only
   def test_lstm_no_state(self):
     x, h, c = self._get_random_inputs()
 
-    keras_result = _new_kerasLSTM(self, x, h, c, return_state=False)
-    self.assertTrue(isinstance(keras_result, np.ndarray))
+    ipu_result = _lstmIPU(self, x, h, c, return_state=False)
+    self.assertTrue(isinstance(ipu_result[0], np.ndarray))
 
   @test_util.deprecated_graph_mode_only
   def test_no_dynamic_training(self):
@@ -235,7 +157,7 @@ class IpuLstmTest(test.TestCase):
 
     with self.assertRaisesRegex(ValueError,
                                 'PopnnLSTM does not support a dynamic'):
-      _new_kerasLSTM(self, x, h, c, training=None)
+      _lstmIPU(self, x, h, c, training=None)
 
   @test_util.deprecated_graph_mode_only
   def test_class_alias(self):
@@ -246,19 +168,18 @@ class IpuLstmTest(test.TestCase):
   def test_lstm_dropout(self):
     x, h, c = self._get_random_inputs()
 
-    dropout_none_result = _new_kerasLSTM(self,
-                                         x,
-                                         h,
-                                         c,
-                                         return_state=False,
-                                         dropout=0.)
-
-    dropout_most_result = _new_kerasLSTM(self,
-                                         x,
-                                         h,
-                                         c,
-                                         return_state=False,
-                                         dropout=0.9)
+    dropout_none_result = _lstmIPU(self,
+                                   x,
+                                   h,
+                                   c,
+                                   return_state=False,
+                                   dropout=0.)
+    dropout_most_result = _lstmIPU(self,
+                                   x,
+                                   h,
+                                   c,
+                                   return_state=False,
+                                   dropout=0.9)
 
     self.assertNotAllClose(dropout_none_result, dropout_most_result)
 
@@ -268,12 +189,12 @@ class IpuLstmTest(test.TestCase):
 
     layer = ipu.layers.PopnnLSTM(
         num_hidden,
-        dtype=dataType,
-        kernel_initializer=init_ops.random_uniform_initializer(seed=42,
-                                                               dtype=dataType),
+        dtype=data_type,
+        kernel_initializer=init_ops.random_uniform_initializer(
+            seed=42, dtype=data_type),
         recurrent_initializer=init_ops.random_uniform_initializer(
-            seed=42, dtype=dataType),
-        bias_initializer=init_ops.zeros_initializer(dtype=dataType))
+            seed=42, dtype=data_type),
+        bias_initializer=init_ops.zeros_initializer(dtype=data_type))
     layer.build(x.shape)
 
     @def_function.function
@@ -286,57 +207,124 @@ class IpuLstmTest(test.TestCase):
     self.assertEqual(layer.kernel.shape, [num_input, num_hidden * 4])
     _ = impl(x, c, h)
 
+  @test_util.deprecated_graph_mode_only
+  def test_lstm_stateful(self):
+    x, h, c = self._get_random_inputs(num_samples=10)
+
+    cpu_result = _lstmCPU(self, x, h, c, stateful=True)
+    ipu_result = _lstmIPU(self, x, h, c, stateful=True)
+    self.assertAllClose(ipu_result, cpu_result)
+
+  @test_util.deprecated_graph_mode_only
+  def test_lstm_stateful_time_major(self):
+    x, h, c = self._get_random_inputs(time_major=True, num_samples=10)
+
+    cpu_result = _lstmCPU(self, x, h, c, stateful=True, time_major=True)
+    ipu_result = _lstmIPU(self, x, h, c, stateful=True, time_major=True)
+    self.assertAllClose(ipu_result, cpu_result)
+
+
+def _kerasGRUImpl(instance,
+                  x_vals,
+                  init_val,
+                  keras_layer=None,
+                  device="cpu",
+                  training=True,
+                  return_state=True,
+                  return_sequences=False,
+                  time_major=False,
+                  dropout=0.,
+                  stateful=False):
+
+  with ops.device(device):
+    x = array_ops.placeholder(x_vals[0].dtype, x_vals[0].shape)
+    init_ph = array_ops.placeholder(init_val.dtype, init_val.shape)
+
+    init = None if stateful else init_ph
+
+    layer = keras_layer(
+        num_hidden,
+        dtype=data_type,
+        kernel_initializer=init_ops.constant_initializer(0.1, data_type),
+        recurrent_initializer=init_ops.constant_initializer(0.2, data_type),
+        bias_initializer=init_ops.constant_initializer(0.3, data_type),
+        recurrent_activation="sigmoid",
+        dropout=dropout,
+        time_major=time_major,
+        return_sequences=return_sequences,
+        return_state=return_state,
+        reset_after=False,
+        stateful=stateful)
+    output = layer(inputs=x, initial_state=init, training=training)
+
+  with instance.test_session() as sess:
+    sess.run(variables.global_variables_initializer())
+    outputs = []
+
+    # Run the op and any updates.
+    to_run = [output, [layer.updates]] if layer.updates else output
+    for x_val in x_vals:
+      r = sess.run(to_run, {x: x_val, init_ph: init_val})
+      r = r[0] if layer.updates else r
+      outputs.append(r)
+    return outputs
+
+
+def _gruIPU(*args, **kwargs):
+  return _kerasGRUImpl(*args,
+                       **kwargs,
+                       keras_layer=ipu.layers.PopnnGRU,
+                       device='/device:IPU:0')
+
+
+def _gruCPU(*args, **kwargs):
+  return _kerasGRUImpl(*args, **kwargs, keras_layer=recurrent_v2.GRU)
+
 
 class IpuGruTest(test.TestCase):
-  def _get_random_inputs(self, time_major=False):
-    np.random.seed(42)
-    init = np.random.rand(batch_size, num_hidden).astype(dataType)
-    if time_major:
-      x = np.random.rand(timesteps, batch_size, num_input).astype(dataType)
-    else:
-      x = np.random.rand(batch_size, timesteps, num_input).astype(dataType)
-    return x, init
+  def _get_random_inputs(self, time_major=False, num_samples=1):
+    np.random.seed(43)
+    init = np.random.rand(batch_size, num_hidden).astype(data_type)
+    xs = []
+    for _ in range(num_samples):
+      shape = [timesteps, batch_size, num_input] \
+              if time_major else [batch_size, timesteps, num_input]
+      xs.append(np.random.rand(*shape).astype(data_type))
+    return xs, init
 
   @test_util.deprecated_graph_mode_only
   def test_gru(self):
     x, init = self._get_random_inputs()
 
-    keras_result = _new_kerasGRU(self, x, init)
-    result_tf = _tfGRU(self, x, init)
-
-    self.assertAllClose(keras_result, result_tf)
-    self.assertNotAllClose(keras_result[0], np.ones([batch_size, num_hidden]))
-    self.assertEqual(keras_result[0].shape, (batch_size, num_hidden))
+    cpu_result = _gruCPU(self, x, init)
+    ipu_result = _gruIPU(self, x, init)
+    self.assertAllClose(ipu_result, cpu_result)
 
   @test_util.deprecated_graph_mode_only
   def test_gru_seq_major(self):
     x, init = self._get_random_inputs(True)
 
-    keras_result = _new_kerasGRU(self, x, init, time_major=True)
-    result_tf = _tfGRU(self, x, init, time_major=True)
-
-    self.assertAllClose(keras_result, result_tf)
-    self.assertNotAllClose(keras_result[0], np.ones([batch_size, num_hidden]))
-    self.assertEqual(keras_result[0].shape, (batch_size, num_hidden))
+    ipu_result = _gruIPU(self, x, init, time_major=True)
+    cpu_result = _gruCPU(self, x, init, time_major=True)
+    self.assertAllClose(ipu_result, cpu_result)
 
   @test_util.deprecated_graph_mode_only
   def test_gru_all_seq(self):
     x, init = self._get_random_inputs()
 
-    keras_result = _new_kerasGRU(self, x, init, return_sequences=True)
-    result_tf = _tfGRU(self, x, init, return_sequences=True)
+    ipu_result = _gruIPU(self, x, init, return_sequences=True)
+    cpu_result = _gruCPU(self, x, init, return_sequences=True)
 
-    self.assertAllClose(keras_result, result_tf)
-    self.assertNotAllClose(keras_result[0], np.ones([batch_size, num_hidden]))
-    self.assertEqual(keras_result[0].shape,
+    self.assertAllClose(ipu_result, cpu_result)
+    self.assertEqual(ipu_result[0][0].shape,
                      (batch_size, timesteps, num_hidden))
 
   @test_util.deprecated_graph_mode_only
   def test_gru_no_state(self):
     x, init = self._get_random_inputs()
 
-    keras_result = _new_kerasGRU(self, x, init, return_state=False)
-    self.assertTrue(isinstance(keras_result, np.ndarray))
+    ipu_result = _gruIPU(self, x, init, return_state=False)
+    self.assertTrue(isinstance(ipu_result[0], np.ndarray))
 
   @test_util.deprecated_graph_mode_only
   def test_no_dynamic_training(self):
@@ -344,7 +332,7 @@ class IpuGruTest(test.TestCase):
 
     with self.assertRaisesRegex(ValueError,
                                 'PopnnGRU does not support a dynamic'):
-      _new_kerasGRU(self, x, init, training=None)
+      _gruIPU(self, x, init, training=None)
 
   @test_util.deprecated_graph_mode_only
   def test_class_alias(self):
@@ -355,21 +343,36 @@ class IpuGruTest(test.TestCase):
   def test_gru_dropout(self):
     x, init = self._get_random_inputs()
 
-    dropout_none_result = _new_kerasGRU(self,
-                                        x,
-                                        init,
-                                        dropout=0.,
-                                        return_state=False,
-                                        return_sequences=True)
-
-    dropout_most_result = _new_kerasGRU(self,
-                                        x,
-                                        init,
-                                        dropout=0.9,
-                                        return_state=False,
-                                        return_sequences=True)
+    dropout_none_result = _gruIPU(self,
+                                  x,
+                                  init,
+                                  dropout=0.,
+                                  return_state=False,
+                                  return_sequences=True)
+    dropout_most_result = _gruIPU(self,
+                                  x,
+                                  init,
+                                  dropout=0.9,
+                                  return_state=False,
+                                  return_sequences=True)
 
     self.assertNotAllClose(dropout_none_result, dropout_most_result)
+
+  @test_util.deprecated_graph_mode_only
+  def test_gru_stateful(self):
+    x, init = self._get_random_inputs(num_samples=10)
+
+    cpu_result = _gruCPU(self, x, init, stateful=True)
+    ipu_result = _gruIPU(self, x, init, stateful=True)
+    self.assertAllClose(ipu_result, cpu_result)
+
+  @test_util.deprecated_graph_mode_only
+  def test_gru_stateful_time_major(self):
+    x, init = self._get_random_inputs(time_major=True, num_samples=10)
+
+    cpu_result = _gruCPU(self, x, init, stateful=True, time_major=True)
+    ipu_result = _gruIPU(self, x, init, stateful=True, time_major=True)
+    self.assertAllClose(ipu_result, cpu_result)
 
 
 if __name__ == '__main__':

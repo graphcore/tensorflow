@@ -319,20 +319,6 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
         break;
       }
       case HloOpcode::kCustomCall: {
-        const int64 output_idx = index[0];
-        // Inference RNNs don't output intermediates.
-        const bool is_fwd_lstm =
-            IsPoplarInstruction(PoplarOp::LstmLayerFwd)(inst);
-        const bool is_fwd_gru =
-            IsPoplarInstruction(PoplarOp::GRULayerFwd)(inst);
-        const int64 intermediates_idx = is_fwd_gru ? 2 : 3;
-        if (is_fwd_lstm || is_fwd_gru) {
-          auto rnn_inst = Cast<HloRNNFwdInstruction>(inst);
-          if (!rnn_inst->is_training() && output_idx == intermediates_idx) {
-            continue;
-          }
-        }
-
         // Dummy operation doesn't output tensors.
         if (IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(inst)) {
           CHECK(IsInstructionInEntryComputation(inst));
