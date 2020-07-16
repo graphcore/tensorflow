@@ -187,7 +187,8 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
 
     // All-Gather the indices from all replicas.
     indices = popops::replicatedAllGather(graph, indices, seq,
-                                          GetDebugName(inst) + "/indices");
+                                          GetDebugName(inst) + "/indices",
+                                          GetReplicatedCollectiveOptions(res));
 
     // Create a replication factor constant tensor.
     poplar::Tensor rep =
@@ -252,7 +253,8 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // results to the correct replica.
     host_sliceable.tensor = popops::replicatedReduceScatter(
         graph, host_sliceable.tensor.flatten(), popops::Operation::ADD, seq,
-        GetDebugName(inst) + "/reduce_scatter");
+        GetDebugName(inst) + "/reduce_scatter",
+        GetReplicatedCollectiveOptions(res));
 
     // Copy the result to the output tensor.
     seq.add(poplar::program::Copy(host_sliceable.tensor.reshape(output.shape()),
@@ -276,7 +278,8 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
 
     // All-Gather the indices from all replicas.
     indices = popops::replicatedAllGather(graph, indices, seq,
-                                          GetDebugName(inst) + "/indices");
+                                          GetDebugName(inst) + "/indices",
+                                          GetReplicatedCollectiveOptions(res));
 
     // Create the host sliceable temporary tensor.
     auto host_sliceable = popops::createHostSliceableTensor(
@@ -299,7 +302,8 @@ class HostEmbeddingLookupOp : public PoplarOpDef {
     // We also recieve the columns we requested from the other replicas.
     host_sliceable.tensor = popops::allToAllPersonalizedExchange(
         graph, host_sliceable.tensor, seq,
-        GetDebugName(inst) + "/exchange_columns");
+        GetDebugName(inst) + "/exchange_columns",
+        GetReplicatedCollectiveOptions(res));
 
     // Dimshuffle and reshape back to the output shape.
     host_sliceable.tensor = host_sliceable.tensor.dimShuffle({1, 0, 2});
@@ -444,12 +448,14 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map) {
     // All-Gather the indices from all replicas.
     indices = popops::replicatedAllGather(graph, indices, seq,
-                                          GetDebugName(inst) + "/indices");
+                                          GetDebugName(inst) + "/indices",
+                                          GetReplicatedCollectiveOptions(res));
     indices = indices.flatten(0, 2);
 
     // All-Gather the grads from all replicas.
     grads = popops::replicatedAllGather(graph, grads, seq,
-                                        GetDebugName(inst) + "/grads");
+                                        GetDebugName(inst) + "/grads",
+                                        GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
     // Create the host sliceable temporary tensor.
@@ -534,7 +540,8 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
       const xla::Shape& output_shape, TensorMap& tensor_map) {
     // All-Gather the indices from all replicas.
     indices = popops::replicatedAllGather(graph, indices, seq,
-                                          GetDebugName(inst) + "/indices");
+                                          GetDebugName(inst) + "/indices",
+                                          GetReplicatedCollectiveOptions(res));
 
     // Check whether we need to pad the gradients because the replication factor
     // isn't a factor of the encoding width.
@@ -551,7 +558,8 @@ class HostEmbeddingUpdateOp : public PoplarOpDef {
 
     // All-To-All exchange the grad columns with their respective replicas.
     grads = popops::allToAllPersonalizedExchange(
-        graph, grads, seq, GetDebugName(inst) + "/exchange_columns");
+        graph, grads, seq, GetDebugName(inst) + "/exchange_columns",
+        GetReplicatedCollectiveOptions(res));
     grads = grads.flatten(0, 2);
 
     // Create the host sliceable temporary tensor.

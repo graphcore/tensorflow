@@ -19,6 +19,12 @@ limitations under the License.
  * These functions are related to poplar, and cannot be used within the
  * optimizers target in the BUILD file.
  */
+#include <poplar/Program.hpp>
+#include <poplar/exceptions.hpp>
+#include <poplin/Convolution.hpp>
+#include <popnn/Pooling.hpp>
+#include <popops/Expr.hpp>
+#include <poputil/exceptions.hpp>
 #include <string>
 #include <vector>
 
@@ -35,13 +41,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
-
-#include <poplar/Program.hpp>
-#include <poplar/exceptions.hpp>
-#include <poplin/Convolution.hpp>
-#include <popnn/Pooling.hpp>
-#include <popops/Expr.hpp>
-#include <poputil/exceptions.hpp>
 
 namespace poplar {
 class Graph;
@@ -90,6 +89,9 @@ Status PoplarExceptionToTensorflowStatus(const std::string& origin,
 
 void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
                          const std::string& value);
+
+poplar::OptionFlags GetReplicatedCollectiveOptions(
+    const CompilerResources& res);
 
 poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res);
 

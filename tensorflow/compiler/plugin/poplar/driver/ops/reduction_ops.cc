@@ -953,7 +953,8 @@ StatusOr<poplar::program::Program> CreateReplicatedAllToAll(
   } else {
     // Perfom the actual Replica->Replica exchange version.
     output_tensor = popops::allToAllPersonalizedExchange(
-        graph, target_input, seq, GetDebugName(inst));
+        graph, target_input, seq, GetDebugName(inst),
+        GetReplicatedCollectiveOptions(res));
   }
 
   for (int i = 0; i < inst->operand_count(); ++i) {
