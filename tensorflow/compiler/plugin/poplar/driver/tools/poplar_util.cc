@@ -213,14 +213,21 @@ void SetFlagIfNotPresent(poplar::OptionFlags& opts, const std::string& key,
   opts.set(key, value);
 }
 
-poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res) {
+poplar::OptionFlags GetReplicatedCollectiveOptions(
+    const CompilerResources& res) {
   poplar::OptionFlags options;
-  options.set("useReplicatedImplementation", "true");
 
+  // Set the GCL options
   for (const auto& opt : res.gcl_options) {
     options.set(opt.first, opt.second);
   }
 
+  return options;
+}
+
+poplar::OptionFlags GetReplicateAllReduceOptions(const CompilerResources& res) {
+  poplar::OptionFlags options = GetReplicatedCollectiveOptions(res);
+  options.set("useReplicatedImplementation", "true");
   return options;
 }
 
