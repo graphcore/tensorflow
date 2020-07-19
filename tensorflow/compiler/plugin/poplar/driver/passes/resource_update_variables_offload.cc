@@ -257,16 +257,28 @@ StatusOr<bool> ResourceUpdateVariablesOffload::Optimize(
     TF_RETURN_IF_ERROR(
         offload_info.input_in_resource_update->ReplaceAllUsesWith(remote_load));
 
-    // Add a remote store for the updated value inside the resource update.
-    HloInstruction* remote_store = resource_update_comp->AddInstruction(
-        CreateHloRemoteParameterStore(offload_info.input_in_resource_update,
-                                      offload_info.output_in_resource_update));
-    TF_RETURN_IF_ERROR(offload_info.output_in_resource_update->ReplaceUseWith(
-        resource_update_comp->root_instruction(), remote_store));
+    // If the input and output are the same instruction, then we use the remote
+    // resource but don't modify it. In this case we simply reconnect the input
+    // remote buffer to the original output position.
+    if (offload_info.input_in_resource_update ==
+        offload_info.output_in_resource_update) {
+      TF_RETURN_IF_ERROR(
+          remote_load->ReplaceUseWith(resource_update_comp->root_instruction(),
+                                      offload_info.input_in_resource_update));
+    } else {
+      // Add a remote store for the updated value inside the resource update.
+      HloInstruction* remote_store =
+          resource_update_comp->AddInstruction(CreateHloRemoteParameterStore(
+              offload_info.input_in_resource_update,
+              offload_info.output_in_resource_update));
 
-    // Mark this input as being stored in a remote buffer.
-    annotations_.remote_parameter_infos.insert(
-        RemoteParameterInfo{offload_info.entry_param_number});
+      TF_RETURN_IF_ERROR(offload_info.output_in_resource_update->ReplaceUseWith(
+          resource_update_comp->root_instruction(), remote_store));
+
+      // Mark this input as being stored in a remote buffer.
+      annotations_.remote_parameter_infos.insert(
+          RemoteParameterInfo{offload_info.entry_param_number});
+    }
   }
 
   return true;

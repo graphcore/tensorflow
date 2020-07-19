@@ -737,6 +737,100 @@ ENTRY e {
   EXPECT_FALSE(changed);
 }
 
+// Add a test case which checks that a read-only offloaded variable is loaded,
+// but no store instruction is created.
+TEST_F(ResourceUpdateVariablesOffloadTest, ReadOnly) {
+  std::string hlo = R"(
+HloModule top
+
+resource_update {
+  arg0 = f32[1,4,4,2] parameter(0)
+  arg1 = f32[1,4,4,2] parameter(1)
+  arg2 = f32[1,4,4,2] parameter(2)
+  arg3 = f32[1,4,4,2] parameter(3)
+  arg2_new = f32[1,4,4,2] add(arg2, arg0)
+  arg3_new = f32[1,4,4,2] add(arg3, arg1)
+  arg3_new_new = f32[1,4,4,2] add(arg3_new, arg2_new)
+  ROOT t = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(arg0, arg1, arg2, arg3_new_new)
+}
+
+loop {
+  after-all = token[] after-all()
+  infeed = (f32[1,4,4,2], token[]) infeed(after-all), infeed_config="140121807314576"
+  in0 = f32[1,4,4,2] get-tuple-element(infeed), index=0
+  in1 = f32[1,4,4,2] parameter(0)
+  add1 = f32[1,4,4,2] add(in0, in1)
+  in2 = f32[1,4,4,2] parameter(1)
+  add2 = f32[1,4,4,2] add(in0, in2)
+  in3 = f32[1,4,4,2] parameter(2)
+  in4 = f32[1,4,4,2] parameter(3)
+  call_ru = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(add1, add2, in3, in4), to_apply=resource_update, frontend_attributes={CALL_CONFIG_TYPE=ResourceUpdate}, backend_config="{\"callConfig\":{\"type\":\"ResourceUpdate\",\"resourceUpdateConfig\":{\"offloadVariables\":true}}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(call_ru), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(call_ru), index=1
+  gte2 = f32[1,4,4,2] get-tuple-element(call_ru), index=2
+  gte3 = f32[1,4,4,2] get-tuple-element(call_ru), index=3
+  ROOT tuple = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, gte3)
+}
+
+ENTRY e {
+  e.in0 = f32[1,4,4,2] parameter(0), parameter_replication={false}
+  e.in1 = f32[1,4,4,2] parameter(1), parameter_replication={false}
+  e.in2 = f32[1,4,4,2] parameter(2), parameter_replication={false}
+  e.in3 = f32[1,4,4,2] parameter(3), parameter_replication={false}
+  e.call = (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) call(e.in0, e.in1, e.in2, e.in3), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+  gte0 = f32[1,4,4,2] get-tuple-element(e.call), index=0
+  gte1 = f32[1,4,4,2] get-tuple-element(e.call), index=1
+  gte2 = f32[1,4,4,2] get-tuple-element(e.call), index=2
+  gte3 = f32[1,4,4,2] get-tuple-element(e.call), index=3
+  ROOT t =  (f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2], f32[1,4,4,2]) tuple(gte0, gte1, gte2, gte3)
+}
+)";
+  auto config = GetModuleConfigForTest();
+  config.set_resource_input_count(4);
+  config.set_input_mapping({0, 1, 2, 3});
+  config.set_resource_update_to_input_index({0, 1, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo, config));
+
+  CompilerAnnotations annotations(module.get());
+  ResourceUpdateVariablesOffload prvo(annotations, true);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, prvo.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  auto root = module->entry_computation()->root_instruction();
+  HloComputation* repeat_computation = root->operand(0)->operand(0)->to_apply();
+  HloInstruction* repeat_root = repeat_computation->root_instruction();
+  HloComputation* resource_update =
+      repeat_root->mutable_operand(0)->mutable_operand(0)->to_apply();
+  EXPECT_EQ(resource_update->num_parameters(), 4);
+  EXPECT_EQ(ShapeUtil::TupleElementCount(
+                resource_update->root_instruction()->shape()),
+            4);
+
+  // Check there is 1 store and 2 loads.
+  auto insts = resource_update->instructions();
+  EXPECT_EQ(absl::c_count_if(
+                insts, IsPoplarInstruction(PoplarOp::RemoteParameterStore)),
+            1);
+  EXPECT_EQ(absl::c_count_if(
+                insts, IsPoplarInstruction(PoplarOp::RemoteParameterLoad)),
+            2);
+
+  HloInstruction* resource_update_root = resource_update->root_instruction();
+
+  // Expect the first three inputs to be pass-through.
+  for (int i : {0, 1, 2}) {
+    const HloInstruction* operand = resource_update_root->operand(i);
+    EXPECT_EQ(operand->opcode(), HloOpcode::kParameter);
+  }
+
+  // The final input should be updated with a store.
+  const HloInstruction* final_operand = resource_update_root->operand(3);
+  EXPECT_EQ(final_operand->opcode(), HloOpcode::kCustomCall);
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::RemoteParameterStore)(final_operand));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
