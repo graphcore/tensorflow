@@ -1106,7 +1106,7 @@ Status InplaceDeferredVisitor::HandleParameterTensor(
     // Add the remote buffer to the computation inputs.
     computation_inputs_[param_num]
                        [input_location.flattened_output_tuple_index] =
-                           *callsite_tensor;
+                           callsite_tensor->AsRemoteBuffer();
 
     TF_CHECK_OK(AddOutputRemoteBuffer(
         tensor_map, input_location.instruction,
