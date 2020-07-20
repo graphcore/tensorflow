@@ -613,13 +613,17 @@ poplar::program::Sequence TensorCopyWithAliasing(poplar::Graph& graph,
   poplar::program::Sequence seq;
   poplar::Tensor src_flat = src.flatten();
   poplar::Tensor dst_flat = dst.flatten();
-  // Get the aliasing information.
-  std::vector<std::vector<poplar::Interval>> flat_dealiased_intervals =
-      graph.getSortedContiguousRegions(src_flat, {{0, src_flat.numElements()}},
-                                       true);
-  // Dealias inputs and outputs.
-  src_flat = poplar::concat(src_flat.slices(flat_dealiased_intervals));
-  dst_flat = poplar::concat(dst_flat.slices(flat_dealiased_intervals));
+
+  if (src_flat.containsAliases()) {
+    // Get the aliasing information.
+    std::vector<std::vector<poplar::Interval>> flat_dealiased_intervals =
+        graph.getSortedContiguousRegions(src_flat,
+                                         {{0, src_flat.numElements()}}, true);
+    // Dealias source and destination.
+    src_flat = poplar::concat(src_flat.slices(flat_dealiased_intervals));
+    dst_flat = poplar::concat(dst_flat.slices(flat_dealiased_intervals));
+  }
+
   seq.add(poplar::program::Copy(src_flat, dst_flat));
   return seq;
 }

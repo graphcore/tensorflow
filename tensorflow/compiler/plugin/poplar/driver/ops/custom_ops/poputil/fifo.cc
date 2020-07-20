@@ -68,6 +68,28 @@ Status AddWriteUndefToFIFOBuffer(const HloInstruction* inst,
   return Status::OK();
 }
 
+void IncreaseCounter(poplar::Graph& graph, poplar::Tensor& counter, int64 depth,
+                     poplar::program::Sequence& seq,
+                     const std::string& debug_name) {
+  // A slightly faster path if the depth is a power of two
+  // counter = (counter + 1) % depth
+  if (is_powerof2(depth)) {
+    popops::mapInPlace(
+        graph,
+        popops::expr::BitwiseAnd(
+            popops::expr::Add(popops::expr::_1, popops::expr::Const(1)),
+            popops::expr::Const(find_powerof2_mask(depth))),
+        {counter}, seq, debug_name + "/CounterIncreaseMask");
+  } else {
+    popops::mapInPlace(
+        graph,
+        popops::expr::Rem(
+            popops::expr::Add(popops::expr::_1, popops::expr::Const(1)),
+            popops::expr::Const(depth)),
+        {counter}, seq, debug_name + "/CounterIncreaseMod");
+  }
+}
+
 std::map<std::size_t, poplar::Interval> GetInverseIntervalsMap(
     const std::vector<poplar::Interval>& intervals) {
   std::map<std::size_t, poplar::Interval> result;
@@ -80,6 +102,107 @@ std::map<std::size_t, poplar::Interval> GetInverseIntervalsMap(
     offset += interval.size();
   }
   return result;
+}
+
+// Helper struct for storing information about tensor aliasing when a tensor is
+// passed between instructions.
+struct TensorAliasingInformation {
+  // Indicates whether a tensor has aliasing, if not, other fields are not
+  // populated.
+  bool has_aliasing;
+
+  // Intervals for the given tensor.
+  std::vector<poplar::Interval> contiguous_intervals;
+
+  // The interval map will store the interval begining to the interval it
+  // aliases.
+  std::map<std::size_t, poplar::Interval> interval_map;
+
+  // Inverse map for reconstructing a tensor with aliasing from intervals.
+  std::map<std::size_t, poplar::Interval> inverse_map;
+};
+
+std::pair<poplar::Tensor, TensorAliasingInformation>
+GetAliasingInformationAndDealiesedTensor(poplar::Graph& graph,
+                                         const poplar::Tensor& tensor) {
+  CHECK_EQ(tensor.rank(), 1);
+
+  TensorAliasingInformation info;
+
+  if (!tensor.containsAliases()) {
+    info.has_aliasing = false;
+    return std::make_pair(tensor, info);
+  }
+
+  // Get the aliasing information.
+  std::vector<std::size_t> interval_aliases;
+  std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
+      graph.getSortedContiguousRegions(tensor, {{0, tensor.numElements()}},
+                                       false, &interval_aliases);
+  // Get the intervals for the flat input.
+  std::vector<poplar::Interval> contiguous_intervals =
+      tensor.getContiguousRegions();
+
+  // Flatten the sorted contiguous intervals so that we can easily map it
+  // to the aliasing information.
+  std::vector<poplar::Interval> flat_intervals;
+  // The interval map will store the interval begining to the interval it
+  // aliases.
+  std::map<std::size_t, poplar::Interval> interval_map;
+  for (auto& intervals : sorted_contiguous_intervals) {
+    flat_intervals.insert(flat_intervals.end(), intervals.begin(),
+                          intervals.end());
+    absl::c_transform(intervals,
+                      std::inserter(interval_map, std::begin(interval_map)),
+                      [](const poplar::Interval& interval) {
+                        return std::make_pair(interval.begin(), interval);
+                      });
+  }
+  CHECK_EQ(interval_aliases.size(), flat_intervals.size());
+  CHECK_EQ(contiguous_intervals.size(), flat_intervals.size());
+
+  // Update the aliasing map and get all the intervals with no aliasing.
+  std::vector<poplar::Interval> flat_dealiased_intervals;
+  for (size_t i = 0; i != flat_intervals.size(); ++i) {
+    poplar::Interval& interval = flat_intervals[i];
+    if (interval.begin() == interval_aliases[i]) {
+      flat_dealiased_intervals.push_back(interval);
+    } else {
+      interval_map[interval.begin()] = interval_map.at(interval_aliases[i]);
+    }
+  }
+
+  // Dealias the input given the intervals.
+  poplar::Tensor dealised_tensor =
+      poplar::concat(tensor.slices(flat_dealiased_intervals));
+
+  info.has_aliasing = true;
+  info.contiguous_intervals = contiguous_intervals;
+  info.interval_map = interval_map;
+  info.inverse_map = GetInverseIntervalsMap(flat_dealiased_intervals);
+  return std::make_pair(dealised_tensor, info);
+}
+
+poplar::Tensor AddAliasing(const poplar::Tensor& tensor,
+                           const TensorAliasingInformation& info) {
+  if (!info.has_aliasing) {
+    return tensor;
+  }
+
+  std::vector<poplar::Tensor> output_regions(info.contiguous_intervals.size());
+  for (size_t i = 0; i != info.contiguous_intervals.size(); ++i) {
+    const poplar::Interval& interval = info.contiguous_intervals.at(i);
+    // First lookup the interval map to look through any aliasing.
+    const poplar::Interval& aliased_interval =
+        info.interval_map.at(interval.begin());
+    // Get the output interval for that unaliased interval.
+    const poplar::Interval& output_interval =
+        info.inverse_map.at(aliased_interval.begin());
+    output_regions[i] = tensor.slice(output_interval);
+  }
+
+  // Concatenate the regions and reshape accordingly.
+  return poplar::concat(output_regions);
 }
 
 class FifoOp : public PoplarOpDef {
@@ -119,15 +242,18 @@ class FifoOp : public PoplarOpDef {
         // Flatten inputs and outputs.
         poplar::Tensor input_flat = input.flatten();
         poplar::Tensor output_flat = output.flatten();
-        // Get the aliasing information.
-        std::vector<std::vector<poplar::Interval>> flat_dealiased_intervals =
-            graph.getSortedContiguousRegions(
-                input_flat, {{0, input_flat.numElements()}}, true);
-        // Dealias inputs and outputs.
-        input_flat =
-            poplar::concat(input_flat.slices(flat_dealiased_intervals));
-        output_flat =
-            poplar::concat(output_flat.slices(flat_dealiased_intervals));
+
+        if (input_flat.containsAliases()) {
+          // Get the aliasing information.
+          std::vector<std::vector<poplar::Interval>> flat_dealiased_intervals =
+              graph.getSortedContiguousRegions(
+                  input_flat, {{0, input_flat.numElements()}}, true);
+          // Dealias inputs and outputs.
+          input_flat =
+              poplar::concat(input_flat.slices(flat_dealiased_intervals));
+          output_flat =
+              poplar::concat(output_flat.slices(flat_dealiased_intervals));
+        }
 
         // Create a buffer of the given depth and the same mapping as the
         // input.
@@ -135,6 +261,7 @@ class FifoOp : public PoplarOpDef {
             input_flat, absl::StrCat(debug_name, "/buffer/", tuple_idx),
             poplar::TensorCloneMethod::PRESERVE_ORDER_AND_ALIASES);
         TF_RETURN_IF_ERROR(AddWriteUndefToFIFOBuffer(inst, buffer, res));
+
         // Copy the content of the buffer to the output.
         seq.add(poplar::program::Copy(buffer, output_flat));
 
@@ -155,47 +282,11 @@ class FifoOp : public PoplarOpDef {
       // Flatten the input.
       poplar::Tensor input_flat = input.flatten();
 
-      // Get the aliasing information.
-      std::vector<std::size_t> interval_aliases;
-      std::vector<std::vector<poplar::Interval>> sorted_contiguous_intervals =
-          graph.getSortedContiguousRegions(input_flat,
-                                           {{0, input_flat.numElements()}},
-                                           false, &interval_aliases);
-      // Get the intervals for the flat input.
-      std::vector<poplar::Interval> contiguous_intervals =
-          input_flat.getContiguousRegions();
-
-      // Flatten the sorted contiguous intervals so that we can easily map it
-      // to the aliasing information.
-      std::vector<poplar::Interval> flat_intervals;
-      // The interval map will store the interval begining to the interval it
-      // aliases.
-      std::map<std::size_t, poplar::Interval> interval_map;
-      for (auto& intervals : sorted_contiguous_intervals) {
-        flat_intervals.insert(flat_intervals.end(), intervals.begin(),
-                              intervals.end());
-        absl::c_transform(intervals,
-                          std::inserter(interval_map, std::begin(interval_map)),
-                          [](const poplar::Interval& interval) {
-                            return std::make_pair(interval.begin(), interval);
-                          });
-      }
-      CHECK_EQ(interval_aliases.size(), flat_intervals.size());
-      CHECK_EQ(contiguous_intervals.size(), flat_intervals.size());
-
-      // Update the aliasing map and get all the intervals with no aliasing.
-      std::vector<poplar::Interval> flat_dealiased_intervals;
-      for (size_t i = 0; i != flat_intervals.size(); ++i) {
-        poplar::Interval& interval = flat_intervals[i];
-        if (interval.begin() == interval_aliases[i]) {
-          flat_dealiased_intervals.push_back(interval);
-        } else {
-          interval_map[interval.begin()] = interval_map.at(interval_aliases[i]);
-        }
-      }
-
-      // Dealias the input given the intervals.
-      input_flat = poplar::concat(input_flat.slices(flat_dealiased_intervals));
+      // Remove any aliasing from the tensor to make sure the FIFO is as small
+      // as possible.
+      TensorAliasingInformation info;
+      std::tie(input_flat, info) =
+          GetAliasingInformationAndDealiesedTensor(graph, input_flat);
 
       // Create a buffer of the given depth and the same mapping as the input.
       const size_t fifo_depth = fifo_inst->depth();
@@ -211,52 +302,19 @@ class FifoOp : public PoplarOpDef {
                                absl::StrCat(debug_name, "/pop/", tuple_idx))
               .squeeze({0});
 
-      // Reconstruct the output tensor from the intervals.
-      // Create an inverse map - note that we only map the intervals with no
-      // aliasing.
-      std::map<std::size_t, poplar::Interval> inverse_map =
-          GetInverseIntervalsMap(flat_dealiased_intervals);
-
-      std::vector<poplar::Tensor> output_regions(contiguous_intervals.size());
-      for (size_t i = 0; i != contiguous_intervals.size(); ++i) {
-        poplar::Interval& interval = contiguous_intervals[i];
-        // First lookup the interval map to look through any aliasing.
-        poplar::Interval& aliased_interval = interval_map.at(interval.begin());
-        // Get the output interval for that unaliased interval.
-        poplar::Interval& output_interval =
-            inverse_map.at(aliased_interval.begin());
-        output_regions[i] = output_flat.slice(output_interval);
-      }
-
-      // Concatenate the regions and reshape accordingly.
-      poplar::Tensor output =
-          poplar::concat(output_regions).reshape(input.shape());
-
-      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
-
       // Update the buffer with the new value.
       popops::dynamicUpdate(graph, buffer, input_flat.expand({0}),
                             counter.reshape({1}), {0}, {1}, seq,
                             absl::StrCat(debug_name, "/push/", tuple_idx));
+
+      // Add the aliasing information back in.
+      output_flat = AddAliasing(output_flat, info);
+      poplar::Tensor output = output_flat.reshape(input.shape());
+
+      TF_CHECK_OK(AddOutputTensor(tensor_map, inst, tuple_idx, output));
     }
 
-    // A slightly faster path if the depth is a power of two
-    // counter = (counter + 1) % depth
-    if (is_powerof2(fifo_inst->depth())) {
-      popops::mapInPlace(
-          graph,
-          popops::expr::BitwiseAnd(
-              popops::expr::Add(popops::expr::_1, popops::expr::Const(1)),
-              popops::expr::Const(find_powerof2_mask(fifo_inst->depth()))),
-          {counter}, seq, debug_name + "/counter_inc_mask");
-    } else {
-      popops::mapInPlace(
-          graph,
-          popops::expr::Rem(
-              popops::expr::Add(popops::expr::_1, popops::expr::Const(1)),
-              popops::expr::Const(fifo_inst->depth())),
-          {counter}, seq, debug_name + "/counter_inc_mod");
-    }
+    IncreaseCounter(graph, counter, fifo_inst->depth(), seq, debug_name);
     return seq;
   }
 };
