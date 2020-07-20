@@ -66,8 +66,10 @@ StatusOr<poplar::program::Program> IpuInterCopyOp::Creator(
                                      inst->name());
     }
 
-    auto operand_tensors =
-        FindInstructionInputs(tensor_map, res, inst, i, seq, false);
+    TF_ASSIGN_OR_RETURN(
+        auto operand_tensors,
+        FindInstructionInputTensors(tensor_map, res, inst, i, seq, false));
+
     // Only copy the tensors where the sharding doesn't match.
     for (size_t index = 0; index < src_sharding.size(); ++index) {
       if (src_sharding[index] != dst_sharding[index]) {

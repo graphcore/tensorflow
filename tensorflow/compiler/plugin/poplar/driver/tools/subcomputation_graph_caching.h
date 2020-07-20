@@ -37,7 +37,7 @@ class SubcomputationGraphCache {
  public:
   // Get or compile the DeferredVisitor for a computation.
   StatusOr<std::shared_ptr<DeferredVisitor>> GetOrCompileSubcomputation(
-      CompilerResources& res, TensorVectors& inputs,
+      CompilerResources& res, TensorOrRemoteBufferVectors& inputs,
       const HloComputation* computation);
 
  private:
