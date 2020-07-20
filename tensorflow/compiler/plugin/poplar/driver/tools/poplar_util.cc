@@ -544,49 +544,44 @@ std::string GetTensorMappingJson(const std::string& module_name,
 
     for (auto tensor : tm.tensor_map) {
       const auto& pop_tensor = tensor.tensor;
-      if (pop_tensor.IsTensor()) {
-        const auto& mapping = graph.getTileMapping(pop_tensor);
-        Json::Value tiles = Json::Value(Json::arrayValue);
+      const auto& mapping = graph.getTileMapping(pop_tensor);
+      Json::Value tiles = Json::Value(Json::arrayValue);
 
-        size_t total_elements = 0;
-        for (size_t tile_idx = 0; tile_idx < mapping.size(); tile_idx++) {
-          const auto& tile = mapping[tile_idx];
-          if (tile.size() > 0) {
-            size_t element_count = 0;
-            for (const auto& interval : tile) {
-              element_count += interval.size();
-            }
-            Json::Value tile_info(Json::arrayValue);
-            tile_info.append(Json::Value::UInt64(tile_idx));
-            tile_info.append(Json::Value::UInt64(element_count));
-            tiles.append(tile_info);
-
-            total_elements += element_count;
+      size_t total_elements = 0;
+      for (size_t tile_idx = 0; tile_idx < mapping.size(); tile_idx++) {
+        const auto& tile = mapping[tile_idx];
+        if (tile.size() > 0) {
+          size_t element_count = 0;
+          for (const auto& interval : tile) {
+            element_count += interval.size();
           }
+          Json::Value tile_info(Json::arrayValue);
+          tile_info.append(Json::Value::UInt64(tile_idx));
+          tile_info.append(Json::Value::UInt64(element_count));
+          tiles.append(tile_info);
+
+          total_elements += element_count;
         }
-
-        Json::Value tensor_shape(Json::arrayValue);
-        for (auto d : pop_tensor.AsTensor().shape()) {
-          tensor_shape.append(Json::Value::UInt64(d));
-        }
-
-        Json::Value js_tensor(Json::arrayValue);
-        js_tensor.append(Json::Value(tensor.location.instruction->name()));
-        js_tensor.append(
-            Json::Value::UInt64(tensor.location.flattened_output_tuple_index));
-        js_tensor.append(tensor_shape);
-        js_tensor.append(
-            Json::Value(pop_tensor.AsTensor().elementType().toString()));
-        js_tensor.append(
-            Json::Value::UInt64(pop_tensor.AsTensor().containsConstant()));
-        js_tensor.append(
-            Json::Value::UInt64(pop_tensor.AsTensor().containsAliases()));
-        js_tensor.append(Json::Value::UInt64(total_elements));
-        js_tensor.append(tiles);
-        js_tensor.append(Json::Value(tensor.name));
-
-        mappings[tm.computation].append(js_tensor);
       }
+
+      Json::Value tensor_shape(Json::arrayValue);
+      for (auto d : pop_tensor.shape()) {
+        tensor_shape.append(Json::Value::UInt64(d));
+      }
+
+      Json::Value js_tensor(Json::arrayValue);
+      js_tensor.append(Json::Value(tensor.location.instruction->name()));
+      js_tensor.append(
+          Json::Value::UInt64(tensor.location.flattened_output_tuple_index));
+      js_tensor.append(tensor_shape);
+      js_tensor.append(Json::Value(pop_tensor.elementType().toString()));
+      js_tensor.append(Json::Value::UInt64(pop_tensor.containsConstant()));
+      js_tensor.append(Json::Value::UInt64(pop_tensor.containsAliases()));
+      js_tensor.append(Json::Value::UInt64(total_elements));
+      js_tensor.append(tiles);
+      js_tensor.append(Json::Value(tensor.name));
+
+      mappings[tm.computation].append(js_tensor);
     }
   }
 
@@ -653,15 +648,6 @@ StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
 
 DeferredArgVectors ConvertInputsToDeferredInputs(TensorVectors& inputs) {
   DeferredArgVectors deferred_inputs(inputs.size());
-  for (uint64 i = 0; i != inputs.size(); ++i) {
-    deferred_inputs[i] = {inputs[i].begin(), inputs[i].end()};
-  }
-  return deferred_inputs;
-}
-
-DeferredArgRBVectors ConvertInputsToDeferredInputs(
-    TensorOrRemoteBufferVectors& inputs) {
-  DeferredArgRBVectors deferred_inputs(inputs.size());
   for (uint64 i = 0; i != inputs.size(); ++i) {
     deferred_inputs[i] = {inputs[i].begin(), inputs[i].end()};
   }

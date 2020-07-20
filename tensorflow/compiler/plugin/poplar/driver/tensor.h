@@ -55,9 +55,6 @@ poplar::Tensor ConvertFromDeviceLayout(const Shape& shape,
 bool PoplarShapeMatchesXLAShape(const poplar::Tensor& tensor,
                                 const xla::Shape& shape);
 
-bool PoplarShapeMatchesXLAShape(poplar::RemoteBuffer remote_buffer,
-                                const xla::Shape& shape);
-
 // Concatenate all tensors into a single tensor.
 poplar::Tensor FlattenAndConcatenateTensors(
     const std::vector<poplar::Tensor>& tensors);
@@ -179,66 +176,16 @@ StatusOr<poplar::Tensor> BroadcastTensor(
 Status AddOutputTensor(TensorMap& map, const HloInstruction* inst, int64 n,
                        const poplar::Tensor& tensor);
 
-Status AddOutputRemoteBuffer(TensorMap& map, const HloInstruction* inst,
-                             int64 n, poplar::RemoteBuffer rbuffer);
-
 /* This returns a [range) which correspond to the flat tuple indices of output
  * tensors.
  */
 std::pair<int64, int64> FindGetTupleElementTupleIndices(
     const HloInstruction* inst);
 
-/**
- * This returns a vector of all poplar tensors which are outputs of the inst
+/* This returns a vector of all poplar tensors which are outputs of the inst
  * operand index `input` in range [range.first, range.second).
- *
- * \param map   The tensor map from which to find the poplar tensors or remote
- *              buffers.
- * \param res   The compiler resources.
- * \param inst  The instruction which we want the inputs tensors or remote
- *              buffers for.
- * \param input The operand input index.
- * \param range The flattened tuple index range to select.
- * \param seq   A poplar sequence control program that will be populated with
- *              any copies that are required to produce the output.
- * \param expand_aliasing When true, any tensors which have aliasing (and may
- *                        not be parallel writeable) are duplicated with their
- *                        aliased elements "expanded".
- *
- * \returns A Status on error, or the requested vector of tensors.
- *
- * \note This function should only be used if a remote buffer is expected, or
- *       can't be excluded as a possibility.
  */
-StatusOr<TensorVector> FindInstructionInputTensorsInRange(
-    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
-    bool expand_aliasing = true);
-
-/**
- * This returns a vector of all poplar tensors or remote buffers which are
- * outputs of the inst operand index `input` in range [range.first,
- * range.second).
- *
- * \param map   The tensor map from which to find the poplar tensors or remote
- *              buffers.
- * \param res   The compiler resources.
- * \param inst  The instruction which we want the inputs tensors or remote
- *              buffers for.
- * \param input The operand input index.
- * \param range The flattened tuple index range to select.
- * \param seq   A poplar sequence control program that will be populated with
- *              any copies that are required to produce the output.
- * \param expand_aliasing When true, any tensors which have aliasing (and may
- *                        not be parallel writeable) are duplicated with their
- *                        aliased elements "expanded".
- *
- * \returns The requested vector of tensors.
- *
- * \note This function should only be used if a remote buffer is expected, or
- *       can't be excluded as a possibility.
- */
-TensorOrRemoteBufferVector FindInstructionInputsInRange(
+TensorVector FindInstructionInputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, std::pair<int64, int64> range, poplar::program::Sequence& seq,
     bool expand_aliasing = true);
@@ -250,52 +197,13 @@ StatusOr<poplar::Tensor> FindInstructionInput(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     int64 input, poplar::program::Sequence& seq, bool expand_aliasing = true);
 
-/**
- * This returns a vector of the poplar tensors or remote buffers which are the
- * inputs to the instruction at the given index.
- *
- * \param map   The tensor map from which to find the poplar tensors or remote
- *              buffers.
- * \param res   The compiler resources.
- * \param inst  The instruction which we want the inputs tensors or remote
- *              buffers for.
- * \param input The operand input index.
- * \param seq   A poplar sequence control program that will be populated with
- *              any copies that are required to produce the output.
- * \param expand_aliasing When true, any tensors which have aliasing (and may
- *                        not be parallel writeable) are duplicated with their
- *                        aliased elements "expanded".
- *
- * \returns The requested vector of tensors or remote buffers.
- *
- * \note This function should only be used if a remote buffer is expected, or
- *       can't be excluded as a possibility. Usually this is not the case.
+/* This returns a vector of all poplar tensors which are part of the tuple
+ * or non-tuple on the input to the instruction
  */
-TensorOrRemoteBufferVector FindInstructionInputs(
-    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq, bool expand_aliasing = true);
-
-/**
- * This returns the poplar tensors which are the inputs to the instruction.
- *
- * \param map   The tensor map from which to find the poplar tensors.
- * \param res   The compiler resources.
- * \param inst  The instruction which we want the inputs tensors for.
- * \param input The input index.
- * \param seq   A poplar sequence control program that will be populated with
- *              any copies that are required to produce the output.
- * \param expand_aliasing When true, any tensors which have aliasing (and may
- *                        not be parallel writeable) are duplicated with their
- *                        aliased elements "expanded".
- *
- * \returns A Status on error, or the requested vector of tensors.
- *
- * \note This function should only be used if a remote buffer is expected, or
- *       can't be excluded as a possibility.
- */
-StatusOr<TensorVector> FindInstructionInputTensors(
-    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    int64 input, poplar::program::Sequence& seq, bool expand_aliasing = true);
+TensorVector FindInstructionInputs(TensorMap& map, CompilerResources& res,
+                                   const HloInstruction* inst, int64 input,
+                                   poplar::program::Sequence& seq,
+                                   bool expand_aliasing = true);
 
 bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
                                      const HloInstruction* inst);
@@ -327,13 +235,9 @@ poplar::Tensor GetTensorForInplaceOp(
 /* This returns a vector of poplar tensors which are all of the outputs from
  * the given instruction.
  */
-TensorOrRemoteBufferVector FindInstructionOutputs(const TensorMap& map,
-                                                  CompilerResources& res,
-                                                  const HloInstruction* inst);
-
-StatusOr<TensorVector> FindInstructionOutputTensors(const TensorMap& map,
-                                                    CompilerResources& res,
-                                                    const HloInstruction* inst);
+TensorVector FindInstructionOutputs(const TensorMap& map,
+                                    CompilerResources& res,
+                                    const HloInstruction* inst);
 
 /* Sometimes an inplace op cannot be performed because the input/output tensor
  * is not parallel writable or because further analysis has shown that the op
@@ -348,30 +252,19 @@ StatusOr<TensorVectors> FindInplaceOutputTensors(
     poplar::program::Sequence& seq, bool expand_aliasing = true,
     bool always_preserve_aliases = false);
 
-/**
- * Same as the above function, but has the option to also return remote buffers.
- */
-StatusOr<TensorOrRemoteBufferVectors> FindInplaceOutputs(
-    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    poplar::program::Sequence& seq, bool expand_aliasing = true,
-    bool always_preserve_aliases = false);
-
 /* This returns a vector of all poplar tensors which are outputs of the inst
  *   in range [range.first, range.second).
  */
-StatusOr<TensorVector> FindInstructionOutputTensorsInRange(
-    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range);
-
-StatusOr<TensorOrRemoteBufferVector> FindInstructionOutputsInRange(
-    TensorMap& map, CompilerResources& res, const HloInstruction* inst,
-    std::pair<int64, int64> range);
+TensorVector FindInstructionOutputsInRange(TensorMap& map,
+                                           CompilerResources& res,
+                                           const HloInstruction* inst,
+                                           std::pair<int64, int64> range);
 
 /* This returns a vector of all poplar tensors which are outputs of the inst
  * in range [range.first, range.second) - any aliasing is expanded - TODO
  * T5364
  */
-StatusOr<TensorVector> FindExpandedInstructionOutputsInRange(
+TensorVector FindExpandedInstructionOutputsInRange(
     TensorMap& map, CompilerResources& res, const HloInstruction* inst,
     std::pair<int64, int64> range, poplar::program::Sequence& seq);
 }  // namespace poplarplugin

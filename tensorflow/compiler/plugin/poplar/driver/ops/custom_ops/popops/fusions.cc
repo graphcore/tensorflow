@@ -183,8 +183,7 @@ class ConvBiasAddOp : public PoplarOpDef {
     const auto forward_path = tensor_target.forward_path;
     const HloInstruction* inst = tensor_target.tgt;
 
-    TF_ASSIGN_OR_RETURN(TensorVector outputs,
-                        FindInstructionOutputTensors(tensor_map, res, layout));
+    TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
     if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
       return xla::FailedPrecondition("Convolution %s output not found for %s",
@@ -246,8 +245,7 @@ class MatMulBiasAddOp : public PoplarOpDef {
     const auto forward_path = tensor_target.forward_path;
     const HloInstruction* inst = tensor_target.tgt;
 
-    TF_ASSIGN_OR_RETURN(TensorVector outputs,
-                        FindInstructionOutputTensors(tensor_map, res, layout));
+    TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
     if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
       return xla::FailedPrecondition("Matmul %s output not found for %s",

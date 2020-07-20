@@ -158,8 +158,7 @@ class ImplicitBinaryElementwiseOp : public BinaryElementwiseOp {
     TF_ASSIGN_OR_RETURN(auto type, PoplarDataType(allocation_shape));
 
     // Get the tensor.
-    TF_ASSIGN_OR_RETURN(TensorVector outputs,
-                        FindInstructionOutputTensors(tensor_map, res, layout));
+    TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
     if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
       return xla::FailedPrecondition("Binary %s input not found for %s",
                                      layout->name(), name);
