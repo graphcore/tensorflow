@@ -68,7 +68,7 @@ enum PoplarOp {
   SendRecvBarrier = 64;
   RemoteParameterLoad = 65;
   RemoteParameterStore = 66;
-  RemoteParameterDummyOutput = 67;
+  // retired = 67;
   RecvFromHost = 68;
   SendToHost = 69;
   SliceApply = 70;
