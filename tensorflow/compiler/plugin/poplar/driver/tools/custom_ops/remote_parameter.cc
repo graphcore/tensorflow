@@ -18,12 +18,11 @@ limitations under the License.
 #include <memory>
 #include <string>
 
+#include "absl/container/flat_hash_map.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/custom_kernels_util.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
-#include "absl/container/flat_hash_map.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -157,6 +156,46 @@ HloRemoteParameterDummyOutput::ExtraPoplarAttributesToStringImpl(
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterDummyOutput(
     const Shape& shape, int64 output_idx) {
   return absl::make_unique<HloRemoteParameterDummyOutput>(shape, output_idx);
+}
+
+HloCreateBuffer::HloCreateBuffer(const Shape& shape, bool is_remote)
+    : HloPoplarInstruction(shape, {}, PoplarOp::CreateBuffer, is_remote),
+      is_remote_(is_remote) {
+  CHECK(!shape.IsTuple());
+  // Set the instruction to have side effect to prevent it from being merged
+  // with other similarly shaped buffers.
+  set_custom_call_has_side_effect(true);
+}
+
+absl::flat_hash_set<int64> HloCreateBuffer::AllocatingIndices() const {
+  return {};
+}
+
+absl::flat_hash_map<int64, int64> HloCreateBuffer::LayoutDependencies() const {
+  return {};
+}
+
+uint64 HloCreateBuffer::NumberOfInplaceOperands() const { return 0; }
+
+bool HloCreateBuffer::IsPopOpsElementwise() const { return false; }
+
+std::unique_ptr<HloInstruction> HloCreateBuffer::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloCloneContext*) const {
+  CHECK_EQ(operands.size(), 0);
+  return CreateHloCreateBuffer(shape, IsRemoteBuffer());
+}
+
+std::vector<std::string> HloCreateBuffer::ExtraPoplarAttributesToStringImpl(
+    const HloPrintOptions& options) const {
+  std::vector<std::string> attributes;
+  attributes.push_back("is_remote=" + std::to_string(is_remote_));
+  return attributes;
+}
+
+std::unique_ptr<HloInstruction> CreateHloCreateBuffer(const Shape& shape,
+                                                      bool is_remote) {
+  return absl::make_unique<HloCreateBuffer>(shape, is_remote);
 }
 
 }  // namespace poplarplugin
