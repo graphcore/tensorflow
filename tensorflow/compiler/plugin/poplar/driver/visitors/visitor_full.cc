@@ -319,12 +319,18 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
         break;
       }
       case HloOpcode::kCustomCall: {
+        // Dummy operation doesn't output tensors.
+        if (IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(inst)) {
+          CHECK(IsInstructionInEntryComputation(inst));
+          continue;
+        }
         break;
       }
       case HloOpcode::kParameter: {
         if (IsRemoteParameter(inst, resources_)) {
           CHECK(IsInstructionInEntryComputation(inst));
           // Remote parameters have no outputs.
+          CHECK_EQ(inst->user_count(), 0);
           return Status::OK();
         }
         break;
@@ -332,45 +338,34 @@ Status FullVisitor::Postprocess(HloInstruction* inst) {
       case HloOpcode::kTuple: {
         // Get the operand index to the tuple instruction given the shape index.
         const int64 operand_idx = index[0];
+        // If the input at this tuple index is RemoteParameterDummyOutput then
+        // we can skip it.
+        if (IsPoplarInstruction(PoplarOp::RemoteParameterDummyOutput)(
+                inst->operand(operand_idx))) {
+          continue;
+        }
         break;
       }
       default: { break; }
     }
 
     // Find the tensor for this output location.
-    TF_ASSIGN_OR_RETURN(
-        TensorOrRemoteBufferVector outs,
-        FindInstructionOutputsInRange(tensor_map, resources_, inst,
-                                      {tuple_index, tuple_index + 1}));
+    auto outs = FindInstructionOutputsInRange(tensor_map, resources_, inst,
+                                              {tuple_index, tuple_index + 1});
     CHECK_EQ(outs.size(), 1);
     auto& out = outs[0];
-    if (out.IsTensor() && !PoplarShapeMatchesXLAShape(out.AsTensor(), shape)) {
+    if (!PoplarShapeMatchesXLAShape(out, shape)) {
       return xla::InternalErrorStrCat(
           "Instruction ", inst->name(), " has mismatched Poplar (",
-          Join(out.AsTensor().shape(), ","), ") and XLA (",
-          Join(shape.dimensions(), ","), ") shapes.");
-    }
-    if (out.IsRemoteBuffer() &&
-        !PoplarShapeMatchesXLAShape(out.AsRemoteBuffer(), shape)) {
-      return xla::InternalErrorStrCat(
-          "Instruction ", inst->name(), " has mismatched Poplar (",
-          out.AsRemoteBuffer().numElements() *
-              out.AsRemoteBuffer().getRepeats(),
-          ") and XLA (", Join(shape.dimensions(), ","), ") shapes.");
+          Join(out.shape(), ","), ") and XLA (", Join(shape.dimensions(), ","),
+          ") shapes.");
     }
     TF_ASSIGN_OR_RETURN(poplar::Type expected_type, PoplarDataType(shape));
-    if (out.IsTensor() && expected_type != out.AsTensor().elementType()) {
+    if (expected_type != out.elementType()) {
       return xla::InternalErrorStrCat(
           "Instruction ", inst->name(), " has mismatched Poplar (",
-          out.AsTensor().elementType().toString().cloneAsString(),
-          ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
-    }
-    if (out.IsRemoteBuffer() &&
-        expected_type != out.AsRemoteBuffer().elementType()) {
-      return xla::InternalErrorStrCat(
-          "Instruction ", inst->name(), " has mismatched Poplar (",
-          out.AsRemoteBuffer().elementType().toString().cloneAsString(),
-          ") and XLA (", expected_type.toString().cloneAsString(), ") type.");
+          out.elementType().toString().cloneAsString(), ") and XLA (",
+          expected_type.toString().cloneAsString(), ") type.");
     }
   }
   return Status::OK();

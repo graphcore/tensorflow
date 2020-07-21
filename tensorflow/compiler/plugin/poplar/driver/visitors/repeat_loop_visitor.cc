@@ -31,17 +31,8 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-RepeatLoopVisitor::RepeatLoopVisitor(CompilerResources& res,
-                                     const DeferredArgRBVectors& inputs,
-                                     bool reallocate_inputs,
-                                     const std::string& name)
-    : InplaceDeferredVisitor(res, inputs, name, {}, reallocate_inputs) {
-  // Push a new vector for the zeroing sequences onto the stack.
-  res.gradient_accumulation_zeroing_sequences.push({});
-}
-
 RepeatLoopVisitor::RepeatLoopVisitor(
-    CompilerResources& res, const DeferredArgRBVectors& inputs,
+    CompilerResources& res, const DeferredArgVectors& inputs,
     const ReallocateInputsInfo& reallocate_inputs_info, const std::string& name)
     : InplaceDeferredVisitor(res, inputs, name, {}, reallocate_inputs_info) {
   // Push a new vector for the zeroing sequences onto the stack.
@@ -60,8 +51,8 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     num_mini_batches_to_accumulate_ =
         GetResourceUpdateBatchesToAccumulate(inst);
 
-    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                        GetInputsForDeferredInplaceRBInstruction(
+    TF_ASSIGN_OR_RETURN(DeferredArgVectors inputs,
+                        GetInputsForDeferredInplaceInstruction(
                             inst, /*preserve_aliasing*/ true));
 
     TF_ASSIGN_OR_RETURN(resource_update_sequence_,
@@ -157,7 +148,7 @@ poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
   return seq;
 }
 
-const TensorOrRemoteBufferVector& RepeatLoopVisitor::GetLoopState() const {
+const TensorVector& RepeatLoopVisitor::GetLoopState() const {
   return loop_state_;
 }
 

@@ -43,17 +43,14 @@ class OneHotOp : public PoplarOpDef {
 
     // We expect only three arguments. Other two, depth and axis, are expected
     // to be compile time constants.
-    TF_ASSIGN_OR_RETURN(
-        TensorVector indices,
-        FindInstructionInputTensors(tensor_map, res, inst, 0, seq, false));
+    TensorVector indices =
+        FindInstructionInputs(tensor_map, res, inst, 0, seq, false);
 
-    TF_ASSIGN_OR_RETURN(
-        TensorVector on,
-        FindInstructionInputTensors(tensor_map, res, inst, 1, seq, false));
+    TensorVector on =
+        FindInstructionInputs(tensor_map, res, inst, 1, seq, false);
 
-    TF_ASSIGN_OR_RETURN(
-        TensorVector off,
-        FindInstructionInputTensors(tensor_map, res, inst, 2, seq, false));
+    TensorVector off =
+        FindInstructionInputs(tensor_map, res, inst, 2, seq, false);
 
     const HloOneHotInstruction* one_hot_op = Cast<HloOneHotInstruction>(inst);
     if (!one_hot_op) {

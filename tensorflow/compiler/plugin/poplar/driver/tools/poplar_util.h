@@ -147,10 +147,6 @@ StatusOr<const popops::SlicePlan*> GetSlicePlan(CompilerResources& res,
 using DeferredArgVectors =
     std::vector<std::vector<absl::optional<poplar::Tensor>>>;
 DeferredArgVectors ConvertInputsToDeferredInputs(TensorVectors& inputs);
-using DeferredArgRBVectors =
-    std::vector<std::vector<absl::optional<TensorOrRemoteBuffer>>>;
-DeferredArgRBVectors ConvertInputsToDeferredInputs(
-    TensorOrRemoteBufferVectors& inputs);
 
 /* Generate a JSON struture describing the tensor mappings
  */
