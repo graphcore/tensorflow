@@ -25,19 +25,19 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-/**
- * HloRemoteParameterLoad represents a variable being loaded from remote memory
- * into device memory.
- */
+// HloRemoteParameterLoad represents a parameter to the entry computation being
+// loaded from remote memory into device memory.
 class HloRemoteParameterLoad : public HloPoplarInstruction {
  public:
-  explicit HloRemoteParameterLoad(HloInstruction* const rbuffer);
+  explicit HloRemoteParameterLoad(const Shape& shape, int64 param_number);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
   uint64 NumberOfInplaceOperands() const override;
+
+  int64 GetParameterNumber() const { return param_number_; }
 
   bool IsPopOpsElementwise() const override;
 
@@ -49,25 +49,27 @@ class HloRemoteParameterLoad : public HloPoplarInstruction {
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
+
+  const int64 param_number_;
 };
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterLoad(
-    HloInstruction* const rbuffer);
+    const Shape& shape, int64 param_number);
 
-/**
- * HloRemoteParameterStore represents a write to a variable stored in remote
- * memory from device memory.
- */
+// HloRemoteParameterStore represents an output to the entry computation being
+// stored into remote memory from device memory.
 class HloRemoteParameterStore : public HloPoplarInstruction {
  public:
-  explicit HloRemoteParameterStore(HloInstruction* const rbuffer,
-                                   HloInstruction* const value);
+  explicit HloRemoteParameterStore(HloInstruction* const output,
+                                   int64 output_idx);
 
   absl::flat_hash_set<int64> AllocatingIndices() const override;
 
   absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
 
   uint64 NumberOfInplaceOperands() const override;
+
+  int64 GetOutputIndex() const { return output_idx_; }
 
   bool IsPopOpsElementwise() const override;
 
@@ -79,10 +81,45 @@ class HloRemoteParameterStore : public HloPoplarInstruction {
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
+
+  const int64 output_idx_;
 };
 
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterStore(
-    HloInstruction* const rbuffer, HloInstruction* const value);
+    HloInstruction* const output, int64 param_number);
+
+// HloRemoteParameterDummyOutput represents a dummy input to the root tuple
+// which is used to indicate a lack of Poplar tensor at that location (we cannot
+// modify the output shape of the program).
+class HloRemoteParameterDummyOutput : public HloPoplarInstruction {
+ public:
+  explicit HloRemoteParameterDummyOutput(const Shape& shape,
+                                         int64 param_number);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+
+  uint64 NumberOfInplaceOperands() const override;
+
+  int64 GetOutputIndex() const { return output_idx_; }
+
+  bool IsPopOpsElementwise() const override;
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+
+  const int64 output_idx_;
+};
+
+std::unique_ptr<HloInstruction> CreateHloRemoteParameterDummyOutput(
+    const Shape& shape, int64 param_number);
 
 }  // namespace poplarplugin
 }  // namespace xla

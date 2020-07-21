@@ -314,8 +314,7 @@ StatusOr<poplar::program::Program> CreateCopy(CompilerResources& res,
   poplar::program::Sequence seq;
 
   poplar::Graph& graph = GetGraph(res, inst);
-  TF_ASSIGN_OR_RETURN(TensorVector inputs, FindInstructionInputTensors(
-                                               tensor_map, res, inst, 0, seq));
+  TensorVector inputs = FindInstructionInputs(tensor_map, res, inst, 0, seq);
 
   for (int64 tuple_idx = 0; tuple_idx != static_cast<int64>(inputs.size());
        ++tuple_idx) {

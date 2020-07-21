@@ -990,16 +990,16 @@ StatusOr<int> GetPipelineStage(
  *
  * @returns A 2D array of pipeline stage inputs.
  */
-StatusOr<TensorOrRemoteBufferVectors> GetInputs(poplar::program::Sequence& seq,
-                                                CompilerResources& res,
-                                                const HloInstruction* inst,
-                                                TensorMap& tensor_map) {
-  TensorOrRemoteBufferVectors inputs(inst->operand_count());
+StatusOr<TensorVectors> GetInputs(poplar::program::Sequence& seq,
+                                  CompilerResources& res,
+                                  const HloInstruction* inst,
+                                  TensorMap& tensor_map) {
+  TensorVectors inputs(inst->operand_count());
   // First get all the inplace inputs - we do not expand constants and we
   // preserve all the aliasing.
   TF_ASSIGN_OR_RETURN(
-      TensorOrRemoteBufferVectors inplace_inputs,
-      FindInplaceOutputs(tensor_map, res, inst, seq, false, true));
+      TensorVectors inplace_inputs,
+      FindInplaceOutputTensors(tensor_map, res, inst, seq, false, true));
   auto inplace_inputs_itr = inplace_inputs.begin();
   auto inst_description = HloInstructionDescription(inst);
   // Keep track of inputs which are not inplace (i.e. parameters for forward
@@ -1034,7 +1034,7 @@ PipelineVisitor::PipelineVisitor(
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     const absl::flat_hash_set<int> stages_with_recomputation,
     int64 num_backward_stages, CompilerResources& res,
-    const DeferredArgRBVectors& inputs, const std::string& name)
+    const DeferredArgVectors& inputs, const std::string& name)
     : InplaceDeferredVisitor(res, inputs, name, {}),
       schedule_(schedule),
       copy_sequences_(stage_count),
@@ -1056,7 +1056,7 @@ PipelineVisitor::PipelineVisitor(
 
 PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                                  CompilerResources& res,
-                                 const DeferredArgRBVectors& inputs,
+                                 const DeferredArgVectors& inputs,
                                  const std::string& name)
     : PipelineVisitor(GetPipelineSchedule(pipeline).ValueOrDie(),
                       GetPipelineStageCount(pipeline),
@@ -1342,15 +1342,15 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, inst));
   const std::string debug_name = GetDebugName(inst);
 
-  TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                      GetInputsForDeferredInplaceRBInstruction(
-                          inst, /*preserve_aliasing*/ true));
+  TF_ASSIGN_OR_RETURN(
+      DeferredArgVectors inputs,
+      GetInputsForDeferredInplaceInstruction(inst, /*preserve_aliasing*/ true));
 
   const bool has_recomputation = stages_with_recomputation_.contains(stage);
 
   std::unique_ptr<PipelineStageVisitor> visitor;
   if (has_recomputation) {
-    DeferredArgRBVectors visitor_inputs = inputs;
+    DeferredArgVectors visitor_inputs = inputs;
     // When recomputation is enabled, we need to add clones for inplace inputs
     // of the pipeline stage (i.e. non parameters/weights), so that we can
     // reuse the code for the recomputation stage.
@@ -1428,7 +1428,7 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
   }
 
   // Set the outputs.
-  const TensorOrRemoteBufferVector& pipeline_outputs = visitor->outputs();
+  const TensorVector& pipeline_outputs = visitor->outputs();
   const ShapeTree<bool> add_copies = visitor->GetOutputCopies(inst);
   size_t flat_tuple_index = 0;
   for (const auto& leaf : add_copies.leaves()) {
@@ -1497,7 +1497,7 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
     seq.add(visitor.GetCachedSequence());
 
     // Set the outputs.
-    const TensorOrRemoteBufferVector& pipeline_outputs = visitor.outputs();
+    const TensorVector& pipeline_outputs = visitor.outputs();
     for (size_t i = 0; i < pipeline_outputs.size(); i++) {
       poplar::Tensor output = pipeline_outputs[i];
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, output));
@@ -1533,8 +1533,7 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
     seq.add(counters_out);
 
     // Set the outputs.
-    const TensorOrRemoteBufferVector& pipeline_outputs =
-        forward_stage_visitor->outputs();
+    const TensorVector& pipeline_outputs = forward_stage_visitor->outputs();
     for (size_t i = 0; i < pipeline_outputs.size(); i++) {
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, i, pipeline_outputs[i]));
     }
@@ -1546,8 +1545,8 @@ Status PipelineVisitor::HandleDeferredAllocationCall(HloInstruction* hlo) {
   HloComputation* comp = hlo->to_apply();
 
   if (IsResourceUpdate(hlo)) {
-    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
-                        GetInputsForDeferredInplaceRBInstruction(
+    TF_ASSIGN_OR_RETURN(DeferredArgVectors inputs,
+                        GetInputsForDeferredInplaceInstruction(
                             hlo, /*preserve_aliasing*/ true));
 
     TF_ASSIGN_OR_RETURN(resource_update_,

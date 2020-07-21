@@ -187,7 +187,7 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
 // Version of While op which allows inputs to not have a layout.
 StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                                                  const HloInstruction* inst,
-                                                 DeferredArgRBVectors& inputs,
+                                                 DeferredArgVectors& inputs,
                                                  const xla::Shape& output,
                                                  TensorMap& tensor_map);
 
@@ -199,14 +199,14 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
 // Version of Repeat op which allows inputs to not have a layout.
 StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
                                                   const HloInstruction* inst,
-                                                  DeferredArgRBVectors& inputs,
+                                                  DeferredArgVectors& inputs,
                                                   const xla::Shape& output,
                                                   TensorMap& tensor_map);
 
 // A ResourceUpdate op which allows inputs to not have a layout.
 StatusOr<poplar::program::Program> CreateResourceUpdateOp(
     CompilerResources& res, const HloInstruction* inst,
-    DeferredArgRBVectors& inputs, const xla::Shape& output,
+    DeferredArgVectors& inputs, const xla::Shape& output,
     TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateFunctionOp(CompilerResources& res,
@@ -220,10 +220,11 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
                                                     TensorMap& tensor_map);
 
 // Version of Pipeline op which allows inputs to not have a layout.
-StatusOr<poplar::program::Program> CreatePipelineOp(
-    CompilerResources& res, const HloInstruction* inst,
-    DeferredArgRBVectors& inputs, const xla::Shape& output,
-    TensorMap& tensor_map);
+StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
+                                                    const HloInstruction* inst,
+                                                    DeferredArgVectors& inputs,
+                                                    const xla::Shape& output,
+                                                    TensorMap& tensor_map);
 
 StatusOr<poplar::program::Program> CreateConvBiasAddOp(
     CompilerResources& res, const HloInstruction* inst,
