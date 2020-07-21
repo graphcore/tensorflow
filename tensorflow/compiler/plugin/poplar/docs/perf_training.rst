@@ -119,7 +119,7 @@ Replicated graphs
 To improve performance, multiple IPUs can be configured to run in a data
 parallel mode.  The graph is said to be replicated across multiple IPUs.
 See the `Poplar and PopLibs User Guide
-<https://documents.graphcore.ai/documents/UG1/latest>`_ for more background
+<https://docs.graphcore.ai/projects/poplar-user-guide/>`_ for more background
 about replicated graphs.
 
 .. note:: Replicated graphs are not supported when running on an IPU Model.
