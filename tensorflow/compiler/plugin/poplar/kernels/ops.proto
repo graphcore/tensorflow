@@ -49,7 +49,7 @@ enum PoplarOp {
   MultiSlice = 45;
   MultiUpdate = 46;
   MultiUpdateAdd = 47;
-  // retired = 48;
+  CreateBuffer = 48;
   AllGather = 49;
   SuggestRecompute = 50;
   BlockRecompute = 51;

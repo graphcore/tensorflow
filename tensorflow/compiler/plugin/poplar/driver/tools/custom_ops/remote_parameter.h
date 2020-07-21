@@ -121,6 +121,37 @@ class HloRemoteParameterDummyOutput : public HloPoplarInstruction {
 std::unique_ptr<HloInstruction> CreateHloRemoteParameterDummyOutput(
     const Shape& shape, int64 param_number);
 
+// HloCreateBuffer represents a creation of a buffer, where the buffer can be
+// stored in either device memory or remote memory.
+class HloCreateBuffer : public HloPoplarInstruction {
+ public:
+  explicit HloCreateBuffer(const Shape& shape, bool is_remote);
+
+  absl::flat_hash_set<int64> AllocatingIndices() const override;
+
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
+
+  uint64 NumberOfInplaceOperands() const override;
+
+  bool IsPopOpsElementwise() const override;
+
+  bool IsRemoteBuffer() const { return is_remote_; }
+
+ protected:
+  std::vector<std::string> ExtraPoplarAttributesToStringImpl(
+      const HloPrintOptions& options) const override;
+
+ private:
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const>,
+      HloCloneContext*) const override;
+
+  const bool is_remote_;
+};
+
+std::unique_ptr<HloInstruction> CreateHloCreateBuffer(const Shape& shape,
+                                                      bool is_remote);
+
 }  // namespace poplarplugin
 }  // namespace xla
 

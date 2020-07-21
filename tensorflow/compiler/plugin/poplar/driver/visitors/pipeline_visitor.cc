@@ -125,6 +125,18 @@ IsGradientAccumulatorSinkInstruction() {
 }
 
 /**
+ * Construct a unary predicate which checks if a given HloInstruction is an
+ * HloCreateBuffer.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(const HloInstruction*)> IsCreateBuffer() {
+  return [](const HloInstruction* inst) -> bool {
+    return IsPoplarInstruction(PoplarOp::CreateBuffer)(inst);
+  };
+}
+
+/**
  * Get the number of stages in a pipeline.
  *
  * @param pipeline The outer pipeline instruction.
@@ -1312,6 +1324,12 @@ StatusOr<poplar::program::Sequence*> PipelineVisitor::GetSequenceForInstruction(
     case HloOpcode::kTuple: {
       CHECK_EQ(hlo->parent()->root_instruction(), hlo);
       return &resource_update_;
+    }
+    case HloOpcode::kCustomCall: {
+      if (IsCreateBuffer()(hlo)) {
+        return &pipeline_write_undef_sequence_;
+      }
+      TF_FALLTHROUGH_INTENDED;
     }
     default: {
       return InternalErrorStrCat("Trying to get a sequence for ",
