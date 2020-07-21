@@ -12,7 +12,7 @@ Several mechanisms are available to retrieve trace information about the
 Poplar IPU compilation and execution. Firstly, there are environment variables
 provided by Poplar itself to dump the compilation and execution reports into a
 file. See the "Profiling" chapter in the
-`Poplar and PopLibs User Guide <https://documents.graphcore.ai/documents/UG1/latest>`_
+`Poplar and PopLibs User Guide <https://docs.graphcore.ai/projects/poplar-user-guide/>`_
 for more information.
 
 Within TensorFlow, the basic steps for this are:
