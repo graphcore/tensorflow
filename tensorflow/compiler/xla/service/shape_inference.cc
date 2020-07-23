@@ -1192,18 +1192,6 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
                Status::OK());
   TF_RET_CHECK(ShapeUtil::ValidateShapeWithOptionalLayout(scale_shape) ==
                Status::OK());
-  
-  if (operand_shape.element_type() == F16 &&
-      offset_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected offset to be of type F32 in batch-norm-training.");
-  }
-
-  if (operand_shape.element_type() == F16 &&
-      scale_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected scale to be of type F32 in batch-norm-training.");
-  }
 
   if (feature_index >= operand_shape.rank()) {
     return InvalidArgument(
@@ -1270,7 +1258,7 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
 
   const int64 feature_count = operand_shape.dimensions(feature_index);
   Shape output_shape_for_mean_and_var =
-      ShapeUtil::MakeShape(scale_shape.element_type(), {feature_count});
+      ShapeUtil::MakeShape(operand_shape.element_type(), {feature_count});
 
   if (ShapeUtil::GetDimension(offset_shape, 0) != feature_count) {
     return InvalidArgument(
@@ -1310,30 +1298,6 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
   TF_RETURN_IF_ERROR(ShapeUtil::ValidateShapeWithOptionalLayout(mean_shape));
   TF_RETURN_IF_ERROR(
       ShapeUtil::ValidateShapeWithOptionalLayout(variance_shape));
-
-  if (operand_shape.element_type() == F16 &&
-      offset_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected offset to be of type F32 in batch-norm-inference.");
-  }
-
-  if (operand_shape.element_type() == F16 &&
-      scale_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected scale to be of type F32 in batch-norm-inference.");
-  }
-
-  if (operand_shape.element_type() == F16 &&
-      mean_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected mean to be of type F32 in batch-norm-inference.");
-  }
-
-  if (operand_shape.element_type() == F16 &&
-      variance_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected variance to be of type F32 in batch-norm-inference.");
-  }
 
   if (feature_index >= operand_shape.rank()) {
     return InvalidArgument(
@@ -1424,7 +1388,7 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
 
   const int64 feature_count = operand_shape.dimensions(feature_index);
   Shape output_shape_for_mean_and_var =
-      ShapeUtil::MakeShape(mean_shape.element_type(), {feature_count});
+      ShapeUtil::MakeShape(operand_shape.element_type(), {feature_count});
 
   if (ShapeUtil::GetDimension(offset_shape, 0) != feature_count) {
     return InvalidArgument(
@@ -1479,30 +1443,6 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
   TF_RETURN_IF_ERROR(ShapeUtil::ValidateShapeWithOptionalLayout(var_shape));
   TF_RETURN_IF_ERROR(
       ShapeUtil::ValidateShapeWithOptionalLayout(output_grad_shape));
-
-  if (operand_shape.element_type() == F16 &&
-      scale_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected scale to be of type F32 in batch-norm-grad.");
-  }
-
-  if (operand_shape.element_type() == F16 &&
-      mean_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected mean to be of type F32 in batch-norm-grad.");
-  }
-
-  if (operand_shape.element_type() == F16 &&
-      var_shape.element_type() != F32) {
-    return InvalidArgument(
-      "Expected variance to be of type F32 in batch-norm-grad.");
-  }
-
-  if (operand_shape.element_type() == F16 &&
-      output_grad_shape.element_type() != F16) {
-    return InvalidArgument(
-      "Expected output_grad to be of type F16 in batch-norm-grad.");
-  }
 
   if (feature_index >= operand_shape.rank()) {
     return InvalidArgument(
@@ -1638,7 +1578,7 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
   }
 
   return ShapeUtil::MakeTupleShape(
-      {operand_shape, mean_shape, mean_shape});
+      {operand_shape, feature_shape, feature_shape});
 }
 
 /* static */ StatusOr<Shape> ShapeInference::InferConvolveShape(
