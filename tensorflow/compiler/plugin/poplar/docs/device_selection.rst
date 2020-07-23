@@ -62,7 +62,7 @@ connected IPUs.
 
 For example, to use all the IPUs in a 16-IPU system the
 appropriate ID is 30. (See the `IPU Command Line Tools
-<https://documents.graphcore.ai/documents/UG10/latest>`_ document for details
+<https://docs.graphcore.ai/projects/command-line-tools/>`_ document for details
 of how device IDs map to available IPUs.) This will allocate a single
 TensorFlow device (``/device:IPU:0``) configured with all 16 IPUs.
 
