@@ -23,7 +23,7 @@ a Poplar source code or binary file containing one or more "codelets"
 
 For more information about writing codelets, please refer to the
 `Poplar and PopLibs User Guide
-<https://documents.graphcore.ai/documents/UG1/latest>`_.
+<https://docs.graphcore.ai/projects/poplar-user-guide/>`_.
 
 These operations are added with ``ipu.custom_ops.precompiled_user_op``.
 See :py:func:`tensorflow.python.ipu.custom_ops.precompiled_user_op` for details.
@@ -188,7 +188,7 @@ constraints on the input tensor.
 If this condition occurs, then by default the backend will create the Poplar
 tensor with linear mapping. See the section on tile mapping in the
 `Poplar and PopLibs API Reference
-<https://documents.graphcore.ai/documents/UG2/latest>`_.
+<https://docs.graphcore.ai/projects/poplar-api/>`_.
 
 To override this behaviour and allocate a tensor using a specific layout
 mapping, the custom operation can provide a function with the following

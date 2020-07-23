@@ -339,5 +339,5 @@ The second thing to note is that the IPU ID is reported as 24. This is a
 *multi-IPU* ID and corresponds to the individual IPUs 4, 5, 6 and 7.
 These are the IPUs selected to host the graph and to process respective shards
 as indexed in the code. See the `IPU Command Line Tools
-<https://documents.graphcore.ai/documents/UG10/latest>`_ document for
+<https://docs.graphcore.ai/projects/command-line-tools/>`_ document for
 more information about how IPU IDs are allocated.

@@ -19,6 +19,7 @@ limitations under the License.
 #include <poplin/Norms.hpp>
 #include <popnn/BatchNorm.hpp>
 #include <popnn/GroupNorm.hpp>
+#include <popops/Cast.hpp>
 #include <popops/ElementWise.hpp>
 #include <popops/Expr.hpp>
 #include <poputil/GraphFunction.hpp>
@@ -161,7 +162,8 @@ poplar::Tensor BatchNormalise(
 StatusOr<poplar::Tensor> AddNormScaleTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
-    uint32 feature_index, const TensorMap& tensor_map) {
+    uint32 feature_index, const TensorMap& tensor_map,
+    const HloInstruction* inst) {
   TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
@@ -170,15 +172,21 @@ StatusOr<poplar::Tensor> AddNormScaleTensor(
         debug_name);
   }
 
+  // Input 1 is the scale.
+  TF_ASSIGN_OR_RETURN(poplar::Type type,
+                      PoplarDataType(inst->operand(1)->shape()));
+
   poplar::Tensor acts = outputs[layout_output_idx];
   auto shuffled = ShuffleNormInputToPoplar(acts, feature_index);
-  return poplin::createNormGamma(graph, shuffled);
+
+  return poplin::createNormGamma(graph, shuffled, type);
 }
 
 StatusOr<poplar::Tensor> AddNormOffsetTensor(
     poplar::Graph& graph, CompilerResources& res, const std::string& debug_name,
     const HloInstruction* layout, uint64 layout_output_idx,
-    uint32 feature_index, const TensorMap& tensor_map) {
+    uint32 feature_index, const TensorMap& tensor_map,
+    const HloInstruction* inst) {
   TensorVector outputs = FindInstructionOutputs(tensor_map, res, layout);
 
   if (layout_output_idx < 0 || outputs.size() <= layout_output_idx) {
@@ -187,9 +195,23 @@ StatusOr<poplar::Tensor> AddNormOffsetTensor(
         debug_name);
   }
 
+  // Input 2 is the offset.
+  TF_ASSIGN_OR_RETURN(poplar::Type type,
+                      PoplarDataType(inst->operand(2)->shape()));
+
   poplar::Tensor acts = outputs[layout_output_idx];
   auto shuffled = ShuffleNormInputToPoplar(acts, feature_index);
-  return poplin::createNormBeta(graph, shuffled);
+
+  return poplin::createNormBeta(graph, shuffled, type);
+}
+
+poplar::Tensor GetAsType(poplar::Graph& graph, poplar::program::Sequence& prog,
+                         const poplar::Tensor& tensor, const poplar::Type& type,
+                         const std::string& debug_prefix) {
+  if (tensor.elementType() == type) {
+    return tensor;
+  }
+  return popops::cast(graph, tensor, type, prog, debug_prefix + "/Cast");
 }
 
 class NormInferenceAndTrainingOp : public PoplarOpDef {
@@ -207,12 +229,12 @@ class NormInferenceAndTrainingOp : public PoplarOpDef {
     switch (input_index) {
       case 1: {
         return AddNormScaleTensor(graph, res, name, *layout, *layout_output_idx,
-                                  norm_opts.feature_index, tensor_map);
+                                  norm_opts.feature_index, tensor_map, inst);
       }
       case 2: {
         return AddNormOffsetTensor(graph, res, name, *layout,
                                    *layout_output_idx, norm_opts.feature_index,
-                                   tensor_map);
+                                   tensor_map, inst);
       }
       default: {
         return xla::FailedPrecondition(
@@ -280,6 +302,18 @@ class NormInferenceOp : public NormInferenceAndTrainingOp {
           poplar::Tensor inv_sd =
               ConvertVarianceToInvStdDev(graph, variance_or_inv_std_dev,
                                          norm_opts.epsilon, prog, debug_prefix);
+
+          if (scale.elementType() != operand.elementType()) {
+            scale = GetAsType(graph, prog, scale, operand.elementType(),
+                              debug_prefix);
+            offset = GetAsType(graph, prog, offset, operand.elementType(),
+                               debug_prefix);
+            mean = GetAsType(graph, prog, mean, operand.elementType(),
+                             debug_prefix);
+            inv_sd = GetAsType(graph, prog, inv_sd, operand.elementType(),
+                               debug_prefix);
+          }
+
           args[5] = BatchNormalise(graph, operand, scale, offset, mean, inv_sd,
                                    prog, debug_prefix);
           break;
@@ -355,11 +389,11 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
                           BroadcastTensor(out, inst->operand(0)->shape(), {}));
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, out));
       poplar::Tensor mean =
-          graph.addConstant(arg_operand.elementType(), {1}, NAN);
+          graph.addConstant(arg_scale.elementType(), {1}, NAN);
       graph.setTileMapping(mean, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, mean));
       poplar::Tensor variance_or_inv_std_dev =
-          graph.addConstant(arg_operand.elementType(), {1}, NAN);
+          graph.addConstant(arg_scale.elementType(), {1}, NAN);
       graph.setTileMapping(variance_or_inv_std_dev, 0);
       TF_CHECK_OK(
           AddOutputTensor(tensor_map, inst, 2, variance_or_inv_std_dev));
@@ -386,8 +420,23 @@ class NormTrainingOp : public NormInferenceAndTrainingOp {
               /*unbiasedVarEstimate=*/false, use_stable_statistics,
               poplar::FLOAT, debug_prefix);
 
+          const bool diff_types = scale.elementType() != operand.elementType();
+          if (diff_types) {
+            scale = GetAsType(graph, prog, scale, operand.elementType(),
+                              debug_prefix);
+            offset = GetAsType(graph, prog, offset, operand.elementType(),
+                               debug_prefix);
+          }
+
           args[3] = BatchNormalise(graph, operand, scale, offset, args[4],
                                    inv_sd, prog, debug_prefix);
+
+          if (diff_types) {
+            args[4] = GetAsType(graph, prog, args[4], args[1].elementType(),
+                                debug_prefix);
+            inv_sd = GetAsType(graph, prog, inv_sd, args[4].elementType(),
+                               debug_prefix);
+          }
           // For batch norm variance_or_inv_std_dev is variance, so we need to
           // convert it.
           args[5] = ConvertInvStdDevToVariance(graph, inv_sd, norm_opts.epsilon,
@@ -476,11 +525,11 @@ class NormGradOp : public PoplarOpDef {
           BroadcastTensor(operand_grad, inst->operand(0)->shape(), {}));
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, operand_grad));
       poplar::Tensor scale_grad =
-          graph.addConstant(arg_operand.elementType(), {1}, 0);
+          graph.addConstant(arg_scale.elementType(), {1}, 0);
       graph.setTileMapping(scale_grad, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 1, scale_grad));
       poplar::Tensor offset_grad =
-          graph.addConstant(arg_operand.elementType(), {1}, 0);
+          graph.addConstant(arg_scale.elementType(), {1}, 0);
       graph.setTileMapping(offset_grad, 0);
       TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 2, offset_grad));
       return seq;
@@ -508,6 +557,17 @@ class NormGradOp : public PoplarOpDef {
           poplar::Tensor inv_sd =
               ConvertVarianceToInvStdDev(graph, variance_or_inv_std_dev,
                                          norm_opts.epsilon, prog, debug_prefix);
+
+          const bool diff_types = scale.elementType() != operand.elementType();
+          if (diff_types) {
+            scale = GetAsType(graph, prog, scale, operand.elementType(),
+                              debug_prefix);
+            mean = GetAsType(graph, prog, mean, operand.elementType(),
+                             debug_prefix);
+            inv_sd = GetAsType(graph, prog, inv_sd, operand.elementType(),
+                               debug_prefix);
+          }
+
           poplar::Tensor operand_whitened =
               popnn::bn::batchNormWhiten(graph, operand, mean, inv_sd, prog,
                                          debug_prefix + "/WhitenedActs");
@@ -520,6 +580,14 @@ class NormGradOp : public PoplarOpDef {
           std::tie(args[6], args[7]) = popnn::bn::batchNormParamGradients(
               graph, operand_whitened, grad_output, prog, poplar::FLOAT,
               debug_prefix + "/ScaleOffsetGrads");
+
+          if (diff_types) {
+            args[6] = GetAsType(graph, prog, args[6], args[1].elementType(),
+                                debug_prefix);
+
+            args[7] = GetAsType(graph, prog, args[7], args[1].elementType(),
+                                debug_prefix);
+          }
           break;
         }
         case NormType::GroupNorm: {

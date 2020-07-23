@@ -14,5 +14,5 @@ The following documents may be useful.
 - *Hands-on Machine Learning with Scikit-Learn and TensorFlow*: A very useful
   practical guide to developing and training network models using TensorFlow:
   http://shop.oreilly.com/product/0636920052289.do
-- `Poplar and PopLibs User Guide <https://documents.graphcore.ai/documents/UG1/latest>`_
+- `Poplar and PopLibs User Guide <https://docs.graphcore.ai/projects/poplar-user-guide/>`_
 - `Graphcore GitHub repository <https://github.com/graphcore/examples>`_ with application examples

@@ -567,7 +567,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
           assert_msg="Expected 1x compile, 1x load, 1x download, 1x execute")
 
       ok = [
-          '__seed*', 'host-exchange-local-copy', 'Copy_',
+          '__seed*', 'host-exchange-local-copy',
           'xw_plus_b/MatMul/dot.*/Conv_1/Convolve', 'xw_plus_b/fusion/Op/Add'
       ]
       report.assert_all_compute_sets_and_list(ok)
