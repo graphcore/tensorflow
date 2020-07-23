@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <dlfcn.h>
 #include <stdlib.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #include <fstream>
@@ -149,6 +150,8 @@ limitations under the License.
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/random/random.h"
+#include "tensorflow/core/platform/cpu_info.h"
+#include "tensorflow/core/public/version.h"
 #include "tensorflow/stream_executor/lib/initialize.h"
 
 namespace se = ::stream_executor;
@@ -679,6 +682,99 @@ void GetPoplarSerializedGraphStream(
   }
 }
 
+Status GetOperatingSystemInfo(utsname& details) {
+  bool is_ok = uname(&details) == 0;
+  if (!is_ok) {
+    return xla::InternalErrorStrCat("Get system info error. ",
+                                    std::strerror(errno));
+  }
+
+  return Status::OK();
+}
+
+StatusOr<std::string> GetFrameworkInfo() {
+  // tf info
+  Json::Value tf_info;
+  tf_info["Version"] = TF_VERSION_STRING;
+  tf_info["Githash"] = tf_git_version();
+
+  Json::Value root;
+  root["Tensorflow"] = tf_info;
+
+  // system info
+  Json::Value system_info;
+  utsname details;
+  TF_RETURN_IF_ERROR(GetOperatingSystemInfo(details));
+  system_info["Operating system"] = details.sysname;
+  system_info["Operating system version"] = details.version;
+  system_info["Machine"] = details.machine;
+
+  system_info["Nominal cpu frequency [GHz]"] = absl::StrFormat(
+      "%.2f", tensorflow::port::NominalCPUFrequency() / 1000000000.0);
+  system_info["Number of total cpus"] = tensorflow::port::NumTotalCPUs();
+  root["System info"] = system_info;
+
+  Json::StreamWriterBuilder json_builder;
+  json_builder["indentation"] = "";
+  json_builder["commentStyle"] = "None";
+  std::string tensorflow_info = Json::writeString(json_builder, root);
+
+  return tensorflow_info;
+}
+
+bool JsonParse(const std::string& env_flags, Json::Value& attributes) {
+  Json::CharReaderBuilder builder;
+  std::string errs;
+  std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+  bool parsed =
+      reader->parse(env_flags.c_str(), env_flags.c_str() + env_flags.size(),
+                    &attributes, &errs);
+  return parsed;
+}
+
+void AddFrameworkFileToAutoReportDirectory(const std::string& tensorflow_info,
+                                           const std::string& module_name) {
+  std::string report_directory;
+  bool report_directory_set = false;
+  char* env_flags = std::getenv("POPLAR_ENGINE_OPTIONS");
+
+  if (env_flags == nullptr) {
+    return;
+  }
+
+  Json::Value attributes;
+  bool parsed = JsonParse(env_flags, attributes);
+  if (parsed) {
+    if (!attributes.isMember("autoReport.directory") &&
+        !attributes.isMember("autoReport.all")) {
+      return;
+    }
+
+    if (attributes.isMember("autoReport.directory")) {
+      report_directory = attributes["autoReport.directory"].asString();
+      report_directory_set = true;
+    }
+  }
+
+  if (!report_directory_set) {
+    report_directory = tensorflow::io::JoinPath("", module_name);
+  }
+
+  CreateDirIfMissing(report_directory);
+
+  Json::Value attrib_dummy;
+  bool is_json_str = JsonParse(tensorflow_info, attrib_dummy);
+
+  if (tensorflow_info.size() > 0 && is_json_str) {
+    std::unique_ptr<tensorflow::WritableFile> wfile;
+    std::string file_name =
+        tensorflow::io::JoinPath(report_directory, "framework.json");
+    TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(file_name, &wfile));
+    TF_CHECK_OK(wfile->Append(tensorflow_info));
+    TF_CHECK_OK(wfile->Close());
+  }
+}
+
 }  // namespace
 
 StatusOr<std::unique_ptr<HloModule>> PoplarCompiler::RunHloPasses(
@@ -1109,6 +1205,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
   std::string map_json;
 
   if (compile) {
+    TF_ASSIGN_OR_RETURN(const std::string tensorflow_info, GetFrameworkInfo());
+    AddFrameworkFileToAutoReportDirectory(tensorflow_info, module->name());
     // Only create the graphs if we are compiling.
     TF_RETURN_IF_ERROR(
         CreatePoplarGraphs(resources, module.get(), poplar_executor));
@@ -1269,7 +1367,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
 
       poplar_executor->AddCompileEndEventRecord(
           module->name(), report_stream.str(), graph_stream.str(), map_json,
-          inst_info, duration);
+          inst_info, tensorflow_info, duration);
     }
   }
 

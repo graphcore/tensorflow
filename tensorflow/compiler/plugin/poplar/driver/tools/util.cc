@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 
+#include <string>
+
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/ipu_inter_copy.h"
@@ -660,6 +662,24 @@ size_t HloComputationHash::operator()(const HloComputation* comp) const {
 bool HloComputationEquals::operator()(const HloComputation* a,
                                       const HloComputation* b) const {
   return a->Equal(*b, false, true);
+}
+
+Status CreateDirIfMissing(const std::string& path) {
+  CHECK(!path.empty());
+  auto* env = tensorflow::Env::Default();
+
+  // Two threads could race to observe the absence of the directory and
+  // simultaneously try to create it, causing the "losing" thread to get a
+  // "directory already exists" error.  We can work around this by checking
+  // again whether the dir exists.
+  if (!env->IsDirectory(path).ok()) {
+    const auto status = env->RecursivelyCreateDir(path);
+    if (!status.ok() && !env->IsDirectory(path).ok()) {
+      return status;
+    }
+  }
+
+  return Status::OK();
 }
 
 }  // namespace poplarplugin
