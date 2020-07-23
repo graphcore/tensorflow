@@ -27,16 +27,6 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
-// This is defined in xla_ipu_common.h as the following:
-// const char* const DEVICE_IPU_XLA_JIT = "XLA_IPU_JIT";
-// That header hasn't been included here asn that would involve
-// making it a hard dependency for tf2xla. Whilst this works for
-// now, a longer term solution for detecting IPU devices in tf2xla
-// will be necessary, however this will involve the IPU being
-// baked into tf2xla as a special case, which could be problematic
-// for upstream.
-constexpr static auto XLA_IPU_JIT = "XLA_IPU_JIT";
-
 class FusedBatchNormOp : public XlaOpKernel {
  public:
   explicit FusedBatchNormOp(OpKernelConstruction* ctx)
@@ -72,7 +62,6 @@ class FusedBatchNormOp : public XlaOpKernel {
       apply_relu_ = false;
     }
     is_on_gpu_ = ctx->device_type().type_string() == DEVICE_GPU_XLA_JIT;
-    is_on_ipu_ = ctx->device_type().type_string() == XLA_IPU_JIT;
   }
 
   void Compile(XlaOpKernelContext* ctx) override { CompileImpl(ctx); }
@@ -92,12 +81,10 @@ class FusedBatchNormOp : public XlaOpKernel {
     int feature_index =
         GetTensorFeatureDimIndex(input_shape.dims(), data_format_);
 
-    if (!is_on_ipu_) {
-      // TODO(b/69928690): support mixed precision in the XLA batch normalization
-      // operators. As a workaround, cast everything to the statistics type (which
-      // may be more precise than the input type).
-      input = xla::ConvertElementType(input, scale_type);
-    }
+    // TODO(b/69928690): support mixed precision in the XLA batch normalization
+    // operators. As a workaround, cast everything to the statistics type (which
+    // may be more precise than the input type).
+    input = xla::ConvertElementType(input, scale_type);
 
     if (is_training_) {
       xla::XlaOp output = xla::BatchNormTraining(
@@ -175,7 +162,6 @@ class FusedBatchNormOp : public XlaOpKernel {
   bool add_side_input_;
   bool apply_relu_;
   bool is_on_gpu_;
-  bool is_on_ipu_;
 };
 
 class FusedBatchNormOpV3 : public FusedBatchNormOp {
@@ -222,7 +208,6 @@ class FusedBatchNormGradOp : public XlaOpKernel {
         ctx, FormatFromString(data_format_str, &data_format_),
         errors::InvalidArgument("Invalid data format: ", data_format_str));
     is_on_gpu_ = ctx->device_type().type_string() == DEVICE_GPU_XLA_JIT;
-    is_on_ipu_ = ctx->device_type().type_string() == XLA_IPU_JIT;
   }
 
   void Compile(XlaOpKernelContext* ctx) override {
@@ -230,19 +215,13 @@ class FusedBatchNormGradOp : public XlaOpKernel {
     DataType input_dtype = ctx->input_type(0);
     DataType scale_dtype = ctx->input_type(2);
 
-    xla::XlaOp grad_backprop, activations;
-    if (!is_on_ipu_) {
-      // TODO(b/69928690): support mixed precision in the XLA batch 
-      // normalization operators. For now, cast everything to the statistics 
-      // type (which may be more precise than the input type).
-      grad_backprop = 
+    // TODO(b/69928690): support mixed precision in the XLA batch normalization
+    // operators. For now, cast everything to the statistics type (which
+    // may be more precise than the input type).
+    auto grad_backprop =
         XlaHelpers::ConvertElementType(ctx->Input(0), scale_dtype);
-      activations = XlaHelpers::ConvertElementType(ctx->Input(1), scale_dtype);
-    } else {
-      grad_backprop = ctx->Input(0);
-      activations = ctx->Input(1);
-    }
-
+    auto activations =
+        XlaHelpers::ConvertElementType(ctx->Input(1), scale_dtype);
     auto scale = ctx->Input(2);
     auto mean = ctx->Input(3);
     auto var = ctx->Input(4);
@@ -291,10 +270,10 @@ class FusedBatchNormGradOp : public XlaOpKernel {
       // x_backprop = y_backprop * (scale * rsqrt(pop_var + epsilon))
       const DataType accumulation_type =
           XlaHelpers::SumAccumulationType(scale_dtype);
-      auto grad_backprop_cast =
+      auto converted =
           XlaHelpers::ConvertElementType(grad_backprop, accumulation_type);
       auto reduce =
-          xla::Reduce(grad_backprop_cast, XlaHelpers::Zero(b, accumulation_type),
+          xla::Reduce(converted, XlaHelpers::Zero(b, accumulation_type),
                       *ctx->GetOrCreateAdd(accumulation_type), reduction_dims);
       offset_backprop = XlaHelpers::ConvertElementType(reduce, scale_dtype);
 
@@ -304,18 +283,15 @@ class FusedBatchNormGradOp : public XlaOpKernel {
 
       // scratch2 = sum(y_backprop * (x - mean))
       auto mul =
-          xla::Mul(grad_backprop_cast, 
-                   xla::Sub(XlaHelpers::ConvertElementType(activations, scale_dtype), 
-                            mean, {feature_index}));
-      auto converted = XlaHelpers::ConvertElementType(mul, accumulation_type);
+          xla::Mul(grad_backprop, xla::Sub(activations, mean, {feature_index}));
+      converted = XlaHelpers::ConvertElementType(mul, accumulation_type);
       reduce =
           xla::Reduce(converted, XlaHelpers::Zero(b, accumulation_type),
                       *ctx->GetOrCreateAdd(accumulation_type), reduction_dims);
       auto scratch2 = XlaHelpers::ConvertElementType(reduce, scale_dtype);
 
       x_backprop =
-          xla::Mul(grad_backprop_cast, 
-                   xla::Mul(scratch1, scale), {feature_index});
+          xla::Mul(grad_backprop, xla::Mul(scratch1, scale), {feature_index});
       scale_backprop = xla::Mul(scratch1, scratch2);
     }
 
@@ -331,7 +307,6 @@ class FusedBatchNormGradOp : public XlaOpKernel {
   float epsilon_;
   bool is_training_;
   bool is_on_gpu_;
-  bool is_on_ipu_;
 };
 
 REGISTER_XLA_OP(Name("FusedBatchNormGrad"), FusedBatchNormGradOp);
