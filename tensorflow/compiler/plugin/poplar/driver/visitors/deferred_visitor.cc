@@ -35,6 +35,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/util.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -717,21 +718,37 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
     poplar::Tensor tensor;
     poplar::Graph& graph = GetGraph(resources_, inst);
 
-    // Get the layout of the variable passed into the gradient accumulator.
-    TensorVector outputs =
-        FindInstructionOutputs(tensor_map, resources_, inst->operand(0));
-    CHECK_EQ(outputs.size(), 1);
-    poplar::Tensor variable_tensor = outputs[0];
+    // GradientAccumulatorCreate also accepts shape
+    // as its ctor argument, maybe we don't have any operands here.
+    // In this case we expect this instruction to have exactly 1 user.
 
-    if (inst->user_count() > 1) {
-      tensor = TensorCloneAndRebalanceAliasing(
-          graph, resources_, variable_tensor, GetDebugName(inst));
+    if (inst->operand_count() > 0) {
+      // Get the layout of the variable passed into the gradient accumulator.
+      TensorVector outputs =
+          FindInstructionOutputs(tensor_map, resources_, inst->operand(0));
+      CHECK_EQ(outputs.size(), 1);
+      poplar::Tensor variable_tensor = outputs[0];
+
+      if (inst->user_count() > 1) {
+        tensor = TensorCloneAndRebalanceAliasing(
+            graph, resources_, variable_tensor, GetDebugName(inst));
+      } else {
+        // Allocate the accumulator, and if there isn't a layout to use, use the
+        // variable layout.
+        TF_ASSIGN_OR_RETURN(
+            tensor,
+            AllocateInput(allocation_location, inst->shape(), variable_tensor));
+      }
     } else {
-      // Allocate the accumulator, and if there isn't a layout to use, use the
-      // variable layout.
-      TF_ASSIGN_OR_RETURN(
-          tensor,
-          AllocateInput(allocation_location, inst->shape(), variable_tensor));
+      if (inst->user_count() > 1) {
+        return FailedPrecondition(
+            "Expected exactly one user if only shape was provided: ",
+            inst->ToString());
+      } else {
+        TF_ASSIGN_OR_RETURN(
+            tensor,
+            AllocateInput(allocation_location, inst->shape(), absl::nullopt));
+      }
     }
     return tensor;
   };
