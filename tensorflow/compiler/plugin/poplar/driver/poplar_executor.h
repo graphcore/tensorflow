@@ -459,6 +459,7 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
                                 const std::string& poplar_graph,
                                 const std::string& tensor_map_json,
                                 const std::string& instruction_info,
+                                const std::string& tensorflow_info,
                                 int64 duration);
 
   void DumpPoplarOutOfMemoryAllocationException(
