@@ -181,6 +181,13 @@ CreateStatefulGradientAccumulationWithMomentumAndAllReduceWithNorm(
       operands, num_mini_batches);
 }
 
+HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(const Shape& shape)
+    : HloPoplarInstruction(shape, {}, PoplarOp::GradientAccumulatorCreate) {
+  // Mark the creator as stateful so that it does not get merged with other same
+  // shaped accumulators.
+  set_custom_call_has_side_effect(true);
+}
+
 HloGradientAccumulatorCreate::HloGradientAccumulatorCreate(
     HloInstruction* const variable)
     : HloPoplarInstruction(variable->shape(), {variable},
@@ -210,8 +217,10 @@ std::unique_ptr<HloInstruction>
 HloGradientAccumulatorCreate::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext*) const {
-  CHECK_EQ(new_operands.size(), 1);
-  return absl::make_unique<HloGradientAccumulatorCreate>(new_operands[0]);
+  CHECK_LE(new_operands.size(), 1);
+  return new_operands.size() == 0
+             ? absl::make_unique<HloGradientAccumulatorCreate>(shape)
+             : absl::make_unique<HloGradientAccumulatorCreate>(new_operands[0]);
 }
 
 std::vector<std::string>
@@ -223,6 +232,11 @@ HloGradientAccumulatorCreate::ExtraPoplarAttributesToStringImpl(
 std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
     HloInstruction* const variable) {
   return absl::make_unique<HloGradientAccumulatorCreate>(variable);
+}
+
+std::unique_ptr<HloInstruction> CreateGradientAccumulatorCreate(
+    const Shape& shape) {
+  return absl::make_unique<HloGradientAccumulatorCreate>(shape);
 }
 
 HloGradientAccumulatorAdd::HloGradientAccumulatorAdd(

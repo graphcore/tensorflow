@@ -56,6 +56,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/embeddings_gradient_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/f16_constant_folding.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
@@ -1021,6 +1022,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
         pass.AddPass<GatherSimplifier>();
       }
       pass.AddPass<ScatterSimplifier>();
+      pass.AddPass<MultiUpdateCanonicalize>();
+      pass.AddPass<EmbeddingsGradientOptimizer>();
       pass.AddPass<MultiUpdateCanonicalize>();
       pass.AddPass<MultiUpdateCombiner>(resources.annotations);
       if (poplar_executor->EnableMultiSliceCombiner()) {

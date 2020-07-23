@@ -161,6 +161,7 @@ cc_library(
         "driver/passes/custom_op_replacer.cc",
         "driver/passes/dependency_replacer.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
+        "driver/passes/embeddings_gradient_optimizer.cc",
         "driver/passes/expression_outliner.cc",
         "driver/passes/f16_constant_folding.cc",
         "driver/passes/forward_allocation.cc",
@@ -302,6 +303,7 @@ cc_library(
         "driver/passes/custom_op_replacer.h",
         "driver/passes/dependency_replacer.h",
         "driver/passes/elementwise_broadcast_converter.h",
+        "driver/passes/embeddings_gradient_optimizer.h",
         "driver/passes/expression_outliner.h",
         "driver/passes/f16_constant_folding.h",
         "driver/passes/forward_allocation.h",
@@ -3156,6 +3158,18 @@ tf_xla_py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+xla_test(
+    name = "embeddings_gradient_optimizer_test",
+    srcs = ["tests/embeddings_gradient_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 

@@ -100,6 +100,13 @@ StatusOr<bool> AddAllocationControlDependencies(HloModule* module) {
         continue;
       }
 
+      // GradientAccumulatorCreate also accepts shape
+      // as its ctor argument as an alternative to instruction.
+      // This means no peer instruction is available here.
+      if (inst->operand_count() == 0) {
+        continue;
+      }
+
       HloInstruction* layout_input = inst->mutable_operand(0);
       // Try and add control dependencies to other layout input users.
       for (HloInstruction* peer : layout_input->users()) {
