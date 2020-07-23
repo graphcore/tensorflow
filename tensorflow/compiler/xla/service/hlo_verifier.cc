@@ -932,6 +932,11 @@ Status CheckMixedPrecisionOperands(const HloInstruction* instruction) {
     case HloOpcode::kTuple:
     case HloOpcode::kWhile:
       break;
+    // Allow mixed precision for batch norm.
+    case HloOpcode::kBatchNormGrad:
+    case HloOpcode::kBatchNormInference:
+    case HloOpcode::kBatchNormTraining:
+      break;
     default: {
       PrimitiveType fp_type = PRIMITIVE_TYPE_INVALID;
       for (auto operand : instruction->operands()) {
