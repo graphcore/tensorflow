@@ -4032,6 +4032,24 @@ tf_xla_py_test(
     size = "medium",
     srcs = ["tests/auto_report_directory_test.py"],
     enabled_backends = ["poplar"],
+    shard_count = 1,
+    deps = [
+        ":ipu_ops_py",
+        ":test_utils_py",
+        "//tensorflow/compiler/tests:xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform",
+        "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+tf_xla_py_test(
+    name = "report_framework_info_test",
+    size = "medium",
+    srcs = ["tests/report_framework_info_test.py"],
+    enabled_backends = ["poplar"],
     deps = [
         ":ipu_ops_py",
         ":test_utils_py",
@@ -4330,6 +4348,7 @@ test_suite(
         "remapping_test",
         "remove_blocked_recompute_test",
         "reorder_gradient_accumulation_pass_test",
+        "report_framework_info_test",
         "resource_update_fixer_test",
         "resource_update_schedule_optimizer_test",
         "resource_update_variables_offload_test",

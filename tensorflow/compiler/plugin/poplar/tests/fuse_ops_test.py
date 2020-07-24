@@ -568,7 +568,7 @@ class IpuFuseOpsTest(xla_test.XLATestCase):
 
       ok = [
           '__seed*', 'host-exchange-local-copy',
-          'xw_plus_b/MatMul/dot.*/Conv_1/Convolve', 'xw_plus_b/fusion/Op/Add'
+          'xw_plus_b/MatMul/dot.*/Conv_1', 'xw_plus_b/fusion/Op/Add'
       ]
       report.assert_all_compute_sets_and_list(ok)
 

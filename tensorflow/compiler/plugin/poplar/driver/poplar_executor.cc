@@ -153,24 +153,6 @@ void ResetXfeedManager(int device_ordinal) {
 }
 
 namespace {
-Status CreateDirIfMissing(const std::string& path) {
-  CHECK(!path.empty());
-  auto* env = tensorflow::Env::Default();
-
-  // Two threads could race to observe the absence of the directory and
-  // simultaneously try to create it, causing the "losing" thread to get a
-  // "directory already exists" error.  We can work around this by checking
-  // again whether the dir exists.
-  if (!env->IsDirectory(path).ok()) {
-    const auto status = env->RecursivelyCreateDir(path);
-    if (!status.ok() && !env->IsDirectory(path).ok()) {
-      return status;
-    }
-  }
-
-  return Status::OK();
-}
-
 Shape GetOutfeedShape(const Shape& output_shape,
                       const uint32 replication_factor) {
   if (replication_factor > 1) {
@@ -1680,10 +1662,12 @@ std::string PoplarExecutor::ReportFileExtension() const {
 void PoplarExecutor::AddCompileEndEventRecord(
     const std::string& module_name, const std::string& report,
     const std::string& poplar_graph, const std::string& tensor_map,
-    const std::string& instruction_info, int64 duration) {
+    const std::string& instruction_info, const std::string& tensorflow_info,
+    int64 duration) {
   std::string rep = std::move(report);
   std::string map = std::move(tensor_map);
   std::string gph = std::move(poplar_graph);
+  std::string tfi = std::move(tensorflow_info);
 
   if (ReportDirectory().size() > 0) {
     std::unique_ptr<tensorflow::WritableFile> file;
@@ -1719,6 +1703,14 @@ void PoplarExecutor::AddCompileEndEventRecord(
       TF_CHECK_OK(file->Append(gph));
       TF_CHECK_OK(file->Close());
       gph = filename;
+    }
+
+    if (tfi.size() > 0) {
+      std::string filename =
+          tensorflow::io::JoinPath(report_dir, "framework.json");
+      TF_CHECK_OK(tensorflow::Env::Default()->NewWritableFile(filename, &file));
+      TF_CHECK_OK(file->Append(tfi));
+      TF_CHECK_OK(file->Close());
     }
   }
 
