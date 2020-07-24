@@ -527,13 +527,22 @@ class ReportJSON(object):
 
   # Asserts all the compute sets match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one compute set
   def assert_all_compute_sets_and_list(self, ok):
-    self.test.assertFalse(
-        missing_whitelist_entries_in_names(self.get_compute_sets(), ok),
-        "Whitelist items not found in compute sets:\n\t%s" %
-        "\n\t".join(self.get_compute_sets()))
-    self.test.assertFalse(
-        missing_names_in_whitelist_entries(self.get_compute_sets(), ok),
-        "Compute sets item not found in whitelist:\n\t%s" % "\n\t".join(ok))
+    missing_whitelist = missing_whitelist_entries_in_names(
+        self.get_compute_sets(), ok)
+    missing_in_whitelist = missing_names_in_whitelist_entries(
+        self.get_compute_sets(), ok)
+
+    error_msg = "\n"
+    if missing_whitelist:
+      error_msg = "Whitelist items [%s] not found in compute sets:\n\t%s" % (
+          ",".join(missing_whitelist), "\n\t".join(self.get_compute_sets()))
+    if missing_whitelist and missing_in_whitelist:
+      error_msg += "\n"
+    if missing_in_whitelist:
+      error_msg += "Compute sets items [%s] not found in whitelist:\n\t%s" % (
+          ",".join(missing_in_whitelist), "\n\t".join(ok))
+
+    self.test.assertFalse(missing_whitelist + missing_in_whitelist, error_msg)
 
   # Asserts all the global exchanges match a pattern in the whitelist and also asserts that all the whitelist patterns match at least one global exchange
   def assert_all_global_exchanges_and_list(self, ok):

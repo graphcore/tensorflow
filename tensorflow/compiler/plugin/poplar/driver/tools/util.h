@@ -20,6 +20,7 @@ limitations under the License.
  * optimizers target within the BUILD file.
  */
 
+#include <string>
 #include <vector>
 
 #include "absl/container/flat_hash_set.h"
@@ -235,6 +236,8 @@ struct HloComputationHash {
 struct HloComputationEquals {
   bool operator()(const HloComputation* a, const HloComputation* b) const;
 };
+
+Status CreateDirIfMissing(const std::string& path);
 
 }  // namespace poplarplugin
 }  // namespace xla
