@@ -168,12 +168,18 @@ bool CopyShardingFromUsers(HloInstruction* inst) {
   // up the tuple. A tuple may have some of its elements unused.
   const int tuple_size = ShapeUtil::TupleElementCount(inst->shape());
   std::vector<HloInstruction*> tuple_users(tuple_size);
+  bool has_gte_user = false;
   for (auto* u : inst->users()) {
     if (u->opcode() == HloOpcode::kGetTupleElement) {
       if (u->tuple_index() < tuple_size) {
         tuple_users[u->tuple_index()] = u;
+        has_gte_user = true;
       }
     }
+  }
+  // No GTE users found - no sharding to use.
+  if (!has_gte_user) {
+    return false;
   }
 
   std::vector<HloSharding> tuple_sharding;

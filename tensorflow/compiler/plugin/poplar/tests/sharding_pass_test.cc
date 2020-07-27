@@ -1692,6 +1692,49 @@ ENTRY main {
   }
 }
 
+TEST_F(ShardingPassTest, TestCallSubcompWithNestedTuple) {
+  std::string hlo_string = R"(
+HloModule top
+
+subcomp {
+  s0 = f16[4] parameter(0)
+  s1 = f16[4] parameter(1)
+  s2 = f16[4] add(s0, s1), sharding={maximal device=1}
+  s3 = f16[4] add(s0, s1), sharding={maximal device=1}
+  s4 = (f16[4], f16[4]) tuple(s2, s3)
+  ROOT s5 = ((f16[4], f16[4])) tuple(s4)
+}
+
+main {
+  a0 = f16[4] parameter(0)
+  a1 = f16[4] parameter(1)
+  c0 = f16[4] cosine(a0)
+  c1 = f16[4] cosine(a1)
+  call1 = ((f16[4], f16[4])) call(c0, c1), to_apply=subcomp
+  ROOT gte0 = (f16[4], f16[4]) get-tuple-element(call1), index=0
+}
+  )";
+
+  HloModuleConfig config;
+  config.set_debug_options(GetDebugOptionsForTest());
+
+  auto module_or_status = ParseAndReturnVerifiedModule(hlo_string, config);
+  EXPECT_TRUE(module_or_status.ok());
+
+  auto* module = module_or_status.ValueOrDie().get();
+
+  ShardingPass shardingPass;
+  ASSERT_TRUE(shardingPass.Run(module).ValueOrDie());
+
+  for (auto* comp : module->computations()) {
+    auto insts = comp->instructions();
+    for (auto* inst : insts) {
+      EXPECT_TRUE(inst->has_sharding());
+      EXPECT_EQ(inst->sharding().GetUniqueDevice(), 1);
+    }
+  }
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
