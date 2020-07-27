@@ -65,7 +65,6 @@ StatusOr<bool> PipelineCommunicationOptimizer::OptimizePipeline(
     HloInstruction* fifo_inst =
         pipeline_comp->AddInstruction(CreateFifo(operand, fifo_depth));
     fifo_inst->SetAndSanitizeName(operand->name() + ".fifo");
-    fifo_inst->set_sharding(operand->sharding());
 
     // Connect it to the right input.
     HloInstruction* stage = path.GetNewConsumerStage();
