@@ -148,8 +148,6 @@ ENTRY e {
   auto fifo = stages.forward[2]->operand(0);
   // Expect FIFO depth to be 1.
   EXPECT_THAT(Cast<HloFifoInstruction>(fifo)->depth(), 1);
-  // Expect sharding on the fifo.
-  EXPECT_THAT(fifo->sharding_unique_device(), 0);
   EXPECT_THAT(fifo->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   auto gte = fifo->operand(0);
   EXPECT_THAT(gte->tuple_index(), 0);
@@ -270,8 +268,6 @@ ENTRY e {
   auto fifo = stages.backward[0]->operand(2);
   // Expect FIFO depth to be 1.
   EXPECT_THAT(Cast<HloFifoInstruction>(fifo)->depth(), 1);
-  // Expect sharding on the fifo.
-  EXPECT_THAT(fifo->sharding_unique_device(), 0);
   EXPECT_THAT(fifo->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   auto gte = fifo->operand(0);
   EXPECT_THAT(gte->tuple_index(), 0);
@@ -389,8 +385,6 @@ ENTRY e {
   auto fifo = stages.backward[1]->operand(0);
   // Expect FIFO depth to be 1.
   EXPECT_THAT(Cast<HloFifoInstruction>(fifo)->depth(), 2);
-  // Expect sharding on the fifo.
-  EXPECT_THAT(fifo->sharding_unique_device(), 1);
   EXPECT_THAT(fifo->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   auto gte = fifo->operand(0);
   EXPECT_THAT(gte->tuple_index(), 0);
@@ -473,8 +467,6 @@ ENTRY e {
   auto fifo = stages.forward[2]->operand(0);
   // Expect FIFO depth to be 1.
   EXPECT_THAT(Cast<HloFifoInstruction>(fifo)->depth(), 1);
-  // Expect sharding on the fifo.
-  EXPECT_THAT(fifo->sharding_unique_device(), 0);
   EXPECT_THAT(fifo->operand(0)->opcode(), HloOpcode::kGetTupleElement);
   auto gte = fifo->operand(0);
   EXPECT_THAT(gte->tuple_index(), 0);

@@ -1053,6 +1053,16 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ResourceUpdateFixer>();
     pipeline.AddPass<ResourceUpdateVariablesOffload>(
         resources.annotations, resources.remote_memory_supported);
+    pipeline.AddPass<PipelineFeedHoisting>();
+    pipeline.AddPass<PipelineFIFOInserter>();
+    pipeline.AddPass<PipelineCommunicationOptimizer>();
+    {
+      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+          "post-pipeline-communication-optimizer");
+      pass.AddPass<HloDCE>();
+      pass.AddPass<HloCSE>(true);
+      pass.AddPass<PipelineOptimizer>();
+    }
     // Passes below this point need to respect control dependencies.
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<SuggestRecompute>();
@@ -1072,15 +1082,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HostComputeBarrierInserter>();
     pipeline.AddPass<ShardingPass>();
     pipeline.AddPass<HostComputeScheduleOptimizer>();
-    pipeline.AddPass<PipelineFeedHoisting>();
-    pipeline.AddPass<PipelineFIFOInserter>();
-    pipeline.AddPass<PipelineCommunicationOptimizer>();
-    {
-      auto& pass = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-          "post-pipeline-communication-optimizer");
-      pass.AddPass<HloDCE>();
-      pass.AddPass<PipelineOptimizer>();
-    }
     pipeline.AddPass<InterIpuCopyInserter>();
     pipeline.AddPass<PostSerializeGradientAccumulation>();
     pipeline.AddPass<CopyInserter>();

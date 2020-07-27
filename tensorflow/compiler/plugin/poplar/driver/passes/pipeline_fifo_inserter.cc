@@ -50,7 +50,6 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
     for (HloInstruction* operand : stage->unique_operands()) {
       switch (operand->opcode()) {
         case HloOpcode::kGetTupleElement: {
-          CHECK(operand->has_sharding());
           const HloInstruction* source = operand->operand(0);
           TF_ASSIGN_OR_RETURN(StageID source_stage_id,
                               analysis->GetStageID(source));
@@ -95,8 +94,6 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
       HloInstruction* fifo_inst = pipeline_comp->AddInstruction(
           CreateFifo(fwd_stage_input,
                      fifo_depth_multiplier * (last_stage_id - stage_id.id)));
-      // Forward sharding from the stage onto the FIFO.
-      fifo_inst->set_sharding(fwd_stage_input->sharding());
       TF_RETURN_IF_ERROR(fwd_stage_input->ReplaceUseWith(stage, fifo_inst));
       changed = true;
     }

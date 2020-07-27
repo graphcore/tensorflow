@@ -14,15 +14,14 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_feed_hoisting.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/fifo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -91,12 +90,11 @@ StatusOr<HloInstruction*> HoistInfeed(HloInstruction* stage,
   std::vector<HloInstruction*> new_operands = {stage->operands().begin(),
                                                stage->operands().end()};
   new_operands.push_back(new_infeed_gte);
-  HloSharding sharding = stage->sharding();
+
   TF_ASSIGN_OR_RETURN(
       stage,
       ReplaceCallWith(stage, builder.Build(old_to_new_computation.at(root)),
                       new_operands, false));
-  stage->set_sharding(sharding);
 
   return stage;
 }
@@ -124,14 +122,6 @@ StatusOr<HloInstruction*> HoistOutfeed(HloInstruction* stage,
     // Remove the old root.
     TF_RETURN_IF_ERROR(stage_comp->RemoveInstruction(root));
   }
-
-  // Create new sharding which has the extra sharding for the outfeed input.
-  HloSharding new_sharding = HloSharding::SingleTuple(
-      new_root->shape(), *stage->sharding().ExtractSingleSharding());
-
-  // Apply the sharding both to the new root, and the pipeline stage.
-  new_root->set_sharding(new_sharding);
-  stage->set_sharding(new_sharding);
 
   // Add the GTE for the new output (it's the last element in the
   // tuple output).
