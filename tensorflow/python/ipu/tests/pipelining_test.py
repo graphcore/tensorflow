@@ -1445,6 +1445,77 @@ class PipeliningTest(test_util.TensorFlowTestCase):
         14415,
         schedule=pipelining_ops.PipelineSchedule.Grouped)
 
+  @test_util.deprecated_graph_mode_only
+  def testPipelineWithEmbeddingOptimization(self):
+    dataset_size = 100
+    embedding_size = 15
+
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(dataset_size, shape=[4])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return math_ops.cast(value,
+                             np.int32), math_ops.cast(label % 4, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    pipeline_depth = 8
+    repeat_count = 2
+    optimizer = gradient_descent.GradientDescentOptimizer(0.01)
+
+    np.random.seed(1)
+    embedding_shape = (dataset_size, embedding_size)
+    embedding_initializer = np.random.normal(0, 1, embedding_shape).astype(
+        np.float32)
+    weights_shape = (embedding_size, embedding_size)
+    weights_initializer = np.random.normal(0, 1,
+                                           weights_shape).astype(np.float32)
+
+    def stage1(idx, label):
+      with variable_scope.variable_scope("stage1", use_resource=True):
+        embedding = variable_scope.get_variable(
+            "c",
+            dtype=np.float32,
+            initializer=embedding_initializer,
+            trainable=True)
+        x = embedding_ops.embedding_lookup(embedding, idx)
+        return x, label
+
+    def stage2(x, label):
+      with variable_scope.variable_scope("vs", use_resource=True):
+        weight = variable_scope.get_variable("w0",
+                                             dtype=np.float32,
+                                             initializer=weights_initializer,
+                                             trainable=True)
+        x = math_ops.matmul(x, weight)
+      return x, label
+
+    def stage3(x, label):
+      x = math_ops.reduce_sum(x, axis=[-1])
+      return x, label
+
+    def stage4(x, label):
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=x, labels=label))
+      return loss
+
+    def inputs_fn():
+      with ops.device('cpu'):
+        return []
+
+    pipelining_test_util.PipelineTester.compare_pipeline_to_sharding(
+        [stage1, stage2, stage3, stage4],
+        inputs_fn, [],
+        repeat_count,
+        pipeline_depth,
+        dataset_fn,
+        optimizer,
+        self,
+        12049,
+        schedule=pipelining_ops.PipelineSchedule.Interleaved)
+
 
 if __name__ == "__main__":
   googletest.main()
