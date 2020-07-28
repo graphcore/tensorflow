@@ -1047,8 +1047,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
-    pipeline.AddPass<RecomputeInstructions>(
-        poplar_executor->RecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<ResourceUpdateFixer>();
     pipeline.AddPass<ResourceUpdateVariablesOffload>(
@@ -1064,6 +1062,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<PipelineOptimizer>();
     }
     // Passes below this point need to respect control dependencies.
+    pipeline.AddPass<RecomputeInstructions>(
+        poplar_executor->RecomputationEnabled());
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<SuggestRecompute>();
       pipeline.AddPass<AddBlockRecompute>();
