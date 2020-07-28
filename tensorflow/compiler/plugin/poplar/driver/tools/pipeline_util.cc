@@ -1812,8 +1812,10 @@ Status PipelineDataflowAnalysis::UpdateThroughInstruction(
       // Make sure the operands of the stage do not violate the data flow
       // constraints.
       TF_RETURN_IF_ERROR(VerifyPipelineStageOperands(inst));
-    } else if (IsGradientAccumulatorCreate(inst)) {
-      // Make sure the input to the creator is just a parameter.
+    } else if (IsGradientAccumulatorCreate(inst) &&
+               !operands_value_set.values().empty()) {
+      // Make sure the input to the creator is just a parameter if it's present.
+      // Creator may not have any inputs.
       CHECK_EQ(operands_value_set.values().size(), 1);
       CHECK_EQ(operands_value_set.values()[0]->instruction()->opcode(),
                HloOpcode::kParameter);
