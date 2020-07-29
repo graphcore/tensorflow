@@ -161,6 +161,7 @@ cc_library(
         "driver/passes/custom_op_replacer.cc",
         "driver/passes/dependency_replacer.cc",
         "driver/passes/elementwise_broadcast_converter.cc",
+        "driver/passes/embeddings_gradient_optimizer.cc",
         "driver/passes/expression_outliner.cc",
         "driver/passes/f16_constant_folding.cc",
         "driver/passes/forward_allocation.cc",
@@ -302,6 +303,7 @@ cc_library(
         "driver/passes/custom_op_replacer.h",
         "driver/passes/dependency_replacer.h",
         "driver/passes/elementwise_broadcast_converter.h",
+        "driver/passes/embeddings_gradient_optimizer.h",
         "driver/passes/expression_outliner.h",
         "driver/passes/f16_constant_folding.h",
         "driver/passes/forward_allocation.h",
@@ -2194,6 +2196,42 @@ xla_test(
 )
 
 xla_test(
+    name = "create_buffer_test",
+    size = "medium",
+    srcs = ["tests/create_buffer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        ":test_utils",
+        "//tensorflow/compiler/xla:array3d",
+        "//tensorflow/compiler/xla:literal",
+        "//tensorflow/compiler/xla:reference_util",
+        "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:status_macros",
+        "//tensorflow/compiler/xla:statusor",
+        "//tensorflow/compiler/xla:test",
+        "//tensorflow/compiler/xla:util",
+        "//tensorflow/compiler/xla:xla_data_proto",
+        "//tensorflow/compiler/xla/client:global_data",
+        "//tensorflow/compiler/xla/client:local_client",
+        "//tensorflow/compiler/xla/client:xla_builder",
+        "//tensorflow/compiler/xla/client:xla_computation",
+        "//tensorflow/compiler/xla/client/lib:arithmetic",
+        "//tensorflow/compiler/xla/client/lib:math",
+        "//tensorflow/compiler/xla/service:hlo",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:client_library_test_base",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+        "//tensorflow/compiler/xla/tests:literal_test_util",
+        "//tensorflow/compiler/xla/tests:xla_internal_test_main",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
     name = "arithmetic_expr_test",
     size = "medium",
     srcs = ["tests/arithmetic_expr_test.cc"],
@@ -3120,6 +3158,18 @@ tf_xla_py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/ipu:ipu_lib",
         "//tensorflow/python/keras:layers_base",
+    ],
+)
+
+xla_test(
+    name = "embeddings_gradient_optimizer_test",
+    srcs = ["tests/embeddings_gradient_optimizer_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
     ],
 )
 
@@ -4246,6 +4296,7 @@ test_suite(
         "conversions_test",
         "convolution_classifier_test",
         "copy_inserter_test",
+        "create_buffer_test",
         "data_initializer_test",
         "deferred_visitor_test",
         "dependency_replacer_test",

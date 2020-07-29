@@ -56,6 +56,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/dependency_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/elementwise_broadcast_converter.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/embeddings_gradient_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/expression_outliner.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/f16_constant_folding.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/forward_allocation.h"
@@ -1022,6 +1023,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       }
       pass.AddPass<ScatterSimplifier>();
       pass.AddPass<MultiUpdateCanonicalize>();
+      pass.AddPass<EmbeddingsGradientOptimizer>();
+      pass.AddPass<MultiUpdateCanonicalize>();
       pass.AddPass<MultiUpdateCombiner>(resources.annotations);
       if (poplar_executor->EnableMultiSliceCombiner()) {
         pass.AddPass<MultiSliceCombiner>(resources.annotations);
@@ -1047,8 +1050,6 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<FuseOpsLate>>(resources.annotations);
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
-    pipeline.AddPass<RecomputeInstructions>(
-        poplar_executor->RecomputationEnabled());
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<ResourceUpdateFixer>();
     pipeline.AddPass<ResourceUpdateVariablesOffload>(
@@ -1064,6 +1065,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<PipelineOptimizer>();
     }
     // Passes below this point need to respect control dependencies.
+    pipeline.AddPass<RecomputeInstructions>(
+        poplar_executor->RecomputationEnabled());
     if (poplar_executor->RecomputationEnabled()) {
       pipeline.AddPass<SuggestRecompute>();
       pipeline.AddPass<AddBlockRecompute>();

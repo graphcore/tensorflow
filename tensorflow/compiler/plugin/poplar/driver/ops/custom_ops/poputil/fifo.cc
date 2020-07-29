@@ -47,15 +47,10 @@ uint32 find_powerof2_mask(uint32 v) {
   return 0xFFFFFFFF % v;
 }
 
-bool IsFifoInPipeline(const HloInstruction* inst, CallGraph* call_graph) {
-  auto call_sites = call_graph->GetNode(inst->parent()).caller_callsites();
-  return call_sites.size() == 1 && IsPipelineOp(call_sites[0].instruction());
-}
-
 Status AddWriteUndefToFIFOBuffer(const HloInstruction* inst,
                                  const poplar::Tensor& buffer,
                                  CompilerResources& res) {
-  if (IsFifoInPipeline(inst, res.module_call_graph.get())) {
+  if (IsInPipeline(inst, res)) {
     // We need to write undef the FIFO buffer otherwise it will be marked as
     // always live in Poplar as we never write to it fully in the pipeline.
     if (res.pipelining_write_undef_sequences.empty()) {
