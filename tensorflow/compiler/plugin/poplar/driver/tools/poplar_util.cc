@@ -311,6 +311,12 @@ bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res) {
          IsRemoteParameter(inst->parameter_number(), res);
 }
 
+bool IsInPipeline(const HloInstruction* inst, CompilerResources& res) {
+  auto call_sites =
+      res.module_call_graph->GetNode(inst->parent()).caller_callsites();
+  return call_sites.size() == 1 && IsPipelineOp(call_sites[0].instruction());
+}
+
 StatusOr<std::string> GetInstructionCompilationInfo(
     const std::unique_ptr<xla::HloModule>& module, CompilerResources& res) {
   TF_ASSIGN_OR_RETURN(auto ml_type_map, GetAllNotNoneMlTypes(module.get()));

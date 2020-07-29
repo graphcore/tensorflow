@@ -28,12 +28,14 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/ops/ops.h"
 #include "tensorflow/compiler/plugin/poplar/driver/poplar_executor.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tensor.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/data_initializer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
 #include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/util.h"
 
 namespace xla {
 namespace poplarplugin {
@@ -686,6 +688,9 @@ Status DeferredVisitor::HandleCustomCall(HloInstruction* inst) {
   if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst)) {
     return HandleGradientAccumulatorCreate(inst);
   }
+  if (IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)) {
+    return HandleCreateBuffer(inst);
+  }
   return HandleNonDeferredCustomCall(inst);
 }
 
@@ -713,21 +718,37 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
     poplar::Tensor tensor;
     poplar::Graph& graph = GetGraph(resources_, inst);
 
-    // Get the layout of the variable passed into the gradient accumulator.
-    TensorVector outputs =
-        FindInstructionOutputs(tensor_map, resources_, inst->operand(0));
-    CHECK_EQ(outputs.size(), 1);
-    poplar::Tensor variable_tensor = outputs[0];
+    // GradientAccumulatorCreate also accepts shape
+    // as its ctor argument, maybe we don't have any operands here.
+    // In this case we expect this instruction to have exactly 1 user.
 
-    if (inst->user_count() > 1) {
-      tensor = TensorCloneAndRebalanceAliasing(
-          graph, resources_, variable_tensor, GetDebugName(inst));
+    if (inst->operand_count() > 0) {
+      // Get the layout of the variable passed into the gradient accumulator.
+      TensorVector outputs =
+          FindInstructionOutputs(tensor_map, resources_, inst->operand(0));
+      CHECK_EQ(outputs.size(), 1);
+      poplar::Tensor variable_tensor = outputs[0];
+
+      if (inst->user_count() > 1) {
+        tensor = TensorCloneAndRebalanceAliasing(
+            graph, resources_, variable_tensor, GetDebugName(inst));
+      } else {
+        // Allocate the accumulator, and if there isn't a layout to use, use the
+        // variable layout.
+        TF_ASSIGN_OR_RETURN(
+            tensor,
+            AllocateInput(allocation_location, inst->shape(), variable_tensor));
+      }
     } else {
-      // Allocate the accumulator, and if there isn't a layout to use, use the
-      // variable layout.
-      TF_ASSIGN_OR_RETURN(
-          tensor,
-          AllocateInput(allocation_location, inst->shape(), variable_tensor));
+      if (inst->user_count() > 1) {
+        return FailedPrecondition(
+            "Expected exactly one user if only shape was provided: ",
+            inst->ToString());
+      } else {
+        TF_ASSIGN_OR_RETURN(
+            tensor,
+            AllocateInput(allocation_location, inst->shape(), absl::nullopt));
+      }
     }
     return tensor;
   };
@@ -764,6 +785,61 @@ Status DeferredVisitor::HandleGradientAccumulatorCreate(HloInstruction* inst) {
     TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
     TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
         output_location, std::move(allocate_fn), std::move(post_process_fn)));
+  }
+
+  return Status::OK();
+}
+
+Status DeferredVisitor::HandleCreateBuffer(HloInstruction* inst) {
+  VLOG(1) << "Processing " << inst->name();
+
+  const HloCreateBuffer* create_buffer = Cast<HloCreateBuffer>(inst);
+  const Shape& shape = inst->shape();
+  CHECK(!shape.IsTuple());
+
+  TensorLocation output_location(inst, 0);
+  if (create_buffer->IsRemoteBuffer()) {
+    return FailedPrecondition("Buffers in remote memory are not supported.");
+  } else {
+    // Allocate now if there is an allocation target.
+    const bool allocate_now =
+        HasTensorAllocationTarget(output_location, resources_);
+
+    // Function which is called when allocating this tensor.
+    DeferredAllocateFunction allocate_fn =
+        [this, shape](
+            TensorLocation allocation_location) -> StatusOr<poplar::Tensor> {
+      TF_ASSIGN_OR_RETURN(
+          poplar::Tensor tensor,
+          AllocateInput(allocation_location, shape, absl::nullopt));
+      return tensor;
+    };
+
+    // Function which is called after the tensor has been created.
+    DeferredPostProcessFunction post_process_fn =
+        [this, inst](poplar::Tensor tensor) -> StatusOr<poplar::Tensor> {
+      if (IsInPipeline(inst, resources_)) {
+        // The create buffer is inside of the pipeline which means it's used
+        // as a stash.
+        TF_ASSIGN_OR_RETURN(auto seq, GetSequenceForInstruction(inst));
+        seq->add(poplar::program::WriteUndef(tensor));
+      }
+      return tensor;
+    };
+
+    if (allocate_now) {
+      // If a tensor can be allocated now, then do it immediately.
+      poplar::Tensor output;
+      TF_ASSIGN_OR_RETURN(output, allocate_fn(output_location));
+      TF_ASSIGN_OR_RETURN(output, post_process_fn(output));
+      TF_RETURN_IF_ERROR(AddOutputTensor(tensor_map, inst, 0, output));
+    } else {
+      // Otherwise defer the allocation.
+      VLOG(1) << "Deferring allocation of " << inst->name() << " sub tensor 0.";
+      TF_ASSIGN_OR_RETURN(auto deferred_allocation, GetDeferredAllocations());
+      TF_RETURN_IF_ERROR(deferred_allocation->AddDeferredAllocation(
+          output_location, std::move(allocate_fn), std::move(post_process_fn)));
+    }
   }
 
   return Status::OK();

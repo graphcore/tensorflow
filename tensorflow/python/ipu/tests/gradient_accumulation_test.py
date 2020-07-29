@@ -31,6 +31,7 @@ from tensorflow.python.platform import googletest
 from tensorflow.python.training import gradient_descent
 from tensorflow.python.training import momentum
 from tensorflow.python.training import adam
+from tensorflow.python.training import rmsprop
 from tensorflow.python.ipu import embedding_ops
 from tensorflow.python.ipu import ipu_compiler
 from tensorflow.python.ipu import ipu_infeed_queue
@@ -446,6 +447,72 @@ class GradientAccumulationTest(test_util.TensorFlowTestCase):
 
     _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
                     num_batches_to_accumulate, dataset_fn, optimizer)
+
+  def _compare6(self, optimizer):
+    dataset_size = 100
+    num_batches_to_accumulate = 10
+    repeat_count = 2
+    embedding_size = 10
+
+    def dataset_fn():
+      dataset = tu.create_single_increasing_dataset(dataset_size, shape=[4])
+      dataset = dataset.batch(batch_size=2, drop_remainder=True)
+
+      def dataset_parser(value):
+        label = math_ops.reduce_mean(value, axis=[1])
+        return math_ops.cast(value,
+                             np.int32), math_ops.cast(label % 4, np.int32)
+
+      return dataset.map(dataset_parser)
+
+    def fwd_fn(idx, label):
+      np.random.seed(1)
+      embedding_shape = (dataset_size, embedding_size)
+      embedding_initializer = np.random.normal(0, 1, embedding_shape).astype(
+          np.float32)
+      weights_shape = (embedding_size, embedding_size)
+      weights_initializer = np.random.normal(0, 1,
+                                             weights_shape).astype(np.float32)
+
+      with variable_scope.variable_scope("part1", use_resource=True):
+        embedding = variable_scope.get_variable(
+            "c",
+            dtype=np.float32,
+            initializer=embedding_initializer,
+            trainable=True)
+
+        weight = variable_scope.get_variable("w0",
+                                             dtype=np.float32,
+                                             initializer=weights_initializer,
+                                             trainable=True)
+
+      x = embedding_ops.embedding_lookup(embedding, idx)
+      x = math_ops.matmul(x, weight)
+
+      logits = math_ops.reduce_sum(x, axis=[-1])
+      loss = math_ops.reduce_mean(
+          nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                      labels=label))
+      return loss
+
+    _compare_to_cpu(self, fwd_fn, lambda: [], [], repeat_count,
+                    num_batches_to_accumulate, dataset_fn, optimizer)
+
+  @test_util.deprecated_graph_mode_only
+  def testCompare6Momentum(self):
+    self._compare6(momentum.MomentumOptimizer(0.01, 0.8))
+
+  @test_util.deprecated_graph_mode_only
+  def testCompare6SDG(self):
+    self._compare6(gradient_descent.GradientDescentOptimizer(0.01))
+
+  @test_util.deprecated_graph_mode_only
+  def testCompare6Adam(self):
+    self._compare6(adam.AdamOptimizer())
+
+  @test_util.deprecated_graph_mode_only
+  def testCompare6RMS(self):
+    self._compare6(rmsprop.RMSPropOptimizer(0.01))
 
 
 if __name__ == "__main__":

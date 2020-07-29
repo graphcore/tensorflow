@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/graph_optimizer_passes/extract_outside_compilation_pass.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -33,6 +34,7 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor_shape.pb.h"
 #include "tensorflow/core/platform/test.h"
 #include "tensorflow/core/public/session_options.h"
+#include "tensorflow/core/util/equal_graph_def.h"
 
 namespace tensorflow {
 namespace {
@@ -59,11 +61,27 @@ class ExtractOutsideCompilationPassTest : public ::testing::Test {
     return ExtractOutsideCompilationPass().Run(opts);
   }
 
+  Status AddLaunchNode(Graph* graph, const std::string& func_name) {
+    NodeDef launch_def;
+    launch_def.set_op("XlaLaunch");
+    launch_def.set_name("launch");
+    AddNodeAttr("Tconstants", DataTypeVector{}, &launch_def);
+    AddNodeAttr("Targs", DataTypeVector{}, &launch_def);
+    AddNodeAttr("Nresources", 0, &launch_def);
+    AddNodeAttr("Tresults", 0, &launch_def);
+    NameAttrList function;
+    function.set_name(func_name);
+    AddNodeAttr("function", function, &launch_def);
+
+    Status s;
+    graph->AddNode(launch_def, &s);
+    return s;
+  }
+
  private:
   SessionOptions session_options_;
   std::unique_ptr<DeviceMgr> device_mgr_;
   DeviceSet device_set_;
-  std::unique_ptr<ProcessFunctionLibraryRuntime> pflr_;
 };
 
 TEST_F(ExtractOutsideCompilationPassTest, TwoInputsTwoOutputs) {
@@ -89,41 +107,24 @@ TEST_F(ExtractOutsideCompilationPassTest, TwoInputsTwoOutputs) {
     Output identity2 = ops::Identity(s.WithOpName("identity2"), identity0);
     Output identity3 = ops::Identity(s.WithOpName("identity3"), identity1);
 
-    auto g = absl::make_unique<Graph>(OpRegistry::Global());
-    TF_CHECK_OK(s.ToGraph(g.get()));
+    identity0.node()->AddAttr(kXlaOutsideCompilationAttrName, "outside");
+    identity0.node()->AddAttr(kXlaInferredShapesAttrName,
+                              std::vector<PartialTensorShape>{{}});
 
-    auto function_nodes = g->BuildNodeNameIndex();
+    identity1.node()->AddAttr(kXlaOutsideCompilationAttrName, "outside");
+    identity1.node()->AddAttr(kXlaInferredShapesAttrName,
+                              std::vector<PartialTensorShape>{{}});
 
-    function_nodes["identity0"]->AddAttr(kXlaOutsideCompilationAttrName,
-                                         "outside");
-    function_nodes["identity1"]->AddAttr(kXlaOutsideCompilationAttrName,
-                                         "outside");
-
-    function_nodes["identity0"]->AddAttr(kXlaInferredShapesAttrName,
-                                         std::vector<PartialTensorShape>{{}});
-    function_nodes["identity1"]->AddAttr(kXlaInferredShapesAttrName,
-                                         std::vector<PartialTensorShape>{{}});
-
-    TF_CHECK_OK(GraphToFunctionDef(*g, "cluster", fdef_lib.add_function()));
+    Graph g(OpRegistry::Global());
+    TF_CHECK_OK(s.ToGraph(&g));
+    TF_CHECK_OK(GraphToFunctionDef(g, "cluster", fdef_lib.add_function()));
   }
 
   auto flib_def = FunctionLibraryDefinition(OpRegistry::Global(), fdef_lib);
   auto graph = absl::make_unique<Graph>(OpRegistry::Global());
 
   // Add an XlaLaunch node that launches the function in the outside graph.
-  NodeDef launch_def;
-  launch_def.set_op("XlaLaunch");
-  launch_def.set_name("launch");
-  AddNodeAttr("Tconstants", DataTypeVector{}, &launch_def);
-  AddNodeAttr("Targs", DataTypeVector{}, &launch_def);
-  AddNodeAttr("Nresources", 0, &launch_def);
-  AddNodeAttr("Tresults", 0, &launch_def);
-  NameAttrList function;
-  function.set_name("cluster");
-  AddNodeAttr("function", function, &launch_def);
-  Status s;
-  graph->AddNode(launch_def, &s);
-  TF_CHECK_OK(s);
+  TF_CHECK_OK(AddLaunchNode(graph.get(), "cluster"));
 
   // Run the pass to perform the extraction.
   TF_CHECK_OK(RunPass(&flib_def, &graph));
@@ -222,6 +223,229 @@ TEST_F(ExtractOutsideCompilationPassTest, TwoInputsTwoOutputs) {
   EXPECT_EQ(host_compute->in_nodes().begin()->name(), const0->name());
   EXPECT_EQ(std::next(host_compute->in_nodes().begin())->name(),
             const1->name());
+}
+
+TEST_F(ExtractOutsideCompilationPassTest, PipelineRepeatCount) {
+  FunctionDefLibrary fdef_lib;
+
+  // Create a "pipeline" function that contains an "outside" scope:
+  //
+  //              pipeline
+  //  ----------------------------------
+  // |            outside               |
+  // |           ---------              |
+  // | const -> | sigmoid | -> identity |
+  // |           ---------              |
+  //  ----------------------------------
+  const auto pipeline_function_name = "pipeline";
+  {
+    auto s = tensorflow::Scope::NewRootScope();
+    auto const0 = ops::Const(s.WithOpName("const"), 1.0f, {});
+    auto sigmoid = ops::Sigmoid(s.WithOpName("sigmoid"), const0);
+    auto identity = ops::Identity(s.WithOpName("identity"), sigmoid);
+
+    sigmoid.node()->AddAttr(kXlaOutsideCompilationAttrName, "outside");
+    sigmoid.node()->AddAttr(kXlaInferredShapesAttrName,
+                            std::vector<PartialTensorShape>{{}});
+
+    Graph g(OpRegistry::Global());
+    TF_CHECK_OK(s.ToGraph(&g));
+    TF_CHECK_OK(
+        GraphToFunctionDef(g, pipeline_function_name, fdef_lib.add_function()));
+  }
+
+  // Create a "cluster" function that contains a Pipeline op invoking the
+  // "pipeline" function with a repeat_count (i.e. a loop).
+  const int32 pipeline_repeat_count = 42;
+  {
+    Graph g(OpRegistry::Global());
+
+    NameAttrList to_apply;
+    to_apply.set_name(pipeline_function_name);
+
+    Node* pipeline_node;
+    TF_CHECK_OK(NodeBuilder("pipeline", "Pipeline")
+                    .Input(std::vector<NodeBuilder::NodeOut>{})
+                    .Attr("repeat_count", pipeline_repeat_count)
+                    .Attr("output_shapes", std::vector<TensorShape>{})
+                    .Attr("pipeline_poplar_config", "")
+                    .Attr("Tout", std::vector<TensorShape>{})
+                    .Attr("pipeline_depth", 1)
+                    .Attr("schedule", 0)
+                    .Attr("to_apply", to_apply)
+                    .Finalize(&g, &pipeline_node));
+
+    TF_CHECK_OK(GraphToFunctionDef(g, "cluster", fdef_lib.add_function()));
+  }
+
+  auto flib_def = FunctionLibraryDefinition(OpRegistry::Global(), fdef_lib);
+  auto graph = absl::make_unique<Graph>(&flib_def);
+
+  // Add an XlaLaunch node that launches the function in the outside graph.
+  TF_CHECK_OK(AddLaunchNode(graph.get(), "cluster"));
+
+  // Run the pass to perform the extraction.
+  TF_CHECK_OK(RunPass(&flib_def, &graph));
+
+  // This is roughly what we expect:
+  //
+  // The pipeline function has got the sigmoid op extracted and replaced
+  // by an XlaHostCompute op (that will be lowered to SendToHost/RecvFromHost):
+  //
+  // pipeline() -> () {
+  //  const = Const()
+  //  host_compute = XlaHostCompute(const)
+  //  identity = Identity(host_compute)
+  // }
+  //
+  // On the host side we expect a while loop with a body that communicates with
+  // the pipeline function using _XlaRecvAtHost/_XlaSendFromHost:
+  //
+  // body(input:int32) -> (output:int32) {
+  //   recv = _XlaRecvAtHost()
+  //   sigmoid = Sigmoid(recv)
+  //   send = _XlaSendFromHost(sigmoid)
+  //   one = Const[value=1]()
+  //   add = Add(input, one)
+  //   return output = add
+  // }
+
+  // Check that we have a loop with the expected nodes in the outside graph.
+  int num_loop_conds = 0;
+  int num_next_iterations = 0;
+  for (const Node* n : graph->nodes()) {
+    if (n->IsLoopCond()) {
+      ++num_loop_conds;
+
+      // Chceck that the loop condition contains the expected nodes.
+      Node* cond_node;
+      TF_CHECK_OK(n->input_node(0, &cond_node));
+
+      const auto cond_function_name = cond_node->type_string();
+      const auto* cond_fdef = flib_def.Find(cond_function_name);
+      CHECK_NOTNULL(cond_fdef);
+
+      std::unique_ptr<FunctionBody> cond_fbody;
+      TF_CHECK_OK(FunctionDefToBodyHelper(*cond_fdef, AttrSlice(), &flib_def,
+                                          &cond_fbody));
+
+      // The condition function should have type `int32 -> bool` and have an
+      // upper bound comparison with the value `pipeline_repeat_count`.
+      ASSERT_EQ(cond_fdef->signature().input_arg_size(), 1);
+      ASSERT_EQ(cond_fdef->signature().output_arg_size(), 1);
+      ASSERT_EQ(cond_fdef->signature().input_arg(0).type(), DT_INT32);
+      ASSERT_EQ(cond_fdef->signature().output_arg(0).type(), DT_BOOL);
+      ASSERT_EQ(cond_fdef->node_def_size(), 2);
+      ASSERT_EQ(cond_fdef->node_def(0).op(), "Const");
+      ASSERT_EQ(cond_fdef->node_def(0).attr().at("value").tensor().int_val(0),
+                pipeline_repeat_count);
+      ASSERT_EQ(cond_fdef->node_def(1).op(), "Less");
+    } else if (n->IsNextIteration()) {
+      ++num_next_iterations;
+
+      // Check that the loop body contains the expected nodes.
+      Node* body_node;
+      TF_CHECK_OK(n->input_node(0, &body_node));
+
+      const auto body_function_name = body_node->type_string();
+      const auto* body_fdef = flib_def.Find(body_function_name);
+      CHECK_NOTNULL(body_fdef);
+
+      // The body function should have type `int32 -> int32` for the loop
+      // counter.
+      ASSERT_EQ(body_fdef->signature().input_arg_size(), 1);
+      ASSERT_EQ(body_fdef->signature().output_arg_size(), 1);
+      ASSERT_EQ(body_fdef->signature().input_arg(0).type(), DT_INT32);
+      ASSERT_EQ(body_fdef->signature().output_arg(0).type(), DT_INT32);
+
+      std::unique_ptr<FunctionBody> body_fbody;
+      TF_CHECK_OK(FunctionDefToBodyHelper(*body_fdef, AttrSlice(), &flib_def,
+                                          &body_fbody));
+
+      // Check that the expected nodes are found in the while body function.
+      auto body_nodes = body_fbody->graph->BuildNodeNameIndex();
+
+      const Node* recv =
+          body_nodes["outside_compilation_pipeline_pipeline_outside_recv0"];
+      ASSERT_NE(recv, nullptr);
+
+      const Node* sigmoid = body_nodes["sigmoid"];
+      ASSERT_NE(sigmoid, nullptr);
+      ASSERT_EQ(sigmoid->num_inputs(), 1);
+      ASSERT_EQ(sigmoid->in_nodes().begin()->name(), recv->name());
+
+      const Node* send =
+          body_nodes["outside_compilation_pipeline_pipeline_outside_send0"];
+      ASSERT_NE(send, nullptr);
+      ASSERT_EQ(send->num_inputs(), 2);
+      ASSERT_EQ(send->in_nodes().begin()->name(), sigmoid->name());
+
+      const Node* one = body_nodes["pipeline_oc_host_graph_launch_one"];
+      ASSERT_NE(one, nullptr);
+      ASSERT_TRUE(one->IsConstant());
+
+      const Node* add = body_nodes["pipeline_oc_host_graph_launch_add"];
+      ASSERT_NE(add, nullptr);
+      ASSERT_EQ(add->num_inputs(), 2);
+      ASSERT_TRUE(add->in_nodes().begin()->IsArg());
+      ASSERT_EQ(std::next(add->in_nodes().begin())->name(), one->name());
+      ASSERT_TRUE(add->out_nodes().begin()->IsRetval());
+    }
+  }
+
+  CHECK_EQ(num_loop_conds, 1);
+  CHECK_EQ(num_next_iterations, 1);
+}
+
+TEST_F(ExtractOutsideCompilationPassTest, NoOutsideScope) {
+  FunctionDefLibrary fdef_lib;
+
+  // Create a "cluster" function without any outside scopes.
+  {
+    auto s = tensorflow::Scope::NewRootScope();
+    auto const0 = ops::Const(s.WithOpName("const"), 1.0f, {});
+    auto sigmoid = ops::Sigmoid(s.WithOpName("sigmoid"), const0);
+    auto identity = ops::Identity(s.WithOpName("identity"), sigmoid);
+
+    Graph g(OpRegistry::Global());
+    TF_CHECK_OK(s.ToGraph(&g));
+    TF_CHECK_OK(GraphToFunctionDef(g, "cluster", fdef_lib.add_function()));
+  }
+
+  auto flib_def = FunctionLibraryDefinition(OpRegistry::Global(), fdef_lib);
+  auto graph = absl::make_unique<Graph>(&flib_def);
+
+  // Add an XlaLaunch node that launches the function in the outside graph.
+  TF_CHECK_OK(AddLaunchNode(graph.get(), "cluster"));
+
+  GraphDef before_graph_def;
+  graph->ToGraphDef(&before_graph_def);
+  const FunctionDefLibrary before_fdef_lib = flib_def.ToProto();
+
+  // Run the pass that should do nothing.
+  TF_CHECK_OK(RunPass(&flib_def, &graph));
+
+  GraphDef after_graph_def;
+  graph->ToGraphDef(&after_graph_def);
+  const FunctionDefLibrary after_fdef_lib = flib_def.ToProto();
+
+  // Check that the graph is unchanged.
+  EqualGraphDefOptions equal_options;
+  equal_options.ignore_internal_attrs = false;
+  std::string diff_graph_def;
+  const bool equal_graphs = EqualGraphDef(after_graph_def, before_graph_def,
+                                          &diff_graph_def, equal_options);
+  ASSERT_TRUE(equal_graphs) << diff_graph_def;
+
+  // Check that the functions are unchanged.
+  ASSERT_EQ(before_fdef_lib.function_size(), after_fdef_lib.function_size());
+  for (int i = 0; i < before_fdef_lib.function_size(); ++i) {
+    const auto& before_function = before_fdef_lib.function(i);
+    const auto& after_function = after_fdef_lib.function(i);
+    ASSERT_TRUE(FunctionDefsEqual(before_function, after_function))
+        << DebugString(before_function)
+        << " != " << DebugString(after_function);
+  }
 }
 
 }  // namespace

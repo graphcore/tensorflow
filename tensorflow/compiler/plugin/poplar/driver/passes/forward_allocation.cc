@@ -28,6 +28,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remap_deduce.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/remote_parameter.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/user_op_hlo.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/meta_graph.h"
@@ -431,10 +432,15 @@ StatusOr<ForwardAllocationGraph::MetaGraphSet> ForwardAllocation::FindInputs(
             IsPoplarInstruction(PoplarOp::RecvFromHost)(inst);
         const bool is_gradient_accumulator_create =
             IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
+        const bool is_in_memory_create_buffer =
+            IsPoplarInstruction(PoplarOp::CreateBuffer)(inst)
+                ? !Cast<HloCreateBuffer>(inst)->IsRemoteBuffer()
+                : false;
 
         is_input = is_remap_deduce || is_host_embedding_lookup ||
                    is_remote_buffer_load || is_rw_user_op ||
-                   is_recv_from_host || is_gradient_accumulator_create;
+                   is_recv_from_host || is_gradient_accumulator_create ||
+                   is_in_memory_create_buffer;
         break;
       }
       default: { break; }

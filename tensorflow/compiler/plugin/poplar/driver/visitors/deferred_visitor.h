@@ -294,6 +294,9 @@ class DeferredVisitor : public FullVisitor {
   // allocation.
   virtual Status HandleGradientAccumulatorCreate(HloInstruction* inst);
 
+  // Handler of CreateBuffer which is aware of deferred allocation.
+  virtual Status HandleCreateBuffer(HloInstruction* inst);
+
   // Handler for all custom calls apart from those which support deferred
   // allocation.
   virtual Status HandleNonDeferredCustomCall(HloInstruction* inst);

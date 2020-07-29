@@ -69,51 +69,27 @@ SendFromFirstReplicaCallbackCreator(const tensorflow::TensorShape& shape,
   return [=](int64 replica_id) -> poplar::StreamCallbackHandle {
     if (replica_id == 0) {
       if (can_avoid_buffer_copy) {
-        // Use a non-owning buffer view to avoid the copy in the callback.
-        // Also, maintain a reference to the TensorBuffer in order to
-        // prohibit any TensorFlow ops from doing in-place modifications
-        // of the buffer (since they will observe the refcount being
-        // greater than one), see i.e. OpKernelContext::forward_input.
-        using Buffer = tensorflow::core::RefCountPtr<PoplarTensorBufferView>;
+        return [rendezvous, key, type, shape](void* src) mutable {
+          // Create a non-owning view of the source data, avoiding copying.
+          auto buffer = tensorflow::core::RefCountPtr<PoplarTensorBufferView>(
+              new PoplarTensorBufferView(
+                  src, shape.num_elements() * tensorflow::DataTypeSize(type)));
+          auto tensor = tensorflow::Tensor(type, shape, buffer.get());
 
-        return [rendezvous, key, type, shape,
-                buf = Buffer()](void* src) mutable {
-          if (!buf) {
-            // Allocate the buffer view the first time.
-            buf.reset(new PoplarTensorBufferView(
-                src, shape.num_elements() * tensorflow::DataTypeSize(type)));
-          } else {
-            // Should get the same pointer from Poplar every time.
-            CHECK_EQ(buf->data(), src);
-            // And we should be the only buffer owner here.
-            CHECK(buf->RefCountIsOne());
-          }
+          rendezvous->Send(key, tensorflow::Rendezvous::Args{}, tensor,
+                           /*is_dead=*/false);
+        };
+      } else {
+        // In this case we must copy the data in the callback.
+        return [rendezvous, key, type, shape](void* src) {
+          auto tensor = tensorflow::Tensor(type, shape);
+          auto* dst = tensorflow::DMAHelper::buffer(&tensor);
+          std::memcpy(dst->data(), src, dst->size());
 
-          auto tensor = tensorflow::Tensor(type, shape, buf.get());
-
-          // Sending here increases the refcount until it is consumed.
           rendezvous->Send(key, tensorflow::Rendezvous::Args{}, tensor,
                            /*is_dead=*/false);
         };
       }
-
-      // Must copy the data in the callback.
-      return [rendezvous, key,
-              tensor = tensorflow::Tensor(type, shape)](void* src) {
-        auto* dst = tensorflow::DMAHelper::buffer(&tensor);
-
-        // We reuse the same tensor every time to avoid allocating in this
-        // callback. This should be safe since every Send op must be matched
-        // by a corresponding Recv op in the same graph, so the tensor must
-        // be consumed before the next execution of the graph. Verify this
-        // assumption here by checking that we are the only owner.
-        CHECK(dst->RefCountIsOne());
-        std::memcpy(dst->data(), src, dst->size());
-
-        // Sending here increases the refcount until it is consumed.
-        rendezvous->Send(key, tensorflow::Rendezvous::Args{}, tensor,
-                         /*is_dead=*/false);
-      };
     } else {
       // Discard the output from the remaining replicas.
       return [](void*) {};

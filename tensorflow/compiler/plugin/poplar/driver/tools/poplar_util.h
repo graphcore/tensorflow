@@ -121,6 +121,8 @@ bool IsRemoteParameter(int64 parameter_number,
 bool IsRemoteParameter(int64 parameter_number, const CompilerResources& res);
 bool IsRemoteParameter(HloInstruction* inst, const CompilerResources& res);
 
+bool IsInPipeline(const HloInstruction* inst, CompilerResources& res);
+
 StatusOr<std::string> GetInstructionCompilationInfo(
     const std::unique_ptr<xla::HloModule>& module, CompilerResources& res);
 
