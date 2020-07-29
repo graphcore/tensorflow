@@ -92,6 +92,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_gradient_accumulation_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_optimizer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_recomputation.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_tuple_remover.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_verifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/poplar_algebraic_simplifier.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/post_serialize_gradient_accumulation.h"
@@ -962,6 +963,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<CustomOpReplacer>();
     pipeline.AddPass<ParsePoplarBackendConfig>();
     pipeline.AddPass<PipelineFixer>();
+    pipeline.AddPass<PipelineTupleRemover>();
     pipeline.AddPass<ReplicationFactorToConstant>(resources.replication_factor);
     pipeline.AddPass<GradientAccumulationFuser>(resources.annotations);
     pipeline.AddPass<HloComputationNameUniquify>();
@@ -984,6 +986,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
       pass.AddPass<PipelineGradientAccumulationOptimizer>();
       pass.AddPass<PipelineOptimizer>();
       pass.AddPass<HloDCE>();
+      pass.AddPass<HloCSE>(true);
     }
     pipeline.AddPass<SortSimplifier>();
     pipeline.AddPass<RootTokenReplacer>();
@@ -1048,6 +1051,7 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<ElementwiseBroadcastConverter>();
     pipeline.AddPass<FuseWideConst>(resources.annotations);
     pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloCSE>(true);
     pipeline.AddPass<ResourceUpdateFixer>();
     pipeline.AddPass<ResourceUpdateVariablesOffload>(
         resources.annotations, resources.remote_memory_supported);
