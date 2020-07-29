@@ -488,7 +488,7 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
     HloInstruction* stage, const std::vector<HloInstruction*>& ordered_lowering,
     std::map<int64, HloInstruction*> replace_parameter_with_lowered_instruction,
     HloInstructionSet forced_parameters, bool replace_resource_update_uses) {
-  CHECK(IsPipelineStageOrBackwardOp(stage));
+  CHECK(IsAnyPipelineStageOpOrResourceUpdate(stage));
 
   HloComputation* pipeline_computation = stage->parent();
 
@@ -574,7 +574,6 @@ StatusOr<HloInstruction*> AddInstructionsToPipelineStage(
           // computation.
           if (operand->opcode() == HloOpcode::kGetTupleElement &&
               operand->operand(0) == stage) {
-            CHECK_EQ(operand->user_count(), 1);
             // In TF2XLA we expect the root to be a tuple, hence we can
             // get the relevant instruction (guaranteed by
             // VerifyPipelineStagesBeforeFixing).
@@ -2019,6 +2018,43 @@ StatusOr<std::vector<PipelinePath>> FindPassthroughPipelinePaths(
     }
   }
   return paths;
+}
+
+OrderedPipelineStages::OrderedPipelineStages(const PipelineStages& stages,
+                                             bool include_resource_update) {
+  for (int64 i = 0; i != stages.forward.size(); ++i) {
+    id_to_stage[i] = stages.forward[i];
+    stage_to_id[stages.forward[i]] = i;
+  }
+  for (int64 i = 0; i != stages.backward.size(); ++i) {
+    const int64 id = stages.forward.size() + stages.backward.size() - i - 1;
+    id_to_stage[id] = stages.backward[i];
+    stage_to_id[stages.backward[i]] = id;
+  }
+  CHECK_EQ(id_to_stage.size(), stages.forward.size() + stages.backward.size());
+  if (include_resource_update && stages.resource_update) {
+    const int64 id = id_to_stage.size();
+    id_to_stage[id] = *stages.resource_update;
+    stage_to_id[*stages.resource_update] = id;
+  }
+}
+
+int64 OrderedPipelineStages::GetNumberOfStages() const {
+  return id_to_stage.size();
+}
+
+HloInstruction* OrderedPipelineStages::GetStage(int64 index) const {
+  return id_to_stage.at(index);
+}
+
+int64 OrderedPipelineStages::GetIndex(HloInstruction* stage) const {
+  return stage_to_id.at(stage);
+}
+
+void OrderedPipelineStages::UpdateStage(int64 index, HloInstruction* stage) {
+  stage_to_id.erase(id_to_stage.at(index));
+  id_to_stage[index] = stage;
+  stage_to_id[stage] = index;
 }
 
 }  // namespace poplarplugin
