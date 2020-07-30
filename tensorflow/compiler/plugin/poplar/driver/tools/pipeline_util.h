@@ -61,6 +61,21 @@ struct PipelineStages {
   absl::optional<HloInstruction*> resource_update;
 };
 
+// Helper struct for storing stages in order from forward to backward.
+class OrderedPipelineStages {
+ public:
+  OrderedPipelineStages(const PipelineStages& stages,
+                        bool include_resource_update);
+  int64 GetNumberOfStages() const;
+  HloInstruction* GetStage(int64 index) const;
+  int64 GetIndex(HloInstruction* stage) const;
+  void UpdateStage(int64 index, HloInstruction* stage);
+
+ private:
+  absl::flat_hash_map<int64, HloInstruction*> id_to_stage;
+  absl::flat_hash_map<HloInstruction*, int64> stage_to_id;
+};
+
 // Get all the pipelines in the module.
 StatusOr<std::vector<HloInstruction*>> GetPipelines(const HloModule* module);
 
