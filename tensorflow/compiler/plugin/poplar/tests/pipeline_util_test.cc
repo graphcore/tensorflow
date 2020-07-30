@@ -330,6 +330,25 @@ TEST_F(PipelineUtilTest, GetPipelineStagesFwdBwdTest) {
                              FindInstruction(module0, "pipeline_stage_1_bwd")));
   EXPECT_THAT(*stages.resource_update,
               FindInstruction(module0, "resource_update"));
+  {
+    OrderedPipelineStages ordered_stages(stages, true);
+    EXPECT_EQ(ordered_stages.GetNumberOfStages(), 5);
+    for (int64 i = 0; i != 5; ++i) {
+      EXPECT_EQ(i, ordered_stages.GetIndex(ordered_stages.GetStage(i)));
+      if (i < 2) {
+        EXPECT_EQ(ordered_stages.GetStage(i), stages.forward[i]);
+      } else if (i < 4) {
+        EXPECT_EQ(ordered_stages.GetStage(i), stages.backward[3 - i]);
+      } else {
+        EXPECT_EQ(i, 4);
+        EXPECT_EQ(ordered_stages.GetStage(i), *stages.resource_update);
+      }
+    }
+  }
+  {
+    OrderedPipelineStages ordered_stages(stages, false);
+    EXPECT_EQ(ordered_stages.GetNumberOfStages(), 4);
+  }
 }
 
 TEST_F(PipelineUtilTest, GetPipelineStagesFwdBwdMismatchTest) {
