@@ -26,12 +26,7 @@ from tensorflow.python.ops import array_ops
 class Dropout(Layer):
   """Base class for implementing XLA and Popnn compatible Dropout layer.
   """
-  def __init__(self,
-               rate=0.5,
-               noise_shape=None,
-               seed=None,
-               seed_modifier=1,
-               **kwargs):
+  def __init__(self, rate=0.5, noise_shape=None, seed=None, **kwargs):
     """Creates a Dropout layer.
 
     The Dropout layer randomly sets input units to 0 with a frequency of `rate`
@@ -43,13 +38,11 @@ class Dropout(Layer):
 
     Args:
       rate: Float between 0 and 1. Fraction of the input units to drop.
+      noise_shape: 1D integer tensor representing the shape of the binary
+        dropout mask that will be multiplied with the input.
       seed: An optional two-element tensor-like object (`tf.Tensor`, a numpy
         array or Python list/tuple), representing the random seed that will be
         used to create the distribution for dropout.
-      noise_shape: 1D integer tensor representing the shape of the binary
-        dropout mask that will be multiplied with the input.
-      seed_modifier: An optional parameter given to poplar which uses it to
-        modify the seed.
 
     Call arguments:
       inputs: Input tensor (of any rank).
@@ -65,7 +58,6 @@ class Dropout(Layer):
     self.built = False
     self.seed = seed
     self.rate = rate
-    self.seed_modifier = seed_modifier
     self.noise_shape = noise_shape
 
     if seed is None:
@@ -92,7 +84,6 @@ class Dropout(Layer):
       output = rand_ops.dropout(x,
                                 seed=self.seed,
                                 rate=self.rate,
-                                seed_modifier=self.seed_modifier,
                                 noise_shape=self.noise_shape,
                                 name=self.name)
     else:
@@ -110,7 +101,6 @@ class Dropout(Layer):
         'noise_shape': self.noise_shape,
         'seed': self.seed,
         'scale': self.scale,
-        'seed_modifier': self.seed_modifier
     }
     base_config = super(Dropout, self).get_config()
     return dict(list(base_config.items()) + list(config.items()))
