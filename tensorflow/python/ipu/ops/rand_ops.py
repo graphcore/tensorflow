@@ -22,13 +22,7 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 
 
-def dropout(x,
-            seed=None,
-            rate=0.5,
-            seed_modifier=1,
-            noise_shape=None,
-            scale=None,
-            name=None):
+def dropout(x, rate=0.5, noise_shape=None, seed=None, name=None):
   """This targets the PopLibs Poprand operation, optimized for execution
   on the IPU.
 
@@ -37,26 +31,18 @@ def dropout(x,
 
   Args:
     x: The input tensor.
+    rate: The probability that a given element will be zeroed out.
+    noise_shape: An optional parameter that determines the shape of the dropout. 
+                 Regular, unshaped dropout used if not specified.
     seed: An optional two-element tensor-like object (`tf.Tensor`, a numpy array
       or Python list/tuple), representing the random seed that will be used to
       create the distribution for dropout.
-    rate: The probability that a given element will be zeroed out.
-    seed_modifier: An optional parameter given to poplar which uses it to modify
-                   the seed.
-    noise_shape: An optional parameter that determines the shape of the dropout. 
-                 Regular, unshaped dropout used if not specified.
-    scale: No longer valid.
     name: Optional op name.
 
   Returns:
     A `Tensor` which has some nodes set to zero, as randomly selected based on
     other parameters.
   """
-
-  if scale:
-    raise RuntimeError(
-        "Setting the `scale` parameter in dropout is not supported. Elements "
-        "are scaled up by `1.0 / (1 - rate)` automatically.")
 
   # Rate is a probability between 0 and 1. Specifically the rate that a variable
   # will be dropped out.
@@ -103,5 +89,4 @@ def dropout(x,
                                      name=name,
                                      is_using_user_seed=is_using_user_seed,
                                      modify_seed=modify_seed,
-                                     seed_modifier=seed_modifier,
                                      noise_shape=noise_shape)[0]
