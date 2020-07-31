@@ -47,14 +47,12 @@ class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
     OP_REQUIRES_OK(ctx,
                    ctx->GetAttr("is_using_user_seed", &is_using_user_seed));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("modify_seed", &modify_seed));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("seed_modifier", &seed_modifier));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("noise_shape", &noise_shape));
 
     attribute_map_.AddAttribute("rate", rate);
     attribute_map_.AddAttribute("scale", scale);
     attribute_map_.AddAttribute("is_using_user_seed", is_using_user_seed);
     attribute_map_.AddAttribute("modify_seed", modify_seed);
-    attribute_map_.AddAttribute("seed_modifier", seed_modifier);
 
     // noise_shape is optional and defaults to an empty list.
     if (!noise_shape.empty()) {
@@ -109,9 +107,6 @@ class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
   // been reversed by this point (for poplar) to represent the probability that
   // a node will be kept.
   float rate;
-
-  // Modifier to apply to the random number generator seed value.
-  int32_t seed_modifier;
 
   // Track if the user provided the seed value or whether we should use the
   // global seed we create.

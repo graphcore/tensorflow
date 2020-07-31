@@ -74,7 +74,6 @@ class DropoutOp : public PoplarOpDef {
     double rate = dropout_instruction->Rate();
     double scale = dropout_instruction->Scale();
     bool is_user_seed = dropout_instruction->IsUserSeed();
-    int32_t seed_modifier = dropout_instruction->SeedModifier();
 
     // By default we will use any seed provided by the user.
     poplar::Tensor initial_seed = in_seed;
@@ -130,8 +129,8 @@ class DropoutOp : public PoplarOpDef {
                                          ns_ref_shape, res, false));
 
       final_output =
-          poprand::shapedDropout(graph, &seed_unsigned, seed_modifier, input,
-                                 reference, rate, scale, seq, debug_name);
+          poprand::shapedDropout(graph, &seed_unsigned, 1U, input, reference,
+                                 rate, scale, seq, debug_name);
     } else {
       // Create an empty tensor for the dropout. This is internal to the poprand
       // implementation but is exposed anyway so we need to provide it.
@@ -141,9 +140,8 @@ class DropoutOp : public PoplarOpDef {
                          inst->operand(0)->shape(), res, false));
 
       // Perform the actual dropout by calling into the poprand function.
-      final_output =
-          poprand::dropout(graph, &seed_unsigned, seed_modifier, input,
-                           reference, rate, scale, seq, debug_name);
+      final_output = poprand::dropout(graph, &seed_unsigned, 1U, input,
+                                      reference, rate, scale, seq, debug_name);
     }
 
     // Mark that tensor as our output.

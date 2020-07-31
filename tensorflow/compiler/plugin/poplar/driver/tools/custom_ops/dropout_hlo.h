@@ -27,7 +27,7 @@ namespace poplarplugin {
 class HloDropoutInstruction : public HloPoplarInstruction {
  public:
   explicit HloDropoutInstruction(HloInstruction* operand, HloInstruction* seed,
-                                 float rate, float scale, int32_t seed_modifier,
+                                 float rate, float scale,
                                  bool should_use_user_seed, bool modify_seed,
                                  const std::vector<int64>& noise_shape);
 
@@ -42,9 +42,6 @@ class HloDropoutInstruction : public HloPoplarInstruction {
 
   // Scale to apply to all elements that aren't dropped out.
   float Scale() const { return scale; }
-
-  // The seed modifier provided by the user.
-  int32_t SeedModifier() const { return seed_modifier; }
 
   // Track whether or not we should use the user provided seed.
   bool IsUserSeed() const { return is_user_seed; }
@@ -70,7 +67,6 @@ class HloDropoutInstruction : public HloPoplarInstruction {
 
   float scale;
   float rate;
-  int32_t seed_modifier;
   bool is_user_seed;
   bool modify_seed;
   std::vector<int64> noise_shape;
@@ -78,7 +74,7 @@ class HloDropoutInstruction : public HloPoplarInstruction {
 
 std::unique_ptr<HloInstruction> CreateDropout(
     HloInstruction* operand, HloInstruction* seed, float rate, float scale,
-    uint32_t seed_modifier, bool should_use_user_seed, bool modify_seed,
+    bool should_use_user_seed, bool modify_seed,
     const std::vector<int64>& noise_shape);
 
 }  // namespace poplarplugin
