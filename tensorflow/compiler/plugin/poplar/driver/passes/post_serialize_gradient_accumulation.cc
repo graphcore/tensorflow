@@ -122,10 +122,7 @@ StatusOr<bool> AddAllocationControlDependencies(HloModule* module) {
         // instructions.
         const HloInstructionDescription description =
             HloInstructionDescription(peer);
-
-        absl::flat_hash_set<int64> inplace_indicies = {
-            description.GetInplaceOperandIndexes().begin(),
-            description.GetInplaceOperandIndexes().end()};
+        const auto& inplace_indicies = description.GetInplaceOperandSet();
 
         const bool can_be_inplace =
             absl::c_any_of(peer->OperandIndices(layout_input),
