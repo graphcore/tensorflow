@@ -629,6 +629,8 @@ HloInstructionDescription::HloInstructionDescription(
       type_ = HloInstructionType::kNotInplace;
     }
   }
+  inplace_operands_set_ = absl::flat_hash_set<int64>{inplace_operands_.begin(),
+                                                     inplace_operands_.end()};
 }
 
 const HloInstructionType& HloInstructionDescription::GetType() const {
@@ -638,6 +640,10 @@ const HloInstructionType& HloInstructionDescription::GetType() const {
 const OperandIndexes& HloInstructionDescription::GetInplaceOperandIndexes()
     const {
   return inplace_operands_;
+}
+
+const OperandSet& HloInstructionDescription::GetInplaceOperandSet() const {
+  return inplace_operands_set_;
 }
 
 bool HloInstructionDescription::IsInplaceType() const {
