@@ -5301,6 +5301,21 @@ TEST_F(PoplarAlgebraicSimplifierTest, ElideDotReduceDontOptimiseNonBatchDims) {
   ASSERT_FALSE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
 }
 
+TEST_F(PoplarAlgebraicSimplifierTest, ElideBitcastConvert) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p0 = f32[4] parameter(0)
+      a = s32[4] bitcast-convert(p0)
+      ROOT b = u32[4] bitcast-convert(a)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(PoplarAlgebraicSimplifier().Run(m.get()).ValueOrDie());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::BitcastConvert(m::Parameter(0))));
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla

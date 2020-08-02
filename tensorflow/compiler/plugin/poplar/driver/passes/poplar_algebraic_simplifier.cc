@@ -574,6 +574,13 @@ Status AlgebraicSimplifierVisitor::HandleBitcast(HloInstruction* bitcast) {
 
 Status AlgebraicSimplifierVisitor::HandleBitcastConvert(
     HloInstruction* bitcast) {
+  // If a bitcast convert feeds a bitcast convert, make it a single bitcast
+  // convert.
+  HloInstruction* op;
+  if (Match(bitcast, m::BitcastConvert(m::BitcastConvert(m::Op(&op))))) {
+    return ReplaceWithNewInstruction(
+        bitcast, HloInstruction::CreateBitcastConvert(bitcast->shape(), op));
+  }
   // Eliminate bitcast converts between same shape.
   ReplaceInstructionIfSameShape(bitcast, bitcast->mutable_operand(0));
   return Status::OK();
