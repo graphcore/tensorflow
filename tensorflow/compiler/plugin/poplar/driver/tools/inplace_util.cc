@@ -470,23 +470,19 @@ HloInstructionDescription::HloInstructionDescription(
         absl::c_iota(indexes, 0);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = indexes;
-      } else if (IsPipelineStageBackward(inst)) {
-        // Backward pipeline stages are only inplace on operands which are not
-        // parameters/gradient accumulators.
+      } else if (IsAnyPipelineStageOp(inst)) {
+        // Pipeline stages are only inplace on operands which are not
+        // parameters/execution counters.
+
+        // Backward pipeline stages don't mark gradient accumulators as inplace
+        // inputs.
+        const bool is_bwd = IsPipelineStageBackward(inst);
+
         for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
           const HloInstruction* operand = inst->operand(op_idx);
-          if (operand->opcode() != HloOpcode::kParameter &&
-              !IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
-                  operand)) {
-            inplace_operands_.push_back(op_idx);
-          }
-        }
-        type_ = HloInstructionType::kInplaceReadWrite;
-      } else if (IsPipelineStage(inst) || IsPipelineStageRecomputation(inst)) {
-        // Pipeline stages are only inplace on operands which are not
-        // parameters.
-        for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
-          if (inst->operand(op_idx)->opcode() != HloOpcode::kParameter) {
+          if (!IsPipelineStageReadOnlyInput(operand) &&
+              !(is_bwd && IsPoplarInstruction(
+                              PoplarOp::GradientAccumulatorCreate)(operand))) {
             inplace_operands_.push_back(op_idx);
           }
         }

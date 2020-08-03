@@ -245,11 +245,11 @@ StatusOr<bool> PipelineRecomputation::RecomputePipeline(
     TF_ASSIGN_OR_RETURN(const int fifo_depth_multiplier,
                         GetFifoDepthMultiplier(pipeline_op));
 
-    // Replace all the non parameter inputs with FIFOs.
+    // Replace all the non read-only inputs with FIFOs.
     auto recomp_operands = recomp_stage->operands();
     for (size_t op_idx = 0; op_idx != recomp_operands.size(); ++op_idx) {
       HloInstruction* operand = recomp_operands[op_idx];
-      if (operand->opcode() == HloOpcode::kParameter) {
+      if (IsPipelineStageReadOnlyInput(operand)) {
         continue;
       }
 

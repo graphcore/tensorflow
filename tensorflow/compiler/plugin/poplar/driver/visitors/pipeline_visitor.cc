@@ -137,6 +137,18 @@ std::function<bool(const HloInstruction*)> IsCreateBuffer() {
 }
 
 /**
+ * Construct a unary predicate which checks if a given HloInstruction is an
+ * HloExecutionCounter.
+ *
+ * @returns The unary predicate.
+ */
+std::function<bool(const HloInstruction*)> IsExecutionCounter() {
+  return [](const HloInstruction* inst) -> bool {
+    return IsPoplarInstruction(PoplarOp::ExecutionCounter)(inst);
+  };
+}
+
+/**
  * Get the number of stages in a pipeline.
  *
  * @param pipeline The outer pipeline instruction.
@@ -364,9 +376,18 @@ absl::flat_hash_map<const HloInstruction*, int> GetPipelineInstStageMapping(
     result[inst] = get_stage_from_users(inst);
   }
 
+  // Partition out execution counters - these are assigned to the first stage in
+  // which they are used in.
+  auto execution_counters_end = std::stable_partition(
+      parameters_end, instructions.end(), IsExecutionCounter());
+  for (auto itr = parameters_end; itr != execution_counters_end; ++itr) {
+    HloInstruction* inst = *itr;
+    result[inst] = get_stage_from_users(inst);
+  }
+
   // Go through the remaining instructions and assign them to stages given their
   // operands. Note that we are visiting in post-order.
-  for (auto itr = parameters_end; itr != instructions.end(); ++itr) {
+  for (auto itr = execution_counters_end; itr != instructions.end(); ++itr) {
     HloInstruction* inst = *itr;
     // Only assign the stage if no other instruction assigned it for us.
     if (!result.contains(inst)) {
@@ -1601,7 +1622,9 @@ Status PipelineVisitor::HandleCopy(HloInstruction* hlo) {
 }
 
 Status PipelineVisitor::HandleNonDeferredCustomCall(HloInstruction* hlo) {
-  if (IsFifoInstruction()(hlo)) {
+  if (IsExecutionCounter()(hlo)) {
+    return HandleExecutionCounter(hlo);
+  } else if (IsFifoInstruction()(hlo)) {
     return HandleFifo(hlo);
   } else if (IsIpuInterCopyInstruction()(hlo)) {
     return HandleInterIpuCopy(hlo);
@@ -1610,6 +1633,22 @@ Status PipelineVisitor::HandleNonDeferredCustomCall(HloInstruction* hlo) {
   } else {
     return HandleNotImplemented(hlo);
   }
+}
+
+Status PipelineVisitor::HandleExecutionCounter(HloInstruction* hlo) {
+  VLOG(1) << "Processing " << hlo->ToString();
+  if (!IsPoplibsHloCustomOp(hlo)) {
+    return HandleNotImplemented(hlo);
+  }
+
+  TF_ASSIGN_OR_RETURN(auto stage, GetPipelineStage(inst_stage_mapping_, hlo));
+  TF_ASSIGN_OR_RETURN(
+      poplar::program::Program prog,
+      CreateCustomCallOp(resources_, hlo, hlo->shape(), tensor_map));
+
+  program_sequences_[stage].add(prog);
+
+  return Status::OK();
 }
 
 Status PipelineVisitor::HandleFifo(HloInstruction* hlo) {
