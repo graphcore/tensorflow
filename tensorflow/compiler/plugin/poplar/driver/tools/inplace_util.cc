@@ -478,12 +478,17 @@ HloInstructionDescription::HloInstructionDescription(
         // inputs.
         const bool is_bwd = IsPipelineStageBackward(inst);
 
+        HloComputation* comp = inst->to_apply();
         for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
           const HloInstruction* operand = inst->operand(op_idx);
           if (!IsPipelineStageReadOnlyInput(operand) &&
               !(is_bwd && IsPoplarInstruction(
                               PoplarOp::GradientAccumulatorCreate)(operand))) {
-            inplace_operands_.push_back(op_idx);
+            // If the stage modifies the input inplace, add it as an inplace
+            // operand.
+            if (IsOutputModifiedInplace(comp->parameter_instruction(op_idx))) {
+              inplace_operands_.push_back(op_idx);
+            }
           }
         }
         type_ = HloInstructionType::kInplaceReadWrite;

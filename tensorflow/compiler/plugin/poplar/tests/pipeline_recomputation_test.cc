@@ -1062,8 +1062,9 @@ ENTRY e {
   // Check the FIFO for in place parameter.
   fifo = stages.recomputation.at(0)->operand(1);
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Fifo)(fifo));
-  EXPECT_THAT(fifo->control_successors(),
-              ::testing::ElementsAre(stages.forward[0]));
+  // Not used inplace by the recomputation stage therefore no control
+  // dependencies;
+  EXPECT_THAT(fifo->control_successors().size(), 0);
 
   // Check the FIFO for statetful op.
   fifo = stages.recomputation.at(0)->operand(2);

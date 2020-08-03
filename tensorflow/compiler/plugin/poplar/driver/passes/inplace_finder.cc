@@ -129,7 +129,7 @@ void InplaceFinder::RouteFinder(HloInstruction* inst,
 
 StatusOr<bool> InplaceFinder::Run(HloModule* module) {
   bool changed = false;
-  for (auto* comp : module->computations()) {
+  for (auto* comp : module->MakeComputationPostOrder()) {
     if (IsPopOpsFusion(comp)) {
       continue;
     }
