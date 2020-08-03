@@ -1249,7 +1249,7 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
 
   const int64 feature_count = operand_shape.dimensions(feature_index);
   Shape output_shape_for_mean_and_var =
-      ShapeUtil::MakeShape(scale_shape.element_type(), {feature_count});
+      ShapeUtil::MakeShape(operand_shape.element_type(), {feature_count});
 
   if (ShapeUtil::GetDimension(offset_shape, 0) != feature_count) {
     return InvalidArgument(
@@ -1379,7 +1379,7 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
 
   const int64 feature_count = operand_shape.dimensions(feature_index);
   Shape output_shape_for_mean_and_var =
-      ShapeUtil::MakeShape(mean_shape.element_type(), {feature_count});
+      ShapeUtil::MakeShape(operand_shape.element_type(), {feature_count});
 
   if (ShapeUtil::GetDimension(offset_shape, 0) != feature_count) {
     return InvalidArgument(
@@ -1569,7 +1569,7 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
   }
 
   return ShapeUtil::MakeTupleShape(
-      {operand_shape, mean_shape, mean_shape});
+      {operand_shape, feature_shape, feature_shape});
 }
 
 /* static */ StatusOr<Shape> ShapeInference::InferConvolveShape(
