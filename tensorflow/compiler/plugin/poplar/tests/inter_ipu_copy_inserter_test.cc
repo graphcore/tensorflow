@@ -15,8 +15,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inter_ipu_copy_inserter.h"
 
+#include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
-
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -756,6 +757,33 @@ cluster_1  {
 
   // A tree of 4 GTEs, 2 inter IPU copies, and 2 tuples will be added
   ASSERT_EQ(comp->instruction_count(), 8);
+}
+
+TEST_F(InterIpuCopyInserterTest, CloneExecutionCounter) {
+  // In this test we check that the execution counter has been cloned with the
+  // new sharding information rather than copied.
+  std::string hlo = R"(
+HloModule top
+
+cluster_1  {
+  arg0 = s32[] parameter(0), sharding={maximal device=0}
+  s = s32[] custom-call(), custom_call_target="ExecutionCounter", backend_config="", sharding={maximal device=0}
+  ROOT mul = s32[] multiply(arg0, s), sharding={maximal device=1}
+}
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest()));
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+
+  EXPECT_TRUE(InterIpuCopyInserter().Run(module.get()).ValueOrDie());
+
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root->sharding().GetUniqueDevice(), 1);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::IpuInterCopy)(root->operand(0)));
+  EXPECT_THAT(root->operand(0)->sharding().GetUniqueDevice(), 1);
+  EXPECT_TRUE(
+      IsPoplarInstruction(PoplarOp::ExecutionCounter)(root->operand(1)));
+  EXPECT_THAT(root->operand(1)->sharding().GetUniqueDevice(), 1);
 }
 
 }  // namespace

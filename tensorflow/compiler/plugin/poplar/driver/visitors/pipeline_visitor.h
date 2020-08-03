@@ -94,6 +94,7 @@ class PipelineVisitor : public InplaceDeferredVisitor {
   Status HandleCopy(HloInstruction* hlo) override;
   Status HandleOutfeed(HloInstruction* hlo) override;
 
+  virtual Status HandleExecutionCounter(HloInstruction* hlo);
   virtual Status HandleFifo(HloInstruction* hlo);
   virtual Status HandleInterIpuCopy(HloInstruction* hlo);
   virtual Status HandleGradientAccumulatorSink(HloInstruction* hlo);

@@ -37,6 +37,10 @@ namespace {
 bool IsGradientAccumulatorCreate(const HloInstruction* inst) {
   return IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(inst);
 }
+
+bool IsExecutionCounter(const HloInstruction* inst) {
+  return IsPoplarInstruction(PoplarOp::ExecutionCounter)(inst);
+}
 }  // namespace
 
 std::string StageID::ToString() const {
@@ -83,7 +87,7 @@ bool IsProducerOp(const HloInstruction* inst) {
     case HloOpcode::kCall:
       return IsAnyPipelineStageOp(inst);
     case HloOpcode::kCustomCall:
-      return IsGradientAccumulatorCreate(inst);
+      return IsGradientAccumulatorCreate(inst) || IsExecutionCounter(inst);
     case HloOpcode::kParameter:
       return true;
     case HloOpcode::kInfeed:
@@ -91,6 +95,10 @@ bool IsProducerOp(const HloInstruction* inst) {
     default:
       return false;
   }
+}
+
+bool IsPipelineStageReadOnlyInput(const HloInstruction* inst) {
+  return inst->opcode() == HloOpcode::kParameter || IsExecutionCounter(inst);
 }
 
 StatusOr<std::vector<HloInstruction*>> GetPipelines(const HloModule* module) {
@@ -280,31 +288,38 @@ Status VerifyPipelineStagesBeforeFixing(const PipelineStages& pipeline_stages) {
   return Status::OK();
 }
 
+StatusOr<HloInstruction*> ConvertAllUsersToGTEs(HloInstruction* const inst) {
+  HloComputation* comp = inst->parent();
+  if (!inst->shape().IsTuple()) {
+    return FailedPrecondition(
+        "Expected the instruction %s to have a tuple output shape.",
+        inst->ToString().c_str());
+  }
+  // Create a GTE from each subshape.
+  const int64 num_elements = ShapeUtil::TupleElementCount(inst->shape());
+  std::vector<HloInstruction*> gtes(num_elements);
+  for (int64 tuple_index = 0; tuple_index != num_elements; ++tuple_index) {
+    TF_ASSIGN_OR_RETURN(gtes[tuple_index],
+                        MakeGetTupleElementHlo(inst, tuple_index));
+    if (inst->has_sharding()) {
+      // If there is any sharding, then forward it.
+      gtes[tuple_index]->set_sharding(inst->sharding().GetSubSharding(
+          inst->shape(), ShapeIndex{tuple_index}));
+    }
+  }
+  // Create tuple.
+  HloInstruction* tuple =
+      comp->AddInstruction(HloInstruction::CreateTuple(gtes));
+  inst->SetupDerivedInstruction(tuple);
+  return tuple;
+}
+
 StatusOr<bool> FixRootInstruction(HloComputation* comp) {
   HloInstruction* root = comp->root_instruction();
   if (root->opcode() == HloOpcode::kTuple) {
     return false;
   }
-  if (!root->shape().IsTuple()) {
-    return FailedPrecondition(
-        "Expected the root instruction to have a tuple output shape.");
-  }
-  // Create a GTE from each subshape.
-  const int64 num_elements = ShapeUtil::TupleElementCount(root->shape());
-  std::vector<HloInstruction*> gtes(num_elements);
-  for (int64 tuple_index = 0; tuple_index != num_elements; ++tuple_index) {
-    TF_ASSIGN_OR_RETURN(gtes[tuple_index],
-                        MakeGetTupleElementHlo(root, tuple_index));
-    if (root->has_sharding()) {
-      // If there is any sharding, then forward it.
-      gtes[tuple_index]->set_sharding(root->sharding().GetSubSharding(
-          root->shape(), ShapeIndex{tuple_index}));
-    }
-  }
-  // Create the root tuple.
-  HloInstruction* new_root =
-      comp->AddInstruction(HloInstruction::CreateTuple(gtes));
-  root->SetupDerivedInstruction(new_root);
+  TF_ASSIGN_OR_RETURN(HloInstruction * new_root, ConvertAllUsersToGTEs(root));
   comp->set_root_instruction(new_root);
   return true;
 }
@@ -1271,6 +1286,41 @@ Status PipelineDataflowAnalysis::VerifyGradientAccumulatorCreateUsage(
   return Status::OK();
 }
 
+Status PipelineDataflowAnalysis::VerifyExecutionCounterUsage(
+    const HloInstruction* execution_counter,
+    const HloInstruction* pipeline_stage_user) {
+  CHECK(IsExecutionCounter(execution_counter));
+  TF_ASSIGN_OR_RETURN(StageID stage_id, GetStageID(pipeline_stage_user));
+  // Get the shard for the pipeline stage.
+  TF_ASSIGN_OR_RETURN(const int64 shard, GetShardForStage(stage_id));
+  // Get the execution_counter value and check where it is used.
+  const HloValue& execution_counter_value =
+      GetValueSet(execution_counter).GetUniqueValue();
+
+  // The execution counter is not used by any stage and it will be removed by
+  // DCE.
+  if (!used_by_stages_.contains(&execution_counter_value)) {
+    return Status::OK();
+  }
+
+  for (const HloInstruction* user_stage :
+       used_by_stages_.at(&execution_counter_value)) {
+    TF_ASSIGN_OR_RETURN(StageID user_stage_id, GetStageID(user_stage));
+    // Get the shard for the other user stage.
+    TF_ASSIGN_OR_RETURN(const int64 user_shard,
+                        GetShardForStage(user_stage_id));
+    if (stage_id.id != user_stage_id.id && shard != user_shard) {
+      return UnimplementedStrCat("The ", stage_id.ToString(),
+                                 " is trying to use a an execution counter (",
+                                 execution_counter->name(),
+                                 ") which is already used by the ",
+                                 user_stage_id.ToString(),
+                                 ". This violates the dataflow constraints.");
+    }
+  }
+  return Status::OK();
+}
+
 Status PipelineDataflowAnalysis::VerifyInfeedUsage(
     const HloInstruction* infeed, const HloInstruction* pipeline_stage_user) {
   CHECK_EQ(infeed->opcode(), HloOpcode::kInfeed);
@@ -1307,9 +1357,15 @@ Status PipelineDataflowAnalysis::VerifyPipelineStageOperands(
         break;
       }
       case HloOpcode::kCustomCall: {
-        CHECK(IsGradientAccumulatorCreate(producer));
-        TF_RETURN_IF_ERROR(
-            VerifyGradientAccumulatorCreateUsage(producer, pipeline_stage));
+        if (IsGradientAccumulatorCreate(producer)) {
+          TF_RETURN_IF_ERROR(
+              VerifyGradientAccumulatorCreateUsage(producer, pipeline_stage));
+
+        } else {
+          CHECK(IsExecutionCounter(producer));
+          TF_RETURN_IF_ERROR(
+              VerifyExecutionCounterUsage(producer, pipeline_stage));
+        }
         break;
       }
       case HloOpcode::kCall: {
@@ -1416,7 +1472,7 @@ StatusOr<bool> PipelineDataflowAnalysis::HasToBeLowered(
       }
     }
     case HloOpcode::kCustomCall: {
-      if (IsGradientAccumulatorCreate(inst)) {
+      if (IsGradientAccumulatorCreate(inst) || IsExecutionCounter(inst)) {
         return false;
       } else if (IsPoplarInstruction(PoplarOp::GradientAccumulatorSink)(inst)) {
         // The sink op combines the same gradient accumulation buffer being
