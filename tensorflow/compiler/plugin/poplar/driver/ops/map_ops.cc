@@ -1,4 +1,4 @@
-/* Copyright 2017-2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -296,13 +296,11 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
                       body_visitor.GetPreambleCopies());
   main_seq.add(copy_seq);
 
-  // Only add the copies for the execution counters in the condition and body
+  // Only add the zeroing for the execution counters in the condition and body
   // visitors once before the execution of the loop so that they are not reset
   // at the beginning of each iteration.
-  TF_RETURN_IF_ERROR(
-      CopyExecutionCountersFromScope(res, cond_counters, main_seq));
-  TF_RETURN_IF_ERROR(
-      CopyExecutionCountersFromScope(res, body_counters, main_seq));
+  main_seq.add(cond_counters.SetInitialValuesToZero());
+  main_seq.add(body_counters.SetInitialValuesToZero());
 
   // Create a sequence and predicate for the condition.
   poplar::program::Sequence cond_seq;
@@ -503,8 +501,7 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
                           graph, pipeline_computation, GetDebugName(inst)));
   ExecutionCounters& execution_counters = visitor.GetExecutionCounters();
   // Initialize the counters.
-  TF_RETURN_IF_ERROR(
-      CopyExecutionCountersFromScope(res, execution_counters, seq));
+  seq.add(execution_counters.SetInitialValuesToZero());
 
   // Get the pipeline sequence.
   TF_ASSIGN_OR_RETURN(poplar::program::Sequence pipeline_prog,

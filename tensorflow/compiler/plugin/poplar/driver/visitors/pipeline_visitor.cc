@@ -1417,10 +1417,9 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
         reusable_visitor->GetExecutionCounters();
     ExecutionCounters forward_counters = sequence_counters.Clone();
 
-    // Initialize the counters once from the outer scope.
-    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
-        resources_, forward_counters,
-        pipeline_execution_counters_initialize_sequence_));
+    // Initialize the counters once.
+    pipeline_execution_counters_initialize_sequence_.add(
+        forward_counters.SetInitialValuesToZero());
 
     // Before every execution of the sequence, copy the counters in.
     TF_ASSIGN_OR_RETURN(
@@ -1438,9 +1437,8 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
     seq.add(counters_out);
   } else {
     // Initialize the counters once from the outer scope.
-    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
-        resources_, visitor->GetExecutionCounters(),
-        pipeline_execution_counters_initialize_sequence_));
+    pipeline_execution_counters_initialize_sequence_.add(
+        visitor->GetExecutionCounters().SetInitialValuesToZero());
     // Execute the sequence.
     seq.add(visitor->GetCachedSequence());
   }
@@ -1503,10 +1501,9 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
                      .instructions();
     TF_RETURN_IF_ERROR(stage_computation->AcceptOrdered(&visitor, order));
 
-    // Initialize the counters once from the outer scope.
-    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
-        resources_, visitor.GetExecutionCounters(),
-        pipeline_execution_counters_initialize_sequence_));
+    // Initialize the counters once.
+    pipeline_execution_counters_initialize_sequence_.add(
+        visitor.GetExecutionCounters().SetInitialValuesToZero());
 
     // Note that it is not required to propagate any deferred allocations here
     // as recomputations do not have any deferred inputs.
@@ -1530,10 +1527,9 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
     ExecutionCounters& sequence_counters =
         reusable_visitor->GetExecutionCounters();
     ExecutionCounters recomputation_counters = sequence_counters.Clone();
-    // Initialize the counters once from the outer scope.
-    TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
-        resources_, recomputation_counters,
-        pipeline_execution_counters_initialize_sequence_));
+    // Initialize the counters once.
+    pipeline_execution_counters_initialize_sequence_.add(
+        recomputation_counters.SetInitialValuesToZero());
 
     // Before every execution of the sequence, copy the counters in.
     TF_ASSIGN_OR_RETURN(
