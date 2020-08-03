@@ -60,14 +60,6 @@ class Dropout(Layer):
     self.rate = rate
     self.noise_shape = noise_shape
 
-    if seed is None:
-      # User did not provide a seed
-      self.seed = [0, 0]
-      self.is_using_user_seed = False
-    else:
-      # User provided a seed
-      self.is_using_user_seed = True
-
   # pylint: disable=useless-super-delegation
   def build(self, input_shape):
     super(Dropout, self).build(input_shape)

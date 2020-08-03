@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <popops/ElementWise.hpp>
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
@@ -234,6 +235,36 @@ class StatelessTruncatedNormalOp : public PoplarOpDef {
   }
 };
 REGISTER_POPLAR_OP(StatelessTruncatedNormal, StatelessTruncatedNormalOp);
+
+class SeedOp : public PoplarOpDef {
+  StatusOr<poplar::program::Program> Creator(poplar::Graph& graph,
+                                             CompilerResources& res,
+                                             const HloInstruction* inst,
+                                             const xla::Shape& output_shape,
+                                             TensorMap& tensor_map) override {
+    const std::string debug_name = GetDebugName(inst);
+    poplar::program::Sequence seq;
+    TF_ASSIGN_OR_RETURN(poplar::Tensor seed_ref,
+                        AddPlainTensor(graph, debug_name + "/SeedRef",
+                                       output_shape, res, false));
+
+    TF_ASSIGN_OR_RETURN(poplar::Type dtype, PoplarDataType(output_shape));
+
+    if (dtype != poplar::INT) {
+      return UnimplementedStrCat(
+          "Only integer seeds are supported, but requested ",
+          output_shape.ToString());
+    }
+
+    poplar::Tensor seed = poprand::uniform(
+        graph, nullptr, 1U, seed_ref, dtype, std::numeric_limits<int32>::min(),
+        std::numeric_limits<int32>::max(), seq, debug_name + "/GenerateSeed");
+
+    TF_CHECK_OK(AddOutputTensor(tensor_map, inst, 0, seed));
+    return seq;
+  }
+};
+REGISTER_POPLAR_OP(Seed, SeedOp);
 
 }  // namespace
 }  // namespace poplarplugin

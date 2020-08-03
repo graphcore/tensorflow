@@ -37,23 +37,22 @@ limitations under the License.
 using namespace xla::poplarplugin;
 
 namespace tensorflow {
+xla::Shape GetSeedShape() { return xla::ShapeUtil::MakeShape(xla::S32, {2}); }
 
-class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
+class DropoutOp : public XlaOpKernel, public IpuOpKernel {
  public:
-  explicit PoprandDropoutOp(OpKernelConstruction* ctx)
+  explicit DropoutOp(OpKernelConstruction* ctx)
       : XlaOpKernel(ctx), IpuOpKernel() {
+    float rate;
+    float scale;
+    std::vector<int64> noise_shape;
+
     OP_REQUIRES_OK(ctx, ctx->GetAttr("rate", &rate));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("scale", &scale));
-    OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("is_using_user_seed", &is_using_user_seed));
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("modify_seed", &modify_seed));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("noise_shape", &noise_shape));
 
     attribute_map_.AddAttribute("rate", rate);
     attribute_map_.AddAttribute("scale", scale);
-    attribute_map_.AddAttribute("is_using_user_seed", is_using_user_seed);
-    attribute_map_.AddAttribute("modify_seed", modify_seed);
-
     // noise_shape is optional and defaults to an empty list.
     if (!noise_shape.empty()) {
       attribute_map_.AddAttribute("noise_shape", noise_shape);
@@ -67,59 +66,90 @@ class PoprandDropoutOp : public XlaOpKernel, IpuOpKernel {
     auto input = ctx->Input(0);
     auto shape = ctx->InputShape(0);
 
-    auto seed_input = ctx->Input(1);
-    auto seed_shape = ctx->InputShape(1);
-    const DataType seed_type = input_type(1);
-
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
 
-    xla::Shape xla_seed_shape;
-    OP_REQUIRES_OK(
-        ctx, TensorShapeToXLAShape(seed_type, seed_shape, &xla_seed_shape));
-
     // We are outputting both the output of the operation and the seed used so
     // we can reuse the seed in the backprop pass.
-    xla::Shape output_tuple_shape =
-        xla::ShapeUtil::MakeTupleShape({xla_shape, xla_seed_shape});
+    const xla::Shape output_tuple_shape =
+        xla::ShapeUtil::MakeTupleShape({xla_shape, GetSeedShape()});
 
     xla::XlaOp call_output = xla::CustomCall(
-        b, PoplarOp_Name(PoplarOp::Dropout), {input, seed_input},
+        b, PoplarOp_Name(PoplarOp::Dropout), {input, GetSeed(ctx, b)},
         output_tuple_shape, attribute_map_.Serialise());
 
     // The actual dropout output.
     xla::XlaOp output = xla::GetTupleElement(call_output, 0);
 
     // Save the seed used so we can reference it in the backwards pass.
-    xla::XlaOp seed_used = xla::GetTupleElement(call_output, 1);
+    xla::XlaOp seed = xla::GetTupleElement(call_output, 1);
 
     ctx->SetOutput(0, output);
-    ctx->SetOutput(1, seed_used);
+    ctx->SetOutput(1, seed);
+  }
+
+ protected:
+  virtual xla::XlaOp GetSeed(XlaOpKernelContext* ctx,
+                             xla::XlaBuilder* builder) {
+    const xla::Shape seed_shape = GetSeedShape();
+    // Create a seed and hash it with the replica index to make sure each
+    // replica has a different seed.
+    xla::XlaOp seed = xla::CustomCall(builder, PoplarOp_Name(PoplarOp::Seed),
+                                      {}, seed_shape, "");
+    xla::XlaOp replica_index =
+        xla::CustomCall(builder, PoplarOp_Name(PoplarOp::ReplicationIndex), {},
+                        xla::ShapeUtil::MakeShape(xla::S32, {}), "");
+
+    // Hashing function based on
+    // tensorflow/core/grappler/graph_analyzer/hash_tools.h
+    // seed = seed ^ (replica_index + 0x9E3779B9U + (seed << 6) + (seed >> 2))
+    seed = xla::BitcastConvertType(seed, xla::U32);
+    replica_index = xla::BitcastConvertType(replica_index, xla::U32);
+
+    xla::XlaOp large_constant = xla::ConstantLiteral(
+        builder, xla::LiteralUtil::CreateR0<uint32>(0x9E3779B9U));
+    xla::XlaOp constant_six = xla::ConstantLiteral(
+        builder, xla::LiteralUtil::CreateR1<uint32>({6U, 6U}));
+    xla::XlaOp constant_two = xla::ConstantLiteral(
+        builder, xla::LiteralUtil::CreateR1<uint32>({2U, 2U}));
+
+    // seed << 6
+    xla::XlaOp shift_left = xla::ShiftLeft(seed, constant_six);
+    // seed >> 2
+    xla::XlaOp shift_right = xla::ShiftRightLogical(seed, constant_two);
+
+    // Compute the rhs of xor.
+    // replica_index + 0x9E3779B9U
+    xla::XlaOp rhs = xla::Add(replica_index, large_constant);
+    rhs = xla::Broadcast(rhs, seed_shape.dimensions());
+
+    // replica_index + 0x9E3779B9U + (seed << 6)
+    rhs = xla::Add(rhs, shift_left);
+    // replica_index + 0x9E3779B9U + (seed << 6) + (seed >> 2)
+    rhs = xla::Add(rhs, shift_right);
+
+    seed = xla::Xor(seed, rhs);
+    return xla::BitcastConvertType(seed, seed_shape.element_type());
   }
 
  private:
-  TF_DISALLOW_COPY_AND_ASSIGN(PoprandDropoutOp);
-
-  // Param to scale the non-dropped outputs by.
-  float scale;
-
-  // To the user this is the probability that a node will be dropped but it has
-  // been reversed by this point (for poplar) to represent the probability that
-  // a node will be kept.
-  float rate;
-
-  // Track if the user provided the seed value or whether we should use the
-  // global seed we create.
-  bool is_using_user_seed;
-
-  // Track whether the seed has to be modified with the execution counter and
-  // the replication index.
-  bool modify_seed;
-
-  // For shaped dropout. See noise_shape in TF's dropout op.
-  std::vector<int64> noise_shape;
+  TF_DISALLOW_COPY_AND_ASSIGN(DropoutOp);
 };
+REGISTER_IPU_OP("IpuDropout", DropoutOp);
 
-REGISTER_IPU_OP("IpuDropout", PoprandDropoutOp);
+class DropoutWithSeedOp : public DropoutOp {
+ public:
+  explicit DropoutWithSeedOp(OpKernelConstruction* ctx) : DropoutOp(ctx) {}
+
+ protected:
+  xla::XlaOp GetSeed(XlaOpKernelContext* ctx,
+                     xla::XlaBuilder* builder) override {
+    return ctx->Input(1);
+  }
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(DropoutWithSeedOp);
+};
+REGISTER_IPU_OP("IpuDropoutWithSeed", DropoutWithSeedOp);
 
 }  // namespace tensorflow
