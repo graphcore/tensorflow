@@ -27,6 +27,7 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/allocation_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/visitors/visitor_full.h"
 
 namespace xla {
@@ -391,13 +392,13 @@ class InplaceDeferredVisitor : public DeferredVisitor {
  public:
   InplaceDeferredVisitor(
       CompilerResources& res, const DeferredArgVectors& inputs,
-      const std::string& name,
+      const HloInstructionDescription& description, const std::string& name,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations = {},
       bool reallocate_inputs = false);
 
   InplaceDeferredVisitor(
       CompilerResources& res, const DeferredArgVectors& inputs,
-      const std::string& name,
+      const HloInstructionDescription& description, const std::string& name,
       const std::vector<const DeferredVisitor*>& dependent_subcomputations,
       const ReallocateInputsInfo& reallocate_inputs_info);
 
@@ -432,7 +433,12 @@ class InplaceDeferredVisitor : public DeferredVisitor {
   std::pair<int64, int64> GetParameterNumberAndFlatIndex(
       int64 output_flat_index);
 
+  const HloInstructionDescription& GetCallsiteDescription() const {
+    return description_;
+  }
+
  private:
+  const HloInstructionDescription description_;
   const ReallocateInputsInfo reallocate_inputs_info_;
 };
 

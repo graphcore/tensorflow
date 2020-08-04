@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <queue>
 #include <stack>
+#include <vector>
 
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/hlo_poplar_instruction.h"
@@ -458,11 +459,48 @@ HloInstructionDescription::HloInstructionDescription(
 
     case HloOpcode::kCall: {
       if (IsRepeatLoop(inst)) {
-        // Inplace on all its inputs.
-        OperandIndexes indexes(inst->operand_count());
-        absl::c_iota(indexes, 0);
-        type_ = HloInstructionType::kInplaceReadWrite;
+        OperandIndexes indexes;
+        const int64 num_operands = inst->operand_count();
+        const HloComputation* comp = inst->to_apply();
+        const HloInstruction* root = comp->root_instruction();
+
+        // The loop is considered to be inplace on all operands unless all it's
+        // users are GTEs
+        const bool all_users_gtes = absl::c_all_of(
+            inst->users(), [](const HloInstruction* user) -> bool {
+              return user->opcode() == HloOpcode::kGetTupleElement;
+            });
+        // The root instruction needs to be an inplace tuple - this makes sure
+        // that an particular input is only used in a single place.
+        // The loop also must have been broken up into individual inputs.
+
+        // Check which inputs are actually modified.
+        if (IsLoweredInplace(root) && root->opcode() == HloOpcode::kTuple &&
+            num_operands == root->operand_count() && all_users_gtes) {
+          // Vector indiciating whether a given input/output index has a gte
+          // output.
+          std::vector<bool> has_gte(num_operands, false);
+          for (const HloInstruction* user : inst->users()) {
+            CHECK_EQ(user->opcode(), HloOpcode::kGetTupleElement);
+            has_gte[user->tuple_index()] = true;
+          }
+
+          for (int64 idx = 0; idx != num_operands; ++idx) {
+            // An operand is not inplace if there is no gte for it and it's used
+            // directly in the root instruction at the same index.
+            if (has_gte[idx] ||
+                root->operand(idx) != comp->parameter_instruction(idx)) {
+              indexes.push_back(idx);
+            }
+          }
+        } else {
+          // Inplace on all its inputs.
+          indexes.resize(num_operands);
+          absl::c_iota(indexes, 0);
+        }
+
         inplace_operands_ = indexes;
+        type_ = HloInstructionType::kInplaceReadWrite;
       } else if (IsPipelineOp(inst) || IsResourceUpdate(inst)) {
         // Pipeline and ResourceUpdate operations are inplace on all
         // their inputs.

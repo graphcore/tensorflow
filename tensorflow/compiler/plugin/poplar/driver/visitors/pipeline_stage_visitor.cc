@@ -32,10 +32,10 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-PipelineStageVisitor::PipelineStageVisitor(CompilerResources& res,
-                                           const DeferredArgVectors& inputs,
-                                           const std::string& name)
-    : InplaceDeferredVisitor(res, inputs, name) {}
+PipelineStageVisitor::PipelineStageVisitor(
+    CompilerResources& res, const DeferredArgVectors& inputs,
+    const HloInstructionDescription& description, const std::string& name)
+    : InplaceDeferredVisitor(res, inputs, description, name) {}
 
 bool PipelineStageVisitor::TupleOutputsNeedToPreserveAliasing(
     const HloInstruction* inst) {
@@ -75,8 +75,8 @@ ShapeTree<bool> PipelineStageVisitor::GetOutputCopies(
 
 ReusablePipelineStageVisitor::ReusablePipelineStageVisitor(
     CompilerResources& res, const DeferredArgVectors& inputs,
-    const std::string& name)
-    : PipelineStageVisitor(res, inputs, name) {}
+    const HloInstructionDescription& description, const std::string& name)
+    : PipelineStageVisitor(res, inputs, description, name) {}
 
 Status ReusablePipelineStageVisitor::PropagateDeferredAllocations(
     const HloInstruction* callsite_inst) {

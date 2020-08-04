@@ -1067,8 +1067,9 @@ PipelineVisitor::PipelineVisitor(
     const absl::flat_hash_map<const HloInstruction*, int>& inst_stage_mapping,
     const absl::flat_hash_set<int> stages_with_recomputation,
     int64 num_backward_stages, CompilerResources& res,
-    const DeferredArgVectors& inputs, const std::string& name)
-    : InplaceDeferredVisitor(res, inputs, name, {}),
+    const DeferredArgVectors& inputs,
+    const HloInstructionDescription& description, const std::string& name)
+    : InplaceDeferredVisitor(res, inputs, description, name, {}),
       schedule_(schedule),
       copy_sequences_(stage_count),
       inter_ipu_copy_sequences_(stage_count),
@@ -1090,6 +1091,7 @@ PipelineVisitor::PipelineVisitor(
 PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                                  CompilerResources& res,
                                  const DeferredArgVectors& inputs,
+                                 const HloInstructionDescription& description,
                                  const std::string& name)
     : PipelineVisitor(GetPipelineSchedule(pipeline).ValueOrDie(),
                       GetPipelineStageCount(pipeline),
@@ -1097,7 +1099,7 @@ PipelineVisitor::PipelineVisitor(const HloInstruction* pipeline,
                       GetPipelineInstStageMapping(pipeline),
                       GetPipelineStagesWithStatelessRecomputation(pipeline),
                       GetNumberOfBackwardPipelineStages(pipeline), res, inputs,
-                      name) {}
+                      description, name) {}
 
 StatusOr<poplar::program::Sequence> PipelineVisitor::GetPipelineSequence(
     int64 iterations) const {
@@ -1410,10 +1412,11 @@ StatusOr<poplar::program::Sequence> PipelineVisitor::CreatePipelineStageOp(
       }
     }
     visitor = absl::make_unique<ReusablePipelineStageVisitor>(
-        resources_, visitor_inputs, debug_name);
+        resources_, visitor_inputs, HloInstructionDescription(inst),
+        debug_name);
   } else {
-    visitor =
-        absl::make_unique<PipelineStageVisitor>(resources_, inputs, debug_name);
+    visitor = absl::make_unique<PipelineStageVisitor>(
+        resources_, inputs, HloInstructionDescription(inst), debug_name);
   }
 
   HloComputation* stage_computation = inst->to_apply();
@@ -1514,7 +1517,8 @@ PipelineVisitor::CreatePipelineStageRecomputationOp(
   // need to create a new sequence.
   if (forward_stage_visitor->inputs().size() != inputs.size()) {
     PipelineStageVisitor visitor(
-        resources_, ConvertInputsToDeferredInputs(inputs), GetDebugName(inst));
+        resources_, ConvertInputsToDeferredInputs(inputs),
+        HloInstructionDescription(inst), GetDebugName(inst));
     HloComputation* stage_computation = inst->to_apply();
     auto order = stage_computation->parent()
                      ->schedule()
