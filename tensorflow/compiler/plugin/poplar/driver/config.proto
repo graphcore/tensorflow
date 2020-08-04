@@ -40,7 +40,7 @@ enum IpuExecutionProfileType {
   TILE_PROFILE = 3;
 }
 
-// NEXT ID 32
+// NEXT ID 37
 message IpuOptions {
 
   // Options controlling the software IPU model (see IPUModel in poplar)
@@ -249,4 +249,8 @@ message IpuOptions {
 
   // Enable math optimizations which might not adhere to IEEE. 
   bool enable_fast_math = 34;
+
+  // Options for multi-replica distribution.
+  int64 multi_replica_process_count = 35;
+  int64 multi_replica_process_index = 36;
 };

@@ -1250,6 +1250,34 @@ def set_ipu_connection_type(opts, connection_type=None, ipu_version=None):
   return opts
 
 
+def set_experimental_multi_replica_distribution_options(
+    opts, process_count, process_index):
+  """This will use the Poplar runtime replica subset feature to let multiple
+  processes collaborate on executing the same Poplar program by executing a
+  subset of the global replicas each.
+
+  The total global replication factor will be equal to the local replication
+  factor multiplied by the `process_count`.
+
+  WARNING: This API is experimental and subject to change.
+
+  Args:
+    process_count: The total number of processes.
+    process_index: The index of the current process.
+
+  Returns:
+    The IpuOptions configuration protobuf.
+  """
+
+  if not 0 <= process_index < process_count:
+    raise ValueError("0 <= process_index < process_count")
+
+  opts.multi_replica_process_count = process_count
+  opts.multi_replica_process_index = process_index
+
+  return opts
+
+
 def reset_ipu_seed(seed, device="/device:IPU:0", cpu_device="cpu"):
   """Reset the seed used to generate stateful random numbers and perform
   stochastic rounding.

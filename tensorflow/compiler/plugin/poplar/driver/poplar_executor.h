@@ -291,6 +291,20 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
     return execution_options_;
   }
 
+  int64 GetMultiReplicaProcessIndex() const {
+    return current_config_.multi_replica_process_index();
+  }
+
+  int64 GetMultiReplicaProcessCount() const {
+    return current_config_.multi_replica_process_count();
+  }
+
+  bool HasMultiReplicaDistributionOptions() const {
+    return GetMultiReplicaProcessCount() > 0;
+  }
+
+  int64 GetNumIpusInLocalProcess(const poplar::Target& target) const;
+
   tensorflow::CancellationManager* cancellation_manager() { return cm_.get(); }
 
   bool IpuTraceEventsEnabled() const {
@@ -565,6 +579,8 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
   void ClearCompilationFailure();
   void NotifyCompilationFailure();
 
+  void SetCurrentReplicationFactor(int64 executable_replication_factor);
+
  private:
   Status CreatePoplarTarget();
 
@@ -794,6 +810,9 @@ class PoplarExecutor : public se::internal::StreamExecutorInterface {
 
   poplar::Engine* current_engine_;
 
+  // The current runtime replication factor, which might be lower than
+  // the compile time replication factor when using the Poplar runtime
+  // replica subset feature.
   int64 current_replication_factor_;
 
   bool device_attached_;
