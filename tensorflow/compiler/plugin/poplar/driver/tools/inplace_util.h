@@ -28,6 +28,7 @@ namespace poplarplugin {
 struct CompilerAnnotations;
 
 using OperandIndexes = std::vector<int64>;
+using OperandSet = absl::flat_hash_set<int64>;
 using InplaceWorkList = absl::flat_hash_map<HloInstruction*, bool>;
 
 enum class HloInstructionType {
@@ -57,6 +58,9 @@ class HloInstructionDescription {
   // Get the inplace operands.
   const OperandIndexes& GetInplaceOperandIndexes() const;
 
+  // Get the inplace operands.
+  const OperandSet& GetInplaceOperandSet() const;
+
   // Checks if the type is kInplaceReadWrite or kInplaceReadOnly.
   bool IsInplaceType() const;
 
@@ -70,6 +74,8 @@ class HloInstructionDescription {
   HloInstructionDescription();
 
   OperandIndexes inplace_operands_;
+
+  OperandSet inplace_operands_set_;
 
   HloInstructionType type_;
 };

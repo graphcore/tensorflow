@@ -49,17 +49,6 @@ def dropout(x, rate=0.5, noise_shape=None, seed=None, name=None):
   if rate >= 1.0 or rate < 0.0:
     raise ValueError("The rate must be in the range [0, 1), but was %s" % rate)
 
-  is_using_user_seed = True
-  if seed is None:
-    is_using_user_seed = False
-    # Create empty placeholder we will generate a random one internally.
-    seed = array_ops.zeros([2], dtypes.int32)
-
-  seed = ops.convert_to_tensor(seed)
-  if seed.shape != [2]:
-    raise ValueError("Expected the seed to have a shape [2], but got %s." %
-                     (str(seed.shape)))
-
   if noise_shape:
     x_shape = x.get_shape().as_list()
     if len(x_shape) != len(noise_shape):
@@ -77,16 +66,19 @@ def dropout(x, rate=0.5, noise_shape=None, seed=None, name=None):
   keep_prob = 1 - rate
   scale = 1 / keep_prob
 
-  # The fwd dropout increments the seed using the execution counter and the
-  # replica index and the bwd dropout instruction just needs to consume that
-  # seed without the need for reapplying these.
-  modify_seed = True
-
-  return gen_poprand_ops.ipu_dropout(x,
-                                     seed=seed,
-                                     rate=keep_prob,
-                                     scale=scale,
-                                     name=name,
-                                     is_using_user_seed=is_using_user_seed,
-                                     modify_seed=modify_seed,
-                                     noise_shape=noise_shape)[0]
+  if seed is None:
+    return gen_poprand_ops.ipu_dropout(x,
+                                       rate=keep_prob,
+                                       scale=scale,
+                                       noise_shape=noise_shape,
+                                       name=name)[0]
+  seed = ops.convert_to_tensor(seed)
+  if seed.shape != [2]:
+    raise ValueError("Expected the seed to have a shape [2], but got %s." %
+                     (str(seed.shape)))
+  return gen_poprand_ops.ipu_dropout_with_seed(x,
+                                               seed=seed,
+                                               rate=keep_prob,
+                                               scale=scale,
+                                               noise_shape=noise_shape,
+                                               name=name)[0]

@@ -12,40 +12,43 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/seed.h"
 
-#include "tensorflow/compiler/plugin/poplar/driver/tools/custom_ops/execution_counter.h"
+#include <memory>
+#include <string>
+#include <vector>
 
-#include "absl/memory/memory.h"
 #include "tensorflow/compiler/plugin/poplar/kernels/ops.pb.h"
 
 namespace xla {
 namespace poplarplugin {
 
-HloExecutionCounter::HloExecutionCounter()
-    : HloPoplarInstruction(ShapeUtil::MakeShape(S32, {}), {},
-                           PoplarOp::ExecutionCounter) {}
+HloSeed::HloSeed(const Shape& shape)
+    : HloPoplarInstruction(shape, {}, PoplarOp::Seed) {
+  set_custom_call_has_side_effect(true);
+}
 
-std::vector<std::string> HloExecutionCounter::ExtraPoplarAttributesToStringImpl(
+std::vector<std::string> HloSeed::ExtraPoplarAttributesToStringImpl(
     const HloPrintOptions& options) const {
   return {};
 }
 
-std::unique_ptr<HloInstruction> HloExecutionCounter::CloneWithNewOperandsImpl(
+std::unique_ptr<HloInstruction> HloSeed::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const>,
     HloCloneContext*) const {
-  CHECK_EQ(shape.rank(), 0);
-  CHECK_EQ(shape.element_type(), S32);
-  return CreateExecutionCounter();
+  return CreateSeed(shape);
 }
 
-std::unique_ptr<HloInstruction> CreateExecutionCounter() {
-  return absl::make_unique<HloExecutionCounter>();
+std::unique_ptr<HloInstruction> CreateSeed(const Shape& shape) {
+  return absl::make_unique<HloSeed>(shape);
 }
 
 namespace {
-static HloPoplarInstructionFactory execution_counter_factory(
-    PoplarOp::ExecutionCounter,
-    [](HloCustomCallInstruction* call) { return CreateExecutionCounter(); });
+
+static HloPoplarInstructionFactory seed_factory(
+    PoplarOp::Seed,
+    [](HloCustomCallInstruction* call) { return CreateSeed(call->shape()); });
 }  // namespace
+
 }  // namespace poplarplugin
 }  // namespace xla

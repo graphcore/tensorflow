@@ -73,9 +73,10 @@ StatusOr<bool> PipelineFIFOInserter::InsertInPipeline(
           break;
         }
         case HloOpcode::kCustomCall: {
-          if (IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
+          if (IsPoplarInstruction(PoplarOp::ExecutionCounter)(operand) ||
+              IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
                   operand)) {
-            // We don't need to do anything for gradient accumulator creators.
+            // We don't need to do anything for these creators.
             break;
           }
           // Fall through.

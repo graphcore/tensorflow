@@ -20,22 +20,24 @@ from tensorflow.compiler.plugin.poplar.ops import gen_poprand_ops
     These gradient function should *never* be called directly.
 """
 @ops.RegisterGradient("IpuDropout")
-def _poputil_dropout_layer_backward(op, grads, seed_grads):
-  """Gradients for the IpuDropout op."""
+def _dropout_grad(op, *grads):
+  """Gradients for the IPU dropout op."""
   seed = op.outputs[1]
   rate = op.get_attr("rate")
   scale = op.get_attr("scale")
   noise_shape = op.get_attr("noise_shape")
 
   return [
-      gen_poprand_ops.ipu_dropout(grads,
-                                  seed=seed,
-                                  rate=rate,
-                                  scale=scale,
-                                  name=op.name + "_grad",
-                                  is_using_user_seed=True,
-                                  modify_seed=False,
-                                  noise_shape=noise_shape)[0],
-      # The seed is an input so needs a gradient as well
-      None
+      gen_poprand_ops.ipu_dropout_with_seed(grads[0],
+                                            seed=seed,
+                                            rate=rate,
+                                            scale=scale,
+                                            name=op.name + "_grad",
+                                            noise_shape=noise_shape)[0]
   ]
+
+
+@ops.RegisterGradient("IpuDropoutWithSeed")
+def _dropout_grad_with_seed(op, *grads):
+  # The seed has no gradient.
+  return _dropout_grad(op, *grads) + [None]

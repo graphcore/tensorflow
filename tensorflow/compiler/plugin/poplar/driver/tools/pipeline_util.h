@@ -50,6 +50,10 @@ bool IsAnyPipelineStageOpOrResourceUpdate(const HloInstruction* inst);
 // an instruction is allowed to produce outputs in a PipelineOp.
 bool IsProducerOp(const HloInstruction* inst);
 
+// Returns true if there is guarantee that the given input instruction to a
+// pipeline stage will not be modified inplace.
+bool IsPipelineStageReadOnlyInput(const HloInstruction* inst);
+
 // Helper struct for holding onto forward, backward and recomputation (if any)
 // PipelineStages.
 // Note that we might not have a recomputation for every pipeline stage
@@ -87,6 +91,10 @@ StatusOr<PipelineStages> GetPipelineStages(HloComputation* pipeline_computation,
 // from it. Ignores computations which are called in the Parallel context.
 StatusOr<absl::flat_hash_set<HloComputation*>> GetAllComputationsCalledBy(
     HloInstruction* pipeline_stage, CallGraph* call_graph);
+
+// Convert an instruction which has a tuple shape such that all the users of
+// that instruction are GetTupleElement instructions.
+StatusOr<HloInstruction*> ConvertAllUsersToGTEs(HloInstruction* const inst);
 
 // Make sure that the root instruction of the computation is a Tuple
 // instruction.
@@ -267,6 +275,11 @@ class PipelineDataflowAnalysis {
   Status VerifyGradientAccumulatorCreateUsage(
       const HloInstruction* gradient_accumulator_creator,
       const HloInstruction* pipeline_stage_user);
+
+  // Verifies that the execution counter is only used by stages on the same
+  // shard.
+  Status VerifyExecutionCounterUsage(const HloInstruction* execution_counter,
+                                     const HloInstruction* pipeline_stage_user);
 
   // Verifies that the infeed is only used by one stage (fwd and possibly
   // recomp).

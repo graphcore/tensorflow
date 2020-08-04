@@ -470,24 +470,25 @@ HloInstructionDescription::HloInstructionDescription(
         absl::c_iota(indexes, 0);
         type_ = HloInstructionType::kInplaceReadWrite;
         inplace_operands_ = indexes;
-      } else if (IsPipelineStageBackward(inst)) {
-        // Backward pipeline stages are only inplace on operands which are not
-        // parameters/gradient accumulators.
+      } else if (IsAnyPipelineStageOp(inst)) {
+        // Pipeline stages are only inplace on operands which are not
+        // parameters/execution counters.
+
+        // Backward pipeline stages don't mark gradient accumulators as inplace
+        // inputs.
+        const bool is_bwd = IsPipelineStageBackward(inst);
+
+        HloComputation* comp = inst->to_apply();
         for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
           const HloInstruction* operand = inst->operand(op_idx);
-          if (operand->opcode() != HloOpcode::kParameter &&
-              !IsPoplarInstruction(PoplarOp::GradientAccumulatorCreate)(
-                  operand)) {
-            inplace_operands_.push_back(op_idx);
-          }
-        }
-        type_ = HloInstructionType::kInplaceReadWrite;
-      } else if (IsPipelineStage(inst) || IsPipelineStageRecomputation(inst)) {
-        // Pipeline stages are only inplace on operands which are not
-        // parameters.
-        for (int64 op_idx = 0; op_idx != inst->operand_count(); ++op_idx) {
-          if (inst->operand(op_idx)->opcode() != HloOpcode::kParameter) {
-            inplace_operands_.push_back(op_idx);
+          if (!IsPipelineStageReadOnlyInput(operand) &&
+              !(is_bwd && IsPoplarInstruction(
+                              PoplarOp::GradientAccumulatorCreate)(operand))) {
+            // If the stage modifies the input inplace, add it as an inplace
+            // operand.
+            if (IsOutputModifiedInplace(comp->parameter_instruction(op_idx))) {
+              inplace_operands_.push_back(op_idx);
+            }
           }
         }
         type_ = HloInstructionType::kInplaceReadWrite;
@@ -629,6 +630,8 @@ HloInstructionDescription::HloInstructionDescription(
       type_ = HloInstructionType::kNotInplace;
     }
   }
+  inplace_operands_set_ = absl::flat_hash_set<int64>{inplace_operands_.begin(),
+                                                     inplace_operands_.end()};
 }
 
 const HloInstructionType& HloInstructionDescription::GetType() const {
@@ -638,6 +641,10 @@ const HloInstructionType& HloInstructionDescription::GetType() const {
 const OperandIndexes& HloInstructionDescription::GetInplaceOperandIndexes()
     const {
   return inplace_operands_;
+}
+
+const OperandSet& HloInstructionDescription::GetInplaceOperandSet() const {
+  return inplace_operands_set_;
 }
 
 bool HloInstructionDescription::IsInplaceType() const {

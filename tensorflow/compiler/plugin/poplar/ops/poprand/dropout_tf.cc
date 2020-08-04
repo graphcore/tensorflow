@@ -21,19 +21,33 @@ namespace tensorflow {
 
 REGISTER_OP("IpuDropout")
     .Input("input: dtype")
-    .Input("seed: int32")
     .Output("output: dtype")
-    .Output("seed_used: int32")
+    .Output("seed: int32")
     .Attr("dtype: {float16, float32, int32}")
     .Attr("rate: float")
     .Attr("scale: float")
-    .Attr("is_using_user_seed: bool")
-    .Attr("modify_seed: bool")
     .Attr("noise_shape: list(int) = []")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       auto in_shape = c->input(0);
       c->set_output(0, in_shape);
       c->set_output(1, c->MakeShape({2}));
+      return Status::OK();
+    });
+
+REGISTER_OP("IpuDropoutWithSeed")
+    .Input("input: dtype")
+    .Input("seed: int32")
+    .Output("output: dtype")
+    .Output("output_seed: int32")
+    .Attr("dtype: {float16, float32, int32}")
+    .Attr("rate: float")
+    .Attr("scale: float")
+    .Attr("noise_shape: list(int) = []")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      auto in_shape = c->input(0);
+      auto seed_shape = c->input(1);
+      c->set_output(0, in_shape);
+      c->set_output(1, seed_shape);
       return Status::OK();
     });
 }  // namespace tensorflow

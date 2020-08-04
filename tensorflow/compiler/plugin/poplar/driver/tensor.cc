@@ -1439,8 +1439,10 @@ bool AreInplaceOutputTensorsWritable(TensorMap& map, CompilerResources& res,
 
   std::vector<TensorVector> tensor_vectors(inplace_indexes.size());
   for (uint64 i = 0; i < inplace_indexes.size(); i++) {
-    tensor_vectors[i] = FindInstructionOutputs(map, res, inst->operand(i));
+    tensor_vectors[i] =
+        FindInstructionOutputs(map, res, inst->operand(inplace_indexes[i]));
   }
+
   // Go through all the inplace tensors and check they are all parallel
   // writeable.
   for (auto tensor_vector : tensor_vectors) {
