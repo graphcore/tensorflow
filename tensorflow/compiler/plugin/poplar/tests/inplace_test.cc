@@ -18,8 +18,10 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/custom_op_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/fuse_ops_late.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/inplace_finder.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/while_loop_to_repeat_simplify.h"
 #include "tensorflow/compiler/plugin/poplar/driver/schedulers/shortest_path_scheduler.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
+#include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/compiler/xla/service/hlo_memory_scheduler.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/test.h"
@@ -1014,6 +1016,109 @@ ENTRY c1 {
   for (const auto* inst : inplace_instructions) {
     EXPECT_THAT(in_place_ops.count(inst->name()), 1);
   }
+}
+
+TEST_F(HloInplaceDependencyTest, InplaceRepeatLoop) {
+  const char* const hlo = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[],f32[10],f32[10]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  const = s32[] constant(1)
+  add = s32[] add(p_body.0, const)
+  p_body.1 = s32[] get-tuple-element(p_body), index=1
+  p_body.2 = f32[10] get-tuple-element(p_body), index=2
+  p_body.3 = f32[10] get-tuple-element(p_body), index=3
+  add2 = f32[10] add(p_body.2, p_body.3)
+  ROOT root = (s32[],s32[],f32[10],f32[10]) tuple(add, p_body.1, add2, p_body.3)
+}
+
+condition {
+  p_cond = (s32[],s32[],f32[10],f32[10]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[] constant(10)
+  p0 = f32[10] parameter(0)
+  p1 = f32[10] parameter(1)
+  while_init = (s32[],s32[],f32[10],f32[10]) tuple(const_0, const_1, p0, p1)
+  ROOT while = (s32[],s32[],f32[10],f32[10]) while(while_init), condition=condition, body=body
+}
+)";
+
+  auto module =
+      HloRunner::CreateModuleFromString(hlo, GetDebugOptionsForTest());
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  EXPECT_TRUE(WhileLoopToRepeatSimplify().Run(module0).ValueOrDie());
+  EXPECT_TRUE(HloDCE().Run(module0).ValueOrDie());
+  auto entry = module0->entry_computation();
+  EXPECT_TRUE(IsRepeatLoop(entry->root_instruction()));
+  EXPECT_TRUE(InplaceFinder().Run(module0).ValueOrDie());
+
+  auto inplace_instructions = GetInplaceInstructions(entry);
+  EXPECT_THAT(inplace_instructions.size(), 1);
+  EXPECT_THAT(HloInstructionDescription(entry->root_instruction())
+                  .GetInplaceOperandIndexes(),
+              ::testing::ElementsAre(2));
+}
+
+TEST_F(HloInplaceDependencyTest, InplaceRepeatLoop2) {
+  const char* const hlo = R"(
+HloModule ModuleWithWhile
+
+body {
+  p_body = (s32[],s32[],f32[10],f32[10]) parameter(0)
+  p_body.0 = s32[] get-tuple-element(p_body), index=0
+  const = s32[] constant(1)
+  add = s32[] add(p_body.0, const)
+  p_body.1 = s32[] get-tuple-element(p_body), index=1
+  p_body.2 = f32[10] get-tuple-element(p_body), index=2
+  p_body.3 = f32[10] get-tuple-element(p_body), index=3
+  add2 = f32[10] add(p_body.2, p_body.3)
+  add3 = f32[10] add(p_body.2, p_body.3)
+  ROOT root = (s32[],s32[],f32[10],f32[10]) tuple(add, p_body.1, add2, add3)
+}
+
+condition {
+  p_cond = (s32[],s32[],f32[10],f32[10]) parameter(0)
+  p_cond.0 = s32[] get-tuple-element(p_cond), index=0
+  const = s32[] constant(10)
+  ROOT result = pred[] compare(p_cond.0, const), direction=LT
+}
+
+ENTRY entry {
+  const_0 = s32[] constant(0)
+  const_1 = s32[] constant(10)
+  p0 = f32[10] parameter(0)
+  p1 = f32[10] parameter(1)
+  while_init = (s32[],s32[],f32[10],f32[10]) tuple(const_0, const_1, p0, p1)
+  ROOT while = (s32[],s32[],f32[10],f32[10]) while(while_init), condition=condition, body=body
+}
+)";
+
+  auto module =
+      HloRunner::CreateModuleFromString(hlo, GetDebugOptionsForTest());
+  EXPECT_TRUE(module.ok());
+  auto* module0 = module.ValueOrDie().get();
+
+  EXPECT_TRUE(WhileLoopToRepeatSimplify().Run(module0).ValueOrDie());
+  EXPECT_TRUE(HloDCE().Run(module0).ValueOrDie());
+  auto entry = module0->entry_computation();
+  EXPECT_TRUE(IsRepeatLoop(entry->root_instruction()));
+  EXPECT_TRUE(InplaceFinder().Run(module0).ValueOrDie());
+
+  auto inplace_instructions = GetInplaceInstructions(entry);
+  EXPECT_THAT(inplace_instructions.size(), 1);
+  EXPECT_THAT(HloInstructionDescription(entry->root_instruction())
+                  .GetInplaceOperandIndexes(),
+              ::testing::ElementsAre(2, 3));
 }
 
 }  // namespace

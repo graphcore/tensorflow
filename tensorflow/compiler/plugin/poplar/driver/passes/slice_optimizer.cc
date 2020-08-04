@@ -32,9 +32,8 @@ namespace poplarplugin {
 namespace {
 std::function<bool(const HloInstruction*)> IsInplaceHloElementwiseBinary() {
   return [](const HloInstruction* inst) -> bool {
-    auto inplace_description = HloInstructionDescription(inst);
     return inst->IsElementwiseBinary() &&
-           inplace_description.GetType() ==
+           HloInstructionDescription(inst).GetType() ==
                HloInstructionType::kInplaceReadWrite;
   };
 }

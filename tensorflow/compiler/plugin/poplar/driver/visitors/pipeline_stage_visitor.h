@@ -29,6 +29,7 @@ struct CompilerResources;
 class PipelineStageVisitor : public InplaceDeferredVisitor {
  public:
   PipelineStageVisitor(CompilerResources& res, const DeferredArgVectors& inputs,
+                       const HloInstructionDescription& description,
                        const std::string& name);
 
   bool TupleOutputsNeedToPreserveAliasing(const HloInstruction* inst) override;
@@ -50,6 +51,7 @@ class ReusablePipelineStageVisitor : public PipelineStageVisitor {
  public:
   ReusablePipelineStageVisitor(CompilerResources& res,
                                const DeferredArgVectors& inputs,
+                               const HloInstructionDescription& description,
                                const std::string& name);
 
   // A function which propagates any tensors which were not allocated at call

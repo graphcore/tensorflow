@@ -177,6 +177,7 @@ StatusOr<poplar::program::Program> CreateFusionOp(CompilerResources& res,
 
   DeferredArgVectors deferred_inputs = ConvertInputsToDeferredInputs(inputs);
   InplaceDeferredVisitor inplace_visitor(res, deferred_inputs,
+                                         HloInstructionDescription(inst),
                                          GetDebugName(inst));
   TF_RETURN_IF_ERROR(comp->Accept(&inplace_visitor));
 
@@ -255,9 +256,10 @@ StatusOr<poplar::program::Program> CreateWhileOp(CompilerResources& res,
   }
 
   // Create an inplace visitor for the loop body.
-  InplaceDeferredVisitor body_visitor(res, inputs, GetDebugName(inst) + "/Body",
-                                      {&condition_visitor},
-                                      reallocate_input_info);
+  InplaceDeferredVisitor body_visitor(
+      res, inputs, HloInstructionDescription(inst),
+      GetDebugName(inst) + "/Body", {&condition_visitor},
+      reallocate_input_info);
   const HloComputation* body_comp = inst->while_body();
   {
     auto order =
@@ -386,8 +388,8 @@ StatusOr<poplar::program::Program> CreateRepeatOp(CompilerResources& res,
       loop_body->parent()->schedule().sequence(loop_body).instructions();
 
   // Create the visitor.
-  RepeatLoopVisitor visitor(res, inputs, reallocate_input_info,
-                            GetDebugName(inst));
+  RepeatLoopVisitor visitor(res, inputs, HloInstructionDescription(inst),
+                            reallocate_input_info, GetDebugName(inst));
 
   // Evaluate the loop body in a order.
   TF_RETURN_IF_ERROR(loop_body->AcceptOrdered(&visitor, order));
@@ -484,7 +486,8 @@ StatusOr<poplar::program::Program> CreatePipelineOp(CompilerResources& res,
   CHECK_EQ(inputs.size(), inst->operand_count());
 
   // Compile the pipeline.
-  PipelineVisitor visitor(inst, res, inputs, GetDebugName(inst));
+  PipelineVisitor visitor(inst, res, inputs, HloInstructionDescription(inst),
+                          GetDebugName(inst));
   auto order = pipeline_computation->parent()
                    ->schedule()
                    .sequence(pipeline_computation)
@@ -623,7 +626,8 @@ StatusOr<poplar::program::Program> CreateResourceUpdateOp(
           << resource_update_comp->name() << " as a resource update.";
   poplar::program::Sequence seq;
   // Create a visitor for the resource update.
-  InplaceDeferredVisitor visitor(res, inputs, GetDebugName(inst));
+  InplaceDeferredVisitor visitor(res, inputs, HloInstructionDescription(inst),
+                                 GetDebugName(inst));
   auto order = resource_update_comp->parent()
                    ->schedule()
                    .sequence(resource_update_comp)
