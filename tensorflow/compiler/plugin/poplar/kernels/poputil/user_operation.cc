@@ -109,7 +109,7 @@ xla::StatusOr<uint64> GetSymbolAddressAsInt64(const LibraryLoadInfo& library,
 Status LoadLibrary(const char* library_filename, void** result,
                    const void** buf, size_t* len);
 
-class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
+class PoputilUserOpBase : public XlaOpKernel, public IpuOpKernel {
  public:
   explicit PoputilUserOpBase(OpKernelConstruction* context)
       : XlaOpKernel(context), IpuOpKernel() {
@@ -129,8 +129,6 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
   }
 
   virtual void Compile(XlaOpKernelContext* context) override {}
-
-  IPUCustomKernelsUtil::AttributeMap& GetAttrMap() { return attribute_map_; }
 
   Status LoadLibrary(LibraryLoadInfo& library, XlaOpKernelContext* context) {
     TF_RETURN_IF_ERROR(::tensorflow::LoadLibrary(
@@ -160,9 +158,9 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
   }
 
   void CreateCustomCall(XlaOpKernelContext* context) {
-    GetAttrMap().AddAttribute("gradient_size", gradient_size);
-    GetAttrMap().AddAttribute("partial_derivative_index", pd_index);
-    GetAttrMap().AddAttribute("attributes", attributes);
+    attribute_map_.AddAttribute("gradient_size", gradient_size);
+    attribute_map_.AddAttribute("partial_derivative_index", pd_index);
+    attribute_map_.AddAttribute("attributes", attributes);
 
     const size_t num_inputs = context->num_inputs();
 
@@ -182,7 +180,7 @@ class PoputilUserOpBase : public XlaOpKernel, IpuOpKernel {
     // defined by the user.
     xla::XlaOp call_output =
         xla::CustomCall(builder, PoplarOp_Name(PoplarOp::UserOp), inputs,
-                        output_tuple_shape, GetAttrMap().Serialise());
+                        output_tuple_shape, attribute_map_.Serialise());
 
     // Extract each element from the output tuple.
     for (size_t i = 0; i < output_shape.size(); ++i) {
@@ -238,10 +236,10 @@ class PoputilUserOp : public PoputilUserOpBase {
         int64 allocator_fn_ptr,
         GetSymbolAddressAsInt64(library, op_name + "_allocator"), 0l);
 
-    GetAttrMap().AddAttribute("metadata_function", metadata_fn_ptr);
-    GetAttrMap().AddAttribute("allocator_function", allocator_fn_ptr);
-    GetAttrMap().AddAttribute("gp_path", gp_path);
-    GetAttrMap().AddAttribute("is_user_read_write", false);
+    attribute_map_.AddAttribute("metadata_function", metadata_fn_ptr);
+    attribute_map_.AddAttribute("allocator_function", allocator_fn_ptr);
+    attribute_map_.AddAttribute("gp_path", gp_path);
+    attribute_map_.AddAttribute("is_user_read_write", false);
 
     return Status::OK();
   }
@@ -261,12 +259,12 @@ class PoputilUserReadWriteOp : public PoputilUserOpBase {
     LibraryLoadInfo library;
     OP_REQUIRES_OK(context, LoadLibrary(library, context));
 
-    GetAttrMap().AddAttribute("metadata_function", (int64)0);
-    GetAttrMap().AddAttribute("allocator_function", (int64)0);
+    attribute_map_.AddAttribute("metadata_function", static_cast<int64>(0));
+    attribute_map_.AddAttribute("allocator_function", static_cast<int64>(0));
 
     std::string null_string = "";
-    GetAttrMap().AddAttribute("gp_path", null_string);
-    GetAttrMap().AddAttribute("is_user_read_write", true);
+    attribute_map_.AddAttribute("gp_path", null_string);
+    attribute_map_.AddAttribute("is_user_read_write", true);
 
     // Set up all the context information to actually create the custom call.
     CreateCustomCall(context);

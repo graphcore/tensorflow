@@ -542,8 +542,7 @@ DeferredVisitor::GetInputsForDeferredInplaceInstruction(
                                " as an inplace operation, but it is not.");
   }
   auto inplace_indexes = inplace_description.GetInplaceOperandIndexes();
-  absl::flat_hash_set<int64> inplace_indexes_set(inplace_indexes.begin(),
-                                                 inplace_indexes.end());
+  auto inplace_indexes_set = inplace_description.GetInplaceOperandSet();
   // Go through all the operands and get the input tensors for any input that
   // cannot be deferred.
   DeferredArgVectors inputs(inst->operand_count());

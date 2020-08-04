@@ -24,18 +24,17 @@ limitations under the License.
 namespace xla {
 namespace poplarplugin {
 
-class HloDropoutInstruction : public HloPoplarInstruction {
+class HloDropout : public HloPoplarInstruction {
  public:
-  explicit HloDropoutInstruction(HloInstruction* operand, HloInstruction* seed,
-                                 float rate, float scale,
-                                 bool should_use_user_seed, bool modify_seed,
-                                 const std::vector<int64>& noise_shape);
+  HloDropout(HloInstruction* operand, HloInstruction* seed, float rate,
+             float scale, const std::vector<int64>& noise_shape);
 
-  absl::flat_hash_set<int64> AllocatingIndices() const override;
-  absl::flat_hash_map<int64, int64> LayoutDependencies() const override;
-  uint64 NumberOfInplaceOperands() const override;
-
-  bool IsPopOpsElementwise() const override;
+  absl::flat_hash_set<int64> AllocatingIndices() const override { return {}; }
+  absl::flat_hash_map<int64, int64> LayoutDependencies() const override {
+    return {};
+  }
+  uint64 NumberOfInplaceOperands() const override { return 0; }
+  bool IsPopOpsElementwise() const override { return false; }
 
   // Probability of a given element being set to zero.
   float Rate() const { return rate; }
@@ -43,18 +42,11 @@ class HloDropoutInstruction : public HloPoplarInstruction {
   // Scale to apply to all elements that aren't dropped out.
   float Scale() const { return scale; }
 
-  // Track whether or not we should use the user provided seed.
-  bool IsUserSeed() const { return is_user_seed; }
-
-  // Track whether or not we should modify the seed with the execution counter
-  // and the replica index.
-  bool ModifySeed() const { return modify_seed; }
-
   // For shaped dropout.
   const std::vector<int64>& NoiseShape() const { return noise_shape; }
 
   // If noise_shape is not provided then the default ia an empty list.
-  bool HasNoiseShape() const { return !noise_shape.empty(); }
+  bool HasNoiseShape() const { return noise_shape.size(); }
 
  protected:
   std::vector<std::string> ExtraPoplarAttributesToStringImpl(
@@ -65,16 +57,13 @@ class HloDropoutInstruction : public HloPoplarInstruction {
       const Shape& shape, absl::Span<HloInstruction* const>,
       HloCloneContext*) const override;
 
-  float scale;
-  float rate;
-  bool is_user_seed;
-  bool modify_seed;
-  std::vector<int64> noise_shape;
+  const float scale;
+  const float rate;
+  const std::vector<int64> noise_shape;
 };
 
 std::unique_ptr<HloInstruction> CreateDropout(
     HloInstruction* operand, HloInstruction* seed, float rate, float scale,
-    bool should_use_user_seed, bool modify_seed,
     const std::vector<int64>& noise_shape);
 
 }  // namespace poplarplugin

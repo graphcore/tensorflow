@@ -70,11 +70,8 @@ Status RepeatLoopVisitor::FinishDeferedAllocationVisit(HloInstruction* inst) {
   // Add any copies if the inputs were reallocated.
   TF_ASSIGN_OR_RETURN(pre_loop_sequence_, GetPreambleCopies());
 
-  // Only add the copies for the execution counters in the body visitor once
-  // before the execution of the loop so that they are not reset at the
-  // beginning of each iteration.
-  TF_RETURN_IF_ERROR(CopyExecutionCountersFromScope(
-      resources_, execution_counters_, pre_loop_sequence_));
+  // Initialize the counters to zero once at the begining.
+  pre_loop_sequence_.add(execution_counters_.SetInitialValuesToZero());
 
   // Create a sequence for all the zeroing gradient accumulation buffers.
   auto& zeroing_seqs = resources_.gradient_accumulation_zeroing_sequences.top();

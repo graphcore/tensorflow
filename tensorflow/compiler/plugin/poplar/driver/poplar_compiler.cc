@@ -105,6 +105,7 @@ limitations under the License.
 #include "tensorflow/compiler/plugin/poplar/driver/passes/resource_update_variables_offload.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/root_token_replacer.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/scatter_simplifier.h"
+#include "tensorflow/compiler/plugin/poplar/driver/passes/seed_hoisting.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/serialize_gradient_accumulation.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/sharding_pass.h"
 #include "tensorflow/compiler/plugin/poplar/driver/passes/slice_optimizer.h"
@@ -998,6 +999,8 @@ StatusOr<std::unique_ptr<Executable>> PoplarCompiler::RunBackend(
     pipeline.AddPass<HloPassFix<PoplarAlgebraicSimplifier>>(
         resources.enable_fast_math);
     pipeline.AddPass<ZeroSizedHloElimination>();
+    pipeline.AddPass<FlattenCallGraph>();
+    pipeline.AddPass<HloPassFix<SeedHoisting>>();
     pipeline.AddPass<ComputationFlattener>();
     pipeline.AddPass<TupleSimplifier>(true);
     // pass.AddPass<ConditionalSimplifier>();

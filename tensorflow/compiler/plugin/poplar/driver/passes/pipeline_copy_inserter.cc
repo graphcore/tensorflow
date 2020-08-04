@@ -14,14 +14,14 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/plugin/poplar/driver/passes/pipeline_copy_inserter.h"
+
 #include "tensorflow/compiler/plugin/poplar/driver/backend_config.pb.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/inplace_util.h"
+#include "tensorflow/compiler/plugin/poplar/driver/tools/matcher_predicates.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/pipeline_util.h"
 #include "tensorflow/compiler/plugin/poplar/driver/tools/util.h"
-
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -46,18 +46,18 @@ StatusOr<bool> AddCopyIfParameterModifiedInplace(HloInstruction* call,
   return false;
 }
 
-StatusOr<bool> InsertStageParameterCopies(PipelineStages& pipeline_stages) {
+StatusOr<bool> InsertStageInputCopies(PipelineStages& pipeline_stages) {
   bool changed = false;
   for (auto stages : {pipeline_stages.forward, pipeline_stages.backward}) {
     for (HloInstruction* stage : stages) {
       // Go through all the operands to the stage, and insert copies if
-      // necessary to make sure no parameter is modified inplace. We could
-      // alternatively mark the modifying instruction not inplace, but that
-      // might result in higher memory usage (for example a tuple going into a
-      // loop is now not inplace).
+      // necessary to make sure no parameter/pipeline execution counter is
+      // modified inplace. We could alternatively mark the modifying instruction
+      // not inplace, but that might result in higher memory usage (for example
+      // a tuple going into a loop is now not inplace).
       // TODO(T10387)
       for (int64 op_idx = 0; op_idx != stage->operand_count(); ++op_idx) {
-        if (stage->operand(op_idx)->opcode() != HloOpcode::kParameter) {
+        if (!IsPipelineStageReadOnlyInput(stage->operand(op_idx))) {
           continue;
         }
         TF_ASSIGN_OR_RETURN(bool added,
@@ -251,10 +251,10 @@ StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
     HloInstruction* pipeline_op) {
   HloComputation* pipeline_comp = pipeline_op->to_apply();
   TF_ASSIGN_OR_RETURN(PipelineStages stages, GetPipelineStages(pipeline_comp));
-  // We first make sure that stages do not modify parameters inplace (only the
-  // resource update can modify them).
-  TF_ASSIGN_OR_RETURN(bool inserted_parameter_copies,
-                      InsertStageParameterCopies(stages));
+  // Make sure that stages do not modify parameter and execution counter inputs
+  // inplace (only the resource update can modify them).
+  TF_ASSIGN_OR_RETURN(bool inserted_stage_input_copies,
+                      InsertStageInputCopies(stages));
   // Insert copies for any read-only pipeline inputs.
   TF_ASSIGN_OR_RETURN(bool inserted_ro_copies,
                       InsertReadOnlyVariableCopies(pipeline_op));
@@ -267,7 +267,7 @@ StatusOr<bool> PipelineCopyInserter::InsertInPipeline(
   // Insert intra IPU copies for any outputs from the previous stage on the same
   // device.
   TF_ASSIGN_OR_RETURN(bool inserted_intra_copies, InsertIntraIPUCopies(stages));
-  return inserted_parameter_copies || inserted_ro_copies ||
+  return inserted_stage_input_copies || inserted_ro_copies ||
          inserted_intra_copies || inserted_intra_copies_between_stages ||
          inserted_intra_copies_before_outfeed;
 }

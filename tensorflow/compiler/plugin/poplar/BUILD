@@ -211,6 +211,7 @@ cc_library(
         "driver/passes/resource_update_schedule_optimizer.cc",
         "driver/passes/root_token_replacer.cc",
         "driver/passes/scatter_simplifier.cc",
+        "driver/passes/seed_hoisting.cc",
         "driver/passes/serialize_gradient_accumulation.cc",
         "driver/passes/sharding_pass.cc",
         "driver/passes/slice_optimizer.cc",
@@ -256,6 +257,7 @@ cc_library(
         "driver/tools/custom_ops/replication_factor.cc",
         "driver/tools/custom_ops/replication_index.cc",
         "driver/tools/custom_ops/rnn.cc",
+        "driver/tools/custom_ops/seed.cc",
         "driver/tools/custom_ops/send_recv_barrier.cc",
         "driver/tools/custom_ops/send_to_host.cc",
         "driver/tools/custom_ops/slice_apply.cc",
@@ -354,6 +356,7 @@ cc_library(
         "driver/passes/resource_update_variables_offload.h",
         "driver/passes/root_token_replacer.h",
         "driver/passes/scatter_simplifier.h",
+        "driver/passes/seed_hoisting.h",
         "driver/passes/serialize_gradient_accumulation.h",
         "driver/passes/sharding_pass.h",
         "driver/passes/slice_optimizer.h",
@@ -397,6 +400,7 @@ cc_library(
         "driver/tools/custom_ops/replication_factor.h",
         "driver/tools/custom_ops/replication_index.h",
         "driver/tools/custom_ops/rnn.h",
+        "driver/tools/custom_ops/seed.h",
         "driver/tools/custom_ops/send_recv_barrier.h",
         "driver/tools/custom_ops/send_to_host.h",
         "driver/tools/custom_ops/slice_apply.h",
@@ -2752,6 +2756,21 @@ xla_test(
     ],
 )
 
+xla_test(
+    name = "seed_hoisting_test",
+    size = "small",
+    srcs = ["tests/seed_hoisting_test.cc"],
+    backends = ["poplar"],
+    copts = ["-fexceptions"],
+    deps = [
+        ":optimizers",
+        "//tensorflow/compiler/xla/service:hlo_matchers",
+        "//tensorflow/compiler/xla/service:hlo_query",
+        "//tensorflow/compiler/xla/service:shape_inference",
+        "//tensorflow/compiler/xla/tests:hlo_test_base",
+    ],
+)
+
 py_library(
     name = "test_utils_py",
     srcs = ["tests/test_utils.py"],
@@ -4404,6 +4423,7 @@ test_suite(
         "scalar_elementwise_graph_test",
         "scatter_simplifier_test",
         "scheduler_tree_test",
+        "seed_hoisting_test",
         "sendrecv_ops_test",
         "serialization_test",
         "serialize_gradient_accumulation_test",

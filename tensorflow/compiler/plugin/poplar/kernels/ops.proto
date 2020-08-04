@@ -54,7 +54,7 @@ enum PoplarOp {
   SuggestRecompute = 50;
   BlockRecompute = 51;
   ReduceScatter = 52;
-  // retired = 53;
+  Seed = 53;
   // retired = 54;
   // retired = 55;
   // retired = 56;
