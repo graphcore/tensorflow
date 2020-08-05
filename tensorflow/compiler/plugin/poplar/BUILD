@@ -3912,6 +3912,18 @@ tf_xla_py_test(
     ],
 )
 
+horovod_py_test(
+    name = "multi_replica_distribution_test",
+    size = "medium",
+    srcs = ["tests/multi_replica_distribution_test.py"],
+    main = "tests/multi_replica_distribution_test.py",
+    num_processes = 2,
+    deps = [
+        ":test_utils_py",
+        "//tensorflow/python/ipu:ipu_lib",
+    ],
+)
+
 tf_xla_py_test(
     name = "device_connection_test",
     size = "medium",

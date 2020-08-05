@@ -236,6 +236,20 @@ poplar::Target CreateIpuTarget(uint num_ipus, int64 ipu_version) {
                                          "ipu" + std::to_string(ipu_version));
 }
 
+// Create a new target based on `target`, but with a total number of IPUs
+// that is multiplied by the `process_count`. This is used for multi-replica
+// distribution, where we compile against a `poplar::Target` with the total
+// global number of IPUs, but execute on the subset of those IPUs that belong
+// to the current process using the Poplar "runtime replica subset" feature.
+poplar::Target CreateMultiReplicaDistributionTarget(
+    const poplar::Target& target, int64 process_count) {
+  const auto target_arch = target.getTargetArchString();
+  const int64 num_ipus = target.getNumIPUs();
+  CHECK_GT(process_count, 0);
+  const int64 global_num_ipus = process_count * num_ipus;
+  return poplar::Target::createIPUTarget(global_num_ipus, target_arch);
+}
+
 }  // namespace
 
 PoplarExecutor::TensorControl::TensorControl(size_t size_) {
@@ -1206,6 +1220,20 @@ bool PoplarExecutor::HasPoplarTarget() const {
   return PoplarXlaFlags::Get().use_ipu_model || ipu_.TargetConfigured();
 }
 
+int64 PoplarExecutor::GetNumIpusInLocalProcess(
+    const poplar::Target& target) const {
+  const int64 num_target_ipus = target.getNumIPUs();
+  if (HasMultiReplicaDistributionOptions()) {
+    // With multi-replica distribution, we run only on our subset of the IPUs.
+    const int64 process_count = GetMultiReplicaProcessCount();
+    CHECK_GT(process_count, 0);
+    CHECK_EQ(num_target_ipus % process_count, 0);
+    return num_target_ipus / process_count;
+  } else {
+    return num_target_ipus;
+  }
+}
+
 const IpuOptions& PoplarExecutor::GetIpuOptions() const {
   return current_config_;
 }
@@ -1245,9 +1273,12 @@ Status PoplarExecutor::AttachToPoplarDevice() {
       // Poplar device would already be set if we were using the model.
       CHECK(HasIpuHardware());
       const poplar::Target& target = GetOrCreatePoplarTarget();
+      const int64 num_local_ipus = GetNumIpusInLocalProcess(target);
+
       // Hardware devices
-      auto device_list = GetDeviceManager().getDevices(target.getTargetType(),
-                                                       target.getNumIPUs());
+      auto device_list =
+          GetDeviceManager().getDevices(target.getTargetType(), num_local_ipus);
+
       for (auto& d : device_list) {
         // Try to attach to that device.
         if (d.attach()) {
@@ -1331,13 +1362,27 @@ Status PoplarExecutor::CreatePoplarTarget() {
       CHECK(HasIpuHardware());
       // A specific device was chosen.
       auto device_list = GetDeviceManager().getDevices();
-      ipu_.SetDeviceAndTarget(std::move(device_list.at(*device_index)));
+      auto& device = device_list.at(*device_index);
+      if (HasMultiReplicaDistributionOptions()) {
+        ipu_.SetTarget(CreateMultiReplicaDistributionTarget(
+            device.getTarget(), GetMultiReplicaProcessCount()));
+        ipu_.SetDevice(std::move(device));
+      } else {
+        ipu_.SetDeviceAndTarget(std::move(device));
+      }
     } else {
       CHECK(num_devices);
+
       // If there is an IPU version configured then use that.
       if (current_config_.has_ipu_version()) {
+        int64 num_target_devices = *num_devices;
+        if (HasMultiReplicaDistributionOptions()) {
+          const int64 process_count = GetMultiReplicaProcessCount();
+          CHECK_GT(process_count, 0);
+          num_target_devices *= process_count;
+        }
         ipu_.SetTarget(
-            CreateIpuTarget(*num_devices, current_config_.ipu_version()));
+            CreateIpuTarget(num_target_devices, current_config_.ipu_version()));
       } else {
         // Deduce the IPU target given the configuration.
         switch (current_config_.device_connection_type()) {
@@ -1353,7 +1398,13 @@ Status PoplarExecutor::CreatePoplarTarget() {
                   "/device:IPU:%d",
                   *num_devices, ordinal_);
             }
-            ipu_.SetTarget(device_list.front().getTarget());
+            if (HasMultiReplicaDistributionOptions()) {
+              ipu_.SetTarget(CreateMultiReplicaDistributionTarget(
+                  device_list.front().getTarget(),
+                  GetMultiReplicaProcessCount()));
+            } else {
+              ipu_.SetTarget(device_list.front().getTarget());
+            }
             break;
           }
           case IpuDeviceConnectionType::NEVER: {
@@ -2823,7 +2874,7 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
         engine->load(ipu_.Device());
 
         current_engine_ = engine;
-        current_replication_factor_ = executable.GetReplicationFactor();
+        SetCurrentReplicationFactor(executable.GetReplicationFactor());
 
         ConnectSeedCallback();
         ConnectCycleCounterCallback();
@@ -3121,6 +3172,18 @@ StatusOr<se::DeviceMemoryBase> PoplarExecutor::ExecuteEngine(
   }
 
   return retbuf;
+}
+
+void PoplarExecutor::SetCurrentReplicationFactor(
+    int64 executable_replication_factor) {
+  if (HasMultiReplicaDistributionOptions()) {
+    const int64 process_count = GetMultiReplicaProcessCount();
+    CHECK_GT(process_count, 0);
+    CHECK_EQ(executable_replication_factor % process_count, 0);
+    current_replication_factor_ = executable_replication_factor / process_count;
+  } else {
+    current_replication_factor_ = executable_replication_factor;
+  }
 }
 
 }  // namespace poplarplugin
