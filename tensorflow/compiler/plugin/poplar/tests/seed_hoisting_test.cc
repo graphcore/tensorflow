@@ -30,8 +30,26 @@ namespace xla {
 namespace m = match;
 namespace poplarplugin {
 namespace {
-
-using SeedHoistingTest = HloTestBase;
+class SeedHoistingTest : public HloTestBase {
+ protected:
+  std::pair<HloInstruction*, HloInstruction*> MatchHashCombine(
+      HloInstruction* inst) {
+    HloInstruction *seed0, *seed1, *seed2, *counter;
+    EXPECT_TRUE(Match(
+        inst, m::BitcastConvert(m::Xor(
+                  m::BitcastConvert(m::Op(&seed0)),
+                  m::Add(m::Add(m::Broadcast(
+                                    m::Add(m::BitcastConvert(m::Op(&counter)),
+                                           m::Constant())),
+                                m::ShiftLeft(m::BitcastConvert(m::Op(&seed1)),
+                                             m::Constant())),
+                         m::ShiftRightLogical(m::BitcastConvert(m::Op(&seed2)),
+                                              m::Constant()))))));
+    EXPECT_THAT(seed0, seed1);
+    EXPECT_THAT(seed0, seed2);
+    return {seed0, counter};
+  }
+};
 
 TEST_F(SeedHoistingTest, NothingToHoist) {
   std::string hlo = R"(
@@ -79,7 +97,7 @@ ENTRY e {
   auto func = root->to_apply();
   EXPECT_THAT(func->instruction_count(), 5);
   auto func_root = func->root_instruction();
-  EXPECT_TRUE(Match(func_root, m::Add(m::Add(m::Parameter(0), m::Parameter(2)),
+  ASSERT_TRUE(Match(func_root, m::Add(m::Add(m::Parameter(0), m::Parameter(2)),
                                       m::Parameter(1))));
 }
 
@@ -125,14 +143,14 @@ ENTRY e {
   EXPECT_THAT(func->instruction_count(), 5);
   auto func_root = func->root_instruction();
   HloInstruction* func2_inst;
-  EXPECT_TRUE(Match(func_root, m::Add(m::Op(&func2_inst), m::Parameter(1))));
+  ASSERT_TRUE(Match(func_root, m::Add(m::Op(&func2_inst), m::Parameter(1))));
   EXPECT_THAT(func2_inst->operand(0)->parameter_number(), 0);
   EXPECT_THAT(func2_inst->operand(1)->parameter_number(), 2);
 
   auto func2 = func2_inst->to_apply();
   EXPECT_THAT(func->instruction_count(), 5);
   auto func2_root = func2->root_instruction();
-  EXPECT_TRUE(Match(func2_root, m::Add(m::Parameter(1), m::Parameter(0))));
+  ASSERT_TRUE(Match(func2_root, m::Add(m::Parameter(1), m::Parameter(0))));
 }
 
 TEST_F(SeedHoistingTest, Pipeliening) {
@@ -179,7 +197,7 @@ ENTRY e {
 
   HloInstruction *pipeline0, *pipeline1;
   auto root = module->entry_computation()->root_instruction();
-  EXPECT_TRUE(Match(
+  ASSERT_TRUE(Match(
       root, m::Tuple(m::Tuple(m::GetTupleElement(m::Op(&pipeline0), 0),
                               m::GetTupleElement(m::Op(&pipeline1), 1)))));
   EXPECT_THAT(pipeline0, pipeline1);
@@ -203,35 +221,65 @@ ENTRY e {
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(s0->operand(3)));
   HloInstruction* s0_root = s0->to_apply()->root_instruction();
   HloInstruction* seed_hash;
-  EXPECT_TRUE(Match(s0_root, m::Tuple(m::Add(m::Parameter(0), m::Parameter(1)),
+  ASSERT_TRUE(Match(s0_root, m::Tuple(m::Add(m::Parameter(0), m::Parameter(1)),
                                       m::Op(&seed_hash))));
-
-  auto match_hash_combine =
-      [](HloInstruction* inst) -> std::pair<HloInstruction*, HloInstruction*> {
-    HloInstruction *seed0, *seed1, *seed2, *counter;
-    EXPECT_TRUE(Match(
-        inst, m::BitcastConvert(m::Xor(
-                  m::BitcastConvert(m::Op(&seed0)),
-                  m::Add(m::Add(m::Broadcast(
-                                    m::Add(m::BitcastConvert(m::Op(&counter)),
-                                           m::Constant())),
-                                m::ShiftLeft(m::BitcastConvert(m::Op(&seed1)),
-                                             m::Constant())),
-                         m::ShiftRightLogical(m::BitcastConvert(m::Op(&seed2)),
-                                              m::Constant()))))));
-    EXPECT_THAT(seed0, seed1);
-    EXPECT_THAT(seed0, seed2);
-    return {seed0, counter};
-  };
   // Seed was hashed with the execution counter of the stage.
-  auto pair = match_hash_combine(seed_hash);
+  auto pair = MatchHashCombine(seed_hash);
   EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(pair.second));
 
   // Seed was hashed with the execution counter of the pipeline.
-  pair = match_hash_combine(pair.first);
+  pair = MatchHashCombine(pair.first);
   EXPECT_THAT(pair.first->parameter_number(), 2);
   EXPECT_THAT(pair.second->parameter_number(), 3);
 }
+
+TEST_F(SeedHoistingTest, RepeatLoop) {
+  std::string hlo = R"(
+HloModule top
+
+loop {
+  p0 = s32[2] parameter(0)
+  p1 = s32[2] parameter(1)
+  s = s32[2] custom-call(), custom_call_target="Seed", backend_config=""
+  add1 = s32[2] add(s, p0)
+  add2 = s32[2] add(add1, p1)
+  ROOT tuple = (s32[2], s32[2]) tuple(add2, p1)
+}
+
+ENTRY e {
+  e.p0 = s32[2] parameter(0), parameter_replication={false}
+  e.p1 = s32[2] parameter(1), parameter_replication={false}
+  ROOT e.call = (s32[2], s32[2]) call(e.p0, e.p1), to_apply=loop, backend_config="{\"callConfig\":{\"type\":\"RepeatLoop\",\"repeatConfig\":{\"repeatCount\":\"100\"}}}"
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module, ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest()));
+  EXPECT_TRUE(CustomOpReplacer().Run(module.get()).ValueOrDie());
+  EXPECT_TRUE(SeedHoisting().Run(module.get()).ValueOrDie());
+
+  HloInstruction *loop0, *loop1;
+  auto root = module->entry_computation()->root_instruction();
+  ASSERT_TRUE(Match(root, m::Tuple(m::GetTupleElement(m::Op(&loop0), 0),
+                                   m::GetTupleElement(m::Op(&loop1), 1))));
+  EXPECT_THAT(loop0, loop1);
+  EXPECT_TRUE(IsRepeatLoop(loop0));
+  EXPECT_THAT(loop0->operand_count(), 3);
+  EXPECT_THAT(loop0->operand(0)->parameter_number(), 0);
+  EXPECT_THAT(loop0->operand(1)->parameter_number(), 1);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::Seed)(loop0->operand(2)));
+
+  HloInstruction* loop_root = loop0->to_apply()->root_instruction();
+  HloInstruction* seed_hash;
+  ASSERT_TRUE(Match(loop_root,
+                    m::Tuple(m::Add(m::Add(m::Op(&seed_hash), m::Parameter(0)),
+                                    m::Parameter(1)),
+                             m::Parameter(1), m::Parameter(2))));
+  // Seed was hashed with the execution counter of the stage.
+  auto pair = MatchHashCombine(seed_hash);
+  EXPECT_TRUE(IsPoplarInstruction(PoplarOp::ExecutionCounter)(pair.second));
+  EXPECT_THAT(pair.first->parameter_number(), 2);
+}
+
 }  // namespace
 }  // namespace poplarplugin
 }  // namespace xla
