@@ -80,6 +80,27 @@ StatusOr<HloInstruction*> HashCombine(HloInstruction* seed,
       HloInstruction::CreateBitcastConvert(shape, seed));
 }
 
+Status StandardizeLoopLikeOutputs(HloInstruction* const inst) {
+  // When hoisting in a loop/pipeline, additional inputs/outputs need to be
+  // added. To do this, all the users of the instruction need  to be GTE
+  // instructions.
+  const bool all_gtes =
+      absl::c_all_of(inst->users(), [](const HloInstruction* user) {
+        return user->opcode() == HloOpcode::kGetTupleElement;
+      });
+  if (!all_gtes) {
+    TF_ASSIGN_OR_RETURN(HloInstruction * new_output,
+                        ConvertAllUsersToGTEs(inst));
+    // Make sure all non-gte users now use the new output.
+    for (HloInstruction* user : inst->users()) {
+      if (user->opcode() != HloOpcode::kGetTupleElement) {
+        TF_RETURN_IF_ERROR(inst->ReplaceUseWith(user, new_output));
+      }
+    }
+  }
+  return Status::OK();
+}
+
 StatusOr<HloInstruction*> AddParametersToCall(
     HloInstruction* call, const std::vector<HloInstruction*>& new_parameters,
     HloCloneContext* context, bool add_parameters_as_outputs = false) {
@@ -240,6 +261,45 @@ Status HoistFromPipelineStage(HloInstruction* seed,
   TF_RETURN_IF_ERROR(module->RemoveEmbeddedComputation(old_pipeline_comp));
   return Status::OK();
 }
+
+Status HoistFromRepeatLoop(HloInstruction* seed, HloInstruction* loop) {
+  HloModule* module = seed->GetModule();
+  HloCloneContext context(module);
+  HloComputation* old_loop_comp = loop->to_apply();
+  HloComputation* parent_comp = loop->parent();
+  if (parent_comp->root_instruction() == loop) {
+    // Repeat loop can't be the root because new inputs/outputs are added
+    TF_RETURN_IF_ERROR(FixRootInstruction(parent_comp).status());
+  }
+  TF_RETURN_IF_ERROR(FixRootInstruction(old_loop_comp).status());
+
+  // When hoisting a seed from a loop:
+  // 1. Clone the seed instruction to the same scope as the loop.
+  // 2. Add the cloned seed as an input/output to the loop, and replace all the
+  // uses of the old seed with the new parameter hashed with the execution
+  // counter.
+  HloInstruction* new_seed = parent_comp->AddInstruction(seed->Clone());
+  seed->SetupDerivedInstruction(new_seed);
+
+  TF_ASSIGN_OR_RETURN(loop,
+                      AddParametersToCall(loop, {new_seed}, &context,
+                                          /*add_parameters_as_outputs*/ true));
+  HloComputation* loop_comp = loop->to_apply();
+
+  HloInstruction* lowered_seed = loop_comp->parameter_instructions().back();
+  // Hash in the execution counter.
+  HloInstruction* execution_counter =
+      loop_comp->AddInstruction(CreateExecutionCounter());
+  TF_ASSIGN_OR_RETURN(lowered_seed,
+                      HashCombine(lowered_seed, execution_counter));
+
+  seed = context.GetInstruction(seed);
+  TF_RETURN_IF_ERROR(seed->ReplaceAllUsesWith(lowered_seed));
+  // Force remove as the seed is stateful.
+  TF_RETURN_IF_ERROR(loop_comp->ForceRemoveInstruction(seed));
+  TF_RETURN_IF_ERROR(module->RemoveEmbeddedComputation(old_loop_comp));
+  return Status::OK();
+}
 }  // namespace
 
 StatusOr<bool> SeedHoisting::Run(HloModule* module) {
@@ -267,9 +327,9 @@ StatusOr<bool> SeedHoisting::Run(HloModule* module) {
       return FailedPrecondition("Expected the call graph to be flat.");
     }
     HloInstruction* callsite = callsites[0].instruction();
-    // Currently only outline the seed from functions and forward pipeline
-    // stages - these are the only ones which currently get outlined.
-    if (!IsFunction(callsite) && !IsPipelineStage(callsite)) {
+    // Currently only outline the seed from scopes.
+    if (!(IsRepeatLoop(callsite) || IsFunction(callsite) ||
+          IsPipelineStage(callsite))) {
       continue;
     }
 
@@ -277,6 +337,15 @@ StatusOr<bool> SeedHoisting::Run(HloModule* module) {
       if (IsPoplarInstruction(PoplarOp::Seed)(inst)) {
         if (IsFunction(callsite)) {
           TF_RETURN_IF_ERROR(HoistFromFunction(inst, callsite));
+        } else if (IsRepeatLoop(callsite)) {
+          // Cannot hoist from a repeat loop where the inputs have not been
+          // broken up.
+          if (callsite->operand_count() !=
+              ShapeUtil::TupleElementCount(callsite->shape())) {
+            continue;
+          }
+          TF_RETURN_IF_ERROR(StandardizeLoopLikeOutputs(callsite));
+          TF_RETURN_IF_ERROR(HoistFromRepeatLoop(inst, callsite));
         } else {
           CHECK(IsPipelineStage(callsite));
           // Find the pipeline instruction.
@@ -287,24 +356,7 @@ StatusOr<bool> SeedHoisting::Run(HloModule* module) {
           }
           HloInstruction* pipeline = stage_callsites[0].instruction();
           CHECK(IsPipelineOp(pipeline));
-          // When hoisting in a pipeline, additional inputs/outputs need to be
-          // added. To do this, all the users of the pipeline instructions need
-          // to be GTE instructions.
-          const bool all_gtes =
-              absl::c_all_of(pipeline->users(), [](const HloInstruction* user) {
-                return user->opcode() == HloOpcode::kGetTupleElement;
-              });
-          if (!all_gtes) {
-            TF_ASSIGN_OR_RETURN(HloInstruction * new_output,
-                                ConvertAllUsersToGTEs(pipeline));
-            // Make sure all non-gte users now use the new output.
-            for (HloInstruction* user : pipeline->users()) {
-              if (user->opcode() != HloOpcode::kGetTupleElement) {
-                TF_RETURN_IF_ERROR(pipeline->ReplaceUseWith(user, new_output));
-              }
-            }
-          }
-
+          TF_RETURN_IF_ERROR(StandardizeLoopLikeOutputs(pipeline));
           TF_RETURN_IF_ERROR(HoistFromPipelineStage(inst, callsite, pipeline));
         }
         return true;
