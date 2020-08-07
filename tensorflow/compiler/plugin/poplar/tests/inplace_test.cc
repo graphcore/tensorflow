@@ -1018,7 +1018,7 @@ ENTRY c1 {
   }
 }
 
-TEST_F(HloInplaceDependencyTest, InplaceRepeatLoop) {
+TEST_F(HloInplaceDependencyTest, DISABLED_InplaceRepeatLoop) {
   const char* const hlo = R"(
 HloModule ModuleWithWhile
 
@@ -1069,7 +1069,7 @@ ENTRY entry {
               ::testing::ElementsAre(2));
 }
 
-TEST_F(HloInplaceDependencyTest, InplaceRepeatLoop2) {
+TEST_F(HloInplaceDependencyTest, DISABLED_InplaceRepeatLoop2) {
   const char* const hlo = R"(
 HloModule ModuleWithWhile
 
