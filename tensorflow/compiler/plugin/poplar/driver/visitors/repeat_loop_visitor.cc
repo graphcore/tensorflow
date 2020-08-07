@@ -32,7 +32,7 @@ namespace xla {
 namespace poplarplugin {
 
 RepeatLoopVisitor::RepeatLoopVisitor(
-    CompilerResources& res, const DeferredArgVectors& inputs,
+    CompilerResources& res, const DeferredArgRBVectors& inputs,
     const HloInstructionDescription& description,
     const ReallocateInputsInfo& reallocate_inputs_info, const std::string& name)
     : InplaceDeferredVisitor(res, inputs, description, name, {},
@@ -53,8 +53,8 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     num_mini_batches_to_accumulate_ =
         GetResourceUpdateBatchesToAccumulate(inst);
 
-    TF_ASSIGN_OR_RETURN(DeferredArgVectors inputs,
-                        GetInputsForDeferredInplaceInstruction(
+    TF_ASSIGN_OR_RETURN(DeferredArgRBVectors inputs,
+                        GetInputsForDeferredInplaceRBInstruction(
                             inst, /*preserve_aliasing*/ true));
 
     TF_ASSIGN_OR_RETURN(resource_update_sequence_,
@@ -147,7 +147,7 @@ poplar::program::Sequence RepeatLoopVisitor::GetRepeatLoopSequence(
   return seq;
 }
 
-const TensorVector& RepeatLoopVisitor::GetLoopState() const {
+const TensorOrRemoteBufferVector& RepeatLoopVisitor::GetLoopState() const {
   return loop_state_;
 }
 
