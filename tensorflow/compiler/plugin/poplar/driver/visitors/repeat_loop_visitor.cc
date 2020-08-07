@@ -33,8 +33,10 @@ namespace poplarplugin {
 
 RepeatLoopVisitor::RepeatLoopVisitor(
     CompilerResources& res, const DeferredArgVectors& inputs,
+    const HloInstructionDescription& description,
     const ReallocateInputsInfo& reallocate_inputs_info, const std::string& name)
-    : InplaceDeferredVisitor(res, inputs, name, {}, reallocate_inputs_info) {
+    : InplaceDeferredVisitor(res, inputs, description, name, {},
+                             reallocate_inputs_info) {
   // Push a new vector for the zeroing sequences onto the stack.
   res.gradient_accumulation_zeroing_sequences.push({});
 }
@@ -58,7 +60,7 @@ Status RepeatLoopVisitor::HandleDeferredAllocationCall(HloInstruction* inst) {
     TF_ASSIGN_OR_RETURN(resource_update_sequence_,
                         CreateResourceUpdateOp(resources_, inst, inputs,
                                                inst->shape(), tensor_map));
-
+    return Status::OK();
   } else {
     return InplaceDeferredVisitor::HandleDeferredAllocationCall(inst);
   }
