@@ -28,6 +28,7 @@ struct CompilerResources;
 class RepeatLoopVisitor : public InplaceDeferredVisitor {
  public:
   RepeatLoopVisitor(CompilerResources& res, const DeferredArgVectors& inputs,
+                    const HloInstructionDescription& description,
                     const ReallocateInputsInfo& reallocate_inputs_info,
                     const std::string& name);
 

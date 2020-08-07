@@ -1059,20 +1059,21 @@ ReallocateInputsInfo GetReallocateInputsInfo(const DeferredArgVectors& inputs,
 
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgVectors& inputs,
-    const std::string& name,
+    const HloInstructionDescription& description, const std::string& name,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     bool reallocate_inputs)
     : InplaceDeferredVisitor(
-          res, inputs, name, dependent_subcomputations,
+          res, inputs, description, name, dependent_subcomputations,
           GetReallocateInputsInfo(inputs, reallocate_inputs)) {}
 
 InplaceDeferredVisitor::InplaceDeferredVisitor(
     CompilerResources& res, const DeferredArgVectors& inputs,
-    const std::string& name,
+    const HloInstructionDescription& description, const std::string& name,
     const std::vector<const DeferredVisitor*>& dependent_subcomputations,
     const ReallocateInputsInfo& reallocate_inputs_info)
     : DeferredVisitor(res, inputs, name, false, true,
                       dependent_subcomputations),
+      description_(description),
       reallocate_inputs_info_(reallocate_inputs_info) {}
 
 Status InplaceDeferredVisitor::PropagateDeferredAllocations(
@@ -1215,6 +1216,7 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
   for (int64 o = 0; o < num_tensors; o++) {
     int64 param_number, param_index;
     std::tie(param_number, param_index) = GetParameterNumberAndFlatIndex(o);
+
     const bool input_used = InputIsAllocated(param_number, param_index);
     if (input_used) {
       if (loop_inputs[o] == loop_outputs[o]) {
@@ -1248,6 +1250,20 @@ StatusOr<TensorVector> InplaceDeferredVisitor::AddLoopInputOutputAliasingCopies(
           }
         }
       }
+    }
+
+    // If this input is not inplace, then it has to be identical.
+    if (!description_.GetInplaceOperandSet().contains(param_number)) {
+      // Input and output can only be different iff the input is not parallel
+      // writable.
+      if (loop_inputs[o] != loop_outputs[o]) {
+        CHECK(!loop_inputs[o].isParallelWriteable());
+        CHECK(alias_type[o] == AliasType::NO_ALIAS_NOT_USED ||
+              alias_type[o] == AliasType::NO_ALIAS_USED);
+      } else {
+        CHECK(alias_type[o] == AliasType::IDENTICAL_ALIAS);
+      }
+      alias_type[o] = AliasType::IDENTICAL_ALIAS;
     }
   }
 
