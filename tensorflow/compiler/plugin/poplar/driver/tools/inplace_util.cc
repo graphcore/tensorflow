@@ -475,7 +475,9 @@ HloInstructionDescription::HloInstructionDescription(
         // The loop also must have been broken up into individual inputs.
 
         // Check which inputs are actually modified.
-        if (IsLoweredInplace(root) && root->opcode() == HloOpcode::kTuple &&
+        // TODO(T25039): support this.
+        if (false && IsLoweredInplace(root) &&
+            root->opcode() == HloOpcode::kTuple &&
             num_operands == root->operand_count() && all_users_gtes) {
           // Vector indiciating whether a given input/output index has a gte
           // output.
